@@ -4,5 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-axum = "0.7.5"
+axum = { version = "0.7.5", features = ["macros"] }
+serde_json = "1.0.120"
 tokio = { version = "1.38.1", features = ["full"] }
