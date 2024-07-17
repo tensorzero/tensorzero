@@ -12,7 +12,7 @@ enum Error {
 
 impl Error {
     /// Defines the error level for logging this error
-    fn error_level(&self) -> tracing::Level {
+    fn level(&self) -> tracing::Level {
         match self {
             Error::Example => tracing::Level::ERROR,
         }
@@ -27,7 +27,7 @@ impl Error {
 
     /// Log the error using the `tracing` library
     fn log(&self) {
-        match self.error_level() {
+        match self.level() {
             tracing::Level::ERROR => tracing::error!(error = self.to_string()),
             tracing::Level::WARN => tracing::warn!(error = self.to_string()),
             tracing::Level::INFO => tracing::info!(error = self.to_string()),
