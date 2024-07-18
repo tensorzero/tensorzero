@@ -5,6 +5,7 @@ use axum::routing::get;
 use axum::{debug_handler, Router};
 
 mod error;
+mod inference;
 mod status;
 
 #[tokio::main]

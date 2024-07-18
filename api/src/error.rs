@@ -1,27 +1,52 @@
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
-use serde::Serialize;
 use serde_json::json;
 
-#[derive(Debug, PartialEq, Serialize)]
-#[serde(tag = "type")]
-enum Error {
-    #[allow(dead_code)]
-    Example,
+#[derive(Debug, PartialEq)]
+pub enum Error {
+    AnthropicClient {
+        message: String,
+        status_code: StatusCode,
+    },
+    AnthropicServer {
+        message: String,
+    },
+    InferenceClient {
+        message: String,
+    },
+    InvalidMessage {
+        message: String,
+    },
+    InvalidRequest {
+        message: String,
+    },
+    InvalidTool {
+        message: String,
+    },
 }
 
 impl Error {
     /// Defines the error level for logging this error
     fn level(&self) -> tracing::Level {
         match self {
-            Error::Example => tracing::Level::ERROR,
+            Error::AnthropicServer { .. }
+            | Error::InferenceClient { .. }
+            | Error::InvalidMessage { .. }
+            | Error::InvalidRequest { .. }
+            | Error::InvalidTool { .. } => tracing::Level::ERROR,
+            Error::AnthropicClient { .. } => tracing::Level::WARN,
         }
     }
 
     /// Defines the HTTP status code for responses involving this error
     fn status_code(&self) -> StatusCode {
         match self {
-            Error::Example => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::AnthropicServer { .. }
+            | Error::InferenceClient { .. }
+            | Error::InvalidMessage { .. }
+            | Error::InvalidRequest { .. }
+            | Error::InvalidTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::AnthropicClient { status_code, .. } => *status_code,
         }
     }
 
@@ -40,7 +65,12 @@ impl Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::Example => write!(f, "Example"),
+            Error::AnthropicServer { message }
+            | Error::InferenceClient { message }
+            | Error::InvalidMessage { message }
+            | Error::InvalidRequest { message }
+            | Error::InvalidTool { message }
+            | Error::AnthropicClient { message, .. } => write!(f, "{}", message),
         }
     }
 }

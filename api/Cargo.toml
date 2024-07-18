@@ -5,7 +5,11 @@ edition = "2021"
 
 [dependencies]
 axum = { version = "0.7.5", features = ["macros"] }
+derive_builder = "0.20.0"
+reqwest = { version = "0.12.5", features=["rustls-tls", "json"], default-features=false }
+secrecy = "0.8.0"
 serde = { version = "1.0.204", features = ["derive"] }
 serde_json = "1.0.120"
 tokio = { version = "1.38.1", features = ["full"] }
 tracing = { version = "0.1.40", features = ["log", "release_max_level_debug"] }
+uuid = { version = "1.10.0", features = ["v7"] }
