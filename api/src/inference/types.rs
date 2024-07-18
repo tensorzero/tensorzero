@@ -1,8 +1,14 @@
 use derive_builder::Builder;
+use futures::Stream;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    pin::Pin,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 use uuid::Uuid;
+
+use crate::error::Error;
 
 /// Top-level TensorZero type for an inference request to a particular model.
 /// This should contain all the information required to make a valid inference request
@@ -93,6 +99,7 @@ pub struct Usage {
     pub completion_tokens: u32,
 }
 
+// TODO: use this and write to DB somehow
 #[derive(Debug, PartialEq, Clone)]
 pub enum Latency {
     Streaming { ttft: Duration, ttd: Duration },
@@ -107,7 +114,6 @@ pub struct ModelInferenceResponse {
     pub tool_calls: Option<Vec<ToolCall>>,
     pub raw: Value,
     pub usage: Usage,
-    pub latency: Latency,
 }
 
 impl ModelInferenceResponse {
@@ -116,7 +122,6 @@ impl ModelInferenceResponse {
         tool_calls: Option<Vec<ToolCall>>,
         raw: Value,
         usage: Usage,
-        latency: Latency,
     ) -> Self {
         Self {
             inference_id: Uuid::now_v7(),
@@ -125,7 +130,6 @@ impl ModelInferenceResponse {
             tool_calls,
             raw,
             usage,
-            latency,
         }
     }
 }
@@ -145,24 +149,28 @@ pub struct ToolCall {
     pub tool_call_id: String,
 }
 
+#[derive(Debug)]
 pub struct InferenceResponseChunk {
     pub inference_id: Uuid,
     pub content: Option<String>,
     pub tool_calls: Option<Vec<ToolCallChunk>>,
     pub created: u64,
+    pub usage: Option<Usage>,
 }
 
 impl InferenceResponseChunk {
-    fn new(
+    pub fn new(
         inference_id: Uuid,
         content: Option<String>,
         tool_calls: Option<Vec<ToolCallChunk>>,
+        usage: Option<Usage>,
     ) -> Self {
         Self {
             inference_id,
             content,
             tool_calls,
             created: current_timestamp(),
+            usage,
         }
     }
 }
@@ -173,3 +181,6 @@ pub struct ToolCallChunk {
     pub name: Option<String>,
     pub arguments: Option<String>,
 }
+
+pub type InferenceResponseStream =
+    Pin<Box<dyn Stream<Item = Result<InferenceResponseChunk, Error>> + Send>>;
