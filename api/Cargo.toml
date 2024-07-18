@@ -3,6 +3,11 @@ name = "api"
 version = "0.1.0"
 edition = "2021"
 
+
+[features]
+integration_tests = []
+
+
 [dependencies]
 axum = { version = "0.7.5", features = ["macros"] }
 derive_builder = "0.20.0"

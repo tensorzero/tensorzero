@@ -1,2 +1,2 @@
-mod providers;
-mod types;
+pub mod providers;
+pub mod types;

@@ -5,7 +5,7 @@ use crate::inference::types::{
     ToolChoice, ToolType, Usage,
 };
 use reqwest::StatusCode;
-use secrecy::{ExposeSecret, Secret};
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -14,12 +14,13 @@ use crate::error::Error;
 const ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
 
+// TODO: consider making this a trait as more inference providers are implemented and we converge on types for the ModelProvider
 pub async fn infer(
     request: ModelInferenceRequest,
     // TODO: use Gabe's model types
     model: &str,
     http_client: &reqwest::Client,
-    api_key: &Secret<String>,
+    api_key: &SecretString,
 ) -> Result<ModelInferenceResponse, Error> {
     let request_body = AnthropicRequestBody::new(model.to_string(), request)?;
     let start = Instant::now();
@@ -52,7 +53,7 @@ pub async fn infer(
                     .map_err(|e| Error::AnthropicServer {
                         message: format!("Error parsing Anthropic response: {e}"),
                     })?;
-            handle_anthropic_error(response_code, error_body)
+            handle_anthropic_error(response_code, error_body.error)
         }
     }
 }
@@ -212,7 +213,7 @@ impl AnthropicRequestBody {
             ),
             _ => (None, request.messages),
         };
-        let messages: Vec<AnthropicMessage> = consolidate_messages(
+        let messages: Vec<AnthropicMessage> = prepare_messages(
             request_messages
                 .into_iter()
                 .map(AnthropicMessage::try_from)
@@ -247,7 +248,7 @@ impl AnthropicRequestBody {
 /// Anthropic API doesn't support consecutive messages from the same role.
 /// This function consolidates messages from the same role into a single message
 /// so as to satisfy the API.
-fn consolidate_messages(messages: Vec<AnthropicMessage>) -> Result<Vec<AnthropicMessage>, Error> {
+fn prepare_messages(messages: Vec<AnthropicMessage>) -> Result<Vec<AnthropicMessage>, Error> {
     let mut consolidated_messages: Vec<AnthropicMessage> = Vec::new();
     let mut last_role: Option<AnthropicRole> = None;
     for message in messages {
@@ -272,11 +273,50 @@ fn consolidate_messages(messages: Vec<AnthropicMessage>) -> Result<Vec<Anthropic
         }
         last_role = Some(this_role)
     }
+    // Anthropic also requires that there is at least one message and it is a User message.
+    // If it's not we will prepend a default User message.
+    match consolidated_messages.first() {
+        Some(&AnthropicMessage {
+            role: AnthropicRole::User,
+            ..
+        }) => {}
+        _ => {
+            consolidated_messages.insert(
+                0,
+                AnthropicMessage {
+                    role: AnthropicRole::User,
+                    content: vec![AnthropicMessageContent::Text {
+                        r#type: AnthropicMessageContentType::Text,
+                        text: "[listening]".to_string(),
+                    }],
+                },
+            );
+        }
+    }
+    // Anthropic will continue any assistant messages passed in.
+    // Since we don't want to do that, we'll append a default User message in the case that the last message was
+    // an assistant message
+    if let Some(last_message) = consolidated_messages.last() {
+        if last_message.role == AnthropicRole::Assistant {
+            consolidated_messages.push(AnthropicMessage {
+                role: AnthropicRole::User,
+                content: vec![AnthropicMessageContent::Text {
+                    r#type: AnthropicMessageContentType::Text,
+                    text: "[listening]".to_string(),
+                }],
+            });
+        }
+    }
     Ok(consolidated_messages)
 }
 
 #[derive(Deserialize, Debug, PartialEq, Clone)]
 struct AnthropicError {
+    error: AnthropicErrorBody,
+}
+
+#[derive(Deserialize, Debug, PartialEq, Clone)]
+struct AnthropicErrorBody {
     r#type: String,
     message: String,
 }
@@ -363,7 +403,7 @@ impl TryFrom<(AnthropicResponseBody, Duration)> for ModelInferenceResponse {
 
 fn handle_anthropic_error(
     response_code: StatusCode,
-    response_body: AnthropicError,
+    response_body: AnthropicErrorBody,
 ) -> Result<ModelInferenceResponse, Error> {
     match response_code {
         StatusCode::UNAUTHORIZED
@@ -532,6 +572,13 @@ mod tests {
     #[test]
     fn test_initialize_anthropic_request_body() {
         let model = "claude".to_string();
+        let listening_message = AnthropicMessage {
+            role: AnthropicRole::User,
+            content: vec![AnthropicMessageContent::Text {
+                r#type: AnthropicMessageContentType::Text,
+                text: "[listening]".to_string(),
+            }],
+        };
         // Test Case 1: Empty message list
         let inference_request = ModelInferenceRequest {
             messages: vec![],
@@ -593,6 +640,7 @@ mod tests {
                 messages: vec![
                     AnthropicMessage::try_from(messages[1].clone()).unwrap(),
                     AnthropicMessage::try_from(messages[2].clone()).unwrap(),
+                    listening_message.clone(),
                 ],
                 max_tokens: 4096,
                 stream: Some(false),
@@ -660,6 +708,7 @@ mod tests {
                         ],
                     },
                     AnthropicMessage::try_from(messages[3].clone()).unwrap(),
+                    listening_message.clone(),
                 ],
                 max_tokens: 100,
                 stream: Some(true),
@@ -735,10 +784,57 @@ mod tests {
                 }]),
             }
         );
+
+        // Test case 5: System message later in list
+        // Test Case 2: Messages with System message
+        let messages = vec![
+            InferenceRequestMessage {
+                role: Role::User,
+                content: "test_user".to_string(),
+                tool_call_id: None,
+            },
+            InferenceRequestMessage {
+                role: Role::System,
+                content: "test_system".to_string(),
+                tool_call_id: None,
+            },
+            InferenceRequestMessage {
+                role: Role::Assistant,
+                content: "test_assistant".to_string(),
+                tool_call_id: None,
+            },
+        ];
+        let inference_request = ModelInferenceRequest {
+            messages: messages.clone(),
+            tools_available: None,
+            tool_choice: None,
+            parallel_tool_calls: None,
+            temperature: None,
+            max_tokens: None,
+            stream: false,
+            json_mode: false,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+        let anthropic_request_body = AnthropicRequestBody::new(model.clone(), inference_request);
+        assert!(anthropic_request_body.is_err());
+        assert_eq!(
+            anthropic_request_body.err().unwrap(),
+            Error::InvalidMessage {
+                message: "Can't convert System message to Anthropic message. Don't pass System message in except as the first message in the chat.".to_string(),
+            }
+        );
     }
 
     #[test]
     fn test_consolidate_messages() {
+        let listening_message = AnthropicMessage {
+            role: AnthropicRole::User,
+            content: vec![AnthropicMessageContent::Text {
+                r#type: AnthropicMessageContentType::Text,
+                text: "[listening]".to_string(),
+            }],
+        };
         // Test case 1: No consolidation needed
         let messages = vec![
             AnthropicMessage {
@@ -771,8 +867,9 @@ mod tests {
                     text: String::from("Hi"),
                 }],
             },
+            listening_message.clone(),
         ];
-        assert_eq!(consolidate_messages(messages.clone()).unwrap(), expected);
+        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
 
         // Test case 2: Consolidation needed
         let messages = vec![
@@ -819,8 +916,9 @@ mod tests {
                     text: String::from("Hi"),
                 }],
             },
+            listening_message.clone(),
         ];
-        assert_eq!(consolidate_messages(messages.clone()).unwrap(), expected);
+        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
 
         // Test case 3: Multiple consolidations needed
         let messages = vec![
@@ -880,13 +978,14 @@ mod tests {
                     },
                 ],
             },
+            listening_message.clone(),
         ];
-        assert_eq!(consolidate_messages(messages.clone()).unwrap(), expected);
+        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
 
         // Test case 4: No messages
         let messages: Vec<AnthropicMessage> = vec![];
-        let expected: Vec<AnthropicMessage> = vec![];
-        assert_eq!(consolidate_messages(messages.clone()).unwrap(), expected);
+        let expected: Vec<AnthropicMessage> = vec![listening_message.clone()];
+        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
 
         // Test case 5: Single message
         let messages = vec![AnthropicMessage {
@@ -903,7 +1002,7 @@ mod tests {
                 text: String::from("Hello"),
             }],
         }];
-        assert_eq!(consolidate_messages(messages.clone()).unwrap(), expected);
+        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
 
         // Test case 6: Consolidate tool uses
         let messages = vec![
@@ -939,7 +1038,7 @@ mod tests {
                 },
             ],
         }];
-        assert_eq!(consolidate_messages(messages.clone()).unwrap(), expected);
+        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
 
         // Test case 7: Consolidate mixed text and tool use
         let messages = vec![
@@ -984,12 +1083,12 @@ mod tests {
                 },
             ],
         }];
-        assert_eq!(consolidate_messages(messages.clone()).unwrap(), expected);
+        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
     }
 
     #[test]
     fn test_handle_anthropic_error() {
-        let error_body = AnthropicError {
+        let error_body = AnthropicErrorBody {
             r#type: "error".to_string(),
             message: "test_message".to_string(),
         };
