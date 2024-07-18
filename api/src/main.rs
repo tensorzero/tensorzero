@@ -4,11 +4,15 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{debug_handler, Router};
 
-mod error;
-mod status;
+mod config_parser; // parse `tensorzero.toml` config
+mod error; // error handling
+mod status; // status endpoint
 
 #[tokio::main]
 async fn main() {
+    let config = config_parser::get_config();
+    println!("\n{:#?}", config); // TODO: temporary
+
     let router = Router::new()
         .route("/", get(hello_world))
         .route("/status", get(status::status_handler));
