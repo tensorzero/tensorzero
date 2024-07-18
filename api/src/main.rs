@@ -4,7 +4,7 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{debug_handler, Router};
 
-mod config_parser; // parse `tensorzero.toml` config
+mod config_parser; // TensorZero config file
 mod error; // error handling
 mod status; // status endpoint
 
