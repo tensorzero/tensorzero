@@ -5,37 +5,34 @@ use std::collections::HashMap;
 // │                                    TYPES                                     │
 // └──────────────────────────────────────────────────────────────────────────────┘
 
-// TODO: We use `#[allow(dead_code)]` to avoid warnings with the config skeleton
-// code, but we should remove it as we implement the API.
-
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO: temporary
     pub models: HashMap<String, ModelConfig>, // model name => model config
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO: temporary
     pub functions: HashMap<String, FunctionConfig>, // function name => function config
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO: temporary
     pub metrics: Option<HashMap<String, MetricConfig>>, // metric name => metric config
 }
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModelConfig {
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO: temporary
     pub routing: Vec<String>,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO: temporary
     pub providers: HashMap<String, ProviderConfig>, // provider name => provider config
 }
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProviderConfig {
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO: temporary
     pub r#type: ProviderConfigType,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO: temporary
     pub name: String,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO: temporary
     pub api_base: Option<String>,
 }
 
@@ -51,13 +48,13 @@ pub enum ProviderConfigType {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FunctionConfig {
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO: temporary
     pub r#type: FunctionConfigType,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO: temporary
     pub system_schema: String,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO: temporary
     pub output_schema: String,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO: temporary
     pub variants: HashMap<String, VariantConfig>, // variant name => variant config
 }
 
@@ -71,29 +68,29 @@ pub enum FunctionConfigType {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct VariantConfig {
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO: temporary
     pub weight: f64,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO: temporary
     pub generation: Option<GenerationConfig>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct GenerationConfig {
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO: temporary
     pub model: String,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO: temporary
     pub system_template: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MetricConfig {
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO: temporary
     pub r#type: MetricConfigType,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO: temporary
     pub optimize: MetricConfigOptimize,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // TODO: temporary
     pub level: MetricConfigLevel,
 }
 
