@@ -163,7 +163,7 @@ impl Config {
             // Ensure that the model has at least one provider
             assert!(
                 !model.routing.is_empty(),
-                "Invalid Config: `models.{model_name}`: `providers` must not be empty",
+                "Invalid Config: `models.{model_name}`: `routing` must not be empty",
             );
 
             // Ensure that routing entries are unique and exist as keys in providers
@@ -378,7 +378,7 @@ mod tests {
     /// Ensure that the config validation panics when a model has no providers in `routing`
     #[test]
     #[should_panic(
-        expected = "Invalid Config: `models.gpt-3.5-turbo`: `providers` must not be empty"
+        expected = "Invalid Config: `models.gpt-3.5-turbo`: `routing` must not be empty"
     )]
     fn test_config_validate_model_empty_providers() {
         let mut config = Config::from(get_sample_valid_config());
