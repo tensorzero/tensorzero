@@ -4,6 +4,7 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{debug_handler, Router};
 
+mod error;
 mod status;
 
 #[tokio::main]

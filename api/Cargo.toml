@@ -5,5 +5,7 @@ edition = "2021"
 
 [dependencies]
 axum = { version = "0.7.5", features = ["macros"] }
+serde = { version = "1.0.204", features = ["derive"] }
 serde_json = "1.0.120"
 tokio = { version = "1.38.1", features = ["full"] }
+tracing = { version = "0.1.40", features = ["log", "release_max_level_debug"] }
