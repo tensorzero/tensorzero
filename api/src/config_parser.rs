@@ -118,6 +118,7 @@ pub enum MetricConfigLevel {
 // ┌──────────────────────────────────────────────────────────────────────────────┐
 // │                                  FUNCTIONS                                   │
 // └──────────────────────────────────────────────────────────────────────────────┘
+
 /// Load and validate the TensorZero config file
 pub fn get_config() -> Config {
     let config_path = get_config_path();
