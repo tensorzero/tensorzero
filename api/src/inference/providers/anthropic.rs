@@ -87,6 +87,7 @@ pub async fn infer_stream(
 
 /// Maps events from Anthropic into our familiar OpenAI format
 /// Modified from the example [here](https://github.com/64bit/async-openai/blob/5c9c817b095e3bacb2b6c9804864cdf8b15c795e/async-openai/src/client.rs#L433)
+/// At a high level, this function is handling low-level EventSource details and mapping the objects returned by Anthropic into our `InferenceResponseChunk` type
 #[allow(dead_code)] // TODO: remove
 async fn stream_anthropic(mut event_source: EventSource) -> InferenceResponseStream {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
@@ -166,6 +167,7 @@ enum AnthropicToolChoice {
     Tool { name: String },
 }
 
+// We map our ToolChoice enum to the Anthropic one that serializes properly
 impl TryFrom<ToolChoice> for AnthropicToolChoice {
     type Error = Error;
     fn try_from(tool_choice: ToolChoice) -> Result<Self, Error> {
@@ -503,7 +505,7 @@ fn handle_anthropic_error(
             message: response_body.message,
             status_code: response_code,
         }),
-        // StatusCode::NOT_FOUND | StatusCode::FORBIDDEN | StatusCode::INTERNAL_SERVER_ERROR
+        // StatusCode::NOT_FOUND | StatusCode::FORBIDDEN | StatusCode::INTERNAL_SERVER_ERROR | 529: Overloaded
         // These are all captured in _ since they have the same error behavior
         _ => Err(Error::AnthropicServer {
             message: response_body.message,
