@@ -131,7 +131,7 @@ pub fn get_config() -> Config {
     config
 }
 
-/// Get the path for `tensorzero.toml`
+/// Get the path for the TensorZero config file
 ///
 /// Use a path provided as a CLI argument (`./api path/to/tensorzero.toml`), or default to
 /// `tensorzero.toml` in the current directory if no path is provided.
