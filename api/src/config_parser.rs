@@ -1,10 +1,6 @@
 use serde::Deserialize;
 use std::collections::HashMap;
 
-// ┌──────────────────────────────────────────────────────────────────────────────┐
-// │                                    TYPES                                     │
-// └──────────────────────────────────────────────────────────────────────────────┘
-
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
@@ -114,10 +110,6 @@ pub enum MetricConfigLevel {
     Inference,
     Episode,
 }
-
-// ┌──────────────────────────────────────────────────────────────────────────────┐
-// │                                  FUNCTIONS                                   │
-// └──────────────────────────────────────────────────────────────────────────────┘
 
 /// Load and validate the TensorZero config file
 pub fn get_config() -> Config {
