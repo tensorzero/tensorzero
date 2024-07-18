@@ -119,6 +119,7 @@ pub enum MetricConfigLevel {
 // │                                   PARSING                                    │
 // └──────────────────────────────────────────────────────────────────────────────┘
 
+/// Load and validate the TensorZero config file
 pub fn get_config() -> Config {
     let config_path = get_config_path();
     let config_table = read_toml_config(&config_path);
@@ -141,6 +142,7 @@ fn get_config_path() -> String {
     }
 }
 
+/// Read a file from the file system and parse it as TOML
 fn read_toml_config(path: &str) -> toml::Table {
     std::fs::read_to_string(path)
         .unwrap_or_else(|_| panic!("Failed to read config file: {path}"))
@@ -148,6 +150,7 @@ fn read_toml_config(path: &str) -> toml::Table {
         .expect("Failed to parse config file as valid TOML")
 }
 
+/// Deserialize a TOML table into a `Config`
 fn parse_toml_config(config_table: toml::Table) -> Config {
     serde_path_to_error::deserialize(config_table).unwrap_or_else(|e| {
         panic!("Failed to parse config:\n{e}");
