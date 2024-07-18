@@ -22,15 +22,27 @@ pub struct ModelConfig {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
-pub struct ProviderConfig {
-    #[allow(dead_code)] // TODO: temporary
-    pub r#type: ProviderConfigType,
-    // TODO: consider moving name and api_base to a provider-specific child object (based on `type`)
-    #[allow(dead_code)] // TODO: temporary
-    pub name: String,
-    #[allow(dead_code)] // TODO: temporary
-    pub api_base: Option<String>,
+pub enum ProviderConfig {
+    Anthropic {
+        #[allow(dead_code)] // TODO: temporary
+        name: String,
+    },
+    Azure {
+        #[allow(dead_code)] // TODO: temporary
+        name: String,
+        #[allow(dead_code)] // TODO: temporary
+        api_base: String,
+    },
+    #[serde(rename = "openai")]
+    OpenAI {
+        #[allow(dead_code)] // TODO: temporary
+        name: String,
+        #[allow(dead_code)] // TODO: temporary
+        api_base: Option<String>,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -47,7 +59,23 @@ pub enum ProviderConfigType {
 pub struct FunctionConfig {
     #[allow(dead_code)] // TODO: temporary
     pub r#type: FunctionConfigType,
-    // TODO: consider moving {user|assistant|system}_schema to a "chat" child object
+    #[allow(dead_code)] // TODO: temporary
+    pub variants: HashMap<String, VariantConfig>, // variant name => variant config
+    #[allow(dead_code)] // TODO: temporary
+    pub chat: Option<FunctionConfigChat>,
+    #[allow(dead_code)] // TODO: temporary
+    pub tool: Option<FunctionConfigTool>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FunctionConfigType {
+    Chat,
+    Tool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct FunctionConfigChat {
     #[allow(dead_code)] // TODO: temporary
     pub system_schema: Option<String>,
     #[allow(dead_code)] // TODO: temporary
@@ -56,15 +84,18 @@ pub struct FunctionConfig {
     pub assistant_schema: Option<String>,
     #[allow(dead_code)] // TODO: temporary
     pub output_schema: Option<String>,
-    #[allow(dead_code)] // TODO: temporary
-    pub variants: HashMap<String, VariantConfig>, // variant name => variant config
 }
 
 #[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum FunctionConfigType {
-    Chat,
-    Tool,
+pub struct FunctionConfigTool {
+    #[allow(dead_code)] // TODO: temporary
+    pub system_schema: Option<String>,
+    #[allow(dead_code)] // TODO: temporary
+    pub user_schema: Option<String>,
+    #[allow(dead_code)] // TODO: temporary
+    pub assistant_schema: Option<String>,
+    #[allow(dead_code)] // TODO: temporary
+    pub output_schema: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -180,24 +211,25 @@ impl Config {
                 );
             }
 
-            // Validate each provider
-            for (provider_name, provider) in model.providers.iter() {
-                // Ensure that the provider has the necessary fields
-                #[allow(clippy::single_match)] // TODO: temporary
-                match provider.r#type {
-                    ProviderConfigType::Azure => {
-                        assert!(
-                            provider.api_base.is_some(),
-                            "Invalid Config: `models.{model_name}.providers.{provider_name}`: Azure provider requires `api_base`",
-                        );
-                    }
-                    _ => {}
-                }
-            }
+            // NOTE: There is nothing to validate in providers for now
+            // for (provider_name, provider) in &model.providers {
+            //     // ...
+            // }
         }
 
         // Validate each function
         for (function_name, function) in &self.functions {
+            match (&function.r#type, &function.chat, &function.tool) {
+                (FunctionConfigType::Chat, _, None) => {}
+                (FunctionConfigType::Chat, _, Some(_)) => {
+                    panic!("Invalid Config: `functions.{function_name}`: must not have a `tool` block because its type is `chat`");
+                }
+                (FunctionConfigType::Tool, None, _) => {}
+                (FunctionConfigType::Tool, Some(_), _) => {
+                    panic!("Invalid Config: `functions.{function_name}`: must not have a `chat` block because its type is `tool`");
+                }
+            }
+
             for (variant_name, variant) in &function.variants {
                 assert!(
                     variant.weight >= 0.0,
@@ -322,7 +354,7 @@ mod tests {
     /// Ensure that the config parsing panics when there are extra variables for providers
     #[test]
     #[should_panic(
-        expected = "Failed to parse config:\nmodels.claude-3-haiku-20240307.providers.anthropic.enable_agi: unknown field `enable_agi`, expected"
+        expected = "Failed to parse config:\nmodels.claude-3-haiku-20240307.providers.anthropic: unknown field `enable_agi`, expected"
     )]
     fn test_config_from_toml_table_extra_variables_providers() {
         let mut config = get_sample_valid_config();
@@ -423,24 +455,6 @@ mod tests {
         config.validate();
     }
 
-    /// Ensure that the config validation panics when a model has an Azure provider without `api_base`
-    #[test]
-    #[should_panic(
-        expected = "Invalid Config: `models.gpt-3.5-turbo.providers.azure`: Azure provider requires `api_base`"
-    )]
-    fn test_config_validate_model_azure_provider_missing_api_base() {
-        let mut config = Config::from(get_sample_valid_config());
-        config
-            .models
-            .get_mut("gpt-3.5-turbo")
-            .expect("Failed to get `models.gpt-3.5-turbo`")
-            .providers
-            .get_mut("azure")
-            .expect("Failed to get `models.gpt-3.5-turbo.providers.azure`")
-            .api_base = None;
-        config.validate();
-    }
-
     /// Ensure that the config validation panics when a function variant has a negative weight
     #[test]
     #[should_panic(
@@ -513,18 +527,35 @@ mod tests {
 
         [functions.generate_draft]
         type = "chat"  # "chat", "tool"
-        system_schema = "to/do.json"
-        output_schema = "to/do.json"
+        chat.system_schema = "functions/generate_draft/system_schema.json"
+        chat.output_schema = "functions/generate_draft/output_schema.json"
+        # optional: tool.parallel_tool_calls, system_schema, user_schema, assistant_schema, output_schema
 
         [functions.generate_draft.variants.openai_promptA]
         weight = 0.9
         generation.model = "gpt-3.5-turbo"
-        generation.system_template = "to/do/promptA/system.jinja"
+        generation.system_template = "functions/generate_draft/promptA/system.jinja"
+        # optional: generation.user_template, generation.assistant_template, generation.function_call, generation.json_mode, generation.temperature, etc.
 
         [functions.generate_draft.variants.openai_promptB]
         weight = 0.1
         generation.model = "gpt-3.5-turbo"
-        generation.system_template = "to/do/promptB/system.jinja"
+        generation.system_template = "functions/generate_draft/promptB/system.jinja"
+
+        [functions.extract_data]
+        type = "tool"
+        tool.system_schema = "functions/extract_data/system_schema.json"
+        tool.output_schema = "functions/extract_data/output_schema.json"
+
+        [functions.extract_data.variants.openai_promptA]
+        weight = 0.9
+        generation.model = "gpt-3.5-turbo"
+        generation.system_template = "functions/extract_data/promptA/system.jinja"
+
+        [functions.extract_data.variants.openai_promptB]
+        weight = 0.1
+        generation.model = "gpt-3.5-turbo"
+        generation.system_template = "functions/extract_data/promptB/system.jinja"
 
         # ┌────────────────────────────────────────────────────────────────────────────┐
         # │                                  METRICS                                   │
