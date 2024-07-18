@@ -20,7 +20,7 @@ pub struct Config {
 #[serde(deny_unknown_fields)]
 pub struct ModelConfig {
     #[allow(dead_code)] // TODO: temporary
-    pub routing: Vec<String>,
+    pub routing: Vec<String>, // [provider name A, provider name B, ...]
     #[allow(dead_code)] // TODO: temporary
     pub providers: HashMap<String, ProviderConfig>, // provider name => provider config
 }
