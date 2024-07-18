@@ -46,10 +46,15 @@ pub enum ProviderConfigType {
 pub struct FunctionConfig {
     #[allow(dead_code)] // TODO: temporary
     pub r#type: FunctionConfigType,
+    // TODO: consider moving {user|assistant|system}_schema to a "chat" child object
     #[allow(dead_code)] // TODO: temporary
-    pub system_schema: String,
+    pub system_schema: Option<String>,
     #[allow(dead_code)] // TODO: temporary
-    pub output_schema: String,
+    pub user_schema: Option<String>,
+    #[allow(dead_code)] // TODO: temporary
+    pub assistant_schema: Option<String>,
+    #[allow(dead_code)] // TODO: temporary
+    pub output_schema: Option<String>,
     #[allow(dead_code)] // TODO: temporary
     pub variants: HashMap<String, VariantConfig>, // variant name => variant config
 }
