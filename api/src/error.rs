@@ -4,19 +4,23 @@ use serde_json::json;
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
+    #[allow(dead_code)] // TODO: remove
     AnthropicClient {
         message: String,
         status_code: StatusCode,
     },
+    #[allow(dead_code)] // TODO: remove
     AnthropicServer {
         message: String,
     },
+    #[allow(dead_code)] // TODO: remove
     InferenceClient {
         message: String,
     },
     InvalidMessage {
         message: String,
     },
+    #[allow(dead_code)] // TODO: remove
     InvalidRequest {
         message: String,
     },

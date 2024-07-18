@@ -55,22 +55,31 @@ impl Default for FunctionType {
 /// This enum is used to denote this tool choice.
 #[derive(Debug, PartialEq, Clone)]
 pub enum ToolChoice {
+    #[allow(dead_code)] // TODO: remove
     None,
+    #[allow(dead_code)] // TODO: remove
     Auto,
+    #[allow(dead_code)] // TODO: remove
     Required,
+    #[allow(dead_code)] // TODO: remove
     Tool(String),
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Role {
+    #[allow(dead_code)] // TODO: remove
     User,
+    #[allow(dead_code)] // TODO: remove
     Assistant,
+    #[allow(dead_code)] // TODO: remove
     System,
+    #[allow(dead_code)] // TODO: remove
     Tool,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ToolType {
+    #[allow(dead_code)] // TODO: remove
     Function,
 }
 
@@ -102,7 +111,9 @@ pub struct Usage {
 // TODO: use this and write to DB somehow
 #[derive(Debug, PartialEq, Clone)]
 pub enum Latency {
+    #[allow(dead_code)] // TODO: remove
     Streaming { ttft: Duration, ttd: Duration },
+    #[allow(dead_code)] // TODO: remove
     NonStreaming { ttd: Duration },
 }
 
@@ -159,6 +170,7 @@ pub struct InferenceResponseChunk {
 }
 
 impl InferenceResponseChunk {
+    #[allow(dead_code)] // TODO: remove
     pub fn new(
         inference_id: Uuid,
         content: Option<String>,
@@ -182,5 +194,6 @@ pub struct ToolCallChunk {
     pub arguments: Option<String>,
 }
 
+#[allow(dead_code)] // TODO: remove
 pub type InferenceResponseStream =
     Pin<Box<dyn Stream<Item = Result<InferenceResponseChunk, Error>> + Send>>;

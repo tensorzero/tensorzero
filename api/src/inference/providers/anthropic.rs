@@ -13,10 +13,13 @@ use uuid::Uuid;
 
 use crate::error::Error;
 
+#[allow(dead_code)] // TODO: remove
 const ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com/v1/messages";
+#[allow(dead_code)] // TODO: remove
 const ANTHROPIC_VERSION: &str = "2023-06-01";
 
 // TODO: consider making this a trait as more inference providers are implemented and we converge on types for the ModelProvider
+#[allow(dead_code)] // TODO: remove
 pub async fn infer(
     request: ModelInferenceRequest,
     // TODO: use Gabe's model types
@@ -60,6 +63,7 @@ pub async fn infer(
 }
 
 // TODO: consider making this a trait as more inference providers are implemented and we converge on types for the ModelProvider
+#[allow(dead_code)] // TODO: remove
 pub async fn infer_stream(
     request: ModelInferenceRequest,
     // TODO: use Gabe's model types
@@ -83,6 +87,7 @@ pub async fn infer_stream(
 
 /// Maps events from Anthropic into our familiar OpenAI format
 /// Modified from the example [here](https://github.com/64bit/async-openai/blob/5c9c817b095e3bacb2b6c9804864cdf8b15c795e/async-openai/src/client.rs#L433)
+#[allow(dead_code)] // TODO: remove
 async fn stream_anthropic(mut event_source: EventSource) -> InferenceResponseStream {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     tokio::spawn(async move {
@@ -280,6 +285,7 @@ struct AnthropicRequestBody {
 }
 
 impl AnthropicRequestBody {
+    #[allow(dead_code)] // TODO: remove
     fn new(model: String, request: ModelInferenceRequest) -> Result<AnthropicRequestBody, Error> {
         if request.messages.is_empty() {
             return Err(Error::InvalidRequest {
@@ -329,6 +335,10 @@ impl AnthropicRequestBody {
 /// Anthropic API doesn't support consecutive messages from the same role.
 /// This function consolidates messages from the same role into a single message
 /// so as to satisfy the API.
+/// It also makes modifications to the messages to make Anthropic happy.
+/// For example, it will prepend a default User message if the first message is an Assistant message.
+/// It will also append a default User message if the last message is an Assistant message.
+#[allow(dead_code)] // TODO: remove
 fn prepare_messages(messages: Vec<AnthropicMessage>) -> Result<Vec<AnthropicMessage>, Error> {
     let mut consolidated_messages: Vec<AnthropicMessage> = Vec::new();
     let mut last_role: Option<AnthropicRole> = None;
@@ -480,6 +490,7 @@ impl TryFrom<AnthropicResponseBody> for ModelInferenceResponse {
     }
 }
 
+#[allow(dead_code)] // TODO: remove
 fn handle_anthropic_error(
     response_code: StatusCode,
     response_body: AnthropicErrorBody,
@@ -520,7 +531,9 @@ enum AnthropicMessageBlock {
 }
 
 struct StreamMessage {
+    #[allow(dead_code)] // TODO: remove
     message: Option<String>,
+    #[allow(dead_code)] // TODO: remove
     tool_calls: Option<Vec<ToolCallChunk>>,
 }
 
@@ -545,7 +558,11 @@ impl From<AnthropicMessageBlock> for StreamMessage {
             },
             AnthropicMessageBlock::InputJsonDelta { partial_json } => StreamMessage {
                 message: None,
-                tool_calls: None,
+                tool_calls: Some(vec![ToolCallChunk {
+                    id: None,
+                    name: None,
+                    arguments: Some(partial_json),
+                }]),
             },
         }
     }
@@ -579,12 +596,13 @@ enum AnthropicStreamMessage {
     Ping {},
 }
 
+#[allow(dead_code)] // TODO: remove
 fn anthropic_to_tensorzero_stream_message(
     message: AnthropicStreamMessage,
     inference_id: Uuid,
 ) -> Result<Option<InferenceResponseChunk>, Error> {
     match message {
-        AnthropicStreamMessage::ContentBlockDelta { delta, index } => {
+        AnthropicStreamMessage::ContentBlockDelta { delta, .. } => {
             let message: StreamMessage = delta.into();
             Ok(Some(InferenceResponseChunk::new(
                 inference_id,
@@ -593,10 +611,7 @@ fn anthropic_to_tensorzero_stream_message(
                 None,
             )))
         }
-        AnthropicStreamMessage::ContentBlockStart {
-            content_block,
-            index,
-        } => {
+        AnthropicStreamMessage::ContentBlockStart { content_block, .. } => {
             let message: StreamMessage = content_block.into();
             Ok(Some(InferenceResponseChunk::new(
                 inference_id,
@@ -605,7 +620,7 @@ fn anthropic_to_tensorzero_stream_message(
                 None,
             )))
         }
-        AnthropicStreamMessage::ContentBlockStop { index } => Ok(None),
+        AnthropicStreamMessage::ContentBlockStop { .. } => Ok(None),
         AnthropicStreamMessage::Error { error } => Err(Error::AnthropicServer {
             message: error.to_string(),
         }),
@@ -639,6 +654,7 @@ fn anthropic_to_tensorzero_stream_message(
     }
 }
 
+#[allow(dead_code)] // TODO: remove
 fn parse_usage_info(usage_info: &Value) -> AnthropicUsage {
     let input_tokens = usage_info
         .get("input_tokens")
@@ -1540,7 +1556,14 @@ mod tests {
         };
         let stream_message: StreamMessage = input_json_delta_block.into();
         assert_eq!(stream_message.message, None);
-        assert_eq!(stream_message.tool_calls, None);
+        assert_eq!(
+            stream_message.tool_calls,
+            Some(vec![ToolCallChunk {
+                id: None,
+                name: None,
+                arguments: Some(r#"{"partial": "json"}"#.to_string()),
+            }])
+        );
     }
 
     #[test]

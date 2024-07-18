@@ -1,5 +1,5 @@
 #[cfg(feature = "integration_tests")]
-mod test_anthropic {
+mod tests {
     use api::inference::providers::anthropic;
     use api::inference::types::{
         FunctionType, InferenceRequestMessage, ModelInferenceRequest, Role,
