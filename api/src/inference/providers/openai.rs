@@ -1,13 +1,17 @@
+use futures::StreamExt;
 use reqwest::StatusCode;
+use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use url::Url;
+use uuid::Uuid;
 
 use crate::error::Error;
 use crate::inference::types::{
-    InferenceRequestMessage, ModelInferenceRequest, ModelInferenceResponse, Tool, ToolCall,
-    ToolChoice, ToolType, Usage,
+    InferenceRequestMessage, InferenceResponseChunk, InferenceResponseStream,
+    ModelInferenceRequest, ModelInferenceResponse, Tool, ToolCall, ToolCallChunk, ToolChoice,
+    ToolType, Usage,
 };
 
 const OPENAI_DEFAULT_BASE_URL: &str = "https://api.openai.com/v1/";
@@ -50,6 +54,74 @@ pub async fn infer(
             })?,
         )
     }
+}
+
+pub async fn infer_stream(
+    request: ModelInferenceRequest,
+    model: &str,
+    http_client: &reqwest::Client,
+    api_key: &SecretString,
+    base_url: Option<&str>,
+) -> Result<InferenceResponseStream, Error> {
+    let request_body = OpenAIRequest::new(model.to_string(), request);
+    let request_url = get_chat_url(base_url)?;
+    let event_source = http_client
+        .post(request_url)
+        .header("Content-Type", "application/json")
+        .header(
+            "Authorization",
+            format!("Bearer {}", api_key.expose_secret()),
+        )
+        .json(&request_body)
+        .eventsource()
+        .map_err(|e| Error::InferenceClient {
+            message: format!("Error sending request to OpenAI: {e}"),
+        })?;
+    Ok(stream_openai(event_source).await)
+}
+
+async fn stream_openai(mut event_source: EventSource) -> InferenceResponseStream {
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    tokio::spawn(async move {
+        let inference_id = Uuid::now_v7();
+        while let Some(ev) = event_source.next().await {
+            match ev {
+                Err(e) => {
+                    if let Err(_e) = tx.send(Err(Error::AnthropicServer {
+                        message: e.to_string(),
+                    })) {
+                        // rx dropped
+                        break;
+                    }
+                }
+                Ok(event) => match event {
+                    Event::Open => continue,
+                    Event::Message(message) => {
+                        if message.data == "[DONE]" {
+                            break;
+                        }
+                        let data: Result<OpenAIChatChunk, Error> =
+                            serde_json::from_str(&message.data).map_err(|e| Error::OpenAIServer {
+                                message: format!(
+                                    "Error parsing message from OpenAI. Error: {}, Data: {}",
+                                    e, message.data
+                                ),
+                            });
+                        let stream_message =
+                            data.and_then(|d| openai_to_tensorzero_stream_message(d, inference_id));
+                        if tx.send(stream_message).is_err() {
+                            // rx dropped
+                            break;
+                        }
+                    }
+                },
+            }
+        }
+
+        event_source.close();
+    });
+
+    Box::pin(tokio_stream::wrappers::UnboundedReceiverStream::new(rx))
 }
 
 fn get_chat_url(base_url: Option<&str>) -> Result<Url, Error> {
@@ -129,6 +201,16 @@ impl From<OpenAIToolCall> for ToolCall {
             id: openai_tool_call.id,
             name: openai_tool_call.function.name,
             arguments: openai_tool_call.function.arguments,
+        }
+    }
+}
+
+impl From<OpenAIToolCall> for ToolCallChunk {
+    fn from(tool_call: OpenAIToolCall) -> Self {
+        ToolCallChunk {
+            id: Some(tool_call.id),
+            name: Some(tool_call.function.name),
+            arguments: Some(tool_call.function.arguments),
         }
     }
 }
@@ -281,6 +363,11 @@ impl From<ToolChoice> for OpenAIToolChoice {
     }
 }
 
+#[derive(Serialize)]
+struct StreamOptions {
+    include_usage: bool,
+}
+
 /// This struct defines the supported parameters for the OpenAI API
 /// See the [OpenAI API documentation](https://platform.openai.com/docs/api-reference/chat/create)
 /// for more details.
@@ -297,6 +384,8 @@ struct OpenAIRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
     stream: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream_options: Option<StreamOptions>,
     response_format: OpenAIResponseFormat,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenAITool>>,
@@ -312,12 +401,19 @@ impl OpenAIRequest {
             true => OpenAIResponseFormat::JsonObject,
             false => OpenAIResponseFormat::Text,
         };
+        let stream_options = match request.stream {
+            true => Some(StreamOptions {
+                include_usage: true,
+            }),
+            false => None,
+        };
         OpenAIRequest {
             messages: request.messages.into_iter().map(|m| m.into()).collect(),
             model,
             temperature: request.temperature,
             max_tokens: request.max_tokens,
             stream: request.stream,
+            stream_options,
             response_format,
             tools: request
                 .tools_available
@@ -396,6 +492,53 @@ impl TryFrom<OpenAIResponse> for ModelInferenceResponse {
             usage,
         ))
     }
+}
+
+// This doesn't include role
+#[derive(Deserialize, Debug, PartialEq)]
+struct OpenAIDelta {
+    content: Option<String>,
+    tool_calls: Option<Vec<OpenAIToolCall>>,
+}
+
+// This doesn't include logprobs, finish_reason, and index
+#[derive(Deserialize, Debug, PartialEq)]
+struct OpenAIChatChunkChoice {
+    delta: OpenAIDelta,
+}
+
+#[derive(Deserialize, Debug, PartialEq)]
+struct OpenAIChatChunk {
+    choices: Vec<OpenAIChatChunkChoice>,
+    usage: Option<OpenAIUsage>,
+}
+
+fn openai_to_tensorzero_stream_message(
+    mut chunk: OpenAIChatChunk,
+    inference_id: Uuid,
+) -> Result<InferenceResponseChunk, Error> {
+    if chunk.choices.len() > 1 {
+        return Err(Error::OpenAIServer {
+            message: "OpenAI response has invalid number of choices: {}. Expected 1.".to_string(),
+        });
+    }
+    let (content, tool_calls) = match chunk.choices.pop() {
+        Some(choice) => (
+            choice.delta.content,
+            choice
+                .delta
+                .tool_calls
+                .map(|t| t.into_iter().map(|t| t.into()).collect()),
+        ),
+        None => (None, None),
+    };
+    let usage = chunk.usage.map(|u| u.into());
+    Ok(InferenceResponseChunk::new(
+        inference_id,
+        content,
+        tool_calls,
+        usage,
+    ))
 }
 
 #[cfg(test)]

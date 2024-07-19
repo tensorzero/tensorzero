@@ -7,6 +7,7 @@ use api::inference::types::{
     FunctionType, InferenceRequestMessage, ModelInferenceRequest, SystemInferenceRequestMessage,
     Tool, ToolChoice, ToolType, UserInferenceRequestMessage,
 };
+use futures::StreamExt;
 use secrecy::SecretString;
 use serde_json::json;
 
@@ -108,4 +109,49 @@ async fn test_infer_with_tool_calls() {
     let arguments: serde_json::Value = serde_json::from_str(&first_tool_call.arguments)
         .expect("Failed to parse tool call arguments");
     assert!(arguments.get("location").is_some());
+}
+
+#[tokio::test]
+async fn test_infer_stream() {
+    // Load API key from environment variable
+    let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY must be set");
+    let api_key = SecretString::new(api_key);
+    let model_name = "gpt-4o-mini";
+    let client = reqwest::Client::new();
+    let messages = vec![
+        InferenceRequestMessage::System(SystemInferenceRequestMessage {
+            content: "You are a helpful but mischevious assistant.".to_string(),
+        }),
+        InferenceRequestMessage::User(UserInferenceRequestMessage {
+            content: "Is Santa Clause real?".to_string(),
+        }),
+    ];
+    let max_tokens = Some(100);
+    let temperature = Some(1.);
+    let inference_request = ModelInferenceRequest {
+        messages: messages.clone(),
+        tools_available: None,
+        tool_choice: None,
+        parallel_tool_calls: None,
+        temperature,
+        max_tokens,
+        stream: true,
+        json_mode: false,
+        function_type: FunctionType::Chat,
+        output_schema: None,
+    };
+
+    let base_url = None;
+    let result =
+        openai::infer_stream(inference_request, model_name, &client, &api_key, base_url).await;
+    assert!(result.is_ok());
+    let mut stream = result.unwrap();
+    let mut collected_chunks = Vec::new();
+    while let Some(chunk) = stream.next().await {
+        assert!(chunk.is_ok());
+        collected_chunks.push(chunk.unwrap());
+    }
+    assert!(!collected_chunks.is_empty());
+    assert!(collected_chunks.first().unwrap().content.is_some());
+    assert!(collected_chunks.last().unwrap().usage.is_some());
 }
