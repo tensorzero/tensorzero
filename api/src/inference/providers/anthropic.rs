@@ -18,7 +18,7 @@ const ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com/v1/messages";
 #[allow(dead_code)] // TODO: remove
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 
-/// Anthropic batch API request
+/// Anthropic non-streaming API request
 // TODO: consider making this a trait as more inference providers are implemented and we converge on types for the ModelProvider
 #[allow(dead_code)] // TODO: remove
 pub async fn infer(
