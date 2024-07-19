@@ -13,8 +13,8 @@ pub struct AppStateData {
 }
 pub type AppState = axum::extract::State<AppStateData>;
 
-impl AppStateData {
-    pub fn new() -> Self {
+impl Default for AppStateData {
+    fn default() -> Self {
         let config = Arc::new(config_parser::Config::load());
         println!("{:#?}", config); // TODO: temporary
         Self { config }
