@@ -2,7 +2,8 @@
 #![cfg(test)]
 use api::inference::providers::anthropic;
 use api::inference::types::{
-    FunctionType, InferenceRequestMessage, ModelInferenceRequest, Role, Tool, ToolChoice, ToolType,
+    FunctionType, InferenceRequestMessage, ModelInferenceRequest, SystemInferenceRequestMessage,
+    Tool, ToolChoice, ToolType, UserInferenceRequestMessage,
 };
 use futures::StreamExt;
 use secrecy::SecretString;
@@ -17,16 +18,12 @@ async fn test_infer() {
     let model_name = "claude-3-haiku-20240307";
     let client = reqwest::Client::new();
     let messages = vec![
-        InferenceRequestMessage {
-            role: Role::System,
+        InferenceRequestMessage::System(SystemInferenceRequestMessage {
             content: "You are a helpful but mischevious assistant.".to_string(),
-            tool_call_id: None,
-        },
-        InferenceRequestMessage {
-            role: Role::User,
+        }),
+        InferenceRequestMessage::User(UserInferenceRequestMessage {
             content: "Is Santa Clause real?".to_string(),
-            tool_call_id: None,
-        },
+        }),
     ];
     let max_tokens = Some(100);
     let temperature = Some(1.);
@@ -44,6 +41,7 @@ async fn test_infer() {
     };
 
     let result = anthropic::infer(inference_request, model_name, &client, &api_key).await;
+    println!("{:?}", result);
     assert!(result.is_ok());
     assert!(result.unwrap().content.is_some());
 }
@@ -56,16 +54,12 @@ async fn test_infer_stream() {
     let model_name = "claude-3-haiku-20240307";
     let client = reqwest::Client::new();
     let messages = vec![
-        InferenceRequestMessage {
-            role: Role::System,
+        InferenceRequestMessage::System(SystemInferenceRequestMessage {
             content: "You are a helpful but mischevious assistant.".to_string(),
-            tool_call_id: None,
-        },
-        InferenceRequestMessage {
-            role: Role::User,
+        }),
+        InferenceRequestMessage::User(UserInferenceRequestMessage {
             content: "Is Santa Clause real?".to_string(),
-            tool_call_id: None,
-        },
+        }),
     ];
     let max_tokens = Some(100);
     let temperature = Some(1.);
@@ -123,11 +117,9 @@ async fn test_infer_with_tool_calls() {
         }),
     };
 
-    let messages = vec![InferenceRequestMessage {
-        role: Role::User,
+    let messages = vec![InferenceRequestMessage::User(UserInferenceRequestMessage {
         content: "What's the weather like in New York?".to_string(),
-        tool_call_id: None,
-    }];
+    })];
 
     let inference_request = ModelInferenceRequest {
         messages,

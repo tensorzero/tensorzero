@@ -90,15 +90,34 @@ pub struct Tool {
     pub parameters: Value,
 }
 
-// We do not support passing tool results in as a message content at the moment
-// If we did, we would need to add a field for tool name here.
-// Since TensorZero has a typed interface for function calling we'll need to put some thought into
-// how that might be supported or whether it would be required.
 #[derive(Debug, PartialEq, Clone)]
-pub struct InferenceRequestMessage {
-    pub role: Role,
+pub struct UserInferenceRequestMessage {
+    pub content: String, // TODO: for now, we don't support image input. This would be the place to start.
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct SystemInferenceRequestMessage {
     pub content: String,
-    pub tool_call_id: Option<String>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct AssistantInferenceRequestMessage {
+    pub content: Option<String>,
+    pub tool_calls: Option<Vec<ToolCall>>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct ToolInferenceRequestMessage {
+    pub tool_call_id: String,
+    pub content: String,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum InferenceRequestMessage {
+    User(UserInferenceRequestMessage),
+    System(SystemInferenceRequestMessage),
+    Assistant(AssistantInferenceRequestMessage),
+    Tool(ToolInferenceRequestMessage),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -156,7 +175,7 @@ fn current_timestamp() -> u64 {
 pub struct ToolCall {
     pub name: String,
     pub arguments: String,
-    pub tool_call_id: String,
+    pub id: String,
 }
 
 #[derive(Debug)]
