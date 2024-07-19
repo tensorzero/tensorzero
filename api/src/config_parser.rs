@@ -1,23 +1,21 @@
 use serde::Deserialize;
 use std::collections::HashMap;
 
+use crate::error::Error;
+use crate::function::{FunctionConfig, FunctionConfigType};
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
-    #[allow(dead_code)] // TODO: temporary
     pub models: HashMap<String, ModelConfig>, // model name => model config
-    #[allow(dead_code)] // TODO: temporary
     pub functions: HashMap<String, FunctionConfig>, // function name => function config
-    #[allow(dead_code)] // TODO: temporary
     pub metrics: Option<HashMap<String, MetricConfig>>, // metric name => metric config
 }
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModelConfig {
-    #[allow(dead_code)] // TODO: temporary
     pub routing: Vec<String>, // [provider name A, provider name B, ...]
-    #[allow(dead_code)] // TODO: temporary
     pub providers: HashMap<String, ProviderConfig>, // provider name => provider config
 }
 
@@ -27,20 +25,15 @@ pub struct ModelConfig {
 #[serde(deny_unknown_fields)]
 pub enum ProviderConfig {
     Anthropic {
-        #[allow(dead_code)] // TODO: temporary
         model_name: String,
     },
     Azure {
-        #[allow(dead_code)] // TODO: temporary
         model_name: String,
-        #[allow(dead_code)] // TODO: temporary
         api_base: String,
     },
     #[serde(rename = "openai")]
     OpenAI {
-        #[allow(dead_code)] // TODO: temporary
         model_name: String,
-        #[allow(dead_code)] // TODO: temporary
         api_base: Option<String>,
     },
 }
@@ -56,74 +49,9 @@ pub enum ProviderConfigType {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct FunctionConfig {
-    #[allow(dead_code)] // TODO: temporary
-    pub r#type: FunctionConfigType,
-    #[allow(dead_code)] // TODO: temporary
-    pub variants: HashMap<String, VariantConfig>, // variant name => variant config
-    #[allow(dead_code)] // TODO: temporary
-    pub chat: Option<FunctionConfigChat>,
-    #[allow(dead_code)] // TODO: temporary
-    pub tool: Option<FunctionConfigTool>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum FunctionConfigType {
-    Chat,
-    Tool,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct FunctionConfigChat {
-    #[allow(dead_code)] // TODO: temporary
-    pub system_schema: Option<String>,
-    #[allow(dead_code)] // TODO: temporary
-    pub user_schema: Option<String>,
-    #[allow(dead_code)] // TODO: temporary
-    pub assistant_schema: Option<String>,
-    #[allow(dead_code)] // TODO: temporary
-    pub output_schema: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct FunctionConfigTool {
-    #[allow(dead_code)] // TODO: temporary
-    pub system_schema: Option<String>,
-    #[allow(dead_code)] // TODO: temporary
-    pub user_schema: Option<String>,
-    #[allow(dead_code)] // TODO: temporary
-    pub assistant_schema: Option<String>,
-    #[allow(dead_code)] // TODO: temporary
-    pub output_schema: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct VariantConfig {
-    #[allow(dead_code)] // TODO: temporary
-    pub weight: f64,
-    #[allow(dead_code)] // TODO: temporary
-    pub generation: Option<GenerationConfig>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct GenerationConfig {
-    #[allow(dead_code)] // TODO: temporary
-    pub model: String,
-    #[allow(dead_code)] // TODO: temporary
-    pub system_template: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct MetricConfig {
-    #[allow(dead_code)] // TODO: temporary
     pub r#type: MetricConfigType,
-    #[allow(dead_code)] // TODO: temporary
     pub optimize: MetricConfigOptimize,
-    #[allow(dead_code)] // TODO: temporary
     pub level: MetricConfigLevel,
 }
 
@@ -253,6 +181,15 @@ impl Config {
         //         // ...
         //     }
         // }
+    }
+
+    /// Get a function by name
+    pub fn get_function<'a>(&'a self, function_name: &str) -> Result<&'a FunctionConfig, Error> {
+        self.functions
+            .get(function_name)
+            .ok_or_else(|| Error::UnknownFunction {
+                name: function_name.to_string(),
+            })
     }
 }
 
@@ -527,35 +464,35 @@ mod tests {
 
         [functions.generate_draft]
         type = "chat"  # "chat", "tool"
-        chat.system_schema = "functions/generate_draft/system_schema.json"
-        chat.output_schema = "functions/generate_draft/output_schema.json"
+        chat.system_schema = "../functions/generate_draft/system_schema.json"
+        chat.output_schema = "../functions/generate_draft/output_schema.json"
         # optional: tool.parallel_tool_calls, system_schema, user_schema, assistant_schema, output_schema
 
         [functions.generate_draft.variants.openai_promptA]
         weight = 0.9
         generation.model = "gpt-3.5-turbo"
-        generation.system_template = "functions/generate_draft/promptA/system.jinja"
+        generation.system_template = "../functions/generate_draft/promptA/system.jinja"
         # optional: generation.user_template, generation.assistant_template, generation.function_call, generation.json_mode, generation.temperature, etc.
 
         [functions.generate_draft.variants.openai_promptB]
         weight = 0.1
         generation.model = "gpt-3.5-turbo"
-        generation.system_template = "functions/generate_draft/promptB/system.jinja"
+        generation.system_template = "../functions/generate_draft/promptB/system.jinja"
 
         [functions.extract_data]
         type = "tool"
-        tool.system_schema = "functions/extract_data/system_schema.json"
-        tool.output_schema = "functions/extract_data/output_schema.json"
+        tool.system_schema = "../functions/extract_data/system_schema.json"
+        tool.output_schema = "../functions/extract_data/output_schema.json"
 
         [functions.extract_data.variants.openai_promptA]
         weight = 0.9
         generation.model = "gpt-3.5-turbo"
-        generation.system_template = "functions/extract_data/promptA/system.jinja"
+        generation.system_template = "../functions/extract_data/promptA/system.jinja"
 
         [functions.extract_data.variants.openai_promptB]
         weight = 0.1
         generation.model = "gpt-3.5-turbo"
-        generation.system_template = "functions/extract_data/promptB/system.jinja"
+        generation.system_template = "../functions/extract_data/promptB/system.jinja"
 
         # ┌────────────────────────────────────────────────────────────────────────────┐
         # │                                  METRICS                                   │
