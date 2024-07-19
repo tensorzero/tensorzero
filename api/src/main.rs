@@ -11,8 +11,8 @@ mod status; // status endpoint
 
 #[tokio::main]
 async fn main() {
-    let config = config_parser::get_config();
-    println!("\n{:#?}", config); // TODO: temporary
+    let config = config_parser::Config::load();
+    println!("{:#?}", config); // TODO: temporary
 
     let router = Router::new()
         .route("/", get(hello_world))

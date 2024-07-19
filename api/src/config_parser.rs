@@ -22,14 +22,27 @@ pub struct ModelConfig {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
-pub struct ProviderConfig {
-    #[allow(dead_code)] // TODO: temporary
-    pub r#type: ProviderConfigType,
-    #[allow(dead_code)] // TODO: temporary
-    pub name: String,
-    #[allow(dead_code)] // TODO: temporary
-    pub api_base: Option<String>,
+pub enum ProviderConfig {
+    Anthropic {
+        #[allow(dead_code)] // TODO: temporary
+        model_name: String,
+    },
+    Azure {
+        #[allow(dead_code)] // TODO: temporary
+        model_name: String,
+        #[allow(dead_code)] // TODO: temporary
+        api_base: String,
+    },
+    #[serde(rename = "openai")]
+    OpenAI {
+        #[allow(dead_code)] // TODO: temporary
+        model_name: String,
+        #[allow(dead_code)] // TODO: temporary
+        api_base: Option<String>,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -46,7 +59,23 @@ pub enum ProviderConfigType {
 pub struct FunctionConfig {
     #[allow(dead_code)] // TODO: temporary
     pub r#type: FunctionConfigType,
-    // TODO: consider moving {user|assistant|system}_schema to a "chat" child object
+    #[allow(dead_code)] // TODO: temporary
+    pub variants: HashMap<String, VariantConfig>, // variant name => variant config
+    #[allow(dead_code)] // TODO: temporary
+    pub chat: Option<FunctionConfigChat>,
+    #[allow(dead_code)] // TODO: temporary
+    pub tool: Option<FunctionConfigTool>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FunctionConfigType {
+    Chat,
+    Tool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct FunctionConfigChat {
     #[allow(dead_code)] // TODO: temporary
     pub system_schema: Option<String>,
     #[allow(dead_code)] // TODO: temporary
@@ -55,15 +84,18 @@ pub struct FunctionConfig {
     pub assistant_schema: Option<String>,
     #[allow(dead_code)] // TODO: temporary
     pub output_schema: Option<String>,
-    #[allow(dead_code)] // TODO: temporary
-    pub variants: HashMap<String, VariantConfig>, // variant name => variant config
 }
 
 #[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum FunctionConfigType {
-    Chat,
-    Tool,
+pub struct FunctionConfigTool {
+    #[allow(dead_code)] // TODO: temporary
+    pub system_schema: Option<String>,
+    #[allow(dead_code)] // TODO: temporary
+    pub user_schema: Option<String>,
+    #[allow(dead_code)] // TODO: temporary
+    pub assistant_schema: Option<String>,
+    #[allow(dead_code)] // TODO: temporary
+    pub output_schema: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -116,42 +148,112 @@ pub enum MetricConfigLevel {
     Episode,
 }
 
-/// Load and validate the TensorZero config file
-pub fn get_config() -> Config {
-    let config_path = get_config_path();
-    let config_table = read_toml_config(&config_path);
-    #[allow(clippy::let_and_return)] // TODO: temporary
-    let config = parse_toml_config(config_table);
-
-    // TODO: sanity check config (e.g. routing has corresponding models, weights are non-negative)
-
-    config
-}
-
-/// Get the path for the TensorZero config file
-///
-/// Use a path provided as a CLI argument (`./api path/to/tensorzero.toml`), or default to
-/// `tensorzero.toml` in the current directory if no path is provided.
-fn get_config_path() -> String {
-    match std::env::args().nth(1) {
-        Some(path) => path,
-        None => "tensorzero.toml".to_string(),
+/// Deserialize a TOML table into `Config`
+impl From<toml::Table> for Config {
+    fn from(table: toml::Table) -> Self {
+        serde_path_to_error::deserialize(table).unwrap_or_else(|e| {
+            panic!("Failed to parse config:\n{e}");
+        })
     }
 }
 
-/// Read a file from the file system and parse it as TOML
-fn read_toml_config(path: &str) -> toml::Table {
-    std::fs::read_to_string(path)
-        .unwrap_or_else(|_| panic!("Failed to read config file: {path}"))
-        .parse::<toml::Table>()
-        .expect("Failed to parse config file as valid TOML")
-}
+impl Config {
+    /// Load and validate the TensorZero config file
+    pub fn load() -> Config {
+        let config_path = Config::get_config_path();
+        let config_table = Config::read_toml_config(&config_path);
+        #[allow(clippy::let_and_return)] // TODO: temporary
+        let config = Config::from(config_table);
+        config.validate();
+        config
+    }
 
-/// Deserialize a TOML table into a `Config`
-fn parse_toml_config(config_table: toml::Table) -> Config {
-    serde_path_to_error::deserialize(config_table).unwrap_or_else(|e| {
-        panic!("Failed to parse config:\n{e}");
-    })
+    /// Get the path for the TensorZero config file
+    ///
+    /// Use a path provided as a CLI argument (`./api path/to/tensorzero.toml`), or default to
+    /// `tensorzero.toml` in the current directory if no path is provided.
+    fn get_config_path() -> String {
+        match std::env::args().nth(1) {
+            Some(path) => path,
+            None => "tensorzero.toml".to_string(),
+        }
+    }
+
+    /// Read a file from the file system and parse it as TOML
+    fn read_toml_config(path: &str) -> toml::Table {
+        std::fs::read_to_string(path)
+            .unwrap_or_else(|_| panic!("Failed to read config file: {path}"))
+            .parse::<toml::Table>()
+            .expect("Failed to parse config file as valid TOML")
+    }
+
+    /// Validate the config
+    fn validate(&self) {
+        // Validate each model
+        for (model_name, model) in &self.models {
+            // Ensure that the model has at least one provider
+            assert!(
+                !model.routing.is_empty(),
+                "Invalid Config: `models.{model_name}`: `routing` must not be empty",
+            );
+
+            // Ensure that routing entries are unique and exist as keys in providers
+            let mut seen_providers = std::collections::HashSet::new();
+            for provider in &model.routing {
+                assert!(
+                    seen_providers.insert(provider),
+                    "Invalid Config: `models.{model_name}.routing`: duplicate entry `{provider}`",
+                );
+
+                assert!(
+                    model.providers.contains_key(provider),
+                    "Invalid Config: `models.{model_name}`: `routing` contains entry `{provider}` that does not exist in `providers`",
+                );
+            }
+
+            // NOTE: There is nothing to validate in providers for now
+            // for (provider_name, provider) in &model.providers {
+            //     // ...
+            // }
+        }
+
+        // Validate each function
+        for (function_name, function) in &self.functions {
+            match (&function.r#type, &function.chat, &function.tool) {
+                (FunctionConfigType::Chat, _, None) => {}
+                (FunctionConfigType::Chat, _, Some(_)) => {
+                    panic!("Invalid Config: `functions.{function_name}`: must not have a `tool` block because its type is `chat`");
+                }
+                (FunctionConfigType::Tool, None, _) => {}
+                (FunctionConfigType::Tool, Some(_), _) => {
+                    panic!("Invalid Config: `functions.{function_name}`: must not have a `chat` block because its type is `tool`");
+                }
+            }
+
+            for (variant_name, variant) in &function.variants {
+                assert!(
+                    variant.weight >= 0.0,
+                    "Invalid Config: `functions.{function_name}.variants.{variant_name}.weight`: must be non-negative",
+                );
+
+                match function.r#type {
+                    FunctionConfigType::Chat | FunctionConfigType::Tool => {
+                        assert!(
+                            variant.generation.is_some(),
+                            "Invalid Config: `functions.{function_name}.variants.{variant_name}`: `generation` is required",
+                        );
+                    }
+                }
+            }
+        }
+
+        // NOTE: There is nothing to validate in metrics for now
+        // if let Some(metrics) = &self.metrics {
+        //     for (metric_name, metric) in metrics {
+        //         // ...
+        //     }
+        // }
+    }
 }
 
 #[cfg(test)]
@@ -160,157 +262,241 @@ mod tests {
 
     /// Ensure that the sample valid config can be parsed without panicking
     #[test]
-    fn test_parse_toml_config_valid() {
+    fn test_config_from_toml_table_valid() {
         let config = get_sample_valid_config();
-        let _ = parse_toml_config(config);
+        let _ = Config::from(config);
 
         // Ensure that removing the `[metrics]` section still parses the config
         let mut config = get_sample_valid_config();
         config
             .remove("metrics")
             .expect("Failed to remove `[metrics]` section");
-        let _ = parse_toml_config(config);
+        let _ = Config::from(config);
     }
 
-    /// Ensure that the config panics when the `[models]` section is missing
+    /// Ensure that the config parsing panics when the `[models]` section is missing
     #[test]
     #[should_panic(expected = "Failed to parse config:\nmissing field `models`\n")]
-    fn test_parse_toml_config_missing_models() {
+    fn test_config_from_toml_table_missing_models() {
         let mut config = get_sample_valid_config();
         config
             .remove("models")
             .expect("Failed to remove `[models]` section");
-        let _ = parse_toml_config(config);
+        let _ = Config::from(config);
     }
 
-    /// Ensure that the config panics when the `[providers]` section is missing
+    /// Ensure that the config parsing panics when the `[providers]` section is missing
     #[test]
     #[should_panic(
         expected = "Failed to parse config:\nmodels.claude-3-haiku-20240307: missing field `providers`\n"
     )]
-    fn test_parse_toml_config_missing_providers() {
+    fn test_config_from_toml_table_missing_providers() {
         let mut config = get_sample_valid_config();
         config["models"]["claude-3-haiku-20240307"]
             .as_table_mut()
             .expect("Failed to get `models.claude-3-haiku-20240307` section")
             .remove("providers")
             .expect("Failed to remove `[providers]` section");
-        let _ = parse_toml_config(config);
+        let _ = Config::from(config);
     }
 
-    /// Ensure that the config panics when the `[functions]` section is missing
+    /// Ensure that the config parsing panics when the `[functions]` section is missing
     #[test]
     #[should_panic(expected = "Failed to parse config:\nmissing field `functions`\n")]
-    fn test_parse_toml_config_missing_functions() {
+    fn test_config_from_toml_table_missing_functions() {
         let mut config = get_sample_valid_config();
         config
             .remove("functions")
             .expect("Failed to remove `[functions]` section");
-        let _ = parse_toml_config(config);
+        let _ = Config::from(config);
     }
 
-    /// Ensure that the config panics when the `[variants]` section is missing
+    /// Ensure that the config parsing panics when the `[variants]` section is missing
     #[test]
     #[should_panic(
         expected = "Failed to parse config:\nfunctions.generate_draft: missing field `variants`\n"
     )]
-    fn test_parse_toml_config_missing_variants() {
+    fn test_config_from_toml_table_missing_variants() {
         let mut config = get_sample_valid_config();
         config["functions"]["generate_draft"]
             .as_table_mut()
             .expect("Failed to get `functions.generate_draft` section")
             .remove("variants")
             .expect("Failed to remove `[variants]` section");
-        let _ = parse_toml_config(config);
+        let _ = Config::from(config);
     }
 
-    /// Ensure that the config panics when there are extra variables at the root level
+    /// Ensure that the config parsing panics when there are extra variables at the root level
     #[test]
     #[should_panic(
         expected = "Failed to parse config:\nenable_agi: unknown field `enable_agi`, expected"
     )]
-    fn test_parse_toml_config_extra_variables_root() {
+    fn test_config_from_toml_table_extra_variables_root() {
         let mut config = get_sample_valid_config();
         config.insert("enable_agi".into(), true.into());
-        let _ = parse_toml_config(config);
+        let _ = Config::from(config);
     }
 
-    /// Ensure that the config panics when there are extra variables for models
+    /// Ensure that the config parsing panics when there are extra variables for models
     #[test]
     #[should_panic(
         expected = "Failed to parse config:\nmodels.claude-3-haiku-20240307.enable_agi: unknown field `enable_agi`, expected"
     )]
-    fn test_parse_toml_config_extra_variables_models() {
+    fn test_config_from_toml_table_extra_variables_models() {
         let mut config = get_sample_valid_config();
         config["models"]["claude-3-haiku-20240307"]
             .as_table_mut()
             .expect("Failed to get `models.claude-3-haiku-20240307` section")
             .insert("enable_agi".into(), true.into());
-        let _ = parse_toml_config(config);
+        let _ = Config::from(config);
     }
 
-    /// Ensure that the config panics when there are extra variables for providers
+    /// Ensure that the config parsing panics when there are extra variables for providers
     #[test]
     #[should_panic(
-        expected = "Failed to parse config:\nmodels.claude-3-haiku-20240307.providers.anthropic.enable_agi: unknown field `enable_agi`, expected"
+        expected = "Failed to parse config:\nmodels.claude-3-haiku-20240307.providers.anthropic: unknown field `enable_agi`, expected"
     )]
-    fn test_parse_toml_config_extra_variables_providers() {
+    fn test_config_from_toml_table_extra_variables_providers() {
         let mut config = get_sample_valid_config();
         config["models"]["claude-3-haiku-20240307"]["providers"]["anthropic"]
             .as_table_mut()
             .expect("Failed to get `models.claude-3-haiku-20240307.providers.anthropic` section")
             .insert("enable_agi".into(), true.into());
-        let _ = parse_toml_config(config);
+        let _ = Config::from(config);
     }
 
-    /// Ensure that the config panics when there are extra variables for functions
+    /// Ensure that the config parsing panics when there are extra variables for functions
     #[test]
     #[should_panic(
         expected = "Failed to parse config:\nfunctions.generate_draft.enable_agi: unknown field `enable_agi`, expected"
     )]
-    fn test_parse_toml_config_extra_variables_functions() {
+    fn test_config_from_toml_table_extra_variables_functions() {
         let mut config = get_sample_valid_config();
         config["functions"]["generate_draft"]
             .as_table_mut()
             .expect("Failed to get `functions.generate_draft` section")
             .insert("enable_agi".into(), true.into());
-        let _ = parse_toml_config(config);
+        let _ = Config::from(config);
     }
 
-    /// Ensure that the config panics when there are extra variables for variants
+    /// Ensure that the config parsing panics when there are extra variables for variants
     #[test]
     #[should_panic(
         expected = "Failed to parse config:\nfunctions.generate_draft.variants.openai_promptA.enable_agi: unknown field `enable_agi`, expected"
     )]
-    fn test_parse_toml_config_extra_variables_variants() {
+    fn test_config_from_toml_table_extra_variables_variants() {
         let mut config = get_sample_valid_config();
         config["functions"]["generate_draft"]["variants"]["openai_promptA"]
             .as_table_mut()
             .expect("Failed to get `functions.generate_draft.variants.openai_promptA` section")
             .insert("enable_agi".into(), true.into());
-        let _ = parse_toml_config(config);
+        let _ = Config::from(config);
     }
 
-    /// Ensure that the config panics when there are extra variables for metrics
+    /// Ensure that the config parsing panics when there are extra variables for metrics
     #[test]
     #[should_panic(
         expected = "Failed to parse config:\nmetrics.task_success.enable_agi: unknown field `enable_agi`, expected"
     )]
-    fn test_parse_toml_config_extra_variables_metrics() {
+    fn test_config_from_toml_table_extra_variables_metrics() {
         let mut config = get_sample_valid_config();
         config["metrics"]["task_success"]
             .as_table_mut()
             .expect("Failed to get `metrics.task_success` section")
             .insert("enable_agi".into(), true.into());
-        let _ = parse_toml_config(config);
+        let _ = Config::from(config);
+    }
+
+    /// Ensure that the config validation panics when a model has no providers in `routing`
+    #[test]
+    #[should_panic(
+        expected = "Invalid Config: `models.gpt-3.5-turbo`: `routing` must not be empty"
+    )]
+    fn test_config_validate_model_empty_providers() {
+        let mut config = Config::from(get_sample_valid_config());
+        config
+            .models
+            .get_mut("gpt-3.5-turbo")
+            .expect("Failed to get `models.gpt-3.5-turbo`")
+            .routing
+            .clear();
+        config.validate();
+    }
+
+    /// Ensure that the config validation panics when there are duplicate routing entries
+    #[test]
+    #[should_panic(
+        expected = "Invalid Config: `models.gpt-3.5-turbo.routing`: duplicate entry `openai`"
+    )]
+    fn test_config_validate_model_duplicate_routing_entry() {
+        let mut config = Config::from(get_sample_valid_config());
+        config
+            .models
+            .get_mut("gpt-3.5-turbo")
+            .expect("Failed to get `models.gpt-3.5-turbo`")
+            .routing
+            .push("openai".into());
+        config.validate();
+    }
+
+    /// Ensure that the config validation panics when a routing entry does not exist in providers
+    #[test]
+    #[should_panic(
+        expected = "Invalid Config: `models.gpt-3.5-turbo`: `routing` contains entry `closedai` that does not exist in `providers`"
+    )]
+    fn test_config_validate_model_routing_entry_not_in_providers() {
+        let mut config = Config::from(get_sample_valid_config());
+        config
+            .models
+            .get_mut("gpt-3.5-turbo")
+            .expect("Failed to get `models.gpt-3.5-turbo`")
+            .routing
+            .push("closedai".into());
+        config.validate();
+    }
+
+    /// Ensure that the config validation panics when a function variant has a negative weight
+    #[test]
+    #[should_panic(
+        expected = "Invalid Config: `functions.generate_draft.variants.openai_promptA.weight`: must be non-negative"
+    )]
+    fn test_config_validate_function_variant_negative_weight() {
+        let mut config = Config::from(get_sample_valid_config());
+        config
+            .functions
+            .get_mut("generate_draft")
+            .expect("Failed to get `functions.generate_draft`")
+            .variants
+            .get_mut("openai_promptA")
+            .expect("Failed to get `functions.generate_draft.variants.openai_promptA`")
+            .weight = -1.0;
+        config.validate();
+    }
+
+    /// Ensure that the config validation panics when a `chat` or `tool` function variant has no `generation`
+    #[test]
+    #[should_panic(
+        expected = "Invalid Config: `functions.generate_draft.variants.openai_promptA`: `generation` is required"
+    )]
+    fn test_config_validate_function_variant_missing_generation() {
+        let mut config = Config::from(get_sample_valid_config());
+        config
+            .functions
+            .get_mut("generate_draft")
+            .expect("Failed to get `functions.generate_draft`")
+            .variants
+            .get_mut("openai_promptA")
+            .expect("Failed to get `functions.generate_draft.variants.openai_promptA`")
+            .generation = None;
+        config.validate();
     }
 
     /// Get a sample valid config for testing
     fn get_sample_valid_config() -> toml::Table {
         let config_str = r#"
-        # ┌──────────────────────────────────────────────────────────────────────────────┐
-        # │                                   GENERAL                                    │
-        # └──────────────────────────────────────────────────────────────────────────────┘
+        # ┌────────────────────────────────────────────────────────────────────────────┐
+        # │                                  GENERAL                                   │
+        # └────────────────────────────────────────────────────────────────────────────┘
 
         # ┌────────────────────────────────────────────────────────────────────────────┐
         # │                                   MODELS                                   │
@@ -321,11 +507,11 @@ mod tests {
 
         [models."gpt-3.5-turbo".providers.openai]
         type = "openai"
-        name = "gpt-3.5-turbo"
+        model_name = "gpt-3.5-turbo"
 
         [models."gpt-3.5-turbo".providers.azure]
-        type = "openai"
-        name = "gpt-35-turbo"
+        type = "azure"
+        model_name = "gpt-35-turbo"
         api_base = "https://your-endpoint.openai.azure.com/"
 
         [models.claude-3-haiku-20240307]
@@ -333,30 +519,47 @@ mod tests {
 
         [models.claude-3-haiku-20240307.providers.anthropic]
         type = "anthropic"
-        name = "claude-3-haiku-20240307"
+        model_name = "claude-3-haiku-20240307"
 
-        # ┌──────────────────────────────────────────────────────────────────────────────┐
-        # │                                  FUNCTIONS                                   │
-        # └──────────────────────────────────────────────────────────────────────────────┘
+        # ┌────────────────────────────────────────────────────────────────────────────┐
+        # │                                 FUNCTIONS                                  │
+        # └────────────────────────────────────────────────────────────────────────────┘
 
         [functions.generate_draft]
         type = "chat"  # "chat", "tool"
-        system_schema = "to/do.json"
-        output_schema = "to/do.json"
+        chat.system_schema = "functions/generate_draft/system_schema.json"
+        chat.output_schema = "functions/generate_draft/output_schema.json"
+        # optional: tool.parallel_tool_calls, system_schema, user_schema, assistant_schema, output_schema
 
         [functions.generate_draft.variants.openai_promptA]
         weight = 0.9
         generation.model = "gpt-3.5-turbo"
-        generation.system_template = "to/do/promptA/system.jinja"
+        generation.system_template = "functions/generate_draft/promptA/system.jinja"
+        # optional: generation.user_template, generation.assistant_template, generation.function_call, generation.json_mode, generation.temperature, etc.
 
         [functions.generate_draft.variants.openai_promptB]
         weight = 0.1
         generation.model = "gpt-3.5-turbo"
-        generation.system_template = "to/do/promptB/system.jinja"
+        generation.system_template = "functions/generate_draft/promptB/system.jinja"
 
-        # ┌──────────────────────────────────────────────────────────────────────────────┐
-        # │                                   METRICS                                    │
-        # └──────────────────────────────────────────────────────────────────────────────┘
+        [functions.extract_data]
+        type = "tool"
+        tool.system_schema = "functions/extract_data/system_schema.json"
+        tool.output_schema = "functions/extract_data/output_schema.json"
+
+        [functions.extract_data.variants.openai_promptA]
+        weight = 0.9
+        generation.model = "gpt-3.5-turbo"
+        generation.system_template = "functions/extract_data/promptA/system.jinja"
+
+        [functions.extract_data.variants.openai_promptB]
+        weight = 0.1
+        generation.model = "gpt-3.5-turbo"
+        generation.system_template = "functions/extract_data/promptB/system.jinja"
+
+        # ┌────────────────────────────────────────────────────────────────────────────┐
+        # │                                  METRICS                                   │
+        # └────────────────────────────────────────────────────────────────────────────┘
 
         [metrics.task_success]
         type = "boolean"
