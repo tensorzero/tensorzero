@@ -64,6 +64,7 @@ pub enum ToolChoice {
     Tool(String), // Forces the LLM to call a particular tool, the String is the name of the Tool
 }
 
+// TODO: I think we can remove the whole struct
 #[derive(Debug, PartialEq, Clone)]
 pub enum Role {
     #[allow(dead_code)] // TODO: remove
@@ -141,7 +142,7 @@ pub struct ModelInferenceResponse {
     pub created: u64,
     pub content: Option<String>,
     pub tool_calls: Option<Vec<ToolCall>>,
-    pub raw: Value,
+    pub raw: String,
     pub usage: Usage,
 }
 
@@ -149,7 +150,7 @@ impl ModelInferenceResponse {
     pub fn new(
         content: Option<String>,
         tool_calls: Option<Vec<ToolCall>>,
-        raw: Value,
+        raw: String,
         usage: Usage,
     ) -> Self {
         Self {

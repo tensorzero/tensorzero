@@ -451,7 +451,9 @@ struct AnthropicResponseBody {
 impl TryFrom<AnthropicResponseBody> for ModelInferenceResponse {
     type Error = Error;
     fn try_from(value: AnthropicResponseBody) -> Result<Self, Self::Error> {
-        let raw = json!(value);
+        let raw = serde_json::to_string(&value).map_err(|e| Error::AnthropicServer {
+            message: format!("Error parsing response from Anthropic: {e}"),
+        })?;
         let mut message_text: Option<String> = None;
         let mut tool_calls: Option<Vec<ToolCall>> = None;
         // Anthropic responses can in principle contain multiple content blocks.
@@ -670,7 +672,10 @@ fn parse_usage_info(usage_info: &Value) -> AnthropicUsage {
 mod tests {
     use serde_json::json;
 
-    use crate::inference::types::{AssistantInferenceRequestMessage, FunctionType, SystemInferenceRequestMessage, ToolInferenceRequestMessage, UserInferenceRequestMessage};
+    use crate::inference::types::{
+        AssistantInferenceRequestMessage, FunctionType, SystemInferenceRequestMessage,
+        ToolInferenceRequestMessage, UserInferenceRequestMessage,
+    };
 
     use super::*;
 
@@ -732,9 +737,10 @@ mod tests {
     #[test]
     fn test_try_from_inference_request_message() {
         // Test a User message
-        let inference_request_message = InferenceRequestMessage::User(UserInferenceRequestMessage {
-            content: "test".to_string(),
-        });
+        let inference_request_message =
+            InferenceRequestMessage::User(UserInferenceRequestMessage {
+                content: "test".to_string(),
+            });
         let anthropic_message = AnthropicMessage::try_from(inference_request_message);
         assert!(anthropic_message.is_ok());
         assert_eq!(
@@ -748,10 +754,11 @@ mod tests {
         );
 
         // Test an Assistant message
-        let inference_request_message = InferenceRequestMessage::Assistant(AssistantInferenceRequestMessage {
-            content: Some("test_assistant".to_string()),
-            tool_calls: None,
-        });
+        let inference_request_message =
+            InferenceRequestMessage::Assistant(AssistantInferenceRequestMessage {
+                content: Some("test_assistant".to_string()),
+                tool_calls: None,
+            });
         let anthropic_message = AnthropicMessage::try_from(inference_request_message);
         assert!(anthropic_message.is_ok());
         assert_eq!(
@@ -766,10 +773,11 @@ mod tests {
         // todo!("implement a test for tool calls here");
 
         // Test a Tool message
-        let inference_request_message = InferenceRequestMessage::Tool(ToolInferenceRequestMessage {
-            content: "test_tool_response".to_string(),
-            tool_call_id: "test_tool_call_id".to_string(),
-        });
+        let inference_request_message =
+            InferenceRequestMessage::Tool(ToolInferenceRequestMessage {
+                content: "test_tool_response".to_string(),
+                tool_call_id: "test_tool_call_id".to_string(),
+            });
         let anthropic_message = AnthropicMessage::try_from(inference_request_message);
         assert!(anthropic_message.is_ok());
         assert_eq!(
@@ -778,14 +786,18 @@ mod tests {
                 role: AnthropicRole::User,
                 content: vec![AnthropicMessageContent::ToolResult {
                     tool_use_id: "test_tool_call_id".to_string(),
-                    content: vec![AnthropicMessageContent::Text{ text: "test_tool_response".to_string()}],
+                    content: vec![AnthropicMessageContent::Text {
+                        text: "test_tool_response".to_string()
+                    }],
                 }],
             }
         );
 
         // Test a system message
-        let inference_request_message = InferenceRequestMessage::System(SystemInferenceRequestMessage {
-            content: "test_system".to_string()});
+        let inference_request_message =
+            InferenceRequestMessage::System(SystemInferenceRequestMessage {
+                content: "test_system".to_string(),
+            });
         let anthropic_message = AnthropicMessage::try_from(inference_request_message);
         assert!(anthropic_message.is_err());
     }
@@ -1181,29 +1193,37 @@ mod tests {
         let messages = vec![
             AnthropicMessage {
                 role: AnthropicRole::User,
-                content: vec![AnthropicMessageContent::ToolResult{
+                content: vec![AnthropicMessageContent::ToolResult {
                     tool_use_id: "tool1".to_string(),
-                    content: vec![AnthropicMessageContent::Text{text: "Tool call 1".to_string()}],
+                    content: vec![AnthropicMessageContent::Text {
+                        text: "Tool call 1".to_string(),
+                    }],
                 }],
             },
             AnthropicMessage {
                 role: AnthropicRole::User,
-                content: vec![AnthropicMessageContent::ToolResult{
+                content: vec![AnthropicMessageContent::ToolResult {
                     tool_use_id: "tool2".to_string(),
-                    content: vec![AnthropicMessageContent::Text{text: "Tool call 2".to_string()}],
+                    content: vec![AnthropicMessageContent::Text {
+                        text: "Tool call 2".to_string(),
+                    }],
                 }],
             },
         ];
         let expected = vec![AnthropicMessage {
             role: AnthropicRole::User,
             content: vec![
-                AnthropicMessageContent::ToolResult{
+                AnthropicMessageContent::ToolResult {
                     tool_use_id: "tool1".to_string(),
-                    content: vec![AnthropicMessageContent::Text{text: "Tool call 1".to_string()}],
+                    content: vec![AnthropicMessageContent::Text {
+                        text: "Tool call 1".to_string(),
+                    }],
                 },
-                AnthropicMessageContent::ToolResult{
+                AnthropicMessageContent::ToolResult {
                     tool_use_id: "tool2".to_string(),
-                    content: vec![AnthropicMessageContent::Text{text: "Tool call 2".to_string()}],
+                    content: vec![AnthropicMessageContent::Text {
+                        text: "Tool call 2".to_string(),
+                    }],
                 },
             ],
         }];
@@ -1219,9 +1239,11 @@ mod tests {
             },
             AnthropicMessage {
                 role: AnthropicRole::User,
-                content: vec![AnthropicMessageContent::ToolResult{
+                content: vec![AnthropicMessageContent::ToolResult {
                     tool_use_id: "tool1".to_string(),
-                    content: vec![AnthropicMessageContent::Text{text: "Tool call 1".to_string()}],
+                    content: vec![AnthropicMessageContent::Text {
+                        text: "Tool call 1".to_string(),
+                    }],
                 }],
             },
             AnthropicMessage {
@@ -1237,9 +1259,11 @@ mod tests {
                 AnthropicMessageContent::Text {
                     text: "User message 1".to_string(),
                 },
-                AnthropicMessageContent::ToolResult{
+                AnthropicMessageContent::ToolResult {
                     tool_use_id: "tool1".to_string(),
-                    content: vec![AnthropicMessageContent::Text{text: "Tool call 1".to_string()}],
+                    content: vec![AnthropicMessageContent::Text {
+                        text: "Tool call 1".to_string(),
+                    }],
                 },
                 AnthropicMessageContent::Text {
                     text: "User message 2".to_string(),
@@ -1345,8 +1369,9 @@ mod tests {
         );
         assert!(inference_response.tool_calls.is_none());
 
-        let raw_json = json!(anthropic_response_body);
-        assert_eq!(inference_response.raw, raw_json);
+        let raw_json = json!(anthropic_response_body).to_string();
+        let parsed_raw: serde_json::Value = serde_json::from_str(&inference_response.raw).unwrap();
+        assert_eq!(raw_json, serde_json::json!(parsed_raw).to_string());
         assert_eq!(inference_response.usage.prompt_tokens, 100);
         assert_eq!(inference_response.usage.completion_tokens, 50);
 
@@ -1379,8 +1404,9 @@ mod tests {
         assert_eq!(tool_calls[0].id, "tool_call_1");
         assert_eq!(tool_calls[0].arguments, r#"{"location":"New York"}"#);
 
-        let raw_json = json!(anthropic_response_body);
-        assert_eq!(inference_response.raw, raw_json);
+        let raw_json = json!(anthropic_response_body).to_string();
+        let parsed_raw: serde_json::Value = serde_json::from_str(&inference_response.raw).unwrap();
+        assert_eq!(raw_json, serde_json::json!(parsed_raw).to_string());
         assert_eq!(inference_response.usage.prompt_tokens, 100);
         assert_eq!(inference_response.usage.completion_tokens, 50);
 
@@ -1421,8 +1447,9 @@ mod tests {
         assert_eq!(tool_calls[0].id, "tool_call_2");
         assert_eq!(tool_calls[0].arguments, r#"{"location":"London"}"#);
 
-        let raw_json = json!(anthropic_response_body);
-        assert_eq!(inference_response.raw, raw_json);
+        let raw_json = json!(anthropic_response_body).to_string();
+        let parsed_raw: serde_json::Value = serde_json::from_str(&inference_response.raw).unwrap();
+        assert_eq!(raw_json, serde_json::json!(parsed_raw).to_string());
 
         assert_eq!(inference_response.usage.prompt_tokens, 100);
         assert_eq!(inference_response.usage.completion_tokens, 50);

@@ -1,13 +1,10 @@
 #![forbid(unsafe_code)]
 
+use api::config_parser;
+use api::status;
 use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{debug_handler, Router};
-
-mod config_parser; // TensorZero config file
-mod error; // error handling
-mod inference; // model inference
-mod status; // status endpoint
 
 #[tokio::main]
 async fn main() {

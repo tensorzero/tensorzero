@@ -17,6 +17,9 @@ pub enum Error {
     InferenceClient {
         message: String,
     },
+    InvalidBaseUrl {
+        message: String,
+    },
     InvalidMessage {
         message: String,
     },
@@ -25,6 +28,13 @@ pub enum Error {
         message: String,
     },
     InvalidTool {
+        message: String,
+    },
+    OpenAIClient {
+        message: String,
+        status_code: StatusCode,
+    },
+    OpenAIServer {
         message: String,
     },
 }
@@ -36,8 +46,12 @@ impl Error {
             Error::AnthropicServer { .. }
             | Error::InferenceClient { .. }
             | Error::InvalidRequest { .. }
-            | Error::InvalidTool { .. } => tracing::Level::ERROR,
-            Error::AnthropicClient { .. } | Error::InvalidMessage { .. } => tracing::Level::WARN,
+            | Error::InvalidBaseUrl { .. }
+            | Error::InvalidTool { .. }
+            | Error::OpenAIServer { .. } => tracing::Level::ERROR,
+            Error::AnthropicClient { .. }
+            | Error::InvalidMessage { .. }
+            | Error::OpenAIClient { .. } => tracing::Level::WARN,
         }
     }
 
@@ -46,9 +60,12 @@ impl Error {
         match self {
             Error::AnthropicServer { .. }
             | Error::InferenceClient { .. }
+            | Error::InvalidBaseUrl { .. }
             | Error::InvalidRequest { .. }
-            | Error::InvalidTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::AnthropicClient { status_code, .. } => *status_code,
+            | Error::InvalidTool { .. }
+            | Error::OpenAIServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::AnthropicClient { status_code, .. }
+            | Error::OpenAIClient { status_code, .. } => *status_code,
             Error::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
         }
     }
@@ -70,9 +87,12 @@ impl std::fmt::Display for Error {
         match self {
             Error::AnthropicServer { message }
             | Error::InferenceClient { message }
+            | Error::InvalidBaseUrl { message }
             | Error::InvalidMessage { message }
             | Error::InvalidRequest { message }
             | Error::InvalidTool { message }
+            | Error::OpenAIServer { message }
+            | Error::OpenAIClient { message, .. }
             | Error::AnthropicClient { message, .. } => write!(f, "{}", message),
         }
     }

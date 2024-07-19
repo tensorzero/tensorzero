@@ -41,7 +41,6 @@ async fn test_infer() {
     };
 
     let result = anthropic::infer(inference_request, model_name, &client, &api_key).await;
-    println!("{:?}", result);
     assert!(result.is_ok());
     assert!(result.unwrap().content.is_some());
 }
