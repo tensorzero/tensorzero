@@ -35,7 +35,7 @@ repos:
 
       - id: cargo-test
         name: cargo test
-        entry: cargo test
+        entry: cargo test --features integration_tests
         language: system
         types: [rust]
         pass_filenames: false
