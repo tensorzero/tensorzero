@@ -28,18 +28,18 @@ pub struct ModelConfig {
 pub enum ProviderConfig {
     Anthropic {
         #[allow(dead_code)] // TODO: temporary
-        name: String,
+        model_name: String,
     },
     Azure {
         #[allow(dead_code)] // TODO: temporary
-        name: String,
+        model_name: String,
         #[allow(dead_code)] // TODO: temporary
         api_base: String,
     },
     #[serde(rename = "openai")]
     OpenAI {
         #[allow(dead_code)] // TODO: temporary
-        name: String,
+        model_name: String,
         #[allow(dead_code)] // TODO: temporary
         api_base: Option<String>,
     },
@@ -507,11 +507,11 @@ mod tests {
 
         [models."gpt-3.5-turbo".providers.openai]
         type = "openai"
-        name = "gpt-3.5-turbo"
+        model_name = "gpt-3.5-turbo"
 
         [models."gpt-3.5-turbo".providers.azure]
         type = "azure"
-        name = "gpt-35-turbo"
+        model_name = "gpt-35-turbo"
         api_base = "https://your-endpoint.openai.azure.com/"
 
         [models.claude-3-haiku-20240307]
@@ -519,7 +519,7 @@ mod tests {
 
         [models.claude-3-haiku-20240307.providers.anthropic]
         type = "anthropic"
-        name = "claude-3-haiku-20240307"
+        model_name = "claude-3-haiku-20240307"
 
         # ┌────────────────────────────────────────────────────────────────────────────┐
         # │                                 FUNCTIONS                                  │
