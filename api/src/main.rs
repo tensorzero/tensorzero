@@ -8,6 +8,7 @@ mod config_parser; // TensorZero config file
 mod endpoints; // API endpoints
 mod error; // error handling
 mod function; // types and methods for working with TensorZero functions
+mod inference; // model inference
 mod jsonschema_util; // utilities for working with JSON schemas
 
 #[tokio::main]
