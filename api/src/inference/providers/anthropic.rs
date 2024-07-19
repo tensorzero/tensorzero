@@ -18,6 +18,7 @@ const ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com/v1/messages";
 #[allow(dead_code)] // TODO: remove
 const ANTHROPIC_VERSION: &str = "2023-06-01";
 
+/// Anthropic batch API request
 // TODO: consider making this a trait as more inference providers are implemented and we converge on types for the ModelProvider
 #[allow(dead_code)] // TODO: remove
 pub async fn infer(
@@ -62,6 +63,7 @@ pub async fn infer(
     }
 }
 
+/// Anthropic streaming API request
 // TODO: consider making this a trait as more inference providers are implemented and we converge on types for the ModelProvider
 #[allow(dead_code)] // TODO: remove
 pub async fn infer_stream(
@@ -120,6 +122,7 @@ async fn stream_anthropic(mut event_source: EventSource) -> InferenceResponseStr
                         let response = match data {
                             Err(e) => Err(e),
                             Ok(data) => {
+                                // Anthropic streaming API docs specify that this is the last message
                                 if let AnthropicStreamMessage::MessageStop = data {
                                     break;
                                 }
@@ -288,6 +291,7 @@ struct AnthropicRequestBody {
 
 impl AnthropicRequestBody {
     #[allow(dead_code)] // TODO: remove
+                        // TODO: convert model to some common ModelProvider type
     fn new(model: String, request: ModelInferenceRequest) -> Result<AnthropicRequestBody, Error> {
         if request.messages.is_empty() {
             return Err(Error::InvalidRequest {
