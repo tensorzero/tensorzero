@@ -12,10 +12,10 @@ use crate::error::Error;
 
 /// Top-level TensorZero type for an inference request to a particular model.
 /// This should contain all the information required to make a valid inference request
-/// for a provider, except for information about what model to actually request.
+/// for a provider, except for information about what model to actually request,
 /// and to convert it back to the appropriate response format.
 /// An example of the latter is that we might have prepared a request with Tools available
-/// but the client actually just wants.
+/// but the client actually just wants a chat response.
 #[derive(Debug, PartialEq, Builder, Default, Clone)]
 #[builder(setter(into, strip_option), default)]
 pub struct ModelInferenceRequest {
@@ -36,10 +36,9 @@ pub struct ModelInferenceRequest {
 /// allow the request to use tools to enforce an output schema without necessarily
 /// exposing that to the client (unless they requested a tool call themselves).
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
-#[repr(u8)]
 pub enum FunctionType {
-    Chat = 1,
-    Tool = 2,
+    Chat,
+    Tool,
 }
 
 /// The default FunctionType is Chat
@@ -62,7 +61,7 @@ pub enum ToolChoice {
     #[allow(dead_code)] // TODO: remove
     Required,
     #[allow(dead_code)] // TODO: remove
-    Tool(String),
+    Tool(String), // Forces the LLM to call a particular tool, the String is the name of the Tool
 }
 
 #[derive(Debug, PartialEq, Clone)]

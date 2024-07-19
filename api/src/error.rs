@@ -35,10 +35,9 @@ impl Error {
         match self {
             Error::AnthropicServer { .. }
             | Error::InferenceClient { .. }
-            | Error::InvalidMessage { .. }
             | Error::InvalidRequest { .. }
             | Error::InvalidTool { .. } => tracing::Level::ERROR,
-            Error::AnthropicClient { .. } => tracing::Level::WARN,
+            Error::AnthropicClient { .. } | Error::InvalidMessage { .. } => tracing::Level::WARN,
         }
     }
 
@@ -47,10 +46,10 @@ impl Error {
         match self {
             Error::AnthropicServer { .. }
             | Error::InferenceClient { .. }
-            | Error::InvalidMessage { .. }
             | Error::InvalidRequest { .. }
             | Error::InvalidTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::AnthropicClient { status_code, .. } => *status_code,
+            Error::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
         }
     }
 

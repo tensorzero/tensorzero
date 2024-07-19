@@ -6,7 +6,7 @@ use axum::{debug_handler, Router};
 
 mod config_parser; // TensorZero config file
 mod error; // error handling
-mod inference; // Code for inferring variants
+mod inference; // model inference
 mod status; // status endpoint
 
 #[tokio::main]

@@ -16,7 +16,7 @@ use crate::error::Error;
 #[allow(dead_code)] // TODO: remove
 const ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com/v1/messages";
 #[allow(dead_code)] // TODO: remove
-const ANTHROPIC_VERSION: &str = "2023-06-01";
+const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 
 /// Anthropic batch API request
 // TODO: consider making this a trait as more inference providers are implemented and we converge on types for the ModelProvider
@@ -31,7 +31,7 @@ pub async fn infer(
     let request_body = AnthropicRequestBody::new(model.to_string(), request)?;
     let res = http_client
         .post(ANTHROPIC_BASE_URL)
-        .header("anthropic-version", ANTHROPIC_VERSION)
+        .header("anthropic-version", ANTHROPIC_API_VERSION)
         .header("x-api-key", api_key.expose_secret())
         .header("content-type", "application/json")
         .json(&request_body)
@@ -40,26 +40,23 @@ pub async fn infer(
         .map_err(|e| Error::InferenceClient {
             message: format!("Error sending request to Anthropic: {e}"),
         })?;
-    match res.status().is_success() {
-        true => {
-            let response_body =
-                res.json::<AnthropicResponseBody>()
-                    .await
-                    .map_err(|e| Error::AnthropicServer {
-                        message: format!("Error parsing Anthropic response: {e}"),
-                    })?;
-            response_body.try_into()
-        }
-        false => {
-            let response_code = res.status();
-            let error_body =
-                res.json::<AnthropicError>()
-                    .await
-                    .map_err(|e| Error::AnthropicServer {
-                        message: format!("Error parsing Anthropic response: {e}"),
-                    })?;
-            handle_anthropic_error(response_code, error_body.error)
-        }
+    if res.status().is_success() {
+        let response_body =
+            res.json::<AnthropicResponseBody>()
+                .await
+                .map_err(|e| Error::AnthropicServer {
+                    message: format!("Error parsing Anthropic response: {e}"),
+                })?;
+        response_body.try_into()
+    } else {
+        let response_code = res.status();
+        let error_body =
+            res.json::<AnthropicError>()
+                .await
+                .map_err(|e| Error::AnthropicServer {
+                    message: format!("Error parsing Anthropic response: {e}"),
+                })?;
+        handle_anthropic_error(response_code, error_body.error)
     }
 }
 
@@ -76,7 +73,7 @@ pub async fn infer_stream(
     let request_body = AnthropicRequestBody::new(model.to_string(), request)?;
     let event_source = http_client
         .post(ANTHROPIC_BASE_URL)
-        .header("anthropic-version", ANTHROPIC_VERSION)
+        .header("anthropic-version", ANTHROPIC_API_VERSION)
         .header("content-type", "application/json")
         .header("x-api-key", api_key.expose_secret())
         .json(&request_body)
@@ -87,7 +84,7 @@ pub async fn infer_stream(
     Ok(stream_anthropic(event_source).await)
 }
 
-/// Maps events from Anthropic into our familiar OpenAI format
+/// Maps events from Anthropic into the TensorZero format
 /// Modified from the example [here](https://github.com/64bit/async-openai/blob/5c9c817b095e3bacb2b6c9804864cdf8b15c795e/async-openai/src/client.rs#L433)
 /// At a high level, this function is handling low-level EventSource details and mapping the objects returned by Anthropic into our `InferenceResponseChunk` type
 #[allow(dead_code)] // TODO: remove
