@@ -64,19 +64,6 @@ pub enum ToolChoice {
     Tool(String), // Forces the LLM to call a particular tool, the String is the name of the Tool
 }
 
-// TODO: I think we can remove the whole struct
-#[derive(Debug, PartialEq, Clone)]
-pub enum Role {
-    #[allow(dead_code)] // TODO: remove
-    User,
-    #[allow(dead_code)] // TODO: remove
-    Assistant,
-    #[allow(dead_code)] // TODO: remove
-    System,
-    #[allow(dead_code)] // TODO: remove
-    Tool,
-}
-
 #[derive(Debug, PartialEq, Clone)]
 pub enum ToolType {
     #[allow(dead_code)] // TODO: remove
