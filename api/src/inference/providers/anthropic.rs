@@ -38,14 +38,14 @@ pub async fn infer(
         .send()
         .await
         .map_err(|e| Error::InferenceClient {
-            message: format!("Error sending request to Anthropic: {e}"),
+            message: format!("Error sending request: {e}"),
         })?;
     if res.status().is_success() {
         let response_body =
             res.json::<AnthropicResponseBody>()
                 .await
                 .map_err(|e| Error::AnthropicServer {
-                    message: format!("Error parsing Anthropic response: {e}"),
+                    message: format!("Error parsing response: {e}"),
                 })?;
         response_body.try_into()
     } else {
@@ -54,7 +54,7 @@ pub async fn infer(
             res.json::<AnthropicError>()
                 .await
                 .map_err(|e| Error::AnthropicServer {
-                    message: format!("Error parsing Anthropic response: {e}"),
+                    message: format!("Error parsing response: {e}"),
                 })?;
         handle_anthropic_error(response_code, error_body.error)
     }
@@ -110,9 +110,9 @@ async fn stream_anthropic(mut event_source: EventSource) -> InferenceResponseStr
                                 {
                                     Error::AnthropicServer {
                                         message: format!(
-                                        "Error parsing message from Anthropic. Error: {}, Data: {}",
-                                        e, message.data
-                                    ),
+                                            "Error parsing message: {}, Data: {}",
+                                            e, message.data
+                                        ),
                                     }
                                 }
                             });

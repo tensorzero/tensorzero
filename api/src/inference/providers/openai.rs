@@ -43,14 +43,14 @@ pub async fn infer(
             res.json::<OpenAIResponse>()
                 .await
                 .map_err(|e| Error::OpenAIServer {
-                    message: format!("Error parsing response from OpenAI: {e}"),
+                    message: format!("Error parsing response: {e}"),
                 })?;
         Ok(response_body.try_into()?)
     } else {
         handle_openai_error(
             res.status(),
             &res.text().await.map_err(|e| Error::OpenAIServer {
-                message: format!("Error parsing error response from OpenAI: {e}"),
+                message: format!("Error parsing error response: {e}"),
             })?,
         )
     }
@@ -103,7 +103,7 @@ async fn stream_openai(mut event_source: EventSource) -> InferenceResponseStream
                         let data: Result<OpenAIChatChunk, Error> =
                             serde_json::from_str(&message.data).map_err(|e| Error::OpenAIServer {
                                 message: format!(
-                                    "Error parsing message from OpenAI. Error: {}, Data: {}",
+                                    "Error parsing chunk. Error: {}, Data: {}",
                                     e, message.data
                                 ),
                             });
@@ -149,12 +149,12 @@ fn handle_openai_error(
     match response_code {
         StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN | StatusCode::TOO_MANY_REQUESTS => {
             Err(Error::OpenAIClient {
-                message: format!("OpenAI error: {response_body}"),
+                message: response_body.to_string(),
                 status_code: response_code,
             })
         }
         _ => Err(Error::OpenAIServer {
-            message: format!("OpenAI error: {response_body}"),
+            message: response_body.to_string(),
         }),
     }
 }
@@ -464,12 +464,12 @@ impl TryFrom<OpenAIResponse> for ModelInferenceResponse {
     type Error = Error;
     fn try_from(mut response: OpenAIResponse) -> Result<Self, Self::Error> {
         let raw = serde_json::to_string(&response).map_err(|e| Error::OpenAIServer {
-            message: format!("Error parsing response from OpenAI: {e}"),
+            message: format!("Error parsing response: {e}"),
         })?;
         if response.choices.len() != 1 {
             return Err(Error::OpenAIServer {
                 message: format!(
-                    "OpenAI response has invalid number of choices: {}. Expected 1.",
+                    "Response has invalid number of choices: {}. Expected 1.",
                     response.choices.len()
                 ),
             });
@@ -479,7 +479,7 @@ impl TryFrom<OpenAIResponse> for ModelInferenceResponse {
             .choices
             .pop()
             .ok_or(Error::OpenAIServer {
-                message: "OpenAI response has no choices (this should never happen)".to_string(),
+                message: "Response has no choices (this should never happen)".to_string(),
             })?
             .message;
 
@@ -519,7 +519,7 @@ fn openai_to_tensorzero_stream_message(
 ) -> Result<InferenceResponseChunk, Error> {
     if chunk.choices.len() > 1 {
         return Err(Error::OpenAIServer {
-            message: "OpenAI response has invalid number of choices: {}. Expected 1.".to_string(),
+            message: "Response has invalid number of choices: {}. Expected 1.".to_string(),
         });
     }
     let (content, tool_calls) = match chunk.choices.pop() {
@@ -598,7 +598,7 @@ mod tests {
             status_code,
         }) = unauthorized
         {
-            assert_eq!(message, "OpenAI error: Unauthorized access");
+            assert_eq!(message, "Unauthorized access");
             assert_eq!(status_code, StatusCode::UNAUTHORIZED);
         }
 
@@ -610,7 +610,7 @@ mod tests {
             status_code,
         }) = forbidden
         {
-            assert_eq!(message, "OpenAI error: Forbidden access");
+            assert_eq!(message, "Forbidden access");
             assert_eq!(status_code, StatusCode::FORBIDDEN);
         }
 
@@ -622,7 +622,7 @@ mod tests {
             status_code,
         }) = rate_limit
         {
-            assert_eq!(message, "OpenAI error: Rate limit exceeded");
+            assert_eq!(message, "Rate limit exceeded");
             assert_eq!(status_code, StatusCode::TOO_MANY_REQUESTS);
         }
 
@@ -630,7 +630,7 @@ mod tests {
         let server_error = handle_openai_error(StatusCode::INTERNAL_SERVER_ERROR, "Server error");
         assert!(matches!(server_error, Err(Error::OpenAIServer { .. })));
         if let Err(Error::OpenAIServer { message }) = server_error {
-            assert_eq!(message, "OpenAI error: Server error");
+            assert_eq!(message, "Server error");
         }
     }
 

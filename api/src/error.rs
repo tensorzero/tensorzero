@@ -85,15 +85,21 @@ impl Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::AnthropicServer { message }
-            | Error::InferenceClient { message }
+            Error::InferenceClient { message }
             | Error::InvalidBaseUrl { message }
             | Error::InvalidMessage { message }
             | Error::InvalidRequest { message }
-            | Error::InvalidTool { message }
-            | Error::OpenAIServer { message }
-            | Error::OpenAIClient { message, .. }
-            | Error::AnthropicClient { message, .. } => write!(f, "{}", message),
+            | Error::InvalidTool { message } => write!(f, "{}", message),
+            Error::AnthropicServer { message } => {
+                write!(f, "Error from Anthropic servers: {}", message)
+            }
+            Error::AnthropicClient { message, .. } => {
+                write!(f, "Error from Anthropic client: {}", message)
+            }
+            Error::OpenAIServer { message } => write!(f, "Error from OpenAI servers: {}", message),
+            Error::OpenAIClient { message, .. } => {
+                write!(f, "Error from OpenAI client: {}", message)
+            }
         }
     }
 }
