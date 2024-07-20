@@ -389,7 +389,6 @@ struct StreamOptions {
 #[derive(Serialize)]
 struct OpenAIRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
-    // TODO: keep this as a reference and use a lifetime
     model: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,

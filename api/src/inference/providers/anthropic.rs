@@ -26,7 +26,6 @@ pub struct AnthropicProvider;
 
 impl InferenceProvider for AnthropicProvider {
     /// Anthropic non-streaming API request
-    // TODO: consider making this a trait as more inference providers are implemented and we converge on types for the ModelProvider
     #[allow(dead_code)] // TODO: remove
     async fn infer(
         &self,
@@ -76,7 +75,6 @@ impl InferenceProvider for AnthropicProvider {
     }
 
     /// Anthropic streaming API request
-    // TODO: consider making this a trait as more inference providers are implemented and we converge on types for the ModelProvider
     #[allow(dead_code)] // TODO: remove
     async fn infer_stream(
         &self,
@@ -289,7 +287,7 @@ impl<'a> TryFrom<&'a InferenceRequestMessage> for AnthropicMessage<'a> {
 }
 
 // TODO: remove Clone
-#[derive(Serialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Debug, PartialEq)]
 struct AnthropicRequestBody<'a> {
     model: &'a str,
     messages: Vec<AnthropicMessage<'a>>,
