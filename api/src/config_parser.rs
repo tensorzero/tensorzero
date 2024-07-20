@@ -46,15 +46,6 @@ pub enum ProviderConfig {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ProviderConfigType {
-    #[serde(rename = "openai")]
-    OpenAI,
-    Anthropic,
-    Azure,
-}
-
-#[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FunctionConfig {
     #[allow(dead_code)] // TODO: temporary

@@ -30,6 +30,9 @@ pub enum Error {
     InvalidTool {
         message: String,
     },
+    InvalidProviderConfig {
+        message: String,
+    },
     OpenAIClient {
         message: String,
         status_code: StatusCode,
@@ -48,6 +51,7 @@ impl Error {
             | Error::InvalidRequest { .. }
             | Error::InvalidBaseUrl { .. }
             | Error::InvalidTool { .. }
+            | Error::InvalidProviderConfig { .. }
             | Error::OpenAIServer { .. } => tracing::Level::ERROR,
             Error::AnthropicClient { .. }
             | Error::InvalidMessage { .. }
@@ -63,6 +67,7 @@ impl Error {
             | Error::InvalidBaseUrl { .. }
             | Error::InvalidRequest { .. }
             | Error::InvalidTool { .. }
+            | Error::InvalidProviderConfig { .. }
             | Error::OpenAIServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::AnthropicClient { status_code, .. }
             | Error::OpenAIClient { status_code, .. } => *status_code,
@@ -89,7 +94,8 @@ impl std::fmt::Display for Error {
             | Error::InvalidBaseUrl { message }
             | Error::InvalidMessage { message }
             | Error::InvalidRequest { message }
-            | Error::InvalidTool { message } => write!(f, "{}", message),
+            | Error::InvalidTool { message }
+            | Error::InvalidProviderConfig { message } => write!(f, "{}", message),
             Error::AnthropicServer { message } => {
                 write!(f, "Error from Anthropic servers: {}", message)
             }
