@@ -6,7 +6,7 @@ use crate::inference::providers::common::{
     create_simple_inference_request, create_streaming_inference_request,
     create_tool_inference_request,
 };
-use api::inference::providers::openai;
+use api::{config_parser::ProviderConfig, inference::providers::openai};
 use futures::StreamExt;
 use secrecy::SecretString;
 
@@ -20,7 +20,11 @@ async fn test_infer() {
     let inference_request = create_simple_inference_request();
 
     let base_url = None;
-    let result = openai::infer(inference_request, model_name, &client, &api_key, base_url).await;
+    let provider_config = ProviderConfig::OpenAI {
+        model_name: model_name.to_string(),
+        api_base: base_url,
+    };
+    let result = openai::infer(&inference_request, &provider_config, &client, &api_key).await;
     assert!(result.is_ok());
     assert!(result.unwrap().content.is_some());
 }
@@ -36,7 +40,11 @@ async fn test_infer_with_tool_calls() {
     let inference_request = create_tool_inference_request();
 
     let base_url = None;
-    let result = openai::infer(inference_request, model_name, &client, &api_key, base_url).await;
+    let provider_config = ProviderConfig::OpenAI {
+        model_name: model_name.to_string(),
+        api_base: base_url,
+    };
+    let result = openai::infer(&inference_request, &provider_config, &client, &api_key).await;
 
     assert!(result.is_ok());
     let response = result.unwrap();
@@ -63,8 +71,12 @@ async fn test_infer_stream() {
     let inference_request = create_streaming_inference_request();
 
     let base_url = None;
+    let provider_config = ProviderConfig::OpenAI {
+        model_name: model_name.to_string(),
+        api_base: base_url,
+    };
     let result =
-        openai::infer_stream(inference_request, model_name, &client, &api_key, base_url).await;
+        openai::infer_stream(&inference_request, &provider_config, &client, &api_key).await;
     assert!(result.is_ok());
     let mut stream = result.unwrap();
     let mut collected_chunks = Vec::new();

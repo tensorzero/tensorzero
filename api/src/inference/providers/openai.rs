@@ -7,6 +7,7 @@ use serde_json::Value;
 use url::Url;
 use uuid::Uuid;
 
+use crate::config_parser::ProviderConfig;
 use crate::error::Error;
 use crate::inference::types::{
     InferenceRequestMessage, InferenceResponseChunk, InferenceResponseStream,
@@ -17,14 +18,24 @@ use crate::inference::types::{
 const OPENAI_DEFAULT_BASE_URL: &str = "https://api.openai.com/v1/";
 
 pub async fn infer(
-    request: ModelInferenceRequest,
-    model: &str,
+    request: &ModelInferenceRequest,
+    model: &ProviderConfig,
     http_client: &reqwest::Client,
     api_key: &SecretString,
-    base_url: Option<&str>,
 ) -> Result<ModelInferenceResponse, Error> {
-    let request_body = OpenAIRequest::new(model.to_string(), request);
-    let request_url = get_chat_url(base_url)?;
+    let (model_name, api_base) = match model {
+        ProviderConfig::OpenAI {
+            model_name,
+            api_base,
+        } => (model_name, api_base.as_deref()),
+        _ => {
+            return Err(Error::InvalidProviderConfig {
+                message: "Expected OpenAI provider config".to_string(),
+            })
+        }
+    };
+    let request_body = OpenAIRequest::new(model_name, request);
+    let request_url = get_chat_url(api_base)?;
     let res = http_client
         .post(request_url)
         .header("Content-Type", "application/json")
@@ -57,14 +68,24 @@ pub async fn infer(
 }
 
 pub async fn infer_stream(
-    request: ModelInferenceRequest,
-    model: &str,
+    request: &ModelInferenceRequest,
+    model: &ProviderConfig,
     http_client: &reqwest::Client,
     api_key: &SecretString,
-    base_url: Option<&str>,
 ) -> Result<InferenceResponseStream, Error> {
-    let request_body = OpenAIRequest::new(model.to_string(), request);
-    let request_url = get_chat_url(base_url)?;
+    let (model_name, api_base) = match model {
+        ProviderConfig::OpenAI {
+            model_name,
+            api_base,
+        } => (model_name, api_base.as_deref()),
+        _ => {
+            return Err(Error::InvalidProviderConfig {
+                message: "Expected OpenAI provider config".to_string(),
+            })
+        }
+    };
+    let request_body = OpenAIRequest::new(model_name, request);
+    let request_url = get_chat_url(api_base)?;
     let event_source = http_client
         .post(request_url)
         .header("Content-Type", "application/json")
@@ -160,108 +181,89 @@ fn handle_openai_error(
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
-struct OpenAISystemRequestMessage {
-    content: String,
+struct OpenAISystemRequestMessage<'a> {
+    content: &'a str,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
-struct OpenAIUserRequestMessage {
-    content: String, // TODO: this could be an array including images and stuff according to API spec, we don't support
+struct OpenAIUserRequestMessage<'a> {
+    content: &'a str, // TODO: this could be an array including images and stuff according to API spec, we don't support
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-struct OpenAIFunctionCall {
-    name: String,
-    arguments: String,
+struct OpenAIRequestFunctionCall<'a> {
+    name: &'a str,
+    arguments: &'a str,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-struct OpenAIToolCall {
-    id: String,
+struct OpenAIRequestToolCall<'a> {
+    id: &'a str,
     r#type: OpenAIToolType,
-    function: OpenAIFunctionCall,
+    function: OpenAIRequestFunctionCall<'a>,
 }
 
-impl From<ToolCall> for OpenAIToolCall {
-    fn from(tool_call: ToolCall) -> Self {
-        OpenAIToolCall {
-            id: tool_call.id,
+impl<'a> From<&'a ToolCall> for OpenAIRequestToolCall<'a> {
+    fn from(tool_call: &'a ToolCall) -> Self {
+        OpenAIRequestToolCall {
+            id: &tool_call.id,
             r#type: OpenAIToolType::Function,
-            function: OpenAIFunctionCall {
-                name: tool_call.name,
-                arguments: tool_call.arguments,
+            function: OpenAIRequestFunctionCall {
+                name: &tool_call.name,
+                arguments: &tool_call.arguments,
             },
         }
     }
 }
 
-impl From<OpenAIToolCall> for ToolCall {
-    fn from(openai_tool_call: OpenAIToolCall) -> Self {
-        ToolCall {
-            id: openai_tool_call.id,
-            name: openai_tool_call.function.name,
-            arguments: openai_tool_call.function.arguments,
-        }
-    }
-}
-
-impl From<OpenAIToolCall> for ToolCallChunk {
-    fn from(tool_call: OpenAIToolCall) -> Self {
-        ToolCallChunk {
-            id: Some(tool_call.id),
-            name: Some(tool_call.function.name),
-            arguments: Some(tool_call.function.arguments),
-        }
-    }
+#[derive(Serialize, Debug, Clone, PartialEq)]
+struct OpenAIAssistantRequestMessage<'a> {
+    content: Option<&'a str>,
+    tool_calls: Option<Vec<OpenAIRequestToolCall<'a>>>,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
-struct OpenAIAssistantRequestMessage {
-    content: Option<String>,
-    tool_calls: Option<Vec<OpenAIToolCall>>,
-}
-
-#[derive(Serialize, Debug, Clone, PartialEq)]
-struct OpenAIToolRequestMessage {
-    content: String,
-    tool_call_id: String,
+struct OpenAIToolRequestMessage<'a> {
+    content: &'a str,
+    tool_call_id: &'a str,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(tag = "role")]
 #[serde(rename_all = "lowercase")]
-enum OpenAIRequestMessage {
-    System(OpenAISystemRequestMessage),
-    User(OpenAIUserRequestMessage),
-    Assistant(OpenAIAssistantRequestMessage),
-    Tool(OpenAIToolRequestMessage),
+enum OpenAIRequestMessage<'a> {
+    System(OpenAISystemRequestMessage<'a>),
+    User(OpenAIUserRequestMessage<'a>),
+    Assistant(OpenAIAssistantRequestMessage<'a>),
+    Tool(OpenAIToolRequestMessage<'a>),
 }
 
-impl From<InferenceRequestMessage> for OpenAIRequestMessage {
-    fn from(inference_message: InferenceRequestMessage) -> Self {
+impl<'a> From<&'a InferenceRequestMessage> for OpenAIRequestMessage<'a> {
+    fn from(inference_message: &'a InferenceRequestMessage) -> Self {
         match inference_message {
             InferenceRequestMessage::System(message) => {
                 OpenAIRequestMessage::System(OpenAISystemRequestMessage {
-                    content: message.content,
+                    content: &message.content,
                 })
             }
             InferenceRequestMessage::User(message) => {
                 OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                    content: message.content,
+                    content: &message.content,
                 })
             }
             InferenceRequestMessage::Assistant(message) => {
                 OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                    content: message.content,
+                    content: message.content.as_deref(),
                     tool_calls: message
                         .tool_calls
-                        .map(|t| t.into_iter().map(|t| t.into()).collect()),
+                        .as_ref()
+                        .map(|t| t.iter().map(|t| t.into()).collect()),
                 })
             }
             InferenceRequestMessage::Tool(message) => {
                 OpenAIRequestMessage::Tool(OpenAIToolRequestMessage {
-                    content: message.content,
-                    tool_call_id: message.tool_call_id,
+                    content: &message.content,
+                    tool_call_id: &message.tool_call_id,
                 })
             }
         }
@@ -283,6 +285,8 @@ enum OpenAIToolType {
     Function,
 }
 
+// NB: if we ever add more complex tool types, should convert to references and lifetimes here
+// as we do above.
 impl From<ToolType> for OpenAIToolType {
     fn from(tool_type: ToolType) -> Self {
         match tool_type {
@@ -292,26 +296,27 @@ impl From<ToolType> for OpenAIToolType {
 }
 
 #[derive(Serialize, PartialEq, Debug)]
-struct OpenAIFunction {
-    name: String,
-    description: Option<String>,
-    parameters: Value,
+struct OpenAIFunction<'a> {
+    name: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<&'a str>,
+    parameters: &'a Value,
 }
 
 #[derive(Serialize, Debug, PartialEq)]
-struct OpenAITool {
+struct OpenAITool<'a> {
     r#type: OpenAIToolType,
-    function: OpenAIFunction,
+    function: OpenAIFunction<'a>,
 }
 
-impl From<Tool> for OpenAITool {
-    fn from(tool: Tool) -> Self {
+impl<'a> From<&'a Tool> for OpenAITool<'a> {
+    fn from(tool: &'a Tool) -> Self {
         OpenAITool {
-            r#type: tool.r#type.into(),
+            r#type: tool.r#type.clone().into(),
             function: OpenAIFunction {
-                name: tool.name,
-                description: tool.description,
-                parameters: tool.parameters,
+                name: &tool.name,
+                description: tool.description.as_deref(),
+                parameters: &tool.parameters,
             },
         }
     }
@@ -319,9 +324,9 @@ impl From<Tool> for OpenAITool {
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(untagged)]
-enum OpenAIToolChoice {
+enum OpenAIToolChoice<'a> {
     String(OpenAIToolChoiceString),
-    Specific(SpecificToolChoice),
+    Specific(SpecificToolChoice<'a>),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -333,24 +338,24 @@ enum OpenAIToolChoiceString {
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
-struct SpecificToolChoice {
+struct SpecificToolChoice<'a> {
     r#type: OpenAIToolType,
-    function: SpecificToolFunction,
+    function: SpecificToolFunction<'a>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-struct SpecificToolFunction {
-    name: String,
+struct SpecificToolFunction<'a> {
+    name: &'a str,
 }
 
-impl Default for OpenAIToolChoice {
+impl<'a> Default for OpenAIToolChoice<'a> {
     fn default() -> Self {
         OpenAIToolChoice::String(OpenAIToolChoiceString::None)
     }
 }
 
-impl From<ToolChoice> for OpenAIToolChoice {
-    fn from(tool_choice: ToolChoice) -> Self {
+impl<'a> From<&'a ToolChoice> for OpenAIToolChoice<'a> {
+    fn from(tool_choice: &'a ToolChoice) -> Self {
         match tool_choice {
             ToolChoice::None => OpenAIToolChoice::String(OpenAIToolChoiceString::None),
             ToolChoice::Auto => OpenAIToolChoice::String(OpenAIToolChoiceString::Auto),
@@ -375,10 +380,10 @@ struct StreamOptions {
 /// presence_penalty, seed, service_tier, stop, user,
 /// or the deprecated function_call and functions arguments.
 #[derive(Serialize)]
-struct OpenAIRequest {
-    messages: Vec<OpenAIRequestMessage>,
+struct OpenAIRequest<'a> {
+    messages: Vec<OpenAIRequestMessage<'a>>,
     // TODO: keep this as a reference and use a lifetime
-    model: String,
+    model: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -388,15 +393,15 @@ struct OpenAIRequest {
     stream_options: Option<StreamOptions>,
     response_format: OpenAIResponseFormat,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<OpenAITool>>,
+    tools: Option<Vec<OpenAITool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_choice: Option<OpenAIToolChoice>,
+    tool_choice: Option<OpenAIToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
 }
 
-impl OpenAIRequest {
-    pub fn new(model: String, request: ModelInferenceRequest) -> OpenAIRequest {
+impl<'a> OpenAIRequest<'a> {
+    pub fn new(model: &'a str, request: &'a ModelInferenceRequest) -> OpenAIRequest<'a> {
         let response_format = match request.json_mode {
             true => OpenAIResponseFormat::JsonObject,
             false => OpenAIResponseFormat::Text,
@@ -408,7 +413,7 @@ impl OpenAIRequest {
             false => None,
         };
         OpenAIRequest {
-            messages: request.messages.into_iter().map(|m| m.into()).collect(),
+            messages: request.messages.iter().map(|m| m.into()).collect(),
             model,
             temperature: request.temperature,
             max_tokens: request.max_tokens,
@@ -417,8 +422,9 @@ impl OpenAIRequest {
             response_format,
             tools: request
                 .tools_available
-                .map(|t| t.into_iter().map(|t| t.into()).collect()),
-            tool_choice: request.tool_choice.map(|choice| choice.into()),
+                .as_ref()
+                .map(|t| t.iter().map(|t| t.into()).collect()),
+            tool_choice: request.tool_choice.as_ref().map(OpenAIToolChoice::from),
             parallel_tool_calls: request.parallel_tool_calls,
         }
     }
@@ -440,10 +446,43 @@ impl From<OpenAIUsage> for Usage {
     }
 }
 
+#[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
+struct OpenAIResponseFunctionCall {
+    name: String,
+    arguments: String,
+}
+
+#[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
+struct OpenAIResponseToolCall {
+    id: String,
+    r#type: OpenAIToolType,
+    function: OpenAIResponseFunctionCall,
+}
+
+impl From<OpenAIResponseToolCall> for ToolCall {
+    fn from(openai_tool_call: OpenAIResponseToolCall) -> Self {
+        ToolCall {
+            id: openai_tool_call.id,
+            name: openai_tool_call.function.name,
+            arguments: openai_tool_call.function.arguments,
+        }
+    }
+}
+
+impl From<OpenAIResponseToolCall> for ToolCallChunk {
+    fn from(tool_call: OpenAIResponseToolCall) -> Self {
+        ToolCallChunk {
+            id: Some(tool_call.id),
+            name: Some(tool_call.function.name),
+            arguments: Some(tool_call.function.arguments),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 struct OpenAIResponseMessage {
     content: Option<String>,
-    tool_calls: Option<Vec<OpenAIToolCall>>,
+    tool_calls: Option<Vec<OpenAIResponseToolCall>>,
 }
 
 // Leaving out logprobs and finish_reason for now
@@ -498,7 +537,7 @@ impl TryFrom<OpenAIResponse> for ModelInferenceResponse {
 #[derive(Deserialize, Debug, PartialEq)]
 struct OpenAIDelta {
     content: Option<String>,
-    tool_calls: Option<Vec<OpenAIToolCall>>,
+    tool_calls: Option<Vec<OpenAIResponseToolCall>>,
 }
 
 // This doesn't include logprobs, finish_reason, and index
@@ -663,7 +702,7 @@ mod tests {
             output_schema: None,
         };
 
-        let openai_request = OpenAIRequest::new("gpt-3.5-turbo".to_string(), basic_request);
+        let openai_request = OpenAIRequest::new("gpt-3.5-turbo", &basic_request);
 
         assert_eq!(openai_request.model, "gpt-3.5-turbo");
         assert_eq!(openai_request.messages.len(), 2);
@@ -707,7 +746,7 @@ mod tests {
             output_schema: None,
         };
 
-        let openai_request = OpenAIRequest::new("gpt-4".to_string(), request_with_tools);
+        let openai_request = OpenAIRequest::new("gpt-4", &request_with_tools);
 
         assert_eq!(openai_request.model, "gpt-4");
         assert_eq!(openai_request.messages.len(), 1);
@@ -762,10 +801,10 @@ mod tests {
                 index: 0,
                 message: OpenAIResponseMessage {
                     content: None,
-                    tool_calls: Some(vec![OpenAIToolCall {
+                    tool_calls: Some(vec![OpenAIResponseToolCall {
                         id: "call1".to_string(),
                         r#type: OpenAIToolType::Function,
-                        function: OpenAIFunctionCall {
+                        function: OpenAIResponseFunctionCall {
                             name: "test_function".to_string(),
                             arguments: "{}".to_string(),
                         },
