@@ -1,11 +1,3 @@
-use crate::{
-    config_parser::ProviderConfig,
-    inference::types::{
-        InferenceRequestMessage, InferenceResponseChunk, InferenceResponseStream,
-        ModelInferenceRequest, ModelInferenceResponse, Tool, ToolCall, ToolCallChunk, ToolChoice,
-        ToolType, Usage,
-    },
-};
 use futures::StreamExt;
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
@@ -15,90 +7,105 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::error::Error;
+use crate::inference::providers::provider_trait::InferenceProvider;
+use crate::{
+    config_parser::ProviderConfig,
+    inference::types::{
+        InferenceRequestMessage, InferenceResponseChunk, InferenceResponseStream,
+        ModelInferenceRequest, ModelInferenceResponse, Tool, ToolCall, ToolCallChunk, ToolChoice,
+        ToolType, Usage,
+    },
+};
 
 #[allow(dead_code)] // TODO: remove
 const ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com/v1/messages";
 #[allow(dead_code)] // TODO: remove
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 
-/// Anthropic non-streaming API request
-// TODO: consider making this a trait as more inference providers are implemented and we converge on types for the ModelProvider
-#[allow(dead_code)] // TODO: remove
-pub async fn infer(
-    request: &ModelInferenceRequest,
-    model: &ProviderConfig,
-    http_client: &reqwest::Client,
-    api_key: &SecretString,
-) -> Result<ModelInferenceResponse, Error> {
-    let model_name = match model {
-        ProviderConfig::Anthropic { model_name } => model_name,
-        _ => {
-            return Err(Error::InvalidProviderConfig {
-                message: "Expected Anthropic provider config".to_string(),
-            })
-        }
-    };
-    let request_body = AnthropicRequestBody::new(model_name, request)?;
-    let res = http_client
-        .post(ANTHROPIC_BASE_URL)
-        .header("anthropic-version", ANTHROPIC_API_VERSION)
-        .header("x-api-key", api_key.expose_secret())
-        .header("content-type", "application/json")
-        .json(&request_body)
-        .send()
-        .await
-        .map_err(|e| Error::InferenceClient {
-            message: format!("Error sending request: {e}"),
-        })?;
-    if res.status().is_success() {
-        let response_body =
-            res.json::<AnthropicResponseBody>()
-                .await
-                .map_err(|e| Error::AnthropicServer {
-                    message: format!("Error parsing response: {e}"),
-                })?;
-        response_body.try_into()
-    } else {
-        let response_code = res.status();
-        let error_body =
-            res.json::<AnthropicError>()
-                .await
-                .map_err(|e| Error::AnthropicServer {
-                    message: format!("Error parsing response: {e}"),
-                })?;
-        handle_anthropic_error(response_code, error_body.error)
-    }
-}
+pub struct AnthropicProvider;
 
-/// Anthropic streaming API request
-// TODO: consider making this a trait as more inference providers are implemented and we converge on types for the ModelProvider
-#[allow(dead_code)] // TODO: remove
-pub async fn infer_stream(
-    request: &ModelInferenceRequest,
-    model: &ProviderConfig,
-    http_client: &reqwest::Client,
-    api_key: &SecretString,
-) -> Result<InferenceResponseStream, Error> {
-    let model_name = match model {
-        ProviderConfig::Anthropic { model_name } => model_name,
-        _ => {
-            return Err(Error::InvalidProviderConfig {
-                message: "Expected Anthropic provider config".to_string(),
-            })
+impl InferenceProvider for AnthropicProvider {
+    /// Anthropic non-streaming API request
+    // TODO: consider making this a trait as more inference providers are implemented and we converge on types for the ModelProvider
+    #[allow(dead_code)] // TODO: remove
+    async fn infer(
+        &self,
+        request: &ModelInferenceRequest,
+        model: &ProviderConfig,
+        http_client: &reqwest::Client,
+        api_key: &SecretString,
+    ) -> Result<ModelInferenceResponse, Error> {
+        let model_name = match model {
+            ProviderConfig::Anthropic { model_name } => model_name,
+            _ => {
+                return Err(Error::InvalidProviderConfig {
+                    message: "Expected Anthropic provider config".to_string(),
+                })
+            }
+        };
+        let request_body = AnthropicRequestBody::new(model_name, request)?;
+        let res = http_client
+            .post(ANTHROPIC_BASE_URL)
+            .header("anthropic-version", ANTHROPIC_API_VERSION)
+            .header("x-api-key", api_key.expose_secret())
+            .header("content-type", "application/json")
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| Error::InferenceClient {
+                message: format!("Error sending request: {e}"),
+            })?;
+        if res.status().is_success() {
+            let response_body =
+                res.json::<AnthropicResponseBody>()
+                    .await
+                    .map_err(|e| Error::AnthropicServer {
+                        message: format!("Error parsing response: {e}"),
+                    })?;
+            response_body.try_into()
+        } else {
+            let response_code = res.status();
+            let error_body =
+                res.json::<AnthropicError>()
+                    .await
+                    .map_err(|e| Error::AnthropicServer {
+                        message: format!("Error parsing response: {e}"),
+                    })?;
+            handle_anthropic_error(response_code, error_body.error)
         }
-    };
-    let request_body = AnthropicRequestBody::new(model_name, request)?;
-    let event_source = http_client
-        .post(ANTHROPIC_BASE_URL)
-        .header("anthropic-version", ANTHROPIC_API_VERSION)
-        .header("content-type", "application/json")
-        .header("x-api-key", api_key.expose_secret())
-        .json(&request_body)
-        .eventsource()
-        .map_err(|e| Error::InferenceClient {
-            message: format!("Error sending request to Anthropic: {e}"),
-        })?;
-    Ok(stream_anthropic(event_source).await)
+    }
+
+    /// Anthropic streaming API request
+    // TODO: consider making this a trait as more inference providers are implemented and we converge on types for the ModelProvider
+    #[allow(dead_code)] // TODO: remove
+    async fn infer_stream(
+        &self,
+        request: &ModelInferenceRequest,
+        model: &ProviderConfig,
+        http_client: &reqwest::Client,
+        api_key: &SecretString,
+    ) -> Result<InferenceResponseStream, Error> {
+        let model_name = match model {
+            ProviderConfig::Anthropic { model_name } => model_name,
+            _ => {
+                return Err(Error::InvalidProviderConfig {
+                    message: "Expected Anthropic provider config".to_string(),
+                })
+            }
+        };
+        let request_body = AnthropicRequestBody::new(model_name, request)?;
+        let event_source = http_client
+            .post(ANTHROPIC_BASE_URL)
+            .header("anthropic-version", ANTHROPIC_API_VERSION)
+            .header("content-type", "application/json")
+            .header("x-api-key", api_key.expose_secret())
+            .json(&request_body)
+            .eventsource()
+            .map_err(|e| Error::InferenceClient {
+                message: format!("Error sending request to Anthropic: {e}"),
+            })?;
+        Ok(stream_anthropic(event_source).await)
+    }
 }
 
 /// Maps events from Anthropic into the TensorZero format

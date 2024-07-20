@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use crate::config_parser::ProviderConfig;
 use crate::error::Error;
+use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
     InferenceRequestMessage, InferenceResponseChunk, InferenceResponseStream,
     ModelInferenceRequest, ModelInferenceResponse, Tool, ToolCall, ToolCallChunk, ToolChoice,
@@ -17,88 +18,94 @@ use crate::inference::types::{
 
 const OPENAI_DEFAULT_BASE_URL: &str = "https://api.openai.com/v1/";
 
-pub async fn infer(
-    request: &ModelInferenceRequest,
-    model: &ProviderConfig,
-    http_client: &reqwest::Client,
-    api_key: &SecretString,
-) -> Result<ModelInferenceResponse, Error> {
-    let (model_name, api_base) = match model {
-        ProviderConfig::OpenAI {
-            model_name,
-            api_base,
-        } => (model_name, api_base.as_deref()),
-        _ => {
-            return Err(Error::InvalidProviderConfig {
-                message: "Expected OpenAI provider config".to_string(),
-            })
-        }
-    };
-    let request_body = OpenAIRequest::new(model_name, request);
-    let request_url = get_chat_url(api_base)?;
-    let res = http_client
-        .post(request_url)
-        .header("Content-Type", "application/json")
-        .header(
-            "Authorization",
-            format!("Bearer {}", api_key.expose_secret()),
-        )
-        .json(&request_body)
-        .send()
-        .await
-        .map_err(|e| Error::InferenceClient {
-            message: format!("Error sending request to OpenAI: {e}"),
-        })?;
-    if res.status().is_success() {
-        let response_body =
-            res.json::<OpenAIResponse>()
-                .await
-                .map_err(|e| Error::OpenAIServer {
-                    message: format!("Error parsing response: {e}"),
-                })?;
-        Ok(response_body.try_into()?)
-    } else {
-        handle_openai_error(
-            res.status(),
-            &res.text().await.map_err(|e| Error::OpenAIServer {
-                message: format!("Error parsing error response: {e}"),
-            })?,
-        )
-    }
-}
+pub struct OpenAIProvider;
 
-pub async fn infer_stream(
-    request: &ModelInferenceRequest,
-    model: &ProviderConfig,
-    http_client: &reqwest::Client,
-    api_key: &SecretString,
-) -> Result<InferenceResponseStream, Error> {
-    let (model_name, api_base) = match model {
-        ProviderConfig::OpenAI {
-            model_name,
-            api_base,
-        } => (model_name, api_base.as_deref()),
-        _ => {
-            return Err(Error::InvalidProviderConfig {
-                message: "Expected OpenAI provider config".to_string(),
-            })
+impl InferenceProvider for OpenAIProvider {
+    async fn infer(
+        &self,
+        request: &ModelInferenceRequest,
+        model: &ProviderConfig,
+        http_client: &reqwest::Client,
+        api_key: &SecretString,
+    ) -> Result<ModelInferenceResponse, Error> {
+        let (model_name, api_base) = match model {
+            ProviderConfig::OpenAI {
+                model_name,
+                api_base,
+            } => (model_name, api_base.as_deref()),
+            _ => {
+                return Err(Error::InvalidProviderConfig {
+                    message: "Expected OpenAI provider config".to_string(),
+                })
+            }
+        };
+        let request_body = OpenAIRequest::new(model_name, request);
+        let request_url = get_chat_url(api_base)?;
+        let res = http_client
+            .post(request_url)
+            .header("Content-Type", "application/json")
+            .header(
+                "Authorization",
+                format!("Bearer {}", api_key.expose_secret()),
+            )
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| Error::InferenceClient {
+                message: format!("Error sending request to OpenAI: {e}"),
+            })?;
+        if res.status().is_success() {
+            let response_body =
+                res.json::<OpenAIResponse>()
+                    .await
+                    .map_err(|e| Error::OpenAIServer {
+                        message: format!("Error parsing response: {e}"),
+                    })?;
+            Ok(response_body.try_into()?)
+        } else {
+            handle_openai_error(
+                res.status(),
+                &res.text().await.map_err(|e| Error::OpenAIServer {
+                    message: format!("Error parsing error response: {e}"),
+                })?,
+            )
         }
-    };
-    let request_body = OpenAIRequest::new(model_name, request);
-    let request_url = get_chat_url(api_base)?;
-    let event_source = http_client
-        .post(request_url)
-        .header("Content-Type", "application/json")
-        .header(
-            "Authorization",
-            format!("Bearer {}", api_key.expose_secret()),
-        )
-        .json(&request_body)
-        .eventsource()
-        .map_err(|e| Error::InferenceClient {
-            message: format!("Error sending request to OpenAI: {e}"),
-        })?;
-    Ok(stream_openai(event_source).await)
+    }
+
+    async fn infer_stream(
+        &self,
+        request: &ModelInferenceRequest,
+        model: &ProviderConfig,
+        http_client: &reqwest::Client,
+        api_key: &SecretString,
+    ) -> Result<InferenceResponseStream, Error> {
+        let (model_name, api_base) = match model {
+            ProviderConfig::OpenAI {
+                model_name,
+                api_base,
+            } => (model_name, api_base.as_deref()),
+            _ => {
+                return Err(Error::InvalidProviderConfig {
+                    message: "Expected OpenAI provider config".to_string(),
+                })
+            }
+        };
+        let request_body = OpenAIRequest::new(model_name, request);
+        let request_url = get_chat_url(api_base)?;
+        let event_source = http_client
+            .post(request_url)
+            .header("Content-Type", "application/json")
+            .header(
+                "Authorization",
+                format!("Bearer {}", api_key.expose_secret()),
+            )
+            .json(&request_body)
+            .eventsource()
+            .map_err(|e| Error::InferenceClient {
+                message: format!("Error sending request to OpenAI: {e}"),
+            })?;
+        Ok(stream_openai(event_source).await)
+    }
 }
 
 async fn stream_openai(mut event_source: EventSource) -> InferenceResponseStream {

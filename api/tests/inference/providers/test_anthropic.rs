@@ -4,7 +4,8 @@ use crate::inference::providers::common::{
     create_simple_inference_request, create_streaming_inference_request,
     create_tool_inference_request,
 };
-use api::{config_parser::ProviderConfig, inference::providers::anthropic};
+use api::inference::providers::provider_trait::InferenceProvider;
+use api::{config_parser::ProviderConfig, inference::providers::anthropic::AnthropicProvider};
 use futures::StreamExt;
 use secrecy::SecretString;
 use std::env;
@@ -20,7 +21,10 @@ async fn test_infer() {
     };
     let client = reqwest::Client::new();
     let inference_request = create_simple_inference_request();
-    let result = anthropic::infer(&inference_request, &config, &client, &api_key).await;
+    let provider = AnthropicProvider;
+    let result = provider
+        .infer(&inference_request, &config, &client, &api_key)
+        .await;
     assert!(result.is_ok());
     assert!(result.unwrap().content.is_some());
 }
@@ -36,7 +40,10 @@ async fn test_infer_stream() {
     };
     let client = reqwest::Client::new();
     let inference_request = create_streaming_inference_request();
-    let result = anthropic::infer_stream(&inference_request, &config, &client, &api_key).await;
+    let provider = AnthropicProvider;
+    let result = provider
+        .infer_stream(&inference_request, &config, &client, &api_key)
+        .await;
     assert!(result.is_ok());
     let mut stream = result.unwrap();
     let mut collected_chunks = Vec::new();
@@ -60,7 +67,10 @@ async fn test_infer_with_tool_calls() {
     let config = ProviderConfig::Anthropic {
         model_name: model_name.to_string(),
     };
-    let result = anthropic::infer(&inference_request, &config, &client, &api_key).await;
+    let provider = AnthropicProvider;
+    let result = provider
+        .infer(&inference_request, &config, &client, &api_key)
+        .await;
 
     assert!(result.is_ok());
     let response = result.unwrap();
