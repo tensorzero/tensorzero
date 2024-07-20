@@ -2,14 +2,13 @@
 #![cfg(test)]
 use std::env;
 
-use api::inference::providers::openai;
-use api::inference::types::{
-    FunctionType, InferenceRequestMessage, ModelInferenceRequest, SystemInferenceRequestMessage,
-    Tool, ToolChoice, ToolType, UserInferenceRequestMessage,
+use crate::inference::providers::common::{
+    create_simple_inference_request, create_streaming_inference_request,
+    create_tool_inference_request,
 };
+use api::inference::providers::openai;
 use futures::StreamExt;
 use secrecy::SecretString;
-use serde_json::json;
 
 #[tokio::test]
 async fn test_infer() {
@@ -18,28 +17,7 @@ async fn test_infer() {
     let api_key = SecretString::new(api_key);
     let model_name = "gpt-4o-mini";
     let client = reqwest::Client::new();
-    let messages = vec![
-        InferenceRequestMessage::System(SystemInferenceRequestMessage {
-            content: "You are a helpful but mischevious assistant.".to_string(),
-        }),
-        InferenceRequestMessage::User(UserInferenceRequestMessage {
-            content: "Is Santa Clause real?".to_string(),
-        }),
-    ];
-    let max_tokens = Some(100);
-    let temperature = Some(1.);
-    let inference_request = ModelInferenceRequest {
-        messages: messages.clone(),
-        tools_available: None,
-        tool_choice: None,
-        parallel_tool_calls: None,
-        temperature,
-        max_tokens,
-        stream: false,
-        json_mode: false,
-        function_type: FunctionType::Chat,
-        output_schema: None,
-    };
+    let inference_request = create_simple_inference_request();
 
     let base_url = None;
     let result = openai::infer(inference_request, model_name, &client, &api_key, base_url).await;
@@ -55,43 +33,7 @@ async fn test_infer_with_tool_calls() {
     let model_name = "gpt-4o-mini";
     let client = reqwest::Client::new();
 
-    // Define a tool
-    let tool = Tool {
-        r#type: ToolType::Function,
-        description: Some("Get the current weather in a given location".to_string()),
-        name: "get_weather".to_string(),
-        parameters: json!({
-            "type": "object",
-            "properties": {
-                "location": {
-                    "type": "string",
-                    "description": "The city and state, e.g. San Francisco, CA"
-                },
-                "unit": {
-                    "type": "string",
-                    "enum": ["celsius", "fahrenheit"]
-                }
-            },
-            "required": ["location"]
-        }),
-    };
-
-    let messages = vec![InferenceRequestMessage::User(UserInferenceRequestMessage {
-        content: "What's the weather like in New York?".to_string(),
-    })];
-
-    let inference_request = ModelInferenceRequest {
-        messages,
-        tools_available: Some(vec![tool]),
-        tool_choice: Some(ToolChoice::Tool("get_weather".to_string())),
-        parallel_tool_calls: None,
-        temperature: Some(0.7),
-        max_tokens: Some(300),
-        stream: false,
-        json_mode: false,
-        function_type: FunctionType::Tool,
-        output_schema: None,
-    };
+    let inference_request = create_tool_inference_request();
 
     let base_url = None;
     let result = openai::infer(inference_request, model_name, &client, &api_key, base_url).await;
@@ -118,28 +60,7 @@ async fn test_infer_stream() {
     let api_key = SecretString::new(api_key);
     let model_name = "gpt-4o-mini";
     let client = reqwest::Client::new();
-    let messages = vec![
-        InferenceRequestMessage::System(SystemInferenceRequestMessage {
-            content: "You are a helpful but mischevious assistant.".to_string(),
-        }),
-        InferenceRequestMessage::User(UserInferenceRequestMessage {
-            content: "Is Santa Clause real?".to_string(),
-        }),
-    ];
-    let max_tokens = Some(100);
-    let temperature = Some(1.);
-    let inference_request = ModelInferenceRequest {
-        messages: messages.clone(),
-        tools_available: None,
-        tool_choice: None,
-        parallel_tool_calls: None,
-        temperature,
-        max_tokens,
-        stream: true,
-        json_mode: false,
-        function_type: FunctionType::Chat,
-        output_schema: None,
-    };
+    let inference_request = create_streaming_inference_request();
 
     let base_url = None;
     let result =
