@@ -115,7 +115,7 @@ async fn stream_openai(mut event_source: EventSource) -> InferenceResponseStream
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    if let Err(_e) = tx.send(Err(Error::AnthropicServer {
+                    if let Err(_e) = tx.send(Err(Error::OpenAIServer {
                         message: e.to_string(),
                     })) {
                         // rx dropped
