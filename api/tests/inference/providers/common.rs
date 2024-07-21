@@ -36,10 +36,10 @@ pub fn create_json_inference_request() -> ModelInferenceRequest {
             content: "You are a helpful but mischevious assistant who returns in the JSON form {\"thinking\": \"...\", \"answer\": \"...\"}".to_string(),
         }),
         InferenceRequestMessage::User(UserInferenceRequestMessage {
-            content: "Is Santa Clause real?".to_string(),
+            content: "Is Santa Clause real? be brief".to_string(),
         }),
     ];
-    let max_tokens = Some(300);
+    let max_tokens = Some(400);
     let temperature = Some(1.);
     let output_schema = json!({
         "type": "object",

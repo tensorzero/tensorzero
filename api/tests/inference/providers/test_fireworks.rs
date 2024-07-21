@@ -116,6 +116,7 @@ async fn test_json_request() {
     assert!(result.content.is_some());
     // parse the result text and see if it matches the output schema
     let result_text = result.content.unwrap();
+    println!("result_text: {}", result_text);
     let result_json: serde_json::Value = serde_json::from_str(&result_text).unwrap();
     assert!(result_json.get("thinking").is_some());
     assert!(result_json.get("answer").is_some());

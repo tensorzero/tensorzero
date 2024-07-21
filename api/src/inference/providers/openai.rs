@@ -761,6 +761,8 @@ fn openai_to_tensorzero_stream_message(
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use crate::inference::types::{
         AssistantInferenceRequestMessage, FunctionType, UserInferenceRequestMessage,
     };
@@ -943,6 +945,65 @@ mod tests {
             Some(OpenAIToolChoice::String(OpenAIToolChoiceString::Auto))
         );
         assert_eq!(openai_request.parallel_tool_calls, Some(true));
+    }
+
+    #[test]
+    fn test_fireworks_request_new() {
+        let tool = Tool {
+            name: "get_weather".to_string(),
+            description: Some("Get the current weather".to_string()),
+            r#type: ToolType::Function,
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "location": {
+                        "type": "string",
+                        "description": "The city and state, e.g. San Francisco, CA"
+                    }
+                },
+                "required": ["location"]
+            }),
+        };
+
+        let request_with_tools = ModelInferenceRequest {
+            messages: vec![InferenceRequestMessage::User(UserInferenceRequestMessage {
+                content: "What's the weather?".to_string(),
+            })],
+            temperature: None,
+            max_tokens: None,
+            stream: false,
+            json_mode: true,
+            tools_available: Some(vec![tool]),
+            tool_choice: Some(ToolChoice::Auto),
+            parallel_tool_calls: Some(true),
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+
+        let fireworks_request =
+            FireworksRequest::new("accounts/fireworks/models/llama-v3-8b", &request_with_tools);
+
+        assert_eq!(
+            fireworks_request.model,
+            "accounts/fireworks/models/llama-v3-8b"
+        );
+        assert_eq!(fireworks_request.messages.len(), 1);
+        assert_eq!(fireworks_request.temperature, None);
+        assert_eq!(fireworks_request.max_tokens, None);
+        assert!(!fireworks_request.stream);
+        assert_eq!(
+            fireworks_request.response_format,
+            FireworksResponseFormat::JsonObject {
+                schema: request_with_tools.output_schema.as_ref(),
+            }
+        );
+        assert!(fireworks_request.tools.is_some());
+        assert_eq!(fireworks_request.tools.as_ref().unwrap().len(), 1);
+        assert_eq!(
+            fireworks_request.tool_choice,
+            Some(OpenAIToolChoice::String(OpenAIToolChoiceString::Auto))
+        );
+        assert_eq!(fireworks_request.parallel_tool_calls, Some(true));
     }
 
     #[test]
