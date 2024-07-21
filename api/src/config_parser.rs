@@ -43,6 +43,11 @@ pub enum ProviderConfig {
         #[allow(dead_code)] // TODO: temporary
         api_base: Option<String>,
     },
+    #[serde(rename = "fireworks")]
+    Fireworks {
+        #[allow(dead_code)] // TODO: temporary
+        model_name: String,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize)]

@@ -1,4 +1,4 @@
-use futures::StreamExt;
+use futures::{StreamExt, TryStreamExt};
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
@@ -105,6 +105,118 @@ impl InferenceProvider for OpenAIProvider {
                 message: format!("Error sending request to OpenAI: {e}"),
             })?;
         Ok(stream_openai(event_source).await)
+    }
+}
+
+pub struct FireworksProvider;
+
+/// Key differences between Fireworks and OpenAI inference:
+/// - Fireworks allows you to specify output format in JSON mode
+/// - Fireworks automatically returns usage in streaming inference, we don't have to ask for it
+/// - Fireworks allows you to auto-truncate requests that are too many tokens
+///   (there are 2 ways to do it, we have the default of auto-truncation to the max window size)
+impl InferenceProvider for FireworksProvider {
+    async fn infer(
+        &self,
+        request: &ModelInferenceRequest,
+        model: &ProviderConfig,
+        http_client: &reqwest::Client,
+        api_key: &SecretString,
+    ) -> Result<ModelInferenceResponse, Error> {
+        let model_name = match model {
+            ProviderConfig::Fireworks { model_name } => model_name,
+            _ => {
+                return Err(Error::InvalidProviderConfig {
+                    message: "Expected Fireworks provider config".to_string(),
+                })
+            }
+        };
+        let api_base = Some("https://api.fireworks.ai/inference/v1/");
+        let request_body = FireworksRequest::new(model_name, request);
+        let request_url = get_chat_url(api_base)?;
+        let res = http_client
+            .post(request_url)
+            .header("Content-Type", "application/json")
+            .header(
+                "Authorization",
+                format!("Bearer {}", api_key.expose_secret()),
+            )
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| Error::InferenceClient {
+                message: format!("Error sending request to Fireworks: {e}"),
+            })?;
+        if res.status().is_success() {
+            let response_body =
+                res.json::<OpenAIResponse>()
+                    .await
+                    .map_err(|e| Error::FireworksServer {
+                        message: format!("Error parsing response: {e}"),
+                    })?;
+            Ok(response_body
+                .try_into()
+                .map_err(map_openai_to_fireworks_error)?)
+        } else {
+            handle_openai_error(
+                res.status(),
+                &res.text().await.map_err(|e| Error::FireworksServer {
+                    message: format!("Error parsing error response: {e}"),
+                })?,
+            )
+            .map_err(map_openai_to_fireworks_error)
+        }
+    }
+
+    async fn infer_stream(
+        &self,
+        request: &ModelInferenceRequest,
+        model: &ProviderConfig,
+        http_client: &reqwest::Client,
+        api_key: &SecretString,
+    ) -> Result<InferenceResponseStream, Error> {
+        let model_name = match model {
+            ProviderConfig::Fireworks { model_name } => model_name,
+            _ => {
+                return Err(Error::InvalidProviderConfig {
+                    message: "Expected Fireworks provider config".to_string(),
+                })
+            }
+        };
+        let request_body = FireworksRequest::new(model_name, request);
+        let api_base = Some("https://api.fireworks.ai/inference/v1/");
+        let request_url = get_chat_url(api_base)?;
+        let event_source = http_client
+            .post(request_url)
+            .header("Content-Type", "application/json")
+            .header(
+                "Authorization",
+                format!("Bearer {}", api_key.expose_secret()),
+            )
+            .json(&request_body)
+            .eventsource()
+            .map_err(|e| Error::InferenceClient {
+                message: format!("Error sending request to Fireworks: {e}"),
+            })?;
+        Ok(Box::pin(
+            stream_openai(event_source)
+                .await
+                .map_err(map_openai_to_fireworks_error),
+        ))
+    }
+}
+
+fn map_openai_to_fireworks_error(e: Error) -> Error {
+    match e {
+        Error::OpenAIServer { message } => Error::FireworksServer { message },
+        Error::OpenAIClient {
+            message,
+            status_code,
+        } => Error::FireworksClient {
+            message,
+            status_code,
+        },
+        _ => e,
     }
 }
 
@@ -277,11 +389,23 @@ impl<'a> From<&'a InferenceRequestMessage> for OpenAIRequestMessage<'a> {
     }
 }
 
-#[derive(Default, Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Default, Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "type")]
 enum OpenAIResponseFormat {
     JsonObject,
+    #[default]
+    Text,
+}
+
+#[derive(Default, Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "type")]
+enum FireworksResponseFormat<'a> {
+    JsonObject {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        schema: Option<&'a Value>, // the desired JSON schema
+    },
     #[default]
     Text,
 }
@@ -383,7 +507,7 @@ struct StreamOptions {
 /// This struct defines the supported parameters for the OpenAI API
 /// See the [OpenAI API documentation](https://platform.openai.com/docs/api-reference/chat/create)
 /// for more details.
-/// We are not handling logprobs, top_logprobs, max_tokens, n,
+/// We are not handling logprobs, top_logprobs, n,
 /// presence_penalty, seed, service_tier, stop, user,
 /// or the deprecated function_call and functions arguments.
 #[derive(Serialize)]
@@ -425,6 +549,55 @@ impl<'a> OpenAIRequest<'a> {
             max_tokens: request.max_tokens,
             stream: request.stream,
             stream_options,
+            response_format,
+            tools: request
+                .tools_available
+                .as_ref()
+                .map(|t| t.iter().map(|t| t.into()).collect()),
+            tool_choice: request.tool_choice.as_ref().map(OpenAIToolChoice::from),
+            parallel_tool_calls: request.parallel_tool_calls,
+        }
+    }
+}
+
+/// This struct defines the supported parameters for the Fireworks inference API
+/// See the [Fireworks API documentation](https://docs.fireworks.ai/api-reference/post-chatcompletions)
+/// for more details.
+/// We are not handling logprobs, top_logprobs, n, prompt_truncate_len
+/// presence_penalty, frequency_penalty, seed, service_tier, stop, user,
+/// or context_length_exceeded_behavior
+#[derive(Serialize)]
+struct FireworksRequest<'a> {
+    messages: Vec<OpenAIRequestMessage<'a>>,
+    model: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_tokens: Option<u32>,
+    stream: bool,
+    response_format: FireworksResponseFormat<'a>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<Vec<OpenAITool<'a>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_choice: Option<OpenAIToolChoice<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parallel_tool_calls: Option<bool>,
+}
+
+impl<'a> FireworksRequest<'a> {
+    pub fn new(model: &'a str, request: &'a ModelInferenceRequest) -> FireworksRequest<'a> {
+        let response_format = match request.json_mode {
+            true => FireworksResponseFormat::JsonObject {
+                schema: request.output_schema.as_ref(),
+            },
+            false => FireworksResponseFormat::Text,
+        };
+        FireworksRequest {
+            messages: request.messages.iter().map(|m| m.into()).collect(),
+            model,
+            temperature: request.temperature,
+            max_tokens: request.max_tokens,
+            stream: request.stream,
             response_format,
             tools: request
                 .tools_available

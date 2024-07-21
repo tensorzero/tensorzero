@@ -14,6 +14,15 @@ pub enum Error {
         message: String,
     },
     #[allow(dead_code)] // TODO: remove
+    FireworksClient {
+        message: String,
+        status_code: StatusCode,
+    },
+    #[allow(dead_code)] // TODO: remove
+    FireworksServer {
+        message: String,
+    },
+    #[allow(dead_code)] // TODO: remove
     InferenceClient {
         message: String,
     },
@@ -47,6 +56,7 @@ impl Error {
     fn level(&self) -> tracing::Level {
         match self {
             Error::AnthropicServer { .. }
+            | Error::FireworksServer { .. }
             | Error::InferenceClient { .. }
             | Error::InvalidRequest { .. }
             | Error::InvalidBaseUrl { .. }
@@ -54,6 +64,7 @@ impl Error {
             | Error::InvalidProviderConfig { .. }
             | Error::OpenAIServer { .. } => tracing::Level::ERROR,
             Error::AnthropicClient { .. }
+            | Error::FireworksClient { .. }
             | Error::InvalidMessage { .. }
             | Error::OpenAIClient { .. } => tracing::Level::WARN,
         }
@@ -63,6 +74,7 @@ impl Error {
     fn status_code(&self) -> StatusCode {
         match self {
             Error::AnthropicServer { .. }
+            | Error::FireworksServer { .. }
             | Error::InferenceClient { .. }
             | Error::InvalidBaseUrl { .. }
             | Error::InvalidRequest { .. }
@@ -70,7 +82,8 @@ impl Error {
             | Error::InvalidProviderConfig { .. }
             | Error::OpenAIServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::AnthropicClient { status_code, .. }
-            | Error::OpenAIClient { status_code, .. } => *status_code,
+            | Error::OpenAIClient { status_code, .. }
+            | Error::FireworksClient { status_code, .. } => *status_code,
             Error::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
         }
     }
@@ -101,6 +114,12 @@ impl std::fmt::Display for Error {
             }
             Error::AnthropicClient { message, .. } => {
                 write!(f, "Error from Anthropic client: {}", message)
+            }
+            Error::FireworksServer { message } => {
+                write!(f, "Error from Fireworks servers: {}", message)
+            }
+            Error::FireworksClient { message, .. } => {
+                write!(f, "Error from Fireworks client: {}", message)
             }
             Error::OpenAIServer { message } => write!(f, "Error from OpenAI servers: {}", message),
             Error::OpenAIClient { message, .. } => {

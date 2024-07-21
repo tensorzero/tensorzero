@@ -30,6 +30,39 @@ pub fn create_simple_inference_request() -> ModelInferenceRequest {
     }
 }
 
+pub fn create_json_inference_request() -> ModelInferenceRequest {
+    let messages = vec![
+        InferenceRequestMessage::System(SystemInferenceRequestMessage {
+            content: "You are a helpful but mischevious assistant who returns in the JSON form {\"thinking\": \"...\", \"answer\": \"...\"}".to_string(),
+        }),
+        InferenceRequestMessage::User(UserInferenceRequestMessage {
+            content: "Is Santa Clause real?".to_string(),
+        }),
+    ];
+    let max_tokens = Some(300);
+    let temperature = Some(1.);
+    let output_schema = json!({
+        "type": "object",
+        "properties": {
+            "thinking": {"type": "string"},
+            "answer": {"type": "string"}
+        },
+        "required": ["thinking", "answer"]
+    });
+    ModelInferenceRequest {
+        messages,
+        tools_available: None,
+        tool_choice: None,
+        parallel_tool_calls: None,
+        temperature,
+        max_tokens,
+        stream: false,
+        json_mode: false,
+        function_type: FunctionType::Chat,
+        output_schema: Some(output_schema),
+    }
+}
+
 pub fn create_tool_inference_request() -> ModelInferenceRequest {
     // Define a tool
     let tool = Tool {

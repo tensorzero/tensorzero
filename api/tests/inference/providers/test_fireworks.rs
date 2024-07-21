@@ -7,7 +7,7 @@ use crate::inference::providers::common::{
     create_streaming_inference_request, create_tool_inference_request,
 };
 use api::{
-    config_parser::ProviderConfig, inference::providers::openai::OpenAIProvider,
+    config_parser::ProviderConfig, inference::providers::openai::FireworksProvider,
     inference::providers::provider_trait::InferenceProvider,
 };
 use futures::StreamExt;
@@ -16,18 +16,16 @@ use secrecy::SecretString;
 #[tokio::test]
 async fn test_infer() {
     // Load API key from environment variable
-    let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY must be set");
+    let api_key = env::var("FIREWORKS_API_KEY").expect("FIREWORKS_API_KEY must be set");
     let api_key = SecretString::new(api_key);
-    let model_name = "gpt-4o-mini";
+    let model_name = "accounts/fireworks/models/llama-v3-8b-instruct";
     let client = reqwest::Client::new();
     let inference_request = create_simple_inference_request();
 
-    let base_url = None;
-    let provider_config = ProviderConfig::OpenAI {
+    let provider_config = ProviderConfig::Fireworks {
         model_name: model_name.to_string(),
-        api_base: base_url,
     };
-    let provider = OpenAIProvider;
+    let provider = FireworksProvider;
     let result = provider
         .infer(&inference_request, &provider_config, &client, &api_key)
         .await;
@@ -38,19 +36,17 @@ async fn test_infer() {
 #[tokio::test]
 async fn test_infer_with_tool_calls() {
     // Load API key from environment variable
-    let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY must be set");
+    let api_key = env::var("FIREWORKS_API_KEY").expect("FIREWORKS_API_KEY must be set");
     let api_key = SecretString::new(api_key);
-    let model_name = "gpt-4o-mini";
+    let model_name = "accounts/fireworks/models/firefunction-v2";
     let client = reqwest::Client::new();
 
     let inference_request = create_tool_inference_request();
 
-    let base_url = None;
-    let provider_config = ProviderConfig::OpenAI {
+    let provider_config = ProviderConfig::Fireworks {
         model_name: model_name.to_string(),
-        api_base: base_url,
     };
-    let provider = OpenAIProvider;
+    let provider = FireworksProvider;
     let result = provider
         .infer(&inference_request, &provider_config, &client, &api_key)
         .await;
@@ -73,18 +69,16 @@ async fn test_infer_with_tool_calls() {
 #[tokio::test]
 async fn test_infer_stream() {
     // Load API key from environment variable
-    let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY must be set");
+    let api_key = env::var("FIREWORKS_API_KEY").expect("FIREWORKS_API_KEY must be set");
     let api_key = SecretString::new(api_key);
-    let model_name = "gpt-4o-mini";
+    let model_name = "accounts/fireworks/models/llama-v3-8b-instruct";
     let client = reqwest::Client::new();
     let inference_request = create_streaming_inference_request();
 
-    let base_url = None;
-    let provider_config = ProviderConfig::OpenAI {
+    let provider_config = ProviderConfig::Fireworks {
         model_name: model_name.to_string(),
-        api_base: base_url,
     };
-    let provider = OpenAIProvider;
+    let provider = FireworksProvider;
     let result = provider
         .infer_stream(&inference_request, &provider_config, &client, &api_key)
         .await;
@@ -96,24 +90,24 @@ async fn test_infer_stream() {
         collected_chunks.push(chunk.unwrap());
     }
     assert!(!collected_chunks.is_empty());
-    assert!(collected_chunks.first().unwrap().content.is_some());
+    // Here, we check the second chunk since fireworks sends an empty chunk at the beginning
+    assert!(collected_chunks.get(1).unwrap().content.is_some());
     assert!(collected_chunks.last().unwrap().usage.is_some());
 }
 
 #[tokio::test]
 async fn test_json_request() {
     // Load API key from environment variable
-    let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY must be set");
+    let api_key = env::var("FIREWORKS_API_KEY").expect("FIREWORKS_API_KEY must be set");
     let api_key = SecretString::new(api_key);
-    let model_name = "gpt-4o-mini";
+    let model_name = "accounts/fireworks/models/llama-v3-8b-instruct";
     let client = reqwest::Client::new();
     let inference_request = create_json_inference_request();
 
-    let provider_config = ProviderConfig::OpenAI {
+    let provider_config = ProviderConfig::Fireworks {
         model_name: model_name.to_string(),
-        api_base: None,
     };
-    let provider = OpenAIProvider;
+    let provider = FireworksProvider;
     let result = provider
         .infer(&inference_request, &provider_config, &client, &api_key)
         .await;
