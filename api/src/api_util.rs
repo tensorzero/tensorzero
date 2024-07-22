@@ -1,4 +1,5 @@
 use axum::extract::{rejection::JsonRejection, FromRequest, Json, Request};
+use reqwest::Client;
 use serde::de::DeserializeOwned;
 use std::sync::Arc;
 use tracing::instrument;
@@ -10,6 +11,7 @@ use crate::error::Error;
 #[derive(Clone)]
 pub struct AppStateData {
     pub config: Arc<Config>,
+    pub http_client: Client,
 }
 pub type AppState = axum::extract::State<AppStateData>;
 
@@ -17,7 +19,10 @@ impl Default for AppStateData {
     fn default() -> Self {
         let config = Arc::new(config_parser::Config::load());
         println!("{:#?}", config); // TODO: temporary
-        Self { config }
+        Self {
+            config,
+            http_client: Client::new(),
+        }
     }
 }
 
