@@ -7,7 +7,7 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use crate::api::{AppState, AppStateData, StructuredJson};
+use crate::api_util::{AppState, AppStateData, StructuredJson};
 use crate::error::Error;
 use crate::function::{InputMessage, VariantConfig};
 

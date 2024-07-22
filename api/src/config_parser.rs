@@ -36,15 +36,11 @@ pub enum ProviderConfig {
         model_name: String,
         api_base: Option<String>,
     },
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ProviderConfigType {
-    #[serde(rename = "openai")]
-    OpenAI,
-    Anthropic,
-    Azure,
+    #[serde(rename = "fireworks")]
+    Fireworks {
+        #[allow(dead_code)] // TODO: temporary
+        model_name: String,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize)]

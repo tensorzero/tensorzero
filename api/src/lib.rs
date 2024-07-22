@@ -1,5 +1,5 @@
-pub mod api; // utilities for API
-mod config_parser; // TensorZero config file
+pub mod api_util; // utilities for API
+pub mod config_parser; // TensorZero config file
 pub mod endpoints; // API endpoints
 mod error; // error handling
 mod function; // types and methods for working with TensorZero functions

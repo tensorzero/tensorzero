@@ -1,87 +1,109 @@
-use crate::inference::types::{
-    InferenceRequestMessage, InferenceResponseChunk, InferenceResponseStream,
-    ModelInferenceRequest, ModelInferenceResponse, Role, Tool, ToolCall, ToolCallChunk, ToolChoice,
-    ToolType, Usage,
-};
 use futures::StreamExt;
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use uuid::Uuid;
 
 use crate::error::Error;
+use crate::inference::providers::provider_trait::InferenceProvider;
+use crate::{
+    config_parser::ProviderConfig,
+    inference::types::{
+        InferenceRequestMessage, InferenceResponseChunk, InferenceResponseStream,
+        ModelInferenceRequest, ModelInferenceResponse, Tool, ToolCall, ToolCallChunk, ToolChoice,
+        ToolType, Usage,
+    },
+};
 
 #[allow(dead_code)] // TODO: remove
 const ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com/v1/messages";
 #[allow(dead_code)] // TODO: remove
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 
-/// Anthropic non-streaming API request
-// TODO: consider making this a trait as more inference providers are implemented and we converge on types for the ModelProvider
-#[allow(dead_code)] // TODO: remove
-pub async fn infer(
-    request: ModelInferenceRequest,
-    // TODO: use Gabe's model types
-    model: &str,
-    http_client: &reqwest::Client,
-    api_key: &SecretString,
-) -> Result<ModelInferenceResponse, Error> {
-    let request_body = AnthropicRequestBody::new(model.to_string(), request)?;
-    let res = http_client
-        .post(ANTHROPIC_BASE_URL)
-        .header("anthropic-version", ANTHROPIC_API_VERSION)
-        .header("x-api-key", api_key.expose_secret())
-        .header("content-type", "application/json")
-        .json(&request_body)
-        .send()
-        .await
-        .map_err(|e| Error::InferenceClient {
-            message: format!("Error sending request to Anthropic: {e}"),
-        })?;
-    if res.status().is_success() {
-        let response_body =
-            res.json::<AnthropicResponseBody>()
-                .await
-                .map_err(|e| Error::AnthropicServer {
-                    message: format!("Error parsing Anthropic response: {e}"),
-                })?;
-        response_body.try_into()
-    } else {
-        let response_code = res.status();
-        let error_body =
-            res.json::<AnthropicError>()
-                .await
-                .map_err(|e| Error::AnthropicServer {
-                    message: format!("Error parsing Anthropic response: {e}"),
-                })?;
-        handle_anthropic_error(response_code, error_body.error)
-    }
-}
+pub struct AnthropicProvider;
 
-/// Anthropic streaming API request
-// TODO: consider making this a trait as more inference providers are implemented and we converge on types for the ModelProvider
-#[allow(dead_code)] // TODO: remove
-pub async fn infer_stream(
-    request: ModelInferenceRequest,
-    // TODO: use Gabe's model types
-    model: &str,
-    http_client: &reqwest::Client,
-    api_key: &SecretString,
-) -> Result<InferenceResponseStream, Error> {
-    let request_body = AnthropicRequestBody::new(model.to_string(), request)?;
-    let event_source = http_client
-        .post(ANTHROPIC_BASE_URL)
-        .header("anthropic-version", ANTHROPIC_API_VERSION)
-        .header("content-type", "application/json")
-        .header("x-api-key", api_key.expose_secret())
-        .json(&request_body)
-        .eventsource()
-        .map_err(|e| Error::InferenceClient {
-            message: format!("Error sending request to Anthropic: {e}"),
-        })?;
-    Ok(stream_anthropic(event_source).await)
+impl InferenceProvider for AnthropicProvider {
+    /// Anthropic non-streaming API request
+    #[allow(dead_code)] // TODO: remove
+    async fn infer(
+        &self,
+        request: &ModelInferenceRequest,
+        model: &ProviderConfig,
+        http_client: &reqwest::Client,
+        api_key: &SecretString,
+    ) -> Result<ModelInferenceResponse, Error> {
+        let model_name = match model {
+            ProviderConfig::Anthropic { model_name } => model_name,
+            _ => {
+                return Err(Error::InvalidProviderConfig {
+                    message: "Expected Anthropic provider config".to_string(),
+                })
+            }
+        };
+        let request_body = AnthropicRequestBody::new(model_name, request)?;
+        let res = http_client
+            .post(ANTHROPIC_BASE_URL)
+            .header("anthropic-version", ANTHROPIC_API_VERSION)
+            .header("x-api-key", api_key.expose_secret())
+            .header("content-type", "application/json")
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| Error::InferenceClient {
+                message: format!("Error sending request: {e}"),
+            })?;
+        if res.status().is_success() {
+            let response_body =
+                res.json::<AnthropicResponseBody>()
+                    .await
+                    .map_err(|e| Error::AnthropicServer {
+                        message: format!("Error parsing response: {e}"),
+                    })?;
+            response_body.try_into()
+        } else {
+            let response_code = res.status();
+            let error_body =
+                res.json::<AnthropicError>()
+                    .await
+                    .map_err(|e| Error::AnthropicServer {
+                        message: format!("Error parsing response: {e}"),
+                    })?;
+            handle_anthropic_error(response_code, error_body.error)
+        }
+    }
+
+    /// Anthropic streaming API request
+    #[allow(dead_code)] // TODO: remove
+    async fn infer_stream(
+        &self,
+        request: &ModelInferenceRequest,
+        model: &ProviderConfig,
+        http_client: &reqwest::Client,
+        api_key: &SecretString,
+    ) -> Result<InferenceResponseStream, Error> {
+        let model_name = match model {
+            ProviderConfig::Anthropic { model_name } => model_name,
+            _ => {
+                return Err(Error::InvalidProviderConfig {
+                    message: "Expected Anthropic provider config".to_string(),
+                })
+            }
+        };
+        let request_body = AnthropicRequestBody::new(model_name, request)?;
+        let event_source = http_client
+            .post(ANTHROPIC_BASE_URL)
+            .header("anthropic-version", ANTHROPIC_API_VERSION)
+            .header("content-type", "application/json")
+            .header("x-api-key", api_key.expose_secret())
+            .json(&request_body)
+            .eventsource()
+            .map_err(|e| Error::InferenceClient {
+                message: format!("Error sending request to Anthropic: {e}"),
+            })?;
+        Ok(stream_anthropic(event_source).await)
+    }
 }
 
 /// Maps events from Anthropic into the TensorZero format
@@ -110,9 +132,9 @@ async fn stream_anthropic(mut event_source: EventSource) -> InferenceResponseStr
                                 {
                                     Error::AnthropicServer {
                                         message: format!(
-                                        "Error parsing message from Anthropic. Error: {}, Data: {}",
-                                        e, message.data
-                                    ),
+                                            "Error parsing message: {}, Data: {}",
+                                            e, message.data
+                                        ),
                                     }
                                 }
                             });
@@ -156,21 +178,19 @@ enum AnthropicRole {
 
 /// We can instruct Anthropic to use a particular tool,
 /// any tool (but to use one), or to use a tool if needed.
-#[derive(Serialize, Debug, PartialEq)]
+#[derive(Serialize, Debug, PartialEq, Clone)]
 #[serde(tag = "type")]
-enum AnthropicToolChoice {
-    #[serde(rename = "auto")]
+#[serde(rename_all = "snake_case")]
+enum AnthropicToolChoice<'a> {
     Auto,
-    #[serde(rename = "any")]
     Any,
-    #[serde(rename = "tool")]
-    Tool { name: String },
+    Tool { name: &'a str },
 }
 
 // We map our ToolChoice enum to the Anthropic one that serializes properly
-impl TryFrom<ToolChoice> for AnthropicToolChoice {
+impl<'a> TryFrom<&'a ToolChoice> for AnthropicToolChoice<'a> {
     type Error = Error;
-    fn try_from(tool_choice: ToolChoice) -> Result<Self, Error> {
+    fn try_from(tool_choice: &'a ToolChoice) -> Result<Self, Error> {
         match tool_choice {
             ToolChoice::Auto => Ok(AnthropicToolChoice::Auto),
             ToolChoice::Required => Ok(AnthropicToolChoice::Any),
@@ -184,146 +204,148 @@ impl TryFrom<ToolChoice> for AnthropicToolChoice {
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
-struct AnthropicTool {
-    name: String,
+struct AnthropicTool<'a> {
+    name: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
-    description: Option<String>,
-    input_schema: Value,
+    description: Option<&'a str>,
+    input_schema: &'a Value,
 }
 
-impl TryFrom<Tool> for AnthropicTool {
+impl<'a> TryFrom<&'a Tool> for AnthropicTool<'a> {
     type Error = Error;
 
-    fn try_from(value: Tool) -> Result<Self, Self::Error> {
+    fn try_from(value: &'a Tool) -> Result<Self, Self::Error> {
         // In case we add more tool types in the future, the compiler will complain here.
         match value.r#type {
             ToolType::Function => Ok(AnthropicTool {
-                name: value.name,
-                description: value.description,
-                input_schema: value.parameters,
+                name: &value.name,
+                description: value.description.as_deref(),
+                input_schema: &value.parameters,
             }),
         }
     }
 }
 
-#[derive(Serialize, Debug, PartialEq, Clone)]
-#[serde(rename_all = "snake_case")]
-enum AnthropicMessageContentType {
-    Text,
-    ToolCall,
-}
-
 #[derive(Serialize, Debug, Clone, PartialEq)]
-#[serde(untagged)]
-enum AnthropicMessageContent {
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+enum AnthropicMessageContent<'a> {
     Text {
-        r#type: AnthropicMessageContentType,
-        text: String,
+        text: &'a str,
     },
-    ToolCall {
-        r#type: AnthropicMessageContentType,
-        tool_use_id: String,
-        content: String,
+    ToolResult {
+        tool_use_id: &'a str,
+        content: Vec<AnthropicMessageContent<'a>>,
     },
+    ToolUse {
+        id: &'a str,
+        name: &'a str,
+        input: &'a str, // This
+    }, // NB: Anthropic also supports Image blocks here but we won't for now
 }
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
-struct AnthropicMessage {
+struct AnthropicMessage<'a> {
     role: AnthropicRole,
-    content: Vec<AnthropicMessageContent>,
+    content: Vec<AnthropicMessageContent<'a>>,
 }
 
-impl TryFrom<InferenceRequestMessage> for AnthropicMessage {
+impl<'a> TryFrom<&'a InferenceRequestMessage> for AnthropicMessage<'a> {
     type Error = Error;
-    fn try_from(inference_message: InferenceRequestMessage) -> Result<AnthropicMessage, Error> {
-        let role = match inference_message.role {
-            Role::User => Ok(AnthropicRole::User),
-            Role::Assistant => Ok(AnthropicRole::Assistant),
-            Role::System => Err(Error::InvalidMessage {
+    fn try_from(
+        inference_message: &'a InferenceRequestMessage,
+    ) -> Result<AnthropicMessage<'a>, Error> {
+        let (role, content) = match inference_message {
+            InferenceRequestMessage::System(_) => Err(Error::InvalidMessage {
                 message: "Can't convert System message to Anthropic message. Don't pass System message in except as the first message in the chat.".to_string(),
             }),
-            Role::Tool => Ok(AnthropicRole::User),
-        }?;
-        let content = match inference_message.role {
-            Role::User => Ok(vec![AnthropicMessageContent::Text {
-                r#type: AnthropicMessageContentType::Text,
-                text: inference_message.content,
-            }]),
-            Role::Assistant => Ok(vec![AnthropicMessageContent::Text {
-                r#type: AnthropicMessageContentType::Text,
-                text: inference_message.content,
-            }]),
-            Role::Tool => Ok(vec![AnthropicMessageContent::ToolCall {
-                r#type: AnthropicMessageContentType::ToolCall,
-                tool_use_id: inference_message.tool_call_id.ok_or(Error::InvalidMessage {
-                    message: "Tool call ID is required for tool messages".to_string(),
-                })?,
-                content: inference_message.content,
-            }]),
-            Role::System => Err(Error::InvalidMessage {
-                message: "Can't convert System message to Anthropic message. Don't pass System message in except as the first message in the chat.".to_string(),
-            }),
+            InferenceRequestMessage::User(message) => Ok((AnthropicRole::User, vec![AnthropicMessageContent::Text { text: &message.content }])),
+            InferenceRequestMessage::Assistant(message) => {
+                let mut content = vec![];
+                if let Some(text) = &message.content {
+                    content.push(AnthropicMessageContent::Text { text });
+                }
+                for tool_call in message.tool_calls.as_ref().map(|v| v.iter()).unwrap_or_default() {
+                    content.push(AnthropicMessageContent::ToolUse {
+                        id: &tool_call.id,
+                        name: &tool_call.name,
+                        input: &tool_call.arguments,
+                    });
+                }
+                Ok((AnthropicRole::Assistant, content))
+            }
+            InferenceRequestMessage::Tool(message) =>
+                Ok((AnthropicRole::User, vec![AnthropicMessageContent::ToolResult {
+                    tool_use_id: &message.tool_call_id,
+                    content: vec![AnthropicMessageContent::Text {
+                        text: &message.content,
+                    }],
+                }]))
         }?;
         Ok(AnthropicMessage { role, content })
     }
 }
 
+// TODO: remove Clone
 #[derive(Serialize, Debug, PartialEq)]
-struct AnthropicRequestBody {
-    model: String,
-    messages: Vec<AnthropicMessage>,
+struct AnthropicRequestBody<'a> {
+    model: &'a str,
+    messages: Vec<AnthropicMessage<'a>>,
     max_tokens: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     stream: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     // This is the system message
-    system: Option<String>,
+    system: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_choice: Option<AnthropicToolChoice>,
+    tool_choice: Option<AnthropicToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<AnthropicTool>>,
+    tools: Option<Vec<AnthropicTool<'a>>>,
 }
 
-impl AnthropicRequestBody {
+impl<'a> AnthropicRequestBody<'a> {
     #[allow(dead_code)] // TODO: remove
-                        // TODO: convert model to some common ModelProvider type
-    fn new(model: String, request: ModelInferenceRequest) -> Result<AnthropicRequestBody, Error> {
+    fn new(
+        model_name: &'a str,
+        request: &'a ModelInferenceRequest,
+    ) -> Result<AnthropicRequestBody<'a>, Error> {
         if request.messages.is_empty() {
             return Err(Error::InvalidRequest {
                 message: "Anthropic requires at least one message".to_string(),
             });
         }
         let first_message = &request.messages[0];
-        let (system, request_messages) = match first_message.role {
-            Role::System => (
-                Some(first_message.content.clone()),
-                request.messages[1..].to_vec(),
-            ),
-            _ => (None, request.messages),
+        let (system, request_messages) = match first_message {
+            InferenceRequestMessage::System(message) => {
+                (Some(message.content.as_str()), &request.messages[1..])
+            }
+            _ => (None, &request.messages[..]),
         };
         let messages: Vec<AnthropicMessage> = prepare_messages(
             request_messages
-                .into_iter()
+                .iter()
                 .map(AnthropicMessage::try_from)
                 .collect::<Result<Vec<_>, _>>()?,
         )?;
         let tool_choice = request
             .tool_choice
+            .as_ref()
             .map(AnthropicToolChoice::try_from)
             .transpose()?;
         let tools = request
             .tools_available
+            .as_ref()
             .map(|tools| {
                 tools
-                    .into_iter()
+                    .iter()
                     .map(AnthropicTool::try_from)
                     .collect::<Result<Vec<_>, _>>()
             })
             .transpose()?;
         Ok(AnthropicRequestBody {
-            model,
+            model: model_name,
             messages,
             max_tokens: request.max_tokens.unwrap_or(4096),
             stream: Some(request.stream),
@@ -380,8 +402,7 @@ fn prepare_messages(messages: Vec<AnthropicMessage>) -> Result<Vec<AnthropicMess
                 AnthropicMessage {
                     role: AnthropicRole::User,
                     content: vec![AnthropicMessageContent::Text {
-                        r#type: AnthropicMessageContentType::Text,
-                        text: "[listening]".to_string(),
+                        text: "[listening]",
                     }],
                 },
             );
@@ -395,8 +416,7 @@ fn prepare_messages(messages: Vec<AnthropicMessage>) -> Result<Vec<AnthropicMess
             consolidated_messages.push(AnthropicMessage {
                 role: AnthropicRole::User,
                 content: vec![AnthropicMessageContent::Text {
-                    r#type: AnthropicMessageContentType::Text,
-                    text: "[listening]".to_string(),
+                    text: "[listening]",
                 }],
             });
         }
@@ -458,7 +478,9 @@ struct AnthropicResponseBody {
 impl TryFrom<AnthropicResponseBody> for ModelInferenceResponse {
     type Error = Error;
     fn try_from(value: AnthropicResponseBody) -> Result<Self, Self::Error> {
-        let raw = json!(value);
+        let raw = serde_json::to_string(&value).map_err(|e| Error::AnthropicServer {
+            message: format!("Error parsing response from Anthropic: {e}"),
+        })?;
         let mut message_text: Option<String> = None;
         let mut tool_calls: Option<Vec<ToolCall>> = None;
         // Anthropic responses can in principle contain multiple content blocks.
@@ -473,7 +495,7 @@ impl TryFrom<AnthropicResponseBody> for ModelInferenceResponse {
                     let tool_call = ToolCall {
                         name,
                         arguments: input.to_string(),
-                        tool_call_id: id,
+                        id,
                     };
                     if let Some(calls) = tool_calls.as_mut() {
                         calls.push(tool_call);
@@ -677,7 +699,10 @@ fn parse_usage_info(usage_info: &Value) -> AnthropicUsage {
 mod tests {
     use serde_json::json;
 
-    use crate::inference::types::FunctionType;
+    use crate::inference::types::{
+        AssistantInferenceRequestMessage, FunctionType, SystemInferenceRequestMessage,
+        ToolInferenceRequestMessage, UserInferenceRequestMessage,
+    };
 
     use super::*;
 
@@ -685,7 +710,7 @@ mod tests {
     fn test_try_from_tool_choice() {
         // Need to cover all 4 cases
         let tool_choice = ToolChoice::None;
-        let anthropic_tool_choice = AnthropicToolChoice::try_from(tool_choice);
+        let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_choice);
         assert!(anthropic_tool_choice.is_err());
         assert_eq!(
             anthropic_tool_choice.err().unwrap(),
@@ -696,23 +721,21 @@ mod tests {
         );
 
         let tool_choice = ToolChoice::Auto;
-        let anthropic_tool_choice = AnthropicToolChoice::try_from(tool_choice);
+        let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_choice);
         assert!(anthropic_tool_choice.is_ok());
         assert_eq!(anthropic_tool_choice.unwrap(), AnthropicToolChoice::Auto);
 
         let tool_choice = ToolChoice::Required;
-        let anthropic_tool_choice = AnthropicToolChoice::try_from(tool_choice);
+        let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_choice);
         assert!(anthropic_tool_choice.is_ok());
         assert_eq!(anthropic_tool_choice.unwrap(), AnthropicToolChoice::Any);
 
         let tool_choice = ToolChoice::Tool("test".to_string());
-        let anthropic_tool_choice = AnthropicToolChoice::try_from(tool_choice);
+        let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_choice);
         assert!(anthropic_tool_choice.is_ok());
         assert_eq!(
             anthropic_tool_choice.unwrap(),
-            AnthropicToolChoice::Tool {
-                name: "test".to_string()
-            }
+            AnthropicToolChoice::Tool { name: "test" }
         );
     }
 
@@ -724,14 +747,14 @@ mod tests {
             r#type: ToolType::Function,
             parameters: Value::Null,
         };
-        let anthropic_tool = AnthropicTool::try_from(tool);
+        let anthropic_tool = AnthropicTool::try_from(&tool);
         assert!(anthropic_tool.is_ok());
         assert_eq!(
             anthropic_tool.unwrap(),
             AnthropicTool {
-                name: "test".to_string(),
-                description: Some("test".to_string()),
-                input_schema: Value::Null,
+                name: "test",
+                description: Some("test"),
+                input_schema: &Value::Null,
             }
         );
     }
@@ -739,85 +762,66 @@ mod tests {
     #[test]
     fn test_try_from_inference_request_message() {
         // Test a User message
-        let inference_request_message = InferenceRequestMessage {
-            role: Role::User,
-            content: "test".to_string(),
-            tool_call_id: None,
-        };
-        let anthropic_message = AnthropicMessage::try_from(inference_request_message);
+        let inference_request_message =
+            InferenceRequestMessage::User(UserInferenceRequestMessage {
+                content: "test".to_string(),
+            });
+        let anthropic_message = AnthropicMessage::try_from(&inference_request_message);
         assert!(anthropic_message.is_ok());
         assert_eq!(
             anthropic_message.unwrap(),
             AnthropicMessage {
                 role: AnthropicRole::User,
-                content: vec![AnthropicMessageContent::Text {
-                    r#type: AnthropicMessageContentType::Text,
-                    text: "test".to_string(),
-                }],
+                content: vec![AnthropicMessageContent::Text { text: "test" }],
             }
         );
 
         // Test an Assistant message
-        let inference_request_message = InferenceRequestMessage {
-            role: Role::Assistant,
-            content: "test_assistant".to_string(),
-            tool_call_id: None,
-        };
-        let anthropic_message = AnthropicMessage::try_from(inference_request_message);
+        let inference_request_message =
+            InferenceRequestMessage::Assistant(AssistantInferenceRequestMessage {
+                content: Some("test_assistant".to_string()),
+                tool_calls: None,
+            });
+        let anthropic_message = AnthropicMessage::try_from(&inference_request_message);
         assert!(anthropic_message.is_ok());
         assert_eq!(
             anthropic_message.unwrap(),
             AnthropicMessage {
                 role: AnthropicRole::Assistant,
                 content: vec![AnthropicMessageContent::Text {
-                    r#type: AnthropicMessageContentType::Text,
-                    text: "test_assistant".to_string(),
+                    text: "test_assistant",
                 }],
             }
         );
+        // todo!("implement a test for tool calls here");
 
         // Test a Tool message
-        let inference_request_message = InferenceRequestMessage {
-            role: Role::Tool,
-            content: "test_tool_response".to_string(),
-            tool_call_id: Some("test_tool_call_id".to_string()),
-        };
-        let anthropic_message = AnthropicMessage::try_from(inference_request_message);
+        let inference_request_message =
+            InferenceRequestMessage::Tool(ToolInferenceRequestMessage {
+                content: "test_tool_response".to_string(),
+                tool_call_id: "test_tool_call_id".to_string(),
+            });
+        let anthropic_message = AnthropicMessage::try_from(&inference_request_message);
         assert!(anthropic_message.is_ok());
         assert_eq!(
             anthropic_message.unwrap(),
             AnthropicMessage {
                 role: AnthropicRole::User,
-                content: vec![AnthropicMessageContent::ToolCall {
-                    r#type: AnthropicMessageContentType::ToolCall,
-                    tool_use_id: "test_tool_call_id".to_string(),
-                    content: "test_tool_response".to_string(),
+                content: vec![AnthropicMessageContent::ToolResult {
+                    tool_use_id: "test_tool_call_id",
+                    content: vec![AnthropicMessageContent::Text {
+                        text: "test_tool_response"
+                    }],
                 }],
             }
         );
 
-        // Test a tool message missing tool call ID
-        let inference_request_message = InferenceRequestMessage {
-            role: Role::Tool,
-            content: "test_tool_response".to_string(),
-            tool_call_id: None,
-        };
-        let anthropic_message = AnthropicMessage::try_from(inference_request_message);
-        assert!(anthropic_message.is_err());
-        assert_eq!(
-            anthropic_message.err().unwrap(),
-            Error::InvalidMessage {
-                message: "Tool call ID is required for tool messages".to_string(),
-            }
-        );
-
         // Test a system message
-        let inference_request_message = InferenceRequestMessage {
-            role: Role::System,
-            content: "test_system".to_string(),
-            tool_call_id: None,
-        };
-        let anthropic_message = AnthropicMessage::try_from(inference_request_message);
+        let inference_request_message =
+            InferenceRequestMessage::System(SystemInferenceRequestMessage {
+                content: "test_system".to_string(),
+            });
+        let anthropic_message = AnthropicMessage::try_from(&inference_request_message);
         assert!(anthropic_message.is_err());
     }
 
@@ -827,8 +831,7 @@ mod tests {
         let listening_message = AnthropicMessage {
             role: AnthropicRole::User,
             content: vec![AnthropicMessageContent::Text {
-                r#type: AnthropicMessageContentType::Text,
-                text: "[listening]".to_string(),
+                text: "[listening]",
             }],
         };
         // Test Case 1: Empty message list
@@ -844,7 +847,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
         };
-        let anthropic_request_body = AnthropicRequestBody::new(model.clone(), inference_request);
+        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
         assert!(anthropic_request_body.is_err());
         assert_eq!(
             anthropic_request_body.err().unwrap(),
@@ -855,21 +858,16 @@ mod tests {
 
         // Test Case 2: Messages with System message
         let messages = vec![
-            InferenceRequestMessage {
-                role: Role::System,
+            InferenceRequestMessage::System(SystemInferenceRequestMessage {
                 content: "test_system".to_string(),
-                tool_call_id: None,
-            },
-            InferenceRequestMessage {
-                role: Role::User,
+            }),
+            InferenceRequestMessage::User(UserInferenceRequestMessage {
                 content: "test_user".to_string(),
-                tool_call_id: None,
-            },
-            InferenceRequestMessage {
-                role: Role::Assistant,
-                content: "test_assistant".to_string(),
-                tool_call_id: None,
-            },
+            }),
+            InferenceRequestMessage::Assistant(AssistantInferenceRequestMessage {
+                content: Some("test_assistant".to_string()),
+                tool_calls: None,
+            }),
         ];
         let inference_request = ModelInferenceRequest {
             messages: messages.clone(),
@@ -883,20 +881,20 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
         };
-        let anthropic_request_body = AnthropicRequestBody::new(model.clone(), inference_request);
+        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
         assert!(anthropic_request_body.is_ok());
         assert_eq!(
             anthropic_request_body.unwrap(),
             AnthropicRequestBody {
-                model: model.clone(),
+                model: &model,
                 messages: vec![
-                    AnthropicMessage::try_from(messages[1].clone()).unwrap(),
-                    AnthropicMessage::try_from(messages[2].clone()).unwrap(),
+                    AnthropicMessage::try_from(&messages[1]).unwrap(),
+                    AnthropicMessage::try_from(&messages[2]).unwrap(),
                     listening_message.clone(),
                 ],
                 max_tokens: 4096,
                 stream: Some(false),
-                system: Some("test_system".to_string()),
+                system: Some("test_system"),
                 temperature: None,
                 tool_choice: None,
                 tools: None,
@@ -906,26 +904,19 @@ mod tests {
         // Test case 3: Messages with system message that require consolidation
         // also some of the optional fields are tested
         let messages = vec![
-            InferenceRequestMessage {
-                role: Role::System,
+            InferenceRequestMessage::System(SystemInferenceRequestMessage {
                 content: "test_system".to_string(),
-                tool_call_id: None,
-            },
-            InferenceRequestMessage {
-                role: Role::User,
+            }),
+            InferenceRequestMessage::User(UserInferenceRequestMessage {
                 content: "test_user".to_string(),
-                tool_call_id: None,
-            },
-            InferenceRequestMessage {
-                role: Role::User,
+            }),
+            InferenceRequestMessage::User(UserInferenceRequestMessage {
                 content: "test_user2".to_string(),
-                tool_call_id: None,
-            },
-            InferenceRequestMessage {
-                role: Role::Assistant,
-                content: "test_assistant".to_string(),
-                tool_call_id: None,
-            },
+            }),
+            InferenceRequestMessage::Assistant(AssistantInferenceRequestMessage {
+                content: Some("test_assistant".to_string()),
+                tool_calls: None,
+            }),
         ];
         let inference_request = ModelInferenceRequest {
             messages: messages.clone(),
@@ -939,32 +930,26 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
         };
-        let anthropic_request_body = AnthropicRequestBody::new(model.clone(), inference_request);
+        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
         assert!(anthropic_request_body.is_ok());
         assert_eq!(
             anthropic_request_body.unwrap(),
             AnthropicRequestBody {
-                model: model.clone(),
+                model: &model,
                 messages: vec![
                     AnthropicMessage {
                         role: AnthropicRole::User,
                         content: vec![
-                            AnthropicMessageContent::Text {
-                                r#type: AnthropicMessageContentType::Text,
-                                text: "test_user".to_string(),
-                            },
-                            AnthropicMessageContent::Text {
-                                r#type: AnthropicMessageContentType::Text,
-                                text: "test_user2".to_string(),
-                            }
+                            AnthropicMessageContent::Text { text: "test_user" },
+                            AnthropicMessageContent::Text { text: "test_user2" }
                         ],
                     },
-                    AnthropicMessage::try_from(messages[3].clone()).unwrap(),
+                    AnthropicMessage::try_from(&messages[3]).unwrap(),
                     listening_message.clone(),
                 ],
                 max_tokens: 100,
                 stream: Some(true),
-                system: Some("test_system".to_string()),
+                system: Some("test_system"),
                 temperature: Some(0.5),
                 tool_choice: None,
                 tools: None,
@@ -973,26 +958,20 @@ mod tests {
 
         // Test case 4: Tool use & choice
         let messages = vec![
-            InferenceRequestMessage {
-                role: Role::System,
+            InferenceRequestMessage::System(SystemInferenceRequestMessage {
                 content: "test_system".to_string(),
-                tool_call_id: None,
-            },
-            InferenceRequestMessage {
-                role: Role::User,
+            }),
+            InferenceRequestMessage::User(UserInferenceRequestMessage {
                 content: "test_user".to_string(),
-                tool_call_id: None,
-            },
-            InferenceRequestMessage {
-                role: Role::Assistant,
-                content: "test_assistant".to_string(),
-                tool_call_id: None,
-            },
-            InferenceRequestMessage {
-                role: Role::Tool,
+            }),
+            InferenceRequestMessage::Assistant(AssistantInferenceRequestMessage {
+                content: Some("test_assistant".to_string()),
+                tool_calls: None,
+            }),
+            InferenceRequestMessage::Tool(ToolInferenceRequestMessage {
+                tool_call_id: "tool_call_id".to_string(),
                 content: "tool_response".to_string(),
-                tool_call_id: Some("tool_call_id".to_string()),
-            },
+            }),
         ];
         let tool = Tool {
             r#type: ToolType::Function,
@@ -1013,48 +992,42 @@ mod tests {
             output_schema: None,
         };
 
-        let anthropic_request_body = AnthropicRequestBody::new(model.clone(), inference_request);
+        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
         assert!(anthropic_request_body.is_ok());
         assert_eq!(
             anthropic_request_body.unwrap(),
             AnthropicRequestBody {
-                model: model.clone(),
+                model: &model,
                 messages: vec![
-                    AnthropicMessage::try_from(messages[1].clone()).unwrap(),
-                    AnthropicMessage::try_from(messages[2].clone()).unwrap(),
-                    AnthropicMessage::try_from(messages[3].clone()).unwrap(),
+                    AnthropicMessage::try_from(&messages[1]).unwrap(),
+                    AnthropicMessage::try_from(&messages[2]).unwrap(),
+                    AnthropicMessage::try_from(&messages[3]).unwrap(),
                 ],
                 max_tokens: 100,
                 stream: Some(true),
-                system: Some("test_system".to_string()),
+                system: Some("test_system"),
                 temperature: Some(0.5),
                 tool_choice: Some(AnthropicToolChoice::Auto),
                 tools: Some(vec![AnthropicTool {
-                    name: "test_name".to_string(),
-                    description: Some("test_description".to_string()),
-                    input_schema: json!({"type": "string"}),
+                    name: "test_name",
+                    description: Some("test_description"),
+                    input_schema: &json!({"type": "string"}),
                 }]),
             }
         );
 
         // Test case 5: System message later in list
-        // Test Case 2: Messages with System message
         let messages = vec![
-            InferenceRequestMessage {
-                role: Role::User,
+            InferenceRequestMessage::User(UserInferenceRequestMessage {
                 content: "test_user".to_string(),
-                tool_call_id: None,
-            },
-            InferenceRequestMessage {
-                role: Role::System,
+            }),
+            InferenceRequestMessage::System(SystemInferenceRequestMessage {
                 content: "test_system".to_string(),
-                tool_call_id: None,
-            },
-            InferenceRequestMessage {
-                role: Role::Assistant,
-                content: "test_assistant".to_string(),
-                tool_call_id: None,
-            },
+            }),
+            InferenceRequestMessage::Assistant(AssistantInferenceRequestMessage {
+                content: Some("test_assistant".to_string()),
+                tool_calls: None,
+            }),
         ];
         let inference_request = ModelInferenceRequest {
             messages: messages.clone(),
@@ -1068,7 +1041,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
         };
-        let anthropic_request_body = AnthropicRequestBody::new(model.clone(), inference_request);
+        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
         assert!(anthropic_request_body.is_err());
         assert_eq!(
             anthropic_request_body.err().unwrap(),
@@ -1083,41 +1056,28 @@ mod tests {
         let listening_message = AnthropicMessage {
             role: AnthropicRole::User,
             content: vec![AnthropicMessageContent::Text {
-                r#type: AnthropicMessageContentType::Text,
-                text: "[listening]".to_string(),
+                text: "[listening]",
             }],
         };
         // Test case 1: No consolidation needed
         let messages = vec![
             AnthropicMessage {
                 role: AnthropicRole::User,
-                content: vec![AnthropicMessageContent::Text {
-                    r#type: AnthropicMessageContentType::Text,
-                    text: String::from("Hello"),
-                }],
+                content: vec![AnthropicMessageContent::Text { text: "Hello" }],
             },
             AnthropicMessage {
                 role: AnthropicRole::Assistant,
-                content: vec![AnthropicMessageContent::Text {
-                    r#type: AnthropicMessageContentType::Text,
-                    text: String::from("Hi"),
-                }],
+                content: vec![AnthropicMessageContent::Text { text: "Hi" }],
             },
         ];
         let expected = vec![
             AnthropicMessage {
                 role: AnthropicRole::User,
-                content: vec![AnthropicMessageContent::Text {
-                    r#type: AnthropicMessageContentType::Text,
-                    text: String::from("Hello"),
-                }],
+                content: vec![AnthropicMessageContent::Text { text: "Hello" }],
             },
             AnthropicMessage {
                 role: AnthropicRole::Assistant,
-                content: vec![AnthropicMessageContent::Text {
-                    r#type: AnthropicMessageContentType::Text,
-                    text: String::from("Hi"),
-                }],
+                content: vec![AnthropicMessageContent::Text { text: "Hi" }],
             },
             listening_message.clone(),
         ];
@@ -1127,46 +1087,32 @@ mod tests {
         let messages = vec![
             AnthropicMessage {
                 role: AnthropicRole::User,
-                content: vec![AnthropicMessageContent::Text {
-                    r#type: AnthropicMessageContentType::Text,
-                    text: String::from("Hello"),
-                }],
+                content: vec![AnthropicMessageContent::Text { text: "Hello" }],
             },
             AnthropicMessage {
                 role: AnthropicRole::User,
                 content: vec![AnthropicMessageContent::Text {
-                    r#type: AnthropicMessageContentType::Text,
-                    text: String::from("How are you?"),
+                    text: "How are you?",
                 }],
             },
             AnthropicMessage {
                 role: AnthropicRole::Assistant,
-                content: vec![AnthropicMessageContent::Text {
-                    r#type: AnthropicMessageContentType::Text,
-                    text: String::from("Hi"),
-                }],
+                content: vec![AnthropicMessageContent::Text { text: "Hi" }],
             },
         ];
         let expected = vec![
             AnthropicMessage {
                 role: AnthropicRole::User,
                 content: vec![
+                    AnthropicMessageContent::Text { text: "Hello" },
                     AnthropicMessageContent::Text {
-                        r#type: AnthropicMessageContentType::Text,
-                        text: String::from("Hello"),
-                    },
-                    AnthropicMessageContent::Text {
-                        r#type: AnthropicMessageContentType::Text,
-                        text: String::from("How are you?"),
+                        text: "How are you?",
                     },
                 ],
             },
             AnthropicMessage {
                 role: AnthropicRole::Assistant,
-                content: vec![AnthropicMessageContent::Text {
-                    r#type: AnthropicMessageContentType::Text,
-                    text: String::from("Hi"),
-                }],
+                content: vec![AnthropicMessageContent::Text { text: "Hi" }],
             },
             listening_message.clone(),
         ];
@@ -1176,30 +1122,22 @@ mod tests {
         let messages = vec![
             AnthropicMessage {
                 role: AnthropicRole::User,
-                content: vec![AnthropicMessageContent::Text {
-                    r#type: AnthropicMessageContentType::Text,
-                    text: String::from("Hello"),
-                }],
+                content: vec![AnthropicMessageContent::Text { text: "Hello" }],
             },
             AnthropicMessage {
                 role: AnthropicRole::User,
                 content: vec![AnthropicMessageContent::Text {
-                    r#type: AnthropicMessageContentType::Text,
-                    text: String::from("How are you?"),
+                    text: "How are you?",
                 }],
             },
             AnthropicMessage {
                 role: AnthropicRole::Assistant,
-                content: vec![AnthropicMessageContent::Text {
-                    r#type: AnthropicMessageContentType::Text,
-                    text: String::from("Hi"),
-                }],
+                content: vec![AnthropicMessageContent::Text { text: "Hi" }],
             },
             AnthropicMessage {
                 role: AnthropicRole::Assistant,
                 content: vec![AnthropicMessageContent::Text {
-                    r#type: AnthropicMessageContentType::Text,
-                    text: String::from("I am here to help."),
+                    text: "I am here to help.",
                 }],
             },
         ];
@@ -1207,26 +1145,18 @@ mod tests {
             AnthropicMessage {
                 role: AnthropicRole::User,
                 content: vec![
+                    AnthropicMessageContent::Text { text: "Hello" },
                     AnthropicMessageContent::Text {
-                        r#type: AnthropicMessageContentType::Text,
-                        text: String::from("Hello"),
-                    },
-                    AnthropicMessageContent::Text {
-                        r#type: AnthropicMessageContentType::Text,
-                        text: String::from("How are you?"),
+                        text: "How are you?",
                     },
                 ],
             },
             AnthropicMessage {
                 role: AnthropicRole::Assistant,
                 content: vec![
+                    AnthropicMessageContent::Text { text: "Hi" },
                     AnthropicMessageContent::Text {
-                        r#type: AnthropicMessageContentType::Text,
-                        text: String::from("Hi"),
-                    },
-                    AnthropicMessageContent::Text {
-                        r#type: AnthropicMessageContentType::Text,
-                        text: String::from("I am here to help."),
+                        text: "I am here to help.",
                     },
                 ],
             },
@@ -1242,17 +1172,11 @@ mod tests {
         // Test case 5: Single message
         let messages = vec![AnthropicMessage {
             role: AnthropicRole::User,
-            content: vec![AnthropicMessageContent::Text {
-                r#type: AnthropicMessageContentType::Text,
-                text: String::from("Hello"),
-            }],
+            content: vec![AnthropicMessageContent::Text { text: "Hello" }],
         }];
         let expected = vec![AnthropicMessage {
             role: AnthropicRole::User,
-            content: vec![AnthropicMessageContent::Text {
-                r#type: AnthropicMessageContentType::Text,
-                text: String::from("Hello"),
-            }],
+            content: vec![AnthropicMessageContent::Text { text: "Hello" }],
         }];
         assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
 
@@ -1260,33 +1184,37 @@ mod tests {
         let messages = vec![
             AnthropicMessage {
                 role: AnthropicRole::User,
-                content: vec![AnthropicMessageContent::ToolCall {
-                    r#type: AnthropicMessageContentType::ToolCall,
-                    tool_use_id: "tool1".to_string(),
-                    content: "Tool call 1".to_string(),
+                content: vec![AnthropicMessageContent::ToolResult {
+                    tool_use_id: "tool1",
+                    content: vec![AnthropicMessageContent::Text {
+                        text: "Tool call 1",
+                    }],
                 }],
             },
             AnthropicMessage {
                 role: AnthropicRole::User,
-                content: vec![AnthropicMessageContent::ToolCall {
-                    r#type: AnthropicMessageContentType::ToolCall,
-                    tool_use_id: "tool2".to_string(),
-                    content: "Tool call 2".to_string(),
+                content: vec![AnthropicMessageContent::ToolResult {
+                    tool_use_id: "tool2",
+                    content: vec![AnthropicMessageContent::Text {
+                        text: "Tool call 2",
+                    }],
                 }],
             },
         ];
         let expected = vec![AnthropicMessage {
             role: AnthropicRole::User,
             content: vec![
-                AnthropicMessageContent::ToolCall {
-                    r#type: AnthropicMessageContentType::ToolCall,
-                    tool_use_id: "tool1".to_string(),
-                    content: "Tool call 1".to_string(),
+                AnthropicMessageContent::ToolResult {
+                    tool_use_id: "tool1",
+                    content: vec![AnthropicMessageContent::Text {
+                        text: "Tool call 1",
+                    }],
                 },
-                AnthropicMessageContent::ToolCall {
-                    r#type: AnthropicMessageContentType::ToolCall,
-                    tool_use_id: "tool2".to_string(),
-                    content: "Tool call 2".to_string(),
+                AnthropicMessageContent::ToolResult {
+                    tool_use_id: "tool2",
+                    content: vec![AnthropicMessageContent::Text {
+                        text: "Tool call 2",
+                    }],
                 },
             ],
         }];
@@ -1297,23 +1225,22 @@ mod tests {
             AnthropicMessage {
                 role: AnthropicRole::User,
                 content: vec![AnthropicMessageContent::Text {
-                    r#type: AnthropicMessageContentType::Text,
-                    text: "User message 1".to_string(),
+                    text: "User message 1",
                 }],
             },
             AnthropicMessage {
                 role: AnthropicRole::User,
-                content: vec![AnthropicMessageContent::ToolCall {
-                    r#type: AnthropicMessageContentType::ToolCall,
-                    tool_use_id: "tool1".to_string(),
-                    content: "Tool call 1".to_string(),
+                content: vec![AnthropicMessageContent::ToolResult {
+                    tool_use_id: "tool1",
+                    content: vec![AnthropicMessageContent::Text {
+                        text: "Tool call 1",
+                    }],
                 }],
             },
             AnthropicMessage {
                 role: AnthropicRole::User,
                 content: vec![AnthropicMessageContent::Text {
-                    r#type: AnthropicMessageContentType::Text,
-                    text: "User message 2".to_string(),
+                    text: "User message 2",
                 }],
             },
         ];
@@ -1321,17 +1248,16 @@ mod tests {
             role: AnthropicRole::User,
             content: vec![
                 AnthropicMessageContent::Text {
-                    r#type: AnthropicMessageContentType::Text,
-                    text: "User message 1".to_string(),
+                    text: "User message 1",
                 },
-                AnthropicMessageContent::ToolCall {
-                    r#type: AnthropicMessageContentType::ToolCall,
-                    tool_use_id: "tool1".to_string(),
-                    content: "Tool call 1".to_string(),
+                AnthropicMessageContent::ToolResult {
+                    tool_use_id: "tool1",
+                    content: vec![AnthropicMessageContent::Text {
+                        text: "Tool call 1",
+                    }],
                 },
                 AnthropicMessageContent::Text {
-                    r#type: AnthropicMessageContentType::Text,
-                    text: "User message 2".to_string(),
+                    text: "User message 2",
                 },
             ],
         }];
@@ -1434,8 +1360,9 @@ mod tests {
         );
         assert!(inference_response.tool_calls.is_none());
 
-        let raw_json = json!(anthropic_response_body);
-        assert_eq!(inference_response.raw, raw_json);
+        let raw_json = json!(anthropic_response_body).to_string();
+        let parsed_raw: serde_json::Value = serde_json::from_str(&inference_response.raw).unwrap();
+        assert_eq!(raw_json, serde_json::json!(parsed_raw).to_string());
         assert_eq!(inference_response.usage.prompt_tokens, 100);
         assert_eq!(inference_response.usage.completion_tokens, 50);
 
@@ -1465,11 +1392,12 @@ mod tests {
         let tool_calls = inference_response.tool_calls.as_ref().unwrap();
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].name, "get_weather");
-        assert_eq!(tool_calls[0].tool_call_id, "tool_call_1");
+        assert_eq!(tool_calls[0].id, "tool_call_1");
         assert_eq!(tool_calls[0].arguments, r#"{"location":"New York"}"#);
 
-        let raw_json = json!(anthropic_response_body);
-        assert_eq!(inference_response.raw, raw_json);
+        let raw_json = json!(anthropic_response_body).to_string();
+        let parsed_raw: serde_json::Value = serde_json::from_str(&inference_response.raw).unwrap();
+        assert_eq!(raw_json, serde_json::json!(parsed_raw).to_string());
         assert_eq!(inference_response.usage.prompt_tokens, 100);
         assert_eq!(inference_response.usage.completion_tokens, 50);
 
@@ -1507,11 +1435,12 @@ mod tests {
         let tool_calls = inference_response.tool_calls.as_ref().unwrap();
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].name, "get_weather");
-        assert_eq!(tool_calls[0].tool_call_id, "tool_call_2");
+        assert_eq!(tool_calls[0].id, "tool_call_2");
         assert_eq!(tool_calls[0].arguments, r#"{"location":"London"}"#);
 
-        let raw_json = json!(anthropic_response_body);
-        assert_eq!(inference_response.raw, raw_json);
+        let raw_json = json!(anthropic_response_body).to_string();
+        let parsed_raw: serde_json::Value = serde_json::from_str(&inference_response.raw).unwrap();
+        assert_eq!(raw_json, serde_json::json!(parsed_raw).to_string());
 
         assert_eq!(inference_response.usage.prompt_tokens, 100);
         assert_eq!(inference_response.usage.completion_tokens, 50);

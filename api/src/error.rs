@@ -4,7 +4,27 @@ use serde_json::json;
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
+    AnthropicClient {
+        message: String,
+        status_code: StatusCode,
+    },
+    AnthropicServer {
+        message: String,
+    },
+    FireworksClient {
+        message: String,
+        status_code: StatusCode,
+    },
+    FireworksServer {
+        message: String,
+    },
+    InferenceClient {
+        message: String,
+    },
     Inference {
+        message: String,
+    },
+    InvalidBaseUrl {
         message: String,
     },
     InvalidFunctionVariants {
@@ -13,7 +33,26 @@ pub enum Error {
     InvalidInputSchema {
         messages: Vec<String>,
     },
+    InvalidMessage {
+        message: String,
+    },
+    InvalidProviderConfig {
+        message: String,
+    },
+    InvalidRequest {
+        message: String,
+    },
+    InvalidTool {
+        message: String,
+    },
     JsonRequest {
+        message: String,
+    },
+    OpenAIClient {
+        message: String,
+        status_code: StatusCode,
+    },
+    OpenAIServer {
         message: String,
     },
     UnknownFunction {
@@ -21,31 +60,6 @@ pub enum Error {
     },
     UnknownVariant {
         name: String,
-    },
-
-    // TODO: clean up merge
-    #[allow(dead_code)] // TODO: remove
-    AnthropicClient {
-        message: String,
-        status_code: StatusCode,
-    },
-    #[allow(dead_code)] // TODO: remove
-    AnthropicServer {
-        message: String,
-    },
-    #[allow(dead_code)] // TODO: remove
-    InferenceClient {
-        message: String,
-    },
-    InvalidMessage {
-        message: String,
-    },
-    #[allow(dead_code)] // TODO: remove
-    InvalidRequest {
-        message: String,
-    },
-    InvalidTool {
-        message: String,
     },
 }
 
@@ -55,14 +69,20 @@ impl Error {
         match self {
             Error::AnthropicClient { .. } => tracing::Level::WARN,
             Error::AnthropicServer { .. } => tracing::Level::ERROR,
+            Error::FireworksClient { .. } => tracing::Level::WARN,
+            Error::FireworksServer { .. } => tracing::Level::ERROR,
             Error::Inference { .. } => tracing::Level::ERROR,
             Error::InferenceClient { .. } => tracing::Level::ERROR,
+            Error::InvalidBaseUrl { .. } => tracing::Level::ERROR,
             Error::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
             Error::InvalidInputSchema { .. } => tracing::Level::WARN,
             Error::InvalidMessage { .. } => tracing::Level::WARN,
+            Error::InvalidProviderConfig { .. } => tracing::Level::ERROR,
             Error::InvalidRequest { .. } => tracing::Level::ERROR,
             Error::InvalidTool { .. } => tracing::Level::ERROR,
             Error::JsonRequest { .. } => tracing::Level::WARN,
+            Error::OpenAIClient { .. } => tracing::Level::WARN,
+            Error::OpenAIServer { .. } => tracing::Level::ERROR,
             Error::UnknownFunction { .. } => tracing::Level::WARN,
             Error::UnknownVariant { .. } => tracing::Level::WARN,
         }
@@ -71,18 +91,24 @@ impl Error {
     /// Defines the HTTP status code for responses involving this error
     fn status_code(&self) -> StatusCode {
         match self {
+            Error::AnthropicClient { status_code, .. } => *status_code,
+            Error::AnthropicServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::FireworksClient { status_code, .. } => *status_code,
+            Error::FireworksServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::Inference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::InferenceClient { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::InvalidBaseUrl { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InvalidInputSchema { .. } => StatusCode::BAD_REQUEST,
-            Error::JsonRequest { .. } => StatusCode::BAD_REQUEST,
-            Error::UnknownFunction { .. } => StatusCode::NOT_FOUND,
-            Error::UnknownVariant { .. } => StatusCode::NOT_FOUND,
-            Error::AnthropicServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::InferenceClient { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
+            Error::InvalidProviderConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InvalidRequest { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InvalidTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::AnthropicClient { status_code, .. } => *status_code,
-            Error::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
+            Error::JsonRequest { .. } => StatusCode::BAD_REQUEST,
+            Error::OpenAIClient { status_code, .. } => *status_code,
+            Error::OpenAIServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::UnknownFunction { .. } => StatusCode::NOT_FOUND,
+            Error::UnknownVariant { .. } => StatusCode::NOT_FOUND,
         }
     }
 
@@ -101,10 +127,21 @@ impl Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::AnthropicClient { message, .. } => write!(f, "{}", message),
-            Error::AnthropicServer { message } => write!(f, "{}", message),
+            Error::AnthropicClient { message, .. } => {
+                write!(f, "Error from Anthropic client: {}", message)
+            }
+            Error::AnthropicServer { message } => {
+                write!(f, "Error from Anthropic servers: {}", message)
+            }
+            Error::FireworksClient { message, .. } => {
+                write!(f, "Error from Fireworks client: {}", message)
+            }
+            Error::FireworksServer { message } => {
+                write!(f, "Error from Fireworks servers: {}", message)
+            }
             Error::Inference { message } => write!(f, "{}", message),
             Error::InferenceClient { message } => write!(f, "{}", message),
+            Error::InvalidBaseUrl { message } => write!(f, "{}", message),
             Error::InvalidFunctionVariants { message } => write!(f, "{}", message),
             Error::InvalidInputSchema { messages } => {
                 write!(
@@ -114,9 +151,14 @@ impl std::fmt::Display for Error {
                 )
             }
             Error::InvalidMessage { message } => write!(f, "{}", message),
+            Error::InvalidProviderConfig { message } => write!(f, "{}", message),
             Error::InvalidRequest { message } => write!(f, "{}", message),
             Error::InvalidTool { message } => write!(f, "{}", message),
             Error::JsonRequest { message } => write!(f, "{}", message),
+            Error::OpenAIServer { message } => write!(f, "Error from OpenAI servers: {}", message),
+            Error::OpenAIClient { message, .. } => {
+                write!(f, "Error from OpenAI client: {}", message)
+            }
             Error::UnknownFunction { name } => write!(f, "Unknown function: {}", name),
             Error::UnknownVariant { name } => write!(f, "Unknown variant: {}", name),
         }
