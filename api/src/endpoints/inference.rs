@@ -44,7 +44,7 @@ pub async fn inference_handler(
     let function = config.get_function(&params.function_name)?;
 
     // Clone the function variants so we can modify the collection as we sample them
-    let mut variants = function.variants.clone();
+    let mut variants = function.variants().clone();
 
     // If the function has no variants, return an error
     if variants.is_empty() {
@@ -80,7 +80,7 @@ pub async fn inference_handler(
     while !variants.is_empty() {
         #[allow(unused)] // TODO: remove
         let (variant_name, variant) = sample_variant(
-            &function.variants,
+            function.variants(),
             &params.function_name,
             &params.episode_id,
         )?;

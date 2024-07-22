@@ -37,8 +37,8 @@ model_name = "claude-3-haiku-20240307"
 
 [functions.generate_draft]
 type = "chat"  # "chat", "tool"
-chat.system_schema = "functions/generate_draft/system_schema.json"
-chat.output_schema = "functions/generate_draft/output_schema.json"
+system_schema = "functions/generate_draft/system_schema.json"
+output_schema = "functions/generate_draft/output_schema.json"
 # optional: tool.parallel_tool_calls, system_schema, user_schema, assistant_schema, output_schema
 
 [functions.generate_draft.variants.openai_promptA]
@@ -54,8 +54,8 @@ generation.system_template = "functions/generate_draft/promptB/system.jinja"
 
 [functions.extract_data]
 type = "tool"
-tool.system_schema = "functions/extract_data/system_schema.json"
-tool.output_schema = "functions/extract_data/output_schema.json"
+system_schema = "functions/extract_data/system_schema.json"
+output_schema = "functions/extract_data/output_schema.json"
 
 [functions.extract_data.variants.openai_promptA]
 weight = 0.9

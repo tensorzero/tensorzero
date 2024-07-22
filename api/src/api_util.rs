@@ -16,6 +16,7 @@ pub type AppState = axum::extract::State<AppStateData>;
 impl Default for AppStateData {
     fn default() -> Self {
         let config = Arc::new(config_parser::Config::load());
+        println!("{:#?}", config); // TODO: temporary
         Self { config }
     }
 }

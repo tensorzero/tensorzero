@@ -6,24 +6,27 @@ use crate::error::Error;
 use crate::jsonschema_util::JSONSchemaFromPath;
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
-pub struct FunctionConfig {
-    pub r#type: FunctionConfigType,
-    pub variants: HashMap<String, VariantConfig>, // variant name => variant config
-    pub chat: Option<FunctionConfigChat>,
-    pub tool: Option<FunctionConfigTool>,
+pub enum FunctionConfig {
+    Chat(FunctionConfigChat),
+    Tool(FunctionConfigTool),
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum FunctionConfigType {
-    Chat,
-    Tool,
+impl FunctionConfig {
+    pub fn variants(&self) -> &HashMap<String, VariantConfig> {
+        match self {
+            FunctionConfig::Chat(params) => &params.variants,
+            FunctionConfig::Tool(params) => &params.variants,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FunctionConfigChat {
+    pub variants: HashMap<String, VariantConfig>, // variant name => variant config
     pub system_schema: Option<JSONSchemaFromPath>,
     pub user_schema: Option<JSONSchemaFromPath>,
     pub assistant_schema: Option<JSONSchemaFromPath>,
@@ -33,6 +36,7 @@ pub struct FunctionConfigChat {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FunctionConfigTool {
+    pub variants: HashMap<String, VariantConfig>, // variant name => variant config
     pub system_schema: Option<JSONSchemaFromPath>,
     pub user_schema: Option<JSONSchemaFromPath>,
     pub assistant_schema: Option<JSONSchemaFromPath>,
@@ -74,26 +78,22 @@ impl FunctionConfig {
     /// - For a chat function, the input is validated against the system, user, and assistant schemas.
     /// - For a tool function, the input is validated against the system, user, and assistant schemas.
     pub fn validate_input(&self, input: &Vec<InputMessage>) -> Result<(), Error> {
-        match self.r#type {
-            FunctionConfigType::Chat => {
-                if let Some(ref chat) = self.chat {
-                    FunctionConfig::validate_chat_like_input(
-                        &chat.system_schema,
-                        &chat.user_schema,
-                        &chat.assistant_schema,
-                        input,
-                    )?;
-                }
+        match &self {
+            FunctionConfig::Chat(params) => {
+                FunctionConfig::validate_chat_like_input(
+                    &params.system_schema,
+                    &params.user_schema,
+                    &params.assistant_schema,
+                    input,
+                )?;
             }
-            FunctionConfigType::Tool => {
-                if let Some(ref tool) = self.tool {
-                    FunctionConfig::validate_chat_like_input(
-                        &tool.system_schema,
-                        &tool.user_schema,
-                        &tool.assistant_schema,
-                        input,
-                    )?;
-                }
+            FunctionConfig::Tool(params) => {
+                FunctionConfig::validate_chat_like_input(
+                    &params.system_schema,
+                    &params.user_schema,
+                    &params.assistant_schema,
+                    input,
+                )?;
             }
         }
 
