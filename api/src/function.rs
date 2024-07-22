@@ -236,7 +236,6 @@ mod tests {
         ];
 
         let validation_result = function_config.validate_input(&input);
-        assert!(validation_result.is_err());
         assert_eq!(
             validation_result.unwrap_err(),
             Error::InvalidMessage {
@@ -271,7 +270,13 @@ mod tests {
             },
         ];
 
-        assert!(function_config.validate_input(&input).is_err()); // TODO: fix
+        let validation_result = function_config.validate_input(&input);
+        assert_eq!(
+            validation_result.unwrap_err(),
+            Error::InvalidInputSchema {
+                messages: vec!["\"system content\" is not of type \"object\"".to_string()]
+            }
+        );
 
         let input = vec![
             InputMessage {
@@ -317,7 +322,13 @@ mod tests {
             },
         ];
 
-        assert!(function_config.validate_input(&input).is_err()); // TODO: fix
+        let validation_result = function_config.validate_input(&input);
+        assert_eq!(
+            validation_result.unwrap_err(),
+            Error::InvalidInputSchema {
+                messages: vec!["\"user content\" is not of type \"object\"".to_string()]
+            }
+        );
 
         let input = vec![
             InputMessage {
@@ -363,7 +374,13 @@ mod tests {
             },
         ];
 
-        assert!(function_config.validate_input(&input).is_err()); // TODO: fix
+        let validation_result = function_config.validate_input(&input);
+        assert_eq!(
+            validation_result.unwrap_err(),
+            Error::InvalidInputSchema {
+                messages: vec!["\"assistant content\" is not of type \"object\"".to_string()]
+            }
+        );
 
         let input = vec![
             InputMessage {
@@ -409,7 +426,13 @@ mod tests {
             },
         ];
 
-        assert!(function_config.validate_input(&input).is_err()); // TODO: fix
+        let validation_result = function_config.validate_input(&input);
+        assert_eq!(
+            validation_result.unwrap_err(),
+            Error::InvalidInputSchema {
+                messages: vec!["\"system content\" is not of type \"object\"".to_string()]
+            }
+        );
 
         let input = vec![
             InputMessage {
@@ -473,7 +496,6 @@ mod tests {
         ];
 
         let validation_result = function_config.validate_input(&input);
-        assert!(validation_result.is_err());
         assert_eq!(
             validation_result.unwrap_err(),
             Error::InvalidMessage {
@@ -508,7 +530,13 @@ mod tests {
             },
         ];
 
-        assert!(function_config.validate_input(&input).is_err()); // TODO: fix
+        let validation_result = function_config.validate_input(&input);
+        assert_eq!(
+            validation_result.unwrap_err(),
+            Error::InvalidInputSchema {
+                messages: vec!["\"system content\" is not of type \"object\"".to_string()]
+            }
+        );
 
         let input = vec![
             InputMessage {
@@ -554,7 +582,13 @@ mod tests {
             },
         ];
 
-        assert!(function_config.validate_input(&input).is_err()); // TODO: fix
+        let validation_result = function_config.validate_input(&input);
+        assert_eq!(
+            validation_result.unwrap_err(),
+            Error::InvalidInputSchema {
+                messages: vec!["\"user content\" is not of type \"object\"".to_string()]
+            }
+        );
 
         let input = vec![
             InputMessage {
@@ -600,7 +634,13 @@ mod tests {
             },
         ];
 
-        assert!(function_config.validate_input(&input).is_err()); // TODO: fix
+        let validation_result = function_config.validate_input(&input);
+        assert_eq!(
+            validation_result.unwrap_err(),
+            Error::InvalidInputSchema {
+                messages: vec!["\"assistant content\" is not of type \"object\"".to_string()]
+            }
+        );
 
         let input = vec![
             InputMessage {
@@ -646,7 +686,13 @@ mod tests {
             },
         ];
 
-        assert!(function_config.validate_input(&input).is_err()); // TODO: fix
+        let validation_result = function_config.validate_input(&input);
+        assert_eq!(
+            validation_result.unwrap_err(),
+            Error::InvalidInputSchema {
+                messages: vec!["\"system content\" is not of type \"object\"".to_string()]
+            }
+        );
 
         let input = vec![
             InputMessage {
