@@ -198,7 +198,7 @@ impl<'a> TryFrom<&'a ToolChoice> for AnthropicToolChoice<'a> {
     }
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 struct AnthropicTool<'a> {
     name: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -221,7 +221,7 @@ impl<'a> TryFrom<&'a Tool> for AnthropicTool<'a> {
     }
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 enum AnthropicMessageContent<'a> {
@@ -239,7 +239,7 @@ enum AnthropicMessageContent<'a> {
     }, // NB: Anthropic also supports Image blocks here but we won't for now
 }
 
-#[derive(Debug, Serialize, Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 struct AnthropicMessage<'a> {
     role: AnthropicRole,
     content: Vec<AnthropicMessageContent<'a>>,
@@ -416,18 +416,18 @@ fn prepare_messages(messages: Vec<AnthropicMessage>) -> Result<Vec<AnthropicMess
     Ok(consolidated_messages)
 }
 
-#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 struct AnthropicError {
     error: AnthropicErrorBody,
 }
 
-#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 struct AnthropicErrorBody {
     r#type: String,
     message: String,
 }
 
-#[derive(Deserialize, Debug, Serialize, Clone)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AnthropicContentBlock {
     Text {
@@ -440,7 +440,7 @@ pub enum AnthropicContentBlock {
     },
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct AnthropicUsage {
     input_tokens: u32,
     output_tokens: u32,
@@ -455,7 +455,7 @@ impl From<AnthropicUsage> for Usage {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct AnthropicResponseBody {
     id: String,
     r#type: String, // this is always "message"

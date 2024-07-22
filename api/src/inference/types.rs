@@ -16,7 +16,7 @@ use crate::error::Error;
 /// and to convert it back to the appropriate response format.
 /// An example of the latter is that we might have prepared a request with Tools available
 /// but the client actually just wants a chat response.
-#[derive(Debug, PartialEq, Builder, Default, Clone)]
+#[derive(Builder, Clone, Debug, Default, PartialEq)]
 #[builder(setter(into, strip_option), default)]
 pub struct ModelInferenceRequest {
     pub messages: Vec<InferenceRequestMessage>,
@@ -35,7 +35,7 @@ pub struct ModelInferenceRequest {
 /// By keeping this enum separately from whether tools are available, we
 /// allow the request to use tools to enforce an output schema without necessarily
 /// exposing that to the client (unless they requested a tool call themselves).
-#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum FunctionType {
     Chat,
     Tool,
@@ -52,7 +52,7 @@ impl Default for FunctionType {
 /// and even specify which tool to be used.
 ///
 /// This enum is used to denote this tool choice.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ToolChoice {
     None,
     Auto,
@@ -60,12 +60,12 @@ pub enum ToolChoice {
     Tool(String), // Forces the LLM to call a particular tool, the String is the name of the Tool
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ToolType {
     Function,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Tool {
     pub r#type: ToolType,
     pub description: Option<String>,
@@ -73,29 +73,29 @@ pub struct Tool {
     pub parameters: Value,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct UserInferenceRequestMessage {
     pub content: String, // TODO: for now, we don't support image input. This would be the place to start.
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct SystemInferenceRequestMessage {
     pub content: String,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct AssistantInferenceRequestMessage {
     pub content: Option<String>,
     pub tool_calls: Option<Vec<ToolCall>>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ToolInferenceRequestMessage {
     pub tool_call_id: String,
     pub content: String,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum InferenceRequestMessage {
     User(UserInferenceRequestMessage),
     System(SystemInferenceRequestMessage),
@@ -103,20 +103,20 @@ pub enum InferenceRequestMessage {
     Tool(ToolInferenceRequestMessage),
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Usage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
 }
 
 // TODO: use this and write to DB somehow
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Latency {
     Streaming { ttft: Duration, ttd: Duration },
     NonStreaming { ttd: Duration },
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ModelInferenceResponse {
     pub inference_id: Uuid,
     pub created: u64,

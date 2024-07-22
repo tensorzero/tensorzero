@@ -41,6 +41,8 @@ pub async fn inference_handler(
     State(AppStateData { config }): AppState,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
+    // Input Validation: make sure the request is valid (though we are guaranteed the correct params via the StructuredJSON extractor)
+    // TODO: validate that the inference ID is a UUIDv7
     // Get the function config or return an error if it doesn't exist
     let function = config.get_function(&params.function_name)?;
 
@@ -80,6 +82,7 @@ pub async fn inference_handler(
     #[allow(unused)] // TODO: remove
     let stream = params.stream.unwrap_or(false);
 
+    // Inference
     // Keep sampling variants until one succeeds
     while !variants.is_empty() {
         #[allow(unused)] // TODO: remove
@@ -225,11 +228,6 @@ mod tests {
                 let actual_prob =
                     *counts.get(variant_name).unwrap_or(&0) as f64 / sample_size as f64;
                 let diff = (expected_prob - actual_prob).abs();
-
-                println!(
-                    "Variant {}: Expected probability = {}, Actual probability = {}",
-                    variant_name, expected_prob, actual_prob
-                );
 
                 assert!(
                     diff <= tolerance,
