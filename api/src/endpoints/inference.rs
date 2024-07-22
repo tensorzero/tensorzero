@@ -103,7 +103,10 @@ fn sample_variant<'a>(
     episode_id: &Uuid,
 ) -> Result<(&'a String, &'a VariantConfig), Error> {
     // Compute the total weight of all variants
-    let total_weight = variants.values().map(|variant| variant.weight).sum::<f64>();
+    let total_weight = variants
+        .values()
+        .map(|variant| variant.weight())
+        .sum::<f64>();
 
     // If the total weight is non-positive, return an error
     // NOTE: We enforce non-negative weights at the config parsing stage, but it's good to be extra
@@ -120,7 +123,7 @@ fn sample_variant<'a>(
     // Iterate over the variants to find the one that corresponds to the sampled threshold
     let mut cumulative_weight = 0.;
     for (variant_name, variant) in variants.iter() {
-        cumulative_weight += variant.weight;
+        cumulative_weight += variant.weight();
         if cumulative_weight > random_threshold {
             return Ok((variant_name, variant));
         }
@@ -150,6 +153,7 @@ fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::function::ChatCompletionConfig;
     use std::collections::HashMap;
 
     #[test]
@@ -189,10 +193,13 @@ mod tests {
                 .map(|&(name, weight)| {
                     (
                         name.to_string(),
-                        VariantConfig {
+                        VariantConfig::ChatCompletion(ChatCompletionConfig {
                             weight,
-                            generation: None,
-                        },
+                            model: "model-name".to_string(),
+                            system_template: None,
+                            user_template: None,
+                            assistant_template: None,
+                        }),
                     )
                 })
                 .collect()
@@ -205,7 +212,7 @@ mod tests {
             sample_size: usize,
             tolerance: f64,
         ) {
-            let total_weight: f64 = variants.values().map(|v| v.weight).sum();
+            let total_weight: f64 = variants.values().map(|v| v.weight()).sum();
             let mut counts: HashMap<String, usize> = HashMap::new();
 
             for _ in 0..sample_size {
@@ -215,7 +222,7 @@ mod tests {
             }
 
             for (variant_name, variant) in variants {
-                let expected_prob = variant.weight / total_weight;
+                let expected_prob = variant.weight() / total_weight;
                 let actual_prob =
                     *counts.get(variant_name).unwrap_or(&0) as f64 / sample_size as f64;
                 let diff = (expected_prob - actual_prob).abs();

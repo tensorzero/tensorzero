@@ -2,7 +2,7 @@ use serde::Deserialize;
 use std::collections::HashMap;
 
 use crate::error::Error;
-use crate::function::FunctionConfig;
+use crate::function::{FunctionConfig, VariantConfig};
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -146,15 +146,15 @@ impl Config {
             // Validate each variant
             for (variant_name, variant) in function.variants() {
                 assert!(
-                    variant.weight >= 0.0,
+                    variant.weight() >= 0.0,
                     "Invalid Config: `functions.{function_name}.variants.{variant_name}.weight`: must be non-negative",
                 );
 
                 match function {
                     FunctionConfig::Chat(_) | FunctionConfig::Tool(_) => {
                         assert!(
-                            variant.generation.is_some(),
-                            "Invalid Config: `functions.{function_name}.variants.{variant_name}`: `generation` is required",
+                            matches!(variant, VariantConfig::ChatCompletion(_)),
+                            "Invalid Config: `functions.{function_name}.variants.{variant_name}`: variant must be ChatCompletionConfig",
                         );
                     }
                 }
@@ -377,31 +377,11 @@ mod tests {
             .expect("Failed to get `functions.generate_draft`")
         {
             FunctionConfig::Chat(params) => {
-                params.variants.get_mut("openai_promptA").unwrap().weight = -1.0;
-            }
-            _ => panic!(),
-        }
-        config.validate();
-    }
-
-    /// Ensure that the config validation panics when a `chat` or `tool` function variant has no `generation`
-    #[test]
-    #[should_panic(
-        expected = "Invalid Config: `functions.generate_draft.variants.openai_promptA`: `generation` is required"
-    )]
-    fn test_config_validate_function_variant_missing_generation() {
-        let mut config = Config::from(get_sample_valid_config());
-        match config
-            .functions
-            .get_mut("generate_draft")
-            .expect("Failed to get `functions.generate_draft`")
-        {
-            FunctionConfig::Chat(params) => {
-                params
-                    .variants
-                    .get_mut("openai_promptA")
-                    .unwrap()
-                    .generation = None;
+                match params.variants.get_mut("openai_promptA").unwrap() {
+                    VariantConfig::ChatCompletion(params) => {
+                        params.weight = -1.0;
+                    }
+                }
             }
             _ => panic!(),
         }
@@ -448,14 +428,16 @@ mod tests {
         output_schema = "../functions/generate_draft/output_schema.json"
 
         [functions.generate_draft.variants.openai_promptA]
+        type = "chat_completion"
         weight = 0.9
-        generation.model = "gpt-3.5-turbo"
-        generation.system_template = "../functions/generate_draft/promptA/system.jinja"
+        model = "gpt-3.5-turbo"
+        system_template = "../functions/generate_draft/promptA/system.jinja"
 
         [functions.generate_draft.variants.openai_promptB]
+        type = "chat_completion"
         weight = 0.1
-        generation.model = "gpt-3.5-turbo"
-        generation.system_template = "../functions/generate_draft/promptB/system.jinja"
+        model = "gpt-3.5-turbo"
+        system_template = "../functions/generate_draft/promptB/system.jinja"
 
         [functions.extract_data]
         type = "tool"
@@ -463,14 +445,16 @@ mod tests {
         output_schema = "../functions/extract_data/output_schema.json"
 
         [functions.extract_data.variants.openai_promptA]
+        type = "chat_completion"
         weight = 0.9
-        generation.model = "gpt-3.5-turbo"
-        generation.system_template = "../functions/extract_data/promptA/system.jinja"
+        model = "gpt-3.5-turbo"
+        system_template = "../functions/extract_data/promptA/system.jinja"
 
         [functions.extract_data.variants.openai_promptB]
+        type = "chat_completion"
         weight = 0.1
-        generation.model = "gpt-3.5-turbo"
-        generation.system_template = "../functions/extract_data/promptB/system.jinja"
+        model = "gpt-3.5-turbo"
+        system_template = "../functions/extract_data/promptB/system.jinja"
 
         # ┌────────────────────────────────────────────────────────────────────────────┐
         # │                                  METRICS                                   │
