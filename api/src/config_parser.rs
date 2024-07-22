@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::error::Error;
@@ -64,11 +64,19 @@ pub enum MetricConfigOptimize {
     Max,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MetricConfigLevel {
     Inference,
     Episode,
+}
+
+impl std::fmt::Display for MetricConfigLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let serialized = serde_json::to_string(self).map_err(|_| std::fmt::Error)?;
+        // Remove the quotes around the string
+        write!(f, "{}", serialized.trim_matches('"'))
+    }
 }
 
 /// Deserialize a TOML table into `Config`
@@ -175,6 +183,16 @@ impl Config {
             .get(function_name)
             .ok_or_else(|| Error::UnknownFunction {
                 name: function_name.to_string(),
+            })
+    }
+
+    /// Get a metric by name
+    pub fn get_metric<'a>(&'a self, metric_name: &str) -> Result<&'a MetricConfig, Error> {
+        self.metrics
+            .as_ref()
+            .and_then(|metrics| metrics.get(metric_name))
+            .ok_or_else(|| Error::UnknownMetric {
+                name: metric_name.to_string(),
             })
     }
 }

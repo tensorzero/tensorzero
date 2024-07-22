@@ -1,23 +1,21 @@
-use axum::body::Body;
 use axum::debug_handler;
 use axum::extract::State;
-use axum::response::Response;
+use reqwest::Client;
 use serde::Deserialize;
-use serde_json::Value;
-use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use serde_json::{json, Value};
 use uuid::Uuid;
 
-use crate::api::{AppState, AppStateData, StructuredJson};
+use crate::api_util::{AppState, AppStateData, StructuredJson};
+use crate::clickhouse::{clickhouse_write, ClickHouseConnectionInfo};
+use crate::config_parser::{Config, MetricConfigLevel, MetricConfigType};
 use crate::error::Error;
-use crate::function::{InputMessage, VariantConfig};
 
 // TODO: function or function_name or ...? variant?
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Params {
+pub struct Params {
     // the episode ID client is providing feedback for (either this or `inference_id` must be set but not both)
     episode_id: Option<Uuid>,
     // the inference ID client is providing feedback for (either this or `episode_id` must be set but not both)
@@ -30,111 +28,215 @@ struct Params {
     dryrun: Option<bool>,
 }
 
+#[derive(Debug)]
+enum FeedbackType {
+    Comment,
+    Demonstration,
+    Float,
+    Boolean,
+}
+
+impl From<MetricConfigType> for FeedbackType {
+    fn from(value: MetricConfigType) -> Self {
+        match value {
+            MetricConfigType::Float => FeedbackType::Float,
+            MetricConfigType::Boolean => FeedbackType::Boolean,
+        }
+    }
+}
+
 /// A handler for the feedback endpoint
 #[debug_handler(state = AppStateData)]
 pub async fn feedback_handler(
-    State(AppStateData { config }): AppState,
+    State(AppStateData {
+        config,
+        http_client,
+        clickhouse_connection_info,
+    }): AppState,
     StructuredJson(params): StructuredJson<Params>,
-) -> Result<Response<Body>, Error> {
-    // Get the function config or return an error if it doesn't exist
-    let function = config.get_function(&params.function)?;
-
-    // Clone the function variants so we can modify the collection as we sample them
-    let mut variants = function.variants.clone();
-
-    // If the function has no variants, return an error
-    if variants.is_empty() {
-        return Err(Error::InvalidFunctionVariants {
-            message: format!("Function `{}` has no variants", params.function),
-        });
-    }
-
-    // Validate the input
-    function.validate_input(&params.input)?;
-
-    // If a variant is pinned, only that variant should be attempted
-    if let Some(ref variant_name) = params.variant {
-        variants.retain(|k, _| k == variant_name);
-
-        // If the pinned variant doesn't exist, return an error
-        if variants.is_empty() {
-            return Err(Error::UnknownVariant {
-                name: params.variant.unwrap(),
-            });
+) -> Result<(), Error> {
+    // Get the metric config or return an error if it doesn't exist
+    let feedback_metadata = get_feedback_metadata(
+        &config,
+        &params.metric_name,
+        params.episode_id,
+        params.inference_id,
+    )?;
+    match feedback_metadata.r#type {
+        FeedbackType::Comment => {
+            write_comment(
+                http_client,
+                clickhouse_connection_info,
+                feedback_metadata.target_id,
+                params.value,
+                feedback_metadata.level,
+                params.dryrun.unwrap_or(false),
+            )
+            .await?
+        }
+        FeedbackType::Demonstration => {
+            write_demonstration(
+                http_client,
+                clickhouse_connection_info,
+                feedback_metadata.target_id,
+                params.value,
+                params.dryrun.unwrap_or(false),
+            )
+            .await?
+        }
+        FeedbackType::Float => {
+            write_float(
+                http_client,
+                clickhouse_connection_info,
+                &params.metric_name,
+                feedback_metadata.target_id,
+                params.value,
+                feedback_metadata.level,
+                params.dryrun.unwrap_or(false),
+            )
+            .await?
+        }
+        FeedbackType::Boolean => {
+            write_boolean(
+                http_client,
+                clickhouse_connection_info,
+                &params.metric_name,
+                feedback_metadata.target_id,
+                params.value,
+                feedback_metadata.level,
+                params.dryrun.unwrap_or(false),
+            )
+            .await?
         }
     }
+    Ok(())
+}
 
-    // If no episode ID is provided, generate a new one
-    let episode_id = params.episode_id.unwrap_or_else(Uuid::now_v7);
+struct FeedbackMetadata {
+    r#type: FeedbackType,
+    level: MetricConfigLevel,
+    target_id: Uuid,
+}
 
-    // Should we store the results?
-    #[allow(unused)] // TODO: remove
-    let dryrun = params.dryrun.unwrap_or(false);
-
-    // Should we stream the inference?
-    #[allow(unused)] // TODO: remove
-    let stream = params.stream.unwrap_or(false);
-
-    // Keep sampling variants until one succeeds
-    while !variants.is_empty() {
-        #[allow(unused)] // TODO: remove
-        let (variant_name, variant) =
-            sample_variant(&function.variants, &params.function, &episode_id)?;
-
-        todo!("Run inference and store results");
+fn get_feedback_metadata(
+    config: &Config,
+    metric_name: &str,
+    episode_id: Option<Uuid>,
+    inference_id: Option<Uuid>,
+) -> Result<FeedbackMetadata, Error> {
+    let metric = config.get_metric(metric_name);
+    let feedback_type = match metric.as_ref() {
+        Ok(metric) => {
+            let feedback_type: FeedbackType = metric.r#type.clone().into();
+            Ok(feedback_type)
+        }
+        Err(e) => match metric_name {
+            "comment" => Ok(FeedbackType::Comment),
+            "demonstration" => Ok(FeedbackType::Demonstration),
+            _ => Err(Error::InvalidRequest {
+                message: e.to_string(),
+            }),
+        },
+    }?;
+    let feedback_level = match metric {
+        Ok(metric) => Ok(metric.level.clone()),
+        Err(_) => match feedback_type {
+            FeedbackType::Demonstration => Ok(MetricConfigLevel::Inference),
+            _ => match (inference_id, episode_id) {
+                (Some(_), None) => Ok(MetricConfigLevel::Inference),
+                (None, Some(_)) => Ok(MetricConfigLevel::Episode),
+                _ => Err(Error::InvalidRequest {
+                    message: "Exactly one of inference_id or episode_id must be provided"
+                        .to_string(),
+                }),
+            },
+        },
+    }?;
+    let target_id = match feedback_level {
+        MetricConfigLevel::Inference => inference_id,
+        MetricConfigLevel::Episode => episode_id,
     }
-
-    // Eventually, if we get here, it means we tried every variant and none of them worked
-    Err(Error::Inference {
-        message: "Inference failed for every variant in this function".to_string(),
+    .ok_or(Error::InvalidRequest {
+        message: "No feedback or episode ID provided".to_string(),
+    })?;
+    Ok(FeedbackMetadata {
+        r#type: feedback_type,
+        level: feedback_level,
+        target_id,
     })
 }
 
-/// Sample a variant from the function based on variant weights (uniform random selection)
-fn sample_variant<'a>(
-    variants: &'a HashMap<String, VariantConfig>,
-    function_name: &'a str,
-    episode_id: &Uuid,
-) -> Result<(&'a String, &'a VariantConfig), Error> {
-    // Compute the total weight of all variants
-    let total_weight = variants.values().map(|variant| variant.weight).sum::<f64>();
-
-    // If the total weight is non-positive, return an error
-    if total_weight <= 0. {
-        return Err(Error::InvalidFunctionVariants {
-            message: format!("Function `{function_name}` variants have non-positive total weight"),
-        });
+async fn write_comment(
+    client: Client,
+    connection_info: ClickHouseConnectionInfo,
+    target_id: Uuid,
+    value: Value,
+    level: MetricConfigLevel,
+    dryrun: bool,
+) -> Result<(), Error> {
+    let value = value.as_str().ok_or(Error::InvalidRequest {
+        message: "Value for comment must be a string".to_string(),
+    })?;
+    let payload = json!({"target_type": level, "target_id": target_id, "value": value});
+    if !dryrun {
+        clickhouse_write(&client, &connection_info, &payload, "CommentFeedback").await?;
     }
-
-    // Sample a random threshold between 0 and the total weight
-    let random_threshold = get_uniform_value(function_name, episode_id) * total_weight;
-
-    // Iterate over the variants to find the one that corresponds to the sampled threshold
-    let mut cumulative_weight = 0.;
-    for (variant_name, variant) in variants.iter() {
-        cumulative_weight += variant.weight;
-        if cumulative_weight > random_threshold {
-            return Ok((variant_name, variant));
-        }
-    }
-
-    // Return the last variant as a fallback (this should only happen due to rare numerical precision issues)
-    variants
-        .iter()
-        .last()
-        .ok_or_else(|| Error::InvalidFunctionVariants {
-            message: format!("Function `{function_name}` has no variants"),
-        })
+    Ok(())
 }
 
-/// Implements a uniform distribution over the interval [0, 1) using a hash function.
-/// This function is deterministic but should have good statistical properties.
-fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
-    let mut hasher = Sha256::new();
-    hasher.update(function_name.as_bytes());
-    hasher.update(episode_id.as_bytes());
-    let hash_value = hasher.finalize();
-    let truncated_hash =
-        u32::from_be_bytes([hash_value[0], hash_value[1], hash_value[2], hash_value[3]]);
-    truncated_hash as f64 / u32::MAX as f64
+async fn write_demonstration(
+    client: Client,
+    connection_info: ClickHouseConnectionInfo,
+    inference_id: Uuid,
+    value: Value,
+    dryrun: bool,
+) -> Result<(), Error> {
+    let value = value.as_str().ok_or(Error::InvalidRequest {
+        message: "Value for demonstration must be a string".to_string(),
+    })?;
+    let payload = json!({"inference_id": inference_id, "value": value});
+    if !dryrun {
+        clickhouse_write(&client, &connection_info, &payload, "DemonstrationFeedback").await?;
+    }
+    Ok(())
+}
+
+async fn write_float(
+    client: Client,
+    connection_info: ClickHouseConnectionInfo,
+    name: &str,
+    target_id: Uuid,
+    value: Value,
+    level: MetricConfigLevel,
+    dryrun: bool,
+) -> Result<(), Error> {
+    let value = value.as_f64().ok_or(Error::InvalidRequest {
+        message: "Value for float must be a number".to_string(),
+    })?;
+    let payload =
+        json!({"target_type": level, "target_id": target_id, "value": value, "name": name});
+    if !dryrun {
+        clickhouse_write(&client, &connection_info, &payload, "FloatMetricFeedback").await?;
+    }
+    Ok(())
+}
+
+async fn write_boolean(
+    client: Client,
+    connection_info: ClickHouseConnectionInfo,
+    name: &str,
+    target_id: Uuid,
+    value: Value,
+    level: MetricConfigLevel,
+    dryrun: bool,
+) -> Result<(), Error> {
+    let value = value.as_bool().ok_or(Error::InvalidRequest {
+        message: "Value for boolean must be a boolean".to_string(),
+    })?;
+    let payload =
+        json!({"target_type": level, "target_id": target_id, "value": value, "name": name});
+    if !dryrun {
+        clickhouse_write(&client, &connection_info, &payload, "BooleanMetricFeedback").await?;
+    }
+    Ok(())
 }

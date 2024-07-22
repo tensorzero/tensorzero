@@ -68,6 +68,9 @@ pub enum Error {
     UnknownVariant {
         name: String,
     },
+    UnknownMetric {
+        name: String,
+    },
 }
 
 impl Error {
@@ -94,6 +97,7 @@ impl Error {
             Error::Serialization { .. } => tracing::Level::ERROR,
             Error::UnknownFunction { .. } => tracing::Level::WARN,
             Error::UnknownVariant { .. } => tracing::Level::WARN,
+            Error::UnknownMetric { .. } => tracing::Level::WARN,
         }
     }
 
@@ -120,6 +124,7 @@ impl Error {
             Error::Serialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::UnknownFunction { .. } => StatusCode::NOT_FOUND,
             Error::UnknownVariant { .. } => StatusCode::NOT_FOUND,
+            Error::UnknownMetric { .. } => StatusCode::NOT_FOUND,
         }
     }
 
@@ -176,6 +181,7 @@ impl std::fmt::Display for Error {
             Error::Serialization { message } => write!(f, "{}", message),
             Error::UnknownFunction { name } => write!(f, "Unknown function: {}", name),
             Error::UnknownVariant { name } => write!(f, "Unknown variant: {}", name),
+            Error::UnknownMetric { name } => write!(f, "Unknown metric: {}", name),
         }
     }
 }

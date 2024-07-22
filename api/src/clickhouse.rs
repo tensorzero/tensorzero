@@ -1,4 +1,5 @@
 use reqwest::Client;
+use serde::Serialize;
 
 use crate::error::Error;
 
@@ -42,12 +43,12 @@ pub async fn clickhouse_write<T: Serialize>(
         .body(query)
         .send()
         .await
-        .map_err(|e| Error::ClickhouseWrite {
+        .map_err(|e| Error::ClickHouseWrite {
             message: e.to_string(),
         })?;
     match response.status() {
         reqwest::StatusCode::OK => Ok(()),
-        _ => Err(Error::ClickhouseWrite {
+        _ => Err(Error::ClickHouseWrite {
             message: response
                 .text()
                 .await

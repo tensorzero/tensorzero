@@ -4,6 +4,7 @@ use serde::de::DeserializeOwned;
 use std::sync::Arc;
 use tracing::instrument;
 
+use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::{self, Config};
 use crate::error::Error;
 
@@ -12,6 +13,7 @@ use crate::error::Error;
 pub struct AppStateData {
     pub config: Arc<Config>,
     pub http_client: Client,
+    pub clickhouse_connection_info: ClickHouseConnectionInfo,
 }
 pub type AppState = axum::extract::State<AppStateData>;
 
@@ -19,9 +21,12 @@ impl Default for AppStateData {
     fn default() -> Self {
         let config = Arc::new(config_parser::Config::load());
         println!("{:#?}", config); // TODO: temporary
+        let clickhouse_url =
+            std::env::var("CLICKHOUSE_URL").expect("Missing environment variable CLICKHOUSE_URL");
         Self {
             config,
             http_client: Client::new(),
+            clickhouse_connection_info: ClickHouseConnectionInfo::new(&clickhouse_url, None),
         }
     }
 }
