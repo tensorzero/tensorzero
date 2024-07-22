@@ -158,6 +158,7 @@ impl Config {
                 }
             }
 
+            // Validate each variant
             for (variant_name, variant) in &function.variants {
                 assert!(
                     variant.weight >= 0.0,

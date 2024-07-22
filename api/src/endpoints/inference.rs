@@ -11,14 +11,12 @@ use crate::api::{AppState, AppStateData, StructuredJson};
 use crate::error::Error;
 use crate::function::{InputMessage, VariantConfig};
 
-// TODO: function or function_name or ...? variant?
-
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Params {
     // the function name
-    function: String,
+    function_name: String,
     // the episode ID (if not provided, a new one will be generated)
     // NOTE: DO NOT GENERATE EPISODE IDS MANUALLY. THE API WILL DO THAT FOR YOU
     episode_id: Option<Uuid>,
@@ -33,7 +31,7 @@ pub struct Params {
     // if the client would like to pin a specific variant to be used
     // NOTE: YOU SHOULD TYPICALLY LET THE API SELECT A VARIANT FOR YOU (I.E. IGNORE THIS FIELD).
     //       ONLY PIN A VARIANT FOR SPECIAL USE CASES (E.G. DEBUGGING).
-    variant: Option<String>,
+    variant_name: Option<String>,
     // if true, the inference will not be stored
     dryrun: Option<bool>,
 }
@@ -45,7 +43,7 @@ pub async fn inference_handler(
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
     // Get the function config or return an error if it doesn't exist
-    let function = config.get_function(&params.function)?;
+    let function = config.get_function(&params.function_name)?;
 
     // Clone the function variants so we can modify the collection as we sample them
     let mut variants = function.variants.clone();
@@ -53,7 +51,7 @@ pub async fn inference_handler(
     // If the function has no variants, return an error
     if variants.is_empty() {
         return Err(Error::InvalidFunctionVariants {
-            message: format!("Function `{}` has no variants", params.function),
+            message: format!("Function `{}` has no variants", params.function_name),
         });
     }
 
@@ -61,13 +59,13 @@ pub async fn inference_handler(
     function.validate_input(&params.input)?;
 
     // If a variant is pinned, only that variant should be attempted
-    if let Some(ref variant_name) = params.variant {
+    if let Some(ref variant_name) = params.variant_name {
         variants.retain(|k, _| k == variant_name);
 
         // If the pinned variant doesn't exist, return an error
         if variants.is_empty() {
             return Err(Error::UnknownVariant {
-                name: params.variant.unwrap(),
+                name: params.variant_name.unwrap(),
             });
         }
     }
@@ -87,7 +85,7 @@ pub async fn inference_handler(
     while !variants.is_empty() {
         #[allow(unused)] // TODO: remove
         let (variant_name, variant) =
-            sample_variant(&function.variants, &params.function, &episode_id)?;
+            sample_variant(&function.variants, &params.function_name, &episode_id)?;
 
         todo!("Run inference and store results");
     }
@@ -108,6 +106,8 @@ fn sample_variant<'a>(
     let total_weight = variants.values().map(|variant| variant.weight).sum::<f64>();
 
     // If the total weight is non-positive, return an error
+    // NOTE: We enforce non-negative weights at the config parsing stage, but it's good to be extra
+    //       safe here to ensure that we catch any regressions we might introduce in the future.
     if total_weight <= 0. {
         return Err(Error::InvalidFunctionVariants {
             message: format!("Function `{function_name}` variants have non-positive total weight"),

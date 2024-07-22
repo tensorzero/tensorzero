@@ -22,6 +22,7 @@ pub enum FunctionConfigType {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct FunctionConfigChat {
     pub system_schema: Option<JSONSchemaFromPath>,
     pub user_schema: Option<JSONSchemaFromPath>,
@@ -30,6 +31,7 @@ pub struct FunctionConfigChat {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct FunctionConfigTool {
     pub system_schema: Option<JSONSchemaFromPath>,
     pub user_schema: Option<JSONSchemaFromPath>,
@@ -60,6 +62,7 @@ pub enum InputMessageRole {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct InputMessage {
     role: InputMessageRole,
     content: serde_json::Value,
