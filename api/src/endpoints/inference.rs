@@ -84,7 +84,7 @@ pub async fn inference_handler(
     while !variants.is_empty() {
         #[allow(unused)] // TODO: remove
         let (variant_name, variant) =
-            sample_variant(function.variants(), &params.function_name, &episode_id)?;
+            sample_variant(&variants, &params.function_name, &episode_id)?;
 
         todo!("Run inference and store results");
     }
