@@ -70,8 +70,7 @@ pub async fn inference_handler(
     }
 
     // Retrieve or generate the episode ID
-    let inference_id = params.episode_id.unwrap_or(Uuid::now_v7());
-    let episode_id = params.episode_id.unwrap_or(inference_id);
+    let episode_id = params.episode_id.unwrap_or(Uuid::now_v7());
 
     // Should we store the results?
     #[allow(unused)] // TODO: remove
