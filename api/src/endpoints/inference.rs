@@ -41,8 +41,9 @@ pub async fn inference_handler(
     State(AppStateData { config }): AppState,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
-    // Input Validation: make sure the request is valid (though we are guaranteed the correct params via the StructuredJSON extractor)
-    // TODO: validate that the inference ID is a UUIDv7
+    // Input Validation: StructuredJson will guarantee us the syntactically correct input. Below we make sure that the input is semantically valid and we
+    // know what function to call with what inputs.
+    // TODO: validate that the episode ID is a UUIDv7
     // Get the function config or return an error if it doesn't exist
     let function = config.get_function(&params.function_name)?;
 
@@ -88,6 +89,7 @@ pub async fn inference_handler(
         #[allow(unused)] // TODO: remove
         let (variant_name, variant) =
             sample_variant(&variants, &params.function_name, &episode_id)?;
+        // TODO: remove the variant that was sampled
 
         todo!("Run inference and store results");
     }
