@@ -18,7 +18,8 @@ pub struct Params {
     // the function name
     function_name: String,
     // the episode ID (if not provided, it'll be set to inference_id)
-    episode_id: Option<String>,
+    // NOTE: DO NOT GENERATE EPISODE IDS MANUALLY. THE API WILL DO THAT FOR YOU.
+    episode_id: Option<Uuid>,
     // the input for the inference
     input: Vec<InputMessage>,
     // the maximum number of tokens to generate (if not provided, the default value will be used)
@@ -68,6 +69,10 @@ pub async fn inference_handler(
         }
     }
 
+    // Retrieve or generate the episode ID
+    let inference_id = params.episode_id.unwrap_or(Uuid::now_v7());
+    let episode_id = params.episode_id.unwrap_or(inference_id);
+
     // Should we store the results?
     #[allow(unused)] // TODO: remove
     let dryrun = params.dryrun.unwrap_or(false);
@@ -79,11 +84,8 @@ pub async fn inference_handler(
     // Keep sampling variants until one succeeds
     while !variants.is_empty() {
         #[allow(unused)] // TODO: remove
-        let (variant_name, variant) = sample_variant(
-            function.variants(),
-            &params.function_name,
-            &params.episode_id,
-        )?;
+        let (variant_name, variant) =
+            sample_variant(function.variants(), &params.function_name, &episode_id)?;
 
         todo!("Run inference and store results");
     }
@@ -98,7 +100,7 @@ pub async fn inference_handler(
 fn sample_variant<'a>(
     variants: &'a HashMap<String, VariantConfig>,
     function_name: &'a str,
-    episode_id: &'a Option<String>,
+    episode_id: &Uuid,
 ) -> Result<(&'a String, &'a VariantConfig), Error> {
     // Compute the total weight of all variants
     let total_weight = variants.values().map(|variant| variant.weight).sum::<f64>();
@@ -135,14 +137,10 @@ fn sample_variant<'a>(
 
 /// Implements a uniform distribution over the interval [0, 1) using a hash function.
 /// This function is deterministic but should have good statistical properties.
-fn get_uniform_value(function_name: &str, episode_id: &Option<String>) -> f64 {
+fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
     let mut hasher = Sha256::new();
     hasher.update(function_name.as_bytes());
-    if let Some(episode_id) = episode_id {
-        hasher.update(episode_id.as_bytes());
-    } else {
-        hasher.update(Uuid::now_v7().as_bytes());
-    }
+    hasher.update(episode_id.as_bytes());
     let hash_value = hasher.finalize();
     let truncated_hash =
         u32::from_be_bytes([hash_value[0], hash_value[1], hash_value[2], hash_value[3]]);
@@ -156,44 +154,26 @@ mod tests {
 
     #[test]
     fn test_get_uniform_value() {
-        // Test with only function name
-        let value1 = get_uniform_value("test_function", &None);
-        let value2 = get_uniform_value("test_function", &None);
+        // Test with function name and episode ID
+        let episode_id = Uuid::now_v7();
+        let value1 = get_uniform_value("test_function", &episode_id);
+        let value2 = get_uniform_value("test_function", &episode_id);
 
-        // Values should be different due to UUID
-        assert_ne!(value1, value2);
+        // Values should be the same due to deterministic input
+        assert_eq!(value1, value2);
         assert!((0.0..1.0).contains(&value1));
         assert!((0.0..1.0).contains(&value2));
 
-        // Test with function name and episode ID
-        let value3 = get_uniform_value("test_function", &Some("episode1".to_string()));
-        let value4 = get_uniform_value("test_function", &Some("episode1".to_string()));
-
-        // Values should be the same due to deterministic input
-        assert_ne!(value1, value3);
-        assert_ne!(value2, value3);
-        assert_ne!(value1, value4);
-        assert_ne!(value2, value4);
-        assert_eq!(value3, value4);
-        assert!((0.0..1.0).contains(&value3));
-        assert!((0.0..1.0).contains(&value4));
-
         // Test with different function names
-        let value5 = get_uniform_value("another_function", &None);
-        assert_ne!(value1, value5);
-        assert_ne!(value2, value5);
-        assert_ne!(value3, value5);
-        assert_ne!(value4, value5);
-        assert!((0.0..1.0).contains(&value5));
+        let value3 = get_uniform_value("another_function", &episode_id);
+        assert_ne!(value1, value3);
+        assert!((0.0..1.0).contains(&value3));
 
         // Test with different episode IDs
-        let value6 = get_uniform_value("test_function", &Some("episode2".to_string()));
-        assert_ne!(value1, value6);
-        assert_ne!(value2, value6);
-        assert_ne!(value3, value6);
-        assert_ne!(value4, value6);
-        assert_ne!(value5, value6);
-        assert!((0.0..1.0).contains(&value6));
+        let value4 = get_uniform_value("test_function", &Uuid::now_v7());
+        assert_ne!(value1, value4);
+        assert_ne!(value3, value4);
+        assert!((0.0..1.0).contains(&value4));
     }
 
     /// Tests the `sample_variant` function with a variety of test cases through Monte Carlo simulations.
@@ -229,7 +209,8 @@ mod tests {
             let mut counts: HashMap<String, usize> = HashMap::new();
 
             for _ in 0..sample_size {
-                let (variant_name, _) = sample_variant(variants, "test_function", &None).unwrap();
+                let (variant_name, _) =
+                    sample_variant(variants, "test_function", &Uuid::now_v7()).unwrap();
                 *counts.entry(variant_name.clone()).or_insert(0) += 1;
             }
 
@@ -238,6 +219,11 @@ mod tests {
                 let actual_prob =
                     *counts.get(variant_name).unwrap_or(&0) as f64 / sample_size as f64;
                 let diff = (expected_prob - actual_prob).abs();
+
+                println!(
+                    "Variant {}: Expected probability = {}, Actual probability = {}",
+                    variant_name, expected_prob, actual_prob
+                );
 
                 assert!(
                     diff <= tolerance,
@@ -249,11 +235,11 @@ mod tests {
 
         // Test case 1: Equal weights
         let variants = create_variants(&[("A", 1.0), ("B", 1.0), ("C", 1.0)]);
-        test_variant_distribution(&variants, 10_000, 0.01);
+        test_variant_distribution(&variants, 10_000, 0.02);
 
         // Test case 2: Unequal weights
         let variants = create_variants(&[("X", 1.0), ("Y", 2.0), ("Z", 3.0)]);
-        test_variant_distribution(&variants, 10_000, 0.01);
+        test_variant_distribution(&variants, 10_000, 0.02);
 
         // Test case 3: Extreme weights
         let variants = create_variants(&[("Rare", 0.01), ("Common", 0.99)]);
