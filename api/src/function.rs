@@ -137,3 +137,489 @@ impl FunctionConfig {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    fn create_test_schema() -> JSONSchemaFromPath {
+        let schema = r#"
+        {
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            },
+            "required": ["name"],
+            "additionalProperties": false
+        }
+        "#;
+
+        let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
+        write!(temp_file, "{}", schema).expect("Failed to write schema to temporary file");
+
+        JSONSchemaFromPath::new(temp_file.path()).expect("Failed to create JSONSchemaFromPath")
+    }
+
+    #[test]
+    fn test_validate_input_chat_no_schema() {
+        let chat_config = FunctionConfigChat {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            output_schema: None,
+        };
+        let function_config = FunctionConfig::Chat(chat_config);
+
+        let input = vec![
+            InputMessage {
+                role: InputMessageRole::System,
+                content: json!("system content"),
+            },
+            InputMessage {
+                role: InputMessageRole::User,
+                content: json!("user content"),
+            },
+            InputMessage {
+                role: InputMessageRole::Assistant,
+                content: json!("assistant content"),
+            },
+        ];
+
+        assert!(function_config.validate_input(&input).is_ok());
+
+        let input = vec![
+            InputMessage {
+                role: InputMessageRole::System,
+                content: json!({ "name": "system name" }),
+            },
+            InputMessage {
+                role: InputMessageRole::User,
+                content: json!({ "name": "user name" }),
+            },
+            InputMessage {
+                role: InputMessageRole::Assistant,
+                content: json!({ "name": "assistant name" }),
+            },
+        ];
+
+        assert!(function_config.validate_input(&input).is_ok());
+    }
+
+    #[test]
+    fn test_validate_input_chat_system_schema() {
+        let chat_config = FunctionConfigChat {
+            variants: HashMap::new(),
+            system_schema: Some(create_test_schema()),
+            user_schema: None,
+            assistant_schema: None,
+            output_schema: None,
+        };
+        let function_config = FunctionConfig::Chat(chat_config);
+
+        let input = vec![
+            InputMessage {
+                role: InputMessageRole::System,
+                content: json!("system content"),
+            },
+            InputMessage {
+                role: InputMessageRole::User,
+                content: json!("user content"),
+            },
+            InputMessage {
+                role: InputMessageRole::Assistant,
+                content: json!("assistant content"),
+            },
+        ];
+
+        assert!(function_config.validate_input(&input).is_err()); // TODO: fix
+
+        let input = vec![
+            InputMessage {
+                role: InputMessageRole::System,
+                content: json!({ "name": "system name" }),
+            },
+            InputMessage {
+                role: InputMessageRole::User,
+                content: json!("user content"),
+            },
+            InputMessage {
+                role: InputMessageRole::Assistant,
+                content: json!("assistant content"),
+            },
+        ];
+
+        assert!(function_config.validate_input(&input).is_ok());
+    }
+
+    #[test]
+    fn test_validate_input_chat_user_schema() {
+        let chat_config = FunctionConfigChat {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: Some(create_test_schema()),
+            assistant_schema: None,
+            output_schema: None,
+        };
+        let function_config = FunctionConfig::Chat(chat_config);
+
+        let input = vec![
+            InputMessage {
+                role: InputMessageRole::System,
+                content: json!("system content"),
+            },
+            InputMessage {
+                role: InputMessageRole::User,
+                content: json!("user content"),
+            },
+            InputMessage {
+                role: InputMessageRole::Assistant,
+                content: json!("assistant content"),
+            },
+        ];
+
+        assert!(function_config.validate_input(&input).is_err()); // TODO: fix
+
+        let input = vec![
+            InputMessage {
+                role: InputMessageRole::System,
+                content: json!("system content"),
+            },
+            InputMessage {
+                role: InputMessageRole::User,
+                content: json!({ "name": "user name" }),
+            },
+            InputMessage {
+                role: InputMessageRole::Assistant,
+                content: json!("assistant content"),
+            },
+        ];
+
+        assert!(function_config.validate_input(&input).is_ok());
+    }
+
+    #[test]
+    fn test_validate_input_chat_assistant_schema() {
+        let chat_config = FunctionConfigChat {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: Some(create_test_schema()),
+            output_schema: None,
+        };
+        let function_config = FunctionConfig::Chat(chat_config);
+
+        let input = vec![
+            InputMessage {
+                role: InputMessageRole::System,
+                content: json!("system content"),
+            },
+            InputMessage {
+                role: InputMessageRole::User,
+                content: json!("user content"),
+            },
+            InputMessage {
+                role: InputMessageRole::Assistant,
+                content: json!("assistant content"),
+            },
+        ];
+
+        assert!(function_config.validate_input(&input).is_err()); // TODO: fix
+
+        let input = vec![
+            InputMessage {
+                role: InputMessageRole::System,
+                content: json!("system content"),
+            },
+            InputMessage {
+                role: InputMessageRole::User,
+                content: json!("user content"),
+            },
+            InputMessage {
+                role: InputMessageRole::Assistant,
+                content: json!({ "name": "assistant name" }),
+            },
+        ];
+
+        assert!(function_config.validate_input(&input).is_ok());
+    }
+
+    #[test]
+    fn test_validate_input_chat_all_schemas() {
+        let chat_config = FunctionConfigChat {
+            variants: HashMap::new(),
+            system_schema: Some(create_test_schema()),
+            user_schema: Some(create_test_schema()),
+            assistant_schema: Some(create_test_schema()),
+            output_schema: None,
+        };
+        let function_config = FunctionConfig::Chat(chat_config);
+
+        let input = vec![
+            InputMessage {
+                role: InputMessageRole::System,
+                content: json!("system content"),
+            },
+            InputMessage {
+                role: InputMessageRole::User,
+                content: json!("user content"),
+            },
+            InputMessage {
+                role: InputMessageRole::Assistant,
+                content: json!("assistant content"),
+            },
+        ];
+
+        assert!(function_config.validate_input(&input).is_err()); // TODO: fix
+
+        let input = vec![
+            InputMessage {
+                role: InputMessageRole::System,
+                content: json!({ "name": "system name" }),
+            },
+            InputMessage {
+                role: InputMessageRole::User,
+                content: json!({ "name": "user name" }),
+            },
+            InputMessage {
+                role: InputMessageRole::Assistant,
+                content: json!({ "name": "assistant name" }),
+            },
+        ];
+
+        assert!(function_config.validate_input(&input).is_ok());
+    }
+
+    #[test]
+    fn test_validate_input_tool_no_schema() {
+        let tool_config = FunctionConfigTool {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            output_schema: None,
+        };
+        let function_config = FunctionConfig::Tool(tool_config);
+
+        let input = vec![
+            InputMessage {
+                role: InputMessageRole::System,
+                content: json!("system content"),
+            },
+            InputMessage {
+                role: InputMessageRole::User,
+                content: json!("user content"),
+            },
+            InputMessage {
+                role: InputMessageRole::Assistant,
+                content: json!("assistant content"),
+            },
+        ];
+
+        assert!(function_config.validate_input(&input).is_ok());
+
+        let input = vec![
+            InputMessage {
+                role: InputMessageRole::System,
+                content: json!({ "name": "system name" }),
+            },
+            InputMessage {
+                role: InputMessageRole::User,
+                content: json!({ "name": "user name" }),
+            },
+            InputMessage {
+                role: InputMessageRole::Assistant,
+                content: json!({ "name": "assistant name" }),
+            },
+        ];
+
+        assert!(function_config.validate_input(&input).is_ok());
+    }
+
+    #[test]
+    fn test_validate_input_tool_system_schema() {
+        let tool_config = FunctionConfigTool {
+            variants: HashMap::new(),
+            system_schema: Some(create_test_schema()),
+            user_schema: None,
+            assistant_schema: None,
+            output_schema: None,
+        };
+        let function_config = FunctionConfig::Tool(tool_config);
+
+        let input = vec![
+            InputMessage {
+                role: InputMessageRole::System,
+                content: json!("system content"),
+            },
+            InputMessage {
+                role: InputMessageRole::User,
+                content: json!("user content"),
+            },
+            InputMessage {
+                role: InputMessageRole::Assistant,
+                content: json!("assistant content"),
+            },
+        ];
+
+        assert!(function_config.validate_input(&input).is_err()); // TODO: fix
+
+        let input = vec![
+            InputMessage {
+                role: InputMessageRole::System,
+                content: json!({ "name": "system name" }),
+            },
+            InputMessage {
+                role: InputMessageRole::User,
+                content: json!("user content"),
+            },
+            InputMessage {
+                role: InputMessageRole::Assistant,
+                content: json!("assistant content"),
+            },
+        ];
+
+        assert!(function_config.validate_input(&input).is_ok());
+    }
+
+    #[test]
+    fn test_validate_input_tool_user_schema() {
+        let tool_config = FunctionConfigTool {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: Some(create_test_schema()),
+            assistant_schema: None,
+            output_schema: None,
+        };
+        let function_config = FunctionConfig::Tool(tool_config);
+
+        let input = vec![
+            InputMessage {
+                role: InputMessageRole::System,
+                content: json!("system content"),
+            },
+            InputMessage {
+                role: InputMessageRole::User,
+                content: json!("user content"),
+            },
+            InputMessage {
+                role: InputMessageRole::Assistant,
+                content: json!("assistant content"),
+            },
+        ];
+
+        assert!(function_config.validate_input(&input).is_err()); // TODO: fix
+
+        let input = vec![
+            InputMessage {
+                role: InputMessageRole::System,
+                content: json!("system content"),
+            },
+            InputMessage {
+                role: InputMessageRole::User,
+                content: json!({ "name": "user name" }),
+            },
+            InputMessage {
+                role: InputMessageRole::Assistant,
+                content: json!("assistant content"),
+            },
+        ];
+
+        assert!(function_config.validate_input(&input).is_ok());
+    }
+
+    #[test]
+    fn test_validate_input_tool_assistant_schema() {
+        let tool_config = FunctionConfigTool {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: Some(create_test_schema()),
+            output_schema: None,
+        };
+        let function_config = FunctionConfig::Tool(tool_config);
+
+        let input = vec![
+            InputMessage {
+                role: InputMessageRole::System,
+                content: json!("system content"),
+            },
+            InputMessage {
+                role: InputMessageRole::User,
+                content: json!("user content"),
+            },
+            InputMessage {
+                role: InputMessageRole::Assistant,
+                content: json!("assistant content"),
+            },
+        ];
+
+        assert!(function_config.validate_input(&input).is_err()); // TODO: fix
+
+        let input = vec![
+            InputMessage {
+                role: InputMessageRole::System,
+                content: json!("system content"),
+            },
+            InputMessage {
+                role: InputMessageRole::User,
+                content: json!("user content"),
+            },
+            InputMessage {
+                role: InputMessageRole::Assistant,
+                content: json!({ "name": "assistant name" }),
+            },
+        ];
+
+        assert!(function_config.validate_input(&input).is_ok());
+    }
+
+    #[test]
+    fn test_validate_input_tool_all_schemas() {
+        let tool_config = FunctionConfigTool {
+            variants: HashMap::new(),
+            system_schema: Some(create_test_schema()),
+            user_schema: Some(create_test_schema()),
+            assistant_schema: Some(create_test_schema()),
+            output_schema: None,
+        };
+        let function_config = FunctionConfig::Tool(tool_config);
+
+        let input = vec![
+            InputMessage {
+                role: InputMessageRole::System,
+                content: json!("system content"),
+            },
+            InputMessage {
+                role: InputMessageRole::User,
+                content: json!("user content"),
+            },
+            InputMessage {
+                role: InputMessageRole::Assistant,
+                content: json!("assistant content"),
+            },
+        ];
+
+        assert!(function_config.validate_input(&input).is_err()); // TODO: fix
+
+        let input = vec![
+            InputMessage {
+                role: InputMessageRole::System,
+                content: json!({ "name": "system name" }),
+            },
+            InputMessage {
+                role: InputMessageRole::User,
+                content: json!({ "name": "user name" }),
+            },
+            InputMessage {
+                role: InputMessageRole::Assistant,
+                content: json!({ "name": "assistant name" }),
+            },
+        ];
+
+        assert!(function_config.validate_input(&input).is_ok());
+    }
+}

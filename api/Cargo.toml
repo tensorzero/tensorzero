@@ -27,3 +27,7 @@ toml = "0.8.15"
 tracing = { version = "0.1.40", features = ["log", "release_max_level_debug"] }
 uuid = { version = "1.10.0", features = ["serde", "v7"] }
 url = "2.5.2"
+
+
+[dev-dependencies]
+tempfile = "3.10.1"

@@ -148,3 +148,119 @@ fn get_uniform_value(function_name: &str, episode_id: &Option<String>) -> f64 {
         u32::from_be_bytes([hash_value[0], hash_value[1], hash_value[2], hash_value[3]]);
     truncated_hash as f64 / u32::MAX as f64
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_get_uniform_value() {
+        // Test with only function name
+        let value1 = get_uniform_value("test_function", &None);
+        let value2 = get_uniform_value("test_function", &None);
+
+        // Values should be different due to UUID
+        assert_ne!(value1, value2);
+        assert!((0.0..1.0).contains(&value1));
+        assert!((0.0..1.0).contains(&value2));
+
+        // Test with function name and episode ID
+        let value3 = get_uniform_value("test_function", &Some("episode1".to_string()));
+        let value4 = get_uniform_value("test_function", &Some("episode1".to_string()));
+
+        // Values should be the same due to deterministic input
+        assert_ne!(value1, value3);
+        assert_ne!(value2, value3);
+        assert_ne!(value1, value4);
+        assert_ne!(value2, value4);
+        assert_eq!(value3, value4);
+        assert!((0.0..1.0).contains(&value3));
+        assert!((0.0..1.0).contains(&value4));
+
+        // Test with different function names
+        let value5 = get_uniform_value("another_function", &None);
+        assert_ne!(value1, value5);
+        assert_ne!(value2, value5);
+        assert_ne!(value3, value5);
+        assert_ne!(value4, value5);
+        assert!((0.0..1.0).contains(&value5));
+
+        // Test with different episode IDs
+        let value6 = get_uniform_value("test_function", &Some("episode2".to_string()));
+        assert_ne!(value1, value6);
+        assert_ne!(value2, value6);
+        assert_ne!(value3, value6);
+        assert_ne!(value4, value6);
+        assert_ne!(value5, value6);
+        assert!((0.0..1.0).contains(&value6));
+    }
+
+    /// Tests the `sample_variant` function with a variety of test cases through Monte Carlo simulations.
+    ///
+    /// NOTE: If this test fails, it might be due to sampling. Please run it again to check if the
+    ///       issue persists.
+    #[test]
+    fn test_sample_variant() {
+        // Helper function to create a HashMap of variant names to their weights
+        fn create_variants(variant_weights: &[(&str, f64)]) -> HashMap<String, VariantConfig> {
+            variant_weights
+                .iter()
+                .map(|&(name, weight)| {
+                    (
+                        name.to_string(),
+                        VariantConfig {
+                            weight,
+                            generation: None,
+                        },
+                    )
+                })
+                .collect()
+        }
+
+        // Helper function to test the distribution of variant weights by sampling them many times
+        // and checking if the observed distribution is close to the expected distribution
+        fn test_variant_distribution(
+            variants: &HashMap<String, VariantConfig>,
+            sample_size: usize,
+            tolerance: f64,
+        ) {
+            let total_weight: f64 = variants.values().map(|v| v.weight).sum();
+            let mut counts: HashMap<String, usize> = HashMap::new();
+
+            for _ in 0..sample_size {
+                let (variant_name, _) = sample_variant(variants, "test_function", &None).unwrap();
+                *counts.entry(variant_name.clone()).or_insert(0) += 1;
+            }
+
+            for (variant_name, variant) in variants {
+                let expected_prob = variant.weight / total_weight;
+                let actual_prob =
+                    *counts.get(variant_name).unwrap_or(&0) as f64 / sample_size as f64;
+                let diff = (expected_prob - actual_prob).abs();
+
+                assert!(
+                    diff <= tolerance,
+                    "Probability for variant {} is outside the acceptable range",
+                    variant_name
+                );
+            }
+        }
+
+        // Test case 1: Equal weights
+        let variants = create_variants(&[("A", 1.0), ("B", 1.0), ("C", 1.0)]);
+        test_variant_distribution(&variants, 10_000, 0.01);
+
+        // Test case 2: Unequal weights
+        let variants = create_variants(&[("X", 1.0), ("Y", 2.0), ("Z", 3.0)]);
+        test_variant_distribution(&variants, 10_000, 0.01);
+
+        // Test case 3: Extreme weights
+        let variants = create_variants(&[("Rare", 0.01), ("Common", 0.99)]);
+        test_variant_distribution(&variants, 10_000, 0.005);
+
+        // Test case 4: Single weights
+        let variants = create_variants(&[("Solo", 1.0)]);
+        test_variant_distribution(&variants, 10_000, 0.0);
+    }
+}
