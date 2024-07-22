@@ -17,16 +17,13 @@ use crate::{
     },
 };
 
-#[allow(dead_code)] // TODO: remove
 const ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com/v1/messages";
-#[allow(dead_code)] // TODO: remove
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 
 pub struct AnthropicProvider;
 
 impl InferenceProvider for AnthropicProvider {
     /// Anthropic non-streaming API request
-    #[allow(dead_code)] // TODO: remove
     async fn infer(
         &self,
         request: &ModelInferenceRequest,
@@ -75,7 +72,6 @@ impl InferenceProvider for AnthropicProvider {
     }
 
     /// Anthropic streaming API request
-    #[allow(dead_code)] // TODO: remove
     async fn infer_stream(
         &self,
         request: &ModelInferenceRequest,
@@ -109,7 +105,6 @@ impl InferenceProvider for AnthropicProvider {
 /// Maps events from Anthropic into the TensorZero format
 /// Modified from the example [here](https://github.com/64bit/async-openai/blob/5c9c817b095e3bacb2b6c9804864cdf8b15c795e/async-openai/src/client.rs#L433)
 /// At a high level, this function is handling low-level EventSource details and mapping the objects returned by Anthropic into our `InferenceResponseChunk` type
-#[allow(dead_code)] // TODO: remove
 async fn stream_anthropic(mut event_source: EventSource) -> InferenceResponseStream {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     tokio::spawn(async move {
@@ -306,7 +301,6 @@ struct AnthropicRequestBody<'a> {
 }
 
 impl<'a> AnthropicRequestBody<'a> {
-    #[allow(dead_code)] // TODO: remove
     fn new(
         model_name: &'a str,
         request: &'a ModelInferenceRequest,
@@ -363,7 +357,6 @@ impl<'a> AnthropicRequestBody<'a> {
 /// It also makes modifications to the messages to make Anthropic happy.
 /// For example, it will prepend a default User message if the first message is an Assistant message.
 /// It will also append a default User message if the last message is an Assistant message.
-#[allow(dead_code)] // TODO: remove
 fn prepare_messages(messages: Vec<AnthropicMessage>) -> Result<Vec<AnthropicMessage>, Error> {
     let mut consolidated_messages: Vec<AnthropicMessage> = Vec::new();
     let mut last_role: Option<AnthropicRole> = None;
@@ -515,7 +508,6 @@ impl TryFrom<AnthropicResponseBody> for ModelInferenceResponse {
     }
 }
 
-#[allow(dead_code)] // TODO: remove
 fn handle_anthropic_error(
     response_code: StatusCode,
     response_body: AnthropicErrorBody,
@@ -556,9 +548,7 @@ enum AnthropicMessageBlock {
 }
 
 struct StreamMessage {
-    #[allow(dead_code)] // TODO: remove
     message: Option<String>,
-    #[allow(dead_code)] // TODO: remove
     tool_calls: Option<Vec<ToolCallChunk>>,
 }
 
@@ -621,7 +611,6 @@ enum AnthropicStreamMessage {
     Ping {},
 }
 
-#[allow(dead_code)] // TODO: remove
 fn anthropic_to_tensorzero_stream_message(
     message: AnthropicStreamMessage,
     inference_id: Uuid,
@@ -679,7 +668,6 @@ fn anthropic_to_tensorzero_stream_message(
     }
 }
 
-#[allow(dead_code)] // TODO: remove
 fn parse_usage_info(usage_info: &Value) -> AnthropicUsage {
     let input_tokens = usage_info
         .get("input_tokens")

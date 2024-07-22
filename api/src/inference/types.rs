@@ -54,19 +54,14 @@ impl Default for FunctionType {
 /// This enum is used to denote this tool choice.
 #[derive(Debug, PartialEq, Clone)]
 pub enum ToolChoice {
-    #[allow(dead_code)] // TODO: remove
     None,
-    #[allow(dead_code)] // TODO: remove
     Auto,
-    #[allow(dead_code)] // TODO: remove
     Required,
-    #[allow(dead_code)] // TODO: remove
     Tool(String), // Forces the LLM to call a particular tool, the String is the name of the Tool
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ToolType {
-    #[allow(dead_code)] // TODO: remove
     Function,
 }
 
@@ -117,9 +112,7 @@ pub struct Usage {
 // TODO: use this and write to DB somehow
 #[derive(Debug, PartialEq, Clone)]
 pub enum Latency {
-    #[allow(dead_code)] // TODO: remove
     Streaming { ttft: Duration, ttd: Duration },
-    #[allow(dead_code)] // TODO: remove
     NonStreaming { ttd: Duration },
 }
 
@@ -176,7 +169,6 @@ pub struct InferenceResponseChunk {
 }
 
 impl InferenceResponseChunk {
-    #[allow(dead_code)] // TODO: remove
     pub fn new(
         inference_id: Uuid,
         content: Option<String>,
@@ -200,6 +192,5 @@ pub struct ToolCallChunk {
     pub arguments: Option<String>,
 }
 
-#[allow(dead_code)] // TODO: remove
 pub type InferenceResponseStream =
     Pin<Box<dyn Stream<Item = Result<InferenceResponseChunk, Error>> + Send>>;
