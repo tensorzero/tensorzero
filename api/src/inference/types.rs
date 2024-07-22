@@ -16,7 +16,7 @@ use crate::error::Error;
 /// and to convert it back to the appropriate response format.
 /// An example of the latter is that we might have prepared a request with Tools available
 /// but the client actually just wants a chat response.
-#[derive(Debug, PartialEq, Builder, Default, Clone)]
+#[derive(Builder, Clone, Debug, Default, PartialEq)]
 #[builder(setter(into, strip_option), default)]
 pub struct ModelInferenceRequest {
     pub messages: Vec<InferenceRequestMessage>,
@@ -35,7 +35,7 @@ pub struct ModelInferenceRequest {
 /// By keeping this enum separately from whether tools are available, we
 /// allow the request to use tools to enforce an output schema without necessarily
 /// exposing that to the client (unless they requested a tool call themselves).
-#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum FunctionType {
     Chat,
     Tool,
@@ -52,25 +52,20 @@ impl Default for FunctionType {
 /// and even specify which tool to be used.
 ///
 /// This enum is used to denote this tool choice.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ToolChoice {
-    #[allow(dead_code)] // TODO: remove
     None,
-    #[allow(dead_code)] // TODO: remove
     Auto,
-    #[allow(dead_code)] // TODO: remove
     Required,
-    #[allow(dead_code)] // TODO: remove
     Tool(String), // Forces the LLM to call a particular tool, the String is the name of the Tool
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ToolType {
-    #[allow(dead_code)] // TODO: remove
     Function,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Tool {
     pub r#type: ToolType,
     pub description: Option<String>,
@@ -78,29 +73,29 @@ pub struct Tool {
     pub parameters: Value,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct UserInferenceRequestMessage {
     pub content: String, // TODO: for now, we don't support image input. This would be the place to start.
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct SystemInferenceRequestMessage {
     pub content: String,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct AssistantInferenceRequestMessage {
     pub content: Option<String>,
     pub tool_calls: Option<Vec<ToolCall>>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ToolInferenceRequestMessage {
     pub tool_call_id: String,
     pub content: String,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum InferenceRequestMessage {
     User(UserInferenceRequestMessage),
     System(SystemInferenceRequestMessage),
@@ -108,22 +103,20 @@ pub enum InferenceRequestMessage {
     Tool(ToolInferenceRequestMessage),
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Usage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
 }
 
 // TODO: use this and write to DB somehow
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Latency {
-    #[allow(dead_code)] // TODO: remove
     Streaming { ttft: Duration, ttd: Duration },
-    #[allow(dead_code)] // TODO: remove
     NonStreaming { ttd: Duration },
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ModelInferenceResponse {
     pub inference_id: Uuid,
     pub created: u64,
@@ -159,7 +152,7 @@ fn current_timestamp() -> u64 {
         .as_secs()
 }
 
-#[derive(Serialize, Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ToolCall {
     pub name: String,
     pub arguments: String,
@@ -176,7 +169,6 @@ pub struct InferenceResponseChunk {
 }
 
 impl InferenceResponseChunk {
-    #[allow(dead_code)] // TODO: remove
     pub fn new(
         inference_id: Uuid,
         content: Option<String>,
@@ -193,13 +185,12 @@ impl InferenceResponseChunk {
     }
 }
 
-#[derive(Serialize, Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ToolCallChunk {
     pub id: Option<String>,
     pub name: Option<String>,
     pub arguments: Option<String>,
 }
 
-#[allow(dead_code)] // TODO: remove
 pub type InferenceResponseStream =
     Pin<Box<dyn Stream<Item = Result<InferenceResponseChunk, Error>> + Send>>;
