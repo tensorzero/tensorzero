@@ -13,6 +13,9 @@ pub enum Error {
     AnthropicServer {
         message: String,
     },
+    ClickHouseWrite {
+        message: String,
+    },
     #[allow(dead_code)] // TODO: remove
     FireworksClient {
         message: String,
@@ -49,6 +52,9 @@ pub enum Error {
     OpenAIServer {
         message: String,
     },
+    Serialization {
+        message: String,
+    },
 }
 
 impl Error {
@@ -56,6 +62,7 @@ impl Error {
     fn level(&self) -> tracing::Level {
         match self {
             Error::AnthropicServer { .. } => tracing::Level::ERROR,
+            Error::ClickHouseWrite { .. } => tracing::Level::ERROR,
             Error::FireworksServer { .. } => tracing::Level::ERROR,
             Error::InferenceClient { .. } => tracing::Level::ERROR,
             Error::InvalidRequest { .. } => tracing::Level::ERROR,
@@ -65,6 +72,7 @@ impl Error {
             Error::OpenAIServer { .. } => tracing::Level::ERROR,
             Error::AnthropicClient { .. } => tracing::Level::WARN,
             Error::FireworksClient { .. } => tracing::Level::WARN,
+            Error::Serialization { .. } => tracing::Level::ERROR,
             Error::InvalidMessage { .. } => tracing::Level::WARN,
             Error::OpenAIClient { .. } => tracing::Level::WARN,
         }
@@ -74,6 +82,7 @@ impl Error {
     fn status_code(&self) -> StatusCode {
         match self {
             Error::AnthropicServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::ClickHouseWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::FireworksServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InferenceClient { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InvalidBaseUrl { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -81,6 +90,7 @@ impl Error {
             Error::InvalidTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InvalidProviderConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::OpenAIServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::Serialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::AnthropicClient { status_code, .. } => *status_code,
             Error::OpenAIClient { status_code, .. } => *status_code,
             Error::FireworksClient { status_code, .. } => *status_code,
@@ -106,6 +116,7 @@ impl std::fmt::Display for Error {
             Error::InferenceClient { message } => write!(f, "{}", message),
             Error::InvalidBaseUrl { message } => write!(f, "{}", message),
             Error::InvalidMessage { message } => write!(f, "{}", message),
+            Error::Serialization { message } => write!(f, "{}", message),
             Error::InvalidRequest { message } => write!(f, "{}", message),
             Error::InvalidTool { message } => write!(f, "{}", message),
             Error::InvalidProviderConfig { message } => write!(f, "{}", message),
@@ -114,6 +125,9 @@ impl std::fmt::Display for Error {
             }
             Error::AnthropicClient { message, .. } => {
                 write!(f, "Error from Anthropic client: {}", message)
+            }
+            Error::ClickHouseWrite { message } => {
+                write!(f, "Error writing to ClickHouse: {}", message)
             }
             Error::FireworksServer { message } => {
                 write!(f, "Error from Fireworks servers: {}", message)
