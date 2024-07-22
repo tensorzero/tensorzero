@@ -173,7 +173,7 @@ enum AnthropicRole {
 
 /// We can instruct Anthropic to use a particular tool,
 /// any tool (but to use one), or to use a tool if needed.
-#[derive(Serialize, Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 enum AnthropicToolChoice<'a> {
@@ -281,8 +281,7 @@ impl<'a> TryFrom<&'a InferenceRequestMessage> for AnthropicMessage<'a> {
     }
 }
 
-// TODO: remove Clone
-#[derive(Serialize, Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize)]
 struct AnthropicRequestBody<'a> {
     model: &'a str,
     messages: Vec<AnthropicMessage<'a>>,
@@ -417,12 +416,12 @@ fn prepare_messages(messages: Vec<AnthropicMessage>) -> Result<Vec<AnthropicMess
     Ok(consolidated_messages)
 }
 
-#[derive(Deserialize, Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
 struct AnthropicError {
     error: AnthropicErrorBody,
 }
 
-#[derive(Deserialize, Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
 struct AnthropicErrorBody {
     r#type: String,
     message: String,

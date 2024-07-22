@@ -434,7 +434,7 @@ struct OpenAIFunction<'a> {
     parameters: &'a Value,
 }
 
-#[derive(Serialize, Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize)]
 struct OpenAITool<'a> {
     r#type: OpenAIToolType,
     function: OpenAIFunction<'a>,
@@ -713,19 +713,19 @@ impl TryFrom<OpenAIResponse> for ModelInferenceResponse {
 }
 
 // This doesn't include role
-#[derive(Deserialize, Debug, PartialEq)]
+#[derive(Debug, PartialEq, Deserialize)]
 struct OpenAIDelta {
     content: Option<String>,
     tool_calls: Option<Vec<OpenAIResponseToolCall>>,
 }
 
 // This doesn't include logprobs, finish_reason, and index
-#[derive(Deserialize, Debug, PartialEq)]
+#[derive(Debug, PartialEq, Deserialize)]
 struct OpenAIChatChunkChoice {
     delta: OpenAIDelta,
 }
 
-#[derive(Deserialize, Debug, PartialEq)]
+#[derive(Debug, PartialEq, Deserialize)]
 struct OpenAIChatChunk {
     choices: Vec<OpenAIChatChunkChoice>,
     usage: Option<OpenAIUsage>,

@@ -38,7 +38,6 @@ pub enum ProviderConfig {
     },
     #[serde(rename = "fireworks")]
     Fireworks {
-        #[allow(dead_code)] // TODO: temporary
         model_name: String,
     },
 }
@@ -86,7 +85,6 @@ impl Config {
     pub fn load() -> Config {
         let config_path = Config::get_config_path();
         let config_table = Config::read_toml_config(&config_path);
-        #[allow(clippy::let_and_return)] // TODO: temporary
         let config = Config::from(config_table);
         config.validate();
         config

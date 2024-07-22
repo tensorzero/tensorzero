@@ -17,11 +17,9 @@ use crate::function::{InputMessage, VariantConfig};
 pub struct Params {
     // the function name
     function_name: String,
-    // the episode ID (if not provided, a new one will be generated)
-    // NOTE: DO NOT GENERATE EPISODE IDS MANUALLY. THE API WILL DO THAT FOR YOU
-    episode_id: Option<Uuid>,
-    // the input for the inference (must match the function's input_schema)
-    #[allow(unused)] // TODO: remove
+    // the episode ID (if not provided, it'll be set to inference_id)
+    episode_id: Option<String>,
+    // the input for the inference
     input: Vec<InputMessage>,
     // the maximum number of tokens to generate (if not provided, the default value will be used)
     #[allow(unused)] // TODO: remove
@@ -70,9 +68,6 @@ pub async fn inference_handler(
         }
     }
 
-    // If no episode ID is provided, generate a new one
-    let episode_id = params.episode_id.unwrap_or_else(Uuid::now_v7);
-
     // Should we store the results?
     #[allow(unused)] // TODO: remove
     let dryrun = params.dryrun.unwrap_or(false);
@@ -84,8 +79,11 @@ pub async fn inference_handler(
     // Keep sampling variants until one succeeds
     while !variants.is_empty() {
         #[allow(unused)] // TODO: remove
-        let (variant_name, variant) =
-            sample_variant(&function.variants, &params.function_name, &episode_id)?;
+        let (variant_name, variant) = sample_variant(
+            &function.variants,
+            &params.function_name,
+            &params.episode_id,
+        )?;
 
         todo!("Run inference and store results");
     }
@@ -100,7 +98,7 @@ pub async fn inference_handler(
 fn sample_variant<'a>(
     variants: &'a HashMap<String, VariantConfig>,
     function_name: &'a str,
-    episode_id: &Uuid,
+    episode_id: &'a Option<String>,
 ) -> Result<(&'a String, &'a VariantConfig), Error> {
     // Compute the total weight of all variants
     let total_weight = variants.values().map(|variant| variant.weight).sum::<f64>();
@@ -137,10 +135,14 @@ fn sample_variant<'a>(
 
 /// Implements a uniform distribution over the interval [0, 1) using a hash function.
 /// This function is deterministic but should have good statistical properties.
-fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
+fn get_uniform_value(function_name: &str, episode_id: &Option<String>) -> f64 {
     let mut hasher = Sha256::new();
     hasher.update(function_name.as_bytes());
-    hasher.update(episode_id.as_bytes());
+    if let Some(episode_id) = episode_id {
+        hasher.update(episode_id.as_bytes());
+    } else {
+        hasher.update(Uuid::now_v7().as_bytes());
+    }
     let hash_value = hasher.finalize();
     let truncated_hash =
         u32::from_be_bytes([hash_value[0], hash_value[1], hash_value[2], hash_value[3]]);

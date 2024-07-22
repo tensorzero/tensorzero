@@ -152,7 +152,7 @@ fn current_timestamp() -> u64 {
         .as_secs()
 }
 
-#[derive(Serialize, Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ToolCall {
     pub name: String,
     pub arguments: String,
@@ -185,7 +185,7 @@ impl InferenceResponseChunk {
     }
 }
 
-#[derive(Serialize, Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ToolCallChunk {
     pub id: Option<String>,
     pub name: Option<String>,
