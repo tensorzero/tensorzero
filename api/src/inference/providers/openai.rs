@@ -113,7 +113,7 @@ pub struct FireworksProvider;
 /// Key differences between Fireworks and OpenAI inference:
 /// - Fireworks allows you to specify output format in JSON mode
 /// - Fireworks automatically returns usage in streaming inference, we don't have to ask for it
-/// - Fireworks allows you to auto-truncate requests that are too many tokens
+/// - Fireworks allows you to auto-truncate requests that have too many tokens
 ///   (there are 2 ways to do it, we have the default of auto-truncation to the max window size)
 impl InferenceProvider for FireworksProvider {
     async fn infer(
