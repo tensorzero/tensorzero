@@ -108,7 +108,6 @@ mod tests {
             .expect("Failed to write invalid schema to temporary file");
 
         let result = JSONSchemaFromPath::new(temp_file.path());
-        assert!(result.is_err()); // TODO: fix
         assert_eq!(
             result.unwrap_err().to_string(),
             "\"invalid\" is not valid under any of the schemas listed in the 'anyOf' keyword"
@@ -119,7 +118,6 @@ mod tests {
     #[test]
     fn test_nonexistent_file() {
         let result = JSONSchemaFromPath::new("nonexistent_file.json");
-        assert!(result.is_err()); // TODO: fix
         assert_eq!(
             result.unwrap_err().to_string(),
             "No such file or directory (os error 2)".to_string()
