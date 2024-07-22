@@ -30,10 +30,10 @@ ORDER BY (metric_name, target_id);
 CREATE TABLE IF NOT EXISTS DemonstrationFeedback
 (
     id UUID DEFAULT generateUUIDv7(),
-    target_id UUID,
+    inference_id UUID,
     value String
 ) ENGINE = MergeTree()
-ORDER BY target_id;
+ORDER BY inference_id;
 
 -- CommentFeedback table
 CREATE TABLE IF NOT EXISTS CommentFeedback

@@ -299,17 +299,17 @@ fn handle_openai_error(
     }
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 struct OpenAISystemRequestMessage<'a> {
     content: &'a str,
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 struct OpenAIUserRequestMessage<'a> {
     content: &'a str, // TODO: this could be an array including images and stuff according to API spec, we don't support
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct OpenAIRequestFunctionCall<'a> {
     name: &'a str,
     arguments: &'a str,
@@ -335,19 +335,19 @@ impl<'a> From<&'a ToolCall> for OpenAIRequestToolCall<'a> {
     }
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 struct OpenAIAssistantRequestMessage<'a> {
     content: Option<&'a str>,
     tool_calls: Option<Vec<OpenAIRequestToolCall<'a>>>,
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 struct OpenAIToolRequestMessage<'a> {
     content: &'a str,
     tool_call_id: &'a str,
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "role")]
 #[serde(rename_all = "lowercase")]
 enum OpenAIRequestMessage<'a> {
@@ -389,7 +389,7 @@ impl<'a> From<&'a InferenceRequestMessage> for OpenAIRequestMessage<'a> {
     }
 }
 
-#[derive(Default, Serialize, Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "type")]
 enum OpenAIResponseFormat {
@@ -398,7 +398,7 @@ enum OpenAIResponseFormat {
     Text,
 }
 
-#[derive(Default, Serialize, Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "type")]
 enum FireworksResponseFormat<'a> {
@@ -410,7 +410,7 @@ enum FireworksResponseFormat<'a> {
     Text,
 }
 
-#[derive(Serialize, PartialEq, Debug, Clone, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 enum OpenAIToolType {
     Function,
@@ -426,7 +426,7 @@ impl From<ToolType> for OpenAIToolType {
     }
 }
 
-#[derive(Serialize, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Serialize)]
 struct OpenAIFunction<'a> {
     name: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -434,7 +434,7 @@ struct OpenAIFunction<'a> {
     parameters: &'a Value,
 }
 
-#[derive(Serialize, Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize)]
 struct OpenAITool<'a> {
     r#type: OpenAIToolType,
     function: OpenAIFunction<'a>,
@@ -453,14 +453,14 @@ impl<'a> From<&'a Tool> for OpenAITool<'a> {
     }
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(untagged)]
 enum OpenAIToolChoice<'a> {
     String(OpenAIToolChoiceString),
     Specific(SpecificToolChoice<'a>),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 enum OpenAIToolChoiceString {
     None,
@@ -468,13 +468,13 @@ enum OpenAIToolChoiceString {
     Required,
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 struct SpecificToolChoice<'a> {
     r#type: OpenAIToolType,
     function: SpecificToolFunction<'a>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct SpecificToolFunction<'a> {
     name: &'a str,
 }
@@ -713,19 +713,19 @@ impl TryFrom<OpenAIResponse> for ModelInferenceResponse {
 }
 
 // This doesn't include role
-#[derive(Deserialize, Debug, PartialEq)]
+#[derive(Debug, PartialEq, Deserialize)]
 struct OpenAIDelta {
     content: Option<String>,
     tool_calls: Option<Vec<OpenAIResponseToolCall>>,
 }
 
 // This doesn't include logprobs, finish_reason, and index
-#[derive(Deserialize, Debug, PartialEq)]
+#[derive(Debug, PartialEq, Deserialize)]
 struct OpenAIChatChunkChoice {
     delta: OpenAIDelta,
 }
 
-#[derive(Deserialize, Debug, PartialEq)]
+#[derive(Debug, PartialEq, Deserialize)]
 struct OpenAIChatChunk {
     choices: Vec<OpenAIChatChunkChoice>,
     usage: Option<OpenAIUsage>,
