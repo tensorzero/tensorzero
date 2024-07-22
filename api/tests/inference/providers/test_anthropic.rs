@@ -1,5 +1,4 @@
 #![cfg(feature = "integration_tests")]
-#![cfg(test)]
 use crate::inference::providers::common::{
     create_simple_inference_request, create_streaming_inference_request,
     create_tool_inference_request,

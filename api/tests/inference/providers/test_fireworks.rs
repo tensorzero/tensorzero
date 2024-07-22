@@ -1,5 +1,4 @@
 #![cfg(feature = "integration_tests")]
-#![cfg(test)]
 use std::env;
 
 use crate::inference::providers::common::{

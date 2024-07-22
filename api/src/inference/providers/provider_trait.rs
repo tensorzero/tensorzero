@@ -3,24 +3,24 @@ use crate::error::Error;
 use crate::inference::types::InferenceResponseStream;
 use crate::inference::types::ModelInferenceRequest;
 use crate::inference::types::ModelInferenceResponse;
+use futures::Future;
 use reqwest::Client;
 use secrecy::SecretString;
 
-#[allow(async_fn_in_trait)]
 pub trait InferenceProvider {
-    async fn infer(
+    fn infer(
         &self,
         request: &ModelInferenceRequest,
         config: &ProviderConfig,
         client: &Client,
         api_key: &SecretString,
-    ) -> Result<ModelInferenceResponse, Error>;
+    ) -> impl Future<Output = Result<ModelInferenceResponse, Error>> + Send;
 
-    async fn infer_stream(
+    fn infer_stream(
         &self,
         request: &ModelInferenceRequest,
         config: &ProviderConfig,
         client: &Client,
         api_key: &SecretString,
-    ) -> Result<InferenceResponseStream, Error>;
+    ) -> impl Future<Output = Result<InferenceResponseStream, Error>> + Send;
 }
