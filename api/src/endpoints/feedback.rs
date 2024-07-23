@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::api_util::{AppState, AppStateData, StructuredJson};
-use crate::clickhouse::{clickhouse_write, ClickHouseConnectionInfo};
+use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::{Config, MetricConfigLevel, MetricConfigType};
 use crate::error::Error;
 
@@ -28,7 +28,7 @@ pub struct Params {
     dryrun: Option<bool>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum FeedbackType {
     Comment,
     Demonstration,
@@ -112,6 +112,7 @@ pub async fn feedback_handler(
     Ok(())
 }
 
+#[derive(Debug)]
 struct FeedbackMetadata {
     r#type: FeedbackType,
     level: MetricConfigLevel,
@@ -157,7 +158,10 @@ fn get_feedback_metadata(
         MetricConfigLevel::Episode => episode_id,
     }
     .ok_or(Error::InvalidRequest {
-        message: "No feedback or episode ID provided".to_string(),
+        message: format!(
+            "Correct ID was not provided for feedback level {}.",
+            serde_json::to_string(&feedback_level).unwrap()
+        ),
     })?;
     Ok(FeedbackMetadata {
         r#type: feedback_type,
@@ -179,7 +183,9 @@ async fn write_comment(
     })?;
     let payload = json!({"target_type": level, "target_id": target_id, "value": value});
     if !dryrun {
-        clickhouse_write(&client, &connection_info, &payload, "CommentFeedback").await?;
+        connection_info
+            .write(&client, &payload, "CommentFeedback")
+            .await?;
     }
     Ok(())
 }
@@ -196,7 +202,9 @@ async fn write_demonstration(
     })?;
     let payload = json!({"inference_id": inference_id, "value": value});
     if !dryrun {
-        clickhouse_write(&client, &connection_info, &payload, "DemonstrationFeedback").await?;
+        connection_info
+            .write(&client, &payload, "DemonstrationFeedback")
+            .await?;
     }
     Ok(())
 }
@@ -216,7 +224,9 @@ async fn write_float(
     let payload =
         json!({"target_type": level, "target_id": target_id, "value": value, "name": name});
     if !dryrun {
-        clickhouse_write(&client, &connection_info, &payload, "FloatMetricFeedback").await?;
+        connection_info
+            .write(&client, &payload, "FloatMetricFeedback")
+            .await?;
     }
     Ok(())
 }
@@ -236,7 +246,335 @@ async fn write_boolean(
     let payload =
         json!({"target_type": level, "target_id": target_id, "value": value, "name": name});
     if !dryrun {
-        clickhouse_write(&client, &connection_info, &payload, "BooleanMetricFeedback").await?;
+        connection_info
+            .write(&client, &payload, "BooleanMetricFeedback")
+            .await?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use super::*;
+    use crate::{
+        config_parser::{MetricConfig, MetricConfigOptimize},
+        testing::get_unit_test_app_state_data,
+    };
+
+    #[tokio::test]
+    async fn test_get_feedback_metadata() {
+        // Case 1.1: Metric exists with name, is inference-level and a Float
+        let mut metrics = HashMap::new();
+        metrics.insert(
+            "test_metric".to_string(),
+            MetricConfig {
+                r#type: MetricConfigType::Float,
+                level: MetricConfigLevel::Inference,
+                optimize: MetricConfigOptimize::Max,
+            },
+        );
+        let config = Config {
+            models: HashMap::new(),
+            metrics: Some(metrics),
+            functions: HashMap::new(),
+        };
+        let inference_id = Uuid::now_v7();
+        let metadata =
+            get_feedback_metadata(&config, "test_metric", None, Some(inference_id)).unwrap();
+        assert_eq!(metadata.r#type, FeedbackType::Float);
+        assert_eq!(metadata.level, MetricConfigLevel::Inference);
+        assert_eq!(metadata.target_id, inference_id);
+
+        // Case 1.2: ID not provided
+        let metadata = get_feedback_metadata(&config, "test_metric", None, None).unwrap_err();
+        assert_eq!(
+            metadata,
+            Error::InvalidRequest {
+                message: "Correct ID was not provided for feedback level \"inference\"."
+                    .to_string(),
+            }
+        );
+        // Case 1.3: ID provided but not for the correct level
+        let metadata =
+            get_feedback_metadata(&config, "test_metric", Some(Uuid::now_v7()), None).unwrap_err();
+        assert_eq!(
+            metadata,
+            Error::InvalidRequest {
+                message: "Correct ID was not provided for feedback level \"inference\"."
+                    .to_string(),
+            }
+        );
+
+        // Case 2.1: Comment Feedback, episode-level
+        let episode_id = Uuid::now_v7();
+        let metadata = get_feedback_metadata(&config, "comment", Some(episode_id), None).unwrap();
+        assert_eq!(metadata.r#type, FeedbackType::Comment);
+        assert_eq!(metadata.level, MetricConfigLevel::Episode);
+        assert_eq!(metadata.target_id, episode_id);
+
+        // Case 2.2: Comment Feedback, inference-level
+        let metadata = get_feedback_metadata(&config, "comment", None, Some(inference_id)).unwrap();
+        assert_eq!(metadata.r#type, FeedbackType::Comment);
+        assert_eq!(metadata.level, MetricConfigLevel::Inference);
+        assert_eq!(metadata.target_id, inference_id);
+
+        // Case 3.1 Demonstration Feedback with only inference id
+        let metadata =
+            get_feedback_metadata(&config, "demonstration", None, Some(inference_id)).unwrap();
+        assert_eq!(metadata.r#type, FeedbackType::Demonstration);
+        assert_eq!(metadata.level, MetricConfigLevel::Inference);
+        assert_eq!(metadata.target_id, inference_id);
+
+        // Case 3.2 Demonstration Feedback with only episode id
+        let metadata =
+            get_feedback_metadata(&config, "demonstration", Some(episode_id), None).unwrap_err();
+        assert_eq!(
+            metadata,
+            Error::InvalidRequest {
+                message: "Correct ID was not provided for feedback level \"inference\"."
+                    .to_string(),
+            }
+        );
+
+        // Case 4.1 Boolean Feedback with episode level and episode id
+        let metric_config = MetricConfig {
+            r#type: MetricConfigType::Boolean,
+            level: MetricConfigLevel::Episode,
+            optimize: MetricConfigOptimize::Max,
+        };
+        let mut metrics = HashMap::new();
+        metrics.insert("test_metric".to_string(), metric_config);
+        let config = Config {
+            models: HashMap::new(),
+            metrics: Some(metrics),
+            functions: HashMap::new(),
+        };
+        let episode_id = Uuid::now_v7();
+        let metadata =
+            get_feedback_metadata(&config, "test_metric", Some(episode_id), None).unwrap();
+        assert_eq!(metadata.r#type, FeedbackType::Boolean);
+        assert_eq!(metadata.level, MetricConfigLevel::Episode);
+        assert_eq!(metadata.target_id, episode_id);
+    }
+
+    #[tokio::test]
+    async fn test_feedback_handler() {
+        // Test a Comment Feedback
+        let config = Config {
+            models: HashMap::new(),
+            metrics: Some(HashMap::new()),
+            functions: HashMap::new(),
+        };
+        let app_state_data = get_unit_test_app_state_data(config);
+        let episode_id = Uuid::now_v7();
+        let value = json!("test comment");
+        let params = Params {
+            episode_id: Some(episode_id),
+            inference_id: None,
+            metric_name: "comment".to_string(),
+            value: value.clone(),
+            dryrun: Some(false),
+        };
+        let response =
+            feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
+        assert!(response.is_ok());
+
+        // Check that the feedback was written
+        let mock_data = app_state_data
+            .clickhouse_connection_info
+            .read("CommentFeedback", "target_id", &episode_id.to_string())
+            .await
+            .unwrap();
+        let retrieved_target_id = mock_data.get("target_id").unwrap();
+        assert_eq!(retrieved_target_id, &episode_id.to_string());
+        let retrieved_value = mock_data.get("value").unwrap();
+        assert_eq!(retrieved_value, &value);
+        let retrieved_target_type = mock_data.get("target_type").unwrap().as_str().unwrap();
+        assert_eq!(retrieved_target_type, "episode");
+
+        // Test a Demonstration Feedback
+        let episode_id = Uuid::now_v7();
+        let value = json!("test demonstration");
+        let params = Params {
+            // Demonstrations shouldn't work with episode id
+            episode_id: Some(episode_id),
+            inference_id: None,
+            metric_name: "demonstration".to_string(),
+            value: value.clone(),
+            dryrun: Some(false),
+        };
+        let response = feedback_handler(State(app_state_data.clone()), StructuredJson(params))
+            .await
+            .unwrap_err();
+        assert_eq!(
+            response,
+            Error::InvalidRequest {
+                message: "Correct ID was not provided for feedback level \"inference\"."
+                    .to_string(),
+            }
+        );
+
+        let inference_id = Uuid::now_v7();
+        let params = Params {
+            episode_id: None,
+            inference_id: Some(inference_id),
+            metric_name: "demonstration".to_string(),
+            value: value.clone(),
+            dryrun: Some(false),
+        };
+        let response =
+            feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
+        assert!(response.is_ok());
+
+        // Check that the feedback was written
+        let mock_data = app_state_data
+            .clickhouse_connection_info
+            .read(
+                "DemonstrationFeedback",
+                "inference_id",
+                &inference_id.to_string(),
+            )
+            .await
+            .unwrap();
+        let retrieved_target_id = mock_data.get("inference_id").unwrap();
+        assert_eq!(retrieved_target_id, &inference_id.to_string());
+        let retrieved_value = mock_data.get("value").unwrap();
+        assert_eq!(retrieved_value, &value);
+
+        // Test a Float Feedback (episode level)
+        let mut metrics = HashMap::new();
+        metrics.insert(
+            "test_float".to_string(),
+            MetricConfig {
+                r#type: MetricConfigType::Float,
+                level: MetricConfigLevel::Episode,
+                optimize: MetricConfigOptimize::Max,
+            },
+        );
+        let config = Config {
+            models: HashMap::new(),
+            metrics: Some(metrics),
+            functions: HashMap::new(),
+        };
+        let app_state_data = get_unit_test_app_state_data(config);
+        let value = json!(4.5);
+        let inference_id = Uuid::now_v7();
+        let episode_id = Uuid::now_v7();
+        let params = Params {
+            episode_id: None,
+            inference_id: Some(inference_id),
+            metric_name: "test_float".to_string(),
+            value: value.clone(),
+            dryrun: Some(false),
+        };
+        let response = feedback_handler(State(app_state_data.clone()), StructuredJson(params))
+            .await
+            .unwrap_err();
+        assert_eq!(
+            response,
+            Error::InvalidRequest {
+                message: "Correct ID was not provided for feedback level \"episode\".".to_string(),
+            }
+        );
+
+        let params = Params {
+            episode_id: Some(episode_id),
+            inference_id: None,
+            metric_name: "test_float".to_string(),
+            value: value.clone(),
+            dryrun: Some(false),
+        };
+        let response =
+            feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
+        assert!(response.is_ok());
+
+        // Check that the feedback was written
+        let mock_data = app_state_data
+            .clickhouse_connection_info
+            .read("FloatMetricFeedback", "target_id", &episode_id.to_string())
+            .await
+            .unwrap();
+        let retrieved_name = mock_data.get("name").unwrap();
+        assert_eq!(retrieved_name, "test_float");
+        let retrieved_target_id = mock_data.get("target_id").unwrap();
+        assert_eq!(retrieved_target_id, &episode_id.to_string());
+        let retrieved_value = mock_data.get("value").unwrap();
+        assert_eq!(retrieved_value, &value);
+        let retrieved_target_type = mock_data.get("target_type").unwrap();
+        assert_eq!(retrieved_target_type, "episode");
+
+        // Test Boolean feedback with inference-level
+        let mut metrics = HashMap::new();
+        metrics.insert(
+            "test_boolean".to_string(),
+            MetricConfig {
+                r#type: MetricConfigType::Boolean,
+                level: MetricConfigLevel::Inference,
+                optimize: MetricConfigOptimize::Max,
+            },
+        );
+        let config = Config {
+            models: HashMap::new(),
+            metrics: Some(metrics),
+            functions: HashMap::new(),
+        };
+        let app_state_data = get_unit_test_app_state_data(config);
+        let value = json!(true);
+        let inference_id = Uuid::now_v7();
+        let params = Params {
+            episode_id: None,
+            inference_id: Some(inference_id),
+            metric_name: "test_boolean".to_string(),
+            value: value.clone(),
+            dryrun: None,
+        };
+        let response =
+            feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
+        assert!(response.is_ok());
+
+        // Check that the feedback was written
+        let mock_data = app_state_data
+            .clickhouse_connection_info
+            .read(
+                "BooleanMetricFeedback",
+                "target_id",
+                &inference_id.to_string(),
+            )
+            .await
+            .unwrap();
+        let retrieved_name = mock_data.get("name").unwrap();
+        assert_eq!(retrieved_name, "test_boolean");
+        let retrieved_target_id = mock_data.get("target_id").unwrap();
+        assert_eq!(retrieved_target_id, &inference_id.to_string());
+        let retrieved_value = mock_data.get("value").unwrap();
+        assert_eq!(retrieved_value, &value);
+        let retrieved_target_type = mock_data.get("target_type").unwrap();
+        assert_eq!(retrieved_target_type, "inference");
+
+        // Test dryrun
+        let inference_id = Uuid::now_v7();
+        let params = Params {
+            episode_id: None,
+            inference_id: Some(inference_id),
+            metric_name: "test_boolean".to_string(),
+            value: value.clone(),
+            dryrun: Some(true),
+        };
+        let response =
+            feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
+        assert!(response.is_ok());
+
+        // Check that the feedback was not written
+        let mock_data = app_state_data
+            .clickhouse_connection_info
+            .read(
+                "BooleanMetricFeedback",
+                "target_id",
+                &inference_id.to_string(),
+            )
+            .await;
+        assert!(mock_data.is_none());
+    }
 }

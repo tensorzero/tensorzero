@@ -26,7 +26,7 @@ impl Default for AppStateData {
         Self {
             config,
             http_client: Client::new(),
-            clickhouse_connection_info: ClickHouseConnectionInfo::new(&clickhouse_url, None),
+            clickhouse_connection_info: ClickHouseConnectionInfo::new(&clickhouse_url, false),
         }
     }
 }

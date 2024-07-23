@@ -64,7 +64,7 @@ pub enum MetricConfigOptimize {
     Max,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MetricConfigLevel {
     Inference,
