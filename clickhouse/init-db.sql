@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS CommentFeedback
 (
     id UUID DEFAULT generateUUIDv7(),
     target_id UUID,
+    target_type Enum('inference' = 1, 'episode' = 2),
     value String
 ) ENGINE = MergeTree()
 ORDER BY target_id;
