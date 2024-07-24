@@ -11,6 +11,10 @@ pub enum Error {
     AnthropicServer {
         message: String,
     },
+    ClickHouseWrite {
+        message: String,
+    },
+    #[allow(dead_code)] // TODO: remove
     FireworksClient {
         message: String,
         status_code: StatusCode,
@@ -55,10 +59,16 @@ pub enum Error {
     OpenAIServer {
         message: String,
     },
+    Serialization {
+        message: String,
+    },
     UnknownFunction {
         name: String,
     },
     UnknownVariant {
+        name: String,
+    },
+    UnknownMetric {
         name: String,
     },
 }
@@ -69,13 +79,14 @@ impl Error {
         match self {
             Error::AnthropicClient { .. } => tracing::Level::WARN,
             Error::AnthropicServer { .. } => tracing::Level::ERROR,
+            Error::ClickHouseWrite { .. } => tracing::Level::ERROR,
             Error::FireworksClient { .. } => tracing::Level::WARN,
             Error::FireworksServer { .. } => tracing::Level::ERROR,
             Error::Inference { .. } => tracing::Level::ERROR,
             Error::InferenceClient { .. } => tracing::Level::ERROR,
             Error::InvalidBaseUrl { .. } => tracing::Level::ERROR,
             Error::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
-            Error::InvalidInputSchema { .. } => tracing::Level::WARN,
+            Error::InvalidInputSchema { .. } => tracing::Level::ERROR,
             Error::InvalidMessage { .. } => tracing::Level::WARN,
             Error::InvalidProviderConfig { .. } => tracing::Level::ERROR,
             Error::InvalidRequest { .. } => tracing::Level::ERROR,
@@ -83,8 +94,10 @@ impl Error {
             Error::JsonRequest { .. } => tracing::Level::WARN,
             Error::OpenAIClient { .. } => tracing::Level::WARN,
             Error::OpenAIServer { .. } => tracing::Level::ERROR,
+            Error::Serialization { .. } => tracing::Level::ERROR,
             Error::UnknownFunction { .. } => tracing::Level::WARN,
             Error::UnknownVariant { .. } => tracing::Level::WARN,
+            Error::UnknownMetric { .. } => tracing::Level::WARN,
         }
     }
 
@@ -93,8 +106,9 @@ impl Error {
         match self {
             Error::AnthropicClient { status_code, .. } => *status_code,
             Error::AnthropicServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::FireworksClient { status_code, .. } => *status_code,
+            Error::ClickHouseWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::FireworksServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::FireworksClient { status_code, .. } => *status_code,
             Error::Inference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InferenceClient { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InvalidBaseUrl { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -102,13 +116,15 @@ impl Error {
             Error::InvalidInputSchema { .. } => StatusCode::BAD_REQUEST,
             Error::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
             Error::InvalidProviderConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::InvalidRequest { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::InvalidRequest { .. } => StatusCode::BAD_REQUEST,
             Error::InvalidTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::JsonRequest { .. } => StatusCode::BAD_REQUEST,
             Error::OpenAIClient { status_code, .. } => *status_code,
             Error::OpenAIServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::Serialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::UnknownFunction { .. } => StatusCode::NOT_FOUND,
             Error::UnknownVariant { .. } => StatusCode::NOT_FOUND,
+            Error::UnknownMetric { .. } => StatusCode::NOT_FOUND,
         }
     }
 
@@ -133,6 +149,9 @@ impl std::fmt::Display for Error {
             Error::AnthropicServer { message } => {
                 write!(f, "Error from Anthropic servers: {}", message)
             }
+            Error::ClickHouseWrite { message } => {
+                write!(f, "Error writing to ClickHouse: {}", message)
+            }
             Error::FireworksClient { message, .. } => {
                 write!(f, "Error from Fireworks client: {}", message)
             }
@@ -155,12 +174,14 @@ impl std::fmt::Display for Error {
             Error::InvalidRequest { message } => write!(f, "{}", message),
             Error::InvalidTool { message } => write!(f, "{}", message),
             Error::JsonRequest { message } => write!(f, "{}", message),
-            Error::OpenAIServer { message } => write!(f, "Error from OpenAI servers: {}", message),
             Error::OpenAIClient { message, .. } => {
                 write!(f, "Error from OpenAI client: {}", message)
             }
+            Error::OpenAIServer { message } => write!(f, "Error from OpenAI servers: {}", message),
+            Error::Serialization { message } => write!(f, "{}", message),
             Error::UnknownFunction { name } => write!(f, "Unknown function: {}", name),
             Error::UnknownVariant { name } => write!(f, "Unknown variant: {}", name),
+            Error::UnknownMetric { name } => write!(f, "Unknown metric: {}", name),
         }
     }
 }

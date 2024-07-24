@@ -1,4 +1,3 @@
-#![cfg(feature = "integration_tests")]
 use api::inference::types::{
     FunctionType, InferenceRequestMessage, ModelInferenceRequest, SystemInferenceRequestMessage,
     Tool, ToolChoice, ToolType, UserInferenceRequestMessage,

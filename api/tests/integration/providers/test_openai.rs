@@ -1,7 +1,6 @@
-#![cfg(feature = "integration_tests")]
 use std::env;
 
-use crate::inference::providers::common::{
+use crate::integration::providers::common::{
     create_json_inference_request, create_simple_inference_request,
     create_streaming_inference_request, create_tool_inference_request,
 };

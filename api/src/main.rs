@@ -10,10 +10,12 @@ use api::endpoints;
 async fn main() {
     let router = Router::new()
         .route("/inference", post(endpoints::inference::inference_handler))
+        .route("/feedback", post(endpoints::feedback::feedback_handler))
         .route("/status", get(endpoints::status::status_handler))
         .with_state(api_util::AppStateData::default());
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
+    // TODO: allow the user to configure the port
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
         .await
         .expect("Failed to bind to port 3000");
 

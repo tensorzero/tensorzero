@@ -7,8 +7,7 @@ USE tensorzero;
 -- BooleanMetricFeedback table
 CREATE TABLE IF NOT EXISTS BooleanMetricFeedback
 (
-    id UUID DEFAULT generateUUIDv7(),
-    target_type Enum('episode_id' = 1, 'inference_id' = 2),
+    id UUID,
     target_id UUID,
     metric_name LowCardinality(String),
     value Bool
@@ -18,8 +17,7 @@ ORDER BY (metric_name, target_id);
 -- FloatMetricFeedback table
 CREATE TABLE IF NOT EXISTS FloatMetricFeedback
 (
-    id UUID DEFAULT generateUUIDv7(),
-    target_type Enum('episode_id' = 1, 'inference_id' = 2),
+    id UUID,
     target_id UUID,
     metric_name LowCardinality(String),
     value Float32
@@ -29,7 +27,7 @@ ORDER BY (metric_name, target_id);
 -- DemonstrationFeedback table
 CREATE TABLE IF NOT EXISTS DemonstrationFeedback
 (
-    id UUID DEFAULT generateUUIDv7(),
+    id UUID,
     inference_id UUID,
     value String
 ) ENGINE = MergeTree()
@@ -38,9 +36,9 @@ ORDER BY inference_id;
 -- CommentFeedback table
 CREATE TABLE IF NOT EXISTS CommentFeedback
 (
-    id UUID DEFAULT generateUUIDv7(),
-    target_type Enum('episode_id' = 1, 'inference_id' = 2),
+    id UUID,
     target_id UUID,
+    target_type Enum('inference' = 1, 'episode' = 2),
     value String
 ) ENGINE = MergeTree()
 ORDER BY target_id;
@@ -60,7 +58,7 @@ ORDER BY (function_name, variant_name, episode_id);
 -- ModelInference table
 CREATE TABLE IF NOT EXISTS ModelInference
 (
-    id UUID DEFAULT generateUUIDv7(),
+    id UUID,
     inference_id UUID,
     input String,
     output String,

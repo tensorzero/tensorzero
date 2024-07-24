@@ -38,7 +38,7 @@ pub struct Params {
 /// A handler for the inference endpoint
 #[debug_handler(state = AppStateData)]
 pub async fn inference_handler(
-    State(AppStateData { config }): AppState,
+    State(AppStateData { config, .. }): AppState,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
     // Get the function config or return an error if it doesn't exist
