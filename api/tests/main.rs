@@ -1,3 +1,2 @@
-mod common;
-mod feedback;
-mod inference;
+mod e2e;
+mod integration;

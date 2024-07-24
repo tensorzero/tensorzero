@@ -1,5 +1,4 @@
-#![cfg(feature = "e2e_tests")]
-use crate::common::clickhouse_flush_async_insert;
+use crate::e2e::common::clickhouse_flush_async_insert;
 use api::clickhouse::ClickHouseConnectionInfo;
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
@@ -122,7 +121,6 @@ async fn e2e_test_demonstration_feedback() {
         .send()
         .await
         .unwrap();
-    // Print the response text
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let response_json = response.json::<Value>().await.unwrap();
     let message = response_json.get("error").unwrap().as_str().unwrap();

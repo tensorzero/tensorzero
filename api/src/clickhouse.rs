@@ -31,7 +31,6 @@ impl ClickHouseConnectionInfo {
         // TODO: parameterize the database name
         let database_name = "tensorzero";
         // Add a query string for the database using the URL crate
-        println!("base_url: {}", base_url);
         let mut url = Url::parse(base_url).expect("Invalid base URL");
         url.query_pairs_mut().append_pair("database", database_name);
         Self::Production { url, client }
