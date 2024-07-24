@@ -4,6 +4,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
+// TODO: make this endpoint configurable with main.rs
 const FEEDBACK_URL: &str = "http://localhost:3000/feedback";
 lazy_static::lazy_static! {
     static ref CLICKHOUSE_URL: String = std::env::var("CLICKHOUSE_URL").expect("CLICKHOUSE_URL must be set");
@@ -13,7 +14,7 @@ lazy_static::lazy_static! {
 async fn e2e_test_comment_feedback() {
     let client = Client::new();
     let episode_id = Uuid::now_v7();
-    // Test comment feedback on episoe
+    // Test comment feedback on episode
     let payload = json!({"episode_id": episode_id, "metric_name": "comment", "value": "good job!"});
     let response = client
         .post(FEEDBACK_URL)
@@ -134,7 +135,7 @@ async fn e2e_test_demonstration_feedback() {
 async fn e2e_test_float_feedback() {
     let client = Client::new();
     let episode_id = Uuid::now_v7();
-    // Test comment feedback on episode
+    // Test Float feedback on episode
     let payload = json!({"episode_id": episode_id, "metric_name": "user_rating", "value": 32.8});
     let response = client
         .post(FEEDBACK_URL)
@@ -174,7 +175,10 @@ async fn e2e_test_float_feedback() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let response_json = response.json::<Value>().await.unwrap();
     let error_message = response_json.get("error").unwrap().as_str().unwrap();
-    assert_eq!(error_message, "Value for float feedback must be a number");
+    assert_eq!(
+        error_message,
+        "Feedback value for metric `user_rating` must be a number"
+    );
 
     // Test float feedback on inference (should fail)
     let inference_id = Uuid::now_v7();
@@ -193,6 +197,35 @@ async fn e2e_test_float_feedback() {
         "Unexpected error message: {}",
         error_message
     );
+
+    // Test float feedback on different metric for inference
+    let inference_id = Uuid::now_v7();
+    let payload =
+        json!({"inference_id": inference_id, "metric_name": "brevity_score", "value": 0.5});
+    let response = client
+        .post(FEEDBACK_URL)
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    let feedback_id = response_json.get("feedback_id").unwrap();
+    assert!(feedback_id.is_string());
+    let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
+
+    // Check ClickHouse
+    let result = select_feedback_clickhouse(&clickhouse, "FloatMetricFeedback", feedback_id)
+        .await
+        .unwrap();
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, feedback_id);
+    let retrieved_inference_id = result.get("target_id").unwrap().as_str().unwrap();
+    let retrieved_inference_id_uuid = Uuid::parse_str(retrieved_inference_id).unwrap();
+    assert_eq!(retrieved_inference_id_uuid, inference_id);
+    let retrieved_value = result.get("value").unwrap().as_f64().unwrap();
+    assert_eq!(retrieved_value, 0.5);
 }
 
 #[tokio::test]
@@ -260,8 +293,36 @@ async fn e2e_test_boolean_feedback() {
     let error_message = response_json.get("error").unwrap().as_str().unwrap();
     assert_eq!(
         error_message,
-        "Value for boolean feedback must be a boolean"
+        "Feedback value for metric `task_success` must be a boolean"
     );
+
+    // Try episode-level feedback on different metric
+    let episode_id = Uuid::now_v7();
+    let payload = json!({"episode_id": episode_id, "metric_name": "goal_achieved", "value": true});
+    let response = client
+        .post(FEEDBACK_URL)
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    let feedback_id = response_json.get("feedback_id").unwrap();
+    assert!(feedback_id.is_string());
+    let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
+
+    // Check ClickHouse
+    let result = select_feedback_clickhouse(&clickhouse, "BooleanMetricFeedback", feedback_id)
+        .await
+        .unwrap();
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, feedback_id);
+    let retrieved_episode_id = result.get("target_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id_uuid = Uuid::parse_str(retrieved_episode_id).unwrap();
+    assert_eq!(retrieved_episode_id_uuid, episode_id);
+    let retrieved_value = result.get("value").unwrap().as_bool().unwrap();
+    assert!(retrieved_value)
 }
 
 async fn select_feedback_clickhouse(

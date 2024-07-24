@@ -47,7 +47,17 @@ type = "boolean"  # "boolean", "float"
 optimize = "max"  # "min", "max"
 level = "inference"  # "inference", "episode"
 
+[metrics.goal_achieved]
+type = "boolean"  # "boolean", "float"
+optimize = "max"  # "min", "max"
+level = "episode"  # "inference", "episode"
+
 [metrics.user_rating]
 type = "float"
 optimize = "max"
 level = "episode"
+
+[metrics.brevity_score]
+type = "float"
+optimize = "max"
+level = "inference"
