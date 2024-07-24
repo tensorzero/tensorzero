@@ -14,6 +14,7 @@ async fn main() {
         .route("/status", get(endpoints::status::status_handler))
         .with_state(api_util::AppStateData::default());
 
+    // TODO: allow the user to configure the port
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
         .await
         .expect("Failed to bind to port 3000");

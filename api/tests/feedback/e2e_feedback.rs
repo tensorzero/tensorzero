@@ -29,8 +29,9 @@ async fn e2e_test_comment_feedback() {
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
 
     // Check ClickHouse
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false);
-    let result = select_feedback_clickhouse(&clickhouse, &client, "CommentFeedback", feedback_id)
+    let clickhouse =
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, client.clone(), false, Some(true));
+    let result = select_feedback_clickhouse(&clickhouse, "CommentFeedback", feedback_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
@@ -61,8 +62,8 @@ async fn e2e_test_comment_feedback() {
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
 
     // Check ClickHouse
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false);
-    let result = select_feedback_clickhouse(&clickhouse, &client, "CommentFeedback", feedback_id)
+    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, client, false, None);
+    let result = select_feedback_clickhouse(&clickhouse, "CommentFeedback", feedback_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
@@ -97,11 +98,11 @@ async fn e2e_test_demonstration_feedback() {
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
 
     // Check ClickHouse
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false);
-    let result =
-        select_feedback_clickhouse(&clickhouse, &client, "DemonstrationFeedback", feedback_id)
-            .await
-            .unwrap();
+    let clickhouse =
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, client.clone(), false, Some(true));
+    let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
+        .await
+        .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
@@ -150,11 +151,11 @@ async fn e2e_test_float_feedback() {
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
 
     // Check ClickHouse
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false);
-    let result =
-        select_feedback_clickhouse(&clickhouse, &client, "FloatMetricFeedback", feedback_id)
-            .await
-            .unwrap();
+    let clickhouse =
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, client.clone(), false, Some(true));
+    let result = select_feedback_clickhouse(&clickhouse, "FloatMetricFeedback", feedback_id)
+        .await
+        .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
@@ -215,11 +216,11 @@ async fn e2e_test_boolean_feedback() {
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
 
     // Check ClickHouse
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false);
-    let result =
-        select_feedback_clickhouse(&clickhouse, &client, "BooleanMetricFeedback", feedback_id)
-            .await
-            .unwrap();
+    let clickhouse =
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, client.clone(), false, Some(true));
+    let result = select_feedback_clickhouse(&clickhouse, "BooleanMetricFeedback", feedback_id)
+        .await
+        .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
@@ -267,14 +268,13 @@ async fn e2e_test_boolean_feedback() {
 
 async fn select_feedback_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
-    client: &Client,
     table_name: &str,
     feedback_id: Uuid,
 ) -> Option<Value> {
-    clickhouse_flush_async_insert(client, clickhouse_connection_info).await;
-    let url = match clickhouse_connection_info {
+    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+    let (url, client) = match clickhouse_connection_info {
         ClickHouseConnectionInfo::Mock { .. } => unimplemented!(),
-        ClickHouseConnectionInfo::Production { url } => url.clone(),
+        ClickHouseConnectionInfo::Production { url, client } => (url.clone(), client),
     };
     let query = format!(
         "SELECT * FROM {} WHERE id = '{}' FORMAT JSONEachRow",

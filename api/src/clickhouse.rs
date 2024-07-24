@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockWriteGuard;
+use url::Url;
 
 use crate::error::Error;
 
@@ -11,40 +12,41 @@ use crate::error::Error;
 pub enum ClickHouseConnectionInfo {
     Mock {
         mock_data: Arc<RwLock<HashMap<String, Vec<serde_json::Value>>>>,
+        healthy: bool,
     },
     Production {
-        url: String,
+        url: Url,
+        client: Client,
     },
 }
 
 impl ClickHouseConnectionInfo {
-    pub fn new(base_url: &str, mock: bool) -> Self {
+    pub fn new(base_url: &str, client: Client, mock: bool, healthy: Option<bool>) -> Self {
         if mock {
             return Self::Mock {
                 mock_data: Arc::new(RwLock::new(HashMap::new())),
+                healthy: healthy.unwrap_or(true),
             };
         }
+        // TODO: parameterize the database name
         let database_name = "tensorzero";
-        // Add a query string for the database
-        let database_url = if base_url.contains('?') {
-            format!("{base_url}&database={database_name}")
-        } else {
-            format!("{base_url}?database={database_name}")
-        };
-        Self::Production {
-            url: database_url.to_string(),
-        }
+        // Add a query string for the database using the URL crate
+        println!("base_url: {}", base_url);
+        let mut url = Url::parse(base_url).expect("Invalid base URL");
+        url.query_pairs_mut().append_pair("database", database_name);
+        Self::Production { url, client }
     }
 
     pub async fn write(
         &self,
-        client: &Client,
         row: &(impl Serialize + Send + Sync),
         table: &str,
     ) -> Result<(), Error> {
         match self {
-            Self::Mock { mock_data } => write_mock(row, table, &mut mock_data.write().await).await,
-            Self::Production { url } => write_production(url, client, row, table).await,
+            Self::Mock { mock_data, .. } => {
+                write_mock(row, table, &mut mock_data.write().await).await
+            }
+            Self::Production { url, client } => write_production(url, client, row, table).await,
         }
     }
 
@@ -53,7 +55,7 @@ impl ClickHouseConnectionInfo {
     #[cfg(test)]
     pub async fn read(&self, table: &str, column: &str, value: &str) -> Option<serde_json::Value> {
         match self {
-            Self::Mock { mock_data } => {
+            Self::Mock { mock_data, .. } => {
                 let mock_data = mock_data.read().await;
                 let table = mock_data.get(table).unwrap();
                 for row in table {
@@ -70,11 +72,11 @@ impl ClickHouseConnectionInfo {
     }
 
     // TODO: use this
-    pub async fn health(&self, client: &Client) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn health(&self) -> Result<(), Box<dyn std::error::Error>> {
         match self {
             Self::Mock { .. } => todo!(),
-            Self::Production { url } => {
-                client.get(url).send().await?;
+            Self::Production { url, client } => {
+                client.get(url.clone()).send().await?;
                 Ok(())
             }
         }
@@ -94,7 +96,7 @@ async fn write_mock(
 }
 
 async fn write_production(
-    url: &str,
+    url: &Url,
     client: &Client,
     row: &(impl Serialize + Send + Sync),
     table: &str,
@@ -102,6 +104,11 @@ async fn write_production(
     let row_json = serde_json::to_string(row).map_err(|e| Error::Serialization {
         message: e.to_string(),
     })?;
+    // TODO: allow the user to parameterize whether to wait_for_async_insert
+    // Design we'll use:
+    //   1. Feedback should not wait
+    //   2. Allow the user to optionally configure that a function is latency sensitive (default false). If so,
+    //      don't wait for the async insert to finish. Otherwise, wait.
     let query = format!(
         "INSERT INTO {table}\n\
      SETTINGS async_insert=1, wait_for_async_insert=0\n\
@@ -109,7 +116,7 @@ async fn write_production(
      {row_json}"
     );
     let response = client
-        .post(url)
+        .post(url.clone())
         .body(query.clone())
         .send()
         .await

@@ -1,6 +1,5 @@
 use axum::extract::State;
 use axum::{debug_handler, Json};
-use reqwest::Client;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use uuid::Uuid;
@@ -9,8 +8,6 @@ use crate::api_util::{AppState, AppStateData, StructuredJson};
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::{Config, MetricConfigLevel, MetricConfigType};
 use crate::error::Error;
-
-// TODO: function or function_name or ...? variant?
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Deserialize)]
@@ -36,8 +33,8 @@ enum FeedbackType {
     Boolean,
 }
 
-impl From<MetricConfigType> for FeedbackType {
-    fn from(value: MetricConfigType) -> Self {
+impl From<&MetricConfigType> for FeedbackType {
+    fn from(value: &MetricConfigType) -> Self {
         match value {
             MetricConfigType::Float => FeedbackType::Float,
             MetricConfigType::Boolean => FeedbackType::Boolean,
@@ -50,8 +47,8 @@ impl From<MetricConfigType> for FeedbackType {
 pub async fn feedback_handler(
     State(AppStateData {
         config,
-        http_client,
         clickhouse_connection_info,
+        ..
     }): AppState,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Json<Value>, Error> {
@@ -66,7 +63,6 @@ pub async fn feedback_handler(
     match feedback_metadata.r#type {
         FeedbackType::Comment => {
             write_comment(
-                http_client,
                 clickhouse_connection_info,
                 feedback_metadata.target_id,
                 params.value,
@@ -78,7 +74,6 @@ pub async fn feedback_handler(
         }
         FeedbackType::Demonstration => {
             write_demonstration(
-                http_client,
                 clickhouse_connection_info,
                 feedback_metadata.target_id,
                 params.value,
@@ -89,7 +84,6 @@ pub async fn feedback_handler(
         }
         FeedbackType::Float => {
             write_float(
-                http_client,
                 clickhouse_connection_info,
                 &params.metric_name,
                 feedback_metadata.target_id,
@@ -102,7 +96,6 @@ pub async fn feedback_handler(
         }
         FeedbackType::Boolean => {
             write_boolean(
-                http_client,
                 clickhouse_connection_info,
                 &params.metric_name,
                 feedback_metadata.target_id,
@@ -118,22 +111,27 @@ pub async fn feedback_handler(
 }
 
 #[derive(Debug)]
-struct FeedbackMetadata {
+struct FeedbackMetadata<'a> {
     r#type: FeedbackType,
-    level: MetricConfigLevel,
+    level: &'a MetricConfigLevel,
     target_id: Uuid,
 }
 
-fn get_feedback_metadata(
-    config: &Config,
+fn get_feedback_metadata<'a>(
+    config: &'a Config,
     metric_name: &str,
     episode_id: Option<Uuid>,
     inference_id: Option<Uuid>,
-) -> Result<FeedbackMetadata, Error> {
+) -> Result<FeedbackMetadata<'a>, Error> {
+    if let (Some(_), Some(_)) = (episode_id, inference_id) {
+        return Err(Error::InvalidRequest {
+            message: "Both episode_id and inference_id cannot be provided".to_string(),
+        });
+    }
     let metric = config.get_metric(metric_name);
     let feedback_type = match metric.as_ref() {
         Ok(metric) => {
-            let feedback_type: FeedbackType = metric.r#type.clone().into();
+            let feedback_type: FeedbackType = (&metric.r#type).into();
             Ok(feedback_type)
         }
         Err(e) => match metric_name {
@@ -145,12 +143,12 @@ fn get_feedback_metadata(
         },
     }?;
     let feedback_level = match metric {
-        Ok(metric) => Ok(metric.level.clone()),
+        Ok(metric) => Ok(&metric.level),
         Err(_) => match feedback_type {
-            FeedbackType::Demonstration => Ok(MetricConfigLevel::Inference),
+            FeedbackType::Demonstration => Ok(&MetricConfigLevel::Inference),
             _ => match (inference_id, episode_id) {
-                (Some(_), None) => Ok(MetricConfigLevel::Inference),
-                (None, Some(_)) => Ok(MetricConfigLevel::Episode),
+                (Some(_), None) => Ok(&MetricConfigLevel::Inference),
+                (None, Some(_)) => Ok(&MetricConfigLevel::Episode),
                 _ => Err(Error::InvalidRequest {
                     message: "Exactly one of inference_id or episode_id must be provided"
                         .to_string(),
@@ -176,29 +174,25 @@ fn get_feedback_metadata(
 }
 
 async fn write_comment(
-    client: Client,
     connection_info: ClickHouseConnectionInfo,
     target_id: Uuid,
     value: Value,
-    level: MetricConfigLevel,
+    level: &MetricConfigLevel,
     feedback_id: Uuid,
     dryrun: bool,
 ) -> Result<(), Error> {
     let value = value.as_str().ok_or(Error::InvalidRequest {
-        message: "Value for comment feedback must be a string".to_string(),
+        message: "Feedback value for a comment must be a string".to_string(),
     })?;
     let payload =
         json!({"target_type": level, "target_id": target_id, "value": value, "id": feedback_id});
     if !dryrun {
-        connection_info
-            .write(&client, &payload, "CommentFeedback")
-            .await?;
+        connection_info.write(&payload, "CommentFeedback").await?;
     }
     Ok(())
 }
 
 async fn write_demonstration(
-    client: Client,
     connection_info: ClickHouseConnectionInfo,
     inference_id: Uuid,
     value: Value,
@@ -206,12 +200,12 @@ async fn write_demonstration(
     dryrun: bool,
 ) -> Result<(), Error> {
     let value = value.as_str().ok_or(Error::InvalidRequest {
-        message: "Value for demonstration feedback must be a string".to_string(),
+        message: "Feedback value for a demonstration must be a string".to_string(),
     })?;
     let payload = json!({"inference_id": inference_id, "value": value, "id": feedback_id});
     if !dryrun {
         connection_info
-            .write(&client, &payload, "DemonstrationFeedback")
+            .write(&payload, "DemonstrationFeedback")
             .await?;
     }
     Ok(())
@@ -219,22 +213,21 @@ async fn write_demonstration(
 
 #[allow(clippy::too_many_arguments)]
 async fn write_float(
-    client: Client,
     connection_info: ClickHouseConnectionInfo,
     name: &str,
     target_id: Uuid,
     value: Value,
-    level: MetricConfigLevel,
+    level: &MetricConfigLevel,
     feedback_id: Uuid,
     dryrun: bool,
 ) -> Result<(), Error> {
     let value = value.as_f64().ok_or(Error::InvalidRequest {
-        message: "Value for float feedback must be a number".to_string(),
+        message: format!("Feedback value for metric `{name}` must be a number"),
     })?;
     let payload = json!({"target_type": level, "target_id": target_id, "value": value, "name": name, "id": feedback_id});
     if !dryrun {
         connection_info
-            .write(&client, &payload, "FloatMetricFeedback")
+            .write(&payload, "FloatMetricFeedback")
             .await?;
     }
     Ok(())
@@ -242,22 +235,21 @@ async fn write_float(
 
 #[allow(clippy::too_many_arguments)]
 async fn write_boolean(
-    client: Client,
     connection_info: ClickHouseConnectionInfo,
     name: &str,
     target_id: Uuid,
     value: Value,
-    level: MetricConfigLevel,
+    level: &MetricConfigLevel,
     feedback_id: Uuid,
     dryrun: bool,
 ) -> Result<(), Error> {
     let value = value.as_bool().ok_or(Error::InvalidRequest {
-        message: "Value for boolean feedback must be a boolean".to_string(),
+        message: format!("Feedback value for metric `{name}` must be a boolean"),
     })?;
     let payload = json!({"target_type": level, "target_id": target_id, "value": value, "name": name, "id": feedback_id});
     if !dryrun {
         connection_info
-            .write(&client, &payload, "BooleanMetricFeedback")
+            .write(&payload, "BooleanMetricFeedback")
             .await?;
     }
     Ok(())
@@ -294,7 +286,7 @@ mod tests {
         let metadata =
             get_feedback_metadata(&config, "test_metric", None, Some(inference_id)).unwrap();
         assert_eq!(metadata.r#type, FeedbackType::Float);
-        assert_eq!(metadata.level, MetricConfigLevel::Inference);
+        assert_eq!(metadata.level, &MetricConfigLevel::Inference);
         assert_eq!(metadata.target_id, inference_id);
 
         // Case 1.2: ID not provided
@@ -317,24 +309,50 @@ mod tests {
             }
         );
 
+        // Case 1.4: Both ids are provided
+        let metadata = get_feedback_metadata(
+            &config,
+            "test_metric",
+            Some(Uuid::now_v7()),
+            Some(Uuid::now_v7()),
+        )
+        .unwrap_err();
+        assert_eq!(
+            metadata,
+            Error::InvalidRequest {
+                message: "Both episode_id and inference_id cannot be provided".to_string(),
+            }
+        );
+
         // Case 2.1: Comment Feedback, episode-level
         let episode_id = Uuid::now_v7();
         let metadata = get_feedback_metadata(&config, "comment", Some(episode_id), None).unwrap();
         assert_eq!(metadata.r#type, FeedbackType::Comment);
-        assert_eq!(metadata.level, MetricConfigLevel::Episode);
+        assert_eq!(metadata.level, &MetricConfigLevel::Episode);
         assert_eq!(metadata.target_id, episode_id);
 
         // Case 2.2: Comment Feedback, inference-level
         let metadata = get_feedback_metadata(&config, "comment", None, Some(inference_id)).unwrap();
         assert_eq!(metadata.r#type, FeedbackType::Comment);
-        assert_eq!(metadata.level, MetricConfigLevel::Inference);
+        assert_eq!(metadata.level, &MetricConfigLevel::Inference);
         assert_eq!(metadata.target_id, inference_id);
+
+        // Case 2.3: Comment feedback but both ids are provided
+        let metadata =
+            get_feedback_metadata(&config, "comment", Some(episode_id), Some(inference_id))
+                .unwrap_err();
+        assert_eq!(
+            metadata,
+            Error::InvalidRequest {
+                message: "Both episode_id and inference_id cannot be provided".to_string(),
+            }
+        );
 
         // Case 3.1 Demonstration Feedback with only inference id
         let metadata =
             get_feedback_metadata(&config, "demonstration", None, Some(inference_id)).unwrap();
         assert_eq!(metadata.r#type, FeedbackType::Demonstration);
-        assert_eq!(metadata.level, MetricConfigLevel::Inference);
+        assert_eq!(metadata.level, &MetricConfigLevel::Inference);
         assert_eq!(metadata.target_id, inference_id);
 
         // Case 3.2 Demonstration Feedback with only episode id
@@ -345,6 +363,21 @@ mod tests {
             Error::InvalidRequest {
                 message: "Correct ID was not provided for feedback level \"inference\"."
                     .to_string(),
+            }
+        );
+
+        // Case 3.3 Demonstration Feedback with both IDs
+        let metadata = get_feedback_metadata(
+            &config,
+            "demonstration",
+            Some(episode_id),
+            Some(inference_id),
+        )
+        .unwrap_err();
+        assert_eq!(
+            metadata,
+            Error::InvalidRequest {
+                message: "Both episode_id and inference_id cannot be provided".to_string(),
             }
         );
 
@@ -365,8 +398,19 @@ mod tests {
         let metadata =
             get_feedback_metadata(&config, "test_metric", Some(episode_id), None).unwrap();
         assert_eq!(metadata.r#type, FeedbackType::Boolean);
-        assert_eq!(metadata.level, MetricConfigLevel::Episode);
+        assert_eq!(metadata.level, &MetricConfigLevel::Episode);
         assert_eq!(metadata.target_id, episode_id);
+
+        // Case 4.2 Boolean Feedback with both ids
+        let metadata =
+            get_feedback_metadata(&config, "test_metric", Some(episode_id), Some(inference_id))
+                .unwrap_err();
+        assert_eq!(
+            metadata,
+            Error::InvalidRequest {
+                message: "Both episode_id and inference_id cannot be provided".to_string(),
+            }
+        );
     }
 
     #[tokio::test]

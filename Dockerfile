@@ -1,6 +1,6 @@
 # ========== builder ==========
 
-FROM rust:1.76 AS builder
+FROM rust:latest AS builder
 
 WORKDIR /src
 

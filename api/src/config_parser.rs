@@ -169,12 +169,16 @@ impl Config {
             }
         }
 
-        // NOTE: There is nothing to validate in metrics for now
-        // if let Some(metrics) = &self.metrics {
-        //     for (metric_name, metric) in metrics {
-        //         // ...
-        //     }
-        // }
+        // Ensure that no metrics are named "comment" or "demonstration"
+        if let Some(metrics) = &self.metrics {
+            for metric_name in metrics.keys() {
+                assert!(
+                    metric_name != "comment" && metric_name != "demonstration",
+                    "Invalid Config: Metric name '{}' is reserved and cannot be used",
+                    metric_name
+                );
+            }
+        }
     }
 
     /// Get a function by name
