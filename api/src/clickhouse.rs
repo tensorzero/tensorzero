@@ -15,13 +15,13 @@ pub enum ClickHouseConnectionInfo {
         healthy: bool,
     },
     Production {
-        url: Url,
+        url: String,
         client: Client,
     },
 }
 
 impl ClickHouseConnectionInfo {
-    pub fn new(base_url: &str, client: Client, mock: bool, healthy: Option<bool>) -> Self {
+    pub fn new(base_url: &str, mock: bool, healthy: Option<bool>) -> Self {
         if mock {
             return Self::Mock {
                 mock_data: Arc::new(RwLock::new(HashMap::new())),
@@ -33,7 +33,10 @@ impl ClickHouseConnectionInfo {
         // Add a query string for the database using the URL crate
         let mut url = Url::parse(base_url).expect("Invalid base URL");
         url.query_pairs_mut().append_pair("database", database_name);
-        Self::Production { url, client }
+        Self::Production {
+            url: url.to_string(),
+            client: Client::new(),
+        }
     }
 
     pub async fn write(
@@ -95,7 +98,7 @@ async fn write_mock(
 }
 
 async fn write_production(
-    url: &Url,
+    url: &str,
     client: &Client,
     row: &(impl Serialize + Send + Sync),
     table: &str,
@@ -105,7 +108,7 @@ async fn write_production(
     })?;
     // TODO: allow the user to parameterize whether to wait_for_async_insert
     // Design we'll use:
-    //   1. Feedback should not wait
+    //   1. Feedback should wait
     //   2. Allow the user to optionally configure that a function is latency sensitive (default false). If so,
     //      don't wait for the async insert to finish. Otherwise, wait.
     let query = format!(
@@ -115,7 +118,7 @@ async fn write_production(
      {row_json}"
     );
     let response = client
-        .post(url.clone())
+        .post(url)
         .body(query.clone())
         .send()
         .await

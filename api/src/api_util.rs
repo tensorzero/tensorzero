@@ -24,16 +24,10 @@ impl Default for AppStateData {
         let clickhouse_url =
             std::env::var("CLICKHOUSE_URL").expect("Missing environment variable CLICKHOUSE_URL");
         let http_client = Client::new();
-        let clickhouse_client = http_client.clone();
         Self {
             config,
             http_client,
-            clickhouse_connection_info: ClickHouseConnectionInfo::new(
-                &clickhouse_url,
-                clickhouse_client,
-                false,
-                None,
-            ),
+            clickhouse_connection_info: ClickHouseConnectionInfo::new(&clickhouse_url, false, None),
         }
     }
 }
