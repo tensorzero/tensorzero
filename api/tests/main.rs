@@ -1,2 +1,3 @@
-#![cfg_attr(feature = "integration_tests", cfg(test))]
+mod common;
+mod feedback;
 mod inference;

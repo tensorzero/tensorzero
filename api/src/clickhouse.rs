@@ -108,15 +108,14 @@ async fn write_production(
      FORMAT JSONEachRow\n\
      {row_json}"
     );
-    let response =
-        client
-            .post(url)
-            .body(query)
-            .send()
-            .await
-            .map_err(|e| Error::ClickHouseWrite {
-                message: e.to_string(),
-            })?;
+    let response = client
+        .post(url)
+        .body(query.clone())
+        .send()
+        .await
+        .map_err(|e| Error::ClickHouseWrite {
+            message: e.to_string(),
+        })?;
     match response.status() {
         reqwest::StatusCode::OK => Ok(()),
         _ => Err(Error::ClickHouseWrite {

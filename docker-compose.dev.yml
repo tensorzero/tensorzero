@@ -11,6 +11,13 @@ services:
       nofile:
         soft: 262144
         hard: 262144
+  api:
+    command: ["api", "/app/tensorzero.test.toml"]
+    environment:
+      - CLICKHOUSE_URL=http://clickhouse:8123
+    volumes:
+      - ./tensorzero.test.toml:/app/tensorzero.test.toml
+
 
 volumes:
   clickhouse-data:

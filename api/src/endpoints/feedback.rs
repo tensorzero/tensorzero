@@ -1,5 +1,5 @@
-use axum::debug_handler;
 use axum::extract::State;
+use axum::{debug_handler, Json};
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -54,7 +54,7 @@ pub async fn feedback_handler(
         clickhouse_connection_info,
     }): AppState,
     StructuredJson(params): StructuredJson<Params>,
-) -> Result<(), Error> {
+) -> Result<Json<Value>, Error> {
     // Get the metric config or return an error if it doesn't exist
     let feedback_metadata = get_feedback_metadata(
         &config,
@@ -62,6 +62,7 @@ pub async fn feedback_handler(
         params.episode_id,
         params.inference_id,
     )?;
+    let feedback_id = Uuid::now_v7();
     match feedback_metadata.r#type {
         FeedbackType::Comment => {
             write_comment(
@@ -70,6 +71,7 @@ pub async fn feedback_handler(
                 feedback_metadata.target_id,
                 params.value,
                 feedback_metadata.level,
+                feedback_id,
                 params.dryrun.unwrap_or(false),
             )
             .await?
@@ -80,6 +82,7 @@ pub async fn feedback_handler(
                 clickhouse_connection_info,
                 feedback_metadata.target_id,
                 params.value,
+                feedback_id,
                 params.dryrun.unwrap_or(false),
             )
             .await?
@@ -92,6 +95,7 @@ pub async fn feedback_handler(
                 feedback_metadata.target_id,
                 params.value,
                 feedback_metadata.level,
+                feedback_id,
                 params.dryrun.unwrap_or(false),
             )
             .await?
@@ -104,12 +108,13 @@ pub async fn feedback_handler(
                 feedback_metadata.target_id,
                 params.value,
                 feedback_metadata.level,
+                feedback_id,
                 params.dryrun.unwrap_or(false),
             )
             .await?
         }
     }
-    Ok(())
+    Ok(Json(json!({"feedback_id": feedback_id})))
 }
 
 #[derive(Debug)]
@@ -176,12 +181,14 @@ async fn write_comment(
     target_id: Uuid,
     value: Value,
     level: MetricConfigLevel,
+    feedback_id: Uuid,
     dryrun: bool,
 ) -> Result<(), Error> {
     let value = value.as_str().ok_or(Error::InvalidRequest {
-        message: "Value for comment must be a string".to_string(),
+        message: "Value for comment feedback must be a string".to_string(),
     })?;
-    let payload = json!({"target_type": level, "target_id": target_id, "value": value});
+    let payload =
+        json!({"target_type": level, "target_id": target_id, "value": value, "id": feedback_id});
     if !dryrun {
         connection_info
             .write(&client, &payload, "CommentFeedback")
@@ -195,12 +202,13 @@ async fn write_demonstration(
     connection_info: ClickHouseConnectionInfo,
     inference_id: Uuid,
     value: Value,
+    feedback_id: Uuid,
     dryrun: bool,
 ) -> Result<(), Error> {
     let value = value.as_str().ok_or(Error::InvalidRequest {
-        message: "Value for demonstration must be a string".to_string(),
+        message: "Value for demonstration feedback must be a string".to_string(),
     })?;
-    let payload = json!({"inference_id": inference_id, "value": value});
+    let payload = json!({"inference_id": inference_id, "value": value, "id": feedback_id});
     if !dryrun {
         connection_info
             .write(&client, &payload, "DemonstrationFeedback")
@@ -209,6 +217,7 @@ async fn write_demonstration(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn write_float(
     client: Client,
     connection_info: ClickHouseConnectionInfo,
@@ -216,13 +225,13 @@ async fn write_float(
     target_id: Uuid,
     value: Value,
     level: MetricConfigLevel,
+    feedback_id: Uuid,
     dryrun: bool,
 ) -> Result<(), Error> {
     let value = value.as_f64().ok_or(Error::InvalidRequest {
-        message: "Value for float must be a number".to_string(),
+        message: "Value for float feedback must be a number".to_string(),
     })?;
-    let payload =
-        json!({"target_type": level, "target_id": target_id, "value": value, "name": name});
+    let payload = json!({"target_type": level, "target_id": target_id, "value": value, "name": name, "id": feedback_id});
     if !dryrun {
         connection_info
             .write(&client, &payload, "FloatMetricFeedback")
@@ -231,6 +240,7 @@ async fn write_float(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn write_boolean(
     client: Client,
     connection_info: ClickHouseConnectionInfo,
@@ -238,13 +248,13 @@ async fn write_boolean(
     target_id: Uuid,
     value: Value,
     level: MetricConfigLevel,
+    feedback_id: Uuid,
     dryrun: bool,
 ) -> Result<(), Error> {
     let value = value.as_bool().ok_or(Error::InvalidRequest {
-        message: "Value for boolean must be a boolean".to_string(),
+        message: "Value for boolean feedback must be a boolean".to_string(),
     })?;
-    let payload =
-        json!({"target_type": level, "target_id": target_id, "value": value, "name": name});
+    let payload = json!({"target_type": level, "target_id": target_id, "value": value, "name": name, "id": feedback_id});
     if !dryrun {
         connection_info
             .write(&client, &payload, "BooleanMetricFeedback")
@@ -380,6 +390,9 @@ mod tests {
         let response =
             feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
         assert!(response.is_ok());
+        let response_json = response.unwrap();
+        let feedback_id = response_json.get("feedback_id").unwrap();
+        assert!(feedback_id.is_string());
 
         // Check that the feedback was written
         let mock_data = app_state_data
@@ -427,6 +440,9 @@ mod tests {
         let response =
             feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
         assert!(response.is_ok());
+        let response_json = response.unwrap();
+        let feedback_id = response_json.get("feedback_id").unwrap();
+        assert!(feedback_id.is_string());
 
         // Check that the feedback was written
         let mock_data = app_state_data
@@ -489,6 +505,9 @@ mod tests {
         let response =
             feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
         assert!(response.is_ok());
+        let response_json = response.unwrap();
+        let feedback_id = response_json.get("feedback_id").unwrap();
+        assert!(feedback_id.is_string());
 
         // Check that the feedback was written
         let mock_data = app_state_data
@@ -533,6 +552,9 @@ mod tests {
         let response =
             feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
         assert!(response.is_ok());
+        let response_json = response.unwrap();
+        let feedback_id = response_json.get("feedback_id").unwrap();
+        assert!(feedback_id.is_string());
 
         // Check that the feedback was written
         let mock_data = app_state_data
@@ -565,6 +587,9 @@ mod tests {
         let response =
             feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
         assert!(response.is_ok());
+        let response_json = response.unwrap();
+        let feedback_id = response_json.get("feedback_id").unwrap();
+        assert!(feedback_id.is_string());
 
         // Check that the feedback was not written
         let mock_data = app_state_data

@@ -116,7 +116,7 @@ impl Error {
             Error::InvalidInputSchema { .. } => StatusCode::BAD_REQUEST,
             Error::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
             Error::InvalidProviderConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::InvalidRequest { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::InvalidRequest { .. } => StatusCode::BAD_REQUEST,
             Error::InvalidTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::JsonRequest { .. } => StatusCode::BAD_REQUEST,
             Error::OpenAIClient { status_code, .. } => *status_code,

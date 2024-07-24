@@ -6,6 +6,7 @@ edition = "2021"
 
 [features]
 integration_tests = []
+e2e_tests = []
 
 
 [dependencies]
@@ -27,6 +28,7 @@ tracing = { version = "0.1.40", features = ["log", "release_max_level_debug"] }
 uuid = { version = "1.10.0", features = ["serde", "v7"] }
 url = "2.5.2"
 derive_builder = "0.20.0"
+lazy_static = "1.5.0"
 
 
 [dev-dependencies]
