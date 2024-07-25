@@ -36,6 +36,7 @@ pub async fn shutdown_signal() {
             .expect("Failed to install Ctrl+C handler");
     };
 
+    #[cfg(unix)]
     let terminate = async {
         signal::unix::signal(signal::unix::SignalKind::terminate())
             .expect("Failed to install SIGTERM handler")
@@ -43,6 +44,7 @@ pub async fn shutdown_signal() {
             .await;
     };
 
+    #[cfg(unix)]
     let hangup = async {
         signal::unix::signal(signal::unix::SignalKind::hangup())
             .expect("Failed to install SIGHUP handler")
