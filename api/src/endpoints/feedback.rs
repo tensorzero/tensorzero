@@ -421,7 +421,7 @@ mod tests {
             metrics: Some(HashMap::new()),
             functions: HashMap::new(),
         };
-        let app_state_data = get_unit_test_app_state_data(config);
+        let app_state_data = get_unit_test_app_state_data(config, Some(true));
         let episode_id = Uuid::now_v7();
         let value = json!("test comment");
         let params = Params {
@@ -518,7 +518,7 @@ mod tests {
             metrics: Some(metrics),
             functions: HashMap::new(),
         };
-        let app_state_data = get_unit_test_app_state_data(config);
+        let app_state_data = get_unit_test_app_state_data(config, Some(true));
         let value = json!(4.5);
         let inference_id = Uuid::now_v7();
         let episode_id = Uuid::now_v7();
@@ -583,7 +583,7 @@ mod tests {
             metrics: Some(metrics),
             functions: HashMap::new(),
         };
-        let app_state_data = get_unit_test_app_state_data(config);
+        let app_state_data = get_unit_test_app_state_data(config, Some(true));
         let value = json!(true);
         let inference_id = Uuid::now_v7();
         let params = Params {
