@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use crate::error::Error;
 use crate::function::{FunctionConfig, VariantConfig};
+use crate::minijinja_util::initialize_templates;
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -97,6 +99,7 @@ impl Config {
         let config_table = Config::read_toml_config(&config_path);
         let config = Config::from(config_table);
         config.validate();
+        initialize_templates(&config.get_templates());
         config
     }
 
@@ -198,6 +201,29 @@ impl Config {
             .ok_or_else(|| Error::UnknownMetric {
                 name: metric_name.to_string(),
             })
+    }
+
+    /// Get all templates from the config
+    pub fn get_templates(&self) -> Vec<&PathBuf> {
+        let mut templates = Vec::new();
+        for function in self.functions.values() {
+            for variant in function.variants().values() {
+                match variant {
+                    VariantConfig::ChatCompletion(chat_config) => {
+                        if let Some(ref path) = chat_config.system_template {
+                            templates.push(path);
+                        }
+                        if let Some(ref path) = chat_config.user_template {
+                            templates.push(path);
+                        }
+                        if let Some(ref path) = chat_config.assistant_template {
+                            templates.push(path);
+                        }
+                    }
+                }
+            }
+        }
+        templates
     }
 }
 
