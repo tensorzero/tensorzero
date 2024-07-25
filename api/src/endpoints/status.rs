@@ -11,6 +11,7 @@ pub async fn status_handler() -> Json<Value> {
     Json(json!({ "status": "ok" }))
 }
 
+/// A handler for a health check that includes availability of related services (for now, ClickHouse)
 pub async fn health_handler(
     State(AppStateData {
         clickhouse_connection_info,
@@ -47,8 +48,16 @@ mod tests {
         let app_state_data = get_unit_test_app_state_data(config.clone(), Some(true));
         let response = health_handler(State(app_state_data)).await;
         assert!(response.is_ok());
+        let response_value = response.unwrap();
+        assert_eq!(response_value.get("api").unwrap(), "ok");
+        assert_eq!(response_value.get("clickhouse").unwrap(), "ok");
+
         let app_state_data = get_unit_test_app_state_data(config.clone(), Some(false));
         let response = health_handler(State(app_state_data)).await;
         assert!(response.is_err());
+        let (status_code, error_json) = response.unwrap_err();
+        assert_eq!(status_code, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(error_json.get("api").unwrap(), "ok");
+        assert_eq!(error_json.get("clickhouse").unwrap(), "error");
     }
 }

@@ -73,7 +73,6 @@ impl ClickHouseConnectionInfo {
         }
     }
 
-    // TODO: use this
     pub async fn health(&self) -> Result<(), Box<dyn std::error::Error>> {
         match self {
             Self::Mock { healthy, .. } => {
@@ -83,7 +82,7 @@ impl ClickHouseConnectionInfo {
                     Err("Mock ClickHouse is not healthy".into())
                 }
             }
-            Self::Production { url, client } => match client.get(url.clone()).send().await {
+            Self::Production { url, client } => match client.get(url).send().await {
                 Ok(_) => Ok(()),
                 Err(e) => Err(format!("ClickHouse is not healthy: {}", e).into()),
             },
