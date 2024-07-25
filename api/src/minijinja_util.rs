@@ -30,6 +30,8 @@ pub fn initialize_templates(template_paths: &[&PathBuf]) {
 }
 
 #[allow(dead_code)]
+// Templates a message with a MiniJinja template.
+// NB: Pass None in for the environment in production code.
 pub fn template_message(
     template_name: &str,
     context: &Value,
