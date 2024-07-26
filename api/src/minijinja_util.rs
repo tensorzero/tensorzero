@@ -7,7 +7,7 @@ use crate::error::Error;
 
 static MINIJINJA_ENV: OnceCell<Environment> = OnceCell::new();
 
-/// Initializes the ENV with the given templates, given as a list of paths to the templates.
+/// Initializes the MINIJINJA_ENV with the given templates, given as a list of paths to the templates.
 /// The name of each template in the environment will simply be the path to that template.
 /// This should be called once at startup.
 pub fn initialize_templates(template_paths: &[&PathBuf]) {
