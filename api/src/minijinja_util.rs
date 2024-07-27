@@ -18,7 +18,6 @@ pub fn initialize_templates(template_paths: &[&PathBuf]) {
             .to_str()
             .unwrap_or_else(|| panic!("Invalid template file path: {}", path.display()))
             .to_owned();
-        println!("Adding template: {}", template_name);
         let template_content = std::fs::read_to_string(path).expect("Failed to read template file");
         env.add_template_owned(template_name, template_content)
             .unwrap_or_else(|e| panic!("Failed to add template at {}: {}", path.display(), e));
