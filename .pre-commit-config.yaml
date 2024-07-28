@@ -17,6 +17,14 @@ repos:
 
   - repo: local
     hooks:
+      - id: cargo-deny
+        name: cargo deny
+        entry: cargo deny check bans
+        language: system
+        types: [rust]
+        pass_filenames: false
+        always_run: true
+
       - id: cargo-fmt
         name: cargo fmt
         entry: cargo fmt -- --check
