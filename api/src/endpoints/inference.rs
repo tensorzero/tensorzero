@@ -9,7 +9,8 @@ use uuid::Uuid;
 
 use crate::api_util::{AppState, AppStateData, StructuredJson};
 use crate::error::Error;
-use crate::function::{InputMessage, VariantConfig};
+use crate::function::VariantConfig;
+use crate::inference::types::InputMessage;
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Deserialize)]

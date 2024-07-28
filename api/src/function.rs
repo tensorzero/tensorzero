@@ -1,9 +1,9 @@
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::collections::HashMap;
-use std::fmt;
 use std::path::PathBuf;
 
 use crate::error::Error;
+use crate::inference::types::{InputMessage, InputMessageRole};
 use crate::jsonschema_util::JSONSchemaFromPath;
 
 #[derive(Clone, Debug, Deserialize)]
@@ -64,31 +64,10 @@ impl VariantConfig {
 #[serde(deny_unknown_fields)]
 pub struct ChatCompletionConfig {
     pub weight: f64,
-    pub model: String,
+    pub model: String, // TODO: validate that the model is valid given the rest of the config
     pub system_template: Option<PathBuf>,
     pub user_template: Option<PathBuf>,
     pub assistant_template: Option<PathBuf>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum InputMessageRole {
-    System,
-    User,
-    Assistant,
-}
-
-impl fmt::Display for InputMessageRole {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", serde_json::to_string(self).unwrap_or_default())
-    }
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct InputMessage {
-    role: InputMessageRole,
-    content: serde_json::Value,
 }
 
 impl FunctionConfig {

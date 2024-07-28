@@ -3,12 +3,36 @@ use futures::Stream;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
+    fmt,
     pin::Pin,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use uuid::Uuid;
 
 use crate::error::Error;
+
+/// InputMessage and InputMessageRole are our representation of the input sent by the client
+/// prior to any processing into LLM representations below.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InputMessageRole {
+    System,
+    User,
+    Assistant,
+}
+
+impl fmt::Display for InputMessageRole {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", serde_json::to_string(self).unwrap_or_default())
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InputMessage {
+    pub role: InputMessageRole,
+    pub content: serde_json::Value,
+}
 
 /// Top-level TensorZero type for an inference request to a particular model.
 /// This should contain all the information required to make a valid inference request
