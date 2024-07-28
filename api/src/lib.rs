@@ -8,3 +8,4 @@ pub mod inference; // model inference
 mod jsonschema_util; // utilities for working with JSON schemas
 mod minijinja_util; // utilities for working with MiniJinja templates
 mod testing;
+mod variant; // types and methods for working with TensorZero variants

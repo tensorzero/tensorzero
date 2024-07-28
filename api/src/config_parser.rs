@@ -3,8 +3,9 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::error::Error;
-use crate::function::{FunctionConfig, VariantConfig};
+use crate::function::FunctionConfig;
 use crate::minijinja_util::initialize_templates;
+use crate::variant::VariantConfig;
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
