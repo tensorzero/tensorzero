@@ -2,8 +2,8 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:latest
     ports:
-      - "8123:8123"  # HTTP port
-      - "9000:9000"  # Native port
+      - "8123:8123" # HTTP port
+      - "9000:9000" # Native port
     volumes:
       - ../../../clickhouse/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     ulimits:
@@ -13,8 +13,12 @@ services:
   api:
     container_name: tensorzero-api-e2e-test
     build:
-      context: ../../..
+      context: ../..
       target: api
+      cache_from:
+        - type=gha
+      cache_to:
+        - type=gha
     ports:
       - 3000:3000
 

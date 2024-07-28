@@ -1,0 +1,76 @@
+name: Build and Test
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+# env:
+#   ALLOY_OTLP_GRPC_ENDPOINT: "not-used-in-ci"
+#   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#   AWS_DEFAULT_REGION: us-east-2
+#   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#   API_CLICKHOUSE_URL: http://localhost:8123/
+#   CACHE_INVALIDATION_SECRET: "not-used-in-ci"
+#   CACHE_TIMEOUT_MS: 20
+#   DATABASE_URL: mysql://root:root@localhost:3306/tensorzero
+#   FORCE_COLOR: 1
+#   OPENAI_MOCK_BASE: http://localhost:9001
+#   PEL_MIN_AGE_MS: 60000 # 1 minute
+#   PEL_PERIOD_S: 60 # 1 minute
+#   PEL_RETRIES: 5
+#   STREAM_TIMEOUT_MS: 1000
+#   TEST_REDIS_URL: redis://localhost:6379/
+#   TRITON_INFERENCE_PASSWORD: ${{ secrets.TRITON_INFERENCE_PASSWORD }}
+#   TRITON_INFERENCE_USERNAME: tensorzero
+
+jobs:
+  run:
+    runs-on: ubuntu-22.04-8core
+
+    timeout-minutes: 30
+
+    # permissions:
+    #   id-token: write # Needed for the Amazon ECR login action
+    #   contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      #   - name: Login to DockerHub
+      #     uses: docker/login-action@v3
+      #     with:
+      #       username: ${{ secrets.DOCKERHUB_USERNAME }}
+      #       password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Cache Cargo Home
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/git/
+            ~/.cargo/registry/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+          save-always: true
+
+      - name: Build (Rust)
+        run: cargo build --verbose
+
+      - name: Launch containers for E2E tests
+        run: docker compose -f api/tests/e2e/docker-compose.yml up -d
+
+      #   - name: Test (Rust)
+      #     if: github.ref != 'refs/heads/main'
+      #     run: |
+      #       cargo test
+
+      - name: Test (Rust) (including integration and E2E)
+        # if: github.ref == 'refs/heads/main'
+        run: |
+          cargo test --features integration_tests,e2e_tests
