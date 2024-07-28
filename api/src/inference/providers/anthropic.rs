@@ -9,12 +9,12 @@ use uuid::Uuid;
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::{
-    config_parser::ProviderConfig,
     inference::types::{
         InferenceRequestMessage, InferenceResponseChunk, InferenceResponseStream,
         ModelInferenceRequest, ModelInferenceResponse, Tool, ToolCall, ToolCallChunk, ToolChoice,
         ToolType, Usage,
     },
+    model::ProviderConfig,
 };
 
 const ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com/v1/messages";
@@ -24,12 +24,12 @@ pub struct AnthropicProvider;
 
 impl InferenceProvider for AnthropicProvider {
     /// Anthropic non-streaming API request
-    async fn infer(
-        &self,
-        request: &ModelInferenceRequest,
-        model: &ProviderConfig,
-        http_client: &reqwest::Client,
-        api_key: &SecretString,
+    async fn infer<'a>(
+        &'a self,
+        request: &'a ModelInferenceRequest<'a>,
+        model: &'a ProviderConfig,
+        http_client: &'a reqwest::Client,
+        api_key: &'a SecretString,
     ) -> Result<ModelInferenceResponse, Error> {
         let model_name = match model {
             ProviderConfig::Anthropic { model_name } => model_name,
@@ -72,12 +72,12 @@ impl InferenceProvider for AnthropicProvider {
     }
 
     /// Anthropic streaming API request
-    async fn infer_stream(
-        &self,
-        request: &ModelInferenceRequest,
-        model: &ProviderConfig,
-        http_client: &reqwest::Client,
-        api_key: &SecretString,
+    async fn infer_stream<'a>(
+        &'a self,
+        request: &'a ModelInferenceRequest<'a>,
+        model: &'a ProviderConfig,
+        http_client: &'a reqwest::Client,
+        api_key: &'a SecretString,
     ) -> Result<InferenceResponseStream, Error> {
         let model_name = match model {
             ProviderConfig::Anthropic { model_name } => model_name,

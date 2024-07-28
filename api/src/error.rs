@@ -46,6 +46,7 @@ pub enum Error {
     InvalidRequest {
         message: String,
     },
+    InvalidTemplatePath,
     InvalidTool {
         message: String,
     },
@@ -97,6 +98,7 @@ impl Error {
             Error::InvalidMessage { .. } => tracing::Level::WARN,
             Error::InvalidProviderConfig { .. } => tracing::Level::ERROR,
             Error::InvalidRequest { .. } => tracing::Level::ERROR,
+            Error::InvalidTemplatePath => tracing::Level::ERROR,
             Error::InvalidTool { .. } => tracing::Level::ERROR,
             Error::JsonRequest { .. } => tracing::Level::WARN,
             Error::MiniJinjaTemplateMissing { .. } => tracing::Level::ERROR,
@@ -126,6 +128,7 @@ impl Error {
             Error::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
             Error::InvalidProviderConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InvalidRequest { .. } => StatusCode::BAD_REQUEST,
+            Error::InvalidTemplatePath => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InvalidTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::JsonRequest { .. } => StatusCode::BAD_REQUEST,
             Error::MiniJinjaTemplateMissing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -183,6 +186,9 @@ impl std::fmt::Display for Error {
             Error::InvalidMessage { message } => write!(f, "{}", message),
             Error::InvalidProviderConfig { message } => write!(f, "{}", message),
             Error::InvalidRequest { message } => write!(f, "{}", message),
+            Error::InvalidTemplatePath => {
+                write!(f, "Template path failed to convert to Rust string")
+            }
             Error::InvalidTool { message } => write!(f, "{}", message),
             Error::JsonRequest { message } => write!(f, "{}", message),
             Error::MiniJinjaTemplateMissing { template_name } => {

@@ -19,6 +19,7 @@ pub enum InputMessageRole {
     System,
     User,
     Assistant,
+    // TODO: add Tool
 }
 
 impl fmt::Display for InputMessageRole {
@@ -42,7 +43,7 @@ pub struct InputMessage {
 /// but the client actually just wants a chat response.
 #[derive(Builder, Clone, Debug, Default, PartialEq)]
 #[builder(setter(into, strip_option), default)]
-pub struct ModelInferenceRequest {
+pub struct ModelInferenceRequest<'a> {
     pub messages: Vec<InferenceRequestMessage>,
     pub tools_available: Option<Vec<Tool>>,
     pub tool_choice: Option<ToolChoice>,
@@ -52,7 +53,7 @@ pub struct ModelInferenceRequest {
     pub stream: bool,
     pub json_mode: bool,
     pub function_type: FunctionType,
-    pub output_schema: Option<Value>,
+    pub output_schema: Option<&'a Value>,
 }
 
 /// FunctionType denotes whether the request is a chat or tool call.

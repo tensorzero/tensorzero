@@ -109,13 +109,7 @@ impl FunctionConfig {
                         Ok(())
                     }
                 }
-            }
-            .map_err(|e| Error::InvalidInputSchema {
-                messages: e
-                    .into_iter()
-                    .map(|error| error.to_string())
-                    .collect::<Vec<String>>(),
-            })?;
+            }?;
         }
 
         Ok(())

@@ -7,7 +7,6 @@ use serde_json::Value;
 use url::Url;
 use uuid::Uuid;
 
-use crate::config_parser::ProviderConfig;
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
@@ -15,18 +14,19 @@ use crate::inference::types::{
     ModelInferenceRequest, ModelInferenceResponse, Tool, ToolCall, ToolCallChunk, ToolChoice,
     ToolType, Usage,
 };
+use crate::model::ProviderConfig;
 
 const OPENAI_DEFAULT_BASE_URL: &str = "https://api.openai.com/v1/";
 
 pub struct OpenAIProvider;
 
 impl InferenceProvider for OpenAIProvider {
-    async fn infer(
-        &self,
-        request: &ModelInferenceRequest,
-        model: &ProviderConfig,
-        http_client: &reqwest::Client,
-        api_key: &SecretString,
+    async fn infer<'a>(
+        &'a self,
+        request: &'a ModelInferenceRequest<'a>,
+        model: &'a ProviderConfig,
+        http_client: &'a reqwest::Client,
+        api_key: &'a SecretString,
     ) -> Result<ModelInferenceResponse, Error> {
         let (model_name, api_base) = match model {
             ProviderConfig::OpenAI {
@@ -72,12 +72,12 @@ impl InferenceProvider for OpenAIProvider {
         }
     }
 
-    async fn infer_stream(
-        &self,
-        request: &ModelInferenceRequest,
-        model: &ProviderConfig,
-        http_client: &reqwest::Client,
-        api_key: &SecretString,
+    async fn infer_stream<'a>(
+        &'a self,
+        request: &'a ModelInferenceRequest<'a>,
+        model: &'a ProviderConfig,
+        http_client: &'a reqwest::Client,
+        api_key: &'a SecretString,
     ) -> Result<InferenceResponseStream, Error> {
         let (model_name, api_base) = match model {
             ProviderConfig::OpenAI {
@@ -116,12 +116,12 @@ pub struct FireworksProvider;
 /// - Fireworks allows you to auto-truncate requests that have too many tokens
 ///   (there are 2 ways to do it, we have the default of auto-truncation to the max window size)
 impl InferenceProvider for FireworksProvider {
-    async fn infer(
-        &self,
-        request: &ModelInferenceRequest,
-        model: &ProviderConfig,
-        http_client: &reqwest::Client,
-        api_key: &SecretString,
+    async fn infer<'a>(
+        &'a self,
+        request: &'a ModelInferenceRequest<'a>,
+        model: &'a ProviderConfig,
+        http_client: &'a reqwest::Client,
+        api_key: &'a SecretString,
     ) -> Result<ModelInferenceResponse, Error> {
         let model_name = match model {
             ProviderConfig::Fireworks { model_name } => model_name,
@@ -168,12 +168,12 @@ impl InferenceProvider for FireworksProvider {
         }
     }
 
-    async fn infer_stream(
-        &self,
-        request: &ModelInferenceRequest,
-        model: &ProviderConfig,
-        http_client: &reqwest::Client,
-        api_key: &SecretString,
+    async fn infer_stream<'a>(
+        &'a self,
+        request: &'a ModelInferenceRequest<'a>,
+        model: &'a ProviderConfig,
+        http_client: &'a reqwest::Client,
+        api_key: &'a SecretString,
     ) -> Result<InferenceResponseStream, Error> {
         let model_name = match model {
             ProviderConfig::Fireworks { model_name } => model_name,
@@ -588,7 +588,7 @@ impl<'a> FireworksRequest<'a> {
     pub fn new(model: &'a str, request: &'a ModelInferenceRequest) -> FireworksRequest<'a> {
         let response_format = match request.json_mode {
             true => FireworksResponseFormat::JsonObject {
-                schema: request.output_schema.as_ref(),
+                schema: request.output_schema,
             },
             false => FireworksResponseFormat::Text,
         };
@@ -994,7 +994,7 @@ mod tests {
         assert_eq!(
             fireworks_request.response_format,
             FireworksResponseFormat::JsonObject {
-                schema: request_with_tools.output_schema.as_ref(),
+                schema: request_with_tools.output_schema,
             }
         );
         assert!(fireworks_request.tools.is_some());

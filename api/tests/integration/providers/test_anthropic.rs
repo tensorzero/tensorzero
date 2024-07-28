@@ -3,7 +3,7 @@ use crate::integration::providers::common::{
     create_tool_inference_request,
 };
 use api::inference::providers::provider_trait::InferenceProvider;
-use api::{config_parser::ProviderConfig, inference::providers::anthropic::AnthropicProvider};
+use api::{inference::providers::anthropic::AnthropicProvider, model::ProviderConfig};
 use futures::StreamExt;
 use secrecy::SecretString;
 use std::env;

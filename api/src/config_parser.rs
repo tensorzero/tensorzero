@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use crate::error::Error;
 use crate::function::FunctionConfig;
 use crate::minijinja_util::initialize_templates;
+use crate::model::ModelConfig;
 use crate::variant::VariantConfig;
 
 #[derive(Clone, Debug, Deserialize)]
@@ -13,36 +14,6 @@ pub struct Config {
     pub models: HashMap<String, ModelConfig>, // model name => model config
     pub functions: HashMap<String, FunctionConfig>, // function name => function config
     pub metrics: Option<HashMap<String, MetricConfig>>, // metric name => metric config
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ModelConfig {
-    pub routing: Vec<String>, // [provider name A, provider name B, ...]
-    pub providers: HashMap<String, ProviderConfig>, // provider name => provider config
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(tag = "type")]
-#[serde(rename_all = "lowercase")]
-#[serde(deny_unknown_fields)]
-pub enum ProviderConfig {
-    Anthropic {
-        model_name: String,
-    },
-    Azure {
-        model_name: String,
-        api_base: String,
-    },
-    #[serde(rename = "openai")]
-    OpenAI {
-        model_name: String,
-        api_base: Option<String>,
-    },
-    #[serde(rename = "fireworks")]
-    Fireworks {
-        model_name: String,
-    },
 }
 
 #[derive(Clone, Debug, Deserialize)]
