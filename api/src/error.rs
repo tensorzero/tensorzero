@@ -60,12 +60,18 @@ pub enum Error {
         template_name: String,
         message: String,
     },
+    ModelProvidersExhausted {
+        provider_errors: Vec<Error>,
+    },
     OpenAIClient {
         message: String,
         status_code: StatusCode,
     },
     OpenAIServer {
         message: String,
+    },
+    ProviderNotFound {
+        provider_name: String,
     },
     Serialization {
         message: String,
@@ -103,8 +109,10 @@ impl Error {
             Error::JsonRequest { .. } => tracing::Level::WARN,
             Error::MiniJinjaTemplateMissing { .. } => tracing::Level::ERROR,
             Error::MiniJinjaTemplateRender { .. } => tracing::Level::ERROR,
+            Error::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
             Error::OpenAIClient { .. } => tracing::Level::WARN,
             Error::OpenAIServer { .. } => tracing::Level::ERROR,
+            Error::ProviderNotFound { .. } => tracing::Level::ERROR,
             Error::Serialization { .. } => tracing::Level::ERROR,
             Error::UnknownFunction { .. } => tracing::Level::WARN,
             Error::UnknownVariant { .. } => tracing::Level::WARN,
@@ -133,8 +141,10 @@ impl Error {
             Error::JsonRequest { .. } => StatusCode::BAD_REQUEST,
             Error::MiniJinjaTemplateMissing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::MiniJinjaTemplateRender { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::OpenAIClient { status_code, .. } => *status_code,
             Error::OpenAIServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::ProviderNotFound { .. } => StatusCode::NOT_FOUND,
             Error::Serialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::UnknownFunction { .. } => StatusCode::NOT_FOUND,
             Error::UnknownVariant { .. } => StatusCode::NOT_FOUND,
@@ -200,10 +210,24 @@ impl std::fmt::Display for Error {
             } => {
                 write!(f, "Error rendering template {}: {}", template_name, message)
             }
+            Error::ModelProvidersExhausted { provider_errors } => {
+                write!(
+                    f,
+                    "All model providers failed to infer with errors: {}",
+                    provider_errors
+                        .iter()
+                        .map(|e| e.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
             Error::OpenAIClient { message, .. } => {
                 write!(f, "Error from OpenAI client: {}", message)
             }
             Error::OpenAIServer { message } => write!(f, "Error from OpenAI servers: {}", message),
+            Error::ProviderNotFound { provider_name } => {
+                write!(f, "Provider not found: {}", provider_name)
+            }
             Error::Serialization { message } => write!(f, "{}", message),
             Error::UnknownFunction { name } => write!(f, "Unknown function: {}", name),
             Error::UnknownVariant { name } => write!(f, "Unknown variant: {}", name),

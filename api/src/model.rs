@@ -20,6 +20,54 @@ pub struct ModelConfig {
     pub providers: HashMap<String, ProviderConfig>, // provider name => provider config
 }
 
+impl ModelConfig {
+    pub async fn infer<'a>(
+        &'a self,
+        request: &'a ModelInferenceRequest<'a>,
+        client: &'a Client,
+        api_key: &'a SecretString,
+    ) -> Result<ModelInferenceResponse, Error> {
+        let mut provider_errors = Vec::new();
+        for provider_name in &self.routing {
+            let provider_config =
+                self.providers
+                    .get(provider_name)
+                    .ok_or(Error::ProviderNotFound {
+                        provider_name: provider_name.clone(),
+                    })?;
+            let response = provider_config.infer(request, client, api_key).await;
+            match response {
+                Ok(response) => return Ok(response),
+                Err(error) => provider_errors.push(error),
+            }
+        }
+        Err(Error::ModelProvidersExhausted { provider_errors })
+    }
+
+    pub async fn infer_stream<'a>(
+        &'a self,
+        request: &'a ModelInferenceRequest<'a>,
+        client: &'a Client,
+        api_key: &'a SecretString,
+    ) -> Result<InferenceResponseStream, Error> {
+        let mut provider_errors = Vec::new();
+        for provider_name in &self.routing {
+            let provider_config =
+                self.providers
+                    .get(provider_name)
+                    .ok_or(Error::ProviderNotFound {
+                        provider_name: provider_name.clone(),
+                    })?;
+            let response = provider_config.infer_stream(request, client, api_key).await;
+            match response {
+                Ok(response) => return Ok(response),
+                Err(error) => provider_errors.push(error),
+            }
+        }
+        Err(Error::ModelProvidersExhausted { provider_errors })
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
@@ -48,46 +96,42 @@ static OPENAI_PROVIDER: OpenAIProvider = OpenAIProvider;
 static FIREWORKS_PROVIDER: FireworksProvider = FireworksProvider;
 
 impl ProviderConfig {
-    async fn infer<'a>(
+    pub async fn infer<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
-        config: &'a ProviderConfig,
         client: &'a Client,
         api_key: &'a SecretString,
     ) -> Result<ModelInferenceResponse, Error> {
         match self {
             ProviderConfig::Anthropic { .. } => {
                 ANTHROPIC_PROVIDER
-                    .infer(request, config, client, api_key)
+                    .infer(request, self, client, api_key)
                     .await
             }
             ProviderConfig::Azure { .. } => {
                 todo!()
             }
             ProviderConfig::OpenAI { .. } => {
-                OPENAI_PROVIDER
-                    .infer(request, config, client, api_key)
-                    .await
+                OPENAI_PROVIDER.infer(request, self, client, api_key).await
             }
             ProviderConfig::Fireworks { .. } => {
                 FIREWORKS_PROVIDER
-                    .infer(request, config, client, api_key)
+                    .infer(request, self, client, api_key)
                     .await
             }
         }
     }
 
-    async fn infer_stream<'a>(
+    pub async fn infer_stream<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
-        config: &'a ProviderConfig,
         client: &'a Client,
         api_key: &'a SecretString,
     ) -> Result<InferenceResponseStream, Error> {
         match self {
             ProviderConfig::Anthropic { .. } => {
                 ANTHROPIC_PROVIDER
-                    .infer_stream(request, config, client, api_key)
+                    .infer_stream(request, self, client, api_key)
                     .await
             }
             ProviderConfig::Azure { .. } => {
@@ -95,12 +139,12 @@ impl ProviderConfig {
             }
             ProviderConfig::OpenAI { .. } => {
                 OPENAI_PROVIDER
-                    .infer_stream(request, config, client, api_key)
+                    .infer_stream(request, self, client, api_key)
                     .await
             }
             ProviderConfig::Fireworks { .. } => {
                 FIREWORKS_PROVIDER
-                    .infer_stream(request, config, client, api_key)
+                    .infer_stream(request, self, client, api_key)
                     .await
             }
         }
