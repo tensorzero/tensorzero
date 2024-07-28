@@ -47,13 +47,23 @@ jobs:
       - name: Build (Rust)
         run: cargo build --verbose
 
-      - name: Launch containers for E2E tests
-        run: docker compose -f api/tests/e2e/docker-compose.yml up -d
+      - name: Lint (Rust)
+        run: |
+          cargo fmt -- --check
+          cargo clippy --all-targets --all-features -- -D warnings
+
+      - uses: EmbarkStudios/cargo-deny-action@v1
+        with:
+          command: check bans
 
       #   - name: Test (Rust)
       #     if: github.ref != 'refs/heads/main'
       #     run: |
       #       cargo test
+
+      - name: Launch containers for E2E tests
+        # if: github.ref == 'refs/heads/main'
+        run: docker compose -f api/tests/e2e/docker-compose.yml up -d
 
       - name: Test (Rust) (including integration and E2E)
         # if: github.ref == 'refs/heads/main'
