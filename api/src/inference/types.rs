@@ -142,12 +142,22 @@ pub enum Latency {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ModelInferenceResponse {
+    pub id: Uuid,
+    pub created: u64,
+    pub content: Option<String>,
+    pub tool_calls: Option<Vec<ToolCall>>,
+    pub raw: String,
+    pub usage: Usage,
+}
+
+pub struct InferenceResponse {
     pub inference_id: Uuid,
     pub created: u64,
     pub content: Option<String>,
     pub tool_calls: Option<Vec<ToolCall>>,
     pub raw: String,
     pub usage: Usage,
+    pub model_inference_responses: Vec<ModelInferenceResponse>,
 }
 
 impl ModelInferenceResponse {
@@ -158,7 +168,7 @@ impl ModelInferenceResponse {
         usage: Usage,
     ) -> Self {
         Self {
-            inference_id: Uuid::now_v7(),
+            id: Uuid::now_v7(),
             created: current_timestamp(),
             content,
             tool_calls,
