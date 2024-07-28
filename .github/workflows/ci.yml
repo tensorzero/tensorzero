@@ -6,24 +6,9 @@ on:
   pull_request:
     branches: ["main"]
 
-# env:
-#   ALLOY_OTLP_GRPC_ENDPOINT: "not-used-in-ci"
-#   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-#   AWS_DEFAULT_REGION: us-east-2
-#   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-#   API_CLICKHOUSE_URL: http://localhost:8123/
-#   CACHE_INVALIDATION_SECRET: "not-used-in-ci"
-#   CACHE_TIMEOUT_MS: 20
-#   DATABASE_URL: mysql://root:root@localhost:3306/tensorzero
-#   FORCE_COLOR: 1
-#   OPENAI_MOCK_BASE: http://localhost:9001
-#   PEL_MIN_AGE_MS: 60000 # 1 minute
-#   PEL_PERIOD_S: 60 # 1 minute
-#   PEL_RETRIES: 5
-#   STREAM_TIMEOUT_MS: 1000
-#   TEST_REDIS_URL: redis://localhost:6379/
-#   TRITON_INFERENCE_PASSWORD: ${{ secrets.TRITON_INFERENCE_PASSWORD }}
-#   TRITON_INFERENCE_USERNAME: tensorzero
+env:
+  CLICKHOUSE_URL: "http://localhost:8123" # for E2E tests
+  FORCE_COLOR: 1
 
 jobs:
   run:
