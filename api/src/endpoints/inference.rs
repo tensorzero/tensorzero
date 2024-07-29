@@ -89,6 +89,18 @@ pub async fn inference_handler(
         // TODO: remove the variant that was sampled
 
         todo!("Run inference and store results");
+
+        // TODO: add metrics
+        // if !dryrun {
+        //     // TODO: add integration/E2E test that checks the Prometheus endpoint
+        //     counter!(
+        //         "request_count",
+        //         "endpoint" => "inference",
+        //         "function_name" => params.function_name.to_string(),
+        //         "variant_name" => variant_name.to_string()
+        //     )
+        //     .increment(1);
+        // }
     }
 
     // Eventually, if we get here, it means we tried every variant and none of them worked

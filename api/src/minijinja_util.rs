@@ -13,15 +13,20 @@ static MINIJINJA_ENV: OnceCell<Environment> = OnceCell::new();
 pub fn initialize_templates(template_paths: &[&PathBuf]) {
     let mut env = Environment::new();
     env.set_undefined_behavior(UndefinedBehavior::Strict);
+
     for path in template_paths {
         let template_name = path
             .to_str()
             .unwrap_or_else(|| panic!("Invalid template file path: {}", path.display()))
             .to_owned();
-        let template_content = std::fs::read_to_string(path).expect("Failed to read template file");
+
+        let template_content = std::fs::read_to_string(path)
+            .unwrap_or_else(|_| panic!("Failed to read template file: {}", path.display()));
+
         env.add_template_owned(template_name, template_content)
             .unwrap_or_else(|e| panic!("Failed to add template at {}: {}", path.display(), e));
     }
+
     MINIJINJA_ENV
         .set(env)
         .expect("Jinja environment already initialized");

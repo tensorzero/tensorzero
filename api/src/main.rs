@@ -8,9 +8,13 @@ use tokio::signal;
 
 use api::api_util;
 use api::endpoints;
+use api::observability;
 
 #[tokio::main]
 async fn main() {
+    // Set up observability
+    observability::setup();
+
     let router = Router::new()
         .route("/inference", post(endpoints::inference::inference_handler))
         .route("/feedback", post(endpoints::feedback::feedback_handler))

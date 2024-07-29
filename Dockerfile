@@ -6,7 +6,7 @@ WORKDIR /src
 
 RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
 
-COPY . .
+COPY ./api .
 
 RUN --mount=type=cache,id=tensorzero-api-release,sharing=shared,target=/usr/local/cargo/registry \
     --mount=type=cache,id=tensorzero-api-release,sharing=shared,target=/usr/local/cargo/git \
@@ -25,5 +25,7 @@ RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/
 FROM base AS api
 
 COPY --from=builder /release/api /usr/local/bin/api
+
+COPY ./functions ./functions
 
 CMD ["api"]
