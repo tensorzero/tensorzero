@@ -58,6 +58,27 @@ impl VariantConfig {
             VariantConfig::ChatCompletion(params) => params.weight,
         }
     }
+
+    // TODO: return a reference to the template itself (not the path)
+    pub fn system_template(&self) -> Option<&PathBuf> {
+        match self {
+            VariantConfig::ChatCompletion(params) => params.system_template.as_ref(),
+        }
+    }
+
+    // TODO: return a reference to the template itself (not the path)
+    pub fn user_template(&self) -> Option<&PathBuf> {
+        match self {
+            VariantConfig::ChatCompletion(params) => params.user_template.as_ref(),
+        }
+    }
+
+    // TODO: return a reference to the template itself (not the path)
+    pub fn assistant_template(&self) -> Option<&PathBuf> {
+        match self {
+            VariantConfig::ChatCompletion(params) => params.assistant_template.as_ref(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
