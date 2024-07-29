@@ -24,6 +24,13 @@ impl FunctionConfig {
             FunctionConfig::Tool(params) => &params.variants,
         }
     }
+
+    pub fn output_schema(&self) -> Option<&JSONSchemaFromPath> {
+        match self {
+            FunctionConfig::Chat(params) => params.output_schema.as_ref(),
+            FunctionConfig::Tool(params) => params.output_schema.as_ref(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -117,11 +124,11 @@ impl FunctionConfig {
 }
 
 /// Sample a variant from the function based on variant weights (uniform random selection)
-pub fn sample_variant<'a>(
-    variants: &'a HashMap<String, VariantConfig>,
-    function_name: &'a str,
+pub fn sample_variant(
+    variants: &mut HashMap<String, VariantConfig>,
+    function_name: &str,
     episode_id: &Uuid,
-) -> Result<(&'a String, &'a VariantConfig), Error> {
+) -> Result<(String, VariantConfig), Error> {
     // Compute the total weight of all variants
     let total_weight = variants
         .values()
@@ -142,19 +149,33 @@ pub fn sample_variant<'a>(
 
     // Iterate over the variants to find the one that corresponds to the sampled threshold
     let mut cumulative_weight = 0.;
+    let mut sampled_variant_name = String::new();
     for (variant_name, variant) in variants.iter() {
         cumulative_weight += variant.weight();
         if cumulative_weight > random_threshold {
-            return Ok((variant_name, variant));
+            sampled_variant_name = variant_name.clone();
+            break;
         }
     }
 
-    // Return the last variant as a fallback (this should only happen due to rare numerical precision issues)
+    // If we didn't find a variant (which should only happen due to rare numerical precision issues),
+    // use the last variant as a fallback
+    if sampled_variant_name.is_empty() {
+        sampled_variant_name = variants
+            .keys()
+            .last()
+            .ok_or_else(|| Error::InvalidFunctionVariants {
+                message: format!("Function `{function_name}` has no variants"),
+            })?
+            .clone();
+    }
+
+    // Remove and return the sampled variant
     variants
-        .iter()
-        .last()
+        .remove(&sampled_variant_name)
+        .map(|variant| (sampled_variant_name, variant))
         .ok_or_else(|| Error::InvalidFunctionVariants {
-            message: format!("Function `{function_name}` has no variants"),
+            message: format!("Failed to remove sampled variant from function `{function_name}`"),
         })
 }
 
@@ -754,7 +775,8 @@ mod tests {
 
             for _ in 0..sample_size {
                 let (variant_name, _) =
-                    sample_variant(variants, "test_function", &Uuid::now_v7()).unwrap();
+                    sample_variant(&mut variants.clone(), "test_function", &Uuid::now_v7())
+                        .unwrap();
                 *counts.entry(variant_name.clone()).or_insert(0) += 1;
             }
 

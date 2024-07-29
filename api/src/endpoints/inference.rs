@@ -9,6 +9,7 @@ use crate::api_util::{AppState, AppStateData, StructuredJson};
 use crate::error::Error;
 use crate::function::sample_variant;
 use crate::inference::types::InputMessage;
+use crate::variant::Variant;
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Deserialize)]
@@ -37,7 +38,11 @@ pub struct Params {
 /// A handler for the inference endpoint
 #[debug_handler(state = AppStateData)]
 pub async fn inference_handler(
-    State(AppStateData { config, .. }): AppState,
+    State(AppStateData {
+        config,
+        http_client,
+        ..
+    }): AppState,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
     // Get the function config or return an error if it doesn't exist
@@ -77,20 +82,46 @@ pub async fn inference_handler(
     let dryrun = params.dryrun.unwrap_or(false);
 
     // Should we stream the inference?
-    #[allow(unused)] // TODO: remove
     let stream = params.stream.unwrap_or(false);
+
+    let mut models_tried = std::collections::HashSet::new();
 
     // Keep sampling variants until one succeeds
     while !variants.is_empty() {
-        #[allow(unused)] // TODO: remove
         let (variant_name, variant) =
-            sample_variant(&variants, &params.function_name, &episode_id)?;
-        // TODO: remove the variant that was sampled
+            sample_variant(&mut variants, &params.function_name, &episode_id)?;
+        // `insert` returns false if the value was already in the set
+        if !models_tried.insert(variant_name.clone()) {
+            continue;
+        }
+        if stream {
+            #[allow(unused)] // TODO: remove
+            let stream = variant
+                .infer_stream(
+                    &params.input,
+                    &config.models,
+                    function.output_schema(),
+                    &http_client,
+                )
+                .await?;
+            // TODO: handle streaming inference
+        } else {
+            variant
+                .infer(
+                    &params.input,
+                    &config.models,
+                    function.output_schema(),
+                    &http_client,
+                )
+                .await?;
+        }
+        // TODO: figure out storage, return types, streaming, streaming retries,
 
         todo!("Run inference and store results");
     }
 
     // Eventually, if we get here, it means we tried every variant and none of them worked
+    // TODO: make this a nicer error that contains all the errors from below.
     Err(Error::Inference {
         message: "Inference failed for every variant in this function".to_string(),
     })

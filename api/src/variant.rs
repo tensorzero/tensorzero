@@ -29,7 +29,7 @@ pub trait Variant {
         &self,
         messages: &[InputMessage],
         models: &HashMap<String, ModelConfig>,
-        output_schema: &Option<JSONSchemaFromPath>,
+        output_schema: Option<&JSONSchemaFromPath>,
         client: &Client,
     ) -> Result<InferenceResponse, Error>;
 
@@ -37,7 +37,7 @@ pub trait Variant {
         &self,
         messages: &[InputMessage],
         models: &HashMap<String, ModelConfig>,
-        output_schema: &Option<JSONSchemaFromPath>,
+        output_schema: Option<&JSONSchemaFromPath>,
         client: &Client,
     ) -> Result<InferenceResponseStream, Error>;
 }
@@ -55,7 +55,7 @@ impl Variant for VariantConfig {
         &self,
         messages: &[InputMessage],
         models: &HashMap<String, ModelConfig>,
-        output_schema: &Option<JSONSchemaFromPath>,
+        output_schema: Option<&JSONSchemaFromPath>,
         client: &Client,
     ) -> Result<InferenceResponse, Error> {
         match self {
@@ -69,7 +69,7 @@ impl Variant for VariantConfig {
         &self,
         messages: &[InputMessage],
         models: &HashMap<String, ModelConfig>,
-        output_schema: &Option<JSONSchemaFromPath>,
+        output_schema: Option<&JSONSchemaFromPath>,
         client: &Client,
     ) -> Result<InferenceResponseStream, Error> {
         match self {
@@ -134,7 +134,7 @@ impl Variant for ChatCompletionConfig {
         &self,
         messages: &[InputMessage],
         models: &HashMap<String, ModelConfig>,
-        output_schema: &Option<JSONSchemaFromPath>,
+        output_schema: Option<&JSONSchemaFromPath>,
         client: &Client,
     ) -> Result<InferenceResponse, Error> {
         let messages = messages
@@ -175,7 +175,7 @@ impl Variant for ChatCompletionConfig {
         &self,
         messages: &[InputMessage],
         models: &HashMap<String, ModelConfig>,
-        output_schema: &Option<JSONSchemaFromPath>,
+        output_schema: Option<&JSONSchemaFromPath>,
         client: &Client,
     ) -> Result<InferenceResponseStream, Error> {
         let messages = messages
