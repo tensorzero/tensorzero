@@ -170,13 +170,19 @@ impl ModelInferenceResponse {
 }
 
 #[derive(Serialize, Debug)]
-pub struct InferenceResponse {
+pub struct ChatInferenceResponse {
     pub inference_id: Uuid,
     pub created: u64,
     pub content: Option<String>,
     pub tool_calls: Option<Vec<ToolCall>>,
     pub usage: Usage,
     pub model_inference_responses: Vec<ModelInferenceResponse>,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(tag = "type")]
+pub enum InferenceResponse {
+    Chat(ChatInferenceResponse),
 }
 
 // Function to get the current timestamp in seconds
@@ -194,8 +200,8 @@ pub struct ToolCall {
     pub id: String,
 }
 
-#[derive(Debug)]
-pub struct InferenceResponseChunk {
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ChatInferenceResponseChunk {
     pub inference_id: Uuid,
     pub content: Option<String>,
     pub tool_calls: Option<Vec<ToolCallChunk>>,
@@ -203,7 +209,33 @@ pub struct InferenceResponseChunk {
     pub usage: Option<Usage>,
 }
 
-impl InferenceResponseChunk {
+impl From<ModelInferenceResponseChunk> for ChatInferenceResponseChunk {
+    fn from(chunk: ModelInferenceResponseChunk) -> Self {
+        Self {
+            inference_id: chunk.inference_id,
+            content: chunk.content,
+            tool_calls: chunk.tool_calls,
+            created: chunk.created,
+            usage: chunk.usage,
+        }
+    }
+}
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(tag = "type")]
+pub enum InferenceResponseChunk {
+    Chat(ChatInferenceResponseChunk),
+}
+
+#[derive(Debug, Clone)]
+pub struct ModelInferenceResponseChunk {
+    pub inference_id: Uuid,
+    pub content: Option<String>,
+    pub tool_calls: Option<Vec<ToolCallChunk>>,
+    pub created: u64,
+    pub usage: Option<Usage>,
+}
+
+impl ModelInferenceResponseChunk {
     pub fn new(
         inference_id: Uuid,
         content: Option<String>,
@@ -228,4 +260,4 @@ pub struct ToolCallChunk {
 }
 
 pub type InferenceResponseStream =
-    Pin<Box<dyn Stream<Item = Result<InferenceResponseChunk, Error>> + Send>>;
+    Pin<Box<dyn Stream<Item = Result<ModelInferenceResponseChunk, Error>> + Send>>;

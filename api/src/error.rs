@@ -17,7 +17,6 @@ pub enum Error {
     ClickHouseWrite {
         message: String,
     },
-    #[allow(dead_code)] // TODO: remove
     FireworksClient {
         message: String,
         status_code: StatusCode,

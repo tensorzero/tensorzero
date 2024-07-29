@@ -24,10 +24,7 @@ async fn test_infer() {
         model_name: model_name.to_string(),
         api_key: Some(api_key),
     };
-    let provider = FireworksProvider;
-    let result = provider
-        .infer(&inference_request, &provider_config, &client)
-        .await;
+    let result = FireworksProvider::infer(&inference_request, &provider_config, &client).await;
     assert!(result.is_ok());
     assert!(result.unwrap().content.is_some());
 }
@@ -46,10 +43,7 @@ async fn test_infer_with_tool_calls() {
         model_name: model_name.to_string(),
         api_key: Some(api_key),
     };
-    let provider = FireworksProvider;
-    let result = provider
-        .infer(&inference_request, &provider_config, &client)
-        .await;
+    let result = FireworksProvider::infer(&inference_request, &provider_config, &client).await;
 
     assert!(result.is_ok());
     let response = result.unwrap();
@@ -79,13 +73,11 @@ async fn test_infer_stream() {
         model_name: model_name.to_string(),
         api_key: Some(api_key),
     };
-    let provider = FireworksProvider;
-    let result = provider
-        .infer_stream(&inference_request, &provider_config, &client)
-        .await;
+    let result =
+        FireworksProvider::infer_stream(&inference_request, &provider_config, &client).await;
     assert!(result.is_ok());
-    let mut stream = result.unwrap();
-    let mut collected_chunks = Vec::new();
+    let (chunk, mut stream) = result.unwrap();
+    let mut collected_chunks = vec![chunk];
     while let Some(chunk) = stream.next().await {
         assert!(chunk.is_ok());
         collected_chunks.push(chunk.unwrap());
@@ -109,10 +101,7 @@ async fn test_json_request() {
         model_name: model_name.to_string(),
         api_key: Some(api_key),
     };
-    let provider = FireworksProvider;
-    let result = provider
-        .infer(&inference_request, &provider_config, &client)
-        .await;
+    let result = FireworksProvider::infer(&inference_request, &provider_config, &client).await;
     assert!(result.is_ok());
     let result = result.unwrap();
     assert!(result.content.is_some());

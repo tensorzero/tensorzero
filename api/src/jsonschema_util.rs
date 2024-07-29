@@ -9,7 +9,7 @@ use crate::error::Error;
 #[derive(Clone, Debug)]
 pub struct JSONSchemaFromPath {
     compiled: Arc<JSONSchema>,
-    value: &'static serde_json::Value,
+    pub value: &'static serde_json::Value,
 }
 
 impl JSONSchemaFromPath {
@@ -29,10 +29,6 @@ impl JSONSchemaFromPath {
 
     pub fn is_valid(&self, instance: &serde_json::Value) -> bool {
         self.compiled.is_valid(instance)
-    }
-
-    pub fn value(&self) -> &serde_json::Value {
-        self.value
     }
 
     pub fn validate(&self, instance: &serde_json::Value) -> Result<(), Error> {

@@ -6,8 +6,9 @@ use uuid::Uuid;
 
 use crate::error::Error;
 use crate::inference::types::{
-    AssistantInferenceRequestMessage, FunctionType, InferenceRequestMessage, InputMessageRole,
-    ModelInferenceRequest, SystemInferenceRequestMessage, UserInferenceRequestMessage,
+    AssistantInferenceRequestMessage, ChatInferenceResponse, FunctionType, InferenceRequestMessage,
+    InputMessageRole, ModelInferenceRequest, ModelInferenceResponseChunk,
+    SystemInferenceRequestMessage, UserInferenceRequestMessage,
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::template_message;
@@ -39,7 +40,7 @@ pub trait Variant {
         models: &HashMap<String, ModelConfig>,
         output_schema: Option<&JSONSchemaFromPath>,
         client: &Client,
-    ) -> Result<InferenceResponseStream, Error>;
+    ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error>;
 }
 
 impl VariantConfig {
@@ -71,7 +72,7 @@ impl Variant for VariantConfig {
         models: &HashMap<String, ModelConfig>,
         output_schema: Option<&JSONSchemaFromPath>,
         client: &Client,
-    ) -> Result<InferenceResponseStream, Error> {
+    ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
         match self {
             VariantConfig::ChatCompletion(params) => {
                 params
@@ -151,14 +152,14 @@ impl Variant for ChatCompletionConfig {
             stream: false,
             json_mode: false,
             function_type: FunctionType::Chat,
-            output_schema: output_schema.as_ref().map(|s| s.value()),
+            output_schema: output_schema.as_ref().map(|s| s.value),
         };
         let model_config = models.get(&self.model).ok_or(Error::ModelNotFound {
             model: self.model.clone(),
         })?;
         let model_inference_response = model_config.infer(&request, client).await?;
 
-        Ok(InferenceResponse {
+        Ok(InferenceResponse::Chat(ChatInferenceResponse {
             inference_id: Uuid::now_v7(),
             created: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -168,7 +169,7 @@ impl Variant for ChatCompletionConfig {
             tool_calls: model_inference_response.tool_calls.clone(),
             usage: model_inference_response.usage.clone(),
             model_inference_responses: vec![model_inference_response],
-        })
+        }))
     }
 
     async fn infer_stream(
@@ -177,7 +178,7 @@ impl Variant for ChatCompletionConfig {
         models: &HashMap<String, ModelConfig>,
         output_schema: Option<&JSONSchemaFromPath>,
         client: &Client,
-    ) -> Result<InferenceResponseStream, Error> {
+    ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
         let messages = messages
             .iter()
             .map(|message| self.prepare_request_message(message))
@@ -192,7 +193,7 @@ impl Variant for ChatCompletionConfig {
             stream: true,
             json_mode: false,
             function_type: FunctionType::Chat,
-            output_schema: output_schema.as_ref().map(|s| s.value()),
+            output_schema: output_schema.as_ref().map(|s| s.value),
         };
         let model_config = models.get(&self.model).ok_or(Error::ModelNotFound {
             model: self.model.clone(),

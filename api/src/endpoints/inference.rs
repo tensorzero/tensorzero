@@ -1,14 +1,22 @@
+use std::convert::Infallible;
+
 use axum::body::Body;
-use axum::debug_handler;
 use axum::extract::State;
-use axum::response::Response;
+use axum::response::sse::{Event, Sse};
+use axum::response::{IntoResponse, Response};
+use axum::{debug_handler, Json};
 use serde::Deserialize;
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::UnboundedReceiverStream;
+use tokio_stream::StreamExt;
 use uuid::Uuid;
 
 use crate::api_util::{AppState, AppStateData, StructuredJson};
 use crate::error::Error;
-use crate::function::sample_variant;
-use crate::inference::types::InputMessage;
+use crate::function::{sample_variant, FunctionConfig};
+use crate::inference::types::{
+    InferenceResponseChunk, InferenceResponseStream, InputMessage, ModelInferenceResponseChunk,
+};
 use crate::variant::Variant;
 
 /// The expected payload is a JSON object with the following fields:
@@ -84,40 +92,64 @@ pub async fn inference_handler(
     // Should we stream the inference?
     let stream = params.stream.unwrap_or(false);
 
-    let mut models_tried = std::collections::HashSet::new();
+    // Keep track of which variants failed
+    let mut variant_error = vec![];
 
     // Keep sampling variants until one succeeds
     while !variants.is_empty() {
         let (variant_name, variant) =
             sample_variant(&mut variants, &params.function_name, &episode_id)?;
-        // `insert` returns false if the value was already in the set
-        if !models_tried.insert(variant_name.clone()) {
-            continue;
-        }
         if stream {
-            #[allow(unused)] // TODO: remove
-            let stream = variant
+            let response = variant
                 .infer_stream(
                     &params.input,
                     &config.models,
                     function.output_schema(),
                     &http_client,
                 )
-                .await?;
-            // TODO: handle streaming inference
+                .await;
+            let (chunk, stream) = match response {
+                Ok((chunk, stream)) => (chunk, stream),
+                Err(e) => {
+                    variant_error.push(e);
+                    continue;
+                }
+            };
+            let (client_sender, client_receiver) = mpsc::unbounded_channel();
+            tokio::spawn(worker_response_router(
+                // TODO: figure out how to get the Rust compiler to realize that the FunctionConfig
+                // can live forever
+                function.clone(),
+                variant_name,
+                chunk,
+                stream,
+                client_sender,
+            ));
+            return Ok(Sse::new(UnboundedReceiverStream::new(client_receiver))
+                .keep_alive(axum::response::sse::KeepAlive::new())
+                .into_response());
         } else {
-            variant
+            let response = variant
                 .infer(
                     &params.input,
                     &config.models,
                     function.output_schema(),
                     &http_client,
                 )
-                .await?;
+                .await;
+            let response = match response {
+                Ok(response) => response,
+                Err(e) => {
+                    variant_error.push(e);
+                    continue;
+                }
+            };
+            let response_value = serde_json::to_value(response).map_err(|e| Error::Inference {
+                message: format!("Failed to convert response to JSON: {}", e),
+            })?;
+            return Ok(Json(response_value).into_response());
         }
-        // TODO: figure out storage, return types, streaming, streaming retries,
-
-        todo!("Run inference and store results");
+        // TODO: figure out storage
     }
 
     // Eventually, if we get here, it means we tried every variant and none of them worked
@@ -125,4 +157,66 @@ pub async fn inference_handler(
     Err(Error::Inference {
         message: "Inference failed for every variant in this function".to_string(),
     })
+}
+
+async fn worker_response_router(
+    function: FunctionConfig,
+    variant_name: String,
+    first_chunk: ModelInferenceResponseChunk,
+    mut stream: InferenceResponseStream,
+    client_sender: mpsc::UnboundedSender<Result<Event, Infallible>>,
+) {
+    let mut buffer = vec![first_chunk.clone()];
+    let mut errors: Vec<Error> = Vec::new();
+    while let Some(chunk) = stream.next().await {
+        let chunk = match chunk {
+            Ok(chunk) => {
+                buffer.push(chunk.clone());
+                chunk
+            }
+            Err(e) => {
+                errors.push(e);
+                continue;
+            }
+        };
+        let event = prepare_event(&function, &variant_name, chunk);
+        match event {
+            Ok(event) => {
+                let r = client_sender.send(Ok(event));
+                if let Err(e) = r {
+                    errors.push(Error::Inference {
+                        message: format!("Failed to send event to client: {}", e),
+                    });
+                }
+            }
+            Err(e) => {
+                errors.push(e);
+            }
+        }
+    }
+    // TODO: log errors and also store results
+}
+
+fn prepare_event(
+    function: &FunctionConfig,
+    variant_name: &str,
+    chunk: ModelInferenceResponseChunk,
+) -> Result<Event, Error> {
+    let mut chunk_json = match function {
+        FunctionConfig::Chat(_) => {
+            let chunk = InferenceResponseChunk::Chat(chunk.into());
+            serde_json::to_value(chunk).map_err(|e| Error::Inference {
+                message: format!("Failed to convert chunk to JSON: {}", e),
+            })?
+        }
+        _ => {
+            unimplemented!()
+        }
+    };
+    chunk_json["variant_name"] = variant_name.to_string().into();
+    Event::default()
+        .json_data(chunk_json)
+        .map_err(|e| Error::Inference {
+            message: format!("Failed to convert Value to Event: {}", e),
+        })
 }

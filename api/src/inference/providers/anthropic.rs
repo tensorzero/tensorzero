@@ -10,9 +10,9 @@ use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::{
     inference::types::{
-        InferenceRequestMessage, InferenceResponseChunk, InferenceResponseStream,
-        ModelInferenceRequest, ModelInferenceResponse, Tool, ToolCall, ToolCallChunk, ToolChoice,
-        ToolType, Usage,
+        InferenceRequestMessage, InferenceResponseStream, ModelInferenceRequest,
+        ModelInferenceResponse, ModelInferenceResponseChunk, Tool, ToolCall, ToolCallChunk,
+        ToolChoice, ToolType, Usage,
     },
     model::ProviderConfig,
 };
@@ -25,7 +25,6 @@ pub struct AnthropicProvider;
 impl InferenceProvider for AnthropicProvider {
     /// Anthropic non-streaming API request
     async fn infer<'a>(
-        &'a self,
         request: &'a ModelInferenceRequest<'a>,
         model: &'a ProviderConfig,
         http_client: &'a reqwest::Client,
@@ -81,11 +80,10 @@ impl InferenceProvider for AnthropicProvider {
 
     /// Anthropic streaming API request
     async fn infer_stream<'a>(
-        &'a self,
         request: &'a ModelInferenceRequest<'a>,
         model: &'a ProviderConfig,
         http_client: &'a reqwest::Client,
-    ) -> Result<InferenceResponseStream, Error> {
+    ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
         let (model_name, api_key) = match model {
             ProviderConfig::Anthropic {
                 model_name,
@@ -113,7 +111,17 @@ impl InferenceProvider for AnthropicProvider {
             .map_err(|e| Error::InferenceClient {
                 message: format!("Error sending request to Anthropic: {e}"),
             })?;
-        Ok(stream_anthropic(event_source).await)
+        let mut stream = stream_anthropic(event_source).await;
+        let chunk = match stream.next().await {
+            Some(Ok(chunk)) => chunk,
+            Some(Err(e)) => return Err(e),
+            None => {
+                return Err(Error::AnthropicServer {
+                    message: "Stream ended before first chunk".to_string(),
+                })
+            }
+        };
+        Ok((chunk, stream))
     }
 }
 
@@ -628,11 +636,11 @@ enum AnthropicStreamMessage {
 fn anthropic_to_tensorzero_stream_message(
     message: AnthropicStreamMessage,
     inference_id: Uuid,
-) -> Result<Option<InferenceResponseChunk>, Error> {
+) -> Result<Option<ModelInferenceResponseChunk>, Error> {
     match message {
         AnthropicStreamMessage::ContentBlockDelta { delta, .. } => {
             let message: StreamMessage = delta.into();
-            Ok(Some(InferenceResponseChunk::new(
+            Ok(Some(ModelInferenceResponseChunk::new(
                 inference_id,
                 message.message,
                 message.tool_calls,
@@ -641,7 +649,7 @@ fn anthropic_to_tensorzero_stream_message(
         }
         AnthropicStreamMessage::ContentBlockStart { content_block, .. } => {
             let message: StreamMessage = content_block.into();
-            Ok(Some(InferenceResponseChunk::new(
+            Ok(Some(ModelInferenceResponseChunk::new(
                 inference_id,
                 message.message,
                 message.tool_calls,
@@ -655,7 +663,7 @@ fn anthropic_to_tensorzero_stream_message(
         AnthropicStreamMessage::MessageDelta { delta } => {
             if let Some(usage_info) = delta.get("usage") {
                 let usage = parse_usage_info(usage_info);
-                Ok(Some(InferenceResponseChunk::new(
+                Ok(Some(ModelInferenceResponseChunk::new(
                     inference_id,
                     None,
                     None,
@@ -668,7 +676,7 @@ fn anthropic_to_tensorzero_stream_message(
         AnthropicStreamMessage::MessageStart { message } => {
             if let Some(usage_info) = message.get("message").and_then(|m| m.get("usage")) {
                 let usage = parse_usage_info(usage_info);
-                Ok(Some(InferenceResponseChunk::new(
+                Ok(Some(ModelInferenceResponseChunk::new(
                     inference_id,
                     None,
                     None,

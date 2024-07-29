@@ -6,10 +6,15 @@ use std::env;
 use crate::{
     error::Error,
     inference::{
-        providers::anthropic::AnthropicProvider,
-        providers::openai::{FireworksProvider, OpenAIProvider},
-        providers::provider_trait::InferenceProvider,
-        types::{InferenceResponseStream, ModelInferenceRequest, ModelInferenceResponse},
+        providers::{
+            anthropic::AnthropicProvider,
+            openai::{FireworksProvider, OpenAIProvider},
+            provider_trait::InferenceProvider,
+        },
+        types::{
+            InferenceResponseStream, ModelInferenceRequest, ModelInferenceResponse,
+            ModelInferenceResponseChunk,
+        },
     },
 };
 use serde::Deserialize;
@@ -48,7 +53,7 @@ impl ModelConfig {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         client: &'a Client,
-    ) -> Result<InferenceResponseStream, Error> {
+    ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
         let mut provider_errors = Vec::new();
         for provider_name in &self.routing {
             let provider_config =
@@ -69,6 +74,7 @@ impl ModelConfig {
     }
 }
 
+// TODO: think about how we can manage typing here so we don't have to check every time this is passed that it is the correct type.
 #[derive(Clone, Debug)]
 pub enum ProviderConfig {
     Anthropic {
@@ -150,10 +156,6 @@ impl<'de> Deserialize<'de> for ProviderConfig {
     }
 }
 
-static ANTHROPIC_PROVIDER: AnthropicProvider = AnthropicProvider;
-static OPENAI_PROVIDER: OpenAIProvider = OpenAIProvider;
-static FIREWORKS_PROVIDER: FireworksProvider = FireworksProvider;
-
 impl ProviderConfig {
     pub async fn infer<'a>(
         &'a self,
@@ -162,14 +164,14 @@ impl ProviderConfig {
     ) -> Result<ModelInferenceResponse, Error> {
         match self {
             ProviderConfig::Anthropic { .. } => {
-                ANTHROPIC_PROVIDER.infer(request, self, client).await
+                AnthropicProvider::infer(request, self, client).await
             }
             ProviderConfig::Azure { .. } => {
                 todo!()
             }
-            ProviderConfig::OpenAI { .. } => OPENAI_PROVIDER.infer(request, self, client).await,
+            ProviderConfig::OpenAI { .. } => OpenAIProvider::infer(request, self, client).await,
             ProviderConfig::Fireworks { .. } => {
-                FIREWORKS_PROVIDER.infer(request, self, client).await
+                FireworksProvider::infer(request, self, client).await
             }
         }
     }
@@ -178,19 +180,19 @@ impl ProviderConfig {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         client: &'a Client,
-    ) -> Result<InferenceResponseStream, Error> {
+    ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
         match self {
             ProviderConfig::Anthropic { .. } => {
-                ANTHROPIC_PROVIDER.infer_stream(request, self, client).await
+                AnthropicProvider::infer_stream(request, self, client).await
             }
             ProviderConfig::Azure { .. } => {
                 todo!()
             }
             ProviderConfig::OpenAI { .. } => {
-                OPENAI_PROVIDER.infer_stream(request, self, client).await
+                OpenAIProvider::infer_stream(request, self, client).await
             }
             ProviderConfig::Fireworks { .. } => {
-                FIREWORKS_PROVIDER.infer_stream(request, self, client).await
+                FireworksProvider::infer_stream(request, self, client).await
             }
         }
     }

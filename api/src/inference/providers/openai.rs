@@ -10,8 +10,8 @@ use uuid::Uuid;
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
-    InferenceRequestMessage, InferenceResponseChunk, InferenceResponseStream,
-    ModelInferenceRequest, ModelInferenceResponse, Tool, ToolCall, ToolCallChunk, ToolChoice,
+    InferenceRequestMessage, InferenceResponseStream, ModelInferenceRequest,
+    ModelInferenceResponse, ModelInferenceResponseChunk, Tool, ToolCall, ToolCallChunk, ToolChoice,
     ToolType, Usage,
 };
 use crate::model::ProviderConfig;
@@ -22,7 +22,6 @@ pub struct OpenAIProvider;
 
 impl InferenceProvider for OpenAIProvider {
     async fn infer<'a>(
-        &'a self,
         request: &'a ModelInferenceRequest<'a>,
         model: &'a ProviderConfig,
         http_client: &'a reqwest::Client,
@@ -79,11 +78,10 @@ impl InferenceProvider for OpenAIProvider {
     }
 
     async fn infer_stream<'a>(
-        &'a self,
         request: &'a ModelInferenceRequest<'a>,
         model: &'a ProviderConfig,
         http_client: &'a reqwest::Client,
-    ) -> Result<InferenceResponseStream, Error> {
+    ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
         let (model_name, api_base, api_key) = match model {
             ProviderConfig::OpenAI {
                 model_name,
@@ -116,7 +114,20 @@ impl InferenceProvider for OpenAIProvider {
             .map_err(|e| Error::InferenceClient {
                 message: format!("Error sending request to OpenAI: {e}"),
             })?;
-        Ok(stream_openai(event_source).await)
+
+        let mut stream = stream_openai(event_source).await;
+        // Get a single chunk from the stream and make sure it is OK then send to client.
+        // We want to do this here so that we can tell that the request is working.
+        let chunk = match stream.next().await {
+            Some(Ok(chunk)) => chunk,
+            Some(Err(e)) => return Err(e),
+            None => {
+                return Err(Error::OpenAIServer {
+                    message: "Stream ended before first chunk".to_string(),
+                })
+            }
+        };
+        Ok((chunk, stream))
     }
 }
 
@@ -129,7 +140,6 @@ pub struct FireworksProvider;
 ///   (there are 2 ways to do it, we have the default of auto-truncation to the max window size)
 impl InferenceProvider for FireworksProvider {
     async fn infer<'a>(
-        &'a self,
         request: &'a ModelInferenceRequest<'a>,
         model: &'a ProviderConfig,
         http_client: &'a reqwest::Client,
@@ -188,11 +198,10 @@ impl InferenceProvider for FireworksProvider {
     }
 
     async fn infer_stream<'a>(
-        &'a self,
         request: &'a ModelInferenceRequest<'a>,
         model: &'a ProviderConfig,
         http_client: &'a reqwest::Client,
-    ) -> Result<InferenceResponseStream, Error> {
+    ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
         let (model_name, api_key) = match model {
             ProviderConfig::Fireworks {
                 model_name,
@@ -224,11 +233,23 @@ impl InferenceProvider for FireworksProvider {
             .map_err(|e| Error::InferenceClient {
                 message: format!("Error sending request to Fireworks: {e}"),
             })?;
-        Ok(Box::pin(
+        let mut stream = Box::pin(
             stream_openai(event_source)
                 .await
                 .map_err(map_openai_to_fireworks_error),
-        ))
+        );
+        // Get a single chunk from the stream and make sure it is OK then send to client.
+        // We want to do this here so that we can tell that the request is working.
+        let chunk = match stream.next().await {
+            Some(Ok(chunk)) => chunk,
+            Some(Err(e)) => return Err(e),
+            None => {
+                return Err(Error::OpenAIServer {
+                    message: "Stream ended before first chunk".to_string(),
+                })
+            }
+        };
+        Ok((chunk, stream))
     }
 }
 
@@ -760,7 +781,7 @@ struct OpenAIChatChunk {
 fn openai_to_tensorzero_stream_message(
     mut chunk: OpenAIChatChunk,
     inference_id: Uuid,
-) -> Result<InferenceResponseChunk, Error> {
+) -> Result<ModelInferenceResponseChunk, Error> {
     if chunk.choices.len() > 1 {
         return Err(Error::OpenAIServer {
             message: "Response has invalid number of choices: {}. Expected 1.".to_string(),
@@ -777,7 +798,7 @@ fn openai_to_tensorzero_stream_message(
         None => (None, None),
     };
     let usage = chunk.usage.map(|u| u.into());
-    Ok(InferenceResponseChunk::new(
+    Ok(ModelInferenceResponseChunk::new(
         inference_id,
         content,
         tool_calls,
