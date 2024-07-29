@@ -5,7 +5,6 @@ use crate::inference::types::ModelInferenceResponse;
 use crate::model::ProviderConfig;
 use futures::Future;
 use reqwest::Client;
-use secrecy::SecretString;
 
 pub trait InferenceProvider {
     fn infer<'a>(
@@ -13,7 +12,6 @@ pub trait InferenceProvider {
         request: &'a ModelInferenceRequest,
         config: &'a ProviderConfig,
         client: &'a Client,
-        api_key: &'a SecretString,
     ) -> impl Future<Output = Result<ModelInferenceResponse, Error>> + Send + 'a;
 
     fn infer_stream<'a>(
@@ -21,6 +19,5 @@ pub trait InferenceProvider {
         request: &'a ModelInferenceRequest,
         config: &'a ProviderConfig,
         client: &'a Client,
-        api_key: &'a SecretString,
     ) -> impl Future<Output = Result<InferenceResponseStream, Error>> + Send + 'a;
 }

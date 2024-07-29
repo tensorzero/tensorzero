@@ -128,7 +128,7 @@ pub enum InferenceRequestMessage {
     Tool(ToolInferenceRequestMessage),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Usage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
@@ -141,7 +141,7 @@ pub enum Latency {
     NonStreaming { ttd: Duration },
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ModelInferenceResponse {
     pub id: Uuid,
     pub created: u64,
@@ -149,16 +149,6 @@ pub struct ModelInferenceResponse {
     pub tool_calls: Option<Vec<ToolCall>>,
     pub raw: String,
     pub usage: Usage,
-}
-
-pub struct InferenceResponse {
-    pub inference_id: Uuid,
-    pub created: u64,
-    pub content: Option<String>,
-    pub tool_calls: Option<Vec<ToolCall>>,
-    pub raw: String,
-    pub usage: Usage,
-    pub model_inference_responses: Vec<ModelInferenceResponse>,
 }
 
 impl ModelInferenceResponse {
@@ -177,6 +167,16 @@ impl ModelInferenceResponse {
             usage,
         }
     }
+}
+
+#[derive(Serialize, Debug)]
+pub struct InferenceResponse {
+    pub inference_id: Uuid,
+    pub created: u64,
+    pub content: Option<String>,
+    pub tool_calls: Option<Vec<ToolCall>>,
+    pub usage: Usage,
+    pub model_inference_responses: Vec<ModelInferenceResponse>,
 }
 
 // Function to get the current timestamp in seconds

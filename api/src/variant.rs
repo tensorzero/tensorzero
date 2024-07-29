@@ -1,5 +1,8 @@
+use reqwest::Client;
 use serde::Deserialize;
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::{collections::HashMap, path::PathBuf};
+use uuid::Uuid;
 
 use crate::error::Error;
 use crate::inference::types::{
@@ -27,6 +30,7 @@ pub trait Variant {
         messages: &[InputMessage],
         models: &HashMap<String, ModelConfig>,
         output_schema: &Option<JSONSchemaFromPath>,
+        client: &Client,
     ) -> Result<InferenceResponse, Error>;
 
     async fn infer_stream(
@@ -34,6 +38,7 @@ pub trait Variant {
         messages: &[InputMessage],
         models: &HashMap<String, ModelConfig>,
         output_schema: &Option<JSONSchemaFromPath>,
+        client: &Client,
     ) -> Result<InferenceResponseStream, Error>;
 }
 
@@ -51,10 +56,11 @@ impl Variant for VariantConfig {
         messages: &[InputMessage],
         models: &HashMap<String, ModelConfig>,
         output_schema: &Option<JSONSchemaFromPath>,
+        client: &Client,
     ) -> Result<InferenceResponse, Error> {
         match self {
             VariantConfig::ChatCompletion(params) => {
-                params.infer(messages, models, output_schema).await
+                params.infer(messages, models, output_schema, client).await
             }
         }
     }
@@ -64,10 +70,13 @@ impl Variant for VariantConfig {
         messages: &[InputMessage],
         models: &HashMap<String, ModelConfig>,
         output_schema: &Option<JSONSchemaFromPath>,
+        client: &Client,
     ) -> Result<InferenceResponseStream, Error> {
         match self {
             VariantConfig::ChatCompletion(params) => {
-                params.infer_stream(messages, models, output_schema).await
+                params
+                    .infer_stream(messages, models, output_schema, client)
+                    .await
             }
         }
     }
@@ -126,6 +135,7 @@ impl Variant for ChatCompletionConfig {
         messages: &[InputMessage],
         models: &HashMap<String, ModelConfig>,
         output_schema: &Option<JSONSchemaFromPath>,
+        client: &Client,
     ) -> Result<InferenceResponse, Error> {
         let messages = messages
             .iter()
@@ -143,7 +153,22 @@ impl Variant for ChatCompletionConfig {
             function_type: FunctionType::Chat,
             output_schema: output_schema.as_ref().map(|s| s.value()),
         };
-        todo!()
+        let model_config = models.get(&self.model).ok_or(Error::ModelNotFound {
+            model: self.model.clone(),
+        })?;
+        let model_inference_response = model_config.infer(&request, client).await?;
+
+        Ok(InferenceResponse {
+            inference_id: Uuid::now_v7(),
+            created: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("Time went backwards")
+                .as_secs(),
+            content: model_inference_response.content.clone(),
+            tool_calls: model_inference_response.tool_calls.clone(),
+            usage: model_inference_response.usage.clone(),
+            model_inference_responses: vec![model_inference_response],
+        })
     }
 
     async fn infer_stream(
@@ -151,6 +176,7 @@ impl Variant for ChatCompletionConfig {
         messages: &[InputMessage],
         models: &HashMap<String, ModelConfig>,
         output_schema: &Option<JSONSchemaFromPath>,
+        client: &Client,
     ) -> Result<InferenceResponseStream, Error> {
         let messages = messages
             .iter()
@@ -168,6 +194,9 @@ impl Variant for ChatCompletionConfig {
             function_type: FunctionType::Chat,
             output_schema: output_schema.as_ref().map(|s| s.value()),
         };
-        todo!()
+        let model_config = models.get(&self.model).ok_or(Error::ModelNotFound {
+            model: self.model.clone(),
+        })?;
+        model_config.infer_stream(&request, client).await
     }
 }

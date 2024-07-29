@@ -22,10 +22,11 @@ async fn test_infer() {
 
     let provider_config = ProviderConfig::Fireworks {
         model_name: model_name.to_string(),
+        api_key: Some(api_key),
     };
     let provider = FireworksProvider;
     let result = provider
-        .infer(&inference_request, &provider_config, &client, &api_key)
+        .infer(&inference_request, &provider_config, &client)
         .await;
     assert!(result.is_ok());
     assert!(result.unwrap().content.is_some());
@@ -43,10 +44,11 @@ async fn test_infer_with_tool_calls() {
 
     let provider_config = ProviderConfig::Fireworks {
         model_name: model_name.to_string(),
+        api_key: Some(api_key),
     };
     let provider = FireworksProvider;
     let result = provider
-        .infer(&inference_request, &provider_config, &client, &api_key)
+        .infer(&inference_request, &provider_config, &client)
         .await;
 
     assert!(result.is_ok());
@@ -75,10 +77,11 @@ async fn test_infer_stream() {
 
     let provider_config = ProviderConfig::Fireworks {
         model_name: model_name.to_string(),
+        api_key: Some(api_key),
     };
     let provider = FireworksProvider;
     let result = provider
-        .infer_stream(&inference_request, &provider_config, &client, &api_key)
+        .infer_stream(&inference_request, &provider_config, &client)
         .await;
     assert!(result.is_ok());
     let mut stream = result.unwrap();
@@ -104,10 +107,11 @@ async fn test_json_request() {
 
     let provider_config = ProviderConfig::Fireworks {
         model_name: model_name.to_string(),
+        api_key: Some(api_key),
     };
     let provider = FireworksProvider;
     let result = provider
-        .infer(&inference_request, &provider_config, &client, &api_key)
+        .infer(&inference_request, &provider_config, &client)
         .await;
     assert!(result.is_ok());
     let result = result.unwrap();

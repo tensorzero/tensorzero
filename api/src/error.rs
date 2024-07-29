@@ -4,6 +4,9 @@ use serde_json::json;
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
+    ApiKeyMissing {
+        provider_name: String,
+    },
     AnthropicClient {
         message: String,
         status_code: StatusCode,
@@ -60,6 +63,9 @@ pub enum Error {
         template_name: String,
         message: String,
     },
+    ModelNotFound {
+        model: String,
+    },
     ModelProvidersExhausted {
         provider_errors: Vec<Error>,
     },
@@ -91,6 +97,7 @@ impl Error {
     /// Defines the error level for logging this error
     fn level(&self) -> tracing::Level {
         match self {
+            Error::ApiKeyMissing { .. } => tracing::Level::ERROR,
             Error::AnthropicClient { .. } => tracing::Level::WARN,
             Error::AnthropicServer { .. } => tracing::Level::ERROR,
             Error::ClickHouseWrite { .. } => tracing::Level::ERROR,
@@ -109,6 +116,7 @@ impl Error {
             Error::JsonRequest { .. } => tracing::Level::WARN,
             Error::MiniJinjaTemplateMissing { .. } => tracing::Level::ERROR,
             Error::MiniJinjaTemplateRender { .. } => tracing::Level::ERROR,
+            Error::ModelNotFound { .. } => tracing::Level::ERROR,
             Error::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
             Error::OpenAIClient { .. } => tracing::Level::WARN,
             Error::OpenAIServer { .. } => tracing::Level::ERROR,
@@ -123,6 +131,7 @@ impl Error {
     /// Defines the HTTP status code for responses involving this error
     fn status_code(&self) -> StatusCode {
         match self {
+            Error::ApiKeyMissing { .. } => StatusCode::BAD_REQUEST,
             Error::AnthropicClient { status_code, .. } => *status_code,
             Error::AnthropicServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ClickHouseWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -141,6 +150,7 @@ impl Error {
             Error::JsonRequest { .. } => StatusCode::BAD_REQUEST,
             Error::MiniJinjaTemplateMissing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::MiniJinjaTemplateRender { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::ModelNotFound { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::OpenAIClient { status_code, .. } => *status_code,
             Error::OpenAIServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -167,6 +177,9 @@ impl Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Error::ApiKeyMissing { provider_name } => {
+                write!(f, "API key missing for provider: {}", provider_name)
+            }
             Error::AnthropicClient { message, .. } => {
                 write!(f, "Error from Anthropic client: {}", message)
             }
@@ -209,6 +222,9 @@ impl std::fmt::Display for Error {
                 message,
             } => {
                 write!(f, "Error rendering template {}: {}", template_name, message)
+            }
+            Error::ModelNotFound { model } => {
+                write!(f, "Model not found: {}", model)
             }
             Error::ModelProvidersExhausted { provider_errors } => {
                 write!(

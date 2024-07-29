@@ -1,7 +1,7 @@
 use futures::StreamExt;
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
-use secrecy::{ExposeSecret, SecretString};
+use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -29,16 +29,24 @@ impl InferenceProvider for AnthropicProvider {
         request: &'a ModelInferenceRequest<'a>,
         model: &'a ProviderConfig,
         http_client: &'a reqwest::Client,
-        api_key: &'a SecretString,
     ) -> Result<ModelInferenceResponse, Error> {
-        let model_name = match model {
-            ProviderConfig::Anthropic { model_name } => model_name,
+        let (model_name, api_key) = match model {
+            ProviderConfig::Anthropic {
+                model_name,
+                api_key,
+            } => (
+                model_name,
+                api_key.as_ref().ok_or(Error::ApiKeyMissing {
+                    provider_name: "Anthropic".to_string(),
+                })?,
+            ),
             _ => {
                 return Err(Error::InvalidProviderConfig {
                     message: "Expected Anthropic provider config".to_string(),
                 })
             }
         };
+
         let request_body = AnthropicRequestBody::new(model_name, request)?;
         let res = http_client
             .post(ANTHROPIC_BASE_URL)
@@ -77,10 +85,17 @@ impl InferenceProvider for AnthropicProvider {
         request: &'a ModelInferenceRequest<'a>,
         model: &'a ProviderConfig,
         http_client: &'a reqwest::Client,
-        api_key: &'a SecretString,
     ) -> Result<InferenceResponseStream, Error> {
-        let model_name = match model {
-            ProviderConfig::Anthropic { model_name } => model_name,
+        let (model_name, api_key) = match model {
+            ProviderConfig::Anthropic {
+                model_name,
+                api_key,
+            } => (
+                model_name,
+                api_key.as_ref().ok_or(Error::ApiKeyMissing {
+                    provider_name: "Anthropic".to_string(),
+                })?,
+            ),
             _ => {
                 return Err(Error::InvalidProviderConfig {
                     message: "Expected Anthropic provider config".to_string(),

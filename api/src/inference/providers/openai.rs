@@ -1,7 +1,7 @@
 use futures::{StreamExt, TryStreamExt};
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
-use secrecy::{ExposeSecret, SecretString};
+use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use url::Url;
@@ -26,13 +26,19 @@ impl InferenceProvider for OpenAIProvider {
         request: &'a ModelInferenceRequest<'a>,
         model: &'a ProviderConfig,
         http_client: &'a reqwest::Client,
-        api_key: &'a SecretString,
     ) -> Result<ModelInferenceResponse, Error> {
-        let (model_name, api_base) = match model {
+        let (model_name, api_base, api_key) = match model {
             ProviderConfig::OpenAI {
                 model_name,
                 api_base,
-            } => (model_name, api_base.as_deref()),
+                api_key,
+            } => (
+                model_name,
+                api_base.as_deref(),
+                api_key.as_ref().ok_or(Error::ApiKeyMissing {
+                    provider_name: "OpenAI".to_string(),
+                })?,
+            ),
             _ => {
                 return Err(Error::InvalidProviderConfig {
                     message: "Expected OpenAI provider config".to_string(),
@@ -77,13 +83,19 @@ impl InferenceProvider for OpenAIProvider {
         request: &'a ModelInferenceRequest<'a>,
         model: &'a ProviderConfig,
         http_client: &'a reqwest::Client,
-        api_key: &'a SecretString,
     ) -> Result<InferenceResponseStream, Error> {
-        let (model_name, api_base) = match model {
+        let (model_name, api_base, api_key) = match model {
             ProviderConfig::OpenAI {
                 model_name,
                 api_base,
-            } => (model_name, api_base.as_deref()),
+                api_key,
+            } => (
+                model_name,
+                api_base.as_deref(),
+                api_key.as_ref().ok_or(Error::ApiKeyMissing {
+                    provider_name: "OpenAI".to_string(),
+                })?,
+            ),
             _ => {
                 return Err(Error::InvalidProviderConfig {
                     message: "Expected OpenAI provider config".to_string(),
@@ -121,10 +133,17 @@ impl InferenceProvider for FireworksProvider {
         request: &'a ModelInferenceRequest<'a>,
         model: &'a ProviderConfig,
         http_client: &'a reqwest::Client,
-        api_key: &'a SecretString,
     ) -> Result<ModelInferenceResponse, Error> {
-        let model_name = match model {
-            ProviderConfig::Fireworks { model_name } => model_name,
+        let (model_name, api_key) = match model {
+            ProviderConfig::Fireworks {
+                model_name,
+                api_key,
+            } => (
+                model_name,
+                api_key.as_ref().ok_or(Error::ApiKeyMissing {
+                    provider_name: "Fireworks".to_string(),
+                })?,
+            ),
             _ => {
                 return Err(Error::InvalidProviderConfig {
                     message: "Expected Fireworks provider config".to_string(),
@@ -173,10 +192,17 @@ impl InferenceProvider for FireworksProvider {
         request: &'a ModelInferenceRequest<'a>,
         model: &'a ProviderConfig,
         http_client: &'a reqwest::Client,
-        api_key: &'a SecretString,
     ) -> Result<InferenceResponseStream, Error> {
-        let model_name = match model {
-            ProviderConfig::Fireworks { model_name } => model_name,
+        let (model_name, api_key) = match model {
+            ProviderConfig::Fireworks {
+                model_name,
+                api_key,
+            } => (
+                model_name,
+                api_key.as_ref().ok_or(Error::ApiKeyMissing {
+                    provider_name: "Fireworks".to_string(),
+                })?,
+            ),
             _ => {
                 return Err(Error::InvalidProviderConfig {
                     message: "Expected Fireworks provider config".to_string(),
