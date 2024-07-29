@@ -59,21 +59,21 @@ impl VariantConfig {
         }
     }
 
-    // TODO: return a reference to the template itself (not the path)
+    // TODO: make sure this fits the upcoming inference PR
     pub fn system_template(&self) -> Option<&PathBuf> {
         match self {
             VariantConfig::ChatCompletion(params) => params.system_template.as_ref(),
         }
     }
 
-    // TODO: return a reference to the template itself (not the path)
+    // TODO: make sure this fits the upcoming inference PR
     pub fn user_template(&self) -> Option<&PathBuf> {
         match self {
             VariantConfig::ChatCompletion(params) => params.user_template.as_ref(),
         }
     }
 
-    // TODO: return a reference to the template itself (not the path)
+    // TODO: make sure this fits the upcoming inference PR
     pub fn assistant_template(&self) -> Option<&PathBuf> {
         match self {
             VariantConfig::ChatCompletion(params) => params.assistant_template.as_ref(),
