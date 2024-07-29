@@ -32,6 +32,7 @@ tokio = { version = "1.38.1", features = ["full"] }
 tokio-stream = "0.1.15"
 toml = "0.8.15"
 tracing = { version = "0.1.40", features = ["log", "release_max_level_debug"] }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter", "fmt", "json"] }
 url = "2.5.2"
 uuid = { version = "1.10.0", features = ["serde", "v7"] }
 
