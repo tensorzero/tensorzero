@@ -6,6 +6,7 @@ use crate::{
     },
     model::ProviderConfig,
 };
+use serde_json::json;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
@@ -28,6 +29,7 @@ pub static DUMMY_INFER_RESPONSE_RAW: &str = r#"{
     }
   ]
 }"#;
+pub static DUMMY_JSON_RESPONSE_RAW: &str = r#"{"answer":"Hello"}"#;
 pub static DUMMY_INFER_USAGE: Usage = Usage {
     prompt_tokens: 10,
     completion_tokens: 10,
@@ -75,8 +77,14 @@ impl InferenceProvider for DummyProvider {
             .duration_since(std::time::UNIX_EPOCH)
             .expect("Time went backwards")
             .as_secs();
-        let content = Some(DUMMY_INFER_RESPONSE_CONTENT.to_string());
-        let raw = DUMMY_INFER_RESPONSE_RAW.to_string();
+        let content = match model_name.as_str() {
+            "json" => Some(serde_json::to_string(&json!({"answer": "Hello"})).unwrap()),
+            _ => Some(DUMMY_INFER_RESPONSE_CONTENT.to_string()),
+        };
+        let raw = match model_name.as_str() {
+            "json" => DUMMY_JSON_RESPONSE_RAW.to_string(),
+            _ => DUMMY_INFER_RESPONSE_RAW.to_string(),
+        };
         let usage = DUMMY_INFER_USAGE.clone();
         Ok(ModelInferenceResponse {
             id,

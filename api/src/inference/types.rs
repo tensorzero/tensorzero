@@ -206,11 +206,11 @@ impl ModelInferenceResponse {
 pub struct ChatInferenceResponse {
     inference_id: Uuid,
     created: u64,
-    content: Option<Value>,
-    raw_content: Option<String>,
-    tool_calls: Option<Vec<ToolCall>>,
-    usage: Usage,
-    model_inference_responses: Vec<ModelInferenceResponse>,
+    pub content: Option<Value>,
+    pub raw_content: Option<String>,
+    pub tool_calls: Option<Vec<ToolCall>>,
+    pub usage: Usage,
+    pub model_inference_responses: Vec<ModelInferenceResponse>,
 }
 
 impl ChatInferenceResponse {
