@@ -1,8 +1,26 @@
 services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    ports:
+      - "8123:8123"  # HTTP port
+      - "9000:9000"  # Native port
+    volumes:
+      - ./clickhouse/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
   api:
-    container_name: api
+    container_name: tensorzero-api
     build:
       context: .
       target: api
     ports:
-      - "3000:3000"
+      - 3000:3000
+
+    command: ["api", "/app/config.toml"]
+    environment:
+      - CLICKHOUSE_URL=http://clickhouse:8123
+      - TENSORZERO_CONFIG_PATH
+    volumes:
+      - ${TENSORZERO_CONFIG_PATH:-./api/tests/e2e/tensorzero.test.toml}:/app/config.toml
