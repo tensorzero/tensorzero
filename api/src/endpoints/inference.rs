@@ -179,9 +179,8 @@ pub async fn inference_handler(
         }
     }
     // Eventually, if we get here, it means we tried every variant and none of them worked
-    // TODO(Viraj): make this a nicer error that contains all the errors from above.
-    Err(Error::Inference {
-        message: "Inference failed for every variant in this function".to_string(),
+    Err(Error::AllVariantsFailed {
+        errors: variant_error,
     })
 }
 
@@ -244,7 +243,7 @@ fn prepare_event(
                 message: format!("Failed to convert chunk to JSON: {}", e),
             })?
         }
-        _ => {
+        FunctionConfig::Tool(_) => {
             unimplemented!()
         }
     };
