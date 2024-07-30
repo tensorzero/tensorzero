@@ -3,6 +3,8 @@ use secrecy::SecretString;
 use std::collections::HashMap;
 use std::env;
 
+#[cfg(test)]
+use crate::inference::providers::dummy::DummyProvider;
 use crate::{
     error::Error,
     inference::{
@@ -95,6 +97,8 @@ pub enum ProviderConfig {
         model_name: String,
         api_key: Option<SecretString>,
     },
+    #[cfg(test)]
+    Dummy { model_name: String },
 }
 
 impl<'de> Deserialize<'de> for ProviderConfig {
@@ -127,6 +131,11 @@ impl<'de> Deserialize<'de> for ProviderConfig {
             Fireworks {
                 model_name: String,
             },
+            #[cfg(test)]
+            #[serde(rename = "dummy")]
+            Dummy {
+                model_name: String,
+            },
         }
 
         let helper = ProviderConfigHelper::deserialize(deserializer)?;
@@ -156,6 +165,8 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 model_name,
                 api_key: env::var("FIREWORKS_API_KEY").ok().map(SecretString::new),
             },
+            #[cfg(test)]
+            ProviderConfigHelper::Dummy { model_name } => ProviderConfig::Dummy { model_name },
         })
     }
 }
@@ -177,6 +188,8 @@ impl ProviderConfig {
             ProviderConfig::Fireworks { .. } => {
                 FireworksProvider::infer(request, self, client).await
             }
+            #[cfg(test)]
+            ProviderConfig::Dummy { .. } => DummyProvider::infer(request, self, client).await,
         }
     }
 
@@ -197,6 +210,10 @@ impl ProviderConfig {
             }
             ProviderConfig::Fireworks { .. } => {
                 FireworksProvider::infer_stream(request, self, client).await
+            }
+            #[cfg(test)]
+            ProviderConfig::Dummy { .. } => {
+                DummyProvider::infer_stream(request, self, client).await
             }
         }
     }
