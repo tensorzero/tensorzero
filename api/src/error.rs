@@ -195,7 +195,7 @@ impl Error {
     }
 
     /// Log the error using the `tracing` library
-    pub fn log(&self) {
+    fn log(&self) {
         match self.level() {
             tracing::Level::ERROR => tracing::error!(error = self.to_string()),
             tracing::Level::WARN => tracing::warn!(error = self.to_string()),

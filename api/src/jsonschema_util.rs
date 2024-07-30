@@ -27,6 +27,18 @@ impl JSONSchemaFromPath {
         })
     }
 
+    /// Create a new JSONSchemaFromPath instance from a JSON schema value
+    #[cfg(test)]
+    pub fn from_value(schema: serde_json::Value) -> Result<Self, Box<dyn std::error::Error>> {
+        // We can 'leak' memory here because we want the schema to exist for the duration of the process
+        let schema_boxed: &'static serde_json::Value = Box::leak(Box::new(schema));
+        let compiled_schema = JSONSchema::compile(schema_boxed)?;
+        Ok(Self {
+            compiled: Arc::new(compiled_schema),
+            value: schema_boxed,
+        })
+    }
+
     pub fn validate(&self, instance: &serde_json::Value) -> Result<(), Error> {
         self.compiled
             .validate(instance)

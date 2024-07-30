@@ -18,7 +18,7 @@ use crate::error::{Error, ResultExt};
 use crate::function::{sample_variant, FunctionConfig};
 use crate::inference::types::{
     collect_chunks, Inference, InferenceResponse, InferenceResponseChunk, InferenceResponseStream,
-    InputMessage, ModelInference, ModelInferenceResponseChunk,
+    InputMessage, ModelInferenceResponseChunk,
 };
 use crate::variant::Variant;
 
@@ -199,16 +199,11 @@ async fn worker_response_router(
 ) {
     let mut buffer = vec![first_chunk.clone()];
     while let Some(chunk) = stream.next().await {
-        let chunk = match chunk {
-            Ok(chunk) => {
-                buffer.push(chunk.clone());
-                chunk
-            }
-            Err(e) => {
-                e.log();
-                continue;
-            }
+        let chunk = match chunk.ok_or_log() {
+            Some(c) => c,
+            None => continue,
         };
+        buffer.push(chunk.clone());
         let event = prepare_event(&function, &variant_name, chunk).ok_or_log();
         if let Some(event) = event {
             let _ = client_sender
@@ -271,16 +266,15 @@ async fn write_inference(
 ) {
     match response {
         InferenceResponse::Chat(response) => {
-            let serialized_input = serde_json::to_string(&input).unwrap();
-            let model_responses: Vec<serde_json::Value> = response
-                .model_inference_responses
-                .iter()
-                .map(|r| {
-                    let model_inference =
-                        ModelInference::new(r.clone(), serialized_input.clone(), episode_id);
-                    serde_json::to_value(model_inference).unwrap_or_default()
-                })
-                .collect();
+            let serialized_input =
+                match serde_json::to_string(&input).map_err(|e| Error::Serialization {
+                    message: e.to_string(),
+                }) {
+                    Ok(serialized_input) => serialized_input,
+                    Err(_) => return,
+                };
+            let model_responses: Vec<serde_json::Value> =
+                response.get_serialized_model_inferences(&serialized_input);
             for response in model_responses {
                 let res = clickhouse_connection_info
                     .write(&response, "ModelInference")
