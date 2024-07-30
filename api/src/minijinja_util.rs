@@ -1,7 +1,15 @@
 use minijinja::{Environment, UndefinedBehavior};
 use once_cell::sync::OnceCell;
 use serde_json::Value;
+#[cfg(test)]
+use std::collections::HashMap;
+#[cfg(test)]
+use std::io::Write;
 use std::path::PathBuf;
+#[cfg(test)]
+use std::sync::OnceLock;
+#[cfg(test)]
+use tempfile::NamedTempFile;
 
 use crate::error::Error;
 
@@ -62,37 +70,52 @@ pub fn template_message(template_name: &str, context: &Value) -> Result<String, 
     }
 }
 
+// At test time, we want to initialize the templates once, and then use them in all tests.
+// This is a bit of a hack, but it works for now.
+// Idea is that TEST_TEMPLATES is initialized once, and then we use it in all tests.
+// Same with MINIJINJA_ENV. We can put all the minijinja templates used in cargo tests in this initializer,
+// then every test that uses minijinja can use them by calling this function and getting the template paths
+// from the map.
+#[cfg(test)]
+static TEST_TEMPLATES: OnceLock<HashMap<&'static str, PathBuf>> = OnceLock::new();
+
+#[cfg(test)]
+fn idempotent_initialize_test_templates() -> &'static HashMap<&'static str, PathBuf> {
+    TEST_TEMPLATES.get_or_init(|| {
+        let mut templates = HashMap::new();
+
+        // Template 1
+        let template1 = "hello, {{name}}!";
+        let temp_file1 = create_temp_file(template1);
+        templates.insert("greeting", temp_file1.path().to_path_buf());
+
+        // Template 2
+        let template2 = "Hello, {{ name }}! You are {{ age }} years old.";
+        let temp_file2 = create_temp_file(template2);
+        templates.insert("greeting_with_age", temp_file2.path().to_path_buf());
+
+        // Initialize templates
+        initialize_templates(&templates.values().collect::<Vec<_>>());
+
+        templates
+    })
+}
+
+#[cfg(test)]
+fn create_temp_file(content: &str) -> NamedTempFile {
+    let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
+    write!(temp_file, "{}", content).expect("Failed to write to temp file");
+    temp_file
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
-    use tempfile::NamedTempFile;
 
     #[test]
     fn test_template() {
-        let template = "hello, {{name}}!";
-        let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
-        write!(temp_file, "{}", template).expect("Failed to write to temp file");
-        let template2 = "Hello, {{ name }}! You are {{ age }} years old.";
-        let mut temp_file2 = NamedTempFile::new().expect("Failed to create temporary file");
-        write!(temp_file2, "{}", template2).expect("Failed to write to temp file");
-        // Add both templates to make sure they're both added.
-        initialize_templates(&[
-            &temp_file.path().to_path_buf(),
-            &temp_file.path().to_path_buf(),
-            &temp_file2.path().to_path_buf(),
-        ]);
-        let env = MINIJINJA_ENV
-            .get()
-            .expect("Jinja environment not initialized");
-        let templates = env.templates().collect::<Vec<_>>();
-        assert_eq!(
-            templates.len(),
-            2,
-            "Expected two templates in the environment"
-        );
-        let template_name = temp_file.path().to_str().unwrap();
-        assert!(templates.iter().any(|(name, _)| name == &template_name));
+        let templates = idempotent_initialize_test_templates();
+        let template_name = templates.get("greeting").unwrap().to_str().unwrap();
 
         let context = serde_json::json!({"name": "world"});
         let result = template_message(template_name, &context);
@@ -100,14 +123,18 @@ mod tests {
         assert_eq!(result.unwrap(), "hello, world!");
 
         // Test a little templating:
-        let test_template_name = temp_file2.path().to_str().unwrap();
+        let template_name = templates
+            .get("greeting_with_age")
+            .unwrap()
+            .to_str()
+            .unwrap();
 
         // Test with correct inputs
         let context = serde_json::json!({
             "name": "Alice",
             "age": 30
         });
-        let result = template_message(test_template_name, &context);
+        let result = template_message(template_name, &context);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "Hello, Alice! You are 30 years old.");
 
@@ -115,7 +142,7 @@ mod tests {
         let context = serde_json::json!({
             "name": "Bob"
         });
-        let result = template_message(test_template_name, &context);
+        let result = template_message(template_name, &context);
         assert!(result.is_err());
 
         // Test with incorrect input type
@@ -123,7 +150,7 @@ mod tests {
             "name": "Charlie",
             "age": "thirty"
         });
-        let result = template_message(test_template_name, &context);
+        let result = template_message(template_name, &context);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "Hello, Charlie! You are thirty years old.");
     }

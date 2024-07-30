@@ -226,3 +226,93 @@ impl Variant for ChatCompletionConfig {
         model_config.infer_stream(&request, client).await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::{error::Error, minijinja_util::initialize_templates};
+    use serde_json::{json, Value};
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_prepare_request_message() {
+        // Part 1: test without templates
+        let chat_completion_config = ChatCompletionConfig {
+            model: "dummy".to_string(),
+            weight: 1.0,
+            system_template: None,
+            user_template: None,
+            assistant_template: None,
+        };
+
+        // Test case 1: Regular user message
+        let input_message = InputMessage {
+            role: InputMessageRole::User,
+            content: Value::String("Hello, how are you?".to_string()),
+        };
+        let result = chat_completion_config.prepare_request_message(&input_message);
+        assert!(result.is_ok());
+        let prepared_message = result.unwrap();
+        match prepared_message {
+            InferenceRequestMessage::User(user_message) => {
+                assert_eq!(user_message.content, "Hello, how are you?");
+            }
+            _ => panic!("Expected User message"),
+        }
+
+        // Test case 2: System message
+        let input_message = InputMessage {
+            role: InputMessageRole::System,
+            content: Value::String("You are a helpful assistant.".to_string()),
+        };
+        let result = chat_completion_config.prepare_request_message(&input_message);
+        assert!(result.is_ok());
+        let prepared_message = result.unwrap();
+        match prepared_message {
+            InferenceRequestMessage::System(system_message) => {
+                assert_eq!(system_message.content, "You are a helpful assistant.");
+            }
+            _ => panic!("Expected System message"),
+        }
+
+        // Test case 3: Assistant message
+        let input_message = InputMessage {
+            role: InputMessageRole::Assistant,
+            content: Value::String("I'm doing well, thank you!".to_string()),
+        };
+        let result = chat_completion_config.prepare_request_message(&input_message);
+        assert!(result.is_ok());
+        let prepared_message = result.unwrap();
+        match prepared_message {
+            InferenceRequestMessage::Assistant(assistant_message) => {
+                assert_eq!(
+                    assistant_message.content,
+                    Some("I'm doing well, thank you!".to_string())
+                );
+            }
+            _ => panic!("Expected Assistant message"),
+        }
+        // Part 2: test with templates
+        // let template = "hello, {{name}}!";
+        // let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
+        // write!(temp_file, "{}", template).expect("Failed to write to temp file");
+        // let template2 = "Hello, {{ name }}! You are {{ age }} years old.";
+        // let mut temp_file2 = NamedTempFile::new().expect("Failed to create temporary file");
+        // write!(temp_file2, "{}", template2).expect("Failed to write to temp file");
+        // // Add both templates to make sure they're both added.
+        // initialize_templates(&[
+        //     &temp_file.path().to_path_buf(),
+        //     &temp_file.path().to_path_buf(),
+        //     &temp_file2.path().to_path_buf(),
+        // ]);
+
+        // let chat_completion_config = ChatCompletionConfig {
+        //     model: "dummy".to_string(),
+        //     weight: 1.0,
+        //     system_template: None,
+        //     user_template: None,
+        //     assistant_template: None,
+        // };
+    }
+}
