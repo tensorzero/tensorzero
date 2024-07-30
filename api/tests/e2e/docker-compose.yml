@@ -13,15 +13,15 @@ services:
   api:
     container_name: tensorzero-api-e2e-test
     build:
-      context: ../..
+      context: ../../..
       target: api
       cache_from:
         - type=gha
       cache_to:
         - type=gha
     ports:
-      - 3000:3000
-
+      - "3000:3000"
+      - "9090:9090" # Prometheus metrics
     command: ["api", "/app/tensorzero.test.toml"]
     environment:
       - CLICKHOUSE_URL=http://clickhouse:8123
