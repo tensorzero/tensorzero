@@ -6,7 +6,6 @@ use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::{debug_handler, Json};
 use serde::Deserialize;
-use serde_json::Value;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tokio_stream::StreamExt;
@@ -17,8 +16,8 @@ use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::Error;
 use crate::function::{sample_variant, FunctionConfig};
 use crate::inference::types::{
-    Inference, InferenceResponse, InferenceResponseChunk, InferenceResponseStream, InputMessage,
-    ModelInference, ModelInferenceResponseChunk,
+    collect_chunks, Inference, InferenceResponse, InferenceResponseChunk, InferenceResponseStream,
+    InputMessage, ModelInference, ModelInferenceResponseChunk,
 };
 use crate::variant::Variant;
 
@@ -151,6 +150,18 @@ pub async fn inference_handler(
                     continue;
                 }
             };
+            let response_to_write = response.clone();
+            tokio::spawn(async move {
+                write_inference(
+                    clickhouse_connection_info,
+                    params.function_name,
+                    variant_name,
+                    params.input,
+                    response_to_write,
+                    episode_id,
+                )
+                .await;
+            });
             // TODO(Viraj): validate output, edit the return value, spawn a thread, write to ClickHouse
             let response_value = serde_json::to_value(response).map_err(|e| Error::Inference {
                 message: format!("Failed to convert response to JSON: {}", e),
@@ -213,23 +224,16 @@ async fn worker_response_router(
         }
     }
     if !dryrun {
-        let inference_response: Result<InferenceResponse, Error> = buffer.try_into();
+        let inference_response: Result<InferenceResponse, Error> =
+            collect_chunks(buffer, function.output_schema());
         match inference_response {
             Ok(inference_response) => {
-                let parsed_output = match inference_response.parse_output(&function) {
-                    Ok(output) => Some(output),
-                    Err(e) => {
-                        e.log();
-                        None
-                    }
-                };
                 write_inference(
                     clickhouse_connection_info,
                     function_name,
                     variant_name,
                     input,
                     inference_response,
-                    parsed_output,
                     episode_id,
                 )
                 .await;
@@ -269,7 +273,6 @@ async fn write_inference(
     variant_name: String,
     input: Vec<InputMessage>,
     response: InferenceResponse,
-    parsed_output: Option<Value>,
     episode_id: Uuid,
 ) {
     match response {
@@ -295,7 +298,6 @@ async fn write_inference(
             }
             let inference = Inference::new(
                 InferenceResponse::Chat(response),
-                parsed_output,
                 serialized_input,
                 episode_id,
                 function_name,

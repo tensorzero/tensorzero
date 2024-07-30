@@ -176,17 +176,25 @@ impl Variant for ChatCompletionConfig {
         })?;
         let model_inference_response = model_config.infer(&request, client).await?;
 
-        Ok(InferenceResponse::Chat(ChatInferenceResponse {
-            inference_id: Uuid::now_v7(),
-            created: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("Time went backwards")
-                .as_secs(),
-            content: model_inference_response.content.clone(),
-            tool_calls: model_inference_response.tool_calls.clone(),
-            usage: model_inference_response.usage.clone(),
-            model_inference_responses: vec![model_inference_response],
-        }))
+        let inference_id = Uuid::now_v7();
+        let created = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_secs();
+        let raw_content = model_inference_response.content.clone();
+        let tool_calls = model_inference_response.tool_calls.clone();
+        let usage = model_inference_response.usage.clone();
+        let model_inference_responses = vec![model_inference_response];
+
+        Ok(InferenceResponse::Chat(ChatInferenceResponse::new(
+            inference_id,
+            created,
+            raw_content,
+            tool_calls,
+            usage,
+            model_inference_responses,
+            output_schema,
+        )))
     }
 
     async fn infer_stream(

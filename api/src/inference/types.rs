@@ -9,7 +9,7 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::{error::Error, function::FunctionConfig};
+use crate::{error::Error, jsonschema_util::JSONSchemaFromPath};
 
 /// TODO(Viraj): write a substantial docstring describing how data flows through the system as a series of
 /// transformations between types.
@@ -199,37 +199,60 @@ impl ModelInferenceResponse {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 pub struct ChatInferenceResponse {
     pub inference_id: Uuid,
     pub created: u64,
-    pub content: Option<String>,
+    pub content: Option<Value>,
+    pub raw_content: Option<String>,
     pub tool_calls: Option<Vec<ToolCall>>,
     pub usage: Usage,
     pub model_inference_responses: Vec<ModelInferenceResponse>,
 }
 
-#[derive(Serialize, Debug)]
-#[serde(tag = "type")]
-pub enum InferenceResponse {
-    Chat(ChatInferenceResponse),
-}
-
-impl InferenceResponse {
-    pub fn parse_output(&self, function: &FunctionConfig) -> Result<Value, Error> {
-        // TODO(Viraj): factor this out into a trait of the ChatInferenceResponse, write a test.
-        let content = match self {
-            InferenceResponse::Chat(chat_response) => chat_response.content.as_ref(),
+impl ChatInferenceResponse {
+    pub fn new(
+        inference_id: Uuid,
+        created: u64,
+        raw_content: Option<String>,
+        tool_calls: Option<Vec<ToolCall>>,
+        usage: Usage,
+        model_inference_responses: Vec<ModelInferenceResponse>,
+        output_schema: Option<&JSONSchemaFromPath>,
+    ) -> Self {
+        let content = match Self::parse_output(raw_content.as_deref(), output_schema) {
+            Ok(content) => Some(content),
+            Err(e) => {
+                e.log();
+                None
+            }
         };
+        Self {
+            inference_id,
+            created,
+            content,
+            raw_content,
+            tool_calls,
+            usage,
+            model_inference_responses,
+        }
+    }
+
+    fn parse_output(
+        content: Option<&str>,
+        output_schema: Option<&JSONSchemaFromPath>,
+    ) -> Result<Value, Error> {
+        // TODO(Viraj): factor this out into a trait of the ChatInferenceResponse, write a test.
+        //
         let content = content.ok_or(Error::OutputParsing {
             raw_output: "".to_string(),
-            message: "".to_string(),
+            message: "Output parsing failed due to None content".to_string(),
         })?;
         let output_value = serde_json::from_str(content).map_err(|e| Error::OutputParsing {
-            raw_output: content.clone(),
+            raw_output: content.to_string(),
             message: e.to_string(),
         })?;
-        match function.output_schema() {
+        match output_schema {
             Some(schema) => {
                 schema
                     .validate(&output_value)
@@ -242,6 +265,12 @@ impl InferenceResponse {
             None => Ok(output_value),
         }
     }
+}
+
+#[derive(Serialize, Debug, Clone)]
+#[serde(tag = "type")]
+pub enum InferenceResponse {
+    Chat(ChatInferenceResponse),
 }
 
 // TODO: handle references and stuff
@@ -259,7 +288,6 @@ pub struct Inference {
 impl Inference {
     pub fn new(
         inference_response: InferenceResponse,
-        parsed_output: Option<Value>,
         input: String,
         episode_id: Uuid,
         function_name: String,
@@ -272,8 +300,8 @@ impl Inference {
                 variant_name,
                 episode_id,
                 input,
-                raw_output: chat_response.content.unwrap_or_default(),
-                output: parsed_output,
+                raw_output: chat_response.raw_content.unwrap_or_default(),
+                output: chat_response.content,
             },
         }
     }
@@ -349,81 +377,84 @@ impl ModelInferenceResponseChunk {
     }
 }
 
-impl TryFrom<Vec<ModelInferenceResponseChunk>> for InferenceResponse {
-    type Error = Error;
+pub fn collect_chunks(
+    value: Vec<ModelInferenceResponseChunk>,
+    output_schema: Option<&JSONSchemaFromPath>,
+) -> Result<InferenceResponse, Error> {
+    // TODO(Viraj): we need this to be per-inference-response-type
+    // and sensitive to the type of variant and function being called.
 
-    fn try_from(value: Vec<ModelInferenceResponseChunk>) -> Result<Self, Self::Error> {
-        // TODO(Viraj): we need this to be per-inference-response-type
-        // and sensitive to the type of variant and function being called.
-
-        // TODO(Viraj): test extensively
-        let inference_id = value
-            .first()
-            .ok_or(Error::TypeConversion {
-                message:
-                    "Attempted to create an InferenceResponse from an empty response chunk vector"
-                        .to_string(),
-            })?
-            .inference_id;
-        let created = value
-            .first()
-            .ok_or(Error::TypeConversion {
-                message:
-                    "Attempted to create an InferenceResponse from an empty response chunk vector"
-                        .to_string(),
-            })?
-            .created;
-        let mut content: Option<String> = None;
-        let mut tool_calls: Option<Vec<ToolCall>> = None;
-        let raw: String = value
-            .iter()
-            .map(|chunk| chunk.raw.as_str())
-            .collect::<Vec<&str>>()
-            .join("\n");
-        let mut usage: Usage = Usage::default();
-        for chunk in value {
-            content = match content {
-                Some(c) => Some(c + &chunk.content.unwrap_or_default()),
-                None => chunk.content,
-            };
-            tool_calls = match tool_calls {
-                Some(mut t) => {
-                    for (j, tool_call) in chunk.tool_calls.unwrap_or_default().iter().enumerate() {
-                        if let Some(existing_tool_call) = t.get_mut(j) {
-                            existing_tool_call
-                                .arguments
-                                .push_str(tool_call.arguments.as_deref().unwrap_or_default());
-                        }
+    // TODO(Viraj): test extensively
+    let inference_id = value
+        .first()
+        .ok_or(Error::TypeConversion {
+            message: "Attempted to create an InferenceResponse from an empty response chunk vector"
+                .to_string(),
+        })?
+        .inference_id;
+    let created = value
+        .first()
+        .ok_or(Error::TypeConversion {
+            message: "Attempted to create an InferenceResponse from an empty response chunk vector"
+                .to_string(),
+        })?
+        .created;
+    let mut content: Option<String> = None;
+    let mut tool_calls: Option<Vec<ToolCall>> = None;
+    let raw: String = value
+        .iter()
+        .map(|chunk| chunk.raw.as_str())
+        .collect::<Vec<&str>>()
+        .join("\n");
+    let mut usage: Usage = Usage::default();
+    for chunk in value {
+        content = match content {
+            Some(c) => Some(c + &chunk.content.unwrap_or_default()),
+            None => chunk.content,
+        };
+        tool_calls = match tool_calls {
+            Some(mut t) => {
+                for (j, tool_call) in chunk.tool_calls.unwrap_or_default().iter().enumerate() {
+                    if let Some(existing_tool_call) = t.get_mut(j) {
+                        existing_tool_call
+                            .arguments
+                            .push_str(tool_call.arguments.as_deref().unwrap_or_default());
                     }
-                    Some(t)
                 }
-                None => chunk.tool_calls.map(|tool_calls| {
-                    tool_calls
-                        .into_iter()
-                        .map(|tool_call| tool_call.into())
-                        .collect()
-                }),
-            };
-            if let Some(chunk_usage) = chunk.usage {
-                usage.prompt_tokens = usage
-                    .prompt_tokens
-                    .saturating_add(chunk_usage.prompt_tokens);
-                usage.completion_tokens = usage
-                    .completion_tokens
-                    .saturating_add(chunk_usage.completion_tokens);
+                Some(t)
             }
+            None => chunk.tool_calls.map(|tool_calls| {
+                tool_calls
+                    .into_iter()
+                    .map(|tool_call| tool_call.into())
+                    .collect()
+            }),
+        };
+        if let Some(chunk_usage) = chunk.usage {
+            usage.prompt_tokens = usage
+                .prompt_tokens
+                .saturating_add(chunk_usage.prompt_tokens);
+            usage.completion_tokens = usage
+                .completion_tokens
+                .saturating_add(chunk_usage.completion_tokens);
         }
-        let model_response =
-            ModelInferenceResponse::new(content.clone(), tool_calls.clone(), raw, usage.clone());
-        Ok(InferenceResponse::Chat(ChatInferenceResponse {
-            inference_id,
-            created,
-            content,
-            tool_calls,
-            usage,
-            model_inference_responses: vec![model_response],
-        }))
     }
+    let model_response = ModelInferenceResponse::new(
+        content.clone(),
+        tool_calls.clone(),
+        raw.clone(),
+        usage.clone(),
+    );
+
+    Ok(InferenceResponse::Chat(ChatInferenceResponse::new(
+        inference_id,
+        created,
+        content,
+        tool_calls,
+        usage,
+        vec![model_response],
+        output_schema,
+    )))
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
