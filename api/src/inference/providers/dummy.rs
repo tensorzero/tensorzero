@@ -2,7 +2,7 @@ use crate::{
     error::Error,
     inference::types::{
         InferenceResponseStream, ModelInferenceRequest, ModelInferenceResponse,
-        ModelInferenceResponseChunk,
+        ModelInferenceResponseChunk, Usage,
     },
     model::ProviderConfig,
 };
@@ -12,6 +12,44 @@ use uuid::Uuid;
 use super::provider_trait::InferenceProvider;
 
 pub struct DummyProvider;
+
+pub static DUMMY_INFER_RESPONSE_CONTENT: &str = "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.";
+pub static DUMMY_INFER_RESPONSE_RAW: &str = r#"{
+  "id": "id",
+  "object": "text.completion",
+  "created": 1618870400,
+  "model": "text-davinci-002",
+  "choices": [
+    {
+      "text": "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.",
+      "index": 0,
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}"#;
+pub static DUMMY_INFER_USAGE: Usage = Usage {
+    prompt_tokens: 10,
+    completion_tokens: 10,
+};
+pub static DUMMY_STREAMING_RESPONSE: [&str; 16] = [
+    "Wally,",
+    " the",
+    " golden",
+    " retriever,",
+    " wagged",
+    " his",
+    " tail",
+    " excitedly",
+    " as",
+    " he",
+    " devoured",
+    " a",
+    " slice",
+    " of",
+    " cheese",
+    " pizza.",
+];
 
 impl InferenceProvider for DummyProvider {
     async fn infer<'a>(
@@ -37,25 +75,9 @@ impl InferenceProvider for DummyProvider {
             .duration_since(std::time::UNIX_EPOCH)
             .expect("Time went backwards")
             .as_secs();
-        let content = Some("Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.".to_string());
-        let raw = r#"{
-  "id": "id",
-  "object": "text.completion",
-  "created": 1618870400,
-  "model": "text-davinci-002",
-  "choices": [
-    {
-      "text": "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.",
-      "index": 0,
-      "logprobs": null,
-      "finish_reason": null
-    }
-  ]
-}"#.to_string();
-        let usage = crate::inference::types::Usage {
-            prompt_tokens: 10,
-            completion_tokens: 10,
-        };
+        let content = Some(DUMMY_INFER_RESPONSE_CONTENT.to_string());
+        let raw = DUMMY_INFER_RESPONSE_RAW.to_string();
+        let usage = DUMMY_INFER_USAGE.clone();
         Ok(ModelInferenceResponse {
             id,
             created,
@@ -90,24 +112,7 @@ impl InferenceProvider for DummyProvider {
             .expect("Time went backwards")
             .as_secs();
 
-        let content_chunks = vec![
-            "Wally,",
-            " the",
-            " golden",
-            " retriever,",
-            " wagged",
-            " his",
-            " tail",
-            " excitedly",
-            " as",
-            " he",
-            " devoured",
-            " a",
-            " slice",
-            " of",
-            " cheese",
-            " pizza.",
-        ];
+        let content_chunks = DUMMY_STREAMING_RESPONSE.to_vec();
 
         let total_tokens = content_chunks.len() as u32;
 

@@ -34,7 +34,7 @@ impl ModelConfig {
         request: &'a ModelInferenceRequest<'a>,
         client: &'a Client,
     ) -> Result<ModelInferenceResponse, Error> {
-        let mut provider_errors = Vec::new();
+        let mut provider_errors: Vec<Error> = Vec::new();
         for provider_name in &self.routing {
             let provider_config =
                 self.providers
@@ -44,7 +44,12 @@ impl ModelConfig {
                     })?;
             let response = provider_config.infer(request, client).await;
             match response {
-                Ok(response) => return Ok(response),
+                Ok(response) => {
+                    for error in &provider_errors {
+                        error.log();
+                    }
+                    return Ok(response);
+                }
                 Err(error) => provider_errors.push(error),
             }
         }
@@ -75,8 +80,6 @@ impl ModelConfig {
 }
 
 // TODO: think about how we can manage typing here so we don't have to check every time this is passed that it is the correct type.
-// TODO(Viraj): implement an arm of the ProviderConfig enum with the #[cfg(test)] attribut
-// so that we can use it as a mock of a model provider that can exercise all needed behaviors.
 #[derive(Clone, Debug)]
 pub enum ProviderConfig {
     Anthropic {
@@ -216,5 +219,182 @@ impl ProviderConfig {
                 DummyProvider::infer_stream(request, self, client).await
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::inference::{
+        providers::dummy::{
+            DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW, DUMMY_INFER_USAGE,
+            DUMMY_STREAMING_RESPONSE,
+        },
+        types::FunctionType,
+    };
+    use tokio_stream::StreamExt;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_model_config_infer_routing() {
+        let good_provider_config = ProviderConfig::Dummy {
+            model_name: "good".to_string(),
+        };
+        let bad_provider_config = ProviderConfig::Dummy {
+            model_name: "error".to_string(),
+        };
+        let model_config = ModelConfig {
+            routing: vec!["good".to_string()],
+            providers: HashMap::from([("good".to_string(), good_provider_config.clone())]),
+        };
+
+        // Try inferring the good model only
+        let request = ModelInferenceRequest {
+            messages: vec![],
+            tools_available: None,
+            tool_choice: None,
+            parallel_tool_calls: None,
+            temperature: None,
+            max_tokens: None,
+            stream: false,
+            json_mode: false,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+        let response = model_config.infer(&request, &Client::new()).await.unwrap();
+        let content = response.content.unwrap();
+        assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
+        let raw = response.raw;
+        assert_eq!(raw, DUMMY_INFER_RESPONSE_RAW);
+        let usage = response.usage;
+        assert_eq!(usage, DUMMY_INFER_USAGE);
+
+        // Try inferring the bad model
+        let model_config = ModelConfig {
+            routing: vec!["error".to_string()],
+            providers: HashMap::from([("error".to_string(), bad_provider_config.clone())]),
+        };
+        let response = model_config
+            .infer(&request, &Client::new())
+            .await
+            .unwrap_err();
+        assert_eq!(
+            response,
+            Error::ModelProvidersExhausted {
+                provider_errors: vec![Error::InferenceClient {
+                    message: "Error sending request to Dummy provider.".to_string()
+                }]
+            }
+        );
+
+        // Try inferring the good model as a fallback
+        let model_config = ModelConfig {
+            routing: vec!["error".to_string(), "good".to_string()],
+            providers: HashMap::from([
+                ("error".to_string(), bad_provider_config),
+                ("good".to_string(), good_provider_config),
+            ]),
+        };
+        let response = model_config.infer(&request, &Client::new()).await.unwrap();
+        let content = response.content.unwrap();
+        assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
+        let raw = response.raw;
+        assert_eq!(raw, DUMMY_INFER_RESPONSE_RAW);
+        let usage = response.usage;
+        assert_eq!(usage, DUMMY_INFER_USAGE);
+        // TODO: assert that an error was logged then do it in the other order and assert that one was not.
+    }
+
+    #[tokio::test]
+    async fn test_model_config_infer_stream_routing() {
+        let good_provider_config = ProviderConfig::Dummy {
+            model_name: "good".to_string(),
+        };
+        let bad_provider_config = ProviderConfig::Dummy {
+            model_name: "error".to_string(),
+        };
+
+        let request = ModelInferenceRequest {
+            messages: vec![],
+            tools_available: None,
+            tool_choice: None,
+            parallel_tool_calls: None,
+            temperature: None,
+            max_tokens: None,
+            stream: true,
+            json_mode: false,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+
+        // Test good model
+        let model_config = ModelConfig {
+            routing: vec!["good".to_string()],
+            providers: HashMap::from([("good".to_string(), good_provider_config.clone())]),
+        };
+        let (initial_chunk, stream) = model_config
+            .infer_stream(&request, &Client::new())
+            .await
+            .unwrap();
+        assert_eq!(
+            initial_chunk.content,
+            Some(DUMMY_STREAMING_RESPONSE[0].to_string())
+        );
+
+        let mut collected_content = initial_chunk.content.unwrap_or_default();
+        let mut stream = Box::pin(stream);
+        while let Some(Ok(chunk)) = stream.next().await {
+            if let Some(content) = chunk.content {
+                collected_content.push_str(&content);
+            }
+        }
+        assert_eq!(collected_content, DUMMY_STREAMING_RESPONSE.join(""));
+
+        // Test bad model
+        let model_config = ModelConfig {
+            routing: vec!["error".to_string()],
+            providers: HashMap::from([("error".to_string(), bad_provider_config.clone())]),
+        };
+        let response = model_config.infer_stream(&request, &Client::new()).await;
+        assert!(response.is_err());
+        let error = match response {
+            Err(error) => error,
+            Ok(_) => panic!("Expected error, got Ok(_)"),
+        };
+        assert_eq!(
+            error,
+            Error::ModelProvidersExhausted {
+                provider_errors: vec![Error::InferenceClient {
+                    message: "Error sending request to Dummy provider.".to_string()
+                }]
+            }
+        );
+
+        // Test fallback
+        let model_config = ModelConfig {
+            routing: vec!["error".to_string(), "good".to_string()],
+            providers: HashMap::from([
+                ("error".to_string(), bad_provider_config),
+                ("good".to_string(), good_provider_config),
+            ]),
+        };
+        let (initial_chunk, stream) = model_config
+            .infer_stream(&request, &Client::new())
+            .await
+            .unwrap();
+        assert_eq!(
+            initial_chunk.content,
+            Some(DUMMY_STREAMING_RESPONSE[0].to_string())
+        );
+
+        let mut collected_content = initial_chunk.content.unwrap_or_default();
+        let mut stream = Box::pin(stream);
+        while let Some(Ok(chunk)) = stream.next().await {
+            if let Some(content) = chunk.content {
+                collected_content.push_str(&content);
+            }
+        }
+        assert_eq!(collected_content, DUMMY_STREAMING_RESPONSE.join(""));
+        // TODO: assert that an error was logged then do it in the other order and assert that one was not.
     }
 }
