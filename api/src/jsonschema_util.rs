@@ -27,18 +27,16 @@ impl JSONSchemaFromPath {
         })
     }
 
-    pub fn is_valid(&self, instance: &serde_json::Value) -> bool {
-        self.compiled.is_valid(instance)
-    }
-
     pub fn validate(&self, instance: &serde_json::Value) -> Result<(), Error> {
         self.compiled
             .validate(instance)
-            .map_err(|e| Error::InvalidInputSchema {
+            .map_err(|e| Error::JsonSchemaValidation {
                 messages: e
                     .into_iter()
                     .map(|error| error.to_string())
                     .collect::<Vec<String>>(),
+                data: instance.clone(),
+                schema: self.value.clone(),
             })
     }
 }
@@ -82,28 +80,28 @@ mod tests {
         let instance = serde_json::json!({
             "name": "John Doe",
         });
-        assert!(schema.is_valid(&instance));
+        assert!(schema.validate(&instance).is_ok());
 
         let instance = serde_json::json!({
             "name": "John Doe",
             "age": 30,
         });
-        assert!(schema.is_valid(&instance));
+        assert!(schema.validate(&instance).is_ok());
 
         let instance = serde_json::json!({
             "name": "John Doe",
             "age": 30,
             "role": "admin"
         });
-        assert!(!schema.is_valid(&instance));
+        assert!(schema.validate(&instance).is_err());
 
         let instance = serde_json::json!({
             "age": "not a number"
         });
-        assert!(!schema.is_valid(&instance));
+        assert!(schema.validate(&instance).is_err());
 
         let instance = serde_json::json!({});
-        assert!(!schema.is_valid(&instance));
+        assert!(schema.validate(&instance).is_err());
     }
 
     #[test]

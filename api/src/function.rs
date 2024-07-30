@@ -272,9 +272,10 @@ mod tests {
 
     #[test]
     fn test_validate_input_chat_system_schema() {
+        let system_schema = create_test_schema();
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: Some(create_test_schema()),
+            system_schema: Some(system_schema.clone()),
             user_schema: None,
             assistant_schema: None,
             output_schema: None,
@@ -299,8 +300,10 @@ mod tests {
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
             validation_result.unwrap_err(),
-            Error::InvalidInputSchema {
-                messages: vec!["\"system content\" is not of type \"object\"".to_string()]
+            Error::JsonSchemaValidation {
+                messages: vec!["\"system content\" is not of type \"object\"".to_string()],
+                data: json!("system content"),
+                schema: system_schema.value.clone(),
             }
         );
 
@@ -324,10 +327,11 @@ mod tests {
 
     #[test]
     fn test_validate_input_chat_user_schema() {
+        let user_schema = create_test_schema();
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
             system_schema: None,
-            user_schema: Some(create_test_schema()),
+            user_schema: Some(user_schema.clone()),
             assistant_schema: None,
             output_schema: None,
         };
@@ -351,8 +355,10 @@ mod tests {
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
             validation_result.unwrap_err(),
-            Error::InvalidInputSchema {
-                messages: vec!["\"user content\" is not of type \"object\"".to_string()]
+            Error::JsonSchemaValidation {
+                messages: vec!["\"user content\" is not of type \"object\"".to_string()],
+                data: json!("user content"),
+                schema: user_schema.value.clone(),
             }
         );
 
@@ -376,11 +382,12 @@ mod tests {
 
     #[test]
     fn test_validate_input_chat_assistant_schema() {
+        let assistant_schema = create_test_schema();
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: None,
-            assistant_schema: Some(create_test_schema()),
+            assistant_schema: Some(assistant_schema.clone()),
             output_schema: None,
         };
         let function_config = FunctionConfig::Chat(chat_config);
@@ -403,8 +410,10 @@ mod tests {
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
             validation_result.unwrap_err(),
-            Error::InvalidInputSchema {
-                messages: vec!["\"assistant content\" is not of type \"object\"".to_string()]
+            Error::JsonSchemaValidation {
+                messages: vec!["\"assistant content\" is not of type \"object\"".to_string()],
+                data: json!("assistant content"),
+                schema: assistant_schema.value.clone(),
             }
         );
 
@@ -428,11 +437,14 @@ mod tests {
 
     #[test]
     fn test_validate_input_chat_all_schemas() {
+        let system_schema = create_test_schema();
+        let user_schema = create_test_schema();
+        let assistant_schema = create_test_schema();
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: Some(create_test_schema()),
-            user_schema: Some(create_test_schema()),
-            assistant_schema: Some(create_test_schema()),
+            system_schema: Some(system_schema.clone()),
+            user_schema: Some(user_schema),
+            assistant_schema: Some(assistant_schema),
             output_schema: None,
         };
         let function_config = FunctionConfig::Chat(chat_config);
@@ -455,8 +467,10 @@ mod tests {
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
             validation_result.unwrap_err(),
-            Error::InvalidInputSchema {
-                messages: vec!["\"system content\" is not of type \"object\"".to_string()]
+            Error::JsonSchemaValidation {
+                messages: vec!["\"system content\" is not of type \"object\"".to_string()],
+                data: json!("system content"),
+                schema: system_schema.value.clone(),
             }
         );
 
@@ -532,9 +546,10 @@ mod tests {
 
     #[test]
     fn test_validate_input_tool_system_schema() {
+        let system_schema = create_test_schema();
         let tool_config = FunctionConfigTool {
             variants: HashMap::new(),
-            system_schema: Some(create_test_schema()),
+            system_schema: Some(system_schema.clone()),
             user_schema: None,
             assistant_schema: None,
             output_schema: None,
@@ -559,8 +574,10 @@ mod tests {
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
             validation_result.unwrap_err(),
-            Error::InvalidInputSchema {
-                messages: vec!["\"system content\" is not of type \"object\"".to_string()]
+            Error::JsonSchemaValidation {
+                messages: vec!["\"system content\" is not of type \"object\"".to_string()],
+                data: json!("system content"),
+                schema: system_schema.value.clone(),
             }
         );
 
@@ -584,10 +601,11 @@ mod tests {
 
     #[test]
     fn test_validate_input_tool_user_schema() {
+        let user_schema = create_test_schema();
         let tool_config = FunctionConfigTool {
             variants: HashMap::new(),
             system_schema: None,
-            user_schema: Some(create_test_schema()),
+            user_schema: Some(user_schema.clone()),
             assistant_schema: None,
             output_schema: None,
         };
@@ -611,8 +629,10 @@ mod tests {
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
             validation_result.unwrap_err(),
-            Error::InvalidInputSchema {
-                messages: vec!["\"user content\" is not of type \"object\"".to_string()]
+            Error::JsonSchemaValidation {
+                messages: vec!["\"user content\" is not of type \"object\"".to_string()],
+                data: json!("user content"),
+                schema: user_schema.value.clone(),
             }
         );
 
@@ -636,11 +656,12 @@ mod tests {
 
     #[test]
     fn test_validate_input_tool_assistant_schema() {
+        let assistant_schema = create_test_schema();
         let tool_config = FunctionConfigTool {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: None,
-            assistant_schema: Some(create_test_schema()),
+            assistant_schema: Some(assistant_schema.clone()),
             output_schema: None,
         };
         let function_config = FunctionConfig::Tool(tool_config);
@@ -663,8 +684,10 @@ mod tests {
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
             validation_result.unwrap_err(),
-            Error::InvalidInputSchema {
-                messages: vec!["\"assistant content\" is not of type \"object\"".to_string()]
+            Error::JsonSchemaValidation {
+                messages: vec!["\"assistant content\" is not of type \"object\"".to_string()],
+                data: json!("assistant content"),
+                schema: assistant_schema.value.clone(),
             }
         );
 
@@ -688,11 +711,14 @@ mod tests {
 
     #[test]
     fn test_validate_input_tool_all_schemas() {
+        let system_schema = create_test_schema();
+        let user_schema = create_test_schema();
+        let assistant_schema = create_test_schema();
         let tool_config = FunctionConfigTool {
             variants: HashMap::new(),
-            system_schema: Some(create_test_schema()),
-            user_schema: Some(create_test_schema()),
-            assistant_schema: Some(create_test_schema()),
+            system_schema: Some(system_schema.clone()),
+            user_schema: Some(user_schema),
+            assistant_schema: Some(assistant_schema),
             output_schema: None,
         };
         let function_config = FunctionConfig::Tool(tool_config);
@@ -715,8 +741,10 @@ mod tests {
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
             validation_result.unwrap_err(),
-            Error::InvalidInputSchema {
-                messages: vec!["\"system content\" is not of type \"object\"".to_string()]
+            Error::JsonSchemaValidation {
+                messages: vec!["\"system content\" is not of type \"object\"".to_string()],
+                data: json!("system content"),
+                schema: system_schema.value.clone(),
             }
         );
 

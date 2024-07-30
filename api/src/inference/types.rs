@@ -11,6 +11,9 @@ use uuid::Uuid;
 
 use crate::{error::Error, function::FunctionConfig};
 
+/// TODO(Viraj): write a substantial docstring describing how data flows through the system as a series of
+/// transformations between types.
+
 /// InputMessage and InputMessageRole are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -214,6 +217,7 @@ pub enum InferenceResponse {
 
 impl InferenceResponse {
     pub fn parse_output(&self, function: &FunctionConfig) -> Result<Value, Error> {
+        // TODO(Viraj): factor this out into a trait of the ChatInferenceResponse, write a test.
         let content = match self {
             InferenceResponse::Chat(chat_response) => chat_response.content.as_ref(),
         };
@@ -230,11 +234,11 @@ impl InferenceResponse {
                 schema
                     .validate(&output_value)
                     .map_err(|e| Error::OutputValidation {
-                        raw_output: content.clone(),
-                        message: e.to_string(),
+                        source: Box::new(e),
                     })?;
                 Ok(output_value)
             }
+            // TODO(Viraj): check how a raw string is handled here and make sure it's sensible
             None => Ok(output_value),
         }
     }
@@ -349,6 +353,10 @@ impl TryFrom<Vec<ModelInferenceResponseChunk>> for InferenceResponse {
     type Error = Error;
 
     fn try_from(value: Vec<ModelInferenceResponseChunk>) -> Result<Self, Self::Error> {
+        // TODO(Viraj): we need this to be per-inference-response-type
+        // and sensitive to the type of variant and function being called.
+
+        // TODO(Viraj): test extensively
         let inference_id = value
             .first()
             .ok_or(Error::TypeConversion {
@@ -427,6 +435,8 @@ pub struct ToolCallChunk {
 
 impl From<ToolCallChunk> for ToolCall {
     fn from(tool_call: ToolCallChunk) -> Self {
+        // TODO: explicitly handle tools both for streaming and non-streaming
+        // as well as for Chat and Tool-style Functions
         Self {
             id: tool_call.id.unwrap_or_default(),
             name: tool_call.name.unwrap_or_default(),

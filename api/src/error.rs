@@ -1,6 +1,6 @@
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
-use serde_json::json;
+use serde_json::{json, Value};
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
@@ -30,14 +30,14 @@ pub enum Error {
     Inference {
         message: String,
     },
+    InputValidation {
+        source: Box<Error>,
+    },
     InvalidBaseUrl {
         message: String,
     },
     InvalidFunctionVariants {
         message: String,
-    },
-    InvalidInputSchema {
-        messages: Vec<String>,
     },
     InvalidMessage {
         message: String,
@@ -54,6 +54,11 @@ pub enum Error {
     },
     JsonRequest {
         message: String,
+    },
+    JsonSchemaValidation {
+        messages: Vec<String>,
+        data: Value,
+        schema: Value,
     },
     MiniJinjaTemplateMissing {
         template_name: String,
@@ -80,8 +85,7 @@ pub enum Error {
         message: String,
     },
     OutputValidation {
-        raw_output: String,
-        message: String,
+        source: Box<Error>,
     },
     ProviderNotFound {
         provider_name: String,
@@ -115,15 +119,16 @@ impl Error {
             Error::FireworksServer { .. } => tracing::Level::ERROR,
             Error::Inference { .. } => tracing::Level::ERROR,
             Error::InferenceClient { .. } => tracing::Level::ERROR,
+            Error::InputValidation { .. } => tracing::Level::WARN,
             Error::InvalidBaseUrl { .. } => tracing::Level::ERROR,
             Error::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
-            Error::InvalidInputSchema { .. } => tracing::Level::ERROR,
             Error::InvalidMessage { .. } => tracing::Level::WARN,
             Error::InvalidProviderConfig { .. } => tracing::Level::ERROR,
             Error::InvalidRequest { .. } => tracing::Level::ERROR,
             Error::InvalidTemplatePath => tracing::Level::ERROR,
             Error::InvalidTool { .. } => tracing::Level::ERROR,
             Error::JsonRequest { .. } => tracing::Level::WARN,
+            Error::JsonSchemaValidation { .. } => tracing::Level::ERROR,
             Error::MiniJinjaTemplateMissing { .. } => tracing::Level::ERROR,
             Error::MiniJinjaTemplateRender { .. } => tracing::Level::ERROR,
             Error::ModelNotFound { .. } => tracing::Level::ERROR,
@@ -152,15 +157,16 @@ impl Error {
             Error::FireworksClient { status_code, .. } => *status_code,
             Error::Inference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InferenceClient { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::InputValidation { .. } => StatusCode::BAD_REQUEST,
             Error::InvalidBaseUrl { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::InvalidInputSchema { .. } => StatusCode::BAD_REQUEST,
             Error::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
             Error::InvalidProviderConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InvalidRequest { .. } => StatusCode::BAD_REQUEST,
             Error::InvalidTemplatePath => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InvalidTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::JsonRequest { .. } => StatusCode::BAD_REQUEST,
+            Error::JsonSchemaValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::MiniJinjaTemplateMissing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::MiniJinjaTemplateRender { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ModelNotFound { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -213,15 +219,15 @@ impl std::fmt::Display for Error {
             }
             Error::Inference { message } => write!(f, "{}", message),
             Error::InferenceClient { message } => write!(f, "{}", message),
-            Error::InvalidBaseUrl { message } => write!(f, "{}", message),
-            Error::InvalidFunctionVariants { message } => write!(f, "{}", message),
-            Error::InvalidInputSchema { messages } => {
+            Error::InputValidation { source } => {
                 write!(
                     f,
-                    "The parameter 'input' does not fit the schema for this Function:\n\n{}",
-                    messages.join("\n")
+                    "Input validation failed with messages: {}",
+                    source.to_string()
                 )
             }
+            Error::InvalidBaseUrl { message } => write!(f, "{}", message),
+            Error::InvalidFunctionVariants { message } => write!(f, "{}", message),
             Error::InvalidMessage { message } => write!(f, "{}", message),
             Error::InvalidProviderConfig { message } => write!(f, "{}", message),
             Error::InvalidRequest { message } => write!(f, "{}", message),
@@ -230,6 +236,27 @@ impl std::fmt::Display for Error {
             }
             Error::InvalidTool { message } => write!(f, "{}", message),
             Error::JsonRequest { message } => write!(f, "{}", message),
+            Error::JsonSchemaValidation {
+                messages,
+                data,
+                schema,
+            } => {
+                write!(
+                    f,
+                    "JSON Schema validation failed for Function:\n\n{}",
+                    messages.join("\n")
+                )?;
+                write!(
+                    f,
+                    "Data: {}",
+                    serde_json::to_string(data).map_err(|_| std::fmt::Error)?
+                )?;
+                write!(
+                    f,
+                    "Schema: {}",
+                    serde_json::to_string(schema).map_err(|_| std::fmt::Error)?
+                )
+            }
             Error::MiniJinjaTemplateMissing { template_name } => {
                 write!(f, "Template not found: {}", template_name)
             }
@@ -263,15 +290,16 @@ impl std::fmt::Display for Error {
             } => {
                 write!(
                     f,
-                    "Error parsing output as JSON: {}: {}",
+                    "Error parsing output as JSON with message: {}: {}",
                     message, raw_output
                 )
             }
-            Error::OutputValidation {
-                raw_output,
-                message,
-            } => {
-                write!(f, "Error validating output: {}: {}", raw_output, message)
+            Error::OutputValidation { source } => {
+                write!(
+                    f,
+                    "Output validation failed with messages: {}",
+                    source.to_string()
+                )
             }
             Error::ProviderNotFound { provider_name } => {
                 write!(f, "Provider not found: {}", provider_name)
