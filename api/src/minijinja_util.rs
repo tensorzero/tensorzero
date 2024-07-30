@@ -1,19 +1,17 @@
 use minijinja::{Environment, UndefinedBehavior};
-use once_cell::sync::OnceCell;
 use serde_json::Value;
 #[cfg(test)]
 use std::collections::HashMap;
 #[cfg(test)]
 use std::io::Write;
 use std::path::PathBuf;
-#[cfg(test)]
 use std::sync::OnceLock;
 #[cfg(test)]
 use tempfile::NamedTempFile;
 
 use crate::error::Error;
 
-static MINIJINJA_ENV: OnceCell<Environment> = OnceCell::new();
+static MINIJINJA_ENV: OnceLock<Environment> = OnceLock::new();
 
 /// Initializes the MINIJINJA_ENV with the given templates, given as a list of paths to the templates.
 /// The name of each template in the environment will simply be the path to that template.
