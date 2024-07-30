@@ -5,6 +5,7 @@ use axum::extract::State;
 use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::{debug_handler, Json};
+use metrics::counter;
 use serde::Deserialize;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::UnboundedReceiverStream;
@@ -13,7 +14,7 @@ use uuid::Uuid;
 
 use crate::api_util::{AppState, AppStateData, StructuredJson};
 use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::error::Error;
+use crate::error::{Error, ResultExt};
 use crate::function::{sample_variant, FunctionConfig};
 use crate::inference::types::{
     collect_chunks, Inference, InferenceResponse, InferenceResponseChunk, InferenceResponseStream,
@@ -151,35 +152,34 @@ pub async fn inference_handler(
                 }
             };
             let response_to_write = response.clone();
-            tokio::spawn(async move {
-                write_inference(
-                    clickhouse_connection_info,
-                    params.function_name,
-                    variant_name,
-                    params.input,
-                    response_to_write,
-                    episode_id,
+            if !dryrun {
+                // TODO: add integration/E2E test that checks the Prometheus endpoint
+                counter!(
+                    "request_count",
+                    "endpoint" => "inference",
+                    "function_name" => params.function_name.to_string(),
                 )
-                .await;
-            });
-            // TODO(Viraj): validate output, edit the return value, spawn a thread, write to ClickHouse
+                .increment(1);
+                tokio::spawn(async move {
+                    write_inference(
+                        clickhouse_connection_info,
+                        params.function_name,
+                        variant_name,
+                        params.input,
+                        response_to_write,
+                        episode_id,
+                    )
+                    .await;
+                });
+            }
             let response_value = serde_json::to_value(response).map_err(|e| Error::Inference {
                 message: format!("Failed to convert response to JSON: {}", e),
             })?;
             return Ok(Json(response_value).into_response());
         }
-        // TODO(Viraj): spawn a thread that writes
-
-        // TODO(Viraj): add metrics
-        // if !dryrun {
-        //     // TODO: add integration/E2E test that checks the Prometheus endpoint
-        //     counter!(
-        //         "request_count",
-        //         "endpoint" => "inference",
-        //         "function_name" => params.function_name.to_string(),
     }
     // Eventually, if we get here, it means we tried every variant and none of them worked
-    // TODO(Viraj): make this a nicer error that contains all the errors from below.
+    // TODO(Viraj): make this a nicer error that contains all the errors from above.
     Err(Error::Inference {
         message: "Inference failed for every variant in this function".to_string(),
     })
@@ -209,36 +209,30 @@ async fn worker_response_router(
                 continue;
             }
         };
-        let event = prepare_event(&function, &variant_name, chunk);
-        match event {
-            Ok(event) => {
-                let r = client_sender.send(Ok(event));
-                if let Err(e) = r {
-                    Error::Inference {
-                        message: format!("Failed to send event to client: {}", e),
-                    }
-                    .log();
-                }
-            }
-            Err(e) => e.log(),
+        let event = prepare_event(&function, &variant_name, chunk).ok_or_log();
+        if let Some(event) = event {
+            let _ = client_sender
+                .send(Ok(event))
+                .map_err(|e| Error::ChannelWrite {
+                    message: e.to_string(),
+                })
+                .ok_or_log();
         }
     }
     if !dryrun {
         let inference_response: Result<InferenceResponse, Error> =
             collect_chunks(buffer, function.output_schema());
-        match inference_response {
-            Ok(inference_response) => {
-                write_inference(
-                    clickhouse_connection_info,
-                    function_name,
-                    variant_name,
-                    input,
-                    inference_response,
-                    episode_id,
-                )
-                .await;
-            }
-            Err(e) => e.log(),
+        let inference_response = inference_response.ok_or_log();
+        if let Some(inference_response) = inference_response {
+            write_inference(
+                clickhouse_connection_info,
+                function_name,
+                variant_name,
+                input,
+                inference_response,
+                episode_id,
+            )
+            .await;
         }
     }
 }
@@ -291,10 +285,7 @@ async fn write_inference(
                 let res = clickhouse_connection_info
                     .write(&response, "ModelInference")
                     .await;
-                // TODO: see if we can just make a .log_error() on a Result<T, Error>
-                if let Err(e) = res {
-                    e.log();
-                }
+                res.ok_or_log();
             }
             let inference = Inference::new(
                 InferenceResponse::Chat(response),
@@ -306,9 +297,7 @@ async fn write_inference(
             let res = clickhouse_connection_info
                 .write(&inference, "Inference")
                 .await;
-            if let Err(e) = res {
-                e.log();
-            }
+            res.ok_or_log();
         }
     }
 }

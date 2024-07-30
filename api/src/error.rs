@@ -4,6 +4,9 @@ use serde_json::{json, Value};
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
+    AllVariantsFailed {
+        errors: Vec<Error>,
+    },
     ApiKeyMissing {
         provider_name: String,
     },
@@ -12,6 +15,9 @@ pub enum Error {
         status_code: StatusCode,
     },
     AnthropicServer {
+        message: String,
+    },
+    ChannelWrite {
         message: String,
     },
     ClickHouseWrite {
@@ -111,9 +117,11 @@ impl Error {
     /// Defines the error level for logging this error
     fn level(&self) -> tracing::Level {
         match self {
+            Error::AllVariantsFailed { .. } => tracing::Level::ERROR,
             Error::ApiKeyMissing { .. } => tracing::Level::ERROR,
             Error::AnthropicClient { .. } => tracing::Level::WARN,
             Error::AnthropicServer { .. } => tracing::Level::ERROR,
+            Error::ChannelWrite { .. } => tracing::Level::ERROR,
             Error::ClickHouseWrite { .. } => tracing::Level::ERROR,
             Error::FireworksClient { .. } => tracing::Level::WARN,
             Error::FireworksServer { .. } => tracing::Level::ERROR,
@@ -149,9 +157,11 @@ impl Error {
     /// Defines the HTTP status code for responses involving this error
     fn status_code(&self) -> StatusCode {
         match self {
+            Error::AllVariantsFailed { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ApiKeyMissing { .. } => StatusCode::BAD_REQUEST,
             Error::AnthropicClient { status_code, .. } => *status_code,
             Error::AnthropicServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ClickHouseWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::FireworksServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::FireworksClient { status_code, .. } => *status_code,
@@ -199,6 +209,17 @@ impl Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Error::AllVariantsFailed { errors } => {
+                write!(
+                    f,
+                    "All variants failed with errors: {}",
+                    errors
+                        .iter()
+                        .map(|e| e.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
             Error::ApiKeyMissing { provider_name } => {
                 write!(f, "API key missing for provider: {}", provider_name)
             }
@@ -207,6 +228,9 @@ impl std::fmt::Display for Error {
             }
             Error::AnthropicServer { message } => {
                 write!(f, "Error from Anthropic servers: {}", message)
+            }
+            Error::ChannelWrite { message } => {
+                write!(f, "Error writing to channel: {}", message)
             }
             Error::ClickHouseWrite { message } => {
                 write!(f, "Error writing to ClickHouse: {}", message)
@@ -313,5 +337,21 @@ impl IntoResponse for Error {
         self.log();
         let body = json!({"error": self.to_string()});
         (self.status_code(), Json(body)).into_response()
+    }
+}
+
+pub trait ResultExt<T> {
+    fn ok_or_log(self) -> Option<T>;
+}
+
+impl<T> ResultExt<T> for Result<T, Error> {
+    fn ok_or_log(self) -> Option<T> {
+        match self {
+            Ok(value) => Some(value),
+            Err(error) => {
+                error.log();
+                None
+            }
+        }
     }
 }
