@@ -75,10 +75,21 @@ pub enum Error {
     OpenAIServer {
         message: String,
     },
+    OutputParsing {
+        raw_output: String,
+        message: String,
+    },
+    OutputValidation {
+        raw_output: String,
+        message: String,
+    },
     ProviderNotFound {
         provider_name: String,
     },
     Serialization {
+        message: String,
+    },
+    TypeConversion {
         message: String,
     },
     UnknownFunction {
@@ -119,8 +130,11 @@ impl Error {
             Error::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
             Error::OpenAIClient { .. } => tracing::Level::WARN,
             Error::OpenAIServer { .. } => tracing::Level::ERROR,
+            Error::OutputParsing { .. } => tracing::Level::WARN,
+            Error::OutputValidation { .. } => tracing::Level::WARN,
             Error::ProviderNotFound { .. } => tracing::Level::ERROR,
             Error::Serialization { .. } => tracing::Level::ERROR,
+            Error::TypeConversion { .. } => tracing::Level::ERROR,
             Error::UnknownFunction { .. } => tracing::Level::WARN,
             Error::UnknownVariant { .. } => tracing::Level::WARN,
             Error::UnknownMetric { .. } => tracing::Level::WARN,
@@ -153,8 +167,11 @@ impl Error {
             Error::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::OpenAIClient { status_code, .. } => *status_code,
             Error::OpenAIServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::OutputParsing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::OutputValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ProviderNotFound { .. } => StatusCode::NOT_FOUND,
             Error::Serialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::TypeConversion { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::UnknownFunction { .. } => StatusCode::NOT_FOUND,
             Error::UnknownVariant { .. } => StatusCode::NOT_FOUND,
             Error::UnknownMetric { .. } => StatusCode::NOT_FOUND,
@@ -162,7 +179,7 @@ impl Error {
     }
 
     /// Log the error using the `tracing` library
-    fn log(&self) {
+    pub fn log(&self) {
         match self.level() {
             tracing::Level::ERROR => tracing::error!(error = self.to_string()),
             tracing::Level::WARN => tracing::warn!(error = self.to_string()),
@@ -240,10 +257,27 @@ impl std::fmt::Display for Error {
                 write!(f, "Error from OpenAI client: {}", message)
             }
             Error::OpenAIServer { message } => write!(f, "Error from OpenAI servers: {}", message),
+            Error::OutputParsing {
+                raw_output,
+                message,
+            } => {
+                write!(
+                    f,
+                    "Error parsing output as JSON: {}: {}",
+                    message, raw_output
+                )
+            }
+            Error::OutputValidation {
+                raw_output,
+                message,
+            } => {
+                write!(f, "Error validating output: {}: {}", raw_output, message)
+            }
             Error::ProviderNotFound { provider_name } => {
                 write!(f, "Provider not found: {}", provider_name)
             }
             Error::Serialization { message } => write!(f, "{}", message),
+            Error::TypeConversion { message } => write!(f, "{}", message),
             Error::UnknownFunction { name } => write!(f, "Unknown function: {}", name),
             Error::UnknownVariant { name } => write!(f, "Unknown variant: {}", name),
             Error::UnknownMetric { name } => write!(f, "Unknown metric: {}", name),

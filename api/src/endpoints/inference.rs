@@ -6,16 +6,19 @@ use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::{debug_handler, Json};
 use serde::Deserialize;
+use serde_json::Value;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
 use crate::api_util::{AppState, AppStateData, StructuredJson};
+use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::Error;
 use crate::function::{sample_variant, FunctionConfig};
 use crate::inference::types::{
-    InferenceResponseChunk, InferenceResponseStream, InputMessage, ModelInferenceResponseChunk,
+    Inference, InferenceResponse, InferenceResponseChunk, InferenceResponseStream, InputMessage,
+    ModelInference, ModelInferenceResponseChunk,
 };
 use crate::variant::Variant;
 
@@ -49,7 +52,7 @@ pub async fn inference_handler(
     State(AppStateData {
         config,
         http_client,
-        ..
+        clickhouse_connection_info,
     }): AppState,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
@@ -120,10 +123,15 @@ pub async fn inference_handler(
                 // TODO: figure out how to get the Rust compiler to realize that the FunctionConfig
                 // can live forever
                 function.clone(),
+                params.function_name,
                 variant_name,
                 chunk,
                 stream,
                 client_sender,
+                params.input,
+                episode_id,
+                clickhouse_connection_info,
+                dryrun,
             ));
             return Ok(Sse::new(UnboundedReceiverStream::new(client_receiver))
                 .keep_alive(axum::response::sse::KeepAlive::new())
@@ -144,12 +152,13 @@ pub async fn inference_handler(
                     continue;
                 }
             };
+            // TODO: validate output, edit the return value, spawn a thread, write to ClickHouse
             let response_value = serde_json::to_value(response).map_err(|e| Error::Inference {
                 message: format!("Failed to convert response to JSON: {}", e),
             })?;
             return Ok(Json(response_value).into_response());
         }
-        // TODO: figure out storage
+        // TODO: spawn a thread that writes
     }
 
     // Eventually, if we get here, it means we tried every variant and none of them worked
@@ -161,13 +170,17 @@ pub async fn inference_handler(
 
 async fn worker_response_router(
     function: FunctionConfig,
+    function_name: String,
     variant_name: String,
     first_chunk: ModelInferenceResponseChunk,
     mut stream: InferenceResponseStream,
     client_sender: mpsc::UnboundedSender<Result<Event, Infallible>>,
+    input: Vec<InputMessage>,
+    episode_id: Uuid,
+    clickhouse_connection_info: ClickHouseConnectionInfo,
+    dryrun: bool,
 ) {
     let mut buffer = vec![first_chunk.clone()];
-    let mut errors: Vec<Error> = Vec::new();
     while let Some(chunk) = stream.next().await {
         let chunk = match chunk {
             Ok(chunk) => {
@@ -175,7 +188,7 @@ async fn worker_response_router(
                 chunk
             }
             Err(e) => {
-                errors.push(e);
+                e.log();
                 continue;
             }
         };
@@ -184,17 +197,40 @@ async fn worker_response_router(
             Ok(event) => {
                 let r = client_sender.send(Ok(event));
                 if let Err(e) = r {
-                    errors.push(Error::Inference {
+                    Error::Inference {
                         message: format!("Failed to send event to client: {}", e),
-                    });
+                    }
+                    .log();
                 }
             }
-            Err(e) => {
-                errors.push(e);
-            }
+            Err(e) => e.log(),
         }
     }
-    // TODO: log errors and also store results
+    if !dryrun {
+        let inference_response: Result<InferenceResponse, Error> = buffer.try_into();
+        match inference_response {
+            Ok(inference_response) => {
+                let parsed_output = match inference_response.parse_output(&function) {
+                    Ok(output) => Some(output),
+                    Err(e) => {
+                        e.log();
+                        None
+                    }
+                };
+                write_inference(
+                    clickhouse_connection_info,
+                    function_name,
+                    variant_name,
+                    input,
+                    inference_response,
+                    parsed_output,
+                    episode_id,
+                )
+                .await;
+            }
+            Err(e) => e.log(),
+        }
+    }
 }
 
 fn prepare_event(
@@ -219,4 +255,52 @@ fn prepare_event(
         .map_err(|e| Error::Inference {
             message: format!("Failed to convert Value to Event: {}", e),
         })
+}
+
+async fn write_inference(
+    clickhouse_connection_info: ClickHouseConnectionInfo,
+    function_name: String,
+    variant_name: String,
+    input: Vec<InputMessage>,
+    response: InferenceResponse,
+    parsed_output: Option<Value>,
+    episode_id: Uuid,
+) {
+    match response {
+        InferenceResponse::Chat(response) => {
+            let serialized_input = serde_json::to_string(&input).unwrap();
+            let model_responses: Vec<serde_json::Value> = response
+                .model_inference_responses
+                .iter()
+                .map(|r| {
+                    let model_inference =
+                        ModelInference::new(r.clone(), serialized_input.clone(), episode_id);
+                    serde_json::to_value(model_inference).unwrap_or_default()
+                })
+                .collect();
+            for response in model_responses {
+                let res = clickhouse_connection_info
+                    .write(&response, "ModelInference")
+                    .await;
+                // TODO: see if we can just make a .log_error() on a Result<T, Error>
+                if let Err(e) = res {
+                    e.log();
+                }
+            }
+            let inference = Inference::new(
+                InferenceResponse::Chat(response),
+                parsed_output,
+                serialized_input,
+                episode_id,
+                function_name,
+                variant_name,
+            );
+            let res = clickhouse_connection_info
+                .write(&inference, "Inference")
+                .await;
+            if let Err(e) = res {
+                e.log();
+            }
+        }
+    }
 }

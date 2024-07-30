@@ -760,19 +760,19 @@ impl TryFrom<OpenAIResponse> for ModelInferenceResponse {
 }
 
 // This doesn't include role
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize, Serialize)]
 struct OpenAIDelta {
     content: Option<String>,
     tool_calls: Option<Vec<OpenAIResponseToolCall>>,
 }
 
 // This doesn't include logprobs, finish_reason, and index
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize, Serialize)]
 struct OpenAIChatChunkChoice {
     delta: OpenAIDelta,
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize, Serialize)]
 struct OpenAIChatChunk {
     choices: Vec<OpenAIChatChunkChoice>,
     usage: Option<OpenAIUsage>,
@@ -782,6 +782,9 @@ fn openai_to_tensorzero_stream_message(
     mut chunk: OpenAIChatChunk,
     inference_id: Uuid,
 ) -> Result<ModelInferenceResponseChunk, Error> {
+    let raw_message = serde_json::to_string(&chunk).map_err(|e| Error::OpenAIServer {
+        message: format!("Error parsing response from OpenAI: {e}"),
+    })?;
     if chunk.choices.len() > 1 {
         return Err(Error::OpenAIServer {
             message: "Response has invalid number of choices: {}. Expected 1.".to_string(),
@@ -803,6 +806,7 @@ fn openai_to_tensorzero_stream_message(
         content,
         tool_calls,
         usage,
+        raw_message,
     ))
 }
 

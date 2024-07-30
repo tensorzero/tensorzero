@@ -9,7 +9,7 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::error::Error;
+use crate::{error::Error, function::FunctionConfig};
 
 /// InputMessage and InputMessageRole are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
@@ -28,7 +28,7 @@ impl fmt::Display for InputMessageRole {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct InputMessage {
     pub role: InputMessageRole,
@@ -128,7 +128,7 @@ pub enum InferenceRequestMessage {
     Tool(ToolInferenceRequestMessage),
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Usage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
@@ -146,9 +146,36 @@ pub struct ModelInferenceResponse {
     pub id: Uuid,
     pub created: u64,
     pub content: Option<String>,
+    #[serde(skip)]
     pub tool_calls: Option<Vec<ToolCall>>,
     pub raw: String,
     pub usage: Usage,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ModelInference {
+    pub id: Uuid,
+    pub inference_id: Uuid,
+    pub input: String,
+    pub output: String,
+    pub raw_response: String,
+    pub input_tokens: u32,
+    pub output_tokens: u32,
+}
+
+impl ModelInference {
+    pub fn new(response: ModelInferenceResponse, input: String, inference_id: Uuid) -> Self {
+        // TODO: deal with tools
+        Self {
+            id: Uuid::now_v7(),
+            inference_id,
+            input,
+            output: response.content.unwrap_or_default(),
+            raw_response: response.raw,
+            input_tokens: response.usage.prompt_tokens,
+            output_tokens: response.usage.completion_tokens,
+        }
+    }
 }
 
 impl ModelInferenceResponse {
@@ -183,6 +210,69 @@ pub struct ChatInferenceResponse {
 #[serde(tag = "type")]
 pub enum InferenceResponse {
     Chat(ChatInferenceResponse),
+}
+
+impl InferenceResponse {
+    pub fn parse_output(&self, function: &FunctionConfig) -> Result<Value, Error> {
+        let content = match self {
+            InferenceResponse::Chat(chat_response) => chat_response.content.as_ref(),
+        };
+        let content = content.ok_or(Error::OutputParsing {
+            raw_output: "".to_string(),
+            message: "".to_string(),
+        })?;
+        let output_value = serde_json::from_str(content).map_err(|e| Error::OutputParsing {
+            raw_output: content.clone(),
+            message: e.to_string(),
+        })?;
+        match function.output_schema() {
+            Some(schema) => {
+                schema
+                    .validate(&output_value)
+                    .map_err(|e| Error::OutputValidation {
+                        raw_output: content.clone(),
+                        message: e.to_string(),
+                    })?;
+                Ok(output_value)
+            }
+            None => Ok(output_value),
+        }
+    }
+}
+
+// TODO: handle references and stuff
+#[derive(Serialize, Debug)]
+pub struct Inference {
+    pub id: Uuid,
+    pub function_name: String,
+    pub variant_name: String,
+    pub episode_id: Uuid,
+    pub input: String,
+    pub output: Option<Value>,
+    pub raw_output: String,
+}
+
+impl Inference {
+    pub fn new(
+        inference_response: InferenceResponse,
+        parsed_output: Option<Value>,
+        input: String,
+        episode_id: Uuid,
+        function_name: String,
+        variant_name: String,
+    ) -> Self {
+        match inference_response {
+            InferenceResponse::Chat(chat_response) => Self {
+                id: chat_response.inference_id,
+                function_name,
+                variant_name,
+                episode_id,
+                input,
+                raw_output: chat_response.content.unwrap_or_default(),
+                output: parsed_output,
+            },
+        }
+    }
 }
 
 // Function to get the current timestamp in seconds
@@ -233,6 +323,7 @@ pub struct ModelInferenceResponseChunk {
     pub tool_calls: Option<Vec<ToolCallChunk>>,
     pub created: u64,
     pub usage: Option<Usage>,
+    pub raw: String,
 }
 
 impl ModelInferenceResponseChunk {
@@ -241,6 +332,7 @@ impl ModelInferenceResponseChunk {
         content: Option<String>,
         tool_calls: Option<Vec<ToolCallChunk>>,
         usage: Option<Usage>,
+        raw: String,
     ) -> Self {
         Self {
             inference_id,
@@ -248,7 +340,81 @@ impl ModelInferenceResponseChunk {
             tool_calls,
             created: current_timestamp(),
             usage,
+            raw,
         }
+    }
+}
+
+impl TryFrom<Vec<ModelInferenceResponseChunk>> for InferenceResponse {
+    type Error = Error;
+
+    fn try_from(value: Vec<ModelInferenceResponseChunk>) -> Result<Self, Self::Error> {
+        let inference_id = value
+            .first()
+            .ok_or(Error::TypeConversion {
+                message:
+                    "Attempted to create an InferenceResponse from an empty response chunk vector"
+                        .to_string(),
+            })?
+            .inference_id;
+        let created = value
+            .first()
+            .ok_or(Error::TypeConversion {
+                message:
+                    "Attempted to create an InferenceResponse from an empty response chunk vector"
+                        .to_string(),
+            })?
+            .created;
+        let mut content: Option<String> = None;
+        let mut tool_calls: Option<Vec<ToolCall>> = None;
+        let raw: String = value
+            .iter()
+            .map(|chunk| chunk.raw.as_str())
+            .collect::<Vec<&str>>()
+            .join("\n");
+        let mut usage: Usage = Usage::default();
+        for chunk in value {
+            content = match content {
+                Some(c) => Some(c + &chunk.content.unwrap_or_default()),
+                None => chunk.content,
+            };
+            tool_calls = match tool_calls {
+                Some(mut t) => {
+                    for (j, tool_call) in chunk.tool_calls.unwrap_or_default().iter().enumerate() {
+                        if let Some(existing_tool_call) = t.get_mut(j) {
+                            existing_tool_call
+                                .arguments
+                                .push_str(tool_call.arguments.as_deref().unwrap_or_default());
+                        }
+                    }
+                    Some(t)
+                }
+                None => chunk.tool_calls.map(|tool_calls| {
+                    tool_calls
+                        .into_iter()
+                        .map(|tool_call| tool_call.into())
+                        .collect()
+                }),
+            };
+            if let Some(chunk_usage) = chunk.usage {
+                usage.prompt_tokens = usage
+                    .prompt_tokens
+                    .saturating_add(chunk_usage.prompt_tokens);
+                usage.completion_tokens = usage
+                    .completion_tokens
+                    .saturating_add(chunk_usage.completion_tokens);
+            }
+        }
+        let model_response =
+            ModelInferenceResponse::new(content.clone(), tool_calls.clone(), raw, usage.clone());
+        Ok(InferenceResponse::Chat(ChatInferenceResponse {
+            inference_id,
+            created,
+            content,
+            tool_calls,
+            usage,
+            model_inference_responses: vec![model_response],
+        }))
     }
 }
 
@@ -257,6 +423,16 @@ pub struct ToolCallChunk {
     pub id: Option<String>,
     pub name: Option<String>,
     pub arguments: Option<String>,
+}
+
+impl From<ToolCallChunk> for ToolCall {
+    fn from(tool_call: ToolCallChunk) -> Self {
+        Self {
+            id: tool_call.id.unwrap_or_default(),
+            name: tool_call.name.unwrap_or_default(),
+            arguments: tool_call.arguments.unwrap_or_default(),
+        }
+    }
 }
 
 pub type InferenceResponseStream =

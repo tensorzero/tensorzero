@@ -550,7 +550,7 @@ fn handle_anthropic_error(
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum AnthropicMessageBlock {
     Text {
@@ -605,7 +605,7 @@ impl From<AnthropicMessageBlock> for StreamMessage {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Serialize)]
 #[allow(dead_code)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum AnthropicStreamMessage {
@@ -637,6 +637,9 @@ fn anthropic_to_tensorzero_stream_message(
     message: AnthropicStreamMessage,
     inference_id: Uuid,
 ) -> Result<Option<ModelInferenceResponseChunk>, Error> {
+    let raw_message = serde_json::to_string(&message).map_err(|e| Error::AnthropicServer {
+        message: format!("Error parsing response from Anthropic: {e}"),
+    })?;
     match message {
         AnthropicStreamMessage::ContentBlockDelta { delta, .. } => {
             let message: StreamMessage = delta.into();
@@ -645,6 +648,7 @@ fn anthropic_to_tensorzero_stream_message(
                 message.message,
                 message.tool_calls,
                 None,
+                raw_message,
             )))
         }
         AnthropicStreamMessage::ContentBlockStart { content_block, .. } => {
@@ -654,6 +658,7 @@ fn anthropic_to_tensorzero_stream_message(
                 message.message,
                 message.tool_calls,
                 None,
+                raw_message,
             )))
         }
         AnthropicStreamMessage::ContentBlockStop { .. } => Ok(None),
@@ -668,6 +673,7 @@ fn anthropic_to_tensorzero_stream_message(
                     None,
                     None,
                     Some(usage.into()),
+                    raw_message,
                 )))
             } else {
                 Ok(None)
@@ -681,6 +687,7 @@ fn anthropic_to_tensorzero_stream_message(
                     None,
                     None,
                     Some(usage.into()),
+                    raw_message,
                 )))
             } else {
                 Ok(None)
