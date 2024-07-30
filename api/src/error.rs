@@ -220,11 +220,7 @@ impl std::fmt::Display for Error {
             Error::Inference { message } => write!(f, "{}", message),
             Error::InferenceClient { message } => write!(f, "{}", message),
             Error::InputValidation { source } => {
-                write!(
-                    f,
-                    "Input validation failed with messages: {}",
-                    source.to_string()
-                )
+                write!(f, "Input validation failed with messages: {}", source)
             }
             Error::InvalidBaseUrl { message } => write!(f, "{}", message),
             Error::InvalidFunctionVariants { message } => write!(f, "{}", message),
@@ -295,11 +291,7 @@ impl std::fmt::Display for Error {
                 )
             }
             Error::OutputValidation { source } => {
-                write!(
-                    f,
-                    "Output validation failed with messages: {}",
-                    source.to_string()
-                )
+                write!(f, "Output validation failed with messages: {}", source)
             }
             Error::ProviderNotFound { provider_name } => {
                 write!(f, "Provider not found: {}", provider_name)

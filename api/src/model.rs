@@ -64,8 +64,6 @@ impl ModelConfig {
                     })?;
             let response = provider_config.infer_stream(request, client).await;
             match response {
-                // TODO: do the thing where we get a single chunk and make sure it is OK before moving on.
-                // This is going to require us to pass some kind of tx for a channel.
                 Ok(response) => return Ok(response),
                 Err(error) => provider_errors.push(error),
             }
@@ -75,6 +73,8 @@ impl ModelConfig {
 }
 
 // TODO: think about how we can manage typing here so we don't have to check every time this is passed that it is the correct type.
+// TODO(Viraj): implement an arm of the ProviderConfig enum with the #[cfg(test)] attribut
+// so that we can use it as a mock of a model provider that can exercise all needed behaviors.
 #[derive(Clone, Debug)]
 pub enum ProviderConfig {
     Anthropic {
@@ -102,6 +102,10 @@ impl<'de> Deserialize<'de> for ProviderConfig {
     where
         D: serde::Deserializer<'de>,
     {
+        /// Helper struct for deserializing the ProviderConfig.
+        /// This is necessary because we want to load environment variables as we deserialize
+        /// and we need to be able to deserialize the correct one based on the "type" field.
+        /// Use the ProviderConfig struct for all post-initialization logic.
         #[derive(Deserialize)]
         #[serde(tag = "type")]
         #[serde(rename_all = "lowercase")]
