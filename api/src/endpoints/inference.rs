@@ -303,3 +303,39 @@ async fn write_inference(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use super::*;
+
+    use crate::{function::FunctionConfigChat, inference::types::ModelInferenceResponseChunk};
+    use uuid::Uuid;
+
+    #[tokio::test]
+    async fn test_prepare_event() {
+        // Test case 1: Valid ModelInferenceResponseChunk
+        let chunk = ModelInferenceResponseChunk {
+            inference_id: Uuid::now_v7(),
+            content: Some("Test content".to_string()),
+            tool_calls: None,
+            created: 0,
+            usage: None,
+            raw: "".to_string(),
+        };
+        let function = FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            output_schema: None,
+        });
+
+        let result = prepare_event(&function, "test_variant", chunk);
+        assert!(result.is_ok());
+        // TODO: you could get the values of the private members using unsafe Rust.
+        // for now, we won't and will rely on integration testing here.
+        // this test doesn't do much so consider deleting or doing more.
+    }
+}
