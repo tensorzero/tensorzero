@@ -197,6 +197,15 @@ async fn worker_response_router(
     dryrun: bool,
 ) {
     let mut buffer = vec![first_chunk.clone()];
+    // Send the first chunk
+    if let Some(event) = prepare_event(&function, &variant_name, first_chunk).ok_or_log() {
+        let _ = client_sender
+            .send(Ok(event))
+            .map_err(|e| Error::ChannelWrite {
+                message: e.to_string(),
+            })
+            .ok_or_log();
+    }
     while let Some(chunk) = stream.next().await {
         let chunk = match chunk.ok_or_log() {
             Some(c) => c,
