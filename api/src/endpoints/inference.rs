@@ -46,6 +46,15 @@ pub struct Params {
     dryrun: Option<bool>,
 }
 
+#[derive(Debug, Clone)]
+struct InferenceMetadata {
+    pub function_name: String,
+    pub variant_name: String,
+    pub episode_id: Uuid,
+    pub input: Vec<InputMessage>,
+    pub dryrun: bool,
+}
+
 /// A handler for the inference endpoint
 #[debug_handler(state = AppStateData)]
 pub async fn inference_handler(
@@ -97,6 +106,15 @@ pub async fn inference_handler(
     // Keep track of which variants failed
     let mut variant_error = vec![];
 
+    // Create InferenceMetadata
+    let inference_metadata = InferenceMetadata {
+        function_name: params.function_name.clone(),
+        variant_name: params.variant_name.clone().unwrap_or_default(),
+        episode_id,
+        input: params.input.clone(),
+        dryrun,
+    };
+
     // Keep sampling variants until one succeeds
     while !variants.is_empty() {
         let (variant_name, variant) =
@@ -119,18 +137,12 @@ pub async fn inference_handler(
             };
             let (client_sender, client_receiver) = mpsc::unbounded_channel();
             tokio::spawn(worker_response_router(
-                // TODO: figure out how to get the Rust compiler to realize that the FunctionConfig
-                // can live forever
                 function.clone(),
-                params.function_name,
-                variant_name,
+                inference_metadata,
                 chunk,
                 stream,
                 client_sender,
-                params.input,
-                episode_id,
                 clickhouse_connection_info,
-                dryrun,
             ));
             return Ok(Sse::new(UnboundedReceiverStream::new(client_receiver))
                 .keep_alive(axum::response::sse::KeepAlive::new())
@@ -186,19 +198,15 @@ pub async fn inference_handler(
 
 async fn worker_response_router(
     function: FunctionConfig,
-    function_name: String,
-    variant_name: String,
+    metadata: InferenceMetadata,
     first_chunk: ModelInferenceResponseChunk,
     mut stream: InferenceResponseStream,
     client_sender: mpsc::UnboundedSender<Result<Event, Infallible>>,
-    input: Vec<InputMessage>,
-    episode_id: Uuid,
     clickhouse_connection_info: ClickHouseConnectionInfo,
-    dryrun: bool,
 ) {
     let mut buffer = vec![first_chunk.clone()];
     // Send the first chunk
-    if let Some(event) = prepare_event(&function, &variant_name, first_chunk).ok_or_log() {
+    if let Some(event) = prepare_event(&function, &metadata, first_chunk).ok_or_log() {
         let _ = client_sender
             .send(Ok(event))
             .map_err(|e| Error::ChannelWrite {
@@ -212,7 +220,7 @@ async fn worker_response_router(
             None => continue,
         };
         buffer.push(chunk.clone());
-        let event = prepare_event(&function, &variant_name, chunk).ok_or_log();
+        let event = prepare_event(&function, &metadata, chunk).ok_or_log();
         if let Some(event) = event {
             let _ = client_sender
                 .send(Ok(event))
@@ -222,18 +230,18 @@ async fn worker_response_router(
                 .ok_or_log();
         }
     }
-    if !dryrun {
+    if !metadata.dryrun {
         let inference_response: Result<InferenceResponse, Error> =
             collect_chunks(buffer, function.output_schema());
         let inference_response = inference_response.ok_or_log();
         if let Some(inference_response) = inference_response {
             write_inference(
                 clickhouse_connection_info,
-                function_name,
-                variant_name,
-                input,
+                metadata.function_name,
+                metadata.variant_name,
+                metadata.input,
                 inference_response,
-                episode_id,
+                metadata.episode_id,
             )
             .await;
         }
@@ -242,7 +250,7 @@ async fn worker_response_router(
 
 fn prepare_event(
     function: &FunctionConfig,
-    variant_name: &str,
+    metadata: &InferenceMetadata,
     chunk: ModelInferenceResponseChunk,
 ) -> Result<Event, Error> {
     let mut chunk_json = match function {
@@ -256,7 +264,7 @@ fn prepare_event(
             unimplemented!()
         }
     };
-    chunk_json["variant_name"] = variant_name.to_string().into();
+    chunk_json["variant_name"] = metadata.variant_name.to_string().into();
     Event::default()
         .json_data(chunk_json)
         .map_err(|e| Error::Inference {
@@ -331,8 +339,15 @@ mod tests {
             assistant_schema: None,
             output_schema: None,
         });
+        let inference_metadata = InferenceMetadata {
+            function_name: "test_function".to_string(),
+            variant_name: "test_variant".to_string(),
+            episode_id: Uuid::now_v7(),
+            input: vec![],
+            dryrun: false,
+        };
 
-        let result = prepare_event(&function, "test_variant", chunk);
+        let result = prepare_event(&function, &inference_metadata, chunk);
         assert!(result.is_ok());
         // TODO: you could get the values of the private members using unsafe Rust.
         // for now, we won't and will rely on integration testing here.
