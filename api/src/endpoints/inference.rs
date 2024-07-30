@@ -89,7 +89,6 @@ pub async fn inference_handler(
     let episode_id = params.episode_id.unwrap_or(Uuid::now_v7());
 
     // Should we store the results?
-    #[allow(unused)] // TODO: remove
     let dryrun = params.dryrun.unwrap_or(false);
 
     // Should we stream the inference?
@@ -152,15 +151,15 @@ pub async fn inference_handler(
                     continue;
                 }
             };
-            // TODO: validate output, edit the return value, spawn a thread, write to ClickHouse
+            // TODO(Viraj): validate output, edit the return value, spawn a thread, write to ClickHouse
             let response_value = serde_json::to_value(response).map_err(|e| Error::Inference {
                 message: format!("Failed to convert response to JSON: {}", e),
             })?;
             return Ok(Json(response_value).into_response());
         }
-        // TODO: spawn a thread that writes
+        // TODO(Viraj): spawn a thread that writes
 
-        // TODO: add metrics
+        // TODO(Viraj): add metrics
         // if !dryrun {
         //     // TODO: add integration/E2E test that checks the Prometheus endpoint
         //     counter!(
@@ -169,7 +168,7 @@ pub async fn inference_handler(
         //         "function_name" => params.function_name.to_string(),
     }
     // Eventually, if we get here, it means we tried every variant and none of them worked
-    // TODO: make this a nicer error that contains all the errors from below.
+    // TODO(Viraj): make this a nicer error that contains all the errors from below.
     Err(Error::Inference {
         message: "Inference failed for every variant in this function".to_string(),
     })

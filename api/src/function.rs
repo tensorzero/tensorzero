@@ -81,8 +81,6 @@ impl FunctionConfig {
         Ok(())
     }
 
-    // TODO: implement output validation against the output schema
-
     /// Validate an input that is a chat-like function (i.e. chat or tool).
     /// The validation is done based on the input's role and the function's schemas.
     fn validate_chat_like_input(

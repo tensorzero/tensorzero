@@ -810,7 +810,6 @@ mod tests {
                 }],
             }
         );
-        // todo!("implement a test for tool calls here");
 
         // Test a Tool message
         let inference_request_message =
