@@ -80,7 +80,7 @@ pub fn template_message(template_name: &str, context: &Value) -> Result<String, 
 static TEST_TEMPLATES: OnceLock<HashMap<&'static str, PathBuf>> = OnceLock::new();
 
 #[cfg(test)]
-fn idempotent_initialize_test_templates() -> &'static HashMap<&'static str, PathBuf> {
+pub fn idempotent_initialize_test_templates() -> &'static HashMap<&'static str, PathBuf> {
     TEST_TEMPLATES.get_or_init(|| {
         let mut templates = HashMap::new();
 
@@ -93,6 +93,17 @@ fn idempotent_initialize_test_templates() -> &'static HashMap<&'static str, Path
         let template2 = "Hello, {{ name }}! You are {{ age }} years old.";
         let temp_file2 = create_temp_file(template2);
         templates.insert("greeting_with_age", temp_file2.path().to_path_buf());
+
+        // System template
+        let system_template =
+            "You are a helpful and friendly assistant namedd {{ assistant_name }}";
+        let temp_file3 = create_temp_file(system_template);
+        templates.insert("system", temp_file3.path().to_path_buf());
+
+        // Assistant Template
+        let assistant_template = "I'm sorry but I can't help you with that because of {{ reason }}";
+        let temp_file4 = create_temp_file(assistant_template);
+        templates.insert("assistant", temp_file4.path().to_path_buf());
 
         // Initialize templates
         initialize_templates(&templates.values().collect::<Vec<_>>());

@@ -231,9 +231,8 @@ impl Variant for ChatCompletionConfig {
 mod tests {
     use super::*;
 
-    use crate::{error::Error, minijinja_util::initialize_templates};
+    use crate::{error::Error, minijinja_util::idempotent_initialize_test_templates};
     use serde_json::{json, Value};
-    use tempfile::NamedTempFile;
 
     #[test]
     fn test_prepare_request_message() {
@@ -293,26 +292,94 @@ mod tests {
             }
             _ => panic!("Expected Assistant message"),
         }
+        // Test case 4: Invalid JSON input
+        let input_message = InputMessage {
+            role: InputMessageRole::User,
+            content: serde_json::json!({"invalid": "json"}),
+        };
+        let result = chat_completion_config
+            .prepare_request_message(&input_message)
+            .unwrap_err();
+        assert_eq!(result, Error::InvalidMessage { message: "Request message content {\"invalid\":\"json\"} is not a string but there is no variant template for Role \"user\"".to_string()});
         // Part 2: test with templates
-        // let template = "hello, {{name}}!";
-        // let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
-        // write!(temp_file, "{}", template).expect("Failed to write to temp file");
-        // let template2 = "Hello, {{ name }}! You are {{ age }} years old.";
-        // let mut temp_file2 = NamedTempFile::new().expect("Failed to create temporary file");
-        // write!(temp_file2, "{}", template2).expect("Failed to write to temp file");
-        // // Add both templates to make sure they're both added.
-        // initialize_templates(&[
-        //     &temp_file.path().to_path_buf(),
-        //     &temp_file.path().to_path_buf(),
-        //     &temp_file2.path().to_path_buf(),
-        // ]);
+        let templates = idempotent_initialize_test_templates();
+        let system_template = templates.get("system").unwrap();
+        let user_template = templates.get("greeting_with_age").unwrap();
+        let assistant_template = templates.get("assistant").unwrap();
 
-        // let chat_completion_config = ChatCompletionConfig {
-        //     model: "dummy".to_string(),
-        //     weight: 1.0,
-        //     system_template: None,
-        //     user_template: None,
-        //     assistant_template: None,
-        // };
+        let chat_completion_config = ChatCompletionConfig {
+            model: "dummy".to_string(),
+            weight: 1.0,
+            system_template: Some(system_template.to_path_buf()),
+            user_template: Some(user_template.to_path_buf()),
+            assistant_template: Some(assistant_template.to_path_buf()),
+        };
+
+        // Test case 4: System message with template
+        let input_message = InputMessage {
+            role: InputMessageRole::System,
+            content: serde_json::json!({"assistant_name": "ChatGPT"}),
+        };
+        let result = chat_completion_config.prepare_request_message(&input_message);
+        assert!(result.is_ok());
+        let prepared_message = result.unwrap();
+        match prepared_message {
+            InferenceRequestMessage::System(system_message) => {
+                assert_eq!(
+                    system_message.content,
+                    "You are a helpful and friendly assistant namedd ChatGPT"
+                );
+            }
+            _ => panic!("Expected System message"),
+        }
+
+        // Test case 5: Assistant message with template
+        let input_message = InputMessage {
+            role: InputMessageRole::Assistant,
+            content: serde_json::json!({"reason": "it's against my ethical guidelines"}),
+        };
+        let result = chat_completion_config.prepare_request_message(&input_message);
+        assert!(result.is_ok());
+        let prepared_message = result.unwrap();
+        match prepared_message {
+            InferenceRequestMessage::Assistant(assistant_message) => {
+                assert_eq!(
+                    assistant_message.content,
+                    Some("I'm sorry but I can't help you with that because of it's against my ethical guidelines".to_string())
+                );
+            }
+            _ => panic!("Expected Assistant message"),
+        }
+
+        // Test case 6: User message with template
+        let input_message = InputMessage {
+            role: InputMessageRole::User,
+            content: json!({"name": "John", "age": 30}),
+        };
+        let result = chat_completion_config.prepare_request_message(&input_message);
+        assert!(result.is_ok());
+        let prepared_message = result.unwrap();
+        match prepared_message {
+            InferenceRequestMessage::User(user_message) => {
+                assert_eq!(user_message.content, "Hello, John! You are 30 years old.");
+            }
+            _ => panic!("Expected User message"),
+        }
+
+        // Test case 7: User message with bad input (missing required field)
+        let input_message = InputMessage {
+            role: InputMessageRole::User,
+            content: json!({"name": "Alice"}), // Missing "age" field
+        };
+        let result = chat_completion_config.prepare_request_message(&input_message);
+        assert!(result.is_err());
+        match result {
+            Err(Error::MiniJinjaTemplateRender { message, .. }) => {
+                // assert_eq!(template_name, "greeting_with_age");
+                println!("{}", message);
+                assert!(message.contains("undefined value"));
+            }
+            _ => panic!("Expected MiniJinjaTemplateRender error"),
+        }
     }
 }
