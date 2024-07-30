@@ -118,27 +118,106 @@ impl Config {
                 );
             }
 
-            // NOTE: There is nothing to validate in providers for now
-            // for (provider_name, provider) in &model.providers {
-            //     // ...
-            // }
+            // Validate each provider
+            for provider_name in model.providers.keys() {
+                assert!(
+                    seen_providers.contains(provider_name),
+                    "Invalid Config: `models.{model_name}`: Provider `{provider_name}` is not listed in `routing`",
+                );
+            }
         }
 
         // Validate each function
         for (function_name, function) in &self.functions {
             // Validate each variant
             for (variant_name, variant) in function.variants() {
+                // Ensure that the weight is non-negative
                 assert!(
                     variant.weight() >= 0.0,
                     "Invalid Config: `functions.{function_name}.variants.{variant_name}.weight`: must be non-negative",
                 );
 
+                // Ensure that the variant type is correct
                 match function {
-                    FunctionConfig::Chat(_) | FunctionConfig::Tool(_) => {
+                    FunctionConfig::Chat(function) => {
+                        // Check that the variant type matches the function type
                         assert!(
                             matches!(variant, VariantConfig::ChatCompletion(_)),
-                            "Invalid Config: `functions.{function_name}.variants.{variant_name}`: variant must be ChatCompletionConfig",
+                            "Invalid Config: `functions.{function_name}.variants.{variant_name}`: variant type must be `chat_completion`",
                         );
+
+                        // Check that system schema <=> system template
+                        match (&function.system_schema, &variant.system_template()) {
+                            (Some(_), None) => {
+                                panic!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `system_template` is required when `system_schema` is specified");
+                            }
+                            (None, Some(_)) => {
+                                panic!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `system_template` is required when `system_schema` is specified");
+                            }
+                            _ => {}
+                        }
+
+                        // Check that user schema <=> user template
+                        match (&function.user_schema, &variant.user_template()) {
+                            (Some(_), None) => {
+                                panic!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `user_template` is required when `user_schema` is specified");
+                            }
+                            (None, Some(_)) => {
+                                panic!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `user_template` is required when `user_schema` is specified");
+                            }
+                            _ => {}
+                        }
+
+                        // Check that assistant schema <=> assistant template
+                        match (&function.assistant_schema, &variant.assistant_template()) {
+                            (Some(_), None) => {
+                                panic!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `assistant_template` is required when `assistant_schema` is specified");
+                            }
+                            (None, Some(_)) => {
+                                panic!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `assistant_template` is required when `assistant_schema` is specified");
+                            }
+                            _ => {}
+                        }
+                    }
+                    FunctionConfig::Tool(function) => {
+                        // Check that the variant type matches the function type
+                        assert!(
+                            matches!(variant, VariantConfig::ChatCompletion(_)),
+                            "Invalid Config: `functions.{function_name}.variants.{variant_name}`: variant type must be `chat_completion`",
+                        );
+
+                        // Check that system schema <=> system template
+                        match (&function.system_schema, &variant.system_template()) {
+                            (Some(_), None) => {
+                                panic!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `system_template` is required when `system_schema` is specified");
+                            }
+                            (None, Some(_)) => {
+                                panic!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `system_template` is required when `system_schema` is specified");
+                            }
+                            _ => {}
+                        }
+
+                        // Check that user schema <=> user template
+                        match (&function.user_schema, &variant.user_template()) {
+                            (Some(_), None) => {
+                                panic!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `user_template` is required when `user_schema` is specified");
+                            }
+                            (None, Some(_)) => {
+                                panic!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `user_template` is required when `user_schema` is specified");
+                            }
+                            _ => {}
+                        }
+
+                        // Check that assistant schema <=> assistant template
+                        match (&function.assistant_schema, &variant.assistant_template()) {
+                            (Some(_), None) => {
+                                panic!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `assistant_template` is required when `assistant_schema` is specified");
+                            }
+                            (None, Some(_)) => {
+                                panic!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `assistant_template` is required when `assistant_schema` is specified");
+                            }
+                            _ => {}
+                        }
                     }
                 }
             }

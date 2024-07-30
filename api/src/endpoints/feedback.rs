@@ -1,5 +1,6 @@
 use axum::extract::State;
 use axum::{debug_handler, Json};
+use metrics::counter;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use uuid::Uuid;
@@ -59,7 +60,12 @@ pub async fn feedback_handler(
         params.episode_id,
         params.inference_id,
     )?;
+
     let feedback_id = Uuid::now_v7();
+
+    let dryrun = params.dryrun.unwrap_or(false);
+
+    // TODO: add test that metadata is not saved if dryrun is true
     match feedback_metadata.r#type {
         FeedbackType::Comment => {
             write_comment(
@@ -68,7 +74,7 @@ pub async fn feedback_handler(
                 params.value,
                 feedback_metadata.level,
                 feedback_id,
-                params.dryrun.unwrap_or(false),
+                dryrun,
             )
             .await?
         }
@@ -78,7 +84,7 @@ pub async fn feedback_handler(
                 feedback_metadata.target_id,
                 params.value,
                 feedback_id,
-                params.dryrun.unwrap_or(false),
+                dryrun,
             )
             .await?
         }
@@ -90,7 +96,7 @@ pub async fn feedback_handler(
                 params.value,
                 feedback_metadata.level,
                 feedback_id,
-                params.dryrun.unwrap_or(false),
+                dryrun,
             )
             .await?
         }
@@ -102,11 +108,22 @@ pub async fn feedback_handler(
                 params.value,
                 feedback_metadata.level,
                 feedback_id,
-                params.dryrun.unwrap_or(false),
+                dryrun,
             )
             .await?
         }
     }
+
+    if !dryrun {
+        // TODO: add integration/E2E test that checks the Prometheus endpoint
+        counter!(
+            "request_count",
+            "endpoint" => "feedback",
+            "metric_name" => params.metric_name.to_string()
+        )
+        .increment(1);
+    }
+
     Ok(Json(json!({"feedback_id": feedback_id})))
 }
 
@@ -184,8 +201,12 @@ async fn write_comment(
     let value = value.as_str().ok_or(Error::InvalidRequest {
         message: "Feedback value for a comment must be a string".to_string(),
     })?;
-    let payload =
-        json!({"target_type": level, "target_id": target_id, "value": value, "id": feedback_id});
+    let payload = json!({
+        "target_type": level,
+        "target_id": target_id,
+        "value": value,
+        "id": feedback_id
+    });
     if !dryrun {
         connection_info.write(&payload, "CommentFeedback").await?;
     }
@@ -211,7 +232,6 @@ async fn write_demonstration(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn write_float(
     connection_info: ClickHouseConnectionInfo,
     name: &str,
@@ -233,7 +253,6 @@ async fn write_float(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn write_boolean(
     connection_info: ClickHouseConnectionInfo,
     name: &str,
@@ -257,9 +276,9 @@ async fn write_boolean(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use std::collections::HashMap;
 
-    use super::*;
     use crate::{
         config_parser::{MetricConfig, MetricConfigOptimize},
         testing::get_unit_test_app_state_data,

@@ -2,7 +2,7 @@ services:
   api:
     container_name: api
     build:
-      context: .
+      context: ./api
       target: api
     ports:
       - "3000:3000"

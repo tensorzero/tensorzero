@@ -159,8 +159,15 @@ pub async fn inference_handler(
             return Ok(Json(response_value).into_response());
         }
         // TODO: spawn a thread that writes
-    }
 
+        // TODO: add metrics
+        // if !dryrun {
+        //     // TODO: add integration/E2E test that checks the Prometheus endpoint
+        //     counter!(
+        //         "request_count",
+        //         "endpoint" => "inference",
+        //         "function_name" => params.function_name.to_string(),
+    }
     // Eventually, if we get here, it means we tried every variant and none of them worked
     // TODO: make this a nicer error that contains all the errors from below.
     Err(Error::Inference {

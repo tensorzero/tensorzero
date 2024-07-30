@@ -1,0 +1,6 @@
+# cargo-deny
+
+[bans]
+deny = [
+    { name = "native-tls" },
+]

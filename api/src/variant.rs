@@ -49,6 +49,23 @@ impl VariantConfig {
             VariantConfig::ChatCompletion(params) => params.weight,
         }
     }
+    pub fn system_template(&self) -> Option<&PathBuf> {
+        match self {
+            VariantConfig::ChatCompletion(params) => params.system_template.as_ref(),
+        }
+    }
+
+    pub fn user_template(&self) -> Option<&PathBuf> {
+        match self {
+            VariantConfig::ChatCompletion(params) => params.user_template.as_ref(),
+        }
+    }
+
+    pub fn assistant_template(&self) -> Option<&PathBuf> {
+        match self {
+            VariantConfig::ChatCompletion(params) => params.assistant_template.as_ref(),
+        }
+    }
 }
 
 impl Variant for VariantConfig {
