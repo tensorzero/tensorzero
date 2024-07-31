@@ -52,12 +52,7 @@ impl InferenceProvider for AzureProvider {
             }
         };
         let request_body = AzureRequest::new(model_name, request);
-        println!(
-            "Request body: {}",
-            serde_json::to_string(&request_body).unwrap()
-        );
         let request_url = get_azure_chat_url(api_base, deployment_id, api_version);
-        println!("Request URL: {}", request_url);
         let res = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
@@ -118,12 +113,7 @@ impl InferenceProvider for AzureProvider {
             }
         };
         let request_body = AzureRequest::new(model_name, request);
-        println!(
-            "Request body: {}",
-            serde_json::to_string(&request_body).unwrap()
-        );
         let request_url = get_azure_chat_url(api_base, deployment_id, api_version);
-        println!("Request URL: {}", request_url);
         let event_source = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
