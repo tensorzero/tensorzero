@@ -172,8 +172,8 @@ enum AzureResponseFormat {
     Text,
 }
 
-/// This struct defines the supported parameters for the Together inference API
-/// See the [Together API documentation](https://docs.together.ai/docs/chat-overview)
+/// This struct defines the supported parameters for the Azure OpenAI inference API
+/// See the [API documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/chatgpt-quickstart)
 /// for more details.
 /// We are not handling logprobs, top_logprobs, n, prompt_truncate_len
 /// presence_penalty, frequency_penalty, seed, service_tier, stop, user,
