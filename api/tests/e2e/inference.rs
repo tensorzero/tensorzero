@@ -420,6 +420,8 @@ async fn e2e_test_variant_failover() {
     assert_eq!(retrieved_episode_id, episode_id);
 }
 
+// TODO (Viraj, before merging): write tests for streaming inference
+
 async fn select_inference_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
