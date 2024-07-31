@@ -85,7 +85,7 @@ pub fn create_tool_inference_request<'a>() -> ModelInferenceRequest<'a> {
     };
 
     let messages = vec![InferenceRequestMessage::User(UserInferenceRequestMessage {
-        content: "What's the weather like in New York?".to_string(),
+        content: "What's the weather like in New York currently?".to_string(),
     })];
 
     ModelInferenceRequest {

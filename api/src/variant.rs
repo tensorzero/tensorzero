@@ -386,8 +386,6 @@ mod tests {
         assert!(result.is_err());
         match result {
             Err(Error::MiniJinjaTemplateRender { message, .. }) => {
-                // assert_eq!(template_name, "greeting_with_age");
-                println!("{}", message);
                 assert!(message.contains("undefined value"));
             }
             _ => panic!("Expected MiniJinjaTemplateRender error"),
