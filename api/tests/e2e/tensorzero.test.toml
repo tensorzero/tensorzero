@@ -38,6 +38,13 @@ routing = ["good"]
 type = "dummy"
 model_name = "good"
 
+[models.error]
+routing = ["error"]
+
+[models.error.providers.error]
+type = "dummy"
+model_name = "error"
+
 [models.test_fallback]
 routing = ["error", "good"]
 
@@ -120,6 +127,21 @@ weight = 1
 model = "json"
 system_template = "functions/basic_test/prompt/system_template.minijinja"
 
+[functions.variant_failover]
+type = "chat"
+system_schema = "functions/basic_test/system_schema.json"
+
+[functions.variant_failover.variants.good]
+type = "chat_completion"
+weight = 0.5
+model = "test"
+system_template = "functions/basic_test/prompt/system_template.minijinja"
+
+[functions.variant_failover.variants.error]
+type = "chat_completion"
+weight = 0.5
+model = "error"
+system_template = "functions/basic_test/prompt/system_template.minijinja"
 
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
@@ -127,14 +149,14 @@ system_template = "functions/basic_test/prompt/system_template.minijinja"
 # └────────────────────────────────────────────────────────────────────────────┘
 
 [metrics.task_success]
-type = "boolean"  # "boolean", "float"
-optimize = "max"  # "min", "max"
-level = "inference"  # "inference", "episode"
+type = "boolean"    # "boolean", "float"
+optimize = "max"    # "min", "max"
+level = "inference" # "inference", "episode"
 
 [metrics.goal_achieved]
 type = "boolean"  # "boolean", "float"
 optimize = "max"  # "min", "max"
-level = "episode"  # "inference", "episode"
+level = "episode" # "inference", "episode"
 
 [metrics.user_rating]
 type = "float"
