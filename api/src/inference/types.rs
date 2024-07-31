@@ -14,8 +14,32 @@ use crate::{
     jsonschema_util::JSONSchemaFromPath,
 };
 
-/// TODO(Viraj): write a substantial docstring describing how data flows through the system as a series of
-/// transformations between types.
+/// Data flow in TensorZero
+///
+/// The flow of an inference request through TensorZero can be viewed as a series of transformations between types.
+/// Most of them are defined below.
+///
+/// A request is made that contains a list of InputMessages.
+/// These are validated against the input schema of the Function
+/// and then templated and transformed into InferenceRequestMessages for a particular Variant.
+/// These InferenceRequestMessages are collected into a ModelInferenceRequest,
+/// which should contain all information needed by a ModelProvider to perform the
+/// inference that is called for.
+///
+/// Each provider transforms a ModelInferenceRequest into a provider-specific (private) inference request type
+/// that is suitable for serialization directly into a request to the provider.
+///
+/// In both non-streaming and streaming inference, each ModelProvider recieves data from the provider in a
+/// a (private) provider-specific format that is then transformed into a ModelInferenceResponse (non-streaming)
+/// or a stream of ModelInferenceResponseChunks (streaming).
+/// As a Variant might make use of multiple model inferences, we then combine
+/// one or more ModelInferenceResponses into a single InferenceResponse (but we keep the original ModelInferenceResponses around).
+/// In the non-streaming case, this InferenceResponse is serialized into the TensorZero response format.
+/// In the streaming case we convert ModelInferenceResponseChunks into serialized InferenceResponseChunks to the client.
+/// We then collect all the InferenceResponseChunks into an InferenceResponse for validation and storage after the fact.
+///
+/// Alongside the response, we also store information about what happened during the request.
+/// For this we convert the InferenceResponse into an Inference and ModelInferences, which are written to ClickHouse asynchronously.
 
 /// InputMessage and InputMessageRole are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
