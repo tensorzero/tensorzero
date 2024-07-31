@@ -52,6 +52,9 @@ pub enum Error {
     JsonRequest {
         message: String,
     },
+    JsonSchema {
+        message: String,
+    },
     MiniJinjaTemplateMissing {
         template_name: String,
     },
@@ -99,6 +102,7 @@ impl Error {
             Error::InvalidRequest { .. } => tracing::Level::ERROR,
             Error::InvalidTool { .. } => tracing::Level::ERROR,
             Error::JsonRequest { .. } => tracing::Level::WARN,
+            Error::JsonSchema { .. } => tracing::Level::ERROR,
             Error::MiniJinjaTemplateMissing { .. } => tracing::Level::ERROR,
             Error::MiniJinjaTemplateRender { .. } => tracing::Level::ERROR,
             Error::OpenAIClient { .. } => tracing::Level::WARN,
@@ -128,6 +132,7 @@ impl Error {
             Error::InvalidRequest { .. } => StatusCode::BAD_REQUEST,
             Error::InvalidTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::JsonRequest { .. } => StatusCode::BAD_REQUEST,
+            Error::JsonSchema { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::MiniJinjaTemplateMissing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::MiniJinjaTemplateRender { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::OpenAIClient { status_code, .. } => *status_code,
@@ -185,6 +190,7 @@ impl std::fmt::Display for Error {
             Error::InvalidRequest { message } => write!(f, "{}", message),
             Error::InvalidTool { message } => write!(f, "{}", message),
             Error::JsonRequest { message } => write!(f, "{}", message),
+            Error::JsonSchema { message } => write!(f, "{}", message),
             Error::MiniJinjaTemplateMissing { template_name } => {
                 write!(f, "Template not found: {}", template_name)
             }
