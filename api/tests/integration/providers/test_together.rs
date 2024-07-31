@@ -16,7 +16,7 @@ async fn test_infer() {
     // Load API key from environment variable
     let api_key = env::var("TOGETHER_API_KEY").expect("TOGETHER_API_KEY must be set");
     let api_key = SecretString::new(api_key);
-    let model_name = " togethercomputer/CodeLlama-34b-Instruct";
+    let model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo";
     let client = reqwest::Client::new();
     let inference_request = create_simple_inference_request();
 
@@ -34,7 +34,7 @@ async fn test_infer_with_tool_calls() {
     // Load API key from environment variable
     let api_key = env::var("TOGETHER_API_KEY").expect("TOGETHER_API_KEY must be set");
     let api_key = SecretString::new(api_key);
-    let model_name = "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo";
+    let model_name = "mistralai/Mixtral-8x7B-Instruct-v0.1";
     let client = reqwest::Client::new();
 
     let inference_request = create_tool_inference_request();
