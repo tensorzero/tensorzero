@@ -151,7 +151,7 @@ pub fn sample_variant(
     for (variant_name, variant) in variants.iter() {
         cumulative_weight += variant.weight();
         if cumulative_weight > random_threshold {
-            sampled_variant_name = variant_name.clone();
+            sampled_variant_name.clone_from(variant_name);
             break;
         }
     }
@@ -159,13 +159,11 @@ pub fn sample_variant(
     // If we didn't find a variant (which should only happen due to rare numerical precision issues),
     // use the last variant as a fallback
     if sampled_variant_name.is_empty() {
-        sampled_variant_name = variants
-            .keys()
-            .last()
-            .ok_or_else(|| Error::InvalidFunctionVariants {
+        sampled_variant_name.clone_from(variants.keys().last().ok_or_else(|| {
+            Error::InvalidFunctionVariants {
                 message: format!("Function `{function_name}` has no variants"),
-            })?
-            .clone();
+            }
+        })?);
     }
 
     // Remove and return the sampled variant
