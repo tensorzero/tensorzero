@@ -301,6 +301,8 @@ async fn write_inference(
                 };
             let model_responses: Vec<serde_json::Value> =
                 response.get_serialized_model_inferences(&serialized_input);
+            // TODO : make these writes concurrent
+            // (doesn't matter that much since they don't block the main thread but still wastes resources)
             for response in model_responses {
                 let res = clickhouse_connection_info
                     .write(&response, "ModelInference")
