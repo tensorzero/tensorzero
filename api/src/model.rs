@@ -125,17 +125,14 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 model_name: String,
                 api_base: String,
             },
-            #[serde(rename = "openai")]
             OpenAI {
                 model_name: String,
                 api_base: Option<String>,
             },
-            #[serde(rename = "fireworks")]
             Fireworks {
                 model_name: String,
             },
             #[cfg(any(test, feature = "e2e_tests"))]
-            #[serde(rename = "dummy")]
             Dummy {
                 model_name: String,
             },
