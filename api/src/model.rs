@@ -10,7 +10,7 @@ use crate::{
     inference::{
         providers::{
             anthropic::AnthropicProvider,
-            openai::{FireworksProvider, OpenAIProvider},
+            openai::{FireworksProvider, OpenAIProvider, TogetherProvider},
             provider_trait::InferenceProvider,
         },
         types::{
@@ -91,12 +91,16 @@ pub enum ProviderConfig {
         api_base: String,
         api_key: Option<SecretString>,
     },
+    Fireworks {
+        model_name: String,
+        api_key: Option<SecretString>,
+    },
     OpenAI {
         model_name: String,
         api_base: Option<String>,
         api_key: Option<SecretString>,
     },
-    Fireworks {
+    Together {
         model_name: String,
         api_key: Option<SecretString>,
     },
@@ -125,13 +129,17 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 model_name: String,
                 api_base: String,
             },
+            #[serde(rename = "fireworks")]
+            Fireworks {
+                model_name: String,
+            },
             #[serde(rename = "openai")]
             OpenAI {
                 model_name: String,
                 api_base: Option<String>,
             },
-            #[serde(rename = "fireworks")]
-            Fireworks {
+            #[serde(rename = "together")]
+            Together {
                 model_name: String,
             },
             #[cfg(any(test, feature = "e2e_tests"))]
@@ -156,6 +164,10 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 api_base,
                 api_key: env::var("AZURE_OPENAI_API_KEY").ok().map(SecretString::new),
             },
+            ProviderConfigHelper::Fireworks { model_name } => ProviderConfig::Fireworks {
+                model_name,
+                api_key: env::var("FIREWORKS_API_KEY").ok().map(SecretString::new),
+            },
             ProviderConfigHelper::OpenAI {
                 model_name,
                 api_base,
@@ -164,9 +176,9 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 api_base,
                 api_key: env::var("OPENAI_API_KEY").ok().map(SecretString::new),
             },
-            ProviderConfigHelper::Fireworks { model_name } => ProviderConfig::Fireworks {
+            ProviderConfigHelper::Together { model_name } => ProviderConfig::Together {
                 model_name,
-                api_key: env::var("FIREWORKS_API_KEY").ok().map(SecretString::new),
+                api_key: env::var("TOGETHER_API_KEY").ok().map(SecretString::new),
             },
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfigHelper::Dummy { model_name } => ProviderConfig::Dummy { model_name },
@@ -187,10 +199,11 @@ impl ProviderConfig {
             ProviderConfig::Azure { .. } => {
                 todo!()
             }
-            ProviderConfig::OpenAI { .. } => OpenAIProvider::infer(request, self, client).await,
             ProviderConfig::Fireworks { .. } => {
                 FireworksProvider::infer(request, self, client).await
             }
+            ProviderConfig::OpenAI { .. } => OpenAIProvider::infer(request, self, client).await,
+            ProviderConfig::Together { .. } => TogetherProvider::infer(request, self, client).await,
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy { .. } => DummyProvider::infer(request, self, client).await,
         }
@@ -208,11 +221,14 @@ impl ProviderConfig {
             ProviderConfig::Azure { .. } => {
                 todo!()
             }
+            ProviderConfig::Fireworks { .. } => {
+                FireworksProvider::infer_stream(request, self, client).await
+            }
             ProviderConfig::OpenAI { .. } => {
                 OpenAIProvider::infer_stream(request, self, client).await
             }
-            ProviderConfig::Fireworks { .. } => {
-                FireworksProvider::infer_stream(request, self, client).await
+            ProviderConfig::Together { .. } => {
+                TogetherProvider::infer_stream(request, self, client).await
             }
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy { .. } => {
