@@ -334,12 +334,12 @@ async fn write_inference(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use super::*;
 
-    use crate::{function::FunctionConfigChat, inference::types::ModelInferenceResponseChunk};
+    use std::collections::HashMap;
     use uuid::Uuid;
+
+    use crate::{function::FunctionConfigChat, inference::types::ModelInferenceResponseChunk};
 
     #[tokio::test]
     async fn test_prepare_event() {
@@ -369,8 +369,8 @@ mod tests {
 
         let result = prepare_event(&function, &inference_metadata, chunk);
         assert!(result.is_ok());
-        // TODO: you could get the values of the private members using unsafe Rust.
-        // for now, we won't and will rely on integration testing here.
-        // this test doesn't do much so consider deleting or doing more.
+        // TODO: You could get the values of the private members using unsafe Rust.
+        // For now, we won't and will rely on integration testing here.
+        // This test doesn't do much so consider deleting or doing more.
     }
 }

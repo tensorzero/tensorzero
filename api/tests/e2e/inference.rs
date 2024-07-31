@@ -12,7 +12,7 @@ use uuid::Uuid;
 // TODO: make this endpoint configurable with main.rs
 const INFERENCE_URL: &str = "http://localhost:3000/inference";
 lazy_static::lazy_static! {
-    static ref CLICKHOUSE_URL: String = std::env::var("CLICKHOUSE_URL").expect("CLICKHOUSE_URL must be set");
+    static ref CLICKHOUSE_URL: String = std::env::var("CLICKHOUSE_URL").expect("Environment variable CLICKHOUSE_URL must be set");
 }
 
 #[tokio::test]
@@ -75,7 +75,6 @@ async fn e2e_test_inference_basic() {
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
-    println!("result: {}", result);
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -154,7 +153,6 @@ async fn e2e_test_inference_model_fallback() {
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
-    println!("result: {}", result);
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -232,16 +230,14 @@ async fn e2e_test_inference_json_fail() {
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
-    println!("result: {}", result);
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, payload["input"]);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    // TODO: handle the fact that this should be Optional
-    assert_eq!(output, "");
+    let output = result.get("output").unwrap();
+    assert!(output.is_null());
     let output_raw = result.get("raw_output").unwrap().as_str().unwrap();
     assert_eq!(output_raw, DUMMY_INFER_RESPONSE_CONTENT);
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
@@ -312,7 +308,6 @@ async fn e2e_test_inference_json_succeed() {
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
-    println!("result: {}", result);
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -405,7 +400,6 @@ async fn e2e_test_variant_failover() {
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
-    println!("result: {}", result);
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);

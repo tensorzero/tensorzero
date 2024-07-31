@@ -68,56 +68,8 @@ pub fn template_message(template_name: &str, context: &Value) -> Result<String, 
     }
 }
 
-// At test time, we want to initialize the templates once, and then use them in all tests.
-// This is a bit of a hack, but it works for now.
-// Idea is that TEST_TEMPLATES is initialized once, and then we use it in all tests.
-// Same with MINIJINJA_ENV. We can put all the minijinja templates used in cargo tests in this initializer,
-// then every test that uses minijinja can use them by calling this function and getting the template paths
-// from the map.
 #[cfg(test)]
-static TEST_TEMPLATES: OnceLock<HashMap<&'static str, PathBuf>> = OnceLock::new();
-
-#[cfg(test)]
-pub fn idempotent_initialize_test_templates() -> &'static HashMap<&'static str, PathBuf> {
-    TEST_TEMPLATES.get_or_init(|| {
-        let mut templates = HashMap::new();
-
-        // Template 1
-        let template1 = "hello, {{name}}!";
-        let temp_file1 = create_temp_file(template1);
-        templates.insert("greeting", temp_file1.path().to_path_buf());
-
-        // Template 2
-        let template2 = "Hello, {{ name }}! You are {{ age }} years old.";
-        let temp_file2 = create_temp_file(template2);
-        templates.insert("greeting_with_age", temp_file2.path().to_path_buf());
-
-        // System template
-        let system_template = "You are a helpful and friendly assistant named {{ assistant_name }}";
-        let temp_file3 = create_temp_file(system_template);
-        templates.insert("system", temp_file3.path().to_path_buf());
-
-        // Assistant Template
-        let assistant_template = "I'm sorry but I can't help you with that because of {{ reason }}";
-        let temp_file4 = create_temp_file(assistant_template);
-        templates.insert("assistant", temp_file4.path().to_path_buf());
-
-        // Initialize templates
-        initialize_templates(&templates.values().collect::<Vec<_>>());
-
-        templates
-    })
-}
-
-#[cfg(test)]
-fn create_temp_file(content: &str) -> NamedTempFile {
-    let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
-    write!(temp_file, "{}", content).expect("Failed to write to temp file");
-    temp_file
-}
-
-#[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     #[test]
@@ -177,5 +129,51 @@ mod tests {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{}", malformed_template).expect("Failed to write to temp file");
         initialize_templates(&[&temp_file.path().to_path_buf()]);
+    }
+    // At test time, we want to initialize the templates once, and then use them in all tests.
+    // This is a bit of a hack, but it works for now.
+    // Idea is that TEST_TEMPLATES is initialized once, and then we use it in all tests.
+    // Same with MINIJINJA_ENV. We can put all the minijinja templates used in cargo tests in this initializer,
+    // then every test that uses minijinja can use them by calling this function and getting the template paths
+    // from the map.
+    static TEST_TEMPLATES: OnceLock<HashMap<&'static str, PathBuf>> = OnceLock::new();
+
+    pub fn idempotent_initialize_test_templates() -> &'static HashMap<&'static str, PathBuf> {
+        TEST_TEMPLATES.get_or_init(|| {
+            let mut templates = HashMap::new();
+
+            // Template 1
+            let template1 = "hello, {{name}}!";
+            let temp_file1 = create_temp_file(template1);
+            templates.insert("greeting", temp_file1.path().to_path_buf());
+
+            // Template 2
+            let template2 = "Hello, {{ name }}! You are {{ age }} years old.";
+            let temp_file2 = create_temp_file(template2);
+            templates.insert("greeting_with_age", temp_file2.path().to_path_buf());
+
+            // System template
+            let system_template =
+                "You are a helpful and friendly assistant named {{ assistant_name }}";
+            let temp_file3 = create_temp_file(system_template);
+            templates.insert("system", temp_file3.path().to_path_buf());
+
+            // Assistant Template
+            let assistant_template =
+                "I'm sorry but I can't help you with that because of {{ reason }}";
+            let temp_file4 = create_temp_file(assistant_template);
+            templates.insert("assistant", temp_file4.path().to_path_buf());
+
+            // Initialize templates
+            initialize_templates(&templates.values().collect::<Vec<_>>());
+
+            templates
+        })
+    }
+
+    fn create_temp_file(content: &str) -> NamedTempFile {
+        let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
+        write!(temp_file, "{}", content).expect("Failed to write to temp file");
+        temp_file
     }
 }

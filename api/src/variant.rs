@@ -239,7 +239,7 @@ mod tests {
             },
             types::Usage,
         },
-        minijinja_util::idempotent_initialize_test_templates,
+        minijinja_util::tests::idempotent_initialize_test_templates,
         model::ProviderConfig,
     };
     use futures::StreamExt;

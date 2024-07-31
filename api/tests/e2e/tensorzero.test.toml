@@ -1,7 +1,8 @@
 #:schema None
-#  NOTE: This is an example configuration file for TensorZero.
-#        You can use this file as a reference for your own configuration by adding
-#        your own models, functions, and metrics.
+# TODO: add the line above to editor config and remove from here
+# NOTE: This is an example configuration file for TensorZero.
+#       You can use this file as a reference for your own configuration by adding
+#       your own models, functions, and metrics.
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  GENERAL                                   │
