@@ -89,6 +89,9 @@ async fn e2e_test_inference_basic() {
     assert_eq!(retrieved_episode_id, episode_id);
 }
 
+/// This test calls a function which calls a model where the first provider is broken but
+/// then the second provider works fine. We expect this request to work despite the first provider
+/// being broken.
 #[tokio::test]
 async fn e2e_test_inference_model_fallback() {
     let client = Client::new();
@@ -165,6 +168,9 @@ async fn e2e_test_inference_model_fallback() {
     assert_eq!(retrieved_episode_id, episode_id);
 }
 
+/// This test checks the return type and clickhouse writes for a function with an output schema and
+/// a response which does not satisfy the schema.
+/// We expect to see a null `content` field in the response and a null `output` field in the table.
 #[tokio::test]
 async fn e2e_test_inference_json_fail() {
     let client = Client::new();
@@ -241,6 +247,9 @@ async fn e2e_test_inference_json_fail() {
     assert_eq!(retrieved_episode_id, episode_id);
 }
 
+/// This test checks the return type and clickhouse writes for a function with an output schema and
+/// a response which satisfies the schema.
+/// We expect to see a filled-out `content` field in the response and a filled-out `output` field in the table.
 #[tokio::test]
 async fn e2e_test_inference_json_succeed() {
     let client = Client::new();
@@ -318,13 +327,17 @@ async fn e2e_test_inference_json_succeed() {
     assert_eq!(retrieved_episode_id, episode_id);
 }
 
+/// The variant_failover function has two variants: good and error, each with weight 0.5
+/// We want to make sure that this does not fail despite the error variant failing every time
+/// We do this by making several requests and checking that the response is 200 in each, then checking that
+/// the response is correct for the last one.
 #[tokio::test]
 async fn e2e_test_variant_failover() {
     let client = Client::new();
     let mut last_response = None;
     let mut last_payload = None;
     let mut last_episode_id = None;
-    for _ in 0..10 {
+    for _ in 0..50 {
         let episode_id = Uuid::now_v7();
 
         let payload = json!({
