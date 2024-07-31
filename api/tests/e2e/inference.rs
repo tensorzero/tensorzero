@@ -239,9 +239,8 @@ async fn e2e_test_inference_json_fail() {
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, payload["input"]);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    // TODO: handle the fact that this should be Optional
-    assert_eq!(output, "");
+    let output = result.get("output").unwrap();
+    assert!(output.is_null());
     let output_raw = result.get("raw_output").unwrap().as_str().unwrap();
     assert_eq!(output_raw, DUMMY_INFER_RESPONSE_CONTENT);
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
