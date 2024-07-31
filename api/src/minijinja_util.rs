@@ -93,8 +93,7 @@ pub fn idempotent_initialize_test_templates() -> &'static HashMap<&'static str, 
         templates.insert("greeting_with_age", temp_file2.path().to_path_buf());
 
         // System template
-        let system_template =
-            "You are a helpful and friendly assistant namedd {{ assistant_name }}";
+        let system_template = "You are a helpful and friendly assistant named {{ assistant_name }}";
         let temp_file3 = create_temp_file(system_template);
         templates.insert("system", temp_file3.path().to_path_buf());
 

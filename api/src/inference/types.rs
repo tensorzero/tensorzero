@@ -210,6 +210,7 @@ pub struct ChatInferenceResponse {
     pub raw_content: Option<String>,
     pub tool_calls: Option<Vec<ToolCall>>,
     pub usage: Usage,
+    #[serde(skip_serializing)]
     pub model_inference_responses: Vec<ModelInferenceResponse>,
 }
 

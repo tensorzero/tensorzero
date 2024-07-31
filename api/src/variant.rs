@@ -338,7 +338,7 @@ mod tests {
             InferenceRequestMessage::System(system_message) => {
                 assert_eq!(
                     system_message.content,
-                    "You are a helpful and friendly assistant namedd ChatGPT"
+                    "You are a helpful and friendly assistant named ChatGPT"
                 );
             }
             _ => panic!("Expected System message"),

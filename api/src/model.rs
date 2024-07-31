@@ -3,7 +3,7 @@ use secrecy::SecretString;
 use std::collections::HashMap;
 use std::env;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "e2e_tests"))]
 use crate::inference::providers::dummy::DummyProvider;
 use crate::{
     error::Error,
@@ -100,7 +100,7 @@ pub enum ProviderConfig {
         model_name: String,
         api_key: Option<SecretString>,
     },
-    #[cfg(test)]
+    #[cfg(any(test, feature = "e2e_tests"))]
     Dummy { model_name: String },
 }
 
@@ -134,7 +134,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
             Fireworks {
                 model_name: String,
             },
-            #[cfg(test)]
+            #[cfg(any(test, feature = "e2e_tests"))]
             #[serde(rename = "dummy")]
             Dummy {
                 model_name: String,
@@ -168,7 +168,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 model_name,
                 api_key: env::var("FIREWORKS_API_KEY").ok().map(SecretString::new),
             },
-            #[cfg(test)]
+            #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfigHelper::Dummy { model_name } => ProviderConfig::Dummy { model_name },
         })
     }
@@ -191,7 +191,7 @@ impl ProviderConfig {
             ProviderConfig::Fireworks { .. } => {
                 FireworksProvider::infer(request, self, client).await
             }
-            #[cfg(test)]
+            #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy { .. } => DummyProvider::infer(request, self, client).await,
         }
     }
@@ -214,7 +214,7 @@ impl ProviderConfig {
             ProviderConfig::Fireworks { .. } => {
                 FireworksProvider::infer_stream(request, self, client).await
             }
-            #[cfg(test)]
+            #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy { .. } => {
                 DummyProvider::infer_stream(request, self, client).await
             }

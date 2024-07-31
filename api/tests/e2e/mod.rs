@@ -2,3 +2,4 @@
 mod common;
 mod feedback;
 mod health;
+mod inference;
