@@ -1,6 +1,8 @@
 use crate::e2e::common::clickhouse_flush_async_insert;
-use api::clickhouse::ClickHouseConnectionInfo;
 use api::inference::providers::dummy::DUMMY_INFER_RESPONSE_CONTENT;
+use api::{
+    clickhouse::ClickHouseConnectionInfo, inference::providers::dummy::DUMMY_JSON_RESPONSE_RAW,
+};
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use uuid::Uuid;
@@ -234,6 +236,83 @@ async fn e2e_test_inference_json_fail() {
     assert_eq!(output, "");
     let output_raw = result.get("raw_output").unwrap().as_str().unwrap();
     assert_eq!(output_raw, DUMMY_INFER_RESPONSE_CONTENT);
+    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+    assert_eq!(retrieved_episode_id, episode_id);
+}
+
+#[tokio::test]
+async fn e2e_test_inference_json_succeed() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "json_succeed",
+        "episode_id": episode_id,
+        "input":
+            [
+                {"role": "system", "content": {"assistant_name": "AskJeeves"}},
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
+                }
+            ],
+        "stream": false,
+    });
+
+    let response = client
+        .post(INFERENCE_URL)
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    // Check Response is OK, then fields in order
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    let content = response_json.get("content").unwrap().as_object().unwrap();
+    let answer = content.get("answer").unwrap().as_str().unwrap();
+    assert_eq!(answer, "Hello");
+    // Check that created is here
+    response_json.get("created").unwrap();
+    // Check that inference_id is here
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+    // Check that raw_content is present
+    let raw_content = response_json.get("raw_content").unwrap();
+    assert_eq!(raw_content, DUMMY_JSON_RESPONSE_RAW);
+    // Check that tool_calls is null
+    response_json.get("tool_calls").unwrap();
+    // Check that type is "chat"
+    let r#type = response_json.get("type").unwrap().as_str().unwrap();
+    assert_eq!(r#type, "Chat");
+
+    // Check that usage is correct
+    let usage = response_json.get("usage").unwrap();
+    let usage = usage.as_object().unwrap();
+    let prompt_tokens = usage.get("prompt_tokens").unwrap().as_u64().unwrap();
+    let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
+    assert_eq!(prompt_tokens, 10);
+    assert_eq!(completion_tokens, 10);
+    // Sleep for 0.1 seconds to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // Check ClickHouse
+    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None);
+    let result = select_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    println!("result: {}", result);
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, inference_id);
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    assert_eq!(input, payload["input"]);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    // TODO: handle the fact that this should be Optional
+    assert_eq!(output, DUMMY_JSON_RESPONSE_RAW);
+    let output_raw = result.get("raw_output").unwrap().as_str().unwrap();
+    assert_eq!(output_raw, DUMMY_JSON_RESPONSE_RAW);
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
     assert_eq!(retrieved_episode_id, episode_id);

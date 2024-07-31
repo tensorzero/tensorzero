@@ -49,6 +49,13 @@ model_name = "error"
 type = "dummy"
 model_name = "good"
 
+[models.json]
+routing = ["json"]
+
+[models.json.providers.json]
+type = "dummy"
+model_name = "json"
+
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
@@ -101,6 +108,18 @@ type = "chat_completion"
 weight = 1
 model = "test"
 system_template = "functions/basic_test/prompt/system_template.minijinja"
+
+[functions.json_succeed]
+type = "chat"
+system_schema = "functions/basic_test/system_schema.json"
+output_schema = "functions/basic_test/output_schema.json"
+
+[functions.json_succeed.variants.test]
+type = "chat_completion"
+weight = 1
+model = "json"
+system_template = "functions/basic_test/prompt/system_template.minijinja"
+
 
 
 # ┌────────────────────────────────────────────────────────────────────────────┐

@@ -1,10 +1,10 @@
 {
   "type": "object",
   "properties": {
-    "output": {
+    "answer": {
       "type": "string"
     }
   },
-  "required": ["output"],
+  "required": ["answer"],
   "additionalProperties": false
 }
