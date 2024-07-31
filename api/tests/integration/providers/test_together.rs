@@ -5,8 +5,8 @@ use crate::integration::providers::common::{
     create_streaming_inference_request, create_tool_inference_request,
 };
 use api::{
-    inference::providers::openai::TogetherProvider,
-    inference::providers::provider_trait::InferenceProvider, model::ProviderConfig,
+    inference::providers::provider_trait::InferenceProvider,
+    inference::providers::together::TogetherProvider, model::ProviderConfig,
 };
 use futures::StreamExt;
 use secrecy::SecretString;

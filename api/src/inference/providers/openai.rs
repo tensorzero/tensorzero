@@ -1,4 +1,4 @@
-use futures::{StreamExt, TryStreamExt};
+use futures::StreamExt;
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::ExposeSecret;
@@ -131,277 +131,7 @@ impl InferenceProvider for OpenAIProvider {
     }
 }
 
-pub struct FireworksProvider;
-
-/// Key differences between Fireworks and OpenAI inference:
-/// - Fireworks allows you to specify output format in JSON mode
-/// - Fireworks automatically returns usage in streaming inference, we don't have to ask for it
-/// - Fireworks allows you to auto-truncate requests that have too many tokens
-///   (there are 2 ways to do it, we have the default of auto-truncation to the max window size)
-impl InferenceProvider for FireworksProvider {
-    async fn infer<'a>(
-        request: &'a ModelInferenceRequest<'a>,
-        model: &'a ProviderConfig,
-        http_client: &'a reqwest::Client,
-    ) -> Result<ModelInferenceResponse, Error> {
-        let (model_name, api_key) = match model {
-            ProviderConfig::Fireworks {
-                model_name,
-                api_key,
-            } => (
-                model_name,
-                api_key.as_ref().ok_or(Error::ApiKeyMissing {
-                    provider_name: "Fireworks".to_string(),
-                })?,
-            ),
-            _ => {
-                return Err(Error::InvalidProviderConfig {
-                    message: "Expected Fireworks provider config".to_string(),
-                })
-            }
-        };
-        let api_base = Some("https://api.fireworks.ai/inference/v1/");
-        let request_body = FireworksRequest::new(model_name, request);
-        let request_url = get_chat_url(api_base)?;
-        let res = http_client
-            .post(request_url)
-            .header("Content-Type", "application/json")
-            .header(
-                "Authorization",
-                format!("Bearer {}", api_key.expose_secret()),
-            )
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| Error::InferenceClient {
-                message: format!("Error sending request to Fireworks: {e}"),
-            })?;
-        if res.status().is_success() {
-            let response_body =
-                res.json::<OpenAIResponse>()
-                    .await
-                    .map_err(|e| Error::FireworksServer {
-                        message: format!("Error parsing response: {e}"),
-                    })?;
-            Ok(response_body
-                .try_into()
-                .map_err(map_openai_to_fireworks_error)?)
-        } else {
-            handle_openai_error(
-                res.status(),
-                &res.text().await.map_err(|e| Error::FireworksServer {
-                    message: format!("Error parsing error response: {e}"),
-                })?,
-            )
-            .map_err(map_openai_to_fireworks_error)
-        }
-    }
-
-    async fn infer_stream<'a>(
-        request: &'a ModelInferenceRequest<'a>,
-        model: &'a ProviderConfig,
-        http_client: &'a reqwest::Client,
-    ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
-        let (model_name, api_key) = match model {
-            ProviderConfig::Fireworks {
-                model_name,
-                api_key,
-            } => (
-                model_name,
-                api_key.as_ref().ok_or(Error::ApiKeyMissing {
-                    provider_name: "Fireworks".to_string(),
-                })?,
-            ),
-            _ => {
-                return Err(Error::InvalidProviderConfig {
-                    message: "Expected Fireworks provider config".to_string(),
-                })
-            }
-        };
-        let request_body = FireworksRequest::new(model_name, request);
-        let api_base = Some("https://api.fireworks.ai/inference/v1/");
-        let request_url = get_chat_url(api_base)?;
-        let event_source = http_client
-            .post(request_url)
-            .header("Content-Type", "application/json")
-            .header(
-                "Authorization",
-                format!("Bearer {}", api_key.expose_secret()),
-            )
-            .json(&request_body)
-            .eventsource()
-            .map_err(|e| Error::InferenceClient {
-                message: format!("Error sending request to Fireworks: {e}"),
-            })?;
-        let mut stream = Box::pin(
-            stream_openai(event_source)
-                .await
-                .map_err(map_openai_to_fireworks_error),
-        );
-        // Get a single chunk from the stream and make sure it is OK then send to client.
-        // We want to do this here so that we can tell that the request is working.
-        let chunk = match stream.next().await {
-            Some(Ok(chunk)) => chunk,
-            Some(Err(e)) => return Err(e),
-            None => {
-                return Err(Error::FireworksServer {
-                    message: "Stream ended before first chunk".to_string(),
-                })
-            }
-        };
-        Ok((chunk, stream))
-    }
-}
-
-fn map_openai_to_fireworks_error(e: Error) -> Error {
-    match e {
-        Error::OpenAIServer { message } => Error::FireworksServer { message },
-        Error::OpenAIClient {
-            message,
-            status_code,
-        } => Error::FireworksClient {
-            message,
-            status_code,
-        },
-        _ => e,
-    }
-}
-
-pub struct TogetherProvider;
-
-// TODO: Add support for Llama 3.1 function calling as discussed [here](https://docs.together.ai/docs/llama-3-function-calling)
-
-impl InferenceProvider for TogetherProvider {
-    async fn infer<'a>(
-        request: &'a ModelInferenceRequest<'a>,
-        model: &'a ProviderConfig,
-        http_client: &'a reqwest::Client,
-    ) -> Result<ModelInferenceResponse, Error> {
-        let (model_name, api_key) = match model {
-            ProviderConfig::Together {
-                model_name,
-                api_key,
-            } => (
-                model_name,
-                api_key.as_ref().ok_or(Error::ApiKeyMissing {
-                    provider_name: "Together".to_string(),
-                })?,
-            ),
-            _ => {
-                return Err(Error::InvalidProviderConfig {
-                    message: "Expected Together provider config".to_string(),
-                })
-            }
-        };
-        let api_base = Some("https://api.together.xyz/v1");
-        let request_body = TogetherRequest::new(model_name, request);
-        let request_url = get_chat_url(api_base)?;
-        let res = http_client
-            .post(request_url)
-            .header("Content-Type", "application/json")
-            .header(
-                "Authorization",
-                format!("Bearer {}", api_key.expose_secret()),
-            )
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| Error::TogetherClient {
-                message: format!("{e}"),
-                status_code: e.status().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
-            })?;
-        if res.status().is_success() {
-            let response_body =
-                res.json::<OpenAIResponse>()
-                    .await
-                    .map_err(|e| Error::TogetherServer {
-                        message: format!("Error parsing response: {e}"),
-                    })?;
-            Ok(response_body
-                .try_into()
-                .map_err(map_openai_to_together_error)?)
-        } else {
-            handle_openai_error(
-                res.status(),
-                &res.text().await.map_err(|e| Error::TogetherServer {
-                    message: format!("Error parsing error response: {e}"),
-                })?,
-            )
-            .map_err(map_openai_to_together_error)
-        }
-    }
-
-    async fn infer_stream<'a>(
-        request: &'a ModelInferenceRequest<'a>,
-        model: &'a ProviderConfig,
-        http_client: &'a reqwest::Client,
-    ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
-        let (model_name, api_key) = match model {
-            ProviderConfig::Together {
-                model_name,
-                api_key,
-            } => (
-                model_name,
-                api_key.as_ref().ok_or(Error::ApiKeyMissing {
-                    provider_name: "Together".to_string(),
-                })?,
-            ),
-            _ => {
-                return Err(Error::InvalidProviderConfig {
-                    message: "Expected Together provider config".to_string(),
-                })
-            }
-        };
-        let request_body = TogetherRequest::new(model_name, request);
-        let api_base = Some("https://api.together.xyz/v1");
-        let request_url = get_chat_url(api_base)?;
-        let event_source = http_client
-            .post(request_url)
-            .header("Content-Type", "application/json")
-            .header(
-                "Authorization",
-                format!("Bearer {}", api_key.expose_secret()),
-            )
-            .json(&request_body)
-            .eventsource()
-            .map_err(|e| Error::InferenceClient {
-                message: format!("Error sending request to Together: {e}"),
-            })?;
-        let mut stream = Box::pin(
-            stream_openai(event_source)
-                .await
-                .map_err(map_openai_to_together_error),
-        );
-        // Get a single chunk from the stream and make sure it is OK then send to client.
-        // We want to do this here so that we can tell that the request is working.
-        let chunk = match stream.next().await {
-            Some(Ok(chunk)) => chunk,
-            Some(Err(e)) => return Err(e),
-            None => {
-                return Err(Error::TogetherServer {
-                    message: "Stream ended before first chunk".to_string(),
-                })
-            }
-        };
-        Ok((chunk, stream))
-    }
-}
-
-fn map_openai_to_together_error(e: Error) -> Error {
-    match e {
-        Error::OpenAIServer { message } => Error::TogetherServer { message },
-        Error::OpenAIClient {
-            message,
-            status_code,
-        } => Error::TogetherClient {
-            message,
-            status_code,
-        },
-        _ => e,
-    }
-}
-
-async fn stream_openai(mut event_source: EventSource) -> InferenceResponseStream {
+pub async fn stream_openai(mut event_source: EventSource) -> InferenceResponseStream {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     tokio::spawn(async move {
         let inference_id = Uuid::now_v7();
@@ -445,7 +175,7 @@ async fn stream_openai(mut event_source: EventSource) -> InferenceResponseStream
     Box::pin(tokio_stream::wrappers::UnboundedReceiverStream::new(rx))
 }
 
-fn get_chat_url(base_url: Option<&str>) -> Result<Url, Error> {
+pub(super) fn get_chat_url(base_url: Option<&str>) -> Result<Url, Error> {
     let base_url = base_url.unwrap_or(OPENAI_DEFAULT_BASE_URL);
     let base_url = if base_url.ends_with('/') {
         base_url.to_string()
@@ -463,7 +193,7 @@ fn get_chat_url(base_url: Option<&str>) -> Result<Url, Error> {
     Ok(url)
 }
 
-fn handle_openai_error(
+pub(super) fn handle_openai_error(
     response_code: StatusCode,
     response_body: &str,
 ) -> Result<ModelInferenceResponse, Error> {
@@ -481,12 +211,12 @@ fn handle_openai_error(
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-struct OpenAISystemRequestMessage<'a> {
+pub(super) struct OpenAISystemRequestMessage<'a> {
     content: &'a str,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-struct OpenAIUserRequestMessage<'a> {
+pub(super) struct OpenAIUserRequestMessage<'a> {
     content: &'a str, // TODO: this could be an array including images and stuff according to API spec, we don't support
 }
 
@@ -517,13 +247,13 @@ impl<'a> From<&'a ToolCall> for OpenAIRequestToolCall<'a> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-struct OpenAIAssistantRequestMessage<'a> {
+pub(super) struct OpenAIAssistantRequestMessage<'a> {
     content: Option<&'a str>,
     tool_calls: Option<Vec<OpenAIRequestToolCall<'a>>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-struct OpenAIToolRequestMessage<'a> {
+pub(super) struct OpenAIToolRequestMessage<'a> {
     content: &'a str,
     tool_call_id: &'a str,
 }
@@ -531,7 +261,7 @@ struct OpenAIToolRequestMessage<'a> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "role")]
 #[serde(rename_all = "lowercase")]
-enum OpenAIRequestMessage<'a> {
+pub(super) enum OpenAIRequestMessage<'a> {
     System(OpenAISystemRequestMessage<'a>),
     User(OpenAIUserRequestMessage<'a>),
     Assistant(OpenAIAssistantRequestMessage<'a>),
@@ -579,28 +309,6 @@ enum OpenAIResponseFormat {
     Text,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-#[serde(tag = "type")]
-enum FireworksResponseFormat<'a> {
-    JsonObject {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        schema: Option<&'a Value>, // the desired JSON schema
-    },
-    #[default]
-    Text,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-#[serde(tag = "type")]
-enum TogetherResponseFormat<'a> {
-    JsonObject {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        schema: Option<&'a Value>, // the desired JSON schema
-    },
-}
-
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 enum OpenAIToolType {
@@ -626,7 +334,7 @@ struct OpenAIFunction<'a> {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-struct OpenAITool<'a> {
+pub(super) struct OpenAITool<'a> {
     r#type: OpenAIToolType,
     function: OpenAIFunction<'a>,
 }
@@ -646,21 +354,21 @@ impl<'a> From<&'a Tool> for OpenAITool<'a> {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(untagged)]
-enum OpenAIToolChoice<'a> {
+pub(super) enum OpenAIToolChoice<'a> {
     String(OpenAIToolChoiceString),
     Specific(SpecificToolChoice<'a>),
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
-enum OpenAIToolChoiceString {
+pub(super) enum OpenAIToolChoiceString {
     None,
     Auto,
     Required,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-struct SpecificToolChoice<'a> {
+pub(super) struct SpecificToolChoice<'a> {
     r#type: OpenAIToolType,
     function: SpecificToolFunction<'a>,
 }
@@ -751,105 +459,6 @@ impl<'a> OpenAIRequest<'a> {
     }
 }
 
-/// This struct defines the supported parameters for the Fireworks inference API
-/// See the [Fireworks API documentation](https://docs.fireworks.ai/api-reference/post-chatcompletions)
-/// for more details.
-/// We are not handling logprobs, top_logprobs, n, prompt_truncate_len
-/// presence_penalty, frequency_penalty, seed, service_tier, stop, user,
-/// or context_length_exceeded_behavior
-#[derive(Serialize)]
-struct FireworksRequest<'a> {
-    messages: Vec<OpenAIRequestMessage<'a>>,
-    model: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    temperature: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    max_tokens: Option<u32>,
-    stream: bool,
-    response_format: FireworksResponseFormat<'a>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<OpenAITool<'a>>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_choice: Option<OpenAIToolChoice<'a>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    parallel_tool_calls: Option<bool>,
-}
-
-impl<'a> FireworksRequest<'a> {
-    pub fn new(model: &'a str, request: &'a ModelInferenceRequest) -> FireworksRequest<'a> {
-        let response_format = match request.json_mode {
-            true => FireworksResponseFormat::JsonObject {
-                schema: request.output_schema,
-            },
-            false => FireworksResponseFormat::Text,
-        };
-        FireworksRequest {
-            messages: request.messages.iter().map(|m| m.into()).collect(),
-            model,
-            temperature: request.temperature,
-            max_tokens: request.max_tokens,
-            stream: request.stream,
-            response_format,
-            tools: request
-                .tools_available
-                .as_ref()
-                .map(|t| t.iter().map(|t| t.into()).collect()),
-            tool_choice: request.tool_choice.as_ref().map(OpenAIToolChoice::from),
-            parallel_tool_calls: request.parallel_tool_calls,
-        }
-    }
-}
-
-/// This struct defines the supported parameters for the Together inference API
-/// See the [Together API documentation](https://docs.together.ai/docs/chat-overview)
-/// for more details.
-/// We are not handling logprobs, top_logprobs, n, prompt_truncate_len
-/// presence_penalty, frequency_penalty, seed, service_tier, stop, user,
-/// or context_length_exceeded_behavior
-#[derive(Serialize)]
-struct TogetherRequest<'a> {
-    messages: Vec<OpenAIRequestMessage<'a>>,
-    model: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    temperature: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    max_tokens: Option<u32>,
-    stream: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    response_format: Option<TogetherResponseFormat<'a>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<OpenAITool<'a>>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_choice: Option<OpenAIToolChoice<'a>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    parallel_tool_calls: Option<bool>,
-}
-
-impl<'a> TogetherRequest<'a> {
-    pub fn new(model: &'a str, request: &'a ModelInferenceRequest) -> TogetherRequest<'a> {
-        let response_format = match request.json_mode {
-            true => Some(TogetherResponseFormat::JsonObject {
-                schema: request.output_schema,
-            }),
-            false => None,
-        };
-        TogetherRequest {
-            messages: request.messages.iter().map(|m| m.into()).collect(),
-            model,
-            temperature: request.temperature,
-            max_tokens: request.max_tokens,
-            stream: request.stream,
-            response_format,
-            tools: request
-                .tools_available
-                .as_ref()
-                .map(|t| t.iter().map(|t| t.into()).collect()),
-            tool_choice: request.tool_choice.as_ref().map(OpenAIToolChoice::from),
-            parallel_tool_calls: request.parallel_tool_calls,
-        }
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 struct OpenAIUsage {
     prompt_tokens: u32,
@@ -914,7 +523,7 @@ struct OpenAIResponseChoice {
 
 // Leaving out id, created, model, service_tier, system_fingerprint, object for now
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-struct OpenAIResponse {
+pub(super) struct OpenAIResponse {
     choices: Vec<OpenAIResponseChoice>,
     usage: OpenAIUsage,
 }
@@ -1190,121 +799,6 @@ mod tests {
             Some(OpenAIToolChoice::String(OpenAIToolChoiceString::Auto))
         );
         assert_eq!(openai_request.parallel_tool_calls, Some(true));
-    }
-
-    #[test]
-    fn test_fireworks_request_new() {
-        let tool = Tool {
-            name: "get_weather".to_string(),
-            description: Some("Get the current weather".to_string()),
-            r#type: ToolType::Function,
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "location": {
-                        "type": "string",
-                        "description": "The city and state, e.g. San Francisco, CA"
-                    }
-                },
-                "required": ["location"]
-            }),
-        };
-
-        let request_with_tools = ModelInferenceRequest {
-            messages: vec![InferenceRequestMessage::User(UserInferenceRequestMessage {
-                content: "What's the weather?".to_string(),
-            })],
-            temperature: None,
-            max_tokens: None,
-            stream: false,
-            json_mode: true,
-            tools_available: Some(vec![tool]),
-            tool_choice: Some(ToolChoice::Auto),
-            parallel_tool_calls: Some(true),
-            function_type: FunctionType::Chat,
-            output_schema: None,
-        };
-
-        let fireworks_request =
-            FireworksRequest::new("accounts/fireworks/models/llama-v3-8b", &request_with_tools);
-
-        assert_eq!(
-            fireworks_request.model,
-            "accounts/fireworks/models/llama-v3-8b"
-        );
-        assert_eq!(fireworks_request.messages.len(), 1);
-        assert_eq!(fireworks_request.temperature, None);
-        assert_eq!(fireworks_request.max_tokens, None);
-        assert!(!fireworks_request.stream);
-        assert_eq!(
-            fireworks_request.response_format,
-            FireworksResponseFormat::JsonObject {
-                schema: request_with_tools.output_schema,
-            }
-        );
-        assert!(fireworks_request.tools.is_some());
-        assert_eq!(fireworks_request.tools.as_ref().unwrap().len(), 1);
-        assert_eq!(
-            fireworks_request.tool_choice,
-            Some(OpenAIToolChoice::String(OpenAIToolChoiceString::Auto))
-        );
-        assert_eq!(fireworks_request.parallel_tool_calls, Some(true));
-    }
-
-    #[test]
-    fn test_together_request_new() {
-        let tool = Tool {
-            name: "get_weather".to_string(),
-            description: Some("Get the current weather".to_string()),
-            r#type: ToolType::Function,
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "location": {
-                        "type": "string",
-                        "description": "The city and state, e.g. San Francisco, CA"
-                    }
-                },
-                "required": ["location"]
-            }),
-        };
-
-        let request_with_tools = ModelInferenceRequest {
-            messages: vec![InferenceRequestMessage::User(UserInferenceRequestMessage {
-                content: "What's the weather?".to_string(),
-            })],
-            temperature: None,
-            max_tokens: None,
-            stream: false,
-            json_mode: true,
-            tools_available: Some(vec![tool]),
-            tool_choice: Some(ToolChoice::Auto),
-            parallel_tool_calls: Some(true),
-            function_type: FunctionType::Chat,
-            output_schema: None,
-        };
-
-        let together_request =
-            TogetherRequest::new("togethercomputer/llama-v3-8b", &request_with_tools);
-
-        assert_eq!(together_request.model, "togethercomputer/llama-v3-8b");
-        assert_eq!(together_request.messages.len(), 1);
-        assert_eq!(together_request.temperature, None);
-        assert_eq!(together_request.max_tokens, None);
-        assert!(!together_request.stream);
-        assert_eq!(
-            together_request.response_format,
-            Some(TogetherResponseFormat::JsonObject {
-                schema: request_with_tools.output_schema,
-            })
-        );
-        assert!(together_request.tools.is_some());
-        assert_eq!(together_request.tools.as_ref().unwrap().len(), 1);
-        assert_eq!(
-            together_request.tool_choice,
-            Some(OpenAIToolChoice::String(OpenAIToolChoiceString::Auto))
-        );
-        assert_eq!(together_request.parallel_tool_calls, Some(true));
     }
 
     #[test]

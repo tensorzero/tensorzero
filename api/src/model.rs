@@ -9,9 +9,8 @@ use crate::{
     error::Error,
     inference::{
         providers::{
-            anthropic::AnthropicProvider,
-            openai::{FireworksProvider, OpenAIProvider, TogetherProvider},
-            provider_trait::InferenceProvider,
+            anthropic::AnthropicProvider, fireworks::FireworksProvider, openai::OpenAIProvider,
+            provider_trait::InferenceProvider, together::TogetherProvider,
         },
         types::{
             InferenceResponseStream, ModelInferenceRequest, ModelInferenceResponse,
