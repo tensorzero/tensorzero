@@ -234,8 +234,8 @@ async fn worker_response_router(
                 .ok_or_log();
         }
     }
-    // Send a final [DONE] event to signal the end of the stream
-    let done_event = Event::default().data("[DONE]").id("done").event("done");
+    // Send the [DONE] event to signal the end of the stream
+    let done_event = Event::default().data("[DONE]");
     let _ = client_sender
         .send(Ok(done_event))
         .map_err(|e| Error::ChannelWrite {
