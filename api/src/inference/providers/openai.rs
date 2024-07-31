@@ -269,6 +269,8 @@ fn map_openai_to_fireworks_error(e: Error) -> Error {
 
 pub struct TogetherProvider;
 
+// TODO: Add support for Llama 3.1 function calling as discussed [here](https://docs.together.ai/docs/llama-3-function-calling)
+
 impl InferenceProvider for TogetherProvider {
     async fn infer<'a>(
         request: &'a ModelInferenceRequest<'a>,
