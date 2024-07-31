@@ -1,9 +1,11 @@
 use crate::e2e::common::clickhouse_flush_async_insert;
-use api::inference::providers::dummy::DUMMY_INFER_RESPONSE_CONTENT;
+use api::inference::providers::dummy::{DUMMY_INFER_RESPONSE_CONTENT, DUMMY_STREAMING_RESPONSE};
 use api::{
     clickhouse::ClickHouseConnectionInfo, inference::providers::dummy::DUMMY_JSON_RESPONSE_RAW,
 };
+use futures::StreamExt;
 use reqwest::{Client, StatusCode};
+use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
@@ -420,7 +422,85 @@ async fn e2e_test_variant_failover() {
     assert_eq!(retrieved_episode_id, episode_id);
 }
 
-// TODO (Viraj, before merging): write tests for streaming inference
+/// This test checks that streaming inference works as expected.
+#[tokio::test]
+async fn e2e_test_streaming() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "basic_test",
+        "episode_id": episode_id,
+        "input":
+            [
+                {"role": "system", "content": {"assistant_name": "AskJeeves"}},
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
+                }
+            ],
+        "stream": true,
+    });
+
+    let mut event_source = client
+        .post(INFERENCE_URL)
+        .json(&payload)
+        .eventsource()
+        .unwrap();
+    let mut chunks = vec![];
+    while let Some(event) = event_source.next().await {
+        let event = event.unwrap();
+        match event {
+            Event::Open => continue,
+            Event::Message(message) => {
+                if message.data == "[DONE]" {
+                    break;
+                }
+                chunks.push(message.data);
+            }
+        }
+    }
+    let mut inference_id = None;
+    for (i, chunk) in chunks.iter().enumerate() {
+        let chunk_json: Value = serde_json::from_str(chunk).unwrap();
+        if i < DUMMY_STREAMING_RESPONSE.len() {
+            let content = chunk_json.get("content").unwrap().as_str().unwrap();
+            assert_eq!(content, DUMMY_STREAMING_RESPONSE[i]);
+        } else {
+            assert!(chunk_json.get("content").unwrap().is_null());
+            let usage = chunk_json.get("usage").unwrap().as_object().unwrap();
+            let prompt_tokens = usage.get("prompt_tokens").unwrap().as_u64().unwrap();
+            let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
+            assert_eq!(prompt_tokens, 10);
+            assert_eq!(completion_tokens, 16);
+            inference_id = Some(
+                Uuid::parse_str(chunk_json.get("inference_id").unwrap().as_str().unwrap()).unwrap(),
+            );
+        }
+    }
+    let inference_id = inference_id.unwrap();
+    // Sleep for 0.1 seconds to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // Check ClickHouse
+    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None);
+    let result = select_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, inference_id);
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    assert_eq!(input, payload["input"]);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    assert_eq!(output, DUMMY_STREAMING_RESPONSE.join(""));
+    let output_raw = result.get("raw_output").unwrap().as_str().unwrap();
+    assert_eq!(output_raw, DUMMY_STREAMING_RESPONSE.join(""));
+    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+    assert_eq!(retrieved_episode_id, episode_id);
+}
 
 async fn select_inference_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
@@ -431,8 +511,6 @@ async fn select_inference_clickhouse(
         ClickHouseConnectionInfo::Mock { .. } => unimplemented!(),
         ClickHouseConnectionInfo::Production { url, client } => (url.clone(), client),
     };
-    println!("url: {}", url);
-    println!("inference_id: {}", inference_id);
     let query = format!(
         "SELECT * FROM Inference WHERE id = '{}' FORMAT JSONEachRow",
         inference_id
@@ -443,9 +521,7 @@ async fn select_inference_clickhouse(
         .send()
         .await
         .expect("Failed to query ClickHouse");
-    println!("status: {}", response.status());
     let text = response.text().await.ok()?;
-    println!("text: {}", text);
     let json: Value = serde_json::from_str(&text).ok()?;
     Some(json)
 }

@@ -234,6 +234,14 @@ async fn worker_response_router(
                 .ok_or_log();
         }
     }
+    // Send a final [DONE] event to signal the end of the stream
+    let done_event = Event::default().data("[DONE]").id("done").event("done");
+    let _ = client_sender
+        .send(Ok(done_event))
+        .map_err(|e| Error::ChannelWrite {
+            message: e.to_string(),
+        })
+        .ok_or_log();
     if !metadata.dryrun {
         counter!(
             "request_count",
