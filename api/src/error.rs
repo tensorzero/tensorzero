@@ -17,6 +17,13 @@ pub enum Error {
     AnthropicServer {
         message: String,
     },
+    AzureClient {
+        message: String,
+        status_code: StatusCode,
+    },
+    AzureServer {
+        message: String,
+    },
     ChannelWrite {
         message: String,
     },
@@ -131,6 +138,8 @@ impl Error {
             Error::ApiKeyMissing { .. } => tracing::Level::ERROR,
             Error::AnthropicClient { .. } => tracing::Level::WARN,
             Error::AnthropicServer { .. } => tracing::Level::ERROR,
+            Error::AzureClient { .. } => tracing::Level::WARN,
+            Error::AzureServer { .. } => tracing::Level::ERROR,
             Error::ChannelWrite { .. } => tracing::Level::ERROR,
             Error::ClickHouseWrite { .. } => tracing::Level::ERROR,
             Error::FireworksClient { .. } => tracing::Level::WARN,
@@ -174,6 +183,8 @@ impl Error {
             Error::ApiKeyMissing { .. } => StatusCode::BAD_REQUEST,
             Error::AnthropicClient { status_code, .. } => *status_code,
             Error::AnthropicServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::AzureClient { status_code, .. } => *status_code,
+            Error::AzureServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ClickHouseWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::FireworksServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -244,6 +255,12 @@ impl std::fmt::Display for Error {
             }
             Error::AnthropicServer { message } => {
                 write!(f, "Error from Anthropic servers: {}", message)
+            }
+            Error::AzureClient { message, .. } => {
+                write!(f, "Error from Azure client: {}", message)
+            }
+            Error::AzureServer { message } => {
+                write!(f, "Error from Azure servers: {}", message)
             }
             Error::ChannelWrite { message } => {
                 write!(f, "Error writing to channel: {}", message)

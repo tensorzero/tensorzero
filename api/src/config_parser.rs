@@ -510,6 +510,7 @@ mod tests {
         model_name = "gpt-35-turbo"
         deployment_id = "gpt-35-turbo"
         api_base = "https://your-endpoint.openai.azure.com/"
+        api_version = "2024-06-01"
 
         [models.claude-3-haiku-20240307]
         routing = ["anthropic"]
