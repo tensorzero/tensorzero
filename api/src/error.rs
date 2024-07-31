@@ -61,6 +61,9 @@ pub enum Error {
     JsonRequest {
         message: String,
     },
+    JsonSchema {
+        message: String,
+    },
     JsonSchemaValidation {
         messages: Vec<String>,
         data: Value,
@@ -136,6 +139,7 @@ impl Error {
             Error::InvalidTemplatePath => tracing::Level::ERROR,
             Error::InvalidTool { .. } => tracing::Level::ERROR,
             Error::JsonRequest { .. } => tracing::Level::WARN,
+            Error::JsonSchema { .. } => tracing::Level::ERROR,
             Error::JsonSchemaValidation { .. } => tracing::Level::ERROR,
             Error::MiniJinjaTemplateMissing { .. } => tracing::Level::ERROR,
             Error::MiniJinjaTemplateRender { .. } => tracing::Level::ERROR,
@@ -176,6 +180,7 @@ impl Error {
             Error::InvalidTemplatePath => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InvalidTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::JsonRequest { .. } => StatusCode::BAD_REQUEST,
+            Error::JsonSchema { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::JsonSchemaValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::MiniJinjaTemplateMissing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::MiniJinjaTemplateRender { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -256,6 +261,7 @@ impl std::fmt::Display for Error {
             }
             Error::InvalidTool { message } => write!(f, "{}", message),
             Error::JsonRequest { message } => write!(f, "{}", message),
+            Error::JsonSchema { message } => write!(f, "{}", message),
             Error::JsonSchemaValidation {
                 messages,
                 data,

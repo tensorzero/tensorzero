@@ -17,3 +17,5 @@ Cargo.lock
 
 # VScode settings
 .vscode/
+
+.DS_Store

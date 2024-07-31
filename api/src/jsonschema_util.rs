@@ -14,13 +14,21 @@ pub struct JSONSchemaFromPath {
 
 impl JSONSchemaFromPath {
     /// Load a JSON schema from a file path
-    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
         let path = path.as_ref().to_owned();
-        let content = fs::read_to_string(path)?;
-        let schema: serde_json::Value = serde_json::from_str(&content)?;
+        let content = fs::read_to_string(&path).map_err(|e| Error::JsonSchema {
+            message: format!("Failed to read JSON Schema `{}`: {}", path.display(), e),
+        })?;
+
+        let schema: serde_json::Value =
+            serde_json::from_str(&content).map_err(|e| Error::JsonSchema {
+                message: format!("Failed to parse JSON Schema `{}`: {}", path.display(), e),
+            })?;
         // We can 'leak' memory here because we want the schema to exist for the duration of the process
         let schema_boxed: &'static serde_json::Value = Box::leak(Box::new(schema));
-        let compiled_schema = JSONSchema::compile(schema_boxed)?;
+        let compiled_schema = JSONSchema::compile(schema_boxed).map_err(|e| Error::JsonSchema {
+            message: format!("Failed to compile JSON Schema `{}`: {}", path.display(), e),
+        })?;
         Ok(Self {
             compiled: Arc::new(compiled_schema),
             value: schema_boxed,
@@ -134,8 +142,10 @@ mod tests {
         let result = JSONSchemaFromPath::new(temp_file.path());
         assert_eq!(
             result.unwrap_err().to_string(),
-            "\"invalid\" is not valid under any of the schemas listed in the 'anyOf' keyword"
-                .to_string()
+            format!(
+                "Failed to compile JSON Schema `{}`: \"invalid\" is not valid under any of the schemas listed in the 'anyOf' keyword",
+                temp_file.path().display()
+            )
         )
     }
 
@@ -144,7 +154,7 @@ mod tests {
         let result = JSONSchemaFromPath::new("nonexistent_file.json");
         assert_eq!(
             result.unwrap_err().to_string(),
-            "No such file or directory (os error 2)".to_string()
+            "Failed to read JSON Schema `nonexistent_file.json`: No such file or directory (os error 2)".to_string()
         )
     }
 }
