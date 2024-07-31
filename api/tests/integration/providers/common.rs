@@ -4,7 +4,7 @@ use api::inference::types::{
 };
 use serde_json::json;
 
-pub fn create_simple_inference_request() -> ModelInferenceRequest {
+pub fn create_simple_inference_request<'a>() -> ModelInferenceRequest<'a> {
     let messages = vec![
         InferenceRequestMessage::System(SystemInferenceRequestMessage {
             content: "You are a helpful but mischevious assistant.".to_string(),
@@ -29,7 +29,7 @@ pub fn create_simple_inference_request() -> ModelInferenceRequest {
     }
 }
 
-pub fn create_json_inference_request() -> ModelInferenceRequest {
+pub fn create_json_inference_request<'a>() -> ModelInferenceRequest<'a> {
     let messages = vec![
         InferenceRequestMessage::System(SystemInferenceRequestMessage {
             content: "You are a helpful but mischevious assistant who returns in the JSON form {\"thinking\": \"...\", \"answer\": \"...\"}".to_string(),
@@ -58,11 +58,11 @@ pub fn create_json_inference_request() -> ModelInferenceRequest {
         stream: false,
         json_mode: false,
         function_type: FunctionType::Chat,
-        output_schema: Some(output_schema),
+        output_schema: Some(Box::leak(Box::new(output_schema))),
     }
 }
 
-pub fn create_tool_inference_request() -> ModelInferenceRequest {
+pub fn create_tool_inference_request<'a>() -> ModelInferenceRequest<'a> {
     // Define a tool
     let tool = Tool {
         r#type: ToolType::Function,
@@ -102,7 +102,7 @@ pub fn create_tool_inference_request() -> ModelInferenceRequest {
     }
 }
 
-pub fn create_streaming_inference_request() -> ModelInferenceRequest {
+pub fn create_streaming_inference_request<'a>() -> ModelInferenceRequest<'a> {
     let messages = vec![
         InferenceRequestMessage::System(SystemInferenceRequestMessage {
             content: "You are a helpful but mischevious assistant.".to_string(),

@@ -1,7 +1,7 @@
 use futures::StreamExt;
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
-use secrecy::{ExposeSecret, SecretString};
+use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -9,12 +9,12 @@ use uuid::Uuid;
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::{
-    config_parser::ProviderConfig,
     inference::types::{
-        InferenceRequestMessage, InferenceResponseChunk, InferenceResponseStream,
-        ModelInferenceRequest, ModelInferenceResponse, Tool, ToolCall, ToolCallChunk, ToolChoice,
-        ToolType, Usage,
+        InferenceRequestMessage, InferenceResponseStream, ModelInferenceRequest,
+        ModelInferenceResponse, ModelInferenceResponseChunk, Tool, ToolCall, ToolCallChunk,
+        ToolChoice, ToolType, Usage,
     },
+    model::ProviderConfig,
 };
 
 const ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com/v1/messages";
@@ -24,21 +24,28 @@ pub struct AnthropicProvider;
 
 impl InferenceProvider for AnthropicProvider {
     /// Anthropic non-streaming API request
-    async fn infer(
-        &self,
-        request: &ModelInferenceRequest,
-        model: &ProviderConfig,
-        http_client: &reqwest::Client,
-        api_key: &SecretString,
+    async fn infer<'a>(
+        request: &'a ModelInferenceRequest<'a>,
+        model: &'a ProviderConfig,
+        http_client: &'a reqwest::Client,
     ) -> Result<ModelInferenceResponse, Error> {
-        let model_name = match model {
-            ProviderConfig::Anthropic { model_name } => model_name,
+        let (model_name, api_key) = match model {
+            ProviderConfig::Anthropic {
+                model_name,
+                api_key,
+            } => (
+                model_name,
+                api_key.as_ref().ok_or(Error::ApiKeyMissing {
+                    provider_name: "Anthropic".to_string(),
+                })?,
+            ),
             _ => {
                 return Err(Error::InvalidProviderConfig {
                     message: "Expected Anthropic provider config".to_string(),
                 })
             }
         };
+
         let request_body = AnthropicRequestBody::new(model_name, request)?;
         let res = http_client
             .post(ANTHROPIC_BASE_URL)
@@ -72,15 +79,21 @@ impl InferenceProvider for AnthropicProvider {
     }
 
     /// Anthropic streaming API request
-    async fn infer_stream(
-        &self,
-        request: &ModelInferenceRequest,
-        model: &ProviderConfig,
-        http_client: &reqwest::Client,
-        api_key: &SecretString,
-    ) -> Result<InferenceResponseStream, Error> {
-        let model_name = match model {
-            ProviderConfig::Anthropic { model_name } => model_name,
+    async fn infer_stream<'a>(
+        request: &'a ModelInferenceRequest<'a>,
+        model: &'a ProviderConfig,
+        http_client: &'a reqwest::Client,
+    ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
+        let (model_name, api_key) = match model {
+            ProviderConfig::Anthropic {
+                model_name,
+                api_key,
+            } => (
+                model_name,
+                api_key.as_ref().ok_or(Error::ApiKeyMissing {
+                    provider_name: "Anthropic".to_string(),
+                })?,
+            ),
             _ => {
                 return Err(Error::InvalidProviderConfig {
                     message: "Expected Anthropic provider config".to_string(),
@@ -98,7 +111,17 @@ impl InferenceProvider for AnthropicProvider {
             .map_err(|e| Error::InferenceClient {
                 message: format!("Error sending request to Anthropic: {e}"),
             })?;
-        Ok(stream_anthropic(event_source).await)
+        let mut stream = stream_anthropic(event_source).await;
+        let chunk = match stream.next().await {
+            Some(Ok(chunk)) => chunk,
+            Some(Err(e)) => return Err(e),
+            None => {
+                return Err(Error::AnthropicServer {
+                    message: "Stream ended before first chunk".to_string(),
+                })
+            }
+        };
+        Ok((chunk, stream))
     }
 }
 
@@ -527,7 +550,7 @@ fn handle_anthropic_error(
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum AnthropicMessageBlock {
     Text {
@@ -582,7 +605,7 @@ impl From<AnthropicMessageBlock> for StreamMessage {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Serialize)]
 #[allow(dead_code)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum AnthropicStreamMessage {
@@ -613,24 +636,29 @@ enum AnthropicStreamMessage {
 fn anthropic_to_tensorzero_stream_message(
     message: AnthropicStreamMessage,
     inference_id: Uuid,
-) -> Result<Option<InferenceResponseChunk>, Error> {
+) -> Result<Option<ModelInferenceResponseChunk>, Error> {
+    let raw_message = serde_json::to_string(&message).map_err(|e| Error::AnthropicServer {
+        message: format!("Error parsing response from Anthropic: {e}"),
+    })?;
     match message {
         AnthropicStreamMessage::ContentBlockDelta { delta, .. } => {
             let message: StreamMessage = delta.into();
-            Ok(Some(InferenceResponseChunk::new(
+            Ok(Some(ModelInferenceResponseChunk::new(
                 inference_id,
                 message.message,
                 message.tool_calls,
                 None,
+                raw_message,
             )))
         }
         AnthropicStreamMessage::ContentBlockStart { content_block, .. } => {
             let message: StreamMessage = content_block.into();
-            Ok(Some(InferenceResponseChunk::new(
+            Ok(Some(ModelInferenceResponseChunk::new(
                 inference_id,
                 message.message,
                 message.tool_calls,
                 None,
+                raw_message,
             )))
         }
         AnthropicStreamMessage::ContentBlockStop { .. } => Ok(None),
@@ -640,11 +668,12 @@ fn anthropic_to_tensorzero_stream_message(
         AnthropicStreamMessage::MessageDelta { delta } => {
             if let Some(usage_info) = delta.get("usage") {
                 let usage = parse_usage_info(usage_info);
-                Ok(Some(InferenceResponseChunk::new(
+                Ok(Some(ModelInferenceResponseChunk::new(
                     inference_id,
                     None,
                     None,
                     Some(usage.into()),
+                    raw_message,
                 )))
             } else {
                 Ok(None)
@@ -653,11 +682,12 @@ fn anthropic_to_tensorzero_stream_message(
         AnthropicStreamMessage::MessageStart { message } => {
             if let Some(usage_info) = message.get("message").and_then(|m| m.get("usage")) {
                 let usage = parse_usage_info(usage_info);
-                Ok(Some(InferenceResponseChunk::new(
+                Ok(Some(ModelInferenceResponseChunk::new(
                     inference_id,
                     None,
                     None,
                     Some(usage.into()),
+                    raw_message,
                 )))
             } else {
                 Ok(None)
@@ -780,7 +810,6 @@ mod tests {
                 }],
             }
         );
-        // todo!("implement a test for tool calls here");
 
         // Test a Tool message
         let inference_request_message =

@@ -8,7 +8,7 @@ use url::Url;
 
 use crate::error::Error;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum ClickHouseConnectionInfo {
     Mock {
         mock_data: Arc<RwLock<HashMap<String, Vec<serde_json::Value>>>>,

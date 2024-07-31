@@ -4,8 +4,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use crate::error::Error;
+
 #[derive(Clone, Debug)]
-pub struct JSONSchemaFromPath(pub Arc<JSONSchema>);
+pub struct JSONSchemaFromPath {
+    compiled: Arc<JSONSchema>,
+    pub value: &'static serde_json::Value,
+}
 
 impl JSONSchemaFromPath {
     /// Load a JSON schema from a file path
@@ -16,7 +21,35 @@ impl JSONSchemaFromPath {
         // We can 'leak' memory here because we want the schema to exist for the duration of the process
         let schema_boxed: &'static serde_json::Value = Box::leak(Box::new(schema));
         let compiled_schema = JSONSchema::compile(schema_boxed)?;
-        Ok(Self(Arc::new(compiled_schema)))
+        Ok(Self {
+            compiled: Arc::new(compiled_schema),
+            value: schema_boxed,
+        })
+    }
+
+    /// Create a new JSONSchemaFromPath instance from a JSON schema value
+    #[cfg(test)]
+    pub fn from_value(schema: serde_json::Value) -> Result<Self, Box<dyn std::error::Error>> {
+        // We can 'leak' memory here because we want the schema to exist for the duration of the process
+        let schema_boxed: &'static serde_json::Value = Box::leak(Box::new(schema));
+        let compiled_schema = JSONSchema::compile(schema_boxed)?;
+        Ok(Self {
+            compiled: Arc::new(compiled_schema),
+            value: schema_boxed,
+        })
+    }
+
+    pub fn validate(&self, instance: &serde_json::Value) -> Result<(), Error> {
+        self.compiled
+            .validate(instance)
+            .map_err(|e| Error::JsonSchemaValidation {
+                messages: e
+                    .into_iter()
+                    .map(|error| error.to_string())
+                    .collect::<Vec<String>>(),
+                data: instance.clone(),
+                schema: self.value.clone(),
+            })
     }
 }
 
@@ -27,15 +60,6 @@ impl<'de> Deserialize<'de> for JSONSchemaFromPath {
     {
         let path = PathBuf::deserialize(deserializer)?;
         JSONSchemaFromPath::new(path).map_err(serde::de::Error::custom)
-    }
-}
-
-// Implement Deref for convenience
-impl std::ops::Deref for JSONSchemaFromPath {
-    type Target = JSONSchema;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
     }
 }
 
@@ -68,28 +92,28 @@ mod tests {
         let instance = serde_json::json!({
             "name": "John Doe",
         });
-        assert!(schema.is_valid(&instance));
+        assert!(schema.validate(&instance).is_ok());
 
         let instance = serde_json::json!({
             "name": "John Doe",
             "age": 30,
         });
-        assert!(schema.is_valid(&instance));
+        assert!(schema.validate(&instance).is_ok());
 
         let instance = serde_json::json!({
             "name": "John Doe",
             "age": 30,
             "role": "admin"
         });
-        assert!(!schema.is_valid(&instance));
+        assert!(schema.validate(&instance).is_err());
 
         let instance = serde_json::json!({
             "age": "not a number"
         });
-        assert!(!schema.is_valid(&instance));
+        assert!(schema.validate(&instance).is_err());
 
         let instance = serde_json::json!({});
-        assert!(!schema.is_valid(&instance));
+        assert!(schema.validate(&instance).is_err());
     }
 
     #[test]

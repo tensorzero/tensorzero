@@ -8,10 +8,12 @@ RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt
 
 COPY ./api .
 
+ARG CARGO_BUILD_FLAGS=""
+
 RUN --mount=type=cache,id=tensorzero-api-release,sharing=shared,target=/usr/local/cargo/registry \
     --mount=type=cache,id=tensorzero-api-release,sharing=shared,target=/usr/local/cargo/git \
     --mount=type=cache,id=tensorzero-api-release,sharing=locked,target=/src/target \
-    cargo build --release && \
+    cargo build --release $CARGO_BUILD_FLAGS && \
     cp -r /src/target/release /release
 
 # ========== base ==========
