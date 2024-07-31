@@ -12,6 +12,7 @@ env:
   FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }} # for integration/E2E tests
   FORCE_COLOR: 1
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }} # for integration/E2E tests
+  TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }} # for integration/E2E tests
 
 jobs:
   run:
