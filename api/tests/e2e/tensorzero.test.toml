@@ -38,6 +38,17 @@ routing = ["good"]
 type = "dummy"
 model_name = "good"
 
+[models.test_fallback]
+routing = ["error", "good"]
+
+[models.test_fallback.providers.error]
+type = "dummy"
+model_name = "error"
+
+[models.test_fallback.providers.good]
+type = "dummy"
+model_name = "good"
+
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
@@ -65,6 +76,27 @@ type = "chat"
 system_schema = "functions/basic_test/system_schema.json"
 
 [functions.basic_test.variants.test]
+type = "chat_completion"
+weight = 1
+model = "test"
+system_template = "functions/basic_test/prompt/system_template.minijinja"
+
+[functions.model_fallback_test]
+type = "chat"
+system_schema = "functions/basic_test/system_schema.json"
+
+[functions.model_fallback_test.variants.test]
+type = "chat_completion"
+weight = 1
+model = "test_fallback"
+system_template = "functions/basic_test/prompt/system_template.minijinja"
+
+[functions.json_fail]
+type = "chat"
+system_schema = "functions/basic_test/system_schema.json"
+output_schema = "functions/basic_test/output_schema.json"
+
+[functions.json_fail.variants.test]
 type = "chat_completion"
 weight = 1
 model = "test"
