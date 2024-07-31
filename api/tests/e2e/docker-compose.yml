@@ -15,6 +15,8 @@ services:
     build:
       context: ../../..
       target: api
+      args:
+        - CARGO_BUILD_FLAGS=--features=e2e_tests
       cache_from:
         - type=gha
       cache_to:
@@ -27,3 +29,4 @@ services:
       - CLICKHOUSE_URL=http://clickhouse:8123
     volumes:
       - ./tensorzero.test.toml:/app/tensorzero.test.toml
+      - ../../../functions:/app/functions

@@ -51,7 +51,9 @@ CREATE TABLE IF NOT EXISTS Inference
     variant_name LowCardinality(String),
     episode_id UUID,
     input String,
-    output String
+    output Nullable(String),
+    -- This is whatever string we got from the Inference, without output sanitization
+    raw_output String,
 ) ENGINE = MergeTree()
 ORDER BY (function_name, variant_name, episode_id);
 

@@ -3,7 +3,7 @@ use crate::integration::providers::common::{
     create_tool_inference_request,
 };
 use api::inference::providers::provider_trait::InferenceProvider;
-use api::{config_parser::ProviderConfig, inference::providers::anthropic::AnthropicProvider};
+use api::{inference::providers::anthropic::AnthropicProvider, model::ProviderConfig};
 use futures::StreamExt;
 use secrecy::SecretString;
 use std::env;
@@ -16,13 +16,11 @@ async fn test_infer() {
     let model_name = "claude-3-haiku-20240307";
     let config = ProviderConfig::Anthropic {
         model_name: model_name.to_string(),
+        api_key: Some(api_key),
     };
     let client = reqwest::Client::new();
     let inference_request = create_simple_inference_request();
-    let provider = AnthropicProvider;
-    let result = provider
-        .infer(&inference_request, &config, &client, &api_key)
-        .await;
+    let result = AnthropicProvider::infer(&inference_request, &config, &client).await;
     assert!(result.is_ok());
     assert!(result.unwrap().content.is_some());
 }
@@ -35,16 +33,14 @@ async fn test_infer_stream() {
     let model_name = "claude-3-haiku-20240307";
     let config = ProviderConfig::Anthropic {
         model_name: model_name.to_string(),
+        api_key: Some(api_key),
     };
     let client = reqwest::Client::new();
     let inference_request = create_streaming_inference_request();
-    let provider = AnthropicProvider;
-    let result = provider
-        .infer_stream(&inference_request, &config, &client, &api_key)
-        .await;
+    let result = AnthropicProvider::infer_stream(&inference_request, &config, &client).await;
     assert!(result.is_ok());
-    let mut stream = result.unwrap();
-    let mut collected_chunks = Vec::new();
+    let (chunk, mut stream) = result.unwrap();
+    let mut collected_chunks = vec![chunk];
     while let Some(chunk) = stream.next().await {
         assert!(chunk.is_ok());
         collected_chunks.push(chunk.unwrap());
@@ -64,11 +60,9 @@ async fn test_infer_with_tool_calls() {
     let inference_request = create_tool_inference_request();
     let config = ProviderConfig::Anthropic {
         model_name: model_name.to_string(),
+        api_key: Some(api_key),
     };
-    let provider = AnthropicProvider;
-    let result = provider
-        .infer(&inference_request, &config, &client, &api_key)
-        .await;
+    let result = AnthropicProvider::infer(&inference_request, &config, &client).await;
 
     assert!(result.is_ok());
     let response = result.unwrap();

@@ -1,38 +1,43 @@
 use futures::{StreamExt, TryStreamExt};
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
-use secrecy::{ExposeSecret, SecretString};
+use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use url::Url;
 use uuid::Uuid;
 
-use crate::config_parser::ProviderConfig;
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
-    InferenceRequestMessage, InferenceResponseChunk, InferenceResponseStream,
-    ModelInferenceRequest, ModelInferenceResponse, Tool, ToolCall, ToolCallChunk, ToolChoice,
+    InferenceRequestMessage, InferenceResponseStream, ModelInferenceRequest,
+    ModelInferenceResponse, ModelInferenceResponseChunk, Tool, ToolCall, ToolCallChunk, ToolChoice,
     ToolType, Usage,
 };
+use crate::model::ProviderConfig;
 
 const OPENAI_DEFAULT_BASE_URL: &str = "https://api.openai.com/v1/";
 
 pub struct OpenAIProvider;
 
 impl InferenceProvider for OpenAIProvider {
-    async fn infer(
-        &self,
-        request: &ModelInferenceRequest,
-        model: &ProviderConfig,
-        http_client: &reqwest::Client,
-        api_key: &SecretString,
+    async fn infer<'a>(
+        request: &'a ModelInferenceRequest<'a>,
+        model: &'a ProviderConfig,
+        http_client: &'a reqwest::Client,
     ) -> Result<ModelInferenceResponse, Error> {
-        let (model_name, api_base) = match model {
+        let (model_name, api_base, api_key) = match model {
             ProviderConfig::OpenAI {
                 model_name,
                 api_base,
-            } => (model_name, api_base.as_deref()),
+                api_key,
+            } => (
+                model_name,
+                api_base.as_deref(),
+                api_key.as_ref().ok_or(Error::ApiKeyMissing {
+                    provider_name: "OpenAI".to_string(),
+                })?,
+            ),
             _ => {
                 return Err(Error::InvalidProviderConfig {
                     message: "Expected OpenAI provider config".to_string(),
@@ -72,18 +77,23 @@ impl InferenceProvider for OpenAIProvider {
         }
     }
 
-    async fn infer_stream(
-        &self,
-        request: &ModelInferenceRequest,
-        model: &ProviderConfig,
-        http_client: &reqwest::Client,
-        api_key: &SecretString,
-    ) -> Result<InferenceResponseStream, Error> {
-        let (model_name, api_base) = match model {
+    async fn infer_stream<'a>(
+        request: &'a ModelInferenceRequest<'a>,
+        model: &'a ProviderConfig,
+        http_client: &'a reqwest::Client,
+    ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
+        let (model_name, api_base, api_key) = match model {
             ProviderConfig::OpenAI {
                 model_name,
                 api_base,
-            } => (model_name, api_base.as_deref()),
+                api_key,
+            } => (
+                model_name,
+                api_base.as_deref(),
+                api_key.as_ref().ok_or(Error::ApiKeyMissing {
+                    provider_name: "OpenAI".to_string(),
+                })?,
+            ),
             _ => {
                 return Err(Error::InvalidProviderConfig {
                     message: "Expected OpenAI provider config".to_string(),
@@ -104,7 +114,20 @@ impl InferenceProvider for OpenAIProvider {
             .map_err(|e| Error::InferenceClient {
                 message: format!("Error sending request to OpenAI: {e}"),
             })?;
-        Ok(stream_openai(event_source).await)
+
+        let mut stream = stream_openai(event_source).await;
+        // Get a single chunk from the stream and make sure it is OK then send to client.
+        // We want to do this here so that we can tell that the request is working.
+        let chunk = match stream.next().await {
+            Some(Ok(chunk)) => chunk,
+            Some(Err(e)) => return Err(e),
+            None => {
+                return Err(Error::OpenAIServer {
+                    message: "Stream ended before first chunk".to_string(),
+                })
+            }
+        };
+        Ok((chunk, stream))
     }
 }
 
@@ -116,15 +139,21 @@ pub struct FireworksProvider;
 /// - Fireworks allows you to auto-truncate requests that have too many tokens
 ///   (there are 2 ways to do it, we have the default of auto-truncation to the max window size)
 impl InferenceProvider for FireworksProvider {
-    async fn infer(
-        &self,
-        request: &ModelInferenceRequest,
-        model: &ProviderConfig,
-        http_client: &reqwest::Client,
-        api_key: &SecretString,
+    async fn infer<'a>(
+        request: &'a ModelInferenceRequest<'a>,
+        model: &'a ProviderConfig,
+        http_client: &'a reqwest::Client,
     ) -> Result<ModelInferenceResponse, Error> {
-        let model_name = match model {
-            ProviderConfig::Fireworks { model_name } => model_name,
+        let (model_name, api_key) = match model {
+            ProviderConfig::Fireworks {
+                model_name,
+                api_key,
+            } => (
+                model_name,
+                api_key.as_ref().ok_or(Error::ApiKeyMissing {
+                    provider_name: "Fireworks".to_string(),
+                })?,
+            ),
             _ => {
                 return Err(Error::InvalidProviderConfig {
                     message: "Expected Fireworks provider config".to_string(),
@@ -168,15 +197,21 @@ impl InferenceProvider for FireworksProvider {
         }
     }
 
-    async fn infer_stream(
-        &self,
-        request: &ModelInferenceRequest,
-        model: &ProviderConfig,
-        http_client: &reqwest::Client,
-        api_key: &SecretString,
-    ) -> Result<InferenceResponseStream, Error> {
-        let model_name = match model {
-            ProviderConfig::Fireworks { model_name } => model_name,
+    async fn infer_stream<'a>(
+        request: &'a ModelInferenceRequest<'a>,
+        model: &'a ProviderConfig,
+        http_client: &'a reqwest::Client,
+    ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
+        let (model_name, api_key) = match model {
+            ProviderConfig::Fireworks {
+                model_name,
+                api_key,
+            } => (
+                model_name,
+                api_key.as_ref().ok_or(Error::ApiKeyMissing {
+                    provider_name: "Fireworks".to_string(),
+                })?,
+            ),
             _ => {
                 return Err(Error::InvalidProviderConfig {
                     message: "Expected Fireworks provider config".to_string(),
@@ -198,11 +233,23 @@ impl InferenceProvider for FireworksProvider {
             .map_err(|e| Error::InferenceClient {
                 message: format!("Error sending request to Fireworks: {e}"),
             })?;
-        Ok(Box::pin(
+        let mut stream = Box::pin(
             stream_openai(event_source)
                 .await
                 .map_err(map_openai_to_fireworks_error),
-        ))
+        );
+        // Get a single chunk from the stream and make sure it is OK then send to client.
+        // We want to do this here so that we can tell that the request is working.
+        let chunk = match stream.next().await {
+            Some(Ok(chunk)) => chunk,
+            Some(Err(e)) => return Err(e),
+            None => {
+                return Err(Error::OpenAIServer {
+                    message: "Stream ended before first chunk".to_string(),
+                })
+            }
+        };
+        Ok((chunk, stream))
     }
 }
 
@@ -588,7 +635,7 @@ impl<'a> FireworksRequest<'a> {
     pub fn new(model: &'a str, request: &'a ModelInferenceRequest) -> FireworksRequest<'a> {
         let response_format = match request.json_mode {
             true => FireworksResponseFormat::JsonObject {
-                schema: request.output_schema.as_ref(),
+                schema: request.output_schema,
             },
             false => FireworksResponseFormat::Text,
         };
@@ -713,19 +760,19 @@ impl TryFrom<OpenAIResponse> for ModelInferenceResponse {
 }
 
 // This doesn't include role
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize, Serialize)]
 struct OpenAIDelta {
     content: Option<String>,
     tool_calls: Option<Vec<OpenAIResponseToolCall>>,
 }
 
 // This doesn't include logprobs, finish_reason, and index
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize, Serialize)]
 struct OpenAIChatChunkChoice {
     delta: OpenAIDelta,
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize, Serialize)]
 struct OpenAIChatChunk {
     choices: Vec<OpenAIChatChunkChoice>,
     usage: Option<OpenAIUsage>,
@@ -734,7 +781,10 @@ struct OpenAIChatChunk {
 fn openai_to_tensorzero_stream_message(
     mut chunk: OpenAIChatChunk,
     inference_id: Uuid,
-) -> Result<InferenceResponseChunk, Error> {
+) -> Result<ModelInferenceResponseChunk, Error> {
+    let raw_message = serde_json::to_string(&chunk).map_err(|e| Error::OpenAIServer {
+        message: format!("Error parsing response from OpenAI: {e}"),
+    })?;
     if chunk.choices.len() > 1 {
         return Err(Error::OpenAIServer {
             message: "Response has invalid number of choices: {}. Expected 1.".to_string(),
@@ -751,11 +801,12 @@ fn openai_to_tensorzero_stream_message(
         None => (None, None),
     };
     let usage = chunk.usage.map(|u| u.into());
-    Ok(InferenceResponseChunk::new(
+    Ok(ModelInferenceResponseChunk::new(
         inference_id,
         content,
         tool_calls,
         usage,
+        raw_message,
     ))
 }
 
@@ -994,7 +1045,7 @@ mod tests {
         assert_eq!(
             fireworks_request.response_format,
             FireworksResponseFormat::JsonObject {
-                schema: request_with_tools.output_schema.as_ref(),
+                schema: request_with_tools.output_schema,
             }
         );
         assert!(fireworks_request.tools.is_some());

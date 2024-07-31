@@ -5,8 +5,8 @@ use crate::integration::providers::common::{
     create_streaming_inference_request, create_tool_inference_request,
 };
 use api::{
-    config_parser::ProviderConfig, inference::providers::openai::FireworksProvider,
-    inference::providers::provider_trait::InferenceProvider,
+    inference::providers::openai::FireworksProvider,
+    inference::providers::provider_trait::InferenceProvider, model::ProviderConfig,
 };
 use futures::StreamExt;
 use secrecy::SecretString;
@@ -22,11 +22,9 @@ async fn test_infer() {
 
     let provider_config = ProviderConfig::Fireworks {
         model_name: model_name.to_string(),
+        api_key: Some(api_key),
     };
-    let provider = FireworksProvider;
-    let result = provider
-        .infer(&inference_request, &provider_config, &client, &api_key)
-        .await;
+    let result = FireworksProvider::infer(&inference_request, &provider_config, &client).await;
     assert!(result.is_ok());
     assert!(result.unwrap().content.is_some());
 }
@@ -43,11 +41,9 @@ async fn test_infer_with_tool_calls() {
 
     let provider_config = ProviderConfig::Fireworks {
         model_name: model_name.to_string(),
+        api_key: Some(api_key),
     };
-    let provider = FireworksProvider;
-    let result = provider
-        .infer(&inference_request, &provider_config, &client, &api_key)
-        .await;
+    let result = FireworksProvider::infer(&inference_request, &provider_config, &client).await;
 
     assert!(result.is_ok());
     let response = result.unwrap();
@@ -75,14 +71,13 @@ async fn test_infer_stream() {
 
     let provider_config = ProviderConfig::Fireworks {
         model_name: model_name.to_string(),
+        api_key: Some(api_key),
     };
-    let provider = FireworksProvider;
-    let result = provider
-        .infer_stream(&inference_request, &provider_config, &client, &api_key)
-        .await;
+    let result =
+        FireworksProvider::infer_stream(&inference_request, &provider_config, &client).await;
     assert!(result.is_ok());
-    let mut stream = result.unwrap();
-    let mut collected_chunks = Vec::new();
+    let (chunk, mut stream) = result.unwrap();
+    let mut collected_chunks = vec![chunk];
     while let Some(chunk) = stream.next().await {
         assert!(chunk.is_ok());
         collected_chunks.push(chunk.unwrap());
@@ -104,17 +99,14 @@ async fn test_json_request() {
 
     let provider_config = ProviderConfig::Fireworks {
         model_name: model_name.to_string(),
+        api_key: Some(api_key),
     };
-    let provider = FireworksProvider;
-    let result = provider
-        .infer(&inference_request, &provider_config, &client, &api_key)
-        .await;
+    let result = FireworksProvider::infer(&inference_request, &provider_config, &client).await;
     assert!(result.is_ok());
     let result = result.unwrap();
     assert!(result.content.is_some());
     // parse the result text and see if it matches the output schema
     let result_text = result.content.unwrap();
-    println!("result_text: {}", result_text);
     let result_json: serde_json::Value = serde_json::from_str(&result_text).unwrap();
     assert!(result_json.get("thinking").is_some());
     assert!(result_json.get("answer").is_some());

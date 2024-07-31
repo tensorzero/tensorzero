@@ -1,15 +1,26 @@
+use std::convert::Infallible;
+
 use axum::body::Body;
-use axum::debug_handler;
 use axum::extract::State;
-use axum::response::Response;
+use axum::response::sse::{Event, Sse};
+use axum::response::{IntoResponse, Response};
+use axum::{debug_handler, Json};
+use metrics::counter;
 use serde::Deserialize;
-use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::UnboundedReceiverStream;
+use tokio_stream::StreamExt;
 use uuid::Uuid;
 
 use crate::api_util::{AppState, AppStateData, StructuredJson};
-use crate::error::Error;
-use crate::function::{InputMessage, VariantConfig};
+use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::error::{Error, ResultExt};
+use crate::function::{sample_variant, FunctionConfig};
+use crate::inference::types::{
+    collect_chunks, Inference, InferenceResponse, InferenceResponseChunk, InferenceResponseStream,
+    InputMessage, ModelInferenceResponseChunk,
+};
+use crate::variant::Variant;
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Deserialize)]
@@ -35,10 +46,23 @@ pub struct Params {
     dryrun: Option<bool>,
 }
 
+#[derive(Debug, Clone)]
+struct InferenceMetadata {
+    pub function_name: String,
+    pub variant_name: String,
+    pub episode_id: Uuid,
+    pub input: Vec<InputMessage>,
+    pub dryrun: bool,
+}
+
 /// A handler for the inference endpoint
 #[debug_handler(state = AppStateData)]
 pub async fn inference_handler(
-    State(AppStateData { config, .. }): AppState,
+    State(AppStateData {
+        config,
+        http_client,
+        clickhouse_connection_info,
+    }): AppState,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
     // Get the function config or return an error if it doesn't exist
@@ -74,194 +98,279 @@ pub async fn inference_handler(
     let episode_id = params.episode_id.unwrap_or(Uuid::now_v7());
 
     // Should we store the results?
-    #[allow(unused)] // TODO: remove
     let dryrun = params.dryrun.unwrap_or(false);
 
     // Should we stream the inference?
-    #[allow(unused)] // TODO: remove
     let stream = params.stream.unwrap_or(false);
+
+    // Keep track of which variants failed
+    let mut variant_errors = vec![];
+
+    // Create InferenceMetadata
+    let inference_metadata = InferenceMetadata {
+        function_name: params.function_name.clone(),
+        variant_name: params.variant_name.clone().unwrap_or_default(),
+        episode_id,
+        input: params.input.clone(),
+        dryrun,
+    };
 
     // Keep sampling variants until one succeeds
     while !variants.is_empty() {
-        #[allow(unused)] // TODO: remove
         let (variant_name, variant) =
-            sample_variant(&variants, &params.function_name, &episode_id)?;
-        // TODO: remove the variant that was sampled
+            sample_variant(&mut variants, &params.function_name, &episode_id)?;
+        if stream {
+            let response = variant
+                .infer_stream(
+                    &params.input,
+                    &config.models,
+                    function.output_schema(),
+                    &http_client,
+                )
+                .await;
 
-        todo!("Run inference and store results");
-
-        // TODO: add metrics
-        // if !dryrun {
-        //     // TODO: add integration/E2E test that checks the Prometheus endpoint
-        //     counter!(
-        //         "request_count",
-        //         "endpoint" => "inference",
-        //         "function_name" => params.function_name.to_string(),
-        //         "variant_name" => variant_name.to_string()
-        //     )
-        //     .increment(1);
-        // }
+            // Make sure the response worked (incl first chunk) prior to launching the thread and starting to return chunks
+            // TODO: how would we handle this for composite variants? it kind of breaks the abstraction.
+            let (chunk, stream) = match response {
+                Ok((chunk, stream)) => (chunk, stream),
+                Err(e) => {
+                    variant_errors.push(e);
+                    continue;
+                }
+            };
+            let (client_sender, client_receiver) = mpsc::unbounded_channel();
+            tokio::spawn(worker_response_router(
+                function.clone(),
+                inference_metadata,
+                chunk,
+                stream,
+                client_sender,
+                clickhouse_connection_info,
+            ));
+            return Ok(Sse::new(UnboundedReceiverStream::new(client_receiver))
+                .keep_alive(axum::response::sse::KeepAlive::new())
+                .into_response());
+        } else {
+            let response = variant
+                .infer(
+                    &params.input,
+                    &config.models,
+                    function.output_schema(),
+                    &http_client,
+                )
+                .await;
+            let response = match response {
+                Ok(response) => response,
+                Err(e) => {
+                    variant_errors.push(e);
+                    continue;
+                }
+            };
+            let response_to_write = response.clone();
+            if !dryrun {
+                // TODO: add integration/E2E test that checks the Prometheus endpoint
+                counter!(
+                    "request_count",
+                    "endpoint" => "inference",
+                    "function_name" => params.function_name.to_string(),
+                )
+                .increment(1);
+                // Spawn a thread for a trailing write to ClickHouse so that it doesn't block the response
+                tokio::spawn(async move {
+                    write_inference(
+                        clickhouse_connection_info,
+                        params.function_name,
+                        variant_name,
+                        params.input,
+                        response_to_write,
+                        episode_id,
+                    )
+                    .await;
+                });
+            }
+            let response_value = serde_json::to_value(response).map_err(|e| Error::Inference {
+                message: format!("Failed to convert response to JSON: {}", e),
+            })?;
+            return Ok(Json(response_value).into_response());
+        }
     }
-
     // Eventually, if we get here, it means we tried every variant and none of them worked
-    Err(Error::Inference {
-        message: "Inference failed for every variant in this function".to_string(),
+    Err(Error::AllVariantsFailed {
+        errors: variant_errors,
     })
 }
 
-/// Sample a variant from the function based on variant weights (uniform random selection)
-fn sample_variant<'a>(
-    variants: &'a HashMap<String, VariantConfig>,
-    function_name: &'a str,
-    episode_id: &Uuid,
-) -> Result<(&'a String, &'a VariantConfig), Error> {
-    // Compute the total weight of all variants
-    let total_weight = variants
-        .values()
-        .map(|variant| variant.weight())
-        .sum::<f64>();
-
-    // If the total weight is non-positive, return an error
-    // NOTE: We enforce non-negative weights at the config parsing stage, but it's good to be extra
-    //       safe here to ensure that we catch any regressions we might introduce in the future.
-    if total_weight <= 0. {
-        return Err(Error::InvalidFunctionVariants {
-            message: format!("Function `{function_name}` variants have non-positive total weight"),
-        });
+async fn worker_response_router(
+    function: FunctionConfig,
+    metadata: InferenceMetadata,
+    first_chunk: ModelInferenceResponseChunk,
+    mut stream: InferenceResponseStream,
+    client_sender: mpsc::UnboundedSender<Result<Event, Infallible>>,
+    clickhouse_connection_info: ClickHouseConnectionInfo,
+) {
+    let mut buffer = vec![first_chunk.clone()];
+    // Send the first chunk
+    if let Some(event) = prepare_event(&function, &metadata, first_chunk).ok_or_log() {
+        let _ = client_sender
+            .send(Ok(event))
+            .map_err(|e| Error::ChannelWrite {
+                message: e.to_string(),
+            })
+            .ok_or_log();
     }
-
-    // Sample a random threshold between 0 and the total weight
-    let random_threshold = get_uniform_value(function_name, episode_id) * total_weight;
-
-    // Iterate over the variants to find the one that corresponds to the sampled threshold
-    let mut cumulative_weight = 0.;
-    for (variant_name, variant) in variants.iter() {
-        cumulative_weight += variant.weight();
-        if cumulative_weight > random_threshold {
-            return Ok((variant_name, variant));
+    while let Some(chunk) = stream.next().await {
+        let chunk = match chunk.ok_or_log() {
+            Some(c) => c,
+            None => continue,
+        };
+        buffer.push(chunk.clone());
+        let event = prepare_event(&function, &metadata, chunk).ok_or_log();
+        if let Some(event) = event {
+            let _ = client_sender
+                .send(Ok(event))
+                .map_err(|e| Error::ChannelWrite {
+                    message: e.to_string(),
+                })
+                .ok_or_log();
         }
     }
+    // Send the [DONE] event to signal the end of the stream
+    let done_event = Event::default().data("[DONE]");
+    let _ = client_sender
+        .send(Ok(done_event))
+        .map_err(|e| Error::ChannelWrite {
+            message: e.to_string(),
+        })
+        .ok_or_log();
+    if !metadata.dryrun {
+        counter!(
+            "request_count",
+            "endpoint" => "inference",
+            "function_name" => metadata.function_name.to_string(),
+        )
+        .increment(1);
+        let inference_response: Result<InferenceResponse, Error> =
+            collect_chunks(buffer, function.output_schema());
+        let inference_response = inference_response.ok_or_log();
+        if let Some(inference_response) = inference_response {
+            write_inference(
+                clickhouse_connection_info,
+                metadata.function_name,
+                metadata.variant_name,
+                metadata.input,
+                inference_response,
+                metadata.episode_id,
+            )
+            .await;
+        }
+    }
+}
 
-    // Return the last variant as a fallback (this should only happen due to rare numerical precision issues)
-    variants
-        .iter()
-        .last()
-        .ok_or_else(|| Error::InvalidFunctionVariants {
-            message: format!("Function `{function_name}` has no variants"),
+fn prepare_event(
+    function: &FunctionConfig,
+    metadata: &InferenceMetadata,
+    chunk: ModelInferenceResponseChunk,
+) -> Result<Event, Error> {
+    let mut chunk_json = match function {
+        FunctionConfig::Chat(_) => {
+            let chunk = InferenceResponseChunk::Chat(chunk.into());
+            serde_json::to_value(chunk).map_err(|e| Error::Inference {
+                message: format!("Failed to convert chunk to JSON: {}", e),
+            })?
+        }
+        FunctionConfig::Tool(_) => {
+            unimplemented!()
+        }
+    };
+    chunk_json["variant_name"] = metadata.variant_name.to_string().into();
+    Event::default()
+        .json_data(chunk_json)
+        .map_err(|e| Error::Inference {
+            message: format!("Failed to convert Value to Event: {}", e),
         })
 }
 
-/// Implements a uniform distribution over the interval [0, 1) using a hash function.
-/// This function is deterministic but should have good statistical properties.
-fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
-    let mut hasher = Sha256::new();
-    hasher.update(function_name.as_bytes());
-    hasher.update(episode_id.as_bytes());
-    let hash_value = hasher.finalize();
-    let truncated_hash =
-        u32::from_be_bytes([hash_value[0], hash_value[1], hash_value[2], hash_value[3]]);
-    truncated_hash as f64 / u32::MAX as f64
+async fn write_inference(
+    clickhouse_connection_info: ClickHouseConnectionInfo,
+    function_name: String,
+    variant_name: String,
+    input: Vec<InputMessage>,
+    response: InferenceResponse,
+    episode_id: Uuid,
+) {
+    match response {
+        InferenceResponse::Chat(response) => {
+            let serialized_input =
+                match serde_json::to_string(&input).map_err(|e| Error::Serialization {
+                    message: e.to_string(),
+                }) {
+                    Ok(serialized_input) => serialized_input,
+                    Err(_) => return,
+                };
+            let model_responses: Vec<serde_json::Value> =
+                response.get_serialized_model_inferences(&serialized_input);
+            // TODO : make these writes concurrent
+            // (doesn't matter that much since they don't block the main thread but still wastes resources)
+            for response in model_responses {
+                let res = clickhouse_connection_info
+                    .write(&response, "ModelInference")
+                    .await;
+                res.ok_or_log();
+            }
+            let inference = Inference::new(
+                InferenceResponse::Chat(response),
+                serialized_input,
+                episode_id,
+                function_name,
+                variant_name,
+            );
+            let res = clickhouse_connection_info
+                .write(&inference, "Inference")
+                .await;
+            res.ok_or_log();
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::function::ChatCompletionConfig;
+
     use std::collections::HashMap;
+    use uuid::Uuid;
 
-    #[test]
-    fn test_get_uniform_value() {
-        // Test with function name and episode ID
-        let episode_id = Uuid::now_v7();
-        let value1 = get_uniform_value("test_function", &episode_id);
-        let value2 = get_uniform_value("test_function", &episode_id);
+    use crate::{function::FunctionConfigChat, inference::types::ModelInferenceResponseChunk};
 
-        // Values should be the same due to deterministic input
-        assert_eq!(value1, value2);
-        assert!((0.0..1.0).contains(&value1));
-        assert!((0.0..1.0).contains(&value2));
+    #[tokio::test]
+    async fn test_prepare_event() {
+        // Test case 1: Valid ModelInferenceResponseChunk
+        let chunk = ModelInferenceResponseChunk {
+            inference_id: Uuid::now_v7(),
+            content: Some("Test content".to_string()),
+            tool_calls: None,
+            created: 0,
+            usage: None,
+            raw: "".to_string(),
+        };
+        let function = FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            output_schema: None,
+        });
+        let inference_metadata = InferenceMetadata {
+            function_name: "test_function".to_string(),
+            variant_name: "test_variant".to_string(),
+            episode_id: Uuid::now_v7(),
+            input: vec![],
+            dryrun: false,
+        };
 
-        // Test with different function names
-        let value3 = get_uniform_value("another_function", &episode_id);
-        assert_ne!(value1, value3);
-        assert!((0.0..1.0).contains(&value3));
-
-        // Test with different episode IDs
-        let value4 = get_uniform_value("test_function", &Uuid::now_v7());
-        assert_ne!(value1, value4);
-        assert_ne!(value3, value4);
-        assert!((0.0..1.0).contains(&value4));
-    }
-
-    /// Tests the `sample_variant` function with a variety of test cases through Monte Carlo simulations.
-    ///
-    /// NOTE: If this test fails, it might be due to sampling. Please run it again to check if the
-    ///       issue persists.
-    #[test]
-    fn test_sample_variant() {
-        // Helper function to create a HashMap of variant names to their weights
-        fn create_variants(variant_weights: &[(&str, f64)]) -> HashMap<String, VariantConfig> {
-            variant_weights
-                .iter()
-                .map(|&(name, weight)| {
-                    (
-                        name.to_string(),
-                        VariantConfig::ChatCompletion(ChatCompletionConfig {
-                            weight,
-                            model: "model-name".to_string(),
-                            system_template: None,
-                            user_template: None,
-                            assistant_template: None,
-                        }),
-                    )
-                })
-                .collect()
-        }
-
-        // Helper function to test the distribution of variant weights by sampling them many times
-        // and checking if the observed distribution is close to the expected distribution
-        fn test_variant_distribution(
-            variants: &HashMap<String, VariantConfig>,
-            sample_size: usize,
-            tolerance: f64,
-        ) {
-            let total_weight: f64 = variants.values().map(|v| v.weight()).sum();
-            let mut counts: HashMap<String, usize> = HashMap::new();
-
-            for _ in 0..sample_size {
-                let (variant_name, _) =
-                    sample_variant(variants, "test_function", &Uuid::now_v7()).unwrap();
-                *counts.entry(variant_name.clone()).or_insert(0) += 1;
-            }
-
-            for (variant_name, variant) in variants {
-                let expected_prob = variant.weight() / total_weight;
-                let actual_prob =
-                    *counts.get(variant_name).unwrap_or(&0) as f64 / sample_size as f64;
-                let diff = (expected_prob - actual_prob).abs();
-
-                assert!(
-                    diff <= tolerance,
-                    "Probability for variant {} is outside the acceptable range",
-                    variant_name
-                );
-            }
-        }
-
-        // Test case 1: Equal weights
-        let variants = create_variants(&[("A", 1.0), ("B", 1.0), ("C", 1.0)]);
-        test_variant_distribution(&variants, 10_000, 0.02);
-
-        // Test case 2: Unequal weights
-        let variants = create_variants(&[("X", 1.0), ("Y", 2.0), ("Z", 3.0)]);
-        test_variant_distribution(&variants, 10_000, 0.02);
-
-        // Test case 3: Extreme weights
-        let variants = create_variants(&[("Rare", 0.01), ("Common", 0.99)]);
-        test_variant_distribution(&variants, 10_000, 0.005);
-
-        // Test case 4: Single weights
-        let variants = create_variants(&[("Solo", 1.0)]);
-        test_variant_distribution(&variants, 10_000, 0.0);
+        let result = prepare_event(&function, &inference_metadata, chunk);
+        assert!(result.is_ok());
+        // TODO: You could get the values of the private members using unsafe Rust.
+        // For now, we won't and will rely on integration testing here.
+        // This test doesn't do much so consider deleting or doing more.
     }
 }
