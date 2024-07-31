@@ -104,7 +104,7 @@ pub async fn inference_handler(
     let stream = params.stream.unwrap_or(false);
 
     // Keep track of which variants failed
-    let mut variant_error = vec![];
+    let mut variant_errors = vec![];
 
     // Create InferenceMetadata
     let inference_metadata = InferenceMetadata {
@@ -128,10 +128,13 @@ pub async fn inference_handler(
                     &http_client,
                 )
                 .await;
+
+            // Make sure the response worked (incl first chunk) prior to launching the thread and starting to return chunks
+            // TODO: how would we handle this for composite variants? it kind of breaks the abstraction.
             let (chunk, stream) = match response {
                 Ok((chunk, stream)) => (chunk, stream),
                 Err(e) => {
-                    variant_error.push(e);
+                    variant_errors.push(e);
                     continue;
                 }
             };
@@ -159,7 +162,7 @@ pub async fn inference_handler(
             let response = match response {
                 Ok(response) => response,
                 Err(e) => {
-                    variant_error.push(e);
+                    variant_errors.push(e);
                     continue;
                 }
             };
@@ -172,6 +175,7 @@ pub async fn inference_handler(
                     "function_name" => params.function_name.to_string(),
                 )
                 .increment(1);
+                // Spawn a thread for a trailing write to ClickHouse so that it doesn't block the response
                 tokio::spawn(async move {
                     write_inference(
                         clickhouse_connection_info,
@@ -192,7 +196,7 @@ pub async fn inference_handler(
     }
     // Eventually, if we get here, it means we tried every variant and none of them worked
     Err(Error::AllVariantsFailed {
-        errors: variant_error,
+        errors: variant_errors,
     })
 }
 
@@ -231,6 +235,12 @@ async fn worker_response_router(
         }
     }
     if !metadata.dryrun {
+        counter!(
+            "request_count",
+            "endpoint" => "inference",
+            "function_name" => metadata.function_name.to_string(),
+        )
+        .increment(1);
         let inference_response: Result<InferenceResponse, Error> =
             collect_chunks(buffer, function.output_schema());
         let inference_response = inference_response.ok_or_log();
