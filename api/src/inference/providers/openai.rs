@@ -244,7 +244,7 @@ impl InferenceProvider for FireworksProvider {
             Some(Ok(chunk)) => chunk,
             Some(Err(e)) => return Err(e),
             None => {
-                return Err(Error::OpenAIServer {
+                return Err(Error::FireworksServer {
                     message: "Stream ended before first chunk".to_string(),
                 })
             }
@@ -335,23 +335,23 @@ impl InferenceProvider for TogetherProvider {
         http_client: &'a reqwest::Client,
     ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
         let (model_name, api_key) = match model {
-            ProviderConfig::Fireworks {
+            ProviderConfig::Together {
                 model_name,
                 api_key,
             } => (
                 model_name,
                 api_key.as_ref().ok_or(Error::ApiKeyMissing {
-                    provider_name: "Fireworks".to_string(),
+                    provider_name: "Together".to_string(),
                 })?,
             ),
             _ => {
                 return Err(Error::InvalidProviderConfig {
-                    message: "Expected Fireworks provider config".to_string(),
+                    message: "Expected Together provider config".to_string(),
                 })
             }
         };
-        let request_body = FireworksRequest::new(model_name, request);
-        let api_base = Some("https://api.fireworks.ai/inference/v1/");
+        let request_body = TogetherRequest::new(model_name, request);
+        let api_base = Some("https://api.together.xyz/v1");
         let request_url = get_chat_url(api_base)?;
         let event_source = http_client
             .post(request_url)
@@ -363,12 +363,12 @@ impl InferenceProvider for TogetherProvider {
             .json(&request_body)
             .eventsource()
             .map_err(|e| Error::InferenceClient {
-                message: format!("Error sending request to Fireworks: {e}"),
+                message: format!("Error sending request to Together: {e}"),
             })?;
         let mut stream = Box::pin(
             stream_openai(event_source)
                 .await
-                .map_err(map_openai_to_fireworks_error),
+                .map_err(map_openai_to_together_error),
         );
         // Get a single chunk from the stream and make sure it is OK then send to client.
         // We want to do this here so that we can tell that the request is working.
@@ -376,7 +376,7 @@ impl InferenceProvider for TogetherProvider {
             Some(Ok(chunk)) => chunk,
             Some(Err(e)) => return Err(e),
             None => {
-                return Err(Error::OpenAIServer {
+                return Err(Error::TogetherServer {
                     message: "Stream ended before first chunk".to_string(),
                 })
             }
@@ -589,7 +589,7 @@ enum FireworksResponseFormat<'a> {
     Text,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "type")]
 enum TogetherResponseFormat<'a> {
@@ -597,8 +597,6 @@ enum TogetherResponseFormat<'a> {
         #[serde(skip_serializing_if = "Option::is_none")]
         schema: Option<&'a Value>, // the desired JSON schema
     },
-    #[default]
-    Text,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -815,7 +813,8 @@ struct TogetherRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
     stream: bool,
-    response_format: TogetherResponseFormat<'a>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_format: Option<TogetherResponseFormat<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenAITool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -827,10 +826,10 @@ struct TogetherRequest<'a> {
 impl<'a> TogetherRequest<'a> {
     pub fn new(model: &'a str, request: &'a ModelInferenceRequest) -> TogetherRequest<'a> {
         let response_format = match request.json_mode {
-            true => TogetherResponseFormat::JsonObject {
+            true => Some(TogetherResponseFormat::JsonObject {
                 schema: request.output_schema,
-            },
-            false => TogetherResponseFormat::Text,
+            }),
+            false => None,
         };
         TogetherRequest {
             messages: request.messages.iter().map(|m| m.into()).collect(),
@@ -1293,9 +1292,9 @@ mod tests {
         assert!(!together_request.stream);
         assert_eq!(
             together_request.response_format,
-            TogetherResponseFormat::JsonObject {
+            Some(TogetherResponseFormat::JsonObject {
                 schema: request_with_tools.output_schema,
-            }
+            })
         );
         assert!(together_request.tools.is_some());
         assert_eq!(together_request.tools.as_ref().unwrap().len(), 1);
