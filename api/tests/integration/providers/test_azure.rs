@@ -1,30 +1,35 @@
+use futures::StreamExt;
+use secrecy::SecretString;
 use std::env;
 
 use crate::integration::providers::common::{
     create_json_inference_request, create_simple_inference_request,
     create_streaming_inference_request, create_tool_inference_request,
 };
-use api::{
-    inference::providers::provider_trait::InferenceProvider,
-    inference::providers::together::TogetherProvider, model::ProviderConfig,
-};
-use futures::StreamExt;
-use secrecy::SecretString;
+use api::inference::providers::{azure::AzureProvider, provider_trait::InferenceProvider};
+use api::model::ProviderConfig;
 
 #[tokio::test]
 async fn test_infer() {
     // Load API key from environment variable
-    let api_key = env::var("TOGETHER_API_KEY").expect("TOGETHER_API_KEY must be set");
+    let api_key = env::var("AZURE_OPENAI_API_KEY")
+        .expect("Environment variable AZURE_OPENAI_API_KEY must be set");
+    let api_base = env::var("AZURE_OPENAI_API_BASE")
+        .expect("Environment variable AZURE_OPENAI_API_BASE must be set");
+    let deployment_id = env::var("AZURE_OPENAI_DEPLOYMENT_ID")
+        .expect("Environment variable AZURE_OPENAI_DEPLOYMENT_ID must be set");
     let api_key = SecretString::new(api_key);
-    let model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo";
+    let model_name = "gpt-35-turbo";
     let client = reqwest::Client::new();
     let inference_request = create_simple_inference_request();
 
-    let provider_config = ProviderConfig::Together {
+    let provider_config = ProviderConfig::Azure {
         model_name: model_name.to_string(),
+        api_base,
         api_key: Some(api_key),
+        deployment_id,
     };
-    let result = TogetherProvider::infer(&inference_request, &provider_config, &client).await;
+    let result = AzureProvider::infer(&inference_request, &provider_config, &client).await;
     assert!(result.is_ok());
     assert!(result.unwrap().content.is_some());
 }
@@ -32,18 +37,25 @@ async fn test_infer() {
 #[tokio::test]
 async fn test_infer_with_tool_calls() {
     // Load API key from environment variable
-    let api_key = env::var("TOGETHER_API_KEY").expect("TOGETHER_API_KEY must be set");
+    let api_key = env::var("AZURE_OPENAI_API_KEY")
+        .expect("Environment variable AZURE_OPENAI_API_KEY must be set");
+    let api_base = env::var("AZURE_OPENAI_API_BASE")
+        .expect("Environment variable AZURE_OPENAI_API_BASE must be set");
+    let deployment_id = env::var("AZURE_OPENAI_DEPLOYMENT_ID")
+        .expect("Environment variable AZURE_OPENAI_DEPLOYMENT_ID must be set");
     let api_key = SecretString::new(api_key);
-    let model_name = "mistralai/Mixtral-8x7B-Instruct-v0.1";
+    let model_name = "gpt-4o-mini";
     let client = reqwest::Client::new();
 
     let inference_request = create_tool_inference_request();
 
-    let provider_config = ProviderConfig::Together {
+    let provider_config = ProviderConfig::Azure {
         model_name: model_name.to_string(),
+        api_base,
         api_key: Some(api_key),
+        deployment_id,
     };
-    let result = TogetherProvider::infer(&inference_request, &provider_config, &client).await;
+    let result = AzureProvider::infer(&inference_request, &provider_config, &client).await;
 
     assert!(result.is_ok());
     let response = result.unwrap();
@@ -63,19 +75,25 @@ async fn test_infer_with_tool_calls() {
 #[tokio::test]
 async fn test_infer_stream() {
     // Load API key from environment variable
-    let api_key = env::var("TOGETHER_API_KEY").expect("TOGETHER_API_KEY must be set");
+    let api_key = env::var("AZURE_OPENAI_API_KEY")
+        .expect("Environment variable AZURE_OPENAI_API_KEY must be set");
+    let api_base = env::var("AZURE_OPENAI_API_BASE")
+        .expect("Environment variable AZURE_OPENAI_API_BASE must be set");
+    let deployment_id = env::var("AZURE_OPENAI_DEPLOYMENT_ID")
+        .expect("Environment variable AZURE_OPENAI_DEPLOYMENT_ID must be set");
     let api_key = SecretString::new(api_key);
-    let model_name = "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo";
+    let model_name = "gpt-35-turbo";
     let client = reqwest::Client::new();
     let inference_request = create_streaming_inference_request();
 
-    let provider_config = ProviderConfig::Together {
+    let provider_config = ProviderConfig::Azure {
         model_name: model_name.to_string(),
+        api_base,
         api_key: Some(api_key),
+        deployment_id,
     };
-    let result =
-        TogetherProvider::infer_stream(&inference_request, &provider_config, &client).await;
-
+    let result = AzureProvider::infer_stream(&inference_request, &provider_config, &client).await;
+    assert!(result.is_ok());
     let (chunk, mut stream) = result.unwrap();
     let mut collected_chunks = vec![chunk];
     while let Some(chunk) = stream.next().await {
@@ -83,25 +101,30 @@ async fn test_infer_stream() {
         collected_chunks.push(chunk.unwrap());
     }
     assert!(!collected_chunks.is_empty());
-    // Here, we check the second chunk since fireworks sends an empty chunk at the beginning
-    assert!(collected_chunks.get(1).unwrap().content.is_some());
-    assert!(collected_chunks.last().unwrap().usage.is_some());
+    assert!(collected_chunks[1].content.is_some());
 }
 
 #[tokio::test]
 async fn test_json_request() {
     // Load API key from environment variable
-    let api_key = env::var("TOGETHER_API_KEY").expect("TOGETHER_API_KEY must be set");
+    let api_key = env::var("AZURE_OPENAI_API_KEY")
+        .expect("Environment variable AZURE_OPENAI_API_KEY must be set");
+    let api_base = env::var("AZURE_OPENAI_API_BASE")
+        .expect("Environment variable AZURE_OPENAI_API_BASE must be set");
+    let deployment_id = env::var("AZURE_OPENAI_DEPLOYMENT_ID")
+        .expect("Environment variable AZURE_OPENAI_DEPLOYMENT_ID must be set");
     let api_key = SecretString::new(api_key);
-    let model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo";
+    let model_name = "gpt-35-turbo";
     let client = reqwest::Client::new();
     let inference_request = create_json_inference_request();
 
-    let provider_config = ProviderConfig::Together {
+    let provider_config = ProviderConfig::Azure {
         model_name: model_name.to_string(),
+        api_base,
         api_key: Some(api_key),
+        deployment_id,
     };
-    let result = TogetherProvider::infer(&inference_request, &provider_config, &client).await;
+    let result = AzureProvider::infer(&inference_request, &provider_config, &client).await;
     assert!(result.is_ok());
     let result = result.unwrap();
     assert!(result.content.is_some());

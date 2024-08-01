@@ -508,6 +508,7 @@ mod tests {
         [models."gpt-3.5-turbo".providers.azure]
         type = "azure"
         model_name = "gpt-35-turbo"
+        deployment_id = "gpt-35-turbo"
         api_base = "https://your-endpoint.openai.azure.com/"
 
         [models.claude-3-haiku-20240307]

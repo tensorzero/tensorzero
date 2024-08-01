@@ -9,9 +9,8 @@ use crate::{
     error::Error,
     inference::{
         providers::{
-            anthropic::AnthropicProvider,
-            openai::{FireworksProvider, OpenAIProvider, TogetherProvider},
-            provider_trait::InferenceProvider,
+            anthropic::AnthropicProvider, fireworks::FireworksProvider, openai::OpenAIProvider,
+            provider_trait::InferenceProvider, together::TogetherProvider,
         },
         types::{
             InferenceResponseStream, ModelInferenceRequest, ModelInferenceResponse,
@@ -89,6 +88,7 @@ pub enum ProviderConfig {
     Azure {
         model_name: String,
         api_base: String,
+        deployment_id: String,
         api_key: Option<SecretString>,
     },
     Fireworks {
@@ -128,6 +128,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
             Azure {
                 model_name: String,
                 api_base: String,
+                deployment_id: String,
             },
             Fireworks {
                 model_name: String,
@@ -155,9 +156,11 @@ impl<'de> Deserialize<'de> for ProviderConfig {
             ProviderConfigHelper::Azure {
                 model_name,
                 api_base,
+                deployment_id,
             } => ProviderConfig::Azure {
                 model_name,
                 api_base,
+                deployment_id,
                 api_key: env::var("AZURE_OPENAI_API_KEY").ok().map(SecretString::new),
             },
             ProviderConfigHelper::Fireworks { model_name } => ProviderConfig::Fireworks {
