@@ -1,4 +1,3 @@
-use crate::e2e::common::clickhouse_flush_async_insert;
 use api::inference::providers::dummy::{DUMMY_INFER_RESPONSE_CONTENT, DUMMY_STREAMING_RESPONSE};
 use api::{
     clickhouse::ClickHouseConnectionInfo, inference::providers::dummy::DUMMY_JSON_RESPONSE_RAW,
@@ -8,6 +7,8 @@ use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use uuid::Uuid;
+
+use crate::e2e::common::clickhouse_flush_async_insert;
 
 // TODO: make this endpoint configurable with main.rs
 const INFERENCE_URL: &str = "http://localhost:3000/inference";
@@ -71,7 +72,7 @@ async fn e2e_test_inference_basic() {
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check ClickHouse
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None);
+    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None).unwrap();
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
@@ -149,7 +150,7 @@ async fn e2e_test_inference_model_fallback() {
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check ClickHouse
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None);
+    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None).unwrap();
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
@@ -226,7 +227,7 @@ async fn e2e_test_inference_json_fail() {
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check ClickHouse
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None);
+    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None).unwrap();
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
@@ -304,7 +305,7 @@ async fn e2e_test_inference_json_succeed() {
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check ClickHouse
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None);
+    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None).unwrap();
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
@@ -396,7 +397,7 @@ async fn e2e_test_variant_failover() {
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check ClickHouse
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None);
+    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None).unwrap();
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
@@ -477,7 +478,7 @@ async fn e2e_test_streaming() {
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check ClickHouse
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None);
+    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None).unwrap();
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();

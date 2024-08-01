@@ -371,7 +371,7 @@ mod tests {
         assert!(response.is_err());
         let error = match response {
             Err(error) => error,
-            Ok(_) => panic!("Expected error, got Ok(_)"),
+            Ok(_) => unreachable!("Expected error, got Ok(_)"),
         };
         assert_eq!(
             error,

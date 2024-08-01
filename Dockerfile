@@ -6,7 +6,7 @@ WORKDIR /src
 
 RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
 
-COPY ./api .
+COPY . .
 
 ARG CARGO_BUILD_FLAGS=""
 

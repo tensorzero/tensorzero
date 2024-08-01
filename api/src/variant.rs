@@ -177,6 +177,7 @@ impl Variant for ChatCompletionConfig {
         let model_inference_response = model_config.infer(&request, client).await?;
 
         let inference_id = Uuid::now_v7();
+        #[allow(clippy::expect_used)]
         let created = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards")
@@ -264,11 +265,10 @@ mod tests {
         let result = chat_completion_config.prepare_request_message(&input_message);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
-        match prepared_message {
-            InferenceRequestMessage::User(user_message) => {
-                assert_eq!(user_message.content, "Hello, how are you?");
-            }
-            _ => panic!("Expected User message"),
+        if let InferenceRequestMessage::User(user_message) = prepared_message {
+            assert_eq!(user_message.content, "Hello, how are you?");
+        } else {
+            unreachable!("Expected User message");
         }
 
         // Test case 2: System message
@@ -279,11 +279,10 @@ mod tests {
         let result = chat_completion_config.prepare_request_message(&input_message);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
-        match prepared_message {
-            InferenceRequestMessage::System(system_message) => {
-                assert_eq!(system_message.content, "You are a helpful assistant.");
-            }
-            _ => panic!("Expected System message"),
+        if let InferenceRequestMessage::System(system_message) = prepared_message {
+            assert_eq!(system_message.content, "You are a helpful assistant.");
+        } else {
+            unreachable!("Expected System message");
         }
 
         // Test case 3: Assistant message
@@ -294,14 +293,13 @@ mod tests {
         let result = chat_completion_config.prepare_request_message(&input_message);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
-        match prepared_message {
-            InferenceRequestMessage::Assistant(assistant_message) => {
-                assert_eq!(
-                    assistant_message.content,
-                    Some("I'm doing well, thank you!".to_string())
-                );
-            }
-            _ => panic!("Expected Assistant message"),
+        if let InferenceRequestMessage::Assistant(assistant_message) = prepared_message {
+            assert_eq!(
+                assistant_message.content,
+                Some("I'm doing well, thank you!".to_string())
+            );
+        } else {
+            unreachable!("Expected Assistant message");
         }
         // Test case 4: Invalid JSON input
         let input_message = InputMessage {
@@ -334,14 +332,13 @@ mod tests {
         let result = chat_completion_config.prepare_request_message(&input_message);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
-        match prepared_message {
-            InferenceRequestMessage::System(system_message) => {
-                assert_eq!(
-                    system_message.content,
-                    "You are a helpful and friendly assistant named ChatGPT"
-                );
-            }
-            _ => panic!("Expected System message"),
+        if let InferenceRequestMessage::System(system_message) = prepared_message {
+            assert_eq!(
+                system_message.content,
+                "You are a helpful and friendly assistant named ChatGPT"
+            );
+        } else {
+            unreachable!("Expected System message");
         }
 
         // Test case 5: Assistant message with template
@@ -352,14 +349,13 @@ mod tests {
         let result = chat_completion_config.prepare_request_message(&input_message);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
-        match prepared_message {
-            InferenceRequestMessage::Assistant(assistant_message) => {
-                assert_eq!(
-                    assistant_message.content,
-                    Some("I'm sorry but I can't help you with that because of it's against my ethical guidelines".to_string())
-                );
-            }
-            _ => panic!("Expected Assistant message"),
+        if let InferenceRequestMessage::Assistant(assistant_message) = prepared_message {
+            assert_eq!(
+                assistant_message.content,
+                Some("I'm sorry but I can't help you with that because of it's against my ethical guidelines".to_string())
+            );
+        } else {
+            unreachable!("Expected Assistant message");
         }
 
         // Test case 6: User message with template
@@ -370,11 +366,10 @@ mod tests {
         let result = chat_completion_config.prepare_request_message(&input_message);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
-        match prepared_message {
-            InferenceRequestMessage::User(user_message) => {
-                assert_eq!(user_message.content, "Hello, John! You are 30 years old.");
-            }
-            _ => panic!("Expected User message"),
+        if let InferenceRequestMessage::User(user_message) = prepared_message {
+            assert_eq!(user_message.content, "Hello, John! You are 30 years old.");
+        } else {
+            unreachable!("Expected User message");
         }
 
         // Test case 7: User message with bad input (missing required field)
@@ -384,11 +379,10 @@ mod tests {
         };
         let result = chat_completion_config.prepare_request_message(&input_message);
         assert!(result.is_err());
-        match result {
-            Err(Error::MiniJinjaTemplateRender { message, .. }) => {
-                assert!(message.contains("undefined value"));
-            }
-            _ => panic!("Expected MiniJinjaTemplateRender error"),
+        if let Err(Error::MiniJinjaTemplateRender { message, .. }) = result {
+            assert!(message.contains("undefined value"));
+        } else {
+            unreachable!("Expected MiniJinjaTemplateRender error");
         }
         // Test case 8: User message with string content when template is provided
         let input_message = InputMessage {
@@ -397,11 +391,10 @@ mod tests {
         };
         let result = chat_completion_config.prepare_request_message(&input_message);
         assert!(result.is_err());
-        match result {
-            Err(Error::MiniJinjaTemplateRender { message, .. }) => {
-                assert!(message.contains("undefined value"), "{}", message);
-            }
-            _ => panic!("Expected MiniJinjaTemplateRender error"),
+        if let Err(Error::MiniJinjaTemplateRender { message, .. }) = result {
+            assert!(message.contains("undefined value"), "{}", message);
+        } else {
+            unreachable!("Expected MiniJinjaTemplateRender error");
         }
     }
 
@@ -459,7 +452,7 @@ mod tests {
                 // template_name is a test filename
                 assert!(message.contains("undefined value"));
             }
-            _ => panic!("Expected MiniJinjaTemplateRender error"),
+            _ => unreachable!("Expected MiniJinjaTemplateRender error"),
         }
 
         // Test case 2: invalid model in request
@@ -641,7 +634,7 @@ mod tests {
                 assert_eq!(provider_errors.len(), 1);
                 assert!(matches!(provider_errors[0], Error::InferenceClient { .. }));
             }
-            _ => panic!("Expected ModelProvidersExhausted error"),
+            _ => unreachable!("Expected ModelProvidersExhausted error"),
         }
 
         // Test case 2: Model inference succeeds

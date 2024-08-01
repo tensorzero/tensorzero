@@ -41,6 +41,7 @@ mod tests {
     #[tokio::test]
     async fn test_health_handler() {
         let config = Config {
+            api: None,
             models: HashMap::new(),
             functions: HashMap::new(),
             metrics: None,

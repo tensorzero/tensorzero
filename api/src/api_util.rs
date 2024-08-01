@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tracing::instrument;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::config_parser::{self, Config};
+use crate::config_parser::Config;
 use crate::error::Error;
 
 /// State for the API
@@ -17,18 +17,21 @@ pub struct AppStateData {
 }
 pub type AppState = axum::extract::State<AppStateData>;
 
-impl Default for AppStateData {
-    fn default() -> Self {
-        let config = Arc::new(config_parser::Config::load());
-        println!("{:#?}", config); // TODO: temporary
-        let clickhouse_url =
-            std::env::var("CLICKHOUSE_URL").expect("Missing environment variable CLICKHOUSE_URL");
+impl AppStateData {
+    pub fn with_config(config: Arc<Config>) -> Result<Self, Error> {
+        let clickhouse_url = std::env::var("CLICKHOUSE_URL").map_err(|_| Error::AppState {
+            message: "Missing environment variable CLICKHOUSE_URL".to_string(),
+        })?;
+        let clickhouse_connection_info =
+            ClickHouseConnectionInfo::new(&clickhouse_url, false, None)?;
+
         let http_client = Client::new();
-        Self {
+
+        Ok(Self {
             config,
             http_client,
-            clickhouse_connection_info: ClickHouseConnectionInfo::new(&clickhouse_url, false, None),
-        }
+            clickhouse_connection_info,
+        })
     }
 }
 

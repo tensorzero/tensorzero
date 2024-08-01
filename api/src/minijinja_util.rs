@@ -16,34 +16,48 @@ static MINIJINJA_ENV: OnceLock<Environment> = OnceLock::new();
 /// Initializes the MINIJINJA_ENV with the given templates, given as a list of paths to the templates.
 /// The name of each template in the environment will simply be the path to that template.
 /// This should be called once at startup.
-pub fn initialize_templates(template_paths: &[&PathBuf]) {
+pub fn initialize_templates(template_paths: &[&PathBuf]) -> Result<(), Error> {
     let mut env = Environment::new();
     env.set_undefined_behavior(UndefinedBehavior::Strict);
 
     for path in template_paths {
         let template_name = path
             .to_str()
-            .unwrap_or_else(|| panic!("Invalid template file path: {}", path.display()))
+            .ok_or(Error::MiniJinjaTemplate {
+                template_name: path.display().to_string(),
+                message: "Template path is invalid".to_string(),
+            })?
             .to_owned();
 
-        let template_content = std::fs::read_to_string(path)
-            .unwrap_or_else(|_| panic!("Failed to read template file: {}", path.display()));
+        let template_content =
+            std::fs::read_to_string(path).map_err(|e| Error::MiniJinjaTemplate {
+                template_name: path.display().to_string(),
+                message: format!("Failed to read template file: {}", e),
+            })?;
 
         env.add_template_owned(template_name, template_content)
-            .unwrap_or_else(|e| panic!("Failed to add template at {}: {}", path.display(), e));
+            .map_err(|e| Error::MiniJinjaTemplate {
+                template_name: path.display().to_string(),
+                message: format!("Failed to add template: {}", e),
+            })?;
     }
 
     MINIJINJA_ENV
         .set(env)
-        .expect("Jinja environment already initialized");
+        .map_err(|_| Error::MiniJinjaEnvironment {
+            message: "Jinja environment already initialized".to_string(),
+        })?;
+
+    Ok(())
 }
 
 #[allow(dead_code)]
 // Templates a message with a MiniJinja template.
 pub fn template_message(template_name: &str, context: &Value) -> Result<String, Error> {
-    let env = MINIJINJA_ENV
-        .get()
-        .expect("Jinja environment not initialized");
+    let env = MINIJINJA_ENV.get().ok_or(Error::MiniJinjaEnvironment {
+        message: "Jinja environment not initialized".to_string(),
+    })?;
+
     let template =
         env.get_template(template_name)
             .map_err(|_| Error::MiniJinjaTemplateMissing {
@@ -73,7 +87,7 @@ pub(crate) mod tests {
     use super::*;
 
     #[test]
-    fn test_template() {
+    fn test_template_good() {
         let templates = idempotent_initialize_test_templates();
         let template_name = templates.get("greeting").unwrap().to_str().unwrap();
 
@@ -116,19 +130,29 @@ pub(crate) mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Failed to read template file")]
-    fn test_nonexistent_file() {
+    fn test_template_nonexistent_file() {
         let nonexistent_path = PathBuf::from("nonexistent_file.txt");
-        initialize_templates(&[&nonexistent_path]);
+        let result = initialize_templates(&[&nonexistent_path]);
+        assert_eq!(
+            result.unwrap_err(),
+            Error::MiniJinjaTemplate {
+                template_name: nonexistent_path.display().to_string(),
+                message: "Failed to read template file: No such file or directory (os error 2)"
+                    .to_string(),
+            }
+        );
     }
 
     #[test]
-    #[should_panic(expected = "Failed to add template")]
-    fn test_malformed_template() {
+    fn test_template_malformed_template() {
         let malformed_template = "{{ unclosed_bracket";
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{}", malformed_template).expect("Failed to write to temp file");
-        initialize_templates(&[&temp_file.path().to_path_buf()]);
+        let result = initialize_templates(&[&temp_file.path().to_path_buf()]);
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Failed to add template"));
     }
     // At test time, we want to initialize the templates once, and then use them in all tests.
     // This is a bit of a hack, but it works for now.
@@ -165,7 +189,7 @@ pub(crate) mod tests {
             templates.insert("assistant", temp_file4.path().to_path_buf());
 
             // Initialize templates
-            initialize_templates(&templates.values().collect::<Vec<_>>());
+            initialize_templates(&templates.values().collect::<Vec<_>>()).unwrap();
 
             templates
         })
