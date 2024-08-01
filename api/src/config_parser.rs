@@ -320,6 +320,42 @@ mod tests {
         let _ = Config::try_from(config).unwrap();
     }
 
+    /// Ensure that the config parsing correctly handles the `api.bind_address` field
+    #[test]
+    fn test_config_api_bind_address() {
+        let mut config = get_sample_valid_config();
+
+        // Test with a valid bind address
+        let parsed_config = Config::try_from(config.clone()).unwrap();
+        assert_eq!(
+            parsed_config.api.unwrap().bind_address.unwrap().to_string(),
+            "0.0.0.0:3000"
+        );
+
+        // Test with missing api section
+        config.remove("api");
+        let parsed_config = Config::try_from(config.clone()).unwrap();
+        assert!(parsed_config.api.is_none());
+
+        // Test with missing bind_address
+        config.insert("api".to_string(), toml::Value::Table(toml::Table::new()));
+        let parsed_config = Config::try_from(config.clone()).unwrap();
+        assert!(parsed_config.api.unwrap().bind_address.is_none());
+
+        // Test with invalid bind address
+        config["api"].as_table_mut().unwrap().insert(
+            "bind_address".to_string(),
+            toml::Value::String("invalid_address".to_string()),
+        );
+        let result = Config::try_from(config);
+        assert_eq!(
+            result.unwrap_err(),
+            Error::Config {
+                message: "Failed to parse config:\ninvalid socket address syntax\nin `api.bind_address`\n".to_string()
+            }
+        );
+    }
+
     /// Ensure that the config parsing fails when the `[models]` section is missing
     #[test]
     fn test_config_from_toml_table_missing_models() {
@@ -565,6 +601,9 @@ mod tests {
         # ┌────────────────────────────────────────────────────────────────────────────┐
         # │                                  GENERAL                                   │
         # └────────────────────────────────────────────────────────────────────────────┘
+
+        [api]
+        bind_address = "0.0.0.0:3000"
 
         # ┌────────────────────────────────────────────────────────────────────────────┐
         # │                                   MODELS                                   │
