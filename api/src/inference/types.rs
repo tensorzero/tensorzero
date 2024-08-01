@@ -340,6 +340,7 @@ impl Inference {
 
 // Function to get the current timestamp in seconds
 fn current_timestamp() -> u64 {
+    #[allow(clippy::expect_used)]
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards")
@@ -820,7 +821,7 @@ mod tests {
             assert_eq!(chat_response.tool_calls, None);
             assert_eq!(chat_response.usage, usage);
         } else {
-            panic!("Expected Ok(InferenceResponse::Chat), got {:?}", result);
+            unreachable!("Expected Ok(InferenceResponse::Chat), got {:?}", result);
         }
 
         // Test case 5: chunks with some None content
@@ -881,7 +882,7 @@ mod tests {
             assert_eq!(chat_response.tool_calls, None);
             assert_eq!(chat_response.usage, usage);
         } else {
-            panic!("Expected Ok(InferenceResponse::Chat), got {:?}", result);
+            unreachable!("Expected Ok(InferenceResponse::Chat), got {:?}", result);
         }
     }
 }

@@ -10,6 +10,9 @@ pub enum Error {
     ApiKeyMissing {
         provider_name: String,
     },
+    AppState {
+        message: String,
+    },
     AnthropicClient {
         message: String,
         status_code: StatusCode,
@@ -28,6 +31,9 @@ pub enum Error {
         message: String,
     },
     ClickHouseWrite {
+        message: String,
+    },
+    Config {
         message: String,
     },
     FireworksClient {
@@ -76,6 +82,13 @@ pub enum Error {
         data: Value,
         schema: Value,
     },
+    MiniJinjaEnvironment {
+        message: String,
+    },
+    MiniJinjaTemplate {
+        template_name: String,
+        message: String,
+    },
     MiniJinjaTemplateMissing {
         template_name: String,
     },
@@ -88,6 +101,9 @@ pub enum Error {
     },
     ModelProvidersExhausted {
         provider_errors: Vec<Error>,
+    },
+    Observability {
+        message: String,
     },
     OpenAIClient {
         message: String,
@@ -136,12 +152,14 @@ impl Error {
         match self {
             Error::AllVariantsFailed { .. } => tracing::Level::ERROR,
             Error::ApiKeyMissing { .. } => tracing::Level::ERROR,
+            Error::AppState { .. } => tracing::Level::ERROR,
             Error::AnthropicClient { .. } => tracing::Level::WARN,
             Error::AnthropicServer { .. } => tracing::Level::ERROR,
             Error::AzureClient { .. } => tracing::Level::WARN,
             Error::AzureServer { .. } => tracing::Level::ERROR,
             Error::ChannelWrite { .. } => tracing::Level::ERROR,
             Error::ClickHouseWrite { .. } => tracing::Level::ERROR,
+            Error::Config { .. } => tracing::Level::ERROR,
             Error::FireworksClient { .. } => tracing::Level::WARN,
             Error::FireworksServer { .. } => tracing::Level::ERROR,
             Error::Inference { .. } => tracing::Level::ERROR,
@@ -157,10 +175,13 @@ impl Error {
             Error::JsonRequest { .. } => tracing::Level::WARN,
             Error::JsonSchema { .. } => tracing::Level::ERROR,
             Error::JsonSchemaValidation { .. } => tracing::Level::ERROR,
+            Error::MiniJinjaEnvironment { .. } => tracing::Level::ERROR,
+            Error::MiniJinjaTemplate { .. } => tracing::Level::ERROR,
             Error::MiniJinjaTemplateMissing { .. } => tracing::Level::ERROR,
             Error::MiniJinjaTemplateRender { .. } => tracing::Level::ERROR,
             Error::ModelNotFound { .. } => tracing::Level::ERROR,
             Error::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
+            Error::Observability { .. } => tracing::Level::ERROR,
             Error::OpenAIClient { .. } => tracing::Level::WARN,
             Error::OpenAIServer { .. } => tracing::Level::ERROR,
             Error::OutputParsing { .. } => tracing::Level::WARN,
@@ -181,12 +202,14 @@ impl Error {
         match self {
             Error::AllVariantsFailed { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ApiKeyMissing { .. } => StatusCode::BAD_REQUEST,
+            Error::AppState { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::AnthropicClient { status_code, .. } => *status_code,
             Error::AnthropicServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::AzureClient { status_code, .. } => *status_code,
             Error::AzureServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ClickHouseWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::FireworksServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::FireworksClient { status_code, .. } => *status_code,
             Error::Inference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -202,10 +225,13 @@ impl Error {
             Error::JsonRequest { .. } => StatusCode::BAD_REQUEST,
             Error::JsonSchema { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::JsonSchemaValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::MiniJinjaEnvironment { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::MiniJinjaTemplate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::MiniJinjaTemplateMissing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::MiniJinjaTemplateRender { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ModelNotFound { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::OpenAIClient { status_code, .. } => *status_code,
             Error::OpenAIServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::OutputParsing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -224,11 +250,11 @@ impl Error {
     /// Log the error using the `tracing` library
     pub fn log(&self) {
         match self.level() {
-            tracing::Level::ERROR => tracing::error!(error = self.to_string()),
-            tracing::Level::WARN => tracing::warn!(error = self.to_string()),
-            tracing::Level::INFO => tracing::info!(error = self.to_string()),
-            tracing::Level::DEBUG => tracing::debug!(error = self.to_string()),
-            tracing::Level::TRACE => tracing::trace!(error = self.to_string()),
+            tracing::Level::ERROR => tracing::error!("{self}"),
+            tracing::Level::WARN => tracing::warn!("{self}"),
+            tracing::Level::INFO => tracing::info!("{self}"),
+            tracing::Level::DEBUG => tracing::debug!("{self}"),
+            tracing::Level::TRACE => tracing::trace!("{self}"),
         }
     }
 }
@@ -250,6 +276,9 @@ impl std::fmt::Display for Error {
             Error::ApiKeyMissing { provider_name } => {
                 write!(f, "API key missing for provider: {}", provider_name)
             }
+            Error::AppState { message } => {
+                write!(f, "Error initializing AppState: {}", message)
+            }
             Error::AnthropicClient { message, .. } => {
                 write!(f, "Error from Anthropic client: {}", message)
             }
@@ -267,6 +296,9 @@ impl std::fmt::Display for Error {
             }
             Error::ClickHouseWrite { message } => {
                 write!(f, "Error writing to ClickHouse: {}", message)
+            }
+            Error::Config { message } => {
+                write!(f, "Error in TensorZero config: {}", message)
             }
             Error::FireworksClient { message, .. } => {
                 write!(f, "Error from Fireworks client: {}", message)
@@ -311,6 +343,15 @@ impl std::fmt::Display for Error {
                     serde_json::to_string(schema).map_err(|_| std::fmt::Error)?
                 )
             }
+            Error::MiniJinjaEnvironment { message } => {
+                write!(f, "Error initializing MiniJinja environment: {}", message)
+            }
+            Error::MiniJinjaTemplate {
+                template_name,
+                message,
+            } => {
+                write!(f, "Error rendering template {}: {}", template_name, message)
+            }
             Error::MiniJinjaTemplateMissing { template_name } => {
                 write!(f, "Template not found: {}", template_name)
             }
@@ -333,6 +374,9 @@ impl std::fmt::Display for Error {
                         .collect::<Vec<_>>()
                         .join(", ")
                 )
+            }
+            Error::Observability { message } => {
+                write!(f, "{}", message)
             }
             Error::OpenAIClient { message, .. } => {
                 write!(f, "Error from OpenAI client: {}", message)

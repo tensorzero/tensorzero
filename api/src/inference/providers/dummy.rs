@@ -1,16 +1,14 @@
-use crate::{
-    error::Error,
-    inference::types::{
-        InferenceResponseStream, ModelInferenceRequest, ModelInferenceResponse,
-        ModelInferenceResponseChunk, Usage,
-    },
-    model::ProviderConfig,
-};
-use serde_json::json;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
 use super::provider_trait::InferenceProvider;
+
+use crate::error::Error;
+use crate::inference::types::{
+    InferenceResponseStream, ModelInferenceRequest, ModelInferenceResponse,
+    ModelInferenceResponseChunk, Usage,
+};
+use crate::model::ProviderConfig;
 
 pub struct DummyProvider;
 
@@ -73,12 +71,13 @@ impl InferenceProvider for DummyProvider {
             });
         }
         let id = Uuid::now_v7();
+        #[allow(clippy::expect_used)]
         let created = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .expect("Time went backwards")
             .as_secs();
         let content = match model_name.as_str() {
-            "json" => Some(serde_json::to_string(&json!({"answer": "Hello"})).unwrap()),
+            "json" => Some(r#"{"answer":"Hello"}"#.to_string()),
             _ => Some(DUMMY_INFER_RESPONSE_CONTENT.to_string()),
         };
         let raw = match model_name.as_str() {
@@ -115,6 +114,7 @@ impl InferenceProvider for DummyProvider {
             });
         }
         let id = Uuid::now_v7();
+        #[allow(clippy::expect_used)]
         let created = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .expect("Time went backwards")

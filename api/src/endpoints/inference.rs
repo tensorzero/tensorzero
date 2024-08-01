@@ -88,7 +88,7 @@ pub async fn inference_handler(
         // If the pinned variant doesn't exist, return an error
         if variants.is_empty() {
             return Err(Error::UnknownVariant {
-                name: params.variant_name.unwrap(),
+                name: variant_name.to_string(),
             });
         }
     }

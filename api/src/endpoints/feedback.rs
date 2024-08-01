@@ -179,8 +179,8 @@ fn get_feedback_metadata<'a>(
     }
     .ok_or(Error::InvalidRequest {
         message: format!(
-            "Correct ID was not provided for feedback level {}.",
-            serde_json::to_string(&feedback_level).unwrap()
+            r#"Correct ID was not provided for feedback level "{}"."#,
+            feedback_level
         ),
     })?;
     Ok(FeedbackMetadata {
@@ -297,6 +297,7 @@ mod tests {
             },
         );
         let config = Config {
+            api: None,
             models: HashMap::new(),
             metrics: Some(metrics),
             functions: HashMap::new(),
@@ -409,6 +410,7 @@ mod tests {
         let mut metrics = HashMap::new();
         metrics.insert("test_metric".to_string(), metric_config);
         let config = Config {
+            api: None,
             models: HashMap::new(),
             metrics: Some(metrics),
             functions: HashMap::new(),
@@ -436,6 +438,7 @@ mod tests {
     async fn test_feedback_handler() {
         // Test a Comment Feedback
         let config = Config {
+            api: None,
             models: HashMap::new(),
             metrics: Some(HashMap::new()),
             functions: HashMap::new(),
@@ -533,6 +536,7 @@ mod tests {
             },
         );
         let config = Config {
+            api: None,
             models: HashMap::new(),
             metrics: Some(metrics),
             functions: HashMap::new(),
@@ -598,6 +602,7 @@ mod tests {
             },
         );
         let config = Config {
+            api: None,
             models: HashMap::new(),
             metrics: Some(metrics),
             functions: HashMap::new(),

@@ -3,3 +3,13 @@ members = [
     "api",
 ]
 resolver = "2"
+
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+
+[workspace.lints.clippy]
+expect_used = "deny"
+panic = "deny"
+unwrap_used = "deny"

@@ -21,22 +21,24 @@ pub enum ClickHouseConnectionInfo {
 }
 
 impl ClickHouseConnectionInfo {
-    pub fn new(base_url: &str, mock: bool, healthy: Option<bool>) -> Self {
+    pub fn new(base_url: &str, mock: bool, healthy: Option<bool>) -> Result<Self, Error> {
         if mock {
-            return Self::Mock {
+            return Ok(Self::Mock {
                 mock_data: Arc::new(RwLock::new(HashMap::new())),
                 healthy: healthy.unwrap_or(true),
-            };
+            });
         }
         // TODO: parameterize the database name
         let database_name = "tensorzero";
         // Add a query string for the database using the URL crate
-        let mut url = Url::parse(base_url).expect("Invalid base URL");
+        let mut url = Url::parse(base_url).map_err(|e| Error::Config {
+            message: format!("Invalid ClickHouse base URL: {}", e),
+        })?;
         url.query_pairs_mut().append_pair("database", database_name);
-        Self::Production {
+        Ok(Self::Production {
             url: url.to_string(),
             client: Client::new(),
-        }
+        })
     }
 
     pub async fn write(

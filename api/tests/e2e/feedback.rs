@@ -29,7 +29,7 @@ async fn e2e_test_comment_feedback() {
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
 
     // Check ClickHouse
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, Some(true));
+    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, Some(true)).unwrap();
     let result = select_feedback_clickhouse(&clickhouse, "CommentFeedback", feedback_id)
         .await
         .unwrap();
@@ -61,7 +61,7 @@ async fn e2e_test_comment_feedback() {
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
 
     // Check ClickHouse
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, Some(true));
+    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, Some(true)).unwrap();
     let result = select_feedback_clickhouse(&clickhouse, "CommentFeedback", feedback_id)
         .await
         .unwrap();
@@ -97,7 +97,7 @@ async fn e2e_test_demonstration_feedback() {
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
 
     // Check ClickHouse
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, Some(true));
+    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, Some(true)).unwrap();
     let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
         .await
         .unwrap();
@@ -148,7 +148,7 @@ async fn e2e_test_float_feedback() {
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
 
     // Check ClickHouse
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, Some(true));
+    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, Some(true)).unwrap();
     let result = select_feedback_clickhouse(&clickhouse, "FloatMetricFeedback", feedback_id)
         .await
         .unwrap();
@@ -244,7 +244,7 @@ async fn e2e_test_boolean_feedback() {
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
 
     // Check ClickHouse
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, Some(true));
+    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, Some(true)).unwrap();
     let result = select_feedback_clickhouse(&clickhouse, "BooleanMetricFeedback", feedback_id)
         .await
         .unwrap();
