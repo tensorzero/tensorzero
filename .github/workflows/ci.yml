@@ -15,6 +15,7 @@ env:
   AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }} # for integration/E2E tests
   AZURE_OPENAI_API_BASE: ${{secrets.AZURE_OPENAI_API_BASE }} # for integration/E2E tests
   AZURE_OPENAI_DEPLOYMENT_ID: ${{secrets.AZURE_OPENAI_DEPLOYMENT_ID }} # for integration/E2E tests
+  TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }} # for integration/E2E tests
 
 jobs:
   run:
