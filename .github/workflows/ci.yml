@@ -8,13 +8,13 @@ on:
 
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }} # for integration/E2E tests
+  AZURE_OPENAI_API_BASE: ${{secrets.AZURE_OPENAI_API_BASE }} # for integration/E2E tests
+  AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }} # for integration/E2E tests
+  AZURE_OPENAI_DEPLOYMENT_ID: ${{secrets.AZURE_OPENAI_DEPLOYMENT_ID }} # for integration/E2E tests
   CLICKHOUSE_URL: "http://localhost:8123" # for E2E tests
   FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }} # for integration/E2E tests
   FORCE_COLOR: 1
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }} # for integration/E2E tests
-  AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }} # for integration/E2E tests
-  AZURE_OPENAI_API_BASE: ${{secrets.AZURE_OPENAI_API_BASE }} # for integration/E2E tests
-  AZURE_OPENAI_DEPLOYMENT_ID: ${{secrets.AZURE_OPENAI_DEPLOYMENT_ID }} # for integration/E2E tests
   TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }} # for integration/E2E tests
 
 jobs:
