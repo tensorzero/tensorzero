@@ -1,15 +1,13 @@
+use futures::StreamExt;
+use secrecy::SecretString;
 use std::env;
 
 use crate::integration::providers::common::{
     create_json_inference_request, create_simple_inference_request,
     create_streaming_inference_request, create_tool_inference_request,
 };
-use api::{
-    inference::providers::azure::AzureProvider,
-    inference::providers::provider_trait::InferenceProvider, model::ProviderConfig,
-};
-use futures::StreamExt;
-use secrecy::SecretString;
+use api::inference::providers::{azure::AzureProvider, provider_trait::InferenceProvider};
+use api::model::ProviderConfig;
 
 #[tokio::test]
 async fn test_infer() {
@@ -18,8 +16,6 @@ async fn test_infer() {
         .expect("Environment variable AZURE_OPENAI_API_KEY must be set");
     let api_base = env::var("AZURE_OPENAI_API_BASE")
         .expect("Environment variable AZURE_OPENAI_API_BASE must be set");
-    let api_version = env::var("AZURE_OPENAI_API_VERSION")
-        .expect("Environment variable AZURE_OPENAI_API_VERSION must be set");
     let deployment_id = env::var("AZURE_OPENAI_DEPLOYMENT_ID")
         .expect("Environment variable AZURE_OPENAI_DEPLOYMENT_ID must be set");
     let api_key = SecretString::new(api_key);
@@ -32,7 +28,6 @@ async fn test_infer() {
         api_base,
         api_key: Some(api_key),
         deployment_id,
-        api_version,
     };
     let result = AzureProvider::infer(&inference_request, &provider_config, &client).await;
     assert!(result.is_ok());
@@ -46,8 +41,6 @@ async fn test_infer_with_tool_calls() {
         .expect("Environment variable AZURE_OPENAI_API_KEY must be set");
     let api_base = env::var("AZURE_OPENAI_API_BASE")
         .expect("Environment variable AZURE_OPENAI_API_BASE must be set");
-    let api_version = env::var("AZURE_OPENAI_API_VERSION")
-        .expect("Environment variable AZURE_OPENAI_API_VERSION must be set");
     let deployment_id = env::var("AZURE_OPENAI_DEPLOYMENT_ID")
         .expect("Environment variable AZURE_OPENAI_DEPLOYMENT_ID must be set");
     let api_key = SecretString::new(api_key);
@@ -61,7 +54,6 @@ async fn test_infer_with_tool_calls() {
         api_base,
         api_key: Some(api_key),
         deployment_id,
-        api_version,
     };
     let result = AzureProvider::infer(&inference_request, &provider_config, &client).await;
 
@@ -87,8 +79,6 @@ async fn test_infer_stream() {
         .expect("Environment variable AZURE_OPENAI_API_KEY must be set");
     let api_base = env::var("AZURE_OPENAI_API_BASE")
         .expect("Environment variable AZURE_OPENAI_API_BASE must be set");
-    let api_version = env::var("AZURE_OPENAI_API_VERSION")
-        .expect("Environment variable AZURE_OPENAI_API_VERSION must be set");
     let deployment_id = env::var("AZURE_OPENAI_DEPLOYMENT_ID")
         .expect("Environment variable AZURE_OPENAI_DEPLOYMENT_ID must be set");
     let api_key = SecretString::new(api_key);
@@ -101,7 +91,6 @@ async fn test_infer_stream() {
         api_base,
         api_key: Some(api_key),
         deployment_id,
-        api_version,
     };
     let result = AzureProvider::infer_stream(&inference_request, &provider_config, &client).await;
     assert!(result.is_ok());
@@ -122,8 +111,6 @@ async fn test_json_request() {
         .expect("Environment variable AZURE_OPENAI_API_KEY must be set");
     let api_base = env::var("AZURE_OPENAI_API_BASE")
         .expect("Environment variable AZURE_OPENAI_API_BASE must be set");
-    let api_version = env::var("AZURE_OPENAI_API_VERSION")
-        .expect("Environment variable AZURE_OPENAI_API_VERSION must be set");
     let deployment_id = env::var("AZURE_OPENAI_DEPLOYMENT_ID")
         .expect("Environment variable AZURE_OPENAI_DEPLOYMENT_ID must be set");
     let api_key = SecretString::new(api_key);
@@ -136,7 +123,6 @@ async fn test_json_request() {
         api_base,
         api_key: Some(api_key),
         deployment_id,
-        api_version,
     };
     let result = AzureProvider::infer(&inference_request, &provider_config, &client).await;
     assert!(result.is_ok());

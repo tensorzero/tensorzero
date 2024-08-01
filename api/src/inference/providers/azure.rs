@@ -4,22 +4,18 @@ use reqwest_eventsource::RequestBuilderExt;
 use secrecy::ExposeSecret;
 use serde::Serialize;
 
-use crate::{
-    error::Error,
-    inference::types::{
-        InferenceResponseStream, ModelInferenceRequest, ModelInferenceResponse,
-        ModelInferenceResponseChunk,
-    },
-    model::ProviderConfig,
+use crate::error::Error;
+use crate::inference::types::{
+    InferenceResponseStream, ModelInferenceRequest, ModelInferenceResponse,
+    ModelInferenceResponseChunk,
 };
+use crate::model::ProviderConfig;
 
-use super::{
-    openai::{
-        handle_openai_error, stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAITool,
-        OpenAIToolChoice,
-    },
-    provider_trait::InferenceProvider,
+use super::openai::{
+    handle_openai_error, stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAITool,
+    OpenAIToolChoice,
 };
+use super::provider_trait::InferenceProvider;
 
 pub struct AzureProvider;
 
@@ -29,13 +25,12 @@ impl InferenceProvider for AzureProvider {
         model: &'a ProviderConfig,
         http_client: &'a reqwest::Client,
     ) -> Result<ModelInferenceResponse, Error> {
-        let (model_name, api_base, deployment_id, api_key, api_version) = match model {
+        let (model_name, api_base, deployment_id, api_key) = match model {
             ProviderConfig::Azure {
                 model_name,
                 api_base,
                 deployment_id,
                 api_key,
-                api_version,
             } => (
                 model_name,
                 api_base,
@@ -43,7 +38,6 @@ impl InferenceProvider for AzureProvider {
                 api_key.as_ref().ok_or(Error::ApiKeyMissing {
                     provider_name: "Azure".to_string(),
                 })?,
-                api_version,
             ),
             _ => {
                 return Err(Error::InvalidProviderConfig {
@@ -52,7 +46,7 @@ impl InferenceProvider for AzureProvider {
             }
         };
         let request_body = AzureRequest::new(model_name, request);
-        let request_url = get_azure_chat_url(api_base, deployment_id, api_version);
+        let request_url = get_azure_chat_url(api_base, deployment_id);
         let res = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
@@ -61,7 +55,7 @@ impl InferenceProvider for AzureProvider {
             .send()
             .await
             .map_err(|e| Error::AzureClient {
-                message: format!("{e}"),
+                message: e.to_string(),
                 status_code: e.status().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
             })?;
         if res.status().is_success() {
@@ -90,13 +84,12 @@ impl InferenceProvider for AzureProvider {
         model: &'a ProviderConfig,
         http_client: &'a reqwest::Client,
     ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
-        let (model_name, api_key, api_base, deployment_id, api_version) = match model {
+        let (model_name, api_key, api_base, deployment_id) = match model {
             ProviderConfig::Azure {
                 model_name,
                 api_key,
                 api_base,
                 deployment_id,
-                api_version,
             } => (
                 model_name,
                 api_key.as_ref().ok_or(Error::ApiKeyMissing {
@@ -104,7 +97,6 @@ impl InferenceProvider for AzureProvider {
                 })?,
                 api_base,
                 deployment_id,
-                api_version,
             ),
             _ => {
                 return Err(Error::InvalidProviderConfig {
@@ -113,7 +105,7 @@ impl InferenceProvider for AzureProvider {
             }
         };
         let request_body = AzureRequest::new(model_name, request);
-        let request_url = get_azure_chat_url(api_base, deployment_id, api_version);
+        let request_url = get_azure_chat_url(api_base, deployment_id);
         let event_source = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
@@ -157,7 +149,8 @@ fn map_openai_to_azure_error(e: Error) -> Error {
     }
 }
 
-fn get_azure_chat_url(api_base: &str, deployment_id: &str, api_version: &str) -> String {
+fn get_azure_chat_url(api_base: &str, deployment_id: &str) -> String {
+    let api_version = "2024-02-01";
     format!(
         "{api_base}/openai/deployments/{deployment_id}/chat/completions?api-version={api_version}"
     )

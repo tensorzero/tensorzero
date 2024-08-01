@@ -89,7 +89,6 @@ pub enum ProviderConfig {
         model_name: String,
         api_base: String,
         deployment_id: String,
-        api_version: String,
         api_key: Option<SecretString>,
     },
     Fireworks {
@@ -130,7 +129,6 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 model_name: String,
                 api_base: String,
                 deployment_id: String,
-                api_version: String,
             },
             Fireworks {
                 model_name: String,
@@ -159,12 +157,10 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 model_name,
                 api_base,
                 deployment_id,
-                api_version,
             } => ProviderConfig::Azure {
                 model_name,
                 api_base,
                 deployment_id,
-                api_version,
                 api_key: env::var("AZURE_OPENAI_API_KEY").ok().map(SecretString::new),
             },
             ProviderConfigHelper::Fireworks { model_name } => ProviderConfig::Fireworks {
