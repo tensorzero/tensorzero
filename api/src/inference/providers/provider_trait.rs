@@ -8,12 +8,6 @@ use futures::Future;
 use reqwest::Client;
 
 pub trait InferenceProvider {
-    // fn with_config<'a>(
-    //     model: &'a ProviderConfig,
-    // ) -> impl Future<Output = Result<Self, Error>> + Send + 'a
-    // where
-    //     Self: Sized;
-
     fn infer<'a>(
         request: &'a ModelInferenceRequest,
         config: &'a ProviderConfig,
