@@ -303,25 +303,23 @@ impl Config {
     /// The former path is used as the name of the template for retrival by variants later.
     pub fn get_templates<P: AsRef<Path>>(&self, base_path: Option<P>) -> HashMap<String, PathBuf> {
         let mut templates = HashMap::new();
+        let mut add_template = |path: &Option<PathBuf>| {
+            if let Some(ref path) = path {
+                match base_path {
+                    Some(ref base) => templates.insert(
+                        // This and the following is there to handle OSes where paths
+                        // cannot be represented in UTF-8.
+                        path.to_string_lossy().to_string(),
+                        base.as_ref().join(path),
+                    ),
+                    None => templates.insert(path.to_string_lossy().to_string(), path.clone()),
+                };
+            }
+        };
         for function in self.functions.values() {
             for variant in function.variants().values() {
                 match variant {
                     VariantConfig::ChatCompletion(chat_config) => {
-                        let mut add_template = |path: &Option<PathBuf>| {
-                            if let Some(ref path) = path {
-                                match base_path {
-                                    Some(ref base) => templates.insert(
-                                        // This and the following is there to handle OSes where paths
-                                        // cannot be represented in UTF-8.
-                                        path.to_string_lossy().to_string(),
-                                        base.as_ref().join(path),
-                                    ),
-                                    None => templates
-                                        .insert(path.to_string_lossy().to_string(), path.clone()),
-                                };
-                            }
-                        };
-
                         add_template(&chat_config.system_template);
                         add_template(&chat_config.user_template);
                         add_template(&chat_config.assistant_template);
