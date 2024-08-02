@@ -81,10 +81,18 @@ impl Config {
     pub fn load() -> Result<Config, Error> {
         let config_path = Config::get_config_path();
         let config_table = Config::read_toml_config(&config_path)?;
-        let config = Config::try_from(config_table)?;
+        let mut config = Config::try_from(config_table)?;
+        config.load_functions(Some(&PathBuf::from(&config_path)))?;
         config.validate()?;
         initialize_templates(&config.get_templates())?;
         Ok(config)
+    }
+
+    pub fn load_functions(&mut self, base_path: Option<&PathBuf>) -> Result<(), Error> {
+        for function in self.functions.values_mut() {
+            function.load(base_path)?;
+        }
+        Ok(())
     }
 
     /// Get the path for the TensorZero config file
@@ -683,5 +691,18 @@ mod tests {
         "#;
 
         toml::from_str(config_str).expect("Failed to parse sample config")
+    }
+
+    #[test]
+    fn test_tensorzero_example_file() {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let config_path = format!("{}/../tensorzero.example.toml", manifest_dir);
+        let config_table = Config::read_toml_config(config_path.as_str())
+            .expect("Failed to read tensorzero.example.toml");
+        let mut config = Config::try_from(config_table).expect("Failed to parse config");
+        config
+            .load_functions(Some(&PathBuf::from(&config_path)))
+            .expect("Failed to load functions");
+        config.validate().expect("Failed to validate config");
     }
 }

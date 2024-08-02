@@ -1,6 +1,7 @@
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use uuid::Uuid;
 
 use crate::error::Error;
@@ -119,6 +120,49 @@ impl FunctionConfig {
 
         Ok(())
     }
+
+    pub fn load(&mut self, base_path: Option<&PathBuf>) -> Result<(), Error> {
+        match self {
+            FunctionConfig::Chat(params) => {
+                params
+                    .system_schema
+                    .as_mut()
+                    .map(|schema| schema.load(base_path));
+                params
+                    .user_schema
+                    .as_mut()
+                    .map(|schema| schema.load(base_path));
+                params
+                    .assistant_schema
+                    .as_mut()
+                    .map(|schema| schema.load(base_path));
+                params
+                    .output_schema
+                    .as_mut()
+                    .map(|schema| schema.load(base_path));
+                Ok(())
+            }
+            FunctionConfig::Tool(params) => {
+                params
+                    .system_schema
+                    .as_mut()
+                    .map(|schema| schema.load(base_path));
+                params
+                    .user_schema
+                    .as_mut()
+                    .map(|schema| schema.load(base_path));
+                params
+                    .assistant_schema
+                    .as_mut()
+                    .map(|schema| schema.load(base_path));
+                params
+                    .output_schema
+                    .as_mut()
+                    .map(|schema| schema.load(base_path));
+                Ok(())
+            }
+        }
+    }
 }
 
 /// Sample a variant from the function based on variant weights (uniform random selection)
@@ -211,7 +255,9 @@ mod tests {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{}", schema).expect("Failed to write schema to temporary file");
 
-        JSONSchemaFromPath::new(temp_file.path()).expect("Failed to create JSONSchemaFromPath")
+        let mut schema = JSONSchemaFromPath::new(temp_file.path().to_owned());
+        schema.load(None).expect("Failed to load schema");
+        schema
     }
 
     #[test]
@@ -299,7 +345,7 @@ mod tests {
             Error::JsonSchemaValidation {
                 messages: vec!["\"system content\" is not of type \"object\"".to_string()],
                 data: json!("system content"),
-                schema: system_schema.value.clone(),
+                schema: system_schema.value.unwrap().clone(),
             }
         );
 
@@ -354,7 +400,7 @@ mod tests {
             Error::JsonSchemaValidation {
                 messages: vec!["\"user content\" is not of type \"object\"".to_string()],
                 data: json!("user content"),
-                schema: user_schema.value.clone(),
+                schema: user_schema.value.unwrap().clone(),
             }
         );
 
@@ -409,7 +455,7 @@ mod tests {
             Error::JsonSchemaValidation {
                 messages: vec!["\"assistant content\" is not of type \"object\"".to_string()],
                 data: json!("assistant content"),
-                schema: assistant_schema.value.clone(),
+                schema: assistant_schema.value.unwrap().clone(),
             }
         );
 
@@ -466,7 +512,7 @@ mod tests {
             Error::JsonSchemaValidation {
                 messages: vec!["\"system content\" is not of type \"object\"".to_string()],
                 data: json!("system content"),
-                schema: system_schema.value.clone(),
+                schema: system_schema.value.unwrap().clone(),
             }
         );
 
@@ -573,7 +619,7 @@ mod tests {
             Error::JsonSchemaValidation {
                 messages: vec!["\"system content\" is not of type \"object\"".to_string()],
                 data: json!("system content"),
-                schema: system_schema.value.clone(),
+                schema: system_schema.value.unwrap().clone(),
             }
         );
 
@@ -628,7 +674,7 @@ mod tests {
             Error::JsonSchemaValidation {
                 messages: vec!["\"user content\" is not of type \"object\"".to_string()],
                 data: json!("user content"),
-                schema: user_schema.value.clone(),
+                schema: user_schema.value.unwrap().clone(),
             }
         );
 
@@ -683,7 +729,7 @@ mod tests {
             Error::JsonSchemaValidation {
                 messages: vec!["\"assistant content\" is not of type \"object\"".to_string()],
                 data: json!("assistant content"),
-                schema: assistant_schema.value.clone(),
+                schema: assistant_schema.value.unwrap().clone(),
             }
         );
 
@@ -740,7 +786,7 @@ mod tests {
             Error::JsonSchemaValidation {
                 messages: vec!["\"system content\" is not of type \"object\"".to_string()],
                 data: json!("system content"),
-                schema: system_schema.value.clone(),
+                schema: system_schema.value.unwrap().clone(),
             }
         );
 
