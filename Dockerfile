@@ -10,9 +10,9 @@ COPY . .
 
 ARG CARGO_BUILD_FLAGS=""
 
-RUN --mount=type=cache,id=tensorzero-api-release,sharing=shared,target=/usr/local/cargo/registry \
-    --mount=type=cache,id=tensorzero-api-release,sharing=shared,target=/usr/local/cargo/git \
-    --mount=type=cache,id=tensorzero-api-release,sharing=locked,target=/src/target \
+RUN --mount=type=cache,id=tensorzero-gateway-release,sharing=shared,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=tensorzero-gateway-release,sharing=shared,target=/usr/local/cargo/git \
+    --mount=type=cache,id=tensorzero-gateway-release,sharing=locked,target=/src/target \
     cargo build --release $CARGO_BUILD_FLAGS && \
     cp -r /src/target/release /release
 
@@ -22,12 +22,12 @@ FROM debian:bookworm-slim AS base
 
 RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
-# ========== api ==========
+# ========== gateway ==========
 
-FROM base AS api
+FROM base AS gateway
 
-COPY --from=builder /release/api /usr/local/bin/api
+COPY --from=builder /release/gateway /usr/local/bin/gateway
 
 COPY ./functions ./functions
 
-CMD ["api"]
+CMD ["gateway"]
