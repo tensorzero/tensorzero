@@ -159,6 +159,12 @@ impl Variant for ChatCompletionConfig {
             .iter()
             .map(|message| self.prepare_request_message(message))
             .collect::<Result<Vec<_>, _>>()?;
+        let output_schema_value = match output_schema {
+            // We want this block to throw an error if somehow the jsonschema is missing
+            // but return None if the output schema is not provided.
+            Some(s) => Some(s.value()?),
+            None => None,
+        };
         let request = ModelInferenceRequest {
             messages,
             tools_available: None,
@@ -169,7 +175,7 @@ impl Variant for ChatCompletionConfig {
             stream: false,
             json_mode: false,
             function_type: FunctionType::Chat,
-            output_schema: output_schema.as_ref().map(|s| s.value),
+            output_schema: output_schema_value,
         };
         let model_config = models.get(&self.model).ok_or(Error::ModelNotFound {
             model: self.model.clone(),
@@ -209,6 +215,12 @@ impl Variant for ChatCompletionConfig {
             .iter()
             .map(|message| self.prepare_request_message(message))
             .collect::<Result<Vec<_>, _>>()?;
+        let output_schema_value = match output_schema {
+            // As above, we want this block to throw an error if somehow the jsonschema is missing
+            // but return None if the output schema is not provided
+            Some(s) => Some(s.value()?),
+            None => None,
+        };
         let request = ModelInferenceRequest {
             messages,
             tools_available: None,
@@ -219,7 +231,7 @@ impl Variant for ChatCompletionConfig {
             stream: true,
             json_mode: false,
             function_type: FunctionType::Chat,
-            output_schema: output_schema.as_ref().map(|s| s.value),
+            output_schema: output_schema_value,
         };
         let model_config = models.get(&self.model).ok_or(Error::ModelNotFound {
             model: self.model.clone(),
@@ -265,10 +277,11 @@ mod tests {
         let result = chat_completion_config.prepare_request_message(&input_message);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
-        if let InferenceRequestMessage::User(user_message) = prepared_message {
-            assert_eq!(user_message.content, "Hello, how are you?");
-        } else {
-            unreachable!("Expected User message");
+        match prepared_message {
+            InferenceRequestMessage::User(user_message) => {
+                assert_eq!(user_message.content, "Hello, how are you?");
+            }
+            _ => unreachable!("Expected User message"),
         }
 
         // Test case 2: System message
@@ -279,10 +292,11 @@ mod tests {
         let result = chat_completion_config.prepare_request_message(&input_message);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
-        if let InferenceRequestMessage::System(system_message) = prepared_message {
-            assert_eq!(system_message.content, "You are a helpful assistant.");
-        } else {
-            unreachable!("Expected System message");
+        match prepared_message {
+            InferenceRequestMessage::System(system_message) => {
+                assert_eq!(system_message.content, "You are a helpful assistant.");
+            }
+            _ => unreachable!("Expected System message"),
         }
 
         // Test case 3: Assistant message
@@ -293,13 +307,14 @@ mod tests {
         let result = chat_completion_config.prepare_request_message(&input_message);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
-        if let InferenceRequestMessage::Assistant(assistant_message) = prepared_message {
-            assert_eq!(
-                assistant_message.content,
-                Some("I'm doing well, thank you!".to_string())
-            );
-        } else {
-            unreachable!("Expected Assistant message");
+        match prepared_message {
+            InferenceRequestMessage::Assistant(assistant_message) => {
+                assert_eq!(
+                    assistant_message.content,
+                    Some("I'm doing well, thank you!".to_string())
+                );
+            }
+            _ => unreachable!("Expected Assistant message"),
         }
         // Test case 4: Invalid JSON input
         let input_message = InputMessage {
@@ -311,17 +326,17 @@ mod tests {
             .unwrap_err();
         assert_eq!(result, Error::InvalidMessage { message: "Request message content {\"invalid\":\"json\"} is not a string but there is no variant template for Role \"user\"".to_string()});
         // Part 2: test with templates
-        let templates = idempotent_initialize_test_templates();
-        let system_template = templates.get("system").unwrap();
-        let user_template = templates.get("greeting_with_age").unwrap();
-        let assistant_template = templates.get("assistant").unwrap();
+        idempotent_initialize_test_templates();
+        let system_template_name = "system";
+        let user_template_name = "greeting_with_age";
+        let assistant_template_name = "assistant";
 
         let chat_completion_config = ChatCompletionConfig {
             model: "dummy".to_string(),
             weight: 1.0,
-            system_template: Some(system_template.to_path_buf()),
-            user_template: Some(user_template.to_path_buf()),
-            assistant_template: Some(assistant_template.to_path_buf()),
+            system_template: Some(system_template_name.into()),
+            user_template: Some(user_template_name.into()),
+            assistant_template: Some(assistant_template_name.into()),
         };
 
         // Test case 4: System message with template
@@ -332,13 +347,14 @@ mod tests {
         let result = chat_completion_config.prepare_request_message(&input_message);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
-        if let InferenceRequestMessage::System(system_message) = prepared_message {
-            assert_eq!(
-                system_message.content,
-                "You are a helpful and friendly assistant named ChatGPT"
-            );
-        } else {
-            unreachable!("Expected System message");
+        match prepared_message {
+            InferenceRequestMessage::System(system_message) => {
+                assert_eq!(
+                    system_message.content,
+                    "You are a helpful and friendly assistant named ChatGPT"
+                );
+            }
+            _ => unreachable!("Expected System message"),
         }
 
         // Test case 5: Assistant message with template
@@ -349,13 +365,14 @@ mod tests {
         let result = chat_completion_config.prepare_request_message(&input_message);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
-        if let InferenceRequestMessage::Assistant(assistant_message) = prepared_message {
-            assert_eq!(
-                assistant_message.content,
-                Some("I'm sorry but I can't help you with that because of it's against my ethical guidelines".to_string())
-            );
-        } else {
-            unreachable!("Expected Assistant message");
+        match prepared_message {
+            InferenceRequestMessage::Assistant(assistant_message) => {
+                assert_eq!(
+                    assistant_message.content,
+                    Some("I'm sorry but I can't help you with that because of it's against my ethical guidelines".to_string())
+                );
+            }
+            _ => unreachable!("Expected Assistant message"),
         }
 
         // Test case 6: User message with template
@@ -366,10 +383,11 @@ mod tests {
         let result = chat_completion_config.prepare_request_message(&input_message);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
-        if let InferenceRequestMessage::User(user_message) = prepared_message {
-            assert_eq!(user_message.content, "Hello, John! You are 30 years old.");
-        } else {
-            unreachable!("Expected User message");
+        match prepared_message {
+            InferenceRequestMessage::User(user_message) => {
+                assert_eq!(user_message.content, "Hello, John! You are 30 years old.");
+            }
+            _ => unreachable!("Expected User message"),
         }
 
         // Test case 7: User message with bad input (missing required field)
@@ -379,10 +397,11 @@ mod tests {
         };
         let result = chat_completion_config.prepare_request_message(&input_message);
         assert!(result.is_err());
-        if let Err(Error::MiniJinjaTemplateRender { message, .. }) = result {
-            assert!(message.contains("undefined value"));
-        } else {
-            unreachable!("Expected MiniJinjaTemplateRender error");
+        match result {
+            Err(Error::MiniJinjaTemplateRender { message, .. }) => {
+                assert!(message.contains("undefined value"));
+            }
+            _ => unreachable!("Expected MiniJinjaTemplateRender error"),
         }
         // Test case 8: User message with string content when template is provided
         let input_message = InputMessage {
@@ -391,24 +410,25 @@ mod tests {
         };
         let result = chat_completion_config.prepare_request_message(&input_message);
         assert!(result.is_err());
-        if let Err(Error::MiniJinjaTemplateRender { message, .. }) = result {
-            assert!(message.contains("undefined value"), "{}", message);
-        } else {
-            unreachable!("Expected MiniJinjaTemplateRender error");
+        match result {
+            Err(Error::MiniJinjaTemplateRender { message, .. }) => {
+                assert!(message.contains("undefined value"), "{}", message);
+            }
+            _ => unreachable!("Expected MiniJinjaTemplateRender error"),
         }
     }
 
     #[tokio::test]
     async fn test_infer_chat_completion() {
         let client = Client::new();
-        let templates = idempotent_initialize_test_templates();
-        let system_template = templates.get("system").unwrap();
-        let user_template = templates.get("greeting_with_age").unwrap();
+        idempotent_initialize_test_templates();
+        let system_template_name = "system";
+        let user_template_name = "greeting_with_age";
         let chat_completion_config = ChatCompletionConfig {
             model: "good".to_string(),
             weight: 1.0,
-            system_template: Some(system_template.to_path_buf()),
-            user_template: Some(user_template.to_path_buf()),
+            system_template: Some(system_template_name.into()),
+            user_template: Some(user_template_name.into()),
             assistant_template: None,
         };
         let good_provider_config = ProviderConfig::Dummy {
@@ -477,8 +497,8 @@ mod tests {
         let chat_completion_config = ChatCompletionConfig {
             model: "error".to_string(),
             weight: 1.0,
-            system_template: Some(system_template.to_path_buf()),
-            user_template: Some(user_template.to_path_buf()),
+            system_template: Some(system_template_name.into()),
+            user_template: Some(user_template_name.into()),
             assistant_template: None,
         };
         let models = HashMap::from([("error".to_string(), error_model_config.clone())]);
@@ -499,8 +519,8 @@ mod tests {
         let chat_completion_config = ChatCompletionConfig {
             model: "good".to_string(),
             weight: 1.0,
-            system_template: Some(system_template.to_path_buf()),
-            user_template: Some(user_template.to_path_buf()),
+            system_template: Some(system_template_name.into()),
+            user_template: Some(user_template_name.into()),
             assistant_template: None,
         };
         let models = HashMap::from([("good".to_string(), text_model_config.clone())]);
@@ -544,7 +564,7 @@ mod tests {
             "required": ["answer"],
             "additionalProperties": false
         });
-        let output_schema = JSONSchemaFromPath::from_value(output_schema).unwrap();
+        let output_schema = JSONSchemaFromPath::from_value(&output_schema);
         let result = chat_completion_config
             .infer(&messages, &models, Some(&output_schema), &client)
             .await
@@ -565,8 +585,8 @@ mod tests {
         let chat_completion_config = ChatCompletionConfig {
             model: "json".to_string(),
             weight: 1.0,
-            system_template: Some(system_template.to_path_buf()),
-            user_template: Some(user_template.to_path_buf()),
+            system_template: Some(system_template_name.into()),
+            user_template: Some(user_template_name.into()),
             assistant_template: None,
         };
         let result = chat_completion_config
@@ -588,9 +608,9 @@ mod tests {
     #[tokio::test]
     async fn test_infer_chat_completion_stream() {
         let client = Client::new();
-        let templates = idempotent_initialize_test_templates();
-        let system_template = templates.get("system").unwrap();
-        let user_template = templates.get("greeting_with_age").unwrap();
+        idempotent_initialize_test_templates();
+        let system_template_name = "system";
+        let user_template_name = "greeting_with_age";
         let good_provider_config = ProviderConfig::Dummy {
             model_name: "good".to_string(),
         };
@@ -619,8 +639,8 @@ mod tests {
         let chat_completion_config = ChatCompletionConfig {
             model: "error".to_string(),
             weight: 1.0,
-            system_template: Some(system_template.to_path_buf()),
-            user_template: Some(user_template.to_path_buf()),
+            system_template: Some(system_template_name.into()),
+            user_template: Some(user_template_name.into()),
             assistant_template: None,
         };
         let models = HashMap::from([("error".to_string(), error_model_config.clone())]);
@@ -641,8 +661,8 @@ mod tests {
         let chat_completion_config = ChatCompletionConfig {
             model: "good".to_string(),
             weight: 1.0,
-            system_template: Some(system_template.to_path_buf()),
-            user_template: Some(user_template.to_path_buf()),
+            system_template: Some(system_template_name.into()),
+            user_template: Some(user_template_name.into()),
             assistant_template: None,
         };
         let models = HashMap::from([("good".to_string(), text_model_config.clone())]);

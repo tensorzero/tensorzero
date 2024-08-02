@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::error::Error;
 use crate::function::FunctionConfig;
@@ -81,10 +81,28 @@ impl Config {
     pub fn load() -> Result<Config, Error> {
         let config_path = Config::get_config_path();
         let config_table = Config::read_toml_config(&config_path)?;
-        let config = Config::try_from(config_table)?;
+        let mut config = Config::try_from(config_table)?;
+        let base_path = match PathBuf::from(&config_path).parent() {
+            Some(base_path) => base_path.to_path_buf(),
+            None => {
+                return Err(Error::Config {
+                    message: format!(
+                        "Failed to get parent directory of config file: {config_path}"
+                    ),
+                })
+            }
+        };
+        config.load_functions(&base_path)?;
         config.validate()?;
-        initialize_templates(&config.get_templates())?;
+        initialize_templates(config.get_templates(&base_path))?;
         Ok(config)
+    }
+
+    pub fn load_functions<P: AsRef<Path>>(&mut self, base_path: P) -> Result<(), Error> {
+        for function in self.functions.values_mut() {
+            function.load(&base_path)?;
+        }
+        Ok(())
     }
 
     /// Get the path for the TensorZero config file
@@ -279,21 +297,28 @@ impl Config {
     }
 
     /// Get all templates from the config
-    pub fn get_templates(&self) -> Vec<&PathBuf> {
-        let mut templates = Vec::new();
+    /// The HashMap returned is a mapping from the path as given in the TOML file
+    /// (relative to the directory containing the TOML file) to the path on the filesystem.
+    /// The former path is used as the name of the template for retrival by variants later.
+    pub fn get_templates<P: AsRef<Path>>(&self, base_path: P) -> HashMap<String, PathBuf> {
+        let mut templates = HashMap::new();
+        let mut add_template = |path: &Option<PathBuf>| {
+            if let Some(ref path) = path {
+                templates.insert(
+                    // This `to_string_lossy`is there to handle OSes where paths
+                    // cannot be represented in UTF-8.
+                    path.to_string_lossy().to_string(),
+                    base_path.as_ref().join(path),
+                );
+            }
+        };
         for function in self.functions.values() {
             for variant in function.variants().values() {
                 match variant {
                     VariantConfig::ChatCompletion(chat_config) => {
-                        if let Some(ref path) = chat_config.system_template {
-                            templates.push(path);
-                        }
-                        if let Some(ref path) = chat_config.user_template {
-                            templates.push(path);
-                        }
-                        if let Some(ref path) = chat_config.assistant_template {
-                            templates.push(path);
-                        }
+                        add_template(&chat_config.system_template);
+                        add_template(&chat_config.user_template);
+                        add_template(&chat_config.assistant_template);
                     }
                 }
             }
@@ -304,6 +329,8 @@ impl Config {
 
 #[cfg(test)]
 mod tests {
+    use crate::{function::FunctionConfigChat, variant::ChatCompletionConfig};
+
     use super::*;
 
     /// Ensure that the sample valid config can be parsed without panicking
@@ -584,7 +611,7 @@ mod tests {
                     }
                 }
             }
-            _ => unimplemented!(),
+            _ => unreachable!(),
         }
         assert_eq!(
             config.validate().unwrap_err(),
@@ -593,6 +620,91 @@ mod tests {
                     .to_string()
             }
         );
+    }
+
+    /// Ensure that get_templates returns the correct templates
+    #[test]
+    fn test_get_all_templates() {
+        let mut config = Config::try_from(get_sample_valid_config()).unwrap();
+
+        // Create the ChatCompletionConfig
+        let chat_completion_config = ChatCompletionConfig {
+            weight: 1.0,
+            model: "gpt-3.5-turbo".to_string(),
+            system_template: Some(PathBuf::from("path/to/system_template.jinja")),
+            user_template: Some(PathBuf::from("path/to/user_template.jinja")),
+            assistant_template: Some(PathBuf::from("path/to/assistant_template.jinja")),
+        };
+
+        // Create the VariantConfig
+        let variant = VariantConfig::ChatCompletion(chat_completion_config);
+
+        // Create the variants HashMap
+        let mut variants = HashMap::new();
+        variants.insert("test_variant".to_string(), variant);
+
+        // Create the FunctionConfigChat
+        let function_config_chat = FunctionConfigChat {
+            variants,
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            output_schema: None,
+        };
+
+        // Create the new function
+        let new_function = FunctionConfig::Chat(function_config_chat);
+
+        config
+            .functions
+            .insert("test_function".to_string(), new_function);
+
+        // Get all templates
+        let templates = config.get_templates(PathBuf::from("/base/path"));
+        println!("templates: {:?}", templates);
+
+        // Check if all expected templates are present
+        assert_eq!(
+            templates.get("../functions/generate_draft/promptA/system.jinja"),
+            Some(&PathBuf::from(
+                "/base/path/../functions/generate_draft/promptA/system.jinja"
+            ))
+        );
+        assert_eq!(
+            templates.get("../functions/generate_draft/promptA/system.jinja"),
+            Some(&PathBuf::from(
+                "/base/path/../functions/generate_draft/promptA/system.jinja"
+            ))
+        );
+        assert_eq!(
+            templates.get("../functions/extract_data/promptA/system.jinja"),
+            Some(&PathBuf::from(
+                "/base/path/../functions/extract_data/promptA/system.jinja"
+            ))
+        );
+        assert_eq!(
+            templates.get("../functions/extract_data/promptB/system.jinja"),
+            Some(&PathBuf::from(
+                "/base/path/../functions/extract_data/promptB/system.jinja"
+            ))
+        );
+        assert_eq!(
+            templates.get("path/to/system_template.jinja"),
+            Some(&PathBuf::from("/base/path/path/to/system_template.jinja"))
+        );
+        assert_eq!(
+            templates.get("path/to/user_template.jinja"),
+            Some(&PathBuf::from("/base/path/path/to/user_template.jinja"))
+        );
+        assert_eq!(
+            templates.get("path/to/assistant_template.jinja"),
+            Some(&PathBuf::from(
+                "/base/path/path/to/assistant_template.jinja"
+            ))
+        );
+
+        // Check the total number of templates
+        assert_eq!(templates.len(), 7);
     }
 
     /// Get a sample valid config for testing
@@ -683,5 +795,18 @@ mod tests {
         "#;
 
         toml::from_str(config_str).expect("Failed to parse sample config")
+    }
+
+    #[test]
+    fn test_tensorzero_example_file() {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let config_path = format!("{}/../tensorzero.example.toml", manifest_dir);
+        let config_table = Config::read_toml_config(config_path.as_str())
+            .expect("Failed to read tensorzero.example.toml");
+        let mut config = Config::try_from(config_table).expect("Failed to parse config");
+        config
+            .load_functions(PathBuf::from(&config_path))
+            .expect("Failed to load functions");
+        config.validate().expect("Failed to validate config");
     }
 }

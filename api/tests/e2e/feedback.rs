@@ -328,7 +328,7 @@ async fn select_feedback_clickhouse(
 ) -> Option<Value> {
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
     let (url, client) = match clickhouse_connection_info {
-        ClickHouseConnectionInfo::Mock { .. } => unimplemented!(),
+        ClickHouseConnectionInfo::Mock { .. } => unreachable!(),
         ClickHouseConnectionInfo::Production { url, client } => (url.clone(), client),
     };
     let query = format!(

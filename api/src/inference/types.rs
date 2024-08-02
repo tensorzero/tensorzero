@@ -445,7 +445,7 @@ pub fn collect_chunks(
         };
         tool_calls = match tool_calls {
             Some(_) => {
-                unimplemented!()
+                unreachable!()
                 // TODO: when we add this code back, make _ into mut t
                 // for (j, tool_call) in chunk.tool_calls.unwrap_or_default().iter().enumerate() {
                 //     if let Some(existing_tool_call) = t.get_mut(j) {
@@ -574,7 +574,7 @@ mod tests {
             },
             "required": ["name", "age"]
         });
-        let output_schema = JSONSchemaFromPath::from_value(schema).unwrap();
+        let output_schema = JSONSchemaFromPath::from_value(&schema);
 
         let chat_inference_response = ChatInferenceResponse::new(
             inference_id,
@@ -717,15 +717,14 @@ mod tests {
         // Test Case 3: a JSON string that passes validation and also include usage in each chunk
         let inference_id = Uuid::now_v7();
         let created = current_timestamp();
-        let schema = JSONSchemaFromPath::from_value(serde_json::json!({
+        let schema = JSONSchemaFromPath::from_value(&serde_json::json!({
             "type": "object",
             "properties": {
                 "name": {"type": "string"},
                 "age": {"type": "number"}
             },
             "required": ["name", "age"]
-        }))
-        .unwrap();
+        }));
         let usage1 = Usage {
             prompt_tokens: 10,
             completion_tokens: 5,
@@ -776,15 +775,14 @@ mod tests {
         // Test Case 4: a JSON string that fails validation and usage only in last chunk
         let inference_id = Uuid::now_v7();
         let created = current_timestamp();
-        let schema = JSONSchemaFromPath::from_value(serde_json::json!({
+        let schema = JSONSchemaFromPath::from_value(&serde_json::json!({
             "type": "object",
             "properties": {
                 "name": {"type": "string"},
                 "age": {"type": "number"}
             },
             "required": ["name", "age"]
-        }))
-        .unwrap();
+        }));
         let usage = Usage {
             prompt_tokens: 10,
             completion_tokens: 5,
@@ -827,15 +825,14 @@ mod tests {
         // Test case 5: chunks with some None content
         let inference_id = Uuid::now_v7();
         let created = current_timestamp();
-        let schema = JSONSchemaFromPath::from_value(serde_json::json!({
+        let schema = JSONSchemaFromPath::from_value(&serde_json::json!({
             "type": "object",
             "properties": {
                 "name": {"type": "string"},
                 "age": {"type": "number"}
             },
             "required": ["name", "age"]
-        }))
-        .unwrap();
+        }));
         let usage = Usage {
             prompt_tokens: 15,
             completion_tokens: 10,

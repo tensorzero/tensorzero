@@ -279,7 +279,7 @@ fn prepare_event(
             })?
         }
         FunctionConfig::Tool(_) => {
-            unimplemented!()
+            unreachable!()
         }
     };
     chunk_json["variant_name"] = metadata.variant_name.to_string().into();
