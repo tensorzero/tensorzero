@@ -11,6 +11,7 @@ use tempfile::NamedTempFile;
 
 use crate::error::Error;
 
+// TODO: investigate `tokio::sync::OnceCell`
 static MINIJINJA_ENV: OnceLock<Environment> = OnceLock::new();
 
 /// Initializes the MINIJINJA_ENV with the given templates, given as a list of paths to the templates.
