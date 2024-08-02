@@ -15,18 +15,12 @@ bind_address = "0.0.0.0:3000"
 # │                                   MODELS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-[models."gpt-3.5-turbo"]
-routing = ["openai", "azure"]
+[models."gpt-4o-mini-2024-07-18"]
+routing = ["openai"]
 
-[models."gpt-3.5-turbo".providers.openai]
+[models."gpt-4o-mini-2024-07-18".providers.openai]
 type = "openai"
-model_name = "gpt-3.5-turbo"
-
-[models."gpt-3.5-turbo".providers.azure]
-type = "azure"
-model_name = "gpt-35-turbo"
-api_base = "https://your-endpoint.openai.azure.com/"
-deployment_id = "gpt-35-turbo"
+model_name = "gpt-4o-mini-2024-07-18"
 
 [models.claude-3-haiku-20240307]
 routing = ["anthropic", "aws-bedrock"]
@@ -76,22 +70,6 @@ model_name = "json"
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-[functions.generate_draft]
-type = "chat"
-system_schema = "functions/generate_draft/system_schema.json"
-output_schema = "functions/generate_draft/output_schema.json"
-
-[functions.generate_draft.variants.openai_promptA]
-type = "chat_completion"
-weight = 0.9
-model = "gpt-3.5-turbo"
-system_template = "functions/generate_draft/promptA/system_template.minijinja"
-
-[functions.generate_draft.variants.openai_promptB]
-type = "chat_completion"
-weight = 0.1
-model = "gpt-3.5-turbo"
-system_template = "functions/generate_draft/promptB/system_template.minijinja"
 
 [functions.basic_test]
 type = "chat"
@@ -101,6 +79,16 @@ system_schema = "functions/basic_test/system_schema.json"
 type = "chat_completion"
 weight = 1
 model = "test"
+system_template = "functions/basic_test/prompt/system_template.minijinja"
+
+[functions.openai_test]
+type = "chat"
+system_schema = "functions/basic_test/system_schema.json"
+
+[functions.openai_test.variants.test]
+type = "chat_completion"
+weight = 1
+model = "gpt-4o-mini-2024-07-18"
 system_template = "functions/basic_test/prompt/system_template.minijinja"
 
 [functions.model_fallback_test]
