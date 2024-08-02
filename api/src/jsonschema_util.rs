@@ -10,7 +10,7 @@ use crate::error::Error;
 pub struct JSONSchemaFromPath {
     path: PathBuf,
     compiled: Option<Arc<JSONSchema>>,
-    pub value: Option<&'static serde_json::Value>,
+    value: Option<&'static serde_json::Value>,
 }
 
 impl JSONSchemaFromPath {
@@ -35,11 +35,14 @@ impl JSONSchemaFromPath {
         }
     }
 
-    pub fn load<P: AsRef<Path>>(&mut self, base_path: Option<P>) -> Result<(), Error> {
-        let path = match base_path {
-            Some(base_path) => base_path.as_ref().join(&self.path),
-            None => self.path.clone(),
-        };
+    pub fn value(&self) -> Result<&'static serde_json::Value, Error> {
+        self.value.ok_or(Error::JsonSchema {
+            message: format!("JSON Schema `{}` not loaded", self.path.display()),
+        })
+    }
+
+    pub fn load<P: AsRef<Path>>(&mut self, base_path: P) -> Result<(), Error> {
+        let path = base_path.as_ref().join(&self.path);
         let content = fs::read_to_string(path).map_err(|e| Error::JsonSchema {
             message: format!(
                 "Failed to read JSON Schema `{}`: {}",
@@ -130,7 +133,7 @@ mod tests {
 
         let mut schema = JSONSchemaFromPath::new(temp_file.path().to_owned());
         schema
-            .load::<&std::path::Path>(None)
+            .load::<&std::path::Path>(&PathBuf::from(""))
             .expect("Failed to load schema");
 
         let instance = serde_json::json!({
@@ -176,7 +179,7 @@ mod tests {
             .expect("Failed to write invalid schema to temporary file");
 
         let mut schema = JSONSchemaFromPath::new(temp_file.path().to_owned());
-        let result = schema.load::<&std::path::Path>(None);
+        let result = schema.load::<&std::path::Path>(&PathBuf::from(""));
         assert_eq!(
             result.unwrap_err().to_string(),
             format!(
@@ -189,7 +192,7 @@ mod tests {
     #[test]
     fn test_nonexistent_file() {
         let mut schema = JSONSchemaFromPath::new(PathBuf::from("nonexistent_file.json"));
-        let result = schema.load::<&std::path::Path>(None);
+        let result = schema.load::<&std::path::Path>(&PathBuf::from(""));
         assert_eq!(
             result.unwrap_err().to_string(),
             "Failed to read JSON Schema `nonexistent_file.json`: No such file or directory (os error 2)".to_string()

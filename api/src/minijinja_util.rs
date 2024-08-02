@@ -22,7 +22,6 @@ pub fn initialize_templates(template_paths: HashMap<String, PathBuf>) -> Result<
                 message: format!("Failed to read template file: {}", e),
             })?;
 
-        println!("Adding template: {}", template_name);
         env.add_template_owned(template_name, template_content)
             .map_err(|e| Error::MiniJinjaTemplate {
                 template_name: path.display().to_string(),

@@ -445,7 +445,7 @@ pub fn collect_chunks(
         };
         tool_calls = match tool_calls {
             Some(_) => {
-                unimplemented!()
+                unreachable!()
                 // TODO: when we add this code back, make _ into mut t
                 // for (j, tool_call) in chunk.tool_calls.unwrap_or_default().iter().enumerate() {
                 //     if let Some(existing_tool_call) = t.get_mut(j) {

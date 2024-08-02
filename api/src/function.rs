@@ -121,7 +121,7 @@ impl FunctionConfig {
         Ok(())
     }
 
-    pub fn load<P: AsRef<Path>>(&mut self, base_path: Option<P>) -> Result<(), Error> {
+    pub fn load<P: AsRef<Path>>(&mut self, base_path: P) -> Result<(), Error> {
         match self {
             FunctionConfig::Chat(params) => {
                 params
@@ -237,7 +237,7 @@ mod tests {
 
     use super::*;
     use serde_json::json;
-    use std::io::Write;
+    use std::{io::Write, path::PathBuf};
     use tempfile::NamedTempFile;
 
     fn create_test_schema() -> JSONSchemaFromPath {
@@ -257,7 +257,7 @@ mod tests {
 
         let mut schema = JSONSchemaFromPath::new(temp_file.path().to_owned());
         schema
-            .load::<&std::path::Path>(None)
+            .load::<&std::path::Path>(&PathBuf::from(""))
             .expect("Failed to load schema");
         schema
     }
@@ -347,7 +347,7 @@ mod tests {
             Error::JsonSchemaValidation {
                 messages: vec!["\"system content\" is not of type \"object\"".to_string()],
                 data: json!("system content"),
-                schema: system_schema.value.unwrap().clone(),
+                schema: system_schema.value().unwrap().clone(),
             }
         );
 
@@ -402,7 +402,7 @@ mod tests {
             Error::JsonSchemaValidation {
                 messages: vec!["\"user content\" is not of type \"object\"".to_string()],
                 data: json!("user content"),
-                schema: user_schema.value.unwrap().clone(),
+                schema: user_schema.value().unwrap().clone(),
             }
         );
 
@@ -457,7 +457,7 @@ mod tests {
             Error::JsonSchemaValidation {
                 messages: vec!["\"assistant content\" is not of type \"object\"".to_string()],
                 data: json!("assistant content"),
-                schema: assistant_schema.value.unwrap().clone(),
+                schema: assistant_schema.value().unwrap().clone(),
             }
         );
 
@@ -514,7 +514,7 @@ mod tests {
             Error::JsonSchemaValidation {
                 messages: vec!["\"system content\" is not of type \"object\"".to_string()],
                 data: json!("system content"),
-                schema: system_schema.value.unwrap().clone(),
+                schema: system_schema.value().unwrap().clone(),
             }
         );
 
@@ -621,7 +621,7 @@ mod tests {
             Error::JsonSchemaValidation {
                 messages: vec!["\"system content\" is not of type \"object\"".to_string()],
                 data: json!("system content"),
-                schema: system_schema.value.unwrap().clone(),
+                schema: system_schema.value().unwrap().clone(),
             }
         );
 
@@ -676,7 +676,7 @@ mod tests {
             Error::JsonSchemaValidation {
                 messages: vec!["\"user content\" is not of type \"object\"".to_string()],
                 data: json!("user content"),
-                schema: user_schema.value.unwrap().clone(),
+                schema: user_schema.value().unwrap().clone(),
             }
         );
 
@@ -731,7 +731,7 @@ mod tests {
             Error::JsonSchemaValidation {
                 messages: vec!["\"assistant content\" is not of type \"object\"".to_string()],
                 data: json!("assistant content"),
-                schema: assistant_schema.value.unwrap().clone(),
+                schema: assistant_schema.value().unwrap().clone(),
             }
         );
 
@@ -788,7 +788,7 @@ mod tests {
             Error::JsonSchemaValidation {
                 messages: vec!["\"system content\" is not of type \"object\"".to_string()],
                 data: json!("system content"),
-                schema: system_schema.value.unwrap().clone(),
+                schema: system_schema.value().unwrap().clone(),
             }
         );
 

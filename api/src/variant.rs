@@ -159,7 +159,12 @@ impl Variant for ChatCompletionConfig {
             .iter()
             .map(|message| self.prepare_request_message(message))
             .collect::<Result<Vec<_>, _>>()?;
-        let output_schema_value = output_schema.and_then(|s| s.value);
+        let output_schema_value = match output_schema {
+            // We want this block to throw an error if somehow the jsonschema is missing
+            // but return None if the output schema is not provided.
+            Some(s) => Some(s.value()?),
+            None => None,
+        };
         let request = ModelInferenceRequest {
             messages,
             tools_available: None,
@@ -210,7 +215,12 @@ impl Variant for ChatCompletionConfig {
             .iter()
             .map(|message| self.prepare_request_message(message))
             .collect::<Result<Vec<_>, _>>()?;
-        let output_schema_value = output_schema.and_then(|s| s.value);
+        let output_schema_value = match output_schema {
+            // As above, we want this block to throw an error if somehow the jsonschema is missing
+            // but return None if the output schema is not provided
+            Some(s) => Some(s.value()?),
+            None => None,
+        };
         let request = ModelInferenceRequest {
             messages,
             tools_available: None,
@@ -644,7 +654,7 @@ mod tests {
                 assert_eq!(provider_errors.len(), 1);
                 assert!(matches!(provider_errors[0], Error::InferenceClient { .. }));
             }
-            _ => unimplemented!("Expected ModelProvidersExhausted error"),
+            _ => unreachable!("Expected ModelProvidersExhausted error"),
         }
 
         // Test case 2: Model inference succeeds

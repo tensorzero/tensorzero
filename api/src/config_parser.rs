@@ -92,15 +92,15 @@ impl Config {
                 })
             }
         };
-        config.load_functions(Some(&base_path))?;
+        config.load_functions(&base_path)?;
         config.validate()?;
-        initialize_templates(config.get_templates(Some(&base_path)))?;
+        initialize_templates(config.get_templates(&base_path))?;
         Ok(config)
     }
 
-    pub fn load_functions<P: AsRef<Path>>(&mut self, base_path: Option<P>) -> Result<(), Error> {
+    pub fn load_functions<P: AsRef<Path>>(&mut self, base_path: P) -> Result<(), Error> {
         for function in self.functions.values_mut() {
-            function.load(base_path.as_ref())?;
+            function.load(&base_path)?;
         }
         Ok(())
     }
@@ -297,23 +297,19 @@ impl Config {
     }
 
     /// Get all templates from the config
-    /// The HashMap returned is a mapping from the path as given in the toml file
-    /// (relative to the directory containing the toml file)
-    /// to the path on the filesystem.
+    /// The HashMap returned is a mapping from the path as given in the TOML file
+    /// (relative to the directory containing the TOML file) to the path on the filesystem.
     /// The former path is used as the name of the template for retrival by variants later.
-    pub fn get_templates<P: AsRef<Path>>(&self, base_path: Option<P>) -> HashMap<String, PathBuf> {
+    pub fn get_templates<P: AsRef<Path>>(&self, base_path: P) -> HashMap<String, PathBuf> {
         let mut templates = HashMap::new();
         let mut add_template = |path: &Option<PathBuf>| {
             if let Some(ref path) = path {
-                match base_path {
-                    Some(ref base) => templates.insert(
-                        // This and the following is there to handle OSes where paths
-                        // cannot be represented in UTF-8.
-                        path.to_string_lossy().to_string(),
-                        base.as_ref().join(path),
-                    ),
-                    None => templates.insert(path.to_string_lossy().to_string(), path.clone()),
-                };
+                templates.insert(
+                    // This `to_string_lossy`is there to handle OSes where paths
+                    // cannot be represented in UTF-8.
+                    path.to_string_lossy().to_string(),
+                    base_path.as_ref().join(path),
+                );
             }
         };
         for function in self.functions.values() {
@@ -615,7 +611,7 @@ mod tests {
                     }
                 }
             }
-            _ => unimplemented!(),
+            _ => unreachable!(),
         }
         assert_eq!(
             config.validate().unwrap_err(),
@@ -664,7 +660,7 @@ mod tests {
             .insert("test_function".to_string(), new_function);
 
         // Get all templates
-        let templates = config.get_templates(Some(PathBuf::from("/base/path")));
+        let templates = config.get_templates(PathBuf::from("/base/path"));
         println!("templates: {:?}", templates);
 
         // Check if all expected templates are present
@@ -809,7 +805,7 @@ mod tests {
             .expect("Failed to read tensorzero.example.toml");
         let mut config = Config::try_from(config_table).expect("Failed to parse config");
         config
-            .load_functions(Some(&PathBuf::from(&config_path)))
+            .load_functions(PathBuf::from(&config_path))
             .expect("Failed to load functions");
         config.validate().expect("Failed to validate config");
     }

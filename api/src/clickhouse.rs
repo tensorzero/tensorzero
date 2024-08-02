@@ -71,7 +71,7 @@ impl ClickHouseConnectionInfo {
                 }
                 None
             }
-            Self::Production { .. } => unimplemented!(),
+            Self::Production { .. } => unreachable!(),
         }
     }
 
