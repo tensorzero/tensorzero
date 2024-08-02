@@ -1,7 +1,7 @@
 use jsonschema::JSONSchema;
 use serde::Deserialize;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::error::Error;
@@ -35,9 +35,9 @@ impl JSONSchemaFromPath {
         }
     }
 
-    pub fn load(&mut self, base_path: Option<&PathBuf>) -> Result<(), Error> {
+    pub fn load<P: AsRef<Path>>(&mut self, base_path: Option<P>) -> Result<(), Error> {
         let path = match base_path {
-            Some(base_path) => base_path.join(&self.path),
+            Some(base_path) => base_path.as_ref().join(&self.path),
             None => self.path.clone(),
         };
         let content = fs::read_to_string(path).map_err(|e| Error::JsonSchema {
@@ -129,7 +129,9 @@ mod tests {
         write!(temp_file, "{}", schema).expect("Failed to write schema to temporary file");
 
         let mut schema = JSONSchemaFromPath::new(temp_file.path().to_owned());
-        schema.load(None).expect("Failed to load schema");
+        schema
+            .load::<&std::path::Path>(None)
+            .expect("Failed to load schema");
 
         let instance = serde_json::json!({
             "name": "John Doe",
@@ -174,7 +176,7 @@ mod tests {
             .expect("Failed to write invalid schema to temporary file");
 
         let mut schema = JSONSchemaFromPath::new(temp_file.path().to_owned());
-        let result = schema.load(None);
+        let result = schema.load::<&std::path::Path>(None);
         assert_eq!(
             result.unwrap_err().to_string(),
             format!(
@@ -187,7 +189,7 @@ mod tests {
     #[test]
     fn test_nonexistent_file() {
         let mut schema = JSONSchemaFromPath::new(PathBuf::from("nonexistent_file.json"));
-        let result = schema.load(None);
+        let result = schema.load::<&std::path::Path>(None);
         assert_eq!(
             result.unwrap_err().to_string(),
             "Failed to read JSON Schema `nonexistent_file.json`: No such file or directory (os error 2)".to_string()

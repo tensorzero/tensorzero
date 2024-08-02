@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::Path;
 use uuid::Uuid;
 
 use crate::error::Error;
@@ -121,44 +121,44 @@ impl FunctionConfig {
         Ok(())
     }
 
-    pub fn load(&mut self, base_path: Option<&PathBuf>) -> Result<(), Error> {
+    pub fn load<P: AsRef<Path>>(&mut self, base_path: Option<P>) -> Result<(), Error> {
         match self {
             FunctionConfig::Chat(params) => {
                 params
                     .system_schema
                     .as_mut()
-                    .map(|schema| schema.load(base_path));
+                    .map(|schema| schema.load(base_path.as_ref()));
                 params
                     .user_schema
                     .as_mut()
-                    .map(|schema| schema.load(base_path));
+                    .map(|schema| schema.load(base_path.as_ref()));
                 params
                     .assistant_schema
                     .as_mut()
-                    .map(|schema| schema.load(base_path));
+                    .map(|schema| schema.load(base_path.as_ref()));
                 params
                     .output_schema
                     .as_mut()
-                    .map(|schema| schema.load(base_path));
+                    .map(|schema| schema.load(base_path.as_ref()));
                 Ok(())
             }
             FunctionConfig::Tool(params) => {
                 params
                     .system_schema
                     .as_mut()
-                    .map(|schema| schema.load(base_path));
+                    .map(|schema| schema.load(base_path.as_ref()));
                 params
                     .user_schema
                     .as_mut()
-                    .map(|schema| schema.load(base_path));
+                    .map(|schema| schema.load(base_path.as_ref()));
                 params
                     .assistant_schema
                     .as_mut()
-                    .map(|schema| schema.load(base_path));
+                    .map(|schema| schema.load(base_path.as_ref()));
                 params
                     .output_schema
                     .as_mut()
-                    .map(|schema| schema.load(base_path));
+                    .map(|schema| schema.load(base_path.as_ref()));
                 Ok(())
             }
         }
@@ -256,7 +256,9 @@ mod tests {
         write!(temp_file, "{}", schema).expect("Failed to write schema to temporary file");
 
         let mut schema = JSONSchemaFromPath::new(temp_file.path().to_owned());
-        schema.load(None).expect("Failed to load schema");
+        schema
+            .load::<&std::path::Path>(None)
+            .expect("Failed to load schema");
         schema
     }
 

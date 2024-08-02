@@ -16,7 +16,7 @@ static MINIJINJA_ENV: OnceLock<Environment> = OnceLock::new();
 /// Initializes the MINIJINJA_ENV with the given templates, given as a list of paths to the templates.
 /// The name of each template in the environment will simply be the path to that template.
 /// This should be called once at startup.
-pub fn initialize_templates(template_paths: &[&PathBuf]) -> Result<(), Error> {
+pub fn initialize_templates(template_paths: &Vec<PathBuf>) -> Result<(), Error> {
     let mut env = Environment::new();
     env.set_undefined_behavior(UndefinedBehavior::Strict);
 
@@ -132,7 +132,7 @@ pub(crate) mod tests {
     #[test]
     fn test_template_nonexistent_file() {
         let nonexistent_path = PathBuf::from("nonexistent_file.txt");
-        let result = initialize_templates(&[&nonexistent_path]);
+        let result = initialize_templates(&vec![nonexistent_path.clone()]);
         assert_eq!(
             result.unwrap_err(),
             Error::MiniJinjaTemplate {
@@ -148,7 +148,7 @@ pub(crate) mod tests {
         let malformed_template = "{{ unclosed_bracket";
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{}", malformed_template).expect("Failed to write to temp file");
-        let result = initialize_templates(&[&temp_file.path().to_path_buf()]);
+        let result = initialize_templates(&vec![temp_file.path().to_path_buf()]);
         assert!(result
             .unwrap_err()
             .to_string()
@@ -189,7 +189,7 @@ pub(crate) mod tests {
             templates.insert("assistant", temp_file4.path().to_path_buf());
 
             // Initialize templates
-            initialize_templates(&templates.values().collect::<Vec<_>>()).unwrap();
+            initialize_templates(&templates.values().cloned().collect::<Vec<_>>()).unwrap();
 
             templates
         })
