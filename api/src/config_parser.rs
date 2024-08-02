@@ -297,6 +297,10 @@ impl Config {
     }
 
     /// Get all templates from the config
+    /// The HashMap returned is a mapping from the path as given in the toml file
+    /// (relative to the directory containing the toml file)
+    /// to the path on the filesystem.
+    /// The former path is used as the name of the template for retrival by variants later.
     pub fn get_templates<P: AsRef<Path>>(&self, base_path: Option<P>) -> HashMap<String, PathBuf> {
         let mut templates = HashMap::new();
         for function in self.functions.values() {
