@@ -13,8 +13,3 @@ unsafe_code = "forbid"
 expect_used = "deny"
 panic = "deny"
 unwrap_used = "deny"
-
-
-[profile.profiling]
-inherits = "release"
-debug = true

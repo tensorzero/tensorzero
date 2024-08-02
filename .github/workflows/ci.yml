@@ -8,6 +8,9 @@ on:
 
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }} # for integration/E2E tests
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }} # for integration/E2E tests
+  AWS_REGION: "us-east-1" # for integration/E2E tests
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }} # for integration/E2E tests
   AZURE_OPENAI_API_BASE: ${{secrets.AZURE_OPENAI_API_BASE }} # for integration/E2E tests
   AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }} # for integration/E2E tests
   AZURE_OPENAI_DEPLOYMENT_ID: ${{secrets.AZURE_OPENAI_DEPLOYMENT_ID }} # for integration/E2E tests
