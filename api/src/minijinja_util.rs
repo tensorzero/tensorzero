@@ -9,7 +9,7 @@ use crate::error::Error;
 static MINIJINJA_ENV: OnceLock<Environment> = OnceLock::new();
 
 /// Initializes the MINIJINJA_ENV with the given templates, given as a map from template names
-/// to template paths (which might be the same as the names or different).
+/// to template paths.
 /// This should be called once at startup.
 pub fn initialize_templates(template_paths: HashMap<String, PathBuf>) -> Result<(), Error> {
     let mut env = Environment::new();
