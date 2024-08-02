@@ -7,7 +7,20 @@ use uuid::Uuid;
 
 use crate::e2e::common::{select_inference_clickhouse, select_model_inferences_clickhouse};
 
-// TODO: make this endpoint configurable with main.rs
+/// OpenAI E2E tests
+///
+/// This file contains a set of tests that check that the OpenAI integration works and the appropriate stuff is written to DB.
+///
+/// Currently we test:
+/// - basic inference
+/// - streaming inference
+///
+/// TODOs:
+///  - tool calling
+///  - JSON mode
+///  - other API parameters (temp, max_tokens, etc.)
+
+// TODO: make this endpoint configurable with some kind of env var
 const INFERENCE_URL: &str = "http://localhost:3000/inference";
 lazy_static::lazy_static! {
     static ref CLICKHOUSE_URL: String = std::env::var("CLICKHOUSE_URL").expect("Environment variable CLICKHOUSE_URL must be set");
