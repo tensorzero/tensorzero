@@ -1,0 +1,46 @@
+[package]
+name = "gateway"
+version = "0.1.0"
+edition = "2021"
+
+
+[features]
+integration_tests = []
+e2e_tests = ["lazy_static"]
+
+
+[dependencies]
+aws-config = { version = "1.5.4", features = ["behavior-version-latest"] }
+aws-sdk-bedrockruntime = { version = "1.42.0", features = ["behavior-version-latest"] }
+axum = { version = "0.7.5", features = ["macros"] }
+bytes = "1.6.1"
+derive_builder = "0.20.0"
+futures = "0.3.30"
+jsonschema = "0.18.0"
+lazy_static = { version = "1.5.0", optional = true }
+metrics = "0.23.0"
+metrics-exporter-prometheus = {version = "0.15.3" , features = ["http-listener"], default-features = false}
+minijinja = {version = "2.1.0", features =["loader"]}
+reqwest = { version = "0.12.5", features=["json", "rustls-tls"], default-features=false }
+reqwest-eventsource = "0.6.0"
+secrecy = "0.8.0"
+serde = { version = "1.0.204", features = ["derive"] }
+serde_json = "1.0.120"
+serde_path_to_error = "0.1.16"
+sha2 = "0.10.8"
+signal = "0.7.0"
+tokio = { version = "1.38.1", features = ["full"] }
+tokio-stream = "0.1.15"
+toml = "0.8.15"
+tracing = { version = "0.1.40", features = ["log", "release_max_level_debug"] }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter", "fmt", "json"] }
+url = "2.5.2"
+uuid = { version = "1.10.0", features = ["serde", "v7"] }
+
+
+[dev-dependencies]
+tempfile = "3.10.1"
+
+
+[lints]
+workspace = true

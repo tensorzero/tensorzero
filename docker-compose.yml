@@ -1,8 +1,8 @@
 services:
-  api:
-    container_name: api
+  gateway:
+    container_name: gateway
     build:
-      context: ./api
-      target: api
+      context: ./gateway
+      target: gateway
     ports:
       - "3000:3000"

@@ -69,7 +69,7 @@ jobs:
 
       - name: Launch containers for E2E tests
         if: github.ref == 'refs/heads/main'
-        run: docker compose -f api/tests/e2e/docker-compose.yml up -d
+        run: docker compose -f gateway/tests/e2e/docker-compose.yml up -d
 
       - name: Test (including integration and E2E) (Rust)
         if: github.ref == 'refs/heads/main'
