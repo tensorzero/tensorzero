@@ -94,7 +94,7 @@ impl Config {
         };
         config.load_functions(Some(&base_path))?;
         config.validate()?;
-        initialize_templates(&config.get_templates(Some(&base_path)))?;
+        initialize_templates(config.get_templates(Some(&base_path)))?;
         Ok(config)
     }
 
@@ -297,8 +297,8 @@ impl Config {
     }
 
     /// Get all templates from the config
-    pub fn get_templates<P: AsRef<Path>>(&self, base_path: Option<P>) -> Vec<PathBuf> {
-        let mut templates = Vec::new();
+    pub fn get_templates<P: AsRef<Path>>(&self, base_path: Option<P>) -> HashMap<String, PathBuf> {
+        let mut templates = HashMap::new();
         for function in self.functions.values() {
             for variant in function.variants().values() {
                 match variant {
@@ -306,9 +306,15 @@ impl Config {
                         let mut add_template = |path: &Option<PathBuf>| {
                             if let Some(ref path) = path {
                                 match base_path {
-                                    Some(ref base) => templates.push(base.as_ref().join(path)),
-                                    None => templates.push(path.clone()),
-                                }
+                                    Some(ref base) => templates.insert(
+                                        // This and the following is there to handle OSes where paths
+                                        // cannot be represented in UTF-8.
+                                        path.to_string_lossy().to_string(),
+                                        base.as_ref().join(path),
+                                    ),
+                                    None => templates
+                                        .insert(path.to_string_lossy().to_string(), path.clone()),
+                                };
                             }
                         };
 
@@ -623,27 +629,33 @@ mod tests {
     fn test_get_all_templates() {
         let mut config = Config::try_from(get_sample_valid_config()).unwrap();
 
-        // Add a new function with multiple templates
-        let mut new_function = FunctionConfig::Chat(FunctionConfigChat {
-            variants: HashMap::new(),
+        // Create the ChatCompletionConfig
+        let chat_completion_config = ChatCompletionConfig {
+            weight: 1.0,
+            model: "gpt-3.5-turbo".to_string(),
+            system_template: Some(PathBuf::from("path/to/system_template.jinja")),
+            user_template: Some(PathBuf::from("path/to/user_template.jinja")),
+            assistant_template: Some(PathBuf::from("path/to/assistant_template.jinja")),
+        };
+
+        // Create the VariantConfig
+        let variant = VariantConfig::ChatCompletion(chat_completion_config);
+
+        // Create the variants HashMap
+        let mut variants = HashMap::new();
+        variants.insert("test_variant".to_string(), variant);
+
+        // Create the FunctionConfigChat
+        let function_config_chat = FunctionConfigChat {
+            variants,
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
             output_schema: None,
-        });
+        };
 
-        if let FunctionConfig::Chat(ref mut chat_config) = new_function {
-            let variant = VariantConfig::ChatCompletion(ChatCompletionConfig {
-                weight: 1.0,
-                model: "gpt-3.5-turbo".to_string(),
-                system_template: Some(PathBuf::from("path/to/system_template.jinja")),
-                user_template: Some(PathBuf::from("path/to/user_template.jinja")),
-                assistant_template: Some(PathBuf::from("path/to/assistant_template.jinja")),
-            });
-            chat_config
-                .variants
-                .insert("test_variant".to_string(), variant);
-        }
+        // Create the new function
+        let new_function = FunctionConfig::Chat(function_config_chat);
 
         config
             .functions
@@ -654,23 +666,44 @@ mod tests {
         println!("templates: {:?}", templates);
 
         // Check if all expected templates are present
-        assert!(templates.contains(&PathBuf::from(
-            "/base/path/../functions/generate_draft/promptA/system.jinja"
-        )));
-        assert!(templates.contains(&PathBuf::from(
-            "/base/path/../functions/generate_draft/promptA/system.jinja"
-        )));
-        assert!(templates.contains(&PathBuf::from(
-            "/base/path/../functions/extract_data/promptA/system.jinja"
-        )));
-        assert!(templates.contains(&PathBuf::from(
-            "/base/path/../functions/extract_data/promptB/system.jinja"
-        )));
-        assert!(templates.contains(&PathBuf::from("/base/path/path/to/system_template.jinja")));
-        assert!(templates.contains(&PathBuf::from("/base/path/path/to/user_template.jinja")));
-        assert!(templates.contains(&PathBuf::from(
-            "/base/path/path/to/assistant_template.jinja"
-        )));
+        assert_eq!(
+            templates.get("../functions/generate_draft/promptA/system.jinja"),
+            Some(&PathBuf::from(
+                "/base/path/../functions/generate_draft/promptA/system.jinja"
+            ))
+        );
+        assert_eq!(
+            templates.get("../functions/generate_draft/promptA/system.jinja"),
+            Some(&PathBuf::from(
+                "/base/path/../functions/generate_draft/promptA/system.jinja"
+            ))
+        );
+        assert_eq!(
+            templates.get("../functions/extract_data/promptA/system.jinja"),
+            Some(&PathBuf::from(
+                "/base/path/../functions/extract_data/promptA/system.jinja"
+            ))
+        );
+        assert_eq!(
+            templates.get("../functions/extract_data/promptB/system.jinja"),
+            Some(&PathBuf::from(
+                "/base/path/../functions/extract_data/promptB/system.jinja"
+            ))
+        );
+        assert_eq!(
+            templates.get("path/to/system_template.jinja"),
+            Some(&PathBuf::from("/base/path/path/to/system_template.jinja"))
+        );
+        assert_eq!(
+            templates.get("path/to/user_template.jinja"),
+            Some(&PathBuf::from("/base/path/path/to/user_template.jinja"))
+        );
+        assert_eq!(
+            templates.get("path/to/assistant_template.jinja"),
+            Some(&PathBuf::from(
+                "/base/path/path/to/assistant_template.jinja"
+            ))
+        );
 
         // Check the total number of templates
         assert_eq!(templates.len(), 7);

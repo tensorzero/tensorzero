@@ -316,17 +316,17 @@ mod tests {
             .unwrap_err();
         assert_eq!(result, Error::InvalidMessage { message: "Request message content {\"invalid\":\"json\"} is not a string but there is no variant template for Role \"user\"".to_string()});
         // Part 2: test with templates
-        let templates = idempotent_initialize_test_templates();
-        let system_template = templates.get("system").unwrap();
-        let user_template = templates.get("greeting_with_age").unwrap();
-        let assistant_template = templates.get("assistant").unwrap();
+        idempotent_initialize_test_templates();
+        let system_template = "system";
+        let user_template = "greeting_with_age";
+        let assistant_template = "assistant";
 
         let chat_completion_config = ChatCompletionConfig {
             model: "dummy".to_string(),
             weight: 1.0,
-            system_template: Some(system_template.to_path_buf()),
-            user_template: Some(user_template.to_path_buf()),
-            assistant_template: Some(assistant_template.to_path_buf()),
+            system_template: Some(system_template.into()),
+            user_template: Some(user_template.into()),
+            assistant_template: Some(assistant_template.into()),
         };
 
         // Test case 4: System message with template
@@ -411,14 +411,14 @@ mod tests {
     #[tokio::test]
     async fn test_infer_chat_completion() {
         let client = Client::new();
-        let templates = idempotent_initialize_test_templates();
-        let system_template = templates.get("system").unwrap();
-        let user_template = templates.get("greeting_with_age").unwrap();
+        idempotent_initialize_test_templates();
+        let system_template = "system";
+        let user_template = "greeting_with_age";
         let chat_completion_config = ChatCompletionConfig {
             model: "good".to_string(),
             weight: 1.0,
-            system_template: Some(system_template.to_path_buf()),
-            user_template: Some(user_template.to_path_buf()),
+            system_template: Some(system_template.into()),
+            user_template: Some(user_template.into()),
             assistant_template: None,
         };
         let good_provider_config = ProviderConfig::Dummy {
@@ -487,8 +487,8 @@ mod tests {
         let chat_completion_config = ChatCompletionConfig {
             model: "error".to_string(),
             weight: 1.0,
-            system_template: Some(system_template.to_path_buf()),
-            user_template: Some(user_template.to_path_buf()),
+            system_template: Some(system_template.into()),
+            user_template: Some(user_template.into()),
             assistant_template: None,
         };
         let models = HashMap::from([("error".to_string(), error_model_config.clone())]);
@@ -509,8 +509,8 @@ mod tests {
         let chat_completion_config = ChatCompletionConfig {
             model: "good".to_string(),
             weight: 1.0,
-            system_template: Some(system_template.to_path_buf()),
-            user_template: Some(user_template.to_path_buf()),
+            system_template: Some(system_template.into()),
+            user_template: Some(user_template.into()),
             assistant_template: None,
         };
         let models = HashMap::from([("good".to_string(), text_model_config.clone())]);
@@ -575,8 +575,8 @@ mod tests {
         let chat_completion_config = ChatCompletionConfig {
             model: "json".to_string(),
             weight: 1.0,
-            system_template: Some(system_template.to_path_buf()),
-            user_template: Some(user_template.to_path_buf()),
+            system_template: Some(system_template.into()),
+            user_template: Some(user_template.into()),
             assistant_template: None,
         };
         let result = chat_completion_config
@@ -598,9 +598,9 @@ mod tests {
     #[tokio::test]
     async fn test_infer_chat_completion_stream() {
         let client = Client::new();
-        let templates = idempotent_initialize_test_templates();
-        let system_template = templates.get("system").unwrap();
-        let user_template = templates.get("greeting_with_age").unwrap();
+        idempotent_initialize_test_templates();
+        let system_template = "system";
+        let user_template = "greeting_with_age";
         let good_provider_config = ProviderConfig::Dummy {
             model_name: "good".to_string(),
         };
@@ -629,8 +629,8 @@ mod tests {
         let chat_completion_config = ChatCompletionConfig {
             model: "error".to_string(),
             weight: 1.0,
-            system_template: Some(system_template.to_path_buf()),
-            user_template: Some(user_template.to_path_buf()),
+            system_template: Some(system_template.into()),
+            user_template: Some(user_template.into()),
             assistant_template: None,
         };
         let models = HashMap::from([("error".to_string(), error_model_config.clone())]);
@@ -651,8 +651,8 @@ mod tests {
         let chat_completion_config = ChatCompletionConfig {
             model: "good".to_string(),
             weight: 1.0,
-            system_template: Some(system_template.to_path_buf()),
-            user_template: Some(user_template.to_path_buf()),
+            system_template: Some(system_template.into()),
+            user_template: Some(user_template.into()),
             assistant_template: None,
         };
         let models = HashMap::from([("good".to_string(), text_model_config.clone())]);
