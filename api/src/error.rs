@@ -20,6 +20,13 @@ pub enum Error {
     AnthropicServer {
         message: String,
     },
+    AWSBedrockClient {
+        message: String,
+        status_code: StatusCode,
+    },
+    AWSBedrockServer {
+        message: String,
+    },
     AzureClient {
         message: String,
         status_code: StatusCode,
@@ -155,6 +162,8 @@ impl Error {
             Error::AppState { .. } => tracing::Level::ERROR,
             Error::AnthropicClient { .. } => tracing::Level::WARN,
             Error::AnthropicServer { .. } => tracing::Level::ERROR,
+            Error::AWSBedrockClient { .. } => tracing::Level::WARN,
+            Error::AWSBedrockServer { .. } => tracing::Level::ERROR,
             Error::AzureClient { .. } => tracing::Level::WARN,
             Error::AzureServer { .. } => tracing::Level::ERROR,
             Error::ChannelWrite { .. } => tracing::Level::ERROR,
@@ -205,6 +214,8 @@ impl Error {
             Error::AppState { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::AnthropicClient { status_code, .. } => *status_code,
             Error::AnthropicServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::AWSBedrockClient { status_code, .. } => *status_code,
+            Error::AWSBedrockServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::AzureClient { status_code, .. } => *status_code,
             Error::AzureServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -284,6 +295,12 @@ impl std::fmt::Display for Error {
             }
             Error::AnthropicServer { message } => {
                 write!(f, "Error from Anthropic servers: {}", message)
+            }
+            Error::AWSBedrockClient { message, .. } => {
+                write!(f, "Error from AWS Bedrock client: {}", message)
+            }
+            Error::AWSBedrockServer { message } => {
+                write!(f, "Error from AWS Bedrock servers: {}", message)
             }
             Error::AzureClient { message, .. } => {
                 write!(f, "Error from Azure client: {}", message)

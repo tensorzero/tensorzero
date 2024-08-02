@@ -9,7 +9,8 @@ use crate::{
     error::Error,
     inference::{
         providers::{
-            anthropic::AnthropicProvider, fireworks::FireworksProvider, openai::OpenAIProvider,
+            anthropic::AnthropicProvider, aws_bedrock::AWSBedrockProvider,
+            fireworks::FireworksProvider, openai::OpenAIProvider,
             provider_trait::InferenceProvider, together::TogetherProvider,
         },
         types::{
@@ -85,6 +86,9 @@ pub enum ProviderConfig {
         model_name: String,
         api_key: Option<SecretString>,
     },
+    AWSBedrock {
+        model_id: String,
+    },
     Azure {
         model_name: String,
         api_base: String,
@@ -105,7 +109,9 @@ pub enum ProviderConfig {
         api_key: Option<SecretString>,
     },
     #[cfg(any(test, feature = "e2e_tests"))]
-    Dummy { model_name: String },
+    Dummy {
+        model_name: String,
+    },
 }
 
 impl<'de> Deserialize<'de> for ProviderConfig {
@@ -124,6 +130,10 @@ impl<'de> Deserialize<'de> for ProviderConfig {
         enum ProviderConfigHelper {
             Anthropic {
                 model_name: String,
+            },
+            #[serde(rename = "aws_bedrock")]
+            AWSBedrock {
+                model_id: String,
             },
             Azure {
                 model_name: String,
@@ -153,6 +163,9 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 model_name,
                 api_key: env::var("ANTHROPIC_API_KEY").ok().map(SecretString::new),
             },
+            ProviderConfigHelper::AWSBedrock { model_id } => {
+                ProviderConfig::AWSBedrock { model_id }
+            }
             ProviderConfigHelper::Azure {
                 model_name,
                 api_base,
@@ -195,6 +208,9 @@ impl ProviderConfig {
             ProviderConfig::Anthropic { .. } => {
                 AnthropicProvider::infer(request, self, client).await
             }
+            ProviderConfig::AWSBedrock { .. } => {
+                AWSBedrockProvider::infer(request, self, client).await
+            }
             ProviderConfig::Azure { .. } => {
                 todo!()
             }
@@ -216,6 +232,9 @@ impl ProviderConfig {
         match self {
             ProviderConfig::Anthropic { .. } => {
                 AnthropicProvider::infer_stream(request, self, client).await
+            }
+            ProviderConfig::AWSBedrock { .. } => {
+                AWSBedrockProvider::infer_stream(request, self, client).await
             }
             ProviderConfig::Azure { .. } => {
                 todo!()
