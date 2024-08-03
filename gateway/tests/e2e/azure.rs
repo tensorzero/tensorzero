@@ -7,9 +7,9 @@ use uuid::Uuid;
 
 use crate::e2e::common::{select_inference_clickhouse, select_model_inferences_clickhouse};
 
-/// OpenAI E2E tests
+/// Azure E2E tests
 ///
-/// This file contains a set of tests that check that the OpenAI integration works and the appropriate stuff is written to DB.
+/// This file contains a set of tests that check that the Azure integration works and the appropriate stuff is written to DB.
 ///
 /// Currently we test:
 /// - basic inference
@@ -33,7 +33,7 @@ async fn test_inference_basic() {
 
     let payload = json!({
         "function_name": "basic_test",
-        "variant_name": "openai",
+        "variant_name": "azure",
         "episode_id": episode_id,
         "input":
             [
@@ -94,7 +94,7 @@ async fn test_inference_basic() {
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
     assert_eq!(retrieved_episode_id, episode_id);
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, "test");
+    assert_eq!(variant_name, "azure");
 
     // Next, check ModelInference table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -121,7 +121,7 @@ async fn test_streaming() {
 
     let payload = json!({
         "function_name": "basic_test",
-        "variant_name": "openai",
+        "variant_name": "azure",
         "episode_id": episode_id,
         "input":
             [
@@ -155,6 +155,7 @@ async fn test_streaming() {
     let mut inference_id = None;
     let mut full_content = String::new();
     for chunk in chunks {
+        println!("chunk: {}", chunk);
         let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
         if let Some(content) = chunk_json.get("content").unwrap().as_str() {
             full_content.push_str(content);
@@ -189,7 +190,7 @@ async fn test_streaming() {
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
     assert_eq!(function_name, payload["function_name"]);
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, "test");
+    assert_eq!(variant_name, "azure");
 
     // Next, check ModelInference table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -198,10 +199,12 @@ async fn test_streaming() {
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, payload["input"]);
-    let input_tokens: u64 = result.get("input_tokens").unwrap().as_u64().unwrap();
-    let output_tokens: u64 = result.get("output_tokens").unwrap().as_u64().unwrap();
-    assert!(input_tokens > 0);
-    assert!(output_tokens > 0);
+    // TODO: As far as @virajmehta can tell, Azure OpenAI service does not support usage as part of its streaming Chat Completions offering.
+    //       If they add it, we can uncomment these lines.
+    // let input_tokens: u64 = result.get("input_tokens").unwrap().as_u64().unwrap();
+    // let output_tokens: u64 = result.get("output_tokens").unwrap().as_u64().unwrap();
+    // assert!(input_tokens > 0);
+    // assert!(output_tokens > 0);
     let output = result.get("output").unwrap().as_str().unwrap();
     assert_eq!(output, full_content);
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
