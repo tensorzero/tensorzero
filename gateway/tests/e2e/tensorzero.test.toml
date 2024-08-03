@@ -38,6 +38,14 @@ routing = ["anthropic", "aws-bedrock"]
 type = "anthropic"
 model_name = "claude-3-haiku-20240307"
 
+# Duplicate so that we can test just Anthropic no fallbacks
+[models.claude-3-haiku-20240307-anthropic]
+routing = ["anthropic"]
+
+[models.claude-3-haiku-20240307-anthropic.providers.anthropic]
+type = "anthropic"
+model_name = "claude-3-haiku-20240307"
+
 [models.claude-3-haiku-20240307.providers.aws-bedrock]
 type = "aws_bedrock"
 model_id = "anthropic.claude-3-haiku-20240307-v1:0"
@@ -113,6 +121,12 @@ system_template = "functions/basic_test/prompt/system_template.minijinja"
 type = "chat_completion"
 weight = 0
 model = "llama3.1-8b-instruct-fireworks"
+system_template = "functions/basic_test/prompt/system_template.minijinja"
+
+[functions.basic_test.variants.anthropic]
+type = "chat_completion"
+weight = 0
+model = "claude-3-haiku-20240307-anthropic"
 system_template = "functions/basic_test/prompt/system_template.minijinja"
 
 [functions.model_fallback_test]

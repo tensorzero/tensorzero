@@ -155,7 +155,6 @@ async fn test_streaming() {
     let mut inference_id = None;
     let mut full_content = String::new();
     for chunk in chunks {
-        println!("chunk: {}", chunk);
         let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
         if let Some(content) = chunk_json.get("content").unwrap().as_str() {
             full_content.push_str(content);
