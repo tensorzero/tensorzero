@@ -94,7 +94,7 @@ async fn test_inference_basic() {
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
     assert_eq!(retrieved_episode_id, episode_id);
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, "test");
+    assert_eq!(variant_name, "openai");
 
     // Next, check ModelInference table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -189,7 +189,7 @@ async fn test_streaming() {
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
     assert_eq!(function_name, payload["function_name"]);
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, "test");
+    assert_eq!(variant_name, "openai");
 
     // Next, check ModelInference table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
