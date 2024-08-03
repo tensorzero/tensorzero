@@ -1,5 +1,6 @@
 #![cfg(feature = "e2e_tests")]
 mod anthropic;
+mod aws_bedrock;
 mod azure;
 mod common;
 mod feedback;
