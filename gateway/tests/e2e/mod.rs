@@ -2,6 +2,7 @@
 mod azure;
 mod common;
 mod feedback;
+mod fireworks;
 mod health;
 mod inference;
 mod openai;

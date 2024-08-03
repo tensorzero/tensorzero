@@ -30,6 +30,7 @@ services:
       - CLICKHOUSE_URL=http://clickhouse:8123
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
+      - FIREWORKS_API_KEY=${FIREWORKS_API_KEY}
     volumes:
       - ./tensorzero.test.toml:/app/tensorzero.test.toml
       - ../../../functions:/app/functions
