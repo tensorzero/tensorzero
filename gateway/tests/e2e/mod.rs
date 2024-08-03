@@ -1,4 +1,5 @@
 #![cfg(feature = "e2e_tests")]
+mod anthropic;
 mod azure;
 mod common;
 mod feedback;
