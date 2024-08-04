@@ -27,15 +27,15 @@ services:
       - "9090:9090" # Prometheus metrics
     command: ["gateway", "/app/tensorzero.test.toml"]
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - AWS_REGION=${AWS_REGION}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:?Environment variable ANTHROPIC_API_KEY is not set}
+      - AWS_REGION=${AWS_REGION:?Environment variable AWS_REGION is not set}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:?Environment variable AWS_ACCESS_KEY_ID is not set}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:?Environment variable AWS_SECRET_ACCESS_KEY is not set}
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY:?Environment variable AZURE_OPENAI_API_KEY is not set}
       - CLICKHOUSE_URL=http://clickhouse:8123
-      - FIREWORKS_API_KEY=${FIREWORKS_API_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - TOGETHER_API_KEY=${TOGETHER_API_KEY}
+      - FIREWORKS_API_KEY=${FIREWORKS_API_KEY:?Environment variable FIREWORKS_API_KEY is not set}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY is not set}
+      - TOGETHER_API_KEY=${TOGETHER_API_KEY:?Environment variable TOGETHER_API_KEY is not set}
     volumes:
       - ./tensorzero.test.toml:/app/tensorzero.test.toml
       - ../../../functions:/app/functions

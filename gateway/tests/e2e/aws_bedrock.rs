@@ -11,9 +11,9 @@ use crate::e2e::common::{select_inference_clickhouse, select_model_inferences_cl
 ///
 /// Currently we test:
 /// - basic inference
-/// - streaming inference
 ///
 /// TODOs:
+///  - streaming inference
 ///  - tool calling
 ///  - JSON mode
 ///  - other API parameters (temp, max_tokens, etc.)

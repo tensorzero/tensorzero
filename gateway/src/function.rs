@@ -192,14 +192,13 @@ pub fn sample_variant(
                 message: format!("Function `{function_name}` has no variants"),
             })?
             .clone();
-        return variants
-            .remove(&sampled_variant_name)
-            .map(|variant| (sampled_variant_name, variant))
-            .ok_or_else(|| Error::InvalidFunctionVariants {
+        return variants.remove_entry(&sampled_variant_name).ok_or_else(|| {
+            Error::InvalidFunctionVariants {
                 message: format!(
                     "Failed to remove sampled variant from function `{function_name}`"
                 ),
-            });
+            }
+        });
     }
 
     // Sample a random threshold between 0 and the total weight
