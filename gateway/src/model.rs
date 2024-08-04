@@ -9,7 +9,7 @@ use crate::{
     error::Error,
     inference::{
         providers::{
-            anthropic::AnthropicProvider, aws_bedrock::AWSBedrockProvider,
+            anthropic::AnthropicProvider, aws_bedrock::AWSBedrockProvider, azure::AzureProvider,
             fireworks::FireworksProvider, openai::OpenAIProvider,
             provider_trait::InferenceProvider, together::TogetherProvider,
         },
@@ -211,9 +211,7 @@ impl ProviderConfig {
             ProviderConfig::AWSBedrock { .. } => {
                 AWSBedrockProvider::infer(request, self, client).await
             }
-            ProviderConfig::Azure { .. } => {
-                todo!()
-            }
+            ProviderConfig::Azure { .. } => AzureProvider::infer(request, self, client).await,
             ProviderConfig::Fireworks { .. } => {
                 FireworksProvider::infer(request, self, client).await
             }
@@ -237,7 +235,7 @@ impl ProviderConfig {
                 AWSBedrockProvider::infer_stream(request, self, client).await
             }
             ProviderConfig::Azure { .. } => {
-                todo!()
+                AzureProvider::infer_stream(request, self, client).await
             }
             ProviderConfig::Fireworks { .. } => {
                 FireworksProvider::infer_stream(request, self, client).await

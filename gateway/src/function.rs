@@ -177,13 +177,29 @@ pub fn sample_variant(
         .map(|variant| variant.weight())
         .sum::<f64>();
 
-    // If the total weight is non-positive, return an error
-    // NOTE: We enforce non-negative weights at the config parsing stage, but it's good to be extra
-    //       safe here to ensure that we catch any regressions we might introduce in the future.
+    // If the total weight is non-positive, perform uniform sampling
+    // NOTE: We enforce non-negative weights at the config parsing stage,
+    //       but there's a chance we pin a weight-zero variant in the config.
+    //       This check also ensures that we catch any regressions we might introduce in the future.
     if total_weight <= 0. {
-        return Err(Error::InvalidFunctionVariants {
-            message: format!("Function `{function_name}` variants have non-positive total weight"),
-        });
+        // Perform uniform sampling if total weight is non-positive
+        let random_index =
+            (get_uniform_value(function_name, episode_id) * variants.len() as f64).floor() as usize;
+        let sampled_variant_name = variants
+            .keys()
+            .nth(random_index)
+            .ok_or_else(|| Error::InvalidFunctionVariants {
+                message: format!("Function `{function_name}` has no variants"),
+            })?
+            .clone();
+        return variants
+            .remove(&sampled_variant_name)
+            .map(|variant| (sampled_variant_name, variant))
+            .ok_or_else(|| Error::InvalidFunctionVariants {
+                message: format!(
+                    "Failed to remove sampled variant from function `{function_name}`"
+                ),
+            });
     }
 
     // Sample a random threshold between 0 and the total weight
@@ -881,6 +897,32 @@ mod tests {
         // Test case 4: Single weights
         let variants = create_variants(&[("Solo", 1.0)]);
         test_variant_distribution(&variants, 10_000, 0.0);
+
+        // Test case 5: All zero weights
+        let variants = create_variants(&[("A", 0.0), ("B", 0.0), ("C", 0.0)]);
+        let sample_size = 10_000;
+        let mut counts: HashMap<String, usize> = HashMap::new();
+
+        for _ in 0..sample_size {
+            let (variant_name, _) =
+                sample_variant(&mut variants.clone(), "test_function", &Uuid::now_v7()).unwrap();
+            *counts.entry(variant_name).or_insert(0) += 1;
+        }
+
+        // Check if all variants are sampled approximately equally
+        let expected_count = sample_size / variants.len();
+        let tolerance = (expected_count as f64 * 0.1) as usize; // 10% tolerance
+
+        for (variant_name, count) in counts {
+            assert!(
+                (count as i32 - expected_count as i32).abs() <= tolerance as i32,
+                "Variant {} was not sampled uniformly. Expected {} +/- {}, got {}",
+                variant_name,
+                expected_count,
+                tolerance,
+                count
+            );
+        }
     }
 
     #[test]

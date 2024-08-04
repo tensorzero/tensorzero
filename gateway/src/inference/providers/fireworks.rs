@@ -184,7 +184,8 @@ struct FireworksRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
     stream: bool,
-    response_format: FireworksResponseFormat<'a>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_format: Option<FireworksResponseFormat<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenAITool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -195,11 +196,17 @@ struct FireworksRequest<'a> {
 
 impl<'a> FireworksRequest<'a> {
     pub fn new(model: &'a str, request: &'a ModelInferenceRequest) -> FireworksRequest<'a> {
+        let tools = request
+            .tools_available
+            .as_ref()
+            .map(|t| t.iter().map(|t| t.into()).collect());
+        // NB: Fireworks will throw an error if you give FireworksResponseFormat::Text and then also include tools.
+        // So we just don't include it as Text is the same as None anyway.
         let response_format = match request.json_mode {
-            true => FireworksResponseFormat::JsonObject {
+            true => Some(FireworksResponseFormat::JsonObject {
                 schema: request.output_schema,
-            },
-            false => FireworksResponseFormat::Text,
+            }),
+            false => None,
         };
         FireworksRequest {
             messages: request.messages.iter().map(|m| m.into()).collect(),
@@ -208,10 +215,7 @@ impl<'a> FireworksRequest<'a> {
             max_tokens: request.max_tokens,
             stream: request.stream,
             response_format,
-            tools: request
-                .tools_available
-                .as_ref()
-                .map(|t| t.iter().map(|t| t.into()).collect()),
+            tools,
             tool_choice: request.tool_choice.as_ref().map(OpenAIToolChoice::from),
             parallel_tool_calls: request.parallel_tool_calls,
         }
@@ -278,9 +282,9 @@ mod tests {
         assert!(!fireworks_request.stream);
         assert_eq!(
             fireworks_request.response_format,
-            FireworksResponseFormat::JsonObject {
+            Some(FireworksResponseFormat::JsonObject {
                 schema: request_with_tools.output_schema,
-            }
+            })
         );
         assert!(fireworks_request.tools.is_some());
         assert_eq!(fireworks_request.tools.as_ref().unwrap().len(), 1);

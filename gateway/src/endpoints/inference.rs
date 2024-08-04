@@ -106,15 +106,6 @@ pub async fn inference_handler(
     // Keep track of which variants failed
     let mut variant_errors = vec![];
 
-    // Create InferenceMetadata
-    let inference_metadata = InferenceMetadata {
-        function_name: params.function_name.clone(),
-        variant_name: params.variant_name.clone().unwrap_or_default(),
-        episode_id,
-        input: params.input.clone(),
-        dryrun,
-    };
-
     // Keep sampling variants until one succeeds
     while !variants.is_empty() {
         let (variant_name, variant) =
@@ -137,6 +128,14 @@ pub async fn inference_handler(
                     variant_errors.push(e);
                     continue;
                 }
+            };
+            // Create InferenceMetadata for a streaming inference
+            let inference_metadata = InferenceMetadata {
+                function_name: params.function_name.clone(),
+                variant_name,
+                episode_id,
+                input: params.input.clone(),
+                dryrun,
             };
             let (client_sender, client_receiver) = mpsc::unbounded_channel();
             tokio::spawn(worker_response_router(

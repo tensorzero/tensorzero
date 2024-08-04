@@ -625,6 +625,7 @@ enum AnthropicStreamMessage {
     },
     MessageDelta {
         delta: Value,
+        usage: Value,
     },
     MessageStart {
         message: Value,
@@ -665,22 +666,18 @@ fn anthropic_to_tensorzero_stream_message(
         AnthropicStreamMessage::Error { error } => Err(Error::AnthropicServer {
             message: error.to_string(),
         }),
-        AnthropicStreamMessage::MessageDelta { delta } => {
-            if let Some(usage_info) = delta.get("usage") {
-                let usage = parse_usage_info(usage_info);
-                Ok(Some(ModelInferenceResponseChunk::new(
-                    inference_id,
-                    None,
-                    None,
-                    Some(usage.into()),
-                    raw_message,
-                )))
-            } else {
-                Ok(None)
-            }
+        AnthropicStreamMessage::MessageDelta { usage, .. } => {
+            let usage = parse_usage_info(&usage);
+            Ok(Some(ModelInferenceResponseChunk::new(
+                inference_id,
+                None,
+                None,
+                Some(usage.into()),
+                raw_message,
+            )))
         }
         AnthropicStreamMessage::MessageStart { message } => {
-            if let Some(usage_info) = message.get("message").and_then(|m| m.get("usage")) {
+            if let Some(usage_info) = message.get("usage") {
                 let usage = parse_usage_info(usage_info);
                 Ok(Some(ModelInferenceResponseChunk::new(
                     inference_id,
@@ -1577,7 +1574,8 @@ mod tests {
 
         // Test MessageDelta with usage
         let message_delta = AnthropicStreamMessage::MessageDelta {
-            delta: json!({"usage": {"input_tokens": 10, "output_tokens": 20}}),
+            delta: json!({}),
+            usage: json!({"input_tokens": 10, "output_tokens": 20}),
         };
         let result = anthropic_to_tensorzero_stream_message(message_delta, inference_id);
         assert!(result.is_ok());
@@ -1591,7 +1589,7 @@ mod tests {
 
         // Test MessageStart with usage
         let message_start = AnthropicStreamMessage::MessageStart {
-            message: json!({"message": {"usage": {"input_tokens": 5, "output_tokens": 15}}}),
+            message: json!({"usage": {"input_tokens": 5, "output_tokens": 15}}),
         };
         let result = anthropic_to_tensorzero_stream_message(message_start, inference_id);
         assert!(result.is_ok());
