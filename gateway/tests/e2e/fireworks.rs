@@ -95,6 +95,8 @@ async fn test_inference_basic() {
     assert_eq!(retrieved_episode_id, episode_id);
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "fireworks");
+    let latency_ms = result.get("latency_ms").unwrap().as_u64().unwrap();
+    assert!(latency_ms > 100);
 
     // Next, check ModelInference table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -111,6 +113,11 @@ async fn test_inference_basic() {
     assert_eq!(output, content);
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     let _: Value = serde_json::from_str(raw_response).unwrap();
+    let latency_ms = result.get("latency_ms").unwrap().as_u64().unwrap();
+    assert!(latency_ms > 100);
+    let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
+    // TTFT is zero for non-streaming inferences
+    assert_eq!(ttft_ms, 0);
 }
 
 /// This test checks that streaming inference works as expected.
@@ -190,6 +197,8 @@ async fn test_streaming() {
     assert_eq!(function_name, payload["function_name"]);
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "fireworks");
+    let latency_ms = result.get("latency_ms").unwrap().as_u64().unwrap();
+    assert!(latency_ms > 100);
 
     // Next, check ModelInference table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -209,4 +218,9 @@ async fn test_streaming() {
     for line in raw_response.lines() {
         let _: Value = serde_json::from_str(line).expect("Each line should be valid JSON");
     }
+    let latency_ms = result.get("latency_ms").unwrap().as_u64().unwrap();
+    assert!(latency_ms > 100);
+    let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
+    assert!(ttft_ms > 100);
+    assert!(ttft_ms <= latency_ms);
 }

@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS Inference
     episode_id UUID,
     input String,
     output Nullable(String),
+    latency_ms UInt32,
     -- This is whatever string we got from the Inference, without output sanitization
     raw_output String,
 ) ENGINE = MergeTree()
@@ -66,6 +67,8 @@ CREATE TABLE IF NOT EXISTS ModelInference
     output String,
     raw_response String,
     input_tokens UInt32,
-    output_tokens UInt32
+    output_tokens UInt32,
+    latency_ms UInt32,
+    ttft_ms UInt32, -- This is 0 if null since that's impossible
 ) ENGINE = MergeTree()
 ORDER BY inference_id;

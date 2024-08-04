@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
@@ -5,7 +7,7 @@ use super::provider_trait::InferenceProvider;
 
 use crate::error::Error;
 use crate::inference::types::{
-    InferenceResponseStream, ModelInferenceRequest, ModelInferenceResponse,
+    InferenceResponseStream, Latency, ModelInferenceRequest, ModelInferenceResponse,
     ModelInferenceResponseChunk, Usage,
 };
 use crate::model::ProviderConfig;
@@ -85,6 +87,9 @@ impl InferenceProvider for DummyProvider {
             _ => DUMMY_INFER_RESPONSE_RAW.to_string(),
         };
         let usage = DUMMY_INFER_USAGE.clone();
+        let latency = Latency::NonStreaming {
+            ttd: Duration::from_millis(100),
+        };
         Ok(ModelInferenceResponse {
             id,
             created,
@@ -92,6 +97,7 @@ impl InferenceProvider for DummyProvider {
             tool_calls: None,
             raw,
             usage,
+            latency,
         })
     }
 
@@ -131,9 +137,11 @@ impl InferenceProvider for DummyProvider {
             tool_calls: None,
             usage: None,
             raw: "".to_string(),
+            latency: Duration::from_millis(100),
         };
-        let stream = tokio_stream::iter(content_chunks.into_iter().skip(1))
-            .map(move |chunk| {
+        let content_chunk_len = content_chunks.len();
+        let stream = tokio_stream::iter(content_chunks.into_iter().skip(1).enumerate())
+            .map(move |(i, chunk)| {
                 Ok(ModelInferenceResponseChunk {
                     inference_id: id,
                     created,
@@ -141,6 +149,7 @@ impl InferenceProvider for DummyProvider {
                     tool_calls: None,
                     usage: None,
                     raw: "".to_string(),
+                    latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
                 })
             })
             .chain(tokio_stream::once(Ok(ModelInferenceResponseChunk {
@@ -153,6 +162,7 @@ impl InferenceProvider for DummyProvider {
                     completion_tokens: total_tokens,
                 }),
                 raw: "".to_string(),
+                latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),
             })))
             .throttle(std::time::Duration::from_millis(10));
 

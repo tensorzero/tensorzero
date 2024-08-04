@@ -164,8 +164,8 @@ pub struct Usage {
     pub completion_tokens: u32,
 }
 
-// TODO: use this and write to DB somehow
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(untagged)]
 pub enum Latency {
     Streaming { ttft: Duration, ttd: Duration },
     NonStreaming { ttd: Duration },
@@ -180,6 +180,7 @@ pub struct ModelInferenceResponse {
     pub tool_calls: Option<Vec<ToolCall>>,
     pub raw: String,
     pub usage: Usage,
+    pub latency: Latency,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -191,11 +192,17 @@ pub struct ModelInference {
     pub raw_response: String,
     pub input_tokens: u32,
     pub output_tokens: u32,
+    pub latency_ms: u32,
+    pub ttft_ms: u32,
 }
 
 impl ModelInference {
     pub fn new(response: ModelInferenceResponse, input: String, inference_id: Uuid) -> Self {
         // TODO: deal with tools
+        let (latency_ms, ttft_ms) = match response.latency {
+            Latency::Streaming { ttft, ttd } => (ttd.as_millis() as u32, ttft.as_millis() as u32),
+            Latency::NonStreaming { ttd } => (ttd.as_millis() as u32, 0),
+        };
         Self {
             id: Uuid::now_v7(),
             inference_id,
@@ -204,6 +211,8 @@ impl ModelInference {
             raw_response: response.raw,
             input_tokens: response.usage.prompt_tokens,
             output_tokens: response.usage.completion_tokens,
+            latency_ms,
+            ttft_ms,
         }
     }
 }
@@ -214,6 +223,7 @@ impl ModelInferenceResponse {
         tool_calls: Option<Vec<ToolCall>>,
         raw: String,
         usage: Usage,
+        latency: Latency,
     ) -> Self {
         Self {
             id: Uuid::now_v7(),
@@ -222,6 +232,7 @@ impl ModelInferenceResponse {
             tool_calls,
             raw,
             usage,
+            latency,
         }
     }
 }
@@ -236,19 +247,27 @@ pub struct ChatInferenceResponse {
     pub usage: Usage,
     #[serde(skip_serializing)]
     pub model_inference_responses: Vec<ModelInferenceResponse>,
+    #[serde(skip_serializing)]
+    pub latency: Latency,
 }
 
 impl ChatInferenceResponse {
     pub fn new(
         inference_id: Uuid,
-        created: u64,
         raw_content: Option<String>,
         tool_calls: Option<Vec<ToolCall>>,
         usage: Usage,
         model_inference_responses: Vec<ModelInferenceResponse>,
         output_schema: Option<&JSONSchemaFromPath>,
+        latency: Latency,
     ) -> Self {
+        #[allow(clippy::expect_used)]
+        let created = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_secs();
         let content = Self::parse_output(raw_content.as_deref(), output_schema).ok_or_log();
+        // For the entire model inference we only store the ttd latency. So, we can simply take the start time and calculate.
         Self {
             inference_id,
             created,
@@ -257,6 +276,7 @@ impl ChatInferenceResponse {
             tool_calls,
             usage,
             model_inference_responses,
+            latency,
         }
     }
 
@@ -314,6 +334,7 @@ pub struct Inference {
     pub input: String,
     pub output: Option<Value>,
     pub raw_output: String,
+    pub latency_ms: u32,
 }
 
 impl Inference {
@@ -325,15 +346,22 @@ impl Inference {
         variant_name: String,
     ) -> Self {
         match inference_response {
-            InferenceResponse::Chat(chat_response) => Self {
-                id: chat_response.inference_id,
-                function_name,
-                variant_name,
-                episode_id,
-                input,
-                raw_output: chat_response.raw_content.unwrap_or_default(),
-                output: chat_response.content,
-            },
+            InferenceResponse::Chat(chat_response) => {
+                let latency_ms = match chat_response.latency {
+                    Latency::Streaming { ttd, .. } => ttd.as_millis() as u32,
+                    Latency::NonStreaming { ttd } => ttd.as_millis() as u32,
+                };
+                Self {
+                    id: chat_response.inference_id,
+                    function_name,
+                    variant_name,
+                    episode_id,
+                    input,
+                    raw_output: chat_response.raw_content.unwrap_or_default(),
+                    output: chat_response.content,
+                    latency_ms,
+                }
+            }
         }
     }
 }
@@ -388,6 +416,7 @@ pub struct ModelInferenceResponseChunk {
     pub created: u64,
     pub usage: Option<Usage>,
     pub raw: String,
+    pub latency: Duration,
 }
 
 impl ModelInferenceResponseChunk {
@@ -397,6 +426,7 @@ impl ModelInferenceResponseChunk {
         tool_calls: Option<Vec<ToolCallChunk>>,
         usage: Option<Usage>,
         raw: String,
+        latency: Duration,
     ) -> Self {
         Self {
             inference_id,
@@ -405,6 +435,7 @@ impl ModelInferenceResponseChunk {
             created: current_timestamp(),
             usage,
             raw,
+            latency,
         }
     }
 }
@@ -423,13 +454,6 @@ pub fn collect_chunks(
                 .to_string(),
         })?
         .inference_id;
-    let created = value
-        .first()
-        .ok_or(Error::TypeConversion {
-            message: "Attempted to create an InferenceResponse from an empty response chunk vector"
-                .to_string(),
-        })?
-        .created;
     let mut content: Option<String> = None;
     let mut tool_calls: Option<Vec<ToolCall>> = None;
     let raw: String = value
@@ -438,14 +462,27 @@ pub fn collect_chunks(
         .collect::<Vec<&str>>()
         .join("\n");
     let mut usage: Usage = Usage::default();
+    let mut ttft: Option<Duration> = None;
+    let ttd = value
+        .last()
+        .ok_or(Error::TypeConversion {
+            message: "Attempted to create an InferenceResponse from an empty response chunk vector"
+                .to_string(),
+        })?
+        .latency;
     for chunk in value {
         content = match content {
             Some(c) => Some(c + &chunk.content.unwrap_or_default()),
             None => chunk.content,
         };
+        if let Some(content) = &content {
+            if !content.is_empty() && ttft.is_none() {
+                ttft = Some(chunk.latency);
+            }
+        }
         tool_calls = match tool_calls {
             Some(_) => {
-                unreachable!()
+                unimplemented!()
                 // TODO: when we add this code back, make _ into mut t
                 // for (j, tool_call) in chunk.tool_calls.unwrap_or_default().iter().enumerate() {
                 //     if let Some(existing_tool_call) = t.get_mut(j) {
@@ -454,6 +491,7 @@ pub fn collect_chunks(
                 //             .push_str(tool_call.arguments.as_deref().unwrap_or_default());
                 //     }
                 // }
+                // TODO: figure out latency for tool call streaming
                 // Some(t)
             }
             None => chunk.tool_calls.map(|tool_calls| {
@@ -472,21 +510,27 @@ pub fn collect_chunks(
                 .saturating_add(chunk_usage.completion_tokens);
         }
     }
+
+    let ttft = ttft.ok_or(Error::TypeConversion {
+        message: "Never got TTFT because there was never content in the response.".to_string(),
+    })?;
+    let latency = Latency::Streaming { ttft, ttd };
     let model_response = ModelInferenceResponse::new(
         content.clone(),
         tool_calls.clone(),
         raw.clone(),
         usage.clone(),
+        latency.clone(),
     );
 
     Ok(InferenceResponse::Chat(ChatInferenceResponse::new(
         inference_id,
-        created,
         content,
         tool_calls,
         usage,
         vec![model_response],
         output_schema,
+        latency,
     )))
 }
 
@@ -521,7 +565,6 @@ mod tests {
         // TODO: handle the tool call case here. For now, we will always set those values to None.
         // Case 1: No output schema
         let inference_id = Uuid::now_v7();
-        let created = current_timestamp();
         let content = Some("Hello, world!".to_string());
         let tool_calls = None;
         let usage = Usage {
@@ -533,22 +576,32 @@ mod tests {
             tool_calls.clone(),
             "".to_string(),
             usage.clone(),
+            Latency::NonStreaming {
+                ttd: Duration::default(),
+            },
         )];
         let chat_inference_response = ChatInferenceResponse::new(
             inference_id,
-            created,
             content.clone(),
             tool_calls.clone(),
             usage.clone(),
             model_inference_responses,
             None,
+            Latency::NonStreaming {
+                ttd: Duration::from_millis(100),
+            },
         );
         let parsed_content = content.as_ref().map(|c| Value::String(c.clone()));
         assert_eq!(chat_inference_response.inference_id, inference_id);
-        assert_eq!(chat_inference_response.created, created);
         assert_eq!(chat_inference_response.content, parsed_content);
         assert_eq!(chat_inference_response.tool_calls, tool_calls);
         assert_eq!(chat_inference_response.usage, usage);
+        assert_eq!(
+            chat_inference_response.latency,
+            Latency::NonStreaming {
+                ttd: Duration::from_millis(100),
+            }
+        );
 
         // Case 2: a JSON string that passes validation
         let inference_id = Uuid::now_v7();
@@ -559,11 +612,16 @@ mod tests {
             prompt_tokens: 15,
             completion_tokens: 25,
         };
+
+        let latency = Latency::NonStreaming {
+            ttd: Duration::from_millis(400),
+        };
         let model_inference_responses = vec![ModelInferenceResponse::new(
             Some(json_content.clone()),
             tool_calls.clone(),
             json_content.clone(),
             usage.clone(),
+            latency.clone(),
         )];
 
         let schema = serde_json::json!({
@@ -578,12 +636,12 @@ mod tests {
 
         let chat_inference_response = ChatInferenceResponse::new(
             inference_id,
-            created,
             Some(json_content.clone()),
             tool_calls.clone(),
             usage.clone(),
             model_inference_responses,
             Some(&output_schema),
+            latency,
         );
 
         assert_eq!(chat_inference_response.inference_id, inference_id);
@@ -596,6 +654,12 @@ mod tests {
         assert_eq!(chat_inference_response.raw_content, Some(json_content));
         assert_eq!(chat_inference_response.tool_calls, tool_calls);
         assert_eq!(chat_inference_response.usage, usage);
+        assert_eq!(
+            chat_inference_response.latency,
+            Latency::NonStreaming {
+                ttd: Duration::from_millis(400),
+            }
+        );
 
         // TODO: assert that the appropriate errors were logged in the next two test cases
         // Case 3: a JSON string that fails validation
@@ -605,16 +669,21 @@ mod tests {
             None,
             invalid_json_content.clone(),
             usage.clone(),
+            Latency::NonStreaming {
+                ttd: Duration::from_millis(300),
+            },
         )];
 
         let chat_inference_response = ChatInferenceResponse::new(
             inference_id,
-            created,
             Some(invalid_json_content.clone()),
             None,
             usage.clone(),
             model_inference_responses,
             Some(&output_schema),
+            Latency::NonStreaming {
+                ttd: Duration::from_millis(300),
+            },
         );
 
         assert_eq!(chat_inference_response.inference_id, inference_id);
@@ -627,6 +696,12 @@ mod tests {
         );
         assert_eq!(chat_inference_response.tool_calls, None);
         assert_eq!(chat_inference_response.usage, usage);
+        assert_eq!(
+            chat_inference_response.latency,
+            Latency::NonStreaming {
+                ttd: Duration::from_millis(300),
+            }
+        );
 
         // Case 4: a malformed JSON
         let malformed_json = r#"{"name": "John", "age": 30,"#.to_string();
@@ -635,16 +710,21 @@ mod tests {
             None,
             malformed_json.clone(),
             usage.clone(),
+            Latency::NonStreaming {
+                ttd: Duration::from_millis(310),
+            },
         )];
 
         let chat_inference_response = ChatInferenceResponse::new(
             inference_id,
-            created,
             Some(malformed_json.clone()),
             None,
             usage.clone(),
             model_inference_responses,
             Some(&output_schema),
+            Latency::NonStreaming {
+                ttd: Duration::from_millis(310),
+            },
         );
 
         assert_eq!(chat_inference_response.inference_id, inference_id);
@@ -654,6 +734,12 @@ mod tests {
         assert_eq!(chat_inference_response.raw_content, Some(malformed_json));
         assert_eq!(chat_inference_response.tool_calls, None);
         assert_eq!(chat_inference_response.usage, usage);
+        assert_eq!(
+            chat_inference_response.latency,
+            Latency::NonStreaming {
+                ttd: Duration::from_millis(310),
+            }
+        );
     }
 
     #[test]
@@ -675,6 +761,7 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let created = current_timestamp();
         let content = Some("Hello,".to_string());
+        let latency = Duration::from_millis(150);
         let chunks = vec![
             ModelInferenceResponseChunk {
                 inference_id,
@@ -683,6 +770,7 @@ mod tests {
                 created,
                 usage: None,
                 raw: "{\"message\": \"Hello}".to_string(),
+                latency,
             },
             ModelInferenceResponseChunk {
                 inference_id,
@@ -694,6 +782,7 @@ mod tests {
                     completion_tokens: 4,
                 }),
                 raw: ", world!\"}".to_string(),
+                latency: Duration::from_millis(250),
             },
         ];
         let response = collect_chunks(chunks, None).unwrap();
@@ -711,6 +800,13 @@ mod tests {
             Usage {
                 prompt_tokens: 2,
                 completion_tokens: 4,
+            }
+        );
+        assert_eq!(
+            chat_response.latency,
+            Latency::Streaming {
+                ttft: Duration::from_millis(150),
+                ttd: Duration::from_millis(250),
             }
         );
 
@@ -741,6 +837,7 @@ mod tests {
                 created,
                 usage: Some(usage1.clone()),
                 raw: "{\"name\":".to_string(),
+                latency: Duration::from_millis(150),
             },
             ModelInferenceResponseChunk {
                 inference_id,
@@ -749,6 +846,7 @@ mod tests {
                 created,
                 usage: Some(usage2.clone()),
                 raw: "\"John\",\"age\":30}".to_string(),
+                latency: Duration::from_millis(250),
             },
         ];
         let response = collect_chunks(chunks, Some(&schema)).unwrap();
@@ -769,6 +867,13 @@ mod tests {
             Usage {
                 prompt_tokens: 15,
                 completion_tokens: 15,
+            }
+        );
+        assert_eq!(
+            chat_response.latency,
+            Latency::Streaming {
+                ttft: Duration::from_millis(150),
+                ttd: Duration::from_millis(250),
             }
         );
 
@@ -795,6 +900,7 @@ mod tests {
                 created,
                 usage: Some(usage.clone()),
                 raw: "{\"name\":".to_string(),
+                latency: Duration::from_millis(100),
             },
             ModelInferenceResponseChunk {
                 inference_id,
@@ -803,6 +909,7 @@ mod tests {
                 created,
                 usage: None,
                 raw: "\"John\"}".to_string(),
+                latency: Duration::from_millis(200),
             },
         ];
         let result = collect_chunks(chunks, Some(&schema));
@@ -818,6 +925,13 @@ mod tests {
             );
             assert_eq!(chat_response.tool_calls, None);
             assert_eq!(chat_response.usage, usage);
+            assert_eq!(
+                chat_response.latency,
+                Latency::Streaming {
+                    ttft: Duration::from_millis(100),
+                    ttd: Duration::from_millis(200),
+                }
+            );
         } else {
             unreachable!("Expected Ok(InferenceResponse::Chat), got {:?}", result);
         }
@@ -845,6 +959,7 @@ mod tests {
                 created,
                 usage: Some(usage.clone()),
                 raw: "{\"name\":\"John\",".to_string(),
+                latency: Duration::from_millis(100),
             },
             ModelInferenceResponseChunk {
                 inference_id,
@@ -853,6 +968,7 @@ mod tests {
                 created,
                 usage: None,
                 raw: "".to_string(),
+                latency: Duration::from_millis(200),
             },
             ModelInferenceResponseChunk {
                 inference_id,
@@ -861,6 +977,7 @@ mod tests {
                 created,
                 usage: None,
                 raw: "\"age\":30}".to_string(),
+                latency: Duration::from_millis(300),
             },
         ];
         let result = collect_chunks(chunks, Some(&schema));
@@ -878,6 +995,13 @@ mod tests {
             );
             assert_eq!(chat_response.tool_calls, None);
             assert_eq!(chat_response.usage, usage);
+            assert_eq!(
+                chat_response.latency,
+                Latency::Streaming {
+                    ttft: Duration::from_millis(100),
+                    ttd: Duration::from_millis(300),
+                }
+            );
         } else {
             unreachable!("Expected Ok(InferenceResponse::Chat), got {:?}", result);
         }

@@ -1,13 +1,13 @@
 use reqwest::Client;
 use serde::Deserialize;
-use std::time::{SystemTime, UNIX_EPOCH};
 use std::{collections::HashMap, path::PathBuf};
+use tokio::time::Instant;
 use uuid::Uuid;
 
 use crate::error::Error;
 use crate::inference::types::{
     AssistantInferenceRequestMessage, ChatInferenceResponse, FunctionType, InferenceRequestMessage,
-    InputMessageRole, ModelInferenceRequest, ModelInferenceResponseChunk,
+    InputMessageRole, Latency, ModelInferenceRequest, ModelInferenceResponseChunk,
     SystemInferenceRequestMessage, UserInferenceRequestMessage,
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
@@ -165,6 +165,7 @@ impl Variant for ChatCompletionConfig {
             Some(s) => Some(s.value()?),
             None => None,
         };
+        let start_time = Instant::now();
         let request = ModelInferenceRequest {
             messages,
             tools_available: None,
@@ -183,24 +184,22 @@ impl Variant for ChatCompletionConfig {
         let model_inference_response = model_config.infer(&request, client).await?;
 
         let inference_id = Uuid::now_v7();
-        #[allow(clippy::expect_used)]
-        let created = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_secs();
+
         let raw_content = model_inference_response.content.clone();
         let tool_calls = model_inference_response.tool_calls.clone();
         let usage = model_inference_response.usage.clone();
         let model_inference_responses = vec![model_inference_response];
-
+        let latency = Latency::NonStreaming {
+            ttd: start_time.elapsed(),
+        };
         Ok(InferenceResponse::Chat(ChatInferenceResponse::new(
             inference_id,
-            created,
             raw_content,
             tool_calls,
             usage,
             model_inference_responses,
             output_schema,
+            latency,
         )))
     }
 

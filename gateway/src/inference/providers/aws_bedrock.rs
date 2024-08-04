@@ -4,11 +4,12 @@ use aws_sdk_bedrockruntime::types::{
     Message, SystemContentBlock,
 };
 use tokio::sync::OnceCell;
+use tokio::time::Instant;
 
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
-    InferenceRequestMessage, InferenceResponseStream, ModelInferenceRequest,
+    InferenceRequestMessage, InferenceResponseStream, Latency, ModelInferenceRequest,
     ModelInferenceResponse, ModelInferenceResponseChunk, ToolCall, Usage,
 };
 use crate::model::ProviderConfig;
@@ -83,11 +84,15 @@ impl InferenceProvider for AWSBedrockProvider {
         // TODO: .tool_config(...)
 
         // TODO: add more granularity to error handling
+        let start_time = Instant::now();
         let output = request.send().await.map_err(|e| Error::AWSBedrockServer {
             message: e.to_string(),
         })?;
+        let latency = Latency::NonStreaming {
+            ttd: start_time.elapsed(),
+        };
 
-        output.try_into()
+        ConverseOutputWithLatency { output, latency }.try_into()
     }
 
     async fn infer_stream<'a>(
@@ -138,10 +143,16 @@ impl TryFrom<&InferenceRequestMessage> for Message {
     }
 }
 
-impl TryFrom<ConverseOutput> for ModelInferenceResponse {
+struct ConverseOutputWithLatency {
+    output: ConverseOutput,
+    latency: Latency,
+}
+
+impl TryFrom<ConverseOutputWithLatency> for ModelInferenceResponse {
     type Error = Error;
 
-    fn try_from(output: ConverseOutput) -> Result<Self, Self::Error> {
+    fn try_from(value: ConverseOutputWithLatency) -> Result<Self, Self::Error> {
+        let ConverseOutputWithLatency { output, latency } = value;
         // TODO: is there something we can do about this?
         let raw = format!("{:?}", output); // AWS SDK doesn't implement Serialize :(
 
@@ -182,6 +193,7 @@ impl TryFrom<ConverseOutput> for ModelInferenceResponse {
             tool_calls,
             raw,
             usage,
+            latency,
         ))
     }
 }

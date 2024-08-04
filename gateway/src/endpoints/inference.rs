@@ -278,7 +278,7 @@ fn prepare_event(
             })?
         }
         FunctionConfig::Tool(_) => {
-            unreachable!()
+            unimplemented!()
         }
     };
     chunk_json["variant_name"] = metadata.variant_name.to_string().into();
@@ -335,7 +335,7 @@ async fn write_inference(
 mod tests {
     use super::*;
 
-    use std::collections::HashMap;
+    use std::{collections::HashMap, time::Duration};
     use uuid::Uuid;
 
     use crate::{function::FunctionConfigChat, inference::types::ModelInferenceResponseChunk};
@@ -350,6 +350,7 @@ mod tests {
             created: 0,
             usage: None,
             raw: "".to_string(),
+            latency: Duration::from_millis(100),
         };
         let function = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),

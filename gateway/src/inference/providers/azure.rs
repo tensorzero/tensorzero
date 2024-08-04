@@ -3,17 +3,18 @@ use reqwest::StatusCode;
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::ExposeSecret;
 use serde::Serialize;
+use tokio::time::Instant;
 
 use crate::error::Error;
 use crate::inference::types::{
-    InferenceResponseStream, ModelInferenceRequest, ModelInferenceResponse,
+    InferenceResponseStream, Latency, ModelInferenceRequest, ModelInferenceResponse,
     ModelInferenceResponseChunk,
 };
 use crate::model::ProviderConfig;
 
 use super::openai::{
-    handle_openai_error, stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAITool,
-    OpenAIToolChoice,
+    handle_openai_error, stream_openai, OpenAIRequestMessage, OpenAIResponse,
+    OpenAIResponseWithLatency, OpenAITool, OpenAIToolChoice,
 };
 use super::provider_trait::InferenceProvider;
 
@@ -47,6 +48,7 @@ impl InferenceProvider for AzureProvider {
         };
         let request_body = AzureRequest::new(model_name, request);
         let request_url = get_azure_chat_url(api_base, deployment_id);
+        let start_time = Instant::now();
         let res = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
@@ -59,15 +61,21 @@ impl InferenceProvider for AzureProvider {
                 status_code: e.status().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
             })?;
         if res.status().is_success() {
+            let latency = Latency::NonStreaming {
+                ttd: start_time.elapsed(),
+            };
             let response_body =
                 res.json::<OpenAIResponse>()
                     .await
                     .map_err(|e| Error::AzureServer {
                         message: format!("Error parsing response: {e}"),
                     })?;
-            Ok(response_body
-                .try_into()
-                .map_err(map_openai_to_azure_error)?)
+            Ok(OpenAIResponseWithLatency {
+                response: response_body,
+                latency,
+            }
+            .try_into()
+            .map_err(map_openai_to_azure_error)?)
         } else {
             handle_openai_error(
                 res.status(),
@@ -106,6 +114,7 @@ impl InferenceProvider for AzureProvider {
         };
         let request_body = AzureRequest::new(model_name, request);
         let request_url = get_azure_chat_url(api_base, deployment_id);
+        let start_time = Instant::now();
         let event_source = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
@@ -116,7 +125,7 @@ impl InferenceProvider for AzureProvider {
                 message: format!("Error sending request to Azure: {e}"),
             })?;
         let mut stream = Box::pin(
-            stream_openai(event_source)
+            stream_openai(event_source, start_time)
                 .await
                 .map_err(map_openai_to_azure_error),
         );
