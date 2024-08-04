@@ -11,12 +11,12 @@ use crate::e2e::common::{select_inference_clickhouse, select_model_inferences_cl
 ///
 /// Currently we test:
 /// - basic inference
-/// - streaming inference
 ///
 /// TODOs:
-///  - tool calling
-///  - JSON mode
-///  - other API parameters (temp, max_tokens, etc.)
+/// - streaming inference
+/// - tool calling
+/// - JSON mode
+/// - other API parameters (temp, max_tokens, etc.)
 
 // TODO: make this endpoint configurable with some kind of env var
 const INFERENCE_URL: &str = "http://localhost:3000/inference";
