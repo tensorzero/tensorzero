@@ -116,9 +116,7 @@ async fn test_inference_basic() {
     let _: Value = serde_json::from_str(raw_response).unwrap();
     let latency_ms = result.get("latency_ms").unwrap().as_u64().unwrap();
     assert!(latency_ms > 100);
-    let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    // TTFT is zero for non-streaming inferences
-    assert_eq!(ttft_ms, 0);
+    assert!(result.get("ttft_ms").unwrap().is_null());
 }
 
 /// This test checks that streaming inference works as expected.

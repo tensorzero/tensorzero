@@ -69,7 +69,7 @@ impl InferenceProvider for FireworksProvider {
                 message: format!("Error sending request to Fireworks: {e}"),
             })?;
         let latency = Latency::NonStreaming {
-            ttd: start_time.elapsed(),
+            response_time: start_time.elapsed(),
         };
         if res.status().is_success() {
             let response_body =

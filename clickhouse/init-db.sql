@@ -69,6 +69,6 @@ CREATE TABLE IF NOT EXISTS ModelInference
     input_tokens UInt32,
     output_tokens UInt32,
     latency_ms UInt32,
-    ttft_ms UInt32, -- This is 0 if null since that's impossible
+    ttft_ms Nullable(UInt32),
 ) ENGINE = MergeTree()
 ORDER BY inference_id;

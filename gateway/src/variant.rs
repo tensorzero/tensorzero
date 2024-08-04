@@ -190,7 +190,7 @@ impl Variant for ChatCompletionConfig {
         let usage = model_inference_response.usage.clone();
         let model_inference_responses = vec![model_inference_response];
         let latency = Latency::NonStreaming {
-            ttd: start_time.elapsed(),
+            response_time: start_time.elapsed(),
         };
         Ok(InferenceResponse::Chat(ChatInferenceResponse::new(
             inference_id,

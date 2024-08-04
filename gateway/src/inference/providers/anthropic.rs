@@ -64,7 +64,7 @@ impl InferenceProvider for AnthropicProvider {
                 message: format!("Error sending request: {e}"),
             })?;
         let latency = Latency::NonStreaming {
-            ttd: start_time.elapsed(),
+            response_time: start_time.elapsed(),
         };
         if res.status().is_success() {
             let body =
@@ -1395,7 +1395,7 @@ mod tests {
             },
         };
         let latency = Latency::NonStreaming {
-            ttd: Duration::from_millis(100),
+            response_time: Duration::from_millis(100),
         };
         let body_with_latency = AnthropicResponseBodyWithLatency {
             body: anthropic_response_body.clone(),

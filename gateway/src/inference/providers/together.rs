@@ -77,7 +77,7 @@ impl InferenceProvider for TogetherProvider {
             Ok(OpenAIResponseWithLatency {
                 response: response_body,
                 latency: Latency::NonStreaming {
-                    ttd: start_time.elapsed(),
+                    response_time: start_time.elapsed(),
                 },
             }
             .try_into()

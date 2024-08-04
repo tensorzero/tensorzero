@@ -62,7 +62,7 @@ impl InferenceProvider for AzureProvider {
             })?;
         if res.status().is_success() {
             let latency = Latency::NonStreaming {
-                ttd: start_time.elapsed(),
+                response_time: start_time.elapsed(),
             };
             let response_body =
                 res.json::<OpenAIResponse>()

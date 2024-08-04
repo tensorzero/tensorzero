@@ -89,7 +89,7 @@ impl InferenceProvider for AWSBedrockProvider {
             message: e.to_string(),
         })?;
         let latency = Latency::NonStreaming {
-            ttd: start_time.elapsed(),
+            response_time: start_time.elapsed(),
         };
 
         ConverseOutputWithLatency { output, latency }.try_into()

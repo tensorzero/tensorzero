@@ -167,8 +167,13 @@ pub struct Usage {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum Latency {
-    Streaming { ttft: Duration, ttd: Duration },
-    NonStreaming { ttd: Duration },
+    Streaming {
+        ttft: Duration,
+        response_time: Duration,
+    },
+    NonStreaming {
+        response_time: Duration,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -193,15 +198,21 @@ pub struct ModelInference {
     pub input_tokens: u32,
     pub output_tokens: u32,
     pub latency_ms: u32,
-    pub ttft_ms: u32,
+    pub ttft_ms: Option<u32>,
 }
 
 impl ModelInference {
     pub fn new(response: ModelInferenceResponse, input: String, inference_id: Uuid) -> Self {
         // TODO: deal with tools
         let (latency_ms, ttft_ms) = match response.latency {
-            Latency::Streaming { ttft, ttd } => (ttd.as_millis() as u32, ttft.as_millis() as u32),
-            Latency::NonStreaming { ttd } => (ttd.as_millis() as u32, 0),
+            Latency::Streaming {
+                ttft,
+                response_time,
+            } => (
+                response_time.as_millis() as u32,
+                Some(ttft.as_millis() as u32),
+            ),
+            Latency::NonStreaming { response_time } => (response_time.as_millis() as u32, None),
         };
         Self {
             id: Uuid::now_v7(),
@@ -267,7 +278,8 @@ impl ChatInferenceResponse {
             .expect("Time went backwards")
             .as_secs();
         let content = Self::parse_output(raw_content.as_deref(), output_schema).ok_or_log();
-        // For the entire model inference we only store the ttd latency. So, we can simply take the start time and calculate.
+        // For the entire model inference we only store the response_time latency.
+        // So, we can simply take the start time and calculate.
         Self {
             inference_id,
             created,
@@ -348,8 +360,8 @@ impl Inference {
         match inference_response {
             InferenceResponse::Chat(chat_response) => {
                 let latency_ms = match chat_response.latency {
-                    Latency::Streaming { ttd, .. } => ttd.as_millis() as u32,
-                    Latency::NonStreaming { ttd } => ttd.as_millis() as u32,
+                    Latency::Streaming { response_time, .. } => response_time.as_millis() as u32,
+                    Latency::NonStreaming { response_time } => response_time.as_millis() as u32,
                 };
                 Self {
                     id: chat_response.inference_id,
@@ -463,7 +475,7 @@ pub fn collect_chunks(
         .join("\n");
     let mut usage: Usage = Usage::default();
     let mut ttft: Option<Duration> = None;
-    let ttd = value
+    let response_time = value
         .last()
         .ok_or(Error::TypeConversion {
             message: "Attempted to create an InferenceResponse from an empty response chunk vector"
@@ -514,7 +526,10 @@ pub fn collect_chunks(
     let ttft = ttft.ok_or(Error::TypeConversion {
         message: "Never got TTFT because there was never content in the response.".to_string(),
     })?;
-    let latency = Latency::Streaming { ttft, ttd };
+    let latency = Latency::Streaming {
+        ttft,
+        response_time,
+    };
     let model_response = ModelInferenceResponse::new(
         content.clone(),
         tool_calls.clone(),
@@ -577,7 +592,7 @@ mod tests {
             "".to_string(),
             usage.clone(),
             Latency::NonStreaming {
-                ttd: Duration::default(),
+                response_time: Duration::default(),
             },
         )];
         let chat_inference_response = ChatInferenceResponse::new(
@@ -588,7 +603,7 @@ mod tests {
             model_inference_responses,
             None,
             Latency::NonStreaming {
-                ttd: Duration::from_millis(100),
+                response_time: Duration::from_millis(100),
             },
         );
         let parsed_content = content.as_ref().map(|c| Value::String(c.clone()));
@@ -599,7 +614,7 @@ mod tests {
         assert_eq!(
             chat_inference_response.latency,
             Latency::NonStreaming {
-                ttd: Duration::from_millis(100),
+                response_time: Duration::from_millis(100),
             }
         );
 
@@ -614,7 +629,7 @@ mod tests {
         };
 
         let latency = Latency::NonStreaming {
-            ttd: Duration::from_millis(400),
+            response_time: Duration::from_millis(400),
         };
         let model_inference_responses = vec![ModelInferenceResponse::new(
             Some(json_content.clone()),
@@ -657,7 +672,7 @@ mod tests {
         assert_eq!(
             chat_inference_response.latency,
             Latency::NonStreaming {
-                ttd: Duration::from_millis(400),
+                response_time: Duration::from_millis(400),
             }
         );
 
@@ -670,7 +685,7 @@ mod tests {
             invalid_json_content.clone(),
             usage.clone(),
             Latency::NonStreaming {
-                ttd: Duration::from_millis(300),
+                response_time: Duration::from_millis(300),
             },
         )];
 
@@ -682,7 +697,7 @@ mod tests {
             model_inference_responses,
             Some(&output_schema),
             Latency::NonStreaming {
-                ttd: Duration::from_millis(300),
+                response_time: Duration::from_millis(300),
             },
         );
 
@@ -699,7 +714,7 @@ mod tests {
         assert_eq!(
             chat_inference_response.latency,
             Latency::NonStreaming {
-                ttd: Duration::from_millis(300),
+                response_time: Duration::from_millis(300),
             }
         );
 
@@ -711,7 +726,7 @@ mod tests {
             malformed_json.clone(),
             usage.clone(),
             Latency::NonStreaming {
-                ttd: Duration::from_millis(310),
+                response_time: Duration::from_millis(310),
             },
         )];
 
@@ -723,7 +738,7 @@ mod tests {
             model_inference_responses,
             Some(&output_schema),
             Latency::NonStreaming {
-                ttd: Duration::from_millis(310),
+                response_time: Duration::from_millis(310),
             },
         );
 
@@ -737,7 +752,7 @@ mod tests {
         assert_eq!(
             chat_inference_response.latency,
             Latency::NonStreaming {
-                ttd: Duration::from_millis(310),
+                response_time: Duration::from_millis(310),
             }
         );
     }
@@ -806,7 +821,7 @@ mod tests {
             chat_response.latency,
             Latency::Streaming {
                 ttft: Duration::from_millis(150),
-                ttd: Duration::from_millis(250),
+                response_time: Duration::from_millis(250),
             }
         );
 
@@ -873,7 +888,7 @@ mod tests {
             chat_response.latency,
             Latency::Streaming {
                 ttft: Duration::from_millis(150),
-                ttd: Duration::from_millis(250),
+                response_time: Duration::from_millis(250),
             }
         );
 
@@ -929,7 +944,7 @@ mod tests {
                 chat_response.latency,
                 Latency::Streaming {
                     ttft: Duration::from_millis(100),
-                    ttd: Duration::from_millis(200),
+                    response_time: Duration::from_millis(200),
                 }
             );
         } else {
@@ -999,7 +1014,7 @@ mod tests {
                 chat_response.latency,
                 Latency::Streaming {
                     ttft: Duration::from_millis(100),
-                    ttd: Duration::from_millis(300),
+                    response_time: Duration::from_millis(300),
                 }
             );
         } else {

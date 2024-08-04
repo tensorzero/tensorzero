@@ -71,7 +71,7 @@ impl InferenceProvider for OpenAIProvider {
                         message: format!("Error parsing response: {e}"),
                     })?;
             let latency = Latency::NonStreaming {
-                ttd: start_time.elapsed(),
+                response_time: start_time.elapsed(),
             };
             Ok(OpenAIResponseWithLatency {
                 response: response_body,
@@ -851,7 +851,7 @@ mod tests {
         let result = ModelInferenceResponse::try_from(OpenAIResponseWithLatency {
             response: valid_response,
             latency: Latency::NonStreaming {
-                ttd: Duration::from_millis(100),
+                response_time: Duration::from_millis(100),
             },
         });
         assert!(result.is_ok());
@@ -866,7 +866,7 @@ mod tests {
         assert_eq!(
             inference_response.latency,
             Latency::NonStreaming {
-                ttd: Duration::from_millis(100)
+                response_time: Duration::from_millis(100)
             }
         );
 
@@ -896,7 +896,7 @@ mod tests {
         let result = ModelInferenceResponse::try_from(OpenAIResponseWithLatency {
             response: valid_response_with_tools,
             latency: Latency::NonStreaming {
-                ttd: Duration::from_millis(110),
+                response_time: Duration::from_millis(110),
             },
         });
         assert!(result.is_ok());
@@ -909,7 +909,7 @@ mod tests {
         assert_eq!(
             inference_response.latency,
             Latency::NonStreaming {
-                ttd: Duration::from_millis(110)
+                response_time: Duration::from_millis(110)
             }
         );
 
@@ -926,7 +926,7 @@ mod tests {
         let result = ModelInferenceResponse::try_from(OpenAIResponseWithLatency {
             response: invalid_response_no_choices,
             latency: Latency::NonStreaming {
-                ttd: Duration::from_millis(120),
+                response_time: Duration::from_millis(120),
             },
         });
         assert!(result.is_err());
@@ -960,7 +960,7 @@ mod tests {
         let result = ModelInferenceResponse::try_from(OpenAIResponseWithLatency {
             response: invalid_response_multiple_choices,
             latency: Latency::NonStreaming {
-                ttd: Duration::from_millis(130),
+                response_time: Duration::from_millis(130),
             },
         });
         assert!(result.is_err());

@@ -88,7 +88,7 @@ impl InferenceProvider for DummyProvider {
         };
         let usage = DUMMY_INFER_USAGE.clone();
         let latency = Latency::NonStreaming {
-            ttd: Duration::from_millis(100),
+            response_time: Duration::from_millis(100),
         };
         Ok(ModelInferenceResponse {
             id,
