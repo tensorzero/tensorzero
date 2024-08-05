@@ -164,21 +164,11 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             response_time: start_time.elapsed(),
         };
         if res.status().is_success() {
-            let body_text = res.text().await.map_err(|e| Error::GCPVertexServer {
-                message: format!("Error reading response body: {e}"),
+            let body = res.json::<GCPVertexGeminiResponse>().await.map_err(|e| {
+                Error::GCPVertexServer {
+                    message: format!("Error parsing response: {e}"),
+                }
             })?;
-
-            let body: GCPVertexGeminiResponse =
-                serde_json::from_str(&body_text).map_err(|e| Error::GCPVertexServer {
-                    message: format!(
-                        "Error parsing response JSON: {e}\nResponse body: {body_text}"
-                    ),
-                })?;
-            // let body = res.json::<GCPVertexGeminiResponse>().await.map_err(|e| {
-            //     Error::GCPVertexServer {
-            //         message: format!("Error parsing response: {e}"),
-            //     }
-            // })?;
             let body_with_latency = GCPVertexGeminiResponseWithLatency { body, latency };
             Ok(body_with_latency.try_into()?)
         } else {
