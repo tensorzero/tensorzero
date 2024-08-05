@@ -124,11 +124,8 @@ impl InferenceProvider for AzureProvider {
             .map_err(|e| Error::InferenceClient {
                 message: format!("Error sending request to Azure: {e}"),
             })?;
-        let mut stream = Box::pin(
-            stream_openai(event_source, start_time)
-                .await
-                .map_err(map_openai_to_azure_error),
-        );
+        let mut stream =
+            Box::pin(stream_openai(event_source, start_time).map_err(map_openai_to_azure_error));
         // Get a single chunk from the stream and make sure it is OK then send to client.
         // We want to do this here so that we can tell that the request is working.
         let chunk = match stream.next().await {

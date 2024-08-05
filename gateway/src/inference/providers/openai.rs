@@ -1,11 +1,11 @@
-use std::time::Duration;
-
+use futures::stream::Stream;
 use futures::StreamExt;
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
 use uuid::Uuid;
@@ -127,7 +127,7 @@ impl InferenceProvider for OpenAIProvider {
                 message: format!("Error sending request to OpenAI: {e}"),
             })?;
 
-        let mut stream = stream_openai(event_source, start_time).await;
+        let mut stream = Box::pin(stream_openai(event_source, start_time));
         // Get a single chunk from the stream and make sure it is OK then send to client.
         // We want to do this here so that we can tell that the request is working.
         let chunk = match stream.next().await {
@@ -143,22 +143,18 @@ impl InferenceProvider for OpenAIProvider {
     }
 }
 
-pub async fn stream_openai(
+pub fn stream_openai(
     mut event_source: EventSource,
     start_time: Instant,
-) -> InferenceResponseStream {
-    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-    tokio::spawn(async move {
+) -> impl Stream<Item = Result<ModelInferenceResponseChunk, Error>> {
+    async_stream::stream! {
         let inference_id = Uuid::now_v7();
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    if let Err(_e) = tx.send(Err(Error::OpenAIServer {
+                    yield Err(Error::OpenAIServer {
                         message: e.to_string(),
-                    })) {
-                        // rx dropped
-                        break;
-                    }
+                    });
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -177,19 +173,14 @@ pub async fn stream_openai(
                         let stream_message = data.and_then(|d| {
                             openai_to_tensorzero_stream_message(d, inference_id, latency)
                         });
-                        if tx.send(stream_message).is_err() {
-                            // rx dropped
-                            break;
-                        }
+                        yield stream_message;
                     }
                 },
             }
         }
 
         event_source.close();
-    });
-
-    Box::pin(tokio_stream::wrappers::UnboundedReceiverStream::new(rx))
+    }
 }
 
 pub(super) fn get_chat_url(base_url: Option<&str>) -> Result<Url, Error> {

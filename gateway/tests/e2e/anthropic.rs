@@ -176,6 +176,7 @@ async fn test_streaming() {
     // Check ClickHouse
     let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None).unwrap();
     // First, check Inference table
+    println!("Checking ClickHouse: {}", inference_id);
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();

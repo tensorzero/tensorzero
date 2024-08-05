@@ -1,16 +1,13 @@
-use std::convert::Infallible;
-use std::time::Duration;
-
 use axum::body::Body;
 use axum::extract::State;
 use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::{debug_handler, Json};
+use futures::stream::Stream;
 use metrics::counter;
 use serde::Deserialize;
-use tokio::sync::mpsc;
+use std::time::Duration;
 use tokio::time::Instant;
-use tokio_stream::wrappers::UnboundedReceiverStream;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
@@ -143,16 +140,16 @@ pub async fn inference_handler(
                 dryrun,
                 start_time,
             };
-            let (client_sender, client_receiver) = mpsc::unbounded_channel();
-            tokio::spawn(worker_response_router(
+
+            let stream = create_stream(
                 function.clone(),
                 inference_metadata,
                 chunk,
                 stream,
-                client_sender,
                 clickhouse_connection_info,
-            ));
-            return Ok(Sse::new(UnboundedReceiverStream::new(client_receiver))
+            );
+
+            return Ok(Sse::new(stream)
                 .keep_alive(axum::response::sse::KeepAlive::new())
                 .into_response());
         } else {
@@ -206,69 +203,62 @@ pub async fn inference_handler(
     })
 }
 
-async fn worker_response_router(
+fn create_stream(
     function: FunctionConfig,
     metadata: InferenceMetadata,
     first_chunk: ModelInferenceResponseChunk,
     mut stream: InferenceResponseStream,
-    client_sender: mpsc::UnboundedSender<Result<Event, Infallible>>,
     clickhouse_connection_info: ClickHouseConnectionInfo,
-) {
-    let mut buffer = vec![first_chunk.clone()];
-    // Send the first chunk
-    if let Some(event) = prepare_event(&function, &metadata, first_chunk).ok_or_log() {
-        let _ = client_sender
-            .send(Ok(event))
-            .map_err(|e| Error::ChannelWrite {
-                message: e.to_string(),
-            })
-            .ok_or_log();
-    }
-    while let Some(chunk) = stream.next().await {
-        let chunk = match chunk.ok_or_log() {
-            Some(c) => c,
-            None => continue,
-        };
-        buffer.push(chunk.clone());
-        let event = prepare_event(&function, &metadata, chunk).ok_or_log();
-        if let Some(event) = event {
-            let _ = client_sender
-                .send(Ok(event))
-                .map_err(|e| Error::ChannelWrite {
-                    message: e.to_string(),
-                })
-                .ok_or_log();
+) -> impl Stream<Item = Result<Event, Error>> {
+    async_stream::stream! {
+        let mut buffer = vec![first_chunk.clone()];
+
+        // Send the first chunk
+        if let Some(event) = prepare_event(&function, &metadata, first_chunk).ok_or_log() {
+            yield Ok(event);
         }
-    }
-    // Send the [DONE] event to signal the end of the stream
-    let done_event = Event::default().data("[DONE]");
-    let _ = client_sender
-        .send(Ok(done_event))
-        .map_err(|e| Error::ChannelWrite {
-            message: e.to_string(),
-        })
-        .ok_or_log();
-    if !metadata.dryrun {
-        counter!(
-            "request_count",
-            "endpoint" => "inference",
-            "function_name" => metadata.function_name.to_string(),
-        )
-        .increment(1);
-        let inference_response: Result<InferenceResponse, Error> =
-            collect_chunks(buffer, function.output_schema());
-        let inference_response = inference_response.ok_or_log();
-        if let Some(inference_response) = inference_response {
-            write_inference(
-                clickhouse_connection_info,
-                metadata.function_name,
-                metadata.variant_name,
-                metadata.input,
-                inference_response,
-                metadata.episode_id,
-                metadata.start_time.elapsed(),
+
+        while let Some(chunk) = stream.next().await {
+            let chunk = match chunk.ok_or_log() {
+                Some(c) => c,
+                None => continue,
+            };
+            buffer.push(chunk.clone());
+            let event = prepare_event(&function, &metadata, chunk).ok_or_log();
+            if let Some(event) = event {
+                yield Ok(event);
+            }
+        }
+
+        // Send the [DONE] event to signal the end of the stream
+        yield Ok(Event::default().data("[DONE]"));
+
+        if !metadata.dryrun {
+            counter!(
+                "request_count",
+                "endpoint" => "inference",
+                "function_name" => metadata.function_name.to_string(),
             )
-            .await;
+            .increment(1);
+
+            let inference_response: Result<InferenceResponse, Error> =
+                collect_chunks(buffer, function.output_schema());
+            let inference_response = inference_response.ok_or_log();
+
+            if let Some(inference_response) = inference_response {
+                tokio::spawn(async move {
+                    write_inference(
+                        clickhouse_connection_info,
+                        metadata.function_name,
+                        metadata.variant_name,
+                        metadata.input,
+                        inference_response,
+                        metadata.episode_id,
+                        metadata.start_time.elapsed(),
+                    )
+                    .await;
+                });
+            }
         }
     }
 }
