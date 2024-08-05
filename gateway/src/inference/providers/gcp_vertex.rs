@@ -1,13 +1,10 @@
 use std::time::Duration;
 
-use futures::StreamExt;
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use reqwest::StatusCode;
-use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::time::Instant;
-use uuid::Uuid;
 
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
@@ -15,8 +12,7 @@ use crate::inference::types::Latency;
 use crate::{
     inference::types::{
         InferenceRequestMessage, InferenceResponseStream, ModelInferenceRequest,
-        ModelInferenceResponse, ModelInferenceResponseChunk, Tool, ToolCall, ToolCallChunk,
-        ToolChoice, ToolType, Usage,
+        ModelInferenceResponse, ModelInferenceResponseChunk, Tool, ToolCall, ToolChoice, Usage,
     },
     model::ProviderConfig,
 };
@@ -53,6 +49,7 @@ struct Claims<'a> {
 
 impl<'a> Claims<'a> {
     fn new(iss: &'a str, sub: &'a str, aud: &'a str) -> Self {
+        #[allow(clippy::expect_used)]
         let current_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .expect("Time went backwards");
@@ -70,55 +67,58 @@ impl<'a> Claims<'a> {
 
 impl GCPCredentials {
     pub fn from_env(path: &str) -> Result<Self, Error> {
-        let credential_str = std::fs::read_to_string(path).map_err(|e| Error::ApiKeyMissing {
-            provider_name: "GCP Vertex Gemini".to_string(),
+        let credential_str = std::fs::read_to_string(path).map_err(|e| Error::GCPCredentials {
+            message: format!("Failed to read GCP Vertex Gemini credentials: {e}"),
         })?;
         let credential_value: Value =
-            serde_json::from_str(&credential_str).map_err(|e| Error::ApiKeyMissing {
-                provider_name: "GCP Vertex Gemini".to_string(),
+            serde_json::from_str(&credential_str).map_err(|e| Error::GCPCredentials {
+                message: format!("Failed to parse GCP Vertex Gemini credentials: {e}"),
             })?;
         match (
             credential_value
                 .get("private_key_id")
-                .ok_or(Error::ApiKeyMissing {
-                    provider_name: "GCP Vertex Gemini: private_key_id".to_string(),
+                .ok_or(Error::GCPCredentials {
+                    message: "GCP Vertex Gemini: missing private_key_id".to_string(),
                 })?
                 .as_str(),
             credential_value
                 .get("private_key")
-                .ok_or(Error::ApiKeyMissing {
-                    provider_name: "GCP Vertex Gemini: private_key".to_string(),
+                .ok_or(Error::GCPCredentials {
+                    message: "GCP Vertex Gemini: missing rivate_key".to_string(),
                 })?
                 .as_str(),
             credential_value
                 .get("client_email")
-                .ok_or(Error::ApiKeyMissing {
-                    provider_name: "GCP Vertex Gemini: client_email".to_string(),
+                .ok_or(Error::GCPCredentials {
+                    message: "GCP Vertex Gemini: missing client_email".to_string(),
                 })?
                 .as_str(),
         ) {
             (Some(private_key_id), Some(private_key), Some(client_email)) => Ok(GCPCredentials {
                 private_key_id: private_key_id.to_string(),
                 private_key: EncodingKey::from_rsa_pem(private_key.as_bytes()).map_err(|_| {
-                    Error::ApiKeyMissing {
-                        provider_name: "GCP Vertex Gemini: private_key failed to parse as RSA"
+                    Error::GCPCredentials {
+                        message: "GCP Vertex Gemini: private_key failed to parse as RSA"
                             .to_string(),
                     }
                 })?,
                 client_email: client_email.to_string(),
             }),
-            _ => Err(Error::ApiKeyMissing {
-                provider_name: "GCP Vertex Gemini".to_string(),
+            _ => Err(Error::GCPCredentials {
+                message: "GCP Vertex Gemini: missing required credentials".to_string(),
             }),
         }
     }
 
-    fn get_jwt_token(&self, audience: &str) -> String {
+    fn get_jwt_token(&self, audience: &str) -> Result<String, Error> {
         let mut header = Header::new(Algorithm::RS256);
         header.kid = Some(self.private_key_id.clone());
         let claims = Claims::new(&self.client_email, &self.client_email, audience);
-        let token = encode(&header, &claims, &self.private_key).unwrap();
-        token
+        let token =
+            encode(&header, &claims, &self.private_key).map_err(|e| Error::GCPCredentials {
+                message: format!("Failed to encode JWT: {e}"),
+            })?;
+        Ok(token)
     }
 }
 
@@ -149,7 +149,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         };
 
         let request_body: GCPVertexGeminiRequest = request.try_into()?;
-        let token = credentials.get_jwt_token(audience);
+        let token = credentials.get_jwt_token(audience)?;
         let start_time = Instant::now();
         let res = http_client
             .post(request_url)
@@ -192,9 +192,9 @@ impl InferenceProvider for GCPVertexGeminiProvider {
 
     /// GCP Vertex Gemini streaming API request
     async fn infer_stream<'a>(
-        request: &'a ModelInferenceRequest<'a>,
-        model: &'a ProviderConfig,
-        http_client: &'a reqwest::Client,
+        _request: &'a ModelInferenceRequest<'a>,
+        _model: &'a ProviderConfig,
+        _http_client: &'a reqwest::Client,
     ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
         todo!()
     }
@@ -307,7 +307,7 @@ impl<'a> From<&'a Vec<Tool>> for GCPVertexGeminiTool<'a> {
     fn from(tools: &'a Vec<Tool>) -> Self {
         GCPVertexGeminiTool::FunctionDeclarations(
             tools
-                .into_iter()
+                .iter()
                 .map(|tool| GCPVertexGeminiFunctionDeclaration {
                     name: &tool.name,
                     description: tool.description.as_deref(),
@@ -424,7 +424,7 @@ impl<'a> TryFrom<&'a ModelInferenceRequest<'a>> for GCPVertexGeminiRequest<'a> {
         };
         let contents = request_messages
             .iter()
-            .map(|message| GCPVertexGeminiContent::try_from(message))
+            .map(GCPVertexGeminiContent::try_from)
             .collect::<Result<Vec<_>, _>>()?;
         let tools = request
             .tools_available
@@ -433,7 +433,7 @@ impl<'a> TryFrom<&'a ModelInferenceRequest<'a>> for GCPVertexGeminiRequest<'a> {
         let tool_config = request
             .tool_choice
             .as_ref()
-            .map(|tool_choice| GCPVertexGeminiToolConfig::from(tool_choice));
+            .map(GCPVertexGeminiToolConfig::from);
         let (response_mime_type, response_schema) = match request.output_schema {
             Some(output_schema) => (
                 Some(GCPVertexGeminiResponseMimeType::ApplicationJson),
@@ -591,7 +591,7 @@ mod tests {
     use super::*;
     use crate::inference::types::{
         AssistantInferenceRequestMessage, FunctionType, SystemInferenceRequestMessage,
-        ToolInferenceRequestMessage, UserInferenceRequestMessage,
+        ToolInferenceRequestMessage, ToolType, UserInferenceRequestMessage,
     };
 
     #[test]
