@@ -1,5 +1,6 @@
 use reqwest::Client;
 use secrecy::SecretString;
+use serde_json::Value;
 use std::collections::HashMap;
 use std::env;
 
@@ -99,6 +100,12 @@ pub enum ProviderConfig {
         model_name: String,
         api_key: Option<SecretString>,
     },
+    GCPVertexGemini {
+        model_id: String,
+        location: String,
+        project_id: String,
+        credentials: Option<Value>,
+    },
     OpenAI {
         model_name: String,
         api_base: Option<String>,
@@ -140,6 +147,12 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 api_base: String,
                 deployment_id: String,
             },
+            #[serde(rename = "gcp_vertex_gemini")]
+            GCPVertexGemini {
+                model_id: String,
+                location: String,
+                project_id: String,
+            },
             Fireworks {
                 model_name: String,
             },
@@ -179,6 +192,18 @@ impl<'de> Deserialize<'de> for ProviderConfig {
             ProviderConfigHelper::Fireworks { model_name } => ProviderConfig::Fireworks {
                 model_name,
                 api_key: env::var("FIREWORKS_API_KEY").ok().map(SecretString::new),
+            },
+            ProviderConfigHelper::GCPVertexGemini {
+                model_id,
+                location,
+                project_id,
+            } => ProviderConfig::GCPVertexGemini {
+                model_id,
+                location,
+                project_id,
+                credentials: env::var("GCP_VERTEX_CREDENTIALS")
+                    .ok()
+                    .and_then(|s| serde_json::from_str(&s).ok()),
             },
             ProviderConfigHelper::OpenAI {
                 model_name,
