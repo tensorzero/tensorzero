@@ -15,17 +15,20 @@ bind_address = "0.0.0.0:3000"
 # │                                   MODELS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-[models."gpt-3.5-turbo"]
-routing = ["openai", "azure"]
+[models."gpt-4o-mini-2024-07-18"]
+routing = ["openai"]
 
-[models."gpt-3.5-turbo".providers.openai]
+[models."gpt-4o-mini-2024-07-18".providers.openai]
 type = "openai"
-model_name = "gpt-3.5-turbo"
+model_name = "gpt-4o-mini-2024-07-18"
 
-[models."gpt-3.5-turbo".providers.azure]
+[models."gpt-35-turbo"]
+routing = ["azure"]
+
+[models."gpt-35-turbo".providers.azure]
 type = "azure"
 model_name = "gpt-35-turbo"
-api_base = "https://your-endpoint.openai.azure.com/"
+api_base = "https://t0-azure-oai.openai.azure.com"
 deployment_id = "gpt-35-turbo"
 
 [models.claude-3-haiku-20240307]
@@ -38,6 +41,36 @@ model_name = "claude-3-haiku-20240307"
 [models.claude-3-haiku-20240307.providers.aws-bedrock]
 type = "aws_bedrock"
 model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+
+# Duplicate so that we can test just Anthropic no fallbacks
+[models.claude-3-haiku-20240307-anthropic]
+routing = ["anthropic"]
+
+[models.claude-3-haiku-20240307-anthropic.providers.anthropic]
+type = "anthropic"
+model_name = "claude-3-haiku-20240307"
+
+# Duplicate so that we can test just AWS Bedrock no fallbacks
+[models.claude-3-haiku-20240307-aws-bedrock]
+routing = ["aws-bedrock"]
+
+[models.claude-3-haiku-20240307-aws-bedrock.providers.aws-bedrock]
+type = "aws_bedrock"
+model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+
+[models."llama3.1-8b-instruct-fireworks"]
+routing = ["fireworks"]
+
+[models."llama3.1-8b-instruct-fireworks".providers.fireworks]
+type = "fireworks"
+model_name = "accounts/fireworks/models/llama-v3p1-8b-instruct"
+
+[models."llama3.1-8b-instruct-together"]
+routing = ["together"]
+
+[models."llama3.1-8b-instruct-together".providers.together]
+type = "together"
+model_name = "llama3-8b-instruct"
 
 [models.test]
 routing = ["good"]
@@ -76,22 +109,6 @@ model_name = "json"
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-[functions.generate_draft]
-type = "chat"
-system_schema = "functions/generate_draft/system_schema.json"
-output_schema = "functions/generate_draft/output_schema.json"
-
-[functions.generate_draft.variants.openai_promptA]
-type = "chat_completion"
-weight = 0.9
-model = "gpt-3.5-turbo"
-system_template = "functions/generate_draft/promptA/system_template.minijinja"
-
-[functions.generate_draft.variants.openai_promptB]
-type = "chat_completion"
-weight = 0.1
-model = "gpt-3.5-turbo"
-system_template = "functions/generate_draft/promptB/system_template.minijinja"
 
 [functions.basic_test]
 type = "chat"
@@ -101,6 +118,42 @@ system_schema = "functions/basic_test/system_schema.json"
 type = "chat_completion"
 weight = 1
 model = "test"
+system_template = "functions/basic_test/prompt/system_template.minijinja"
+
+[functions.basic_test.variants.anthropic]
+type = "chat_completion"
+weight = 0
+model = "claude-3-haiku-20240307-anthropic"
+system_template = "functions/basic_test/prompt/system_template.minijinja"
+
+[functions.basic_test.variants.aws-bedrock]
+type = "chat_completion"
+weight = 0
+model = "claude-3-haiku-20240307-aws-bedrock"
+system_template = "functions/basic_test/prompt/system_template.minijinja"
+
+[functions.basic_test.variants.azure]
+type = "chat_completion"
+weight = 0
+model = "gpt-35-turbo"
+system_template = "functions/basic_test/prompt/system_template.minijinja"
+
+[functions.basic_test.variants.fireworks]
+type = "chat_completion"
+weight = 0
+model = "llama3.1-8b-instruct-fireworks"
+system_template = "functions/basic_test/prompt/system_template.minijinja"
+
+[functions.basic_test.variants.openai]
+type = "chat_completion"
+weight = 0
+model = "gpt-4o-mini-2024-07-18"
+system_template = "functions/basic_test/prompt/system_template.minijinja"
+
+[functions.basic_test.variants.together]
+type = "chat_completion"
+weight = 0
+model = "llama3.1-8b-instruct-together"
 system_template = "functions/basic_test/prompt/system_template.minijinja"
 
 [functions.model_fallback_test]

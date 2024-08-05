@@ -46,7 +46,9 @@ async fn test_infer_stream() {
         collected_chunks.push(chunk.unwrap());
     }
     assert!(!collected_chunks.is_empty());
-    assert!(collected_chunks.last().unwrap().content.is_some());
+    // Fourth as an arbitrary middle chunk, the first and last contain only metadata for Anthropic
+    assert!(collected_chunks[4].content.is_some());
+    assert!(collected_chunks.last().unwrap().usage.is_some());
 }
 
 #[tokio::test]

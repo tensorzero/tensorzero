@@ -1,4 +1,5 @@
 use std::convert::Infallible;
+use std::time::Duration;
 
 use axum::body::Body;
 use axum::extract::State;
@@ -8,6 +9,7 @@ use axum::{debug_handler, Json};
 use metrics::counter;
 use serde::Deserialize;
 use tokio::sync::mpsc;
+use tokio::time::Instant;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
@@ -53,6 +55,7 @@ struct InferenceMetadata {
     pub episode_id: Uuid,
     pub input: Vec<InputMessage>,
     pub dryrun: bool,
+    pub start_time: Instant,
 }
 
 /// A handler for the inference endpoint
@@ -65,6 +68,8 @@ pub async fn inference_handler(
     }): AppState,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
+    // To be used for the Inference table processing_time measurements
+    let start_time = Instant::now();
     // Get the function config or return an error if it doesn't exist
     let function = config.get_function(&params.function_name)?;
 
@@ -106,15 +111,6 @@ pub async fn inference_handler(
     // Keep track of which variants failed
     let mut variant_errors = vec![];
 
-    // Create InferenceMetadata
-    let inference_metadata = InferenceMetadata {
-        function_name: params.function_name.clone(),
-        variant_name: params.variant_name.clone().unwrap_or_default(),
-        episode_id,
-        input: params.input.clone(),
-        dryrun,
-    };
-
     // Keep sampling variants until one succeeds
     while !variants.is_empty() {
         let (variant_name, variant) =
@@ -137,6 +133,15 @@ pub async fn inference_handler(
                     variant_errors.push(e);
                     continue;
                 }
+            };
+            // Create InferenceMetadata for a streaming inference
+            let inference_metadata = InferenceMetadata {
+                function_name: params.function_name.clone(),
+                variant_name,
+                episode_id,
+                input: params.input.clone(),
+                dryrun,
+                start_time,
             };
             let (client_sender, client_receiver) = mpsc::unbounded_channel();
             tokio::spawn(worker_response_router(
@@ -184,6 +189,7 @@ pub async fn inference_handler(
                         params.input,
                         response_to_write,
                         episode_id,
+                        start_time.elapsed(),
                     )
                     .await;
                 });
@@ -260,6 +266,7 @@ async fn worker_response_router(
                 metadata.input,
                 inference_response,
                 metadata.episode_id,
+                metadata.start_time.elapsed(),
             )
             .await;
         }
@@ -279,7 +286,7 @@ fn prepare_event(
             })?
         }
         FunctionConfig::Tool(_) => {
-            unreachable!()
+            unimplemented!()
         }
     };
     chunk_json["variant_name"] = metadata.variant_name.to_string().into();
@@ -297,6 +304,7 @@ async fn write_inference(
     input: Vec<InputMessage>,
     response: InferenceResponse,
     episode_id: Uuid,
+    processing_time: Duration,
 ) {
     match response {
         InferenceResponse::Chat(response) => {
@@ -323,6 +331,7 @@ async fn write_inference(
                 episode_id,
                 function_name,
                 variant_name,
+                processing_time,
             );
             let res = clickhouse_connection_info
                 .write(&inference, "Inference")
@@ -336,7 +345,7 @@ async fn write_inference(
 mod tests {
     use super::*;
 
-    use std::collections::HashMap;
+    use std::{collections::HashMap, time::Duration};
     use uuid::Uuid;
 
     use crate::{function::FunctionConfigChat, inference::types::ModelInferenceResponseChunk};
@@ -351,6 +360,7 @@ mod tests {
             created: 0,
             usage: None,
             raw: "".to_string(),
+            latency: Duration::from_millis(100),
         };
         let function = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
@@ -365,6 +375,7 @@ mod tests {
             episode_id: Uuid::now_v7(),
             input: vec![],
             dryrun: false,
+            start_time: Instant::now(),
         };
 
         let result = prepare_event(&function, &inference_metadata, chunk);

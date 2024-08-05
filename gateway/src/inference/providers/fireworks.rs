@@ -3,11 +3,12 @@ use reqwest_eventsource::RequestBuilderExt;
 use secrecy::ExposeSecret;
 use serde::Serialize;
 use serde_json::Value;
+use tokio::time::Instant;
 
 use crate::{
     error::Error,
     inference::types::{
-        InferenceResponseStream, ModelInferenceRequest, ModelInferenceResponse,
+        InferenceResponseStream, Latency, ModelInferenceRequest, ModelInferenceResponse,
         ModelInferenceResponseChunk,
     },
     model::ProviderConfig,
@@ -16,7 +17,7 @@ use crate::{
 use super::{
     openai::{
         get_chat_url, handle_openai_error, stream_openai, OpenAIRequestMessage, OpenAIResponse,
-        OpenAITool, OpenAIToolChoice,
+        OpenAIResponseWithLatency, OpenAITool, OpenAIToolChoice,
     },
     provider_trait::InferenceProvider,
 };
@@ -53,6 +54,7 @@ impl InferenceProvider for FireworksProvider {
         let api_base = Some("https://api.fireworks.ai/inference/v1/");
         let request_body = FireworksRequest::new(model_name, request);
         let request_url = get_chat_url(api_base)?;
+        let start_time = Instant::now();
         let res = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
@@ -66,6 +68,9 @@ impl InferenceProvider for FireworksProvider {
             .map_err(|e| Error::InferenceClient {
                 message: format!("Error sending request to Fireworks: {e}"),
             })?;
+        let latency = Latency::NonStreaming {
+            response_time: start_time.elapsed(),
+        };
         if res.status().is_success() {
             let response_body =
                 res.json::<OpenAIResponse>()
@@ -73,9 +78,12 @@ impl InferenceProvider for FireworksProvider {
                     .map_err(|e| Error::FireworksServer {
                         message: format!("Error parsing response: {e}"),
                     })?;
-            Ok(response_body
-                .try_into()
-                .map_err(map_openai_to_fireworks_error)?)
+            Ok(OpenAIResponseWithLatency {
+                response: response_body,
+                latency,
+            }
+            .try_into()
+            .map_err(map_openai_to_fireworks_error)?)
         } else {
             handle_openai_error(
                 res.status(),
@@ -111,6 +119,7 @@ impl InferenceProvider for FireworksProvider {
         let request_body = FireworksRequest::new(model_name, request);
         let api_base = Some("https://api.fireworks.ai/inference/v1/");
         let request_url = get_chat_url(api_base)?;
+        let start_time = Instant::now();
         let event_source = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
@@ -124,7 +133,7 @@ impl InferenceProvider for FireworksProvider {
                 message: format!("Error sending request to Fireworks: {e}"),
             })?;
         let mut stream = Box::pin(
-            stream_openai(event_source)
+            stream_openai(event_source, start_time)
                 .await
                 .map_err(map_openai_to_fireworks_error),
         );
@@ -184,7 +193,8 @@ struct FireworksRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
     stream: bool,
-    response_format: FireworksResponseFormat<'a>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_format: Option<FireworksResponseFormat<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenAITool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -195,11 +205,17 @@ struct FireworksRequest<'a> {
 
 impl<'a> FireworksRequest<'a> {
     pub fn new(model: &'a str, request: &'a ModelInferenceRequest) -> FireworksRequest<'a> {
+        let tools = request
+            .tools_available
+            .as_ref()
+            .map(|t| t.iter().map(|t| t.into()).collect());
+        // NB: Fireworks will throw an error if you give FireworksResponseFormat::Text and then also include tools.
+        // So we just don't include it as Text is the same as None anyway.
         let response_format = match request.json_mode {
-            true => FireworksResponseFormat::JsonObject {
+            true => Some(FireworksResponseFormat::JsonObject {
                 schema: request.output_schema,
-            },
-            false => FireworksResponseFormat::Text,
+            }),
+            false => None,
         };
         FireworksRequest {
             messages: request.messages.iter().map(|m| m.into()).collect(),
@@ -208,10 +224,7 @@ impl<'a> FireworksRequest<'a> {
             max_tokens: request.max_tokens,
             stream: request.stream,
             response_format,
-            tools: request
-                .tools_available
-                .as_ref()
-                .map(|t| t.iter().map(|t| t.into()).collect()),
+            tools,
             tool_choice: request.tool_choice.as_ref().map(OpenAIToolChoice::from),
             parallel_tool_calls: request.parallel_tool_calls,
         }
@@ -278,9 +291,9 @@ mod tests {
         assert!(!fireworks_request.stream);
         assert_eq!(
             fireworks_request.response_format,
-            FireworksResponseFormat::JsonObject {
+            Some(FireworksResponseFormat::JsonObject {
                 schema: request_with_tools.output_schema,
-            }
+            })
         );
         assert!(fireworks_request.tools.is_some());
         assert_eq!(fireworks_request.tools.as_ref().unwrap().len(), 1);

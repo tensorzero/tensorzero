@@ -1,16 +1,19 @@
+use std::time::Duration;
+
 use futures::StreamExt;
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tokio::time::Instant;
 use url::Url;
 use uuid::Uuid;
 
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
-    InferenceRequestMessage, InferenceResponseStream, ModelInferenceRequest,
+    InferenceRequestMessage, InferenceResponseStream, Latency, ModelInferenceRequest,
     ModelInferenceResponse, ModelInferenceResponseChunk, Tool, ToolCall, ToolCallChunk, ToolChoice,
     ToolType, Usage,
 };
@@ -46,6 +49,7 @@ impl InferenceProvider for OpenAIProvider {
         };
         let request_body = OpenAIRequest::new(model_name, request);
         let request_url = get_chat_url(api_base)?;
+        let start_time = Instant::now();
         let res = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
@@ -66,7 +70,14 @@ impl InferenceProvider for OpenAIProvider {
                     .map_err(|e| Error::OpenAIServer {
                         message: format!("Error parsing response: {e}"),
                     })?;
-            Ok(response_body.try_into()?)
+            let latency = Latency::NonStreaming {
+                response_time: start_time.elapsed(),
+            };
+            Ok(OpenAIResponseWithLatency {
+                response: response_body,
+                latency,
+            }
+            .try_into()?)
         } else {
             handle_openai_error(
                 res.status(),
@@ -102,6 +113,7 @@ impl InferenceProvider for OpenAIProvider {
         };
         let request_body = OpenAIRequest::new(model_name, request);
         let request_url = get_chat_url(api_base)?;
+        let start_time = Instant::now();
         let event_source = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
@@ -115,7 +127,7 @@ impl InferenceProvider for OpenAIProvider {
                 message: format!("Error sending request to OpenAI: {e}"),
             })?;
 
-        let mut stream = stream_openai(event_source).await;
+        let mut stream = stream_openai(event_source, start_time).await;
         // Get a single chunk from the stream and make sure it is OK then send to client.
         // We want to do this here so that we can tell that the request is working.
         let chunk = match stream.next().await {
@@ -131,7 +143,10 @@ impl InferenceProvider for OpenAIProvider {
     }
 }
 
-pub async fn stream_openai(mut event_source: EventSource) -> InferenceResponseStream {
+pub async fn stream_openai(
+    mut event_source: EventSource,
+    start_time: Instant,
+) -> InferenceResponseStream {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     tokio::spawn(async move {
         let inference_id = Uuid::now_v7();
@@ -158,8 +173,10 @@ pub async fn stream_openai(mut event_source: EventSource) -> InferenceResponseSt
                                     e, message.data
                                 ),
                             });
-                        let stream_message =
-                            data.and_then(|d| openai_to_tensorzero_stream_message(d, inference_id));
+                        let latency = start_time.elapsed();
+                        let stream_message = data.and_then(|d| {
+                            openai_to_tensorzero_stream_message(d, inference_id, latency)
+                        });
                         if tx.send(stream_message).is_err() {
                             // rx dropped
                             break;
@@ -528,9 +545,18 @@ pub(super) struct OpenAIResponse {
     usage: OpenAIUsage,
 }
 
-impl TryFrom<OpenAIResponse> for ModelInferenceResponse {
+pub(super) struct OpenAIResponseWithLatency {
+    pub(super) response: OpenAIResponse,
+    pub(super) latency: Latency,
+}
+
+impl TryFrom<OpenAIResponseWithLatency> for ModelInferenceResponse {
     type Error = Error;
-    fn try_from(mut response: OpenAIResponse) -> Result<Self, Self::Error> {
+    fn try_from(value: OpenAIResponseWithLatency) -> Result<Self, Self::Error> {
+        let OpenAIResponseWithLatency {
+            mut response,
+            latency,
+        } = value;
         let raw = serde_json::to_string(&response).map_err(|e| Error::OpenAIServer {
             message: format!("Error parsing response: {e}"),
         })?;
@@ -558,6 +584,7 @@ impl TryFrom<OpenAIResponse> for ModelInferenceResponse {
                 .map(|t| t.into_iter().map(|t| t.into()).collect()),
             raw,
             usage,
+            latency,
         ))
     }
 }
@@ -584,6 +611,7 @@ struct OpenAIChatChunk {
 fn openai_to_tensorzero_stream_message(
     mut chunk: OpenAIChatChunk,
     inference_id: Uuid,
+    latency: Duration,
 ) -> Result<ModelInferenceResponseChunk, Error> {
     let raw_message = serde_json::to_string(&chunk).map_err(|e| Error::OpenAIServer {
         message: format!("Error parsing response from OpenAI: {e}"),
@@ -610,6 +638,7 @@ fn openai_to_tensorzero_stream_message(
         tool_calls,
         usage,
         raw_message,
+        latency,
     ))
 }
 
@@ -819,7 +848,12 @@ mod tests {
             },
         };
 
-        let result = ModelInferenceResponse::try_from(valid_response);
+        let result = ModelInferenceResponse::try_from(OpenAIResponseWithLatency {
+            response: valid_response,
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_millis(100),
+            },
+        });
         assert!(result.is_ok());
         let inference_response = result.unwrap();
         assert_eq!(
@@ -829,6 +863,12 @@ mod tests {
         assert_eq!(inference_response.tool_calls, None);
         assert_eq!(inference_response.usage.prompt_tokens, 10);
         assert_eq!(inference_response.usage.completion_tokens, 20);
+        assert_eq!(
+            inference_response.latency,
+            Latency::NonStreaming {
+                response_time: Duration::from_millis(100)
+            }
+        );
 
         // Test case 2: Valid response with tool calls
         let valid_response_with_tools = OpenAIResponse {
@@ -853,7 +893,12 @@ mod tests {
             },
         };
 
-        let result = ModelInferenceResponse::try_from(valid_response_with_tools);
+        let result = ModelInferenceResponse::try_from(OpenAIResponseWithLatency {
+            response: valid_response_with_tools,
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_millis(110),
+            },
+        });
         assert!(result.is_ok());
         let inference_response = result.unwrap();
         assert_eq!(inference_response.content, None);
@@ -861,6 +906,12 @@ mod tests {
         assert_eq!(inference_response.tool_calls.unwrap().len(), 1);
         assert_eq!(inference_response.usage.prompt_tokens, 15);
         assert_eq!(inference_response.usage.completion_tokens, 25);
+        assert_eq!(
+            inference_response.latency,
+            Latency::NonStreaming {
+                response_time: Duration::from_millis(110)
+            }
+        );
 
         // Test case 3: Invalid response with no choices
         let invalid_response_no_choices = OpenAIResponse {
@@ -872,7 +923,12 @@ mod tests {
             },
         };
 
-        let result = ModelInferenceResponse::try_from(invalid_response_no_choices);
+        let result = ModelInferenceResponse::try_from(OpenAIResponseWithLatency {
+            response: invalid_response_no_choices,
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_millis(120),
+            },
+        });
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), Error::OpenAIServer { .. }));
 
@@ -901,7 +957,12 @@ mod tests {
             },
         };
 
-        let result = ModelInferenceResponse::try_from(invalid_response_multiple_choices);
+        let result = ModelInferenceResponse::try_from(OpenAIResponseWithLatency {
+            response: invalid_response_multiple_choices,
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_millis(130),
+            },
+        });
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), Error::OpenAIServer { .. }));
     }

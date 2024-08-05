@@ -4,11 +4,12 @@ use reqwest_eventsource::RequestBuilderExt;
 use secrecy::ExposeSecret;
 use serde::Serialize;
 use serde_json::Value;
+use tokio::time::Instant;
 
 use crate::{
     error::Error,
     inference::types::{
-        InferenceResponseStream, ModelInferenceRequest, ModelInferenceResponse,
+        InferenceResponseStream, Latency, ModelInferenceRequest, ModelInferenceResponse,
         ModelInferenceResponseChunk,
     },
     model::ProviderConfig,
@@ -17,7 +18,7 @@ use crate::{
 use super::{
     openai::{
         get_chat_url, handle_openai_error, stream_openai, OpenAIRequestMessage, OpenAIResponse,
-        OpenAITool, OpenAIToolChoice,
+        OpenAIResponseWithLatency, OpenAITool, OpenAIToolChoice,
     },
     provider_trait::InferenceProvider,
 };
@@ -51,6 +52,7 @@ impl InferenceProvider for TogetherProvider {
         let api_base = Some("https://api.together.xyz/v1");
         let request_body = TogetherRequest::new(model_name, request);
         let request_url = get_chat_url(api_base)?;
+        let start_time = Instant::now();
         let res = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
@@ -72,9 +74,14 @@ impl InferenceProvider for TogetherProvider {
                     .map_err(|e| Error::TogetherServer {
                         message: format!("Error parsing response: {e}"),
                     })?;
-            Ok(response_body
-                .try_into()
-                .map_err(map_openai_to_together_error)?)
+            Ok(OpenAIResponseWithLatency {
+                response: response_body,
+                latency: Latency::NonStreaming {
+                    response_time: start_time.elapsed(),
+                },
+            }
+            .try_into()
+            .map_err(map_openai_to_together_error)?)
         } else {
             handle_openai_error(
                 res.status(),
@@ -110,6 +117,7 @@ impl InferenceProvider for TogetherProvider {
         let request_body = TogetherRequest::new(model_name, request);
         let api_base = Some("https://api.together.xyz/v1");
         let request_url = get_chat_url(api_base)?;
+        let start_time = Instant::now();
         let event_source = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
@@ -123,7 +131,7 @@ impl InferenceProvider for TogetherProvider {
                 message: format!("Error sending request to Together: {e}"),
             })?;
         let mut stream = Box::pin(
-            stream_openai(event_source)
+            stream_openai(event_source, start_time)
                 .await
                 .map_err(map_openai_to_together_error),
         );
