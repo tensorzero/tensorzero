@@ -197,7 +197,7 @@ pub struct ModelInference {
     pub raw_response: String,
     pub input_tokens: u32,
     pub output_tokens: u32,
-    pub latency_ms: u32,
+    pub response_time_ms: u32,
     pub ttft_ms: Option<u32>,
 }
 
@@ -222,7 +222,7 @@ impl ModelInference {
             raw_response: response.raw,
             input_tokens: response.usage.prompt_tokens,
             output_tokens: response.usage.completion_tokens,
-            latency_ms,
+            response_time_ms: latency_ms,
             ttft_ms,
         }
     }
@@ -258,8 +258,6 @@ pub struct ChatInferenceResponse {
     pub usage: Usage,
     #[serde(skip_serializing)]
     pub model_inference_responses: Vec<ModelInferenceResponse>,
-    #[serde(skip_serializing)]
-    pub latency: Latency,
 }
 
 impl ChatInferenceResponse {
@@ -270,7 +268,6 @@ impl ChatInferenceResponse {
         usage: Usage,
         model_inference_responses: Vec<ModelInferenceResponse>,
         output_schema: Option<&JSONSchemaFromPath>,
-        latency: Latency,
     ) -> Self {
         #[allow(clippy::expect_used)]
         let created = SystemTime::now()
@@ -288,7 +285,6 @@ impl ChatInferenceResponse {
             tool_calls,
             usage,
             model_inference_responses,
-            latency,
         }
     }
 
@@ -336,7 +332,6 @@ pub enum InferenceResponse {
     Chat(ChatInferenceResponse),
 }
 
-// TODO: handle references and stuff
 #[derive(Serialize, Debug)]
 pub struct Inference {
     pub id: Uuid,
@@ -346,7 +341,7 @@ pub struct Inference {
     pub input: String,
     pub output: Option<Value>,
     pub raw_output: String,
-    pub latency_ms: u32,
+    pub processing_time_ms: u32,
 }
 
 impl Inference {
@@ -356,24 +351,20 @@ impl Inference {
         episode_id: Uuid,
         function_name: String,
         variant_name: String,
+        processing_time: Duration,
     ) -> Self {
+        let processing_time_ms = processing_time.as_millis() as u32;
         match inference_response {
-            InferenceResponse::Chat(chat_response) => {
-                let latency_ms = match chat_response.latency {
-                    Latency::Streaming { response_time, .. } => response_time.as_millis() as u32,
-                    Latency::NonStreaming { response_time } => response_time.as_millis() as u32,
-                };
-                Self {
-                    id: chat_response.inference_id,
-                    function_name,
-                    variant_name,
-                    episode_id,
-                    input,
-                    raw_output: chat_response.raw_content.unwrap_or_default(),
-                    output: chat_response.content,
-                    latency_ms,
-                }
-            }
+            InferenceResponse::Chat(chat_response) => Self {
+                id: chat_response.inference_id,
+                function_name,
+                variant_name,
+                episode_id,
+                input,
+                raw_output: chat_response.raw_content.unwrap_or_default(),
+                output: chat_response.content,
+                processing_time_ms,
+            },
         }
     }
 }
@@ -545,7 +536,6 @@ pub fn collect_chunks(
         usage,
         vec![model_response],
         output_schema,
-        latency,
     )))
 }
 
@@ -602,21 +592,12 @@ mod tests {
             usage.clone(),
             model_inference_responses,
             None,
-            Latency::NonStreaming {
-                response_time: Duration::from_millis(100),
-            },
         );
         let parsed_content = content.as_ref().map(|c| Value::String(c.clone()));
         assert_eq!(chat_inference_response.inference_id, inference_id);
         assert_eq!(chat_inference_response.content, parsed_content);
         assert_eq!(chat_inference_response.tool_calls, tool_calls);
         assert_eq!(chat_inference_response.usage, usage);
-        assert_eq!(
-            chat_inference_response.latency,
-            Latency::NonStreaming {
-                response_time: Duration::from_millis(100),
-            }
-        );
 
         // Case 2: a JSON string that passes validation
         let inference_id = Uuid::now_v7();
@@ -656,7 +637,6 @@ mod tests {
             usage.clone(),
             model_inference_responses,
             Some(&output_schema),
-            latency,
         );
 
         assert_eq!(chat_inference_response.inference_id, inference_id);
@@ -669,12 +649,6 @@ mod tests {
         assert_eq!(chat_inference_response.raw_content, Some(json_content));
         assert_eq!(chat_inference_response.tool_calls, tool_calls);
         assert_eq!(chat_inference_response.usage, usage);
-        assert_eq!(
-            chat_inference_response.latency,
-            Latency::NonStreaming {
-                response_time: Duration::from_millis(400),
-            }
-        );
 
         // TODO: assert that the appropriate errors were logged in the next two test cases
         // Case 3: a JSON string that fails validation
@@ -696,9 +670,6 @@ mod tests {
             usage.clone(),
             model_inference_responses,
             Some(&output_schema),
-            Latency::NonStreaming {
-                response_time: Duration::from_millis(300),
-            },
         );
 
         assert_eq!(chat_inference_response.inference_id, inference_id);
@@ -711,12 +682,6 @@ mod tests {
         );
         assert_eq!(chat_inference_response.tool_calls, None);
         assert_eq!(chat_inference_response.usage, usage);
-        assert_eq!(
-            chat_inference_response.latency,
-            Latency::NonStreaming {
-                response_time: Duration::from_millis(300),
-            }
-        );
 
         // Case 4: a malformed JSON
         let malformed_json = r#"{"name": "John", "age": 30,"#.to_string();
@@ -737,9 +702,6 @@ mod tests {
             usage.clone(),
             model_inference_responses,
             Some(&output_schema),
-            Latency::NonStreaming {
-                response_time: Duration::from_millis(310),
-            },
         );
 
         assert_eq!(chat_inference_response.inference_id, inference_id);
@@ -749,12 +711,6 @@ mod tests {
         assert_eq!(chat_inference_response.raw_content, Some(malformed_json));
         assert_eq!(chat_inference_response.tool_calls, None);
         assert_eq!(chat_inference_response.usage, usage);
-        assert_eq!(
-            chat_inference_response.latency,
-            Latency::NonStreaming {
-                response_time: Duration::from_millis(310),
-            }
-        );
     }
 
     #[test]
@@ -817,13 +773,6 @@ mod tests {
                 completion_tokens: 4,
             }
         );
-        assert_eq!(
-            chat_response.latency,
-            Latency::Streaming {
-                ttft: Duration::from_millis(150),
-                response_time: Duration::from_millis(250),
-            }
-        );
 
         // Test Case 3: a JSON string that passes validation and also include usage in each chunk
         let inference_id = Uuid::now_v7();
@@ -884,13 +833,6 @@ mod tests {
                 completion_tokens: 15,
             }
         );
-        assert_eq!(
-            chat_response.latency,
-            Latency::Streaming {
-                ttft: Duration::from_millis(150),
-                response_time: Duration::from_millis(250),
-            }
-        );
 
         // Test Case 4: a JSON string that fails validation and usage only in last chunk
         let inference_id = Uuid::now_v7();
@@ -940,13 +882,6 @@ mod tests {
             );
             assert_eq!(chat_response.tool_calls, None);
             assert_eq!(chat_response.usage, usage);
-            assert_eq!(
-                chat_response.latency,
-                Latency::Streaming {
-                    ttft: Duration::from_millis(100),
-                    response_time: Duration::from_millis(200),
-                }
-            );
         } else {
             unreachable!("Expected Ok(InferenceResponse::Chat), got {:?}", result);
         }
@@ -1010,13 +945,6 @@ mod tests {
             );
             assert_eq!(chat_response.tool_calls, None);
             assert_eq!(chat_response.usage, usage);
-            assert_eq!(
-                chat_response.latency,
-                Latency::Streaming {
-                    ttft: Duration::from_millis(100),
-                    response_time: Duration::from_millis(300),
-                }
-            );
         } else {
             unreachable!("Expected Ok(InferenceResponse::Chat), got {:?}", result);
         }

@@ -662,7 +662,7 @@ enum AnthropicStreamMessage {
 fn anthropic_to_tensorzero_stream_message(
     message: AnthropicStreamMessage,
     inference_id: Uuid,
-    latency: Duration,
+    message_latency: Duration,
 ) -> Result<Option<ModelInferenceResponseChunk>, Error> {
     let raw_message = serde_json::to_string(&message).map_err(|e| Error::AnthropicServer {
         message: format!("Error parsing response from Anthropic: {e}"),
@@ -676,7 +676,7 @@ fn anthropic_to_tensorzero_stream_message(
                 message.tool_calls,
                 None,
                 raw_message,
-                latency,
+                message_latency,
             )))
         }
         AnthropicStreamMessage::ContentBlockStart { content_block, .. } => {
@@ -687,7 +687,7 @@ fn anthropic_to_tensorzero_stream_message(
                 message.tool_calls,
                 None,
                 raw_message,
-                latency,
+                message_latency,
             )))
         }
         AnthropicStreamMessage::ContentBlockStop { .. } => Ok(None),
@@ -702,7 +702,7 @@ fn anthropic_to_tensorzero_stream_message(
                 None,
                 Some(usage.into()),
                 raw_message,
-                latency,
+                message_latency,
             )))
         }
         AnthropicStreamMessage::MessageStart { message } => {
@@ -714,7 +714,7 @@ fn anthropic_to_tensorzero_stream_message(
                     None,
                     Some(usage.into()),
                     raw_message,
-                    latency,
+                    message_latency,
                 )))
             } else {
                 Ok(None)

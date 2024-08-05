@@ -1,13 +1,12 @@
 use reqwest::Client;
 use serde::Deserialize;
 use std::{collections::HashMap, path::PathBuf};
-use tokio::time::Instant;
 use uuid::Uuid;
 
 use crate::error::Error;
 use crate::inference::types::{
     AssistantInferenceRequestMessage, ChatInferenceResponse, FunctionType, InferenceRequestMessage,
-    InputMessageRole, Latency, ModelInferenceRequest, ModelInferenceResponseChunk,
+    InputMessageRole, ModelInferenceRequest, ModelInferenceResponseChunk,
     SystemInferenceRequestMessage, UserInferenceRequestMessage,
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
@@ -165,7 +164,6 @@ impl Variant for ChatCompletionConfig {
             Some(s) => Some(s.value()?),
             None => None,
         };
-        let start_time = Instant::now();
         let request = ModelInferenceRequest {
             messages,
             tools_available: None,
@@ -189,9 +187,6 @@ impl Variant for ChatCompletionConfig {
         let tool_calls = model_inference_response.tool_calls.clone();
         let usage = model_inference_response.usage.clone();
         let model_inference_responses = vec![model_inference_response];
-        let latency = Latency::NonStreaming {
-            response_time: start_time.elapsed(),
-        };
         Ok(InferenceResponse::Chat(ChatInferenceResponse::new(
             inference_id,
             raw_content,
@@ -199,7 +194,6 @@ impl Variant for ChatCompletionConfig {
             usage,
             model_inference_responses,
             output_schema,
-            latency,
         )))
     }
 

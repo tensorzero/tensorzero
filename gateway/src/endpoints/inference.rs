@@ -1,4 +1,5 @@
 use std::convert::Infallible;
+use std::time::Duration;
 
 use axum::body::Body;
 use axum::extract::State;
@@ -8,6 +9,7 @@ use axum::{debug_handler, Json};
 use metrics::counter;
 use serde::Deserialize;
 use tokio::sync::mpsc;
+use tokio::time::Instant;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
@@ -53,6 +55,7 @@ struct InferenceMetadata {
     pub episode_id: Uuid,
     pub input: Vec<InputMessage>,
     pub dryrun: bool,
+    pub start_time: Instant,
 }
 
 /// A handler for the inference endpoint
@@ -65,6 +68,8 @@ pub async fn inference_handler(
     }): AppState,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
+    // To be used for the Inference table
+    let start_time = Instant::now();
     // Get the function config or return an error if it doesn't exist
     let function = config.get_function(&params.function_name)?;
 
@@ -136,6 +141,7 @@ pub async fn inference_handler(
                 episode_id,
                 input: params.input.clone(),
                 dryrun,
+                start_time,
             };
             let (client_sender, client_receiver) = mpsc::unbounded_channel();
             tokio::spawn(worker_response_router(
@@ -183,6 +189,7 @@ pub async fn inference_handler(
                         params.input,
                         response_to_write,
                         episode_id,
+                        start_time.elapsed(),
                     )
                     .await;
                 });
@@ -259,6 +266,7 @@ async fn worker_response_router(
                 metadata.input,
                 inference_response,
                 metadata.episode_id,
+                metadata.start_time.elapsed(),
             )
             .await;
         }
@@ -296,6 +304,7 @@ async fn write_inference(
     input: Vec<InputMessage>,
     response: InferenceResponse,
     episode_id: Uuid,
+    processing_time: Duration,
 ) {
     match response {
         InferenceResponse::Chat(response) => {
@@ -322,6 +331,7 @@ async fn write_inference(
                 episode_id,
                 function_name,
                 variant_name,
+                processing_time,
             );
             let res = clickhouse_connection_info
                 .write(&inference, "Inference")
@@ -365,6 +375,7 @@ mod tests {
             episode_id: Uuid::now_v7(),
             input: vec![],
             dryrun: false,
+            start_time: Instant::now(),
         };
 
         let result = prepare_event(&function, &inference_metadata, chunk);

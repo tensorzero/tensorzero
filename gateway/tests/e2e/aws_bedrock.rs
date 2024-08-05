@@ -93,9 +93,9 @@ async fn test_inference_basic() {
     assert_eq!(retrieved_episode_id, episode_id);
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "aws-bedrock");
-    let latency_ms = result.get("latency_ms").unwrap().as_u64().unwrap();
+    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     // Bedrock can't be faster than this
-    assert!(latency_ms > 100);
+    assert!(processing_time_ms > 100);
 
     // Next, check ModelInference table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -112,7 +112,7 @@ async fn test_inference_basic() {
     assert_eq!(output, content);
     let _ = result.get("raw_response").unwrap().as_str().unwrap();
     // This is Debug output, not a nice JSON unfortunately
-    let latency_ms = result.get("latency_ms").unwrap().as_u64().unwrap();
-    assert!(latency_ms > 100);
+    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    assert!(response_time_ms > 100);
     assert!(result.get("ttft_ms").unwrap().is_null());
 }
