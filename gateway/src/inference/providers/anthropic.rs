@@ -1,13 +1,17 @@
+use std::time::Duration;
+
 use futures::StreamExt;
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tokio::time::Instant;
 use uuid::Uuid;
 
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
+use crate::inference::types::Latency;
 use crate::{
     inference::types::{
         InferenceRequestMessage, InferenceResponseStream, ModelInferenceRequest,
@@ -47,6 +51,7 @@ impl InferenceProvider for AnthropicProvider {
         };
 
         let request_body = AnthropicRequestBody::new(model_name, request)?;
+        let start_time = Instant::now();
         let res = http_client
             .post(ANTHROPIC_BASE_URL)
             .header("anthropic-version", ANTHROPIC_API_VERSION)
@@ -58,14 +63,18 @@ impl InferenceProvider for AnthropicProvider {
             .map_err(|e| Error::InferenceClient {
                 message: format!("Error sending request: {e}"),
             })?;
+        let latency = Latency::NonStreaming {
+            response_time: start_time.elapsed(),
+        };
         if res.status().is_success() {
-            let response_body =
+            let body =
                 res.json::<AnthropicResponseBody>()
                     .await
                     .map_err(|e| Error::AnthropicServer {
                         message: format!("Error parsing response: {e}"),
                     })?;
-            response_body.try_into()
+            let body_with_latency = AnthropicResponseBodyWithLatency { body, latency };
+            Ok(body_with_latency.try_into()?)
         } else {
             let response_code = res.status();
             let error_body =
@@ -101,6 +110,7 @@ impl InferenceProvider for AnthropicProvider {
             }
         };
         let request_body = AnthropicRequestBody::new(model_name, request)?;
+        let start_time = Instant::now();
         let event_source = http_client
             .post(ANTHROPIC_BASE_URL)
             .header("anthropic-version", ANTHROPIC_API_VERSION)
@@ -111,7 +121,7 @@ impl InferenceProvider for AnthropicProvider {
             .map_err(|e| Error::InferenceClient {
                 message: format!("Error sending request to Anthropic: {e}"),
             })?;
-        let mut stream = stream_anthropic(event_source).await;
+        let mut stream = stream_anthropic(event_source, start_time).await;
         let chunk = match stream.next().await {
             Some(Ok(chunk)) => chunk,
             Some(Err(e)) => return Err(e),
@@ -128,7 +138,10 @@ impl InferenceProvider for AnthropicProvider {
 /// Maps events from Anthropic into the TensorZero format
 /// Modified from the example [here](https://github.com/64bit/async-openai/blob/5c9c817b095e3bacb2b6c9804864cdf8b15c795e/async-openai/src/client.rs#L433)
 /// At a high level, this function is handling low-level EventSource details and mapping the objects returned by Anthropic into our `InferenceResponseChunk` type
-async fn stream_anthropic(mut event_source: EventSource) -> InferenceResponseStream {
+async fn stream_anthropic(
+    mut event_source: EventSource,
+    start_time: Instant,
+) -> InferenceResponseStream {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     tokio::spawn(async move {
         let inference_id = Uuid::now_v7();
@@ -163,7 +176,11 @@ async fn stream_anthropic(mut event_source: EventSource) -> InferenceResponseStr
                                 if let AnthropicStreamMessage::MessageStop = data {
                                     break;
                                 }
-                                anthropic_to_tensorzero_stream_message(data, inference_id)
+                                anthropic_to_tensorzero_stream_message(
+                                    data,
+                                    inference_id,
+                                    start_time.elapsed(),
+                                )
                             }
                         }
                         .transpose();
@@ -490,17 +507,24 @@ struct AnthropicResponseBody {
     usage: AnthropicUsage,
 }
 
-impl TryFrom<AnthropicResponseBody> for ModelInferenceResponse {
+#[derive(Clone, Debug, PartialEq, Serialize)]
+struct AnthropicResponseBodyWithLatency {
+    body: AnthropicResponseBody,
+    latency: Latency,
+}
+
+impl TryFrom<AnthropicResponseBodyWithLatency> for ModelInferenceResponse {
     type Error = Error;
-    fn try_from(value: AnthropicResponseBody) -> Result<Self, Self::Error> {
-        let raw = serde_json::to_string(&value).map_err(|e| Error::AnthropicServer {
+    fn try_from(value: AnthropicResponseBodyWithLatency) -> Result<Self, Self::Error> {
+        let AnthropicResponseBodyWithLatency { body, latency } = value;
+        let raw = serde_json::to_string(&body).map_err(|e| Error::AnthropicServer {
             message: format!("Error parsing response from Anthropic: {e}"),
         })?;
         let mut message_text: Option<String> = None;
         let mut tool_calls: Option<Vec<ToolCall>> = None;
         // Anthropic responses can in principle contain multiple content blocks.
         // We stack them into one response to match our response types.
-        for block in value.content {
+        for block in body.content {
             match block {
                 AnthropicContentBlock::Text { text } => match message_text {
                     Some(message) => message_text = Some(format!("{}\n{}", message, text)),
@@ -525,7 +549,8 @@ impl TryFrom<AnthropicResponseBody> for ModelInferenceResponse {
             message_text,
             tool_calls,
             raw,
-            value.usage.into(),
+            body.usage.into(),
+            latency,
         ))
     }
 }
@@ -637,6 +662,7 @@ enum AnthropicStreamMessage {
 fn anthropic_to_tensorzero_stream_message(
     message: AnthropicStreamMessage,
     inference_id: Uuid,
+    message_latency: Duration,
 ) -> Result<Option<ModelInferenceResponseChunk>, Error> {
     let raw_message = serde_json::to_string(&message).map_err(|e| Error::AnthropicServer {
         message: format!("Error parsing response from Anthropic: {e}"),
@@ -650,6 +676,7 @@ fn anthropic_to_tensorzero_stream_message(
                 message.tool_calls,
                 None,
                 raw_message,
+                message_latency,
             )))
         }
         AnthropicStreamMessage::ContentBlockStart { content_block, .. } => {
@@ -660,6 +687,7 @@ fn anthropic_to_tensorzero_stream_message(
                 message.tool_calls,
                 None,
                 raw_message,
+                message_latency,
             )))
         }
         AnthropicStreamMessage::ContentBlockStop { .. } => Ok(None),
@@ -674,6 +702,7 @@ fn anthropic_to_tensorzero_stream_message(
                 None,
                 Some(usage.into()),
                 raw_message,
+                message_latency,
             )))
         }
         AnthropicStreamMessage::MessageStart { message } => {
@@ -685,6 +714,7 @@ fn anthropic_to_tensorzero_stream_message(
                     None,
                     Some(usage.into()),
                     raw_message,
+                    message_latency,
                 )))
             } else {
                 Ok(None)
@@ -1364,9 +1394,15 @@ mod tests {
                 output_tokens: 50,
             },
         };
+        let latency = Latency::NonStreaming {
+            response_time: Duration::from_millis(100),
+        };
+        let body_with_latency = AnthropicResponseBodyWithLatency {
+            body: anthropic_response_body.clone(),
+            latency: latency.clone(),
+        };
 
-        let inference_response =
-            ModelInferenceResponse::try_from(anthropic_response_body.clone()).unwrap();
+        let inference_response = ModelInferenceResponse::try_from(body_with_latency).unwrap();
         assert_eq!(
             inference_response.content.as_ref().unwrap(),
             "Response text"
@@ -1378,6 +1414,7 @@ mod tests {
         assert_eq!(raw_json, serde_json::json!(parsed_raw).to_string());
         assert_eq!(inference_response.usage.prompt_tokens, 100);
         assert_eq!(inference_response.usage.completion_tokens, 50);
+        assert_eq!(inference_response.latency, latency);
 
         // Test case 2: Tool call response
         let anthropic_response_body = AnthropicResponseBody {
@@ -1397,9 +1434,12 @@ mod tests {
                 output_tokens: 50,
             },
         };
+        let body_with_latency = AnthropicResponseBodyWithLatency {
+            body: anthropic_response_body.clone(),
+            latency: latency.clone(),
+        };
 
-        let inference_response: ModelInferenceResponse =
-            anthropic_response_body.clone().try_into().unwrap();
+        let inference_response: ModelInferenceResponse = body_with_latency.try_into().unwrap();
         assert!(inference_response.content.is_none());
         assert!(inference_response.tool_calls.is_some());
         let tool_calls = inference_response.tool_calls.as_ref().unwrap();
@@ -1413,6 +1453,7 @@ mod tests {
         assert_eq!(raw_json, serde_json::json!(parsed_raw).to_string());
         assert_eq!(inference_response.usage.prompt_tokens, 100);
         assert_eq!(inference_response.usage.completion_tokens, 50);
+        assert_eq!(inference_response.latency, latency);
 
         // Test case 3: Mixed response (text and tool call)
         let anthropic_response_body = AnthropicResponseBody {
@@ -1437,9 +1478,11 @@ mod tests {
                 output_tokens: 50,
             },
         };
-
-        let inference_response =
-            ModelInferenceResponse::try_from(anthropic_response_body.clone()).unwrap();
+        let body_with_latency = AnthropicResponseBodyWithLatency {
+            body: anthropic_response_body.clone(),
+            latency: latency.clone(),
+        };
+        let inference_response = ModelInferenceResponse::try_from(body_with_latency).unwrap();
         assert_eq!(
             inference_response.content.as_ref().unwrap(),
             "Here's the weather:"
@@ -1457,6 +1500,7 @@ mod tests {
 
         assert_eq!(inference_response.usage.prompt_tokens, 100);
         assert_eq!(inference_response.usage.completion_tokens, 50);
+        assert_eq!(inference_response.latency, latency);
     }
 
     #[test]
@@ -1525,11 +1569,14 @@ mod tests {
             },
             index: 0,
         };
-        let result = anthropic_to_tensorzero_stream_message(content_block_delta, inference_id);
+        let latency = Duration::from_millis(100);
+        let result =
+            anthropic_to_tensorzero_stream_message(content_block_delta, inference_id, latency);
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content, Some("Hello".to_string()));
         assert_eq!(chunk.tool_calls, None);
+        assert_eq!(chunk.latency, latency);
 
         // Test ContentBlockStart
         let content_block_start = AnthropicStreamMessage::ContentBlockStart {
@@ -1540,7 +1587,9 @@ mod tests {
             },
             index: 1,
         };
-        let result = anthropic_to_tensorzero_stream_message(content_block_start, inference_id);
+        let latency = Duration::from_millis(110);
+        let result =
+            anthropic_to_tensorzero_stream_message(content_block_start, inference_id, latency);
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content, None);
@@ -1552,10 +1601,13 @@ mod tests {
             tool_calls[0].arguments,
             Some(r#"{"operation":"add"}"#.to_string())
         );
+        assert_eq!(chunk.latency, latency);
 
         // Test ContentBlockStop
         let content_block_stop = AnthropicStreamMessage::ContentBlockStop { index: 2 };
-        let result = anthropic_to_tensorzero_stream_message(content_block_stop, inference_id);
+        let latency = Duration::from_millis(120);
+        let result =
+            anthropic_to_tensorzero_stream_message(content_block_stop, inference_id, latency);
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
 
@@ -1563,7 +1615,8 @@ mod tests {
         let error_message = AnthropicStreamMessage::Error {
             error: json!({"message": "Test error"}),
         };
-        let result = anthropic_to_tensorzero_stream_message(error_message, inference_id);
+        let latency = Duration::from_millis(130);
+        let result = anthropic_to_tensorzero_stream_message(error_message, inference_id, latency);
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err(),
@@ -1577,7 +1630,8 @@ mod tests {
             delta: json!({}),
             usage: json!({"input_tokens": 10, "output_tokens": 20}),
         };
-        let result = anthropic_to_tensorzero_stream_message(message_delta, inference_id);
+        let latency = Duration::from_millis(140);
+        let result = anthropic_to_tensorzero_stream_message(message_delta, inference_id, latency);
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content, None);
@@ -1586,12 +1640,14 @@ mod tests {
         let usage = chunk.usage.unwrap();
         assert_eq!(usage.prompt_tokens, 10);
         assert_eq!(usage.completion_tokens, 20);
+        assert_eq!(chunk.latency, latency);
 
         // Test MessageStart with usage
         let message_start = AnthropicStreamMessage::MessageStart {
             message: json!({"usage": {"input_tokens": 5, "output_tokens": 15}}),
         };
-        let result = anthropic_to_tensorzero_stream_message(message_start, inference_id);
+        let latency = Duration::from_millis(150);
+        let result = anthropic_to_tensorzero_stream_message(message_start, inference_id, latency);
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content, None);
@@ -1600,16 +1656,19 @@ mod tests {
         let usage = chunk.usage.unwrap();
         assert_eq!(usage.prompt_tokens, 5);
         assert_eq!(usage.completion_tokens, 15);
+        assert_eq!(chunk.latency, latency);
 
         // Test MessageStop
         let message_stop = AnthropicStreamMessage::MessageStop;
-        let result = anthropic_to_tensorzero_stream_message(message_stop, inference_id);
+        let latency = Duration::from_millis(160);
+        let result = anthropic_to_tensorzero_stream_message(message_stop, inference_id, latency);
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
 
         // Test Ping
         let ping = AnthropicStreamMessage::Ping {};
-        let result = anthropic_to_tensorzero_stream_message(ping, inference_id);
+        let latency = Duration::from_millis(170);
+        let result = anthropic_to_tensorzero_stream_message(ping, inference_id, latency);
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
     }
