@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "gateway",
+    "gateway/tests/mock-inference-provider",
 ]
 resolver = "2"
 
