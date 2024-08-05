@@ -120,7 +120,7 @@ impl InferenceProvider for AnthropicProvider {
             .map_err(|e| Error::InferenceClient {
                 message: format!("Error sending request to Anthropic: {e}"),
             })?;
-        let mut stream = Box::pin(stream_anthropic(event_source, start_time).await);
+        let mut stream = Box::pin(stream_anthropic(event_source, start_time));
         let chunk = match stream.next().await {
             Some(Ok(chunk)) => chunk,
             Some(Err(e)) => return Err(e),
@@ -138,7 +138,7 @@ impl InferenceProvider for AnthropicProvider {
 /// Modified from the example [here](https://github.com/64bit/async-openai/blob/5c9c817b095e3bacb2b6c9804864cdf8b15c795e/async-openai/src/client.rs#L433)
 /// At a high level, this function is handling low-level EventSource details and mapping the objects returned by Anthropic into our `InferenceResponseChunk` type
 
-async fn stream_anthropic(
+fn stream_anthropic(
     mut event_source: EventSource,
     start_time: Instant,
 ) -> impl Stream<Item = Result<ModelInferenceResponseChunk, Error>> {
