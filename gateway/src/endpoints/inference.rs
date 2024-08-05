@@ -68,7 +68,7 @@ pub async fn inference_handler(
     }): AppState,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
-    // To be used for the Inference table
+    // To be used for the Inference table processing_time measurements
     let start_time = Instant::now();
     // Get the function config or return an error if it doesn't exist
     let function = config.get_function(&params.function_name)?;
