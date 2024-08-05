@@ -1,0 +1,6 @@
+{
+  "response_format": {
+    "type": "text"
+  },
+  "stream": true
+}

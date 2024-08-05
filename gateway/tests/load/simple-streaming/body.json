@@ -1,0 +1,12 @@
+{
+  "function_name": "function1",
+  "episode_id": "00000000-0000-0000-0000-000000000000",
+  "input": [
+    {
+      "role": "user",
+      "content": "Is Santa real?"
+    }
+  ],
+  "max_tokens": 100,
+  "stream": true
+}
