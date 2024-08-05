@@ -1,4 +1,5 @@
 pub mod clickhouse;
+pub mod clickhouse_migration_manager;
 pub mod config_parser; // TensorZero config file
 pub mod endpoints; // API endpoints
 mod error; // error handling

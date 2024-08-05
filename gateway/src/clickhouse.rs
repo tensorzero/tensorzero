@@ -90,6 +90,32 @@ impl ClickHouseConnectionInfo {
             },
         }
     }
+
+    pub async fn run_query(&self, query: String) -> Result<String, Error> {
+        match self {
+            Self::Mock { .. } => unimplemented!(),
+            Self::Production { url, client } => {
+                let response = client.post(url).body(query).send().await.map_err(|e| {
+                    Error::ClickHouseWrite {
+                        message: e.to_string(),
+                    }
+                })?;
+
+                let status = response.status();
+
+                let response_body = response.text().await.map_err(|e| Error::ClickHouseWrite {
+                    message: e.to_string(),
+                })?;
+
+                match status {
+                    reqwest::StatusCode::OK => Ok(response_body),
+                    _ => Err(Error::ClickHouseWrite {
+                        message: response_body,
+                    }),
+                }
+            }
+        }
+    }
 }
 
 async fn write_mock(
