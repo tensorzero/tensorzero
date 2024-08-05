@@ -207,6 +207,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                     })
                     .and_then(|path| GCPCredentials::from_env(path.as_str()))
                     .ok_or_log();
+                // TODO: need to separate this out for streaming and non-streaming
                 let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:generateContent");
                 let audience = format!("https://{location}-aiplatform.googleapis.com/");
 

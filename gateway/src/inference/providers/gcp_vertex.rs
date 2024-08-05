@@ -164,11 +164,21 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             response_time: start_time.elapsed(),
         };
         if res.status().is_success() {
-            let body = res.json::<GCPVertexGeminiResponse>().await.map_err(|e| {
-                Error::AnthropicServer {
-                    message: format!("Error parsing response: {e}"),
-                }
+            let body_text = res.text().await.map_err(|e| Error::GCPVertexServer {
+                message: format!("Error reading response body: {e}"),
             })?;
+
+            let body: GCPVertexGeminiResponse =
+                serde_json::from_str(&body_text).map_err(|e| Error::GCPVertexServer {
+                    message: format!(
+                        "Error parsing response JSON: {e}\nResponse body: {body_text}"
+                    ),
+                })?;
+            // let body = res.json::<GCPVertexGeminiResponse>().await.map_err(|e| {
+            //     Error::GCPVertexServer {
+            //         message: format!("Error parsing response: {e}"),
+            //     }
+            // })?;
             let body_with_latency = GCPVertexGeminiResponseWithLatency { body, latency };
             Ok(body_with_latency.try_into()?)
         } else {
@@ -190,14 +200,14 @@ impl InferenceProvider for GCPVertexGeminiProvider {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, PartialEq, Debug)]
 #[serde(rename_all = "lowercase")]
 enum GCPVertexGeminiRole {
     User,
     Model,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, PartialEq, Debug)]
 struct GCPVertexGeminiFunctionCall<'a> {
     name: &'a str,
     args: &'a str, // JSON as string
@@ -209,7 +219,7 @@ struct GCPVertexGeminiFunctionResponse<'a> {
     response: &'a str, // JSON as string
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, PartialEq, Debug)]
 #[serde(rename_all = "camelCase", untagged)]
 enum GCPVertexGeminiContentPart<'a> {
     Text {
@@ -220,13 +230,13 @@ enum GCPVertexGeminiContentPart<'a> {
     FunctionCall {
         function_call: GCPVertexGeminiFunctionCall<'a>,
     },
-    FunctionResponse {
-        function_response: GCPVertexGeminiFunctionResponse<'a>,
-    },
+    // FunctionResponse {
+    //     function_response: GCPVertexGeminiFunctionResponse<'a>,
+    // },
     // TODO: VideoMetadata { video_metadata: VideoMetadata },
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug, PartialEq)]
 struct GCPVertexGeminiContent<'a> {
     role: GCPVertexGeminiRole,
     parts: Vec<GCPVertexGeminiContentPart<'a>>,
@@ -261,7 +271,7 @@ impl<'a> TryFrom<&'a InferenceRequestMessage> for GCPVertexGeminiContent<'a> {
                     parts,
                 }
             }
-            InferenceRequestMessage::System(message) => return Err(Error::InvalidMessage {
+            InferenceRequestMessage::System(_message) => return Err(Error::InvalidMessage {
                 message: "Can't convert System message to GCP Vertex Gemini message. Don't pass System message in except as the first message in the chat.".to_string(),
             }),
             InferenceRequestMessage::Tool(message) => GCPVertexGeminiContent {
@@ -277,8 +287,8 @@ impl<'a> TryFrom<&'a InferenceRequestMessage> for GCPVertexGeminiContent<'a> {
     }
 }
 
-#[derive(Serialize)]
-struct GCPVertexFunctionDeclaration<'a> {
+#[derive(Serialize, PartialEq, Debug)]
+struct GCPVertexGeminiFunctionDeclaration<'a> {
     name: &'a str,
     description: Option<&'a str>,
     parameters: Option<&'a Value>, // Should be a JSONSchema as a Value
@@ -287,10 +297,10 @@ struct GCPVertexFunctionDeclaration<'a> {
 // TODO: implement [Retrieval](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/Tool#Retrieval)
 // and [GoogleSearchRetrieval](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/Tool#GoogleSearchRetrieval)
 // tools.
-#[derive(Serialize)]
+#[derive(Serialize, PartialEq, Debug)]
 #[serde(rename_all = "camelCase")]
 enum GCPVertexGeminiTool<'a> {
-    FunctionDeclarations(Vec<GCPVertexFunctionDeclaration<'a>>),
+    FunctionDeclarations(Vec<GCPVertexGeminiFunctionDeclaration<'a>>),
 }
 
 impl<'a> From<&'a Vec<Tool>> for GCPVertexGeminiTool<'a> {
@@ -298,7 +308,7 @@ impl<'a> From<&'a Vec<Tool>> for GCPVertexGeminiTool<'a> {
         GCPVertexGeminiTool::FunctionDeclarations(
             tools
                 .into_iter()
-                .map(|tool| GCPVertexFunctionDeclaration {
+                .map(|tool| GCPVertexGeminiFunctionDeclaration {
                     name: &tool.name,
                     description: tool.description.as_deref(),
                     parameters: Some(&tool.parameters),
@@ -308,7 +318,7 @@ impl<'a> From<&'a Vec<Tool>> for GCPVertexGeminiTool<'a> {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, PartialEq, Debug)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 enum GCPVertexGeminiFunctionCallingMode {
     Auto,
@@ -316,14 +326,14 @@ enum GCPVertexGeminiFunctionCallingMode {
     None,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, PartialEq, Debug)]
 #[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiFunctionCallingConfig<'a> {
     mode: GCPVertexGeminiFunctionCallingMode,
     allowed_function_names: Option<Vec<&'a str>>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, PartialEq, Debug)]
 #[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiToolConfig<'a> {
     function_calling_config: GCPVertexGeminiFunctionCallingConfig<'a>,
@@ -360,16 +370,17 @@ impl<'a> From<&'a ToolChoice> for GCPVertexGeminiToolConfig<'a> {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug, PartialEq)]
 enum GCPVertexGeminiResponseMimeType {
     #[serde(rename = "text/plain")]
+    #[allow(dead_code)]
     TextPlain,
     #[serde(rename = "application/json")]
     ApplicationJson,
 }
 
 // TODO: add the other options [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/GenerationConfig)
-#[derive(Serialize)]
+#[derive(Serialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiGenerationConfig<'a> {
     stop_sequences: Option<Vec<&'a str>>,
@@ -379,7 +390,7 @@ struct GCPVertexGeminiGenerationConfig<'a> {
     response_schema: Option<&'a Value>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiRequest<'a> {
     contents: Vec<GCPVertexGeminiContent<'a>>,
@@ -411,8 +422,7 @@ impl<'a> TryFrom<&'a ModelInferenceRequest<'a>> for GCPVertexGeminiRequest<'a> {
             }
             _ => (None, &request.messages[..]),
         };
-        let contents = request
-            .messages
+        let contents = request_messages
             .iter()
             .map(|message| GCPVertexGeminiContent::try_from(message))
             .collect::<Result<Vec<_>, _>>()?;
@@ -476,7 +486,6 @@ struct GCPVertexGeminiResponseContent {
 
 #[derive(Deserialize, Serialize)]
 struct GCPVertexGeminiResponseCandidate {
-    index: u8,
     content: GCPVertexGeminiResponseContent,
 }
 
@@ -574,5 +583,482 @@ fn handle_gcp_vertex_gemini_error(
         _ => Err(Error::GCPVertexServer {
             message: response_body,
         }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::inference::types::{
+        AssistantInferenceRequestMessage, FunctionType, SystemInferenceRequestMessage,
+        ToolInferenceRequestMessage, UserInferenceRequestMessage,
+    };
+
+    #[test]
+    fn test_gcp_vertex_content_try_from() {
+        let message = InferenceRequestMessage::User(UserInferenceRequestMessage {
+            content: "Hello, world!".to_string(),
+        });
+        let content = GCPVertexGeminiContent::try_from(&message).unwrap();
+        assert_eq!(content.role, GCPVertexGeminiRole::User);
+        assert_eq!(content.parts.len(), 1);
+        assert_eq!(
+            content.parts[0],
+            GCPVertexGeminiContentPart::Text {
+                text: "Hello, world!"
+            }
+        );
+
+        let message = InferenceRequestMessage::Assistant(AssistantInferenceRequestMessage {
+            content: Some("Hello, world!".to_string()),
+            tool_calls: None,
+        });
+        let content = GCPVertexGeminiContent::try_from(&message).unwrap();
+        assert_eq!(content.role, GCPVertexGeminiRole::Model);
+        assert_eq!(content.parts.len(), 1);
+        assert_eq!(
+            content.parts[0],
+            GCPVertexGeminiContentPart::Text {
+                text: "Hello, world!"
+            }
+        );
+        let message = InferenceRequestMessage::Assistant(AssistantInferenceRequestMessage {
+            content: Some("Here's the result of the function call:".to_string()),
+            tool_calls: Some(vec![ToolCall {
+                id: "call_1".to_string(),
+                name: "get_weather".to_string(),
+                arguments: r#"{"location": "New York", "unit": "celsius"}"#.to_string(),
+            }]),
+        });
+        let content = GCPVertexGeminiContent::try_from(&message).unwrap();
+        assert_eq!(content.role, GCPVertexGeminiRole::Model);
+        assert_eq!(content.parts.len(), 2);
+        assert_eq!(
+            content.parts[0],
+            GCPVertexGeminiContentPart::Text {
+                text: "Here's the result of the function call:"
+            }
+        );
+        assert_eq!(
+            content.parts[1],
+            GCPVertexGeminiContentPart::FunctionCall {
+                function_call: GCPVertexGeminiFunctionCall {
+                    name: "get_weather",
+                    args: r#"{"location": "New York", "unit": "celsius"}"#,
+                }
+            }
+        );
+        let message = InferenceRequestMessage::System(SystemInferenceRequestMessage {
+            content: "You are a helpful assistant.".to_string(),
+        });
+        let result = GCPVertexGeminiContent::try_from(&message);
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert_eq!(
+            error,
+            Error::InvalidMessage {
+                message: "Can't convert System message to GCP Vertex Gemini message. Don't pass System message in except as the first message in the chat.".to_string()
+            }
+        );
+
+        let message = InferenceRequestMessage::Tool(ToolInferenceRequestMessage {
+            tool_call_id: "call_1".to_string(),
+            content: r#"{"temperature": 25, "conditions": "sunny"}"#.to_string(),
+        });
+        let content = GCPVertexGeminiContent::try_from(&message).unwrap();
+        assert_eq!(content.role, GCPVertexGeminiRole::User);
+        assert_eq!(content.parts.len(), 1);
+        assert_eq!(
+            content.parts[0],
+            GCPVertexGeminiContentPart::FunctionCall {
+                function_call: GCPVertexGeminiFunctionCall {
+                    name: "call_1",
+                    args: r#"{"temperature": 25, "conditions": "sunny"}"#,
+                }
+            }
+        );
+    }
+
+    #[test]
+    fn test_from_vec_tool() {
+        let tools = vec![
+            Tool {
+                name: "get_weather".to_string(),
+                description: Some("Get the weather for a given location".to_string()),
+                parameters: serde_json::to_value(
+                    r#"{"location": {"type": "string"}, "unit": {"type": "string"}}"#,
+                )
+                .unwrap(),
+                r#type: ToolType::Function,
+            },
+            Tool {
+                name: "get_time".to_string(),
+                description: Some("Get the current time for a given timezone".to_string()),
+                parameters: serde_json::to_value(r#"{"timezone": {"type": "string"}}"#).unwrap(),
+                r#type: ToolType::Function,
+            },
+        ];
+        let tool = GCPVertexGeminiTool::from(&tools);
+        assert_eq!(
+            tool,
+            GCPVertexGeminiTool::FunctionDeclarations(vec![
+                GCPVertexGeminiFunctionDeclaration {
+                    name: "get_weather",
+                    description: Some("Get the weather for a given location"),
+                    parameters: Some(&tools[0].parameters),
+                },
+                GCPVertexGeminiFunctionDeclaration {
+                    name: "get_time",
+                    description: Some("Get the current time for a given timezone"),
+                    parameters: Some(&tools[1].parameters),
+                }
+            ])
+        );
+    }
+
+    #[test]
+    fn test_from_tool_choice() {
+        let tool_choice = ToolChoice::Auto;
+        let tool_config = GCPVertexGeminiToolConfig::from(&tool_choice);
+        assert_eq!(
+            tool_config,
+            GCPVertexGeminiToolConfig {
+                function_calling_config: GCPVertexGeminiFunctionCallingConfig {
+                    mode: GCPVertexGeminiFunctionCallingMode::Auto,
+                    allowed_function_names: None,
+                }
+            }
+        );
+
+        let tool_choice = ToolChoice::Tool("get_weather".to_string());
+        let tool_config = GCPVertexGeminiToolConfig::from(&tool_choice);
+        assert_eq!(
+            tool_config,
+            GCPVertexGeminiToolConfig {
+                function_calling_config: GCPVertexGeminiFunctionCallingConfig {
+                    mode: GCPVertexGeminiFunctionCallingMode::Auto,
+                    allowed_function_names: Some(vec!["get_weather"]),
+                }
+            }
+        );
+
+        let tool_choice = ToolChoice::None;
+        let tool_config = GCPVertexGeminiToolConfig::from(&tool_choice);
+        assert_eq!(
+            tool_config,
+            GCPVertexGeminiToolConfig {
+                function_calling_config: GCPVertexGeminiFunctionCallingConfig {
+                    mode: GCPVertexGeminiFunctionCallingMode::None,
+                    allowed_function_names: None,
+                }
+            }
+        );
+
+        let tool_choice = ToolChoice::Required;
+        let tool_config = GCPVertexGeminiToolConfig::from(&tool_choice);
+        assert_eq!(
+            tool_config,
+            GCPVertexGeminiToolConfig {
+                function_calling_config: GCPVertexGeminiFunctionCallingConfig {
+                    mode: GCPVertexGeminiFunctionCallingMode::Any,
+                    allowed_function_names: None,
+                }
+            }
+        );
+    }
+
+    #[test]
+    fn test_gcp_vertex_request_try_from() {
+        // Test Case 1: Empty message list
+        let inference_request = ModelInferenceRequest {
+            messages: vec![],
+            tools_available: None,
+            tool_choice: None,
+            parallel_tool_calls: None,
+            temperature: None,
+            max_tokens: None,
+            stream: false,
+            json_mode: false,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+        let result = GCPVertexGeminiRequest::try_from(&inference_request);
+        let error = result.unwrap_err();
+        assert_eq!(
+            error,
+            Error::InvalidRequest {
+                message: "GCP Vertex Gemini requires at least one message".to_string()
+            }
+        );
+
+        // Test Case 2: Messages with System message
+        let messages = vec![
+            InferenceRequestMessage::System(SystemInferenceRequestMessage {
+                content: "test_system".to_string(),
+            }),
+            InferenceRequestMessage::User(UserInferenceRequestMessage {
+                content: "test_user".to_string(),
+            }),
+            InferenceRequestMessage::Assistant(AssistantInferenceRequestMessage {
+                content: Some("test_assistant".to_string()),
+                tool_calls: None,
+            }),
+        ];
+        let inference_request = ModelInferenceRequest {
+            messages: messages.clone(),
+            tools_available: None,
+            tool_choice: None,
+            parallel_tool_calls: None,
+            temperature: None,
+            max_tokens: None,
+            stream: false,
+            json_mode: false,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+        let result = GCPVertexGeminiRequest::try_from(&inference_request);
+        let request = result.unwrap();
+        assert_eq!(request.contents.len(), 2);
+        assert_eq!(request.contents[0].role, GCPVertexGeminiRole::User);
+        assert_eq!(
+            request.contents[0].parts[0],
+            GCPVertexGeminiContentPart::Text { text: "test_user" }
+        );
+        assert_eq!(request.contents[1].role, GCPVertexGeminiRole::Model);
+        assert_eq!(request.contents[1].parts.len(), 1);
+        assert_eq!(
+            request.contents[1].parts[0],
+            GCPVertexGeminiContentPart::Text {
+                text: "test_assistant"
+            }
+        );
+
+        // Test case 3: Messages with system message and some of the optional fields are tested
+        let messages = vec![
+            InferenceRequestMessage::System(SystemInferenceRequestMessage {
+                content: "test_system".to_string(),
+            }),
+            InferenceRequestMessage::User(UserInferenceRequestMessage {
+                content: "test_user".to_string(),
+            }),
+            InferenceRequestMessage::User(UserInferenceRequestMessage {
+                content: "test_user2".to_string(),
+            }),
+            InferenceRequestMessage::Assistant(AssistantInferenceRequestMessage {
+                content: Some("test_assistant".to_string()),
+                tool_calls: None,
+            }),
+        ];
+        let inference_request = ModelInferenceRequest {
+            messages: messages.clone(),
+            tools_available: None,
+            tool_choice: None,
+            parallel_tool_calls: None,
+            temperature: Some(0.5),
+            max_tokens: Some(100),
+            stream: true,
+            json_mode: true,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+        let result = GCPVertexGeminiRequest::try_from(&inference_request);
+        let request = result.unwrap();
+        assert_eq!(request.contents.len(), 3);
+        assert_eq!(request.contents[0].role, GCPVertexGeminiRole::User);
+        assert_eq!(request.contents[1].role, GCPVertexGeminiRole::User);
+        assert_eq!(request.contents[2].role, GCPVertexGeminiRole::Model);
+        assert_eq!(request.contents[0].parts.len(), 1);
+        assert_eq!(request.contents[1].parts.len(), 1);
+        assert_eq!(request.contents[2].parts.len(), 1);
+        assert_eq!(
+            request.contents[0].parts[0],
+            GCPVertexGeminiContentPart::Text { text: "test_user" }
+        );
+        assert_eq!(
+            request.contents[1].parts[0],
+            GCPVertexGeminiContentPart::Text { text: "test_user2" }
+        );
+        assert_eq!(
+            request.contents[2].parts[0],
+            GCPVertexGeminiContentPart::Text {
+                text: "test_assistant"
+            }
+        );
+        assert_eq!(
+            request.generation_config.as_ref().unwrap().temperature,
+            Some(0.5)
+        );
+        assert_eq!(
+            request
+                .generation_config
+                .as_ref()
+                .unwrap()
+                .max_output_tokens,
+            Some(100)
+        );
+    }
+
+    #[test]
+    fn test_gcp_to_t0_response() {
+        let part = GCPVertexGeminiResponseContentPart::Text {
+            text: "test_assistant".to_string(),
+        };
+        let content = GCPVertexGeminiResponseContent { parts: vec![part] };
+        let candidate = GCPVertexGeminiResponseCandidate { content };
+        let response = GCPVertexGeminiResponse {
+            candidates: vec![candidate],
+            usage_metadata: GCPVertexGeminiUsageMetadata {
+                prompt_token_count: 10,
+                candidates_token_count: 10,
+            },
+        };
+        let latency = Latency::NonStreaming {
+            response_time: Duration::from_secs(1),
+        };
+        let response_with_latency = GCPVertexGeminiResponseWithLatency {
+            body: response,
+            latency: latency.clone(),
+        };
+        let model_inference_response: ModelInferenceResponse =
+            response_with_latency.try_into().unwrap();
+        assert_eq!(
+            model_inference_response.content,
+            Some("test_assistant".to_string())
+        );
+        assert_eq!(model_inference_response.tool_calls, None);
+        assert_eq!(
+            model_inference_response.usage,
+            Usage {
+                prompt_tokens: 10,
+                completion_tokens: 10,
+            }
+        );
+        assert_eq!(model_inference_response.latency, latency);
+
+        let text_part = GCPVertexGeminiResponseContentPart::Text {
+            text: "Here's the weather information:".to_string(),
+        };
+        let function_call_part = GCPVertexGeminiResponseContentPart::FunctionCall {
+            function_call: GCPVertexGeminiResponseFunctionCall {
+                name: "get_weather".to_string(),
+                args: r#"{"location": "New York", "unit": "celsius"}"#.to_string(),
+            },
+        };
+        let content = GCPVertexGeminiResponseContent {
+            parts: vec![text_part, function_call_part],
+        };
+        let candidate = GCPVertexGeminiResponseCandidate { content };
+        let response = GCPVertexGeminiResponse {
+            candidates: vec![candidate],
+            usage_metadata: GCPVertexGeminiUsageMetadata {
+                prompt_token_count: 15,
+                candidates_token_count: 20,
+            },
+        };
+        let latency = Latency::NonStreaming {
+            response_time: Duration::from_secs(2),
+        };
+        let response_with_latency = GCPVertexGeminiResponseWithLatency {
+            body: response,
+            latency: latency.clone(),
+        };
+        let model_inference_response: ModelInferenceResponse =
+            response_with_latency.try_into().unwrap();
+
+        assert_eq!(
+            model_inference_response.content,
+            Some("Here's the weather information:".to_string())
+        );
+        assert_eq!(
+            model_inference_response.tool_calls,
+            Some(vec![ToolCall {
+                id: "get_weather".to_string(), // GCP doesn't do IDs
+                name: "get_weather".to_string(),
+                arguments: r#"{"location": "New York", "unit": "celsius"}"#.to_string(),
+            }])
+        );
+        assert_eq!(
+            model_inference_response.usage,
+            Usage {
+                prompt_tokens: 15,
+                completion_tokens: 20,
+            }
+        );
+        assert_eq!(model_inference_response.latency, latency);
+
+        let text_part1 = GCPVertexGeminiResponseContentPart::Text {
+            text: "Here's the weather information:".to_string(),
+        };
+        let function_call_part = GCPVertexGeminiResponseContentPart::FunctionCall {
+            function_call: GCPVertexGeminiResponseFunctionCall {
+                name: "get_weather".to_string(),
+                args: r#"{"location": "New York", "unit": "celsius"}"#.to_string(),
+            },
+        };
+        let text_part2 = GCPVertexGeminiResponseContentPart::Text {
+            text: "And here's a restaurant recommendation:".to_string(),
+        };
+        let function_call_part2 = GCPVertexGeminiResponseContentPart::FunctionCall {
+            function_call: GCPVertexGeminiResponseFunctionCall {
+                name: "get_restaurant".to_string(),
+                args: r#"{"cuisine": "Italian", "price_range": "moderate"}"#.to_string(),
+            },
+        };
+        let content = GCPVertexGeminiResponseContent {
+            parts: vec![
+                text_part1,
+                function_call_part,
+                text_part2,
+                function_call_part2,
+            ],
+        };
+        let candidate = GCPVertexGeminiResponseCandidate { content };
+        let response = GCPVertexGeminiResponse {
+            candidates: vec![candidate],
+            usage_metadata: GCPVertexGeminiUsageMetadata {
+                prompt_token_count: 25,
+                candidates_token_count: 40,
+            },
+        };
+        let latency = Latency::NonStreaming {
+            response_time: Duration::from_secs(3),
+        };
+        let response_with_latency = GCPVertexGeminiResponseWithLatency {
+            body: response,
+            latency: latency.clone(),
+        };
+        let model_inference_response: ModelInferenceResponse =
+            response_with_latency.try_into().unwrap();
+
+        assert_eq!(
+            model_inference_response.content,
+            Some(
+                "Here's the weather information:\nAnd here's a restaurant recommendation:"
+                    .to_string()
+            )
+        );
+        assert_eq!(
+            model_inference_response.tool_calls,
+            Some(vec![
+                ToolCall {
+                    id: "get_weather".to_string(),
+                    name: "get_weather".to_string(),
+                    arguments: r#"{"location": "New York", "unit": "celsius"}"#.to_string(),
+                },
+                ToolCall {
+                    id: "get_restaurant".to_string(),
+                    name: "get_restaurant".to_string(),
+                    arguments: r#"{"cuisine": "Italian", "price_range": "moderate"}"#.to_string(),
+                }
+            ])
+        );
+        assert_eq!(
+            model_inference_response.usage,
+            Usage {
+                prompt_tokens: 25,
+                completion_tokens: 40,
+            }
+        );
+        assert_eq!(model_inference_response.latency, latency);
     }
 }
