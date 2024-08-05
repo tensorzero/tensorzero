@@ -213,11 +213,12 @@ struct GCPVertexGeminiFunctionCall<'a> {
     args: &'a str, // JSON as string
 }
 
-#[derive(Serialize)]
-struct GCPVertexGeminiFunctionResponse<'a> {
-    name: &'a str,
-    response: &'a str, // JSON as string
-}
+// TODO: use this when we do tool calling properly
+// #[derive(Serialize)]
+// struct GCPVertexGeminiFunctionResponse<'a> {
+//     name: &'a str,
+//     response: &'a str, // JSON as string
+// }
 
 #[derive(Serialize, PartialEq, Debug)]
 #[serde(rename_all = "camelCase", untagged)]
