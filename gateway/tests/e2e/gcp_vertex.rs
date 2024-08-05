@@ -94,7 +94,7 @@ async fn test_inference_basic() {
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "gcp-vertex-gemini");
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    // Bedrock can't be faster than this
+    // Gemini can't be faster than this
     assert!(processing_time_ms > 100);
 
     // Next, check ModelInference table
