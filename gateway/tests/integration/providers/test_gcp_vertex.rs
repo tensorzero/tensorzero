@@ -6,8 +6,8 @@ use serde_json::{json, Value};
 #[tokio::test]
 async fn test_infer() {
     let mut provider_config_json = json!({"type": "gcp_vertex_gemini", "model_id": "gemini-1.5-flash-001", "location": "us-central1"});
-    let gcp_project_id = std::env::var("GCP_PROJECT_ID").expect("GCP_PROJECT_ID must be set");
-    provider_config_json["project_id"] = Value::String(gcp_project_id);
+    let gcp_project_id = "tensorzero-public";
+    provider_config_json["project_id"] = Value::String(gcp_project_id.to_string());
     let config: ProviderConfig = serde_json::from_value(provider_config_json)
         .expect("Failed to deserialize provider config");
     let client = reqwest::Client::new();
