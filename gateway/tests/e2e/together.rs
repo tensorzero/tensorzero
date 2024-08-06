@@ -96,7 +96,7 @@ async fn test_inference_basic() {
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "together");
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    // Anthropic can't be faster than this
+    // Together can't be faster than this
     assert!(processing_time_ms > 100);
 
     // Next, check ModelInference table
@@ -219,7 +219,7 @@ async fn test_streaming() {
     }
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 100);
-    assert!(result.get("ttft_ms").unwrap().is_null());
+    let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
     assert!(ttft_ms > 100);
     assert!(ttft_ms <= response_time_ms);
 }

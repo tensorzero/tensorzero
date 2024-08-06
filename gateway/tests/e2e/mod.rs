@@ -5,6 +5,8 @@ mod azure;
 mod common;
 mod feedback;
 mod fireworks;
+mod gcp_vertex;
 mod health;
 mod inference;
 mod openai;
+mod together;

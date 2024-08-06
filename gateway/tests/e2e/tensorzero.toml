@@ -58,6 +58,15 @@ routing = ["aws-bedrock"]
 type = "aws_bedrock"
 model_id = "anthropic.claude-3-haiku-20240307-v1:0"
 
+[models."gemini-1.5-flash-001"]
+routing = ["gcp_vertex_gemini"]
+
+[models."gemini-1.5-flash-001".providers.gcp_vertex_gemini]
+type = "gcp_vertex_gemini"
+model_id = "gemini-1.5-flash-001"
+location = "us-central1"
+project_id = "tensorzero-public"
+
 [models."llama3.1-8b-instruct-fireworks"]
 routing = ["fireworks"]
 
@@ -70,7 +79,7 @@ routing = ["together"]
 
 [models."llama3.1-8b-instruct-together".providers.together]
 type = "together"
-model_name = "llama3-8b-instruct"
+model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
 
 [models.test]
 routing = ["good"]
@@ -142,6 +151,12 @@ system_template = "functions/basic_test/prompt/system_template.minijinja"
 type = "chat_completion"
 weight = 0
 model = "llama3.1-8b-instruct-fireworks"
+system_template = "functions/basic_test/prompt/system_template.minijinja"
+
+[functions.basic_test.variants.gcp-vertex-gemini]
+type = "chat_completion"
+weight = 0
+model = "gemini-1.5-flash-001"
 system_template = "functions/basic_test/prompt/system_template.minijinja"
 
 [functions.basic_test.variants.openai]
