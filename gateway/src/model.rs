@@ -6,7 +6,7 @@ use std::env;
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::inference::providers::dummy::DummyProvider;
 use crate::{
-    error::{Error, ResultExt},
+    error::Error,
     inference::{
         providers::{
             anthropic::AnthropicProvider,
@@ -201,11 +201,10 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 location,
                 project_id,
             } => {
-                let credentials_path = env::var("GCP_VERTEX_CREDENTIALS_PATH")
-                    .map_err(|e| Error::ApiKeyMissing {
-                        provider_name: format!("GCP Vertex Gemini credentials path: {}", e),
-                    })
-                    .ok_or_log();
+                // If the environment variable is not set, we will simply have None as our credentials.
+                let credentials_path = env::var("GCP_VERTEX_CREDENTIALS_PATH").ok();
+                // If the environment variable is set, we will load and validate (as much as possible)
+                // the credentials from the path. If this fails, we will throw an error and stop the startup.
                 let credentials = match credentials_path {
                     Some(path) => Some(GCPCredentials::from_env(path.as_str()).map_err(|e| {
                         serde::de::Error::custom(format!("Failed to load GCP credentials: {}", e))

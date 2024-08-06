@@ -21,6 +21,12 @@ use crate::{
 
 pub struct GCPVertexGeminiProvider;
 
+/// Auth
+///
+/// We implement below the JWT request signing as documented [here](https://developers.google.com/identity/protocols/oauth2/service-account).
+///
+/// GCPCredentials contains the pieces of information required to successfully make a request using a service account JWT
+/// key. The way this works is that there are "claims" about who is making the request and we sign those claims using the key.
 #[derive(Clone)]
 pub struct GCPCredentials {
     private_key_id: String,
@@ -38,13 +44,14 @@ impl std::fmt::Debug for GCPCredentials {
     }
 }
 
+/// JWT standard claims that are used in GCP auth.
 #[derive(Serialize)]
 struct Claims<'a> {
-    iss: &'a str,
-    sub: &'a str,
-    aud: &'a str,
-    iat: u64,
-    exp: u64,
+    iss: &'a str, // Issuer
+    sub: &'a str, // Subject
+    aud: &'a str, // Audience
+    iat: u64,     // Issued at
+    exp: u64,     // Expiration time
 }
 
 impl<'a> Claims<'a> {
@@ -66,6 +73,7 @@ impl<'a> Claims<'a> {
 }
 
 impl GCPCredentials {
+    /// Given a path to a JSON key taken from a GCP service account, load the credentials needed to sign requests.
     pub fn from_env(path: &str) -> Result<Self, Error> {
         let credential_str = std::fs::read_to_string(path).map_err(|e| Error::GCPCredentials {
             message: format!("Failed to read GCP Vertex Gemini credentials: {e}"),
@@ -110,6 +118,7 @@ impl GCPCredentials {
         }
     }
 
+    // Get a signed JWT token for the given audience valid from the current time.
     fn get_jwt_token(&self, audience: &str) -> Result<String, Error> {
         let mut header = Header::new(Algorithm::RS256);
         header.kid = Some(self.private_key_id.clone());
