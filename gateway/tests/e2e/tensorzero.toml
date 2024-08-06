@@ -1,5 +1,6 @@
 #:schema None
-# TODO: add the line above to editor config and remove from here
+# TODO (#75): set up custom schema for tensorzero.toml
+
 # NOTE: This is an example configuration file for TensorZero.
 #       You can use this file as a reference for your own configuration by adding
 #       your own models, functions, and metrics.

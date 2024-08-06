@@ -103,7 +103,7 @@ impl Variant for VariantConfig {
 #[serde(deny_unknown_fields)]
 pub struct ChatCompletionConfig {
     pub weight: f64,
-    pub model: String, // TODO: validate that the model is valid given the rest of the config
+    pub model: String, // TODO (#85): validate that this model exists in the model config
     pub system_template: Option<PathBuf>,
     pub user_template: Option<PathBuf>,
     pub assistant_template: Option<PathBuf>,

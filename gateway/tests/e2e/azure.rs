@@ -20,7 +20,7 @@ use crate::e2e::common::{select_inference_clickhouse, select_model_inferences_cl
 ///  - JSON mode
 ///  - other API parameters (temp, max_tokens, etc.)
 
-// TODO: make this endpoint configurable with some kind of env var
+// TODO (#74): make this endpoint configurable with some kind of env var
 const INFERENCE_URL: &str = "http://localhost:3000/inference";
 lazy_static::lazy_static! {
     static ref CLICKHOUSE_URL: String = std::env::var("CLICKHOUSE_URL").expect("Environment variable CLICKHOUSE_URL must be set");
@@ -206,7 +206,7 @@ async fn test_streaming() {
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, payload["input"]);
-    // TODO: As far as @virajmehta can tell, Azure OpenAI service does not support usage as part of its streaming Chat Completions offering.
+    // NOTE: As far as @virajmehta can tell, Azure OpenAI service does not support usage as part of its streaming Chat Completions offering.
     //       If they add it, we can uncomment these lines.
     // let input_tokens: u64 = result.get("input_tokens").unwrap().as_u64().unwrap();
     // let output_tokens: u64 = result.get("output_tokens").unwrap().as_u64().unwrap();

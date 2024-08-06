@@ -31,7 +31,7 @@ fn setup_logs() {
 
 /// Set up Prometheus metrics exporter
 fn setup_metrics() -> Result<(), Error> {
-    // TODO: make this configurable
+    // TODO (#71): make this configurable
     let prometheus_listener_addr = SocketAddr::from(([0, 0, 0, 0], 9090));
 
     PrometheusBuilder::new()

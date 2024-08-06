@@ -219,7 +219,7 @@ pub(super) struct OpenAISystemRequestMessage<'a> {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(super) struct OpenAIUserRequestMessage<'a> {
-    content: &'a str, // TODO: this could be an array including images and stuff according to API spec, we don't support
+    content: &'a str, // NOTE: this could be an array including images and stuff according to API spec (not supported yet)
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

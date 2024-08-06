@@ -37,7 +37,7 @@ impl ClickHouseConnectionInfo {
 
         Ok(Self::Production {
             base_url,
-            database: "tensorzero".to_string(), // TODO: parameterize the database name
+            database: "tensorzero".to_string(), // TODO (#69): parameterize the database name
             client: Client::new(),
         })
     }
@@ -193,7 +193,7 @@ async fn write_production(
     let row_json = serde_json::to_string(row).map_err(|e| Error::Serialization {
         message: e.to_string(),
     })?;
-    // TODO: allow the user to parameterize whether to wait_for_async_insert
+    // TODO (#70): allow the user to parameterize whether to wait_for_async_insert
     // Design we'll use:
     //   1. Feedback should wait
     //   2. Allow the user to optionally configure that a function is latency sensitive (default false). If so,
