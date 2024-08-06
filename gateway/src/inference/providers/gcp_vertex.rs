@@ -92,7 +92,7 @@ impl GCPCredentials {
             credential_value
                 .get("private_key")
                 .ok_or(Error::GCPCredentials {
-                    message: "GCP Vertex Gemini: missing rivate_key".to_string(),
+                    message: "GCP Vertex Gemini: missing private_key".to_string(),
                 })?
                 .as_str(),
             credential_value
