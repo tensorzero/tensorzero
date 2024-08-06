@@ -25,7 +25,7 @@ services:
     ports:
       - "3000:3000"
       - "9090:9090" # Prometheus metrics
-    command: ["gateway", "/app/tensorzero.test.toml"]
+    command: ["gateway", "/app/tensorzero.toml"]
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:?Environment variable ANTHROPIC_API_KEY is not set}
       - AWS_REGION=${AWS_REGION:?Environment variable AWS_REGION is not set}
@@ -37,5 +37,5 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY is not set}
       - TOGETHER_API_KEY=${TOGETHER_API_KEY:?Environment variable TOGETHER_API_KEY is not set}
     volumes:
-      - ./tensorzero.test.toml:/app/tensorzero.test.toml
+      - ./tensorzero.toml:/app/tensorzero.toml
       - ../../../functions:/app/functions
