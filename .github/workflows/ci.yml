@@ -17,6 +17,7 @@ env:
   CLICKHOUSE_URL: "http://localhost:8123" # for E2E tests
   FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }} # for integration/E2E tests
   FORCE_COLOR: 1
+  GCP_VERTEX_CREDENTIALS_PATH: ${{ github.workspace }}/gcp_jwt_key.json
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }} # for integration/E2E tests
   TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }} # for integration/E2E tests
 
@@ -62,16 +63,19 @@ jobs:
         with:
           command: check bans
 
-      - name: Test (Rust)
-        if: github.ref != 'refs/heads/main'
-        run: |
-          cargo test
+      # - name: Test (Rust)
+      # if: github.ref != 'refs/heads/main'
+      # run: |
+      #   cargo test
+
+      - name: Write GCP JWT key to file
+        run: echo "${{ secrets.GCP_JWT_KEY }}" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
       - name: Launch containers for E2E tests
-        if: github.ref == 'refs/heads/main'
+        # if: github.ref == 'refs/heads/main'
         run: docker compose -f gateway/tests/e2e/docker-compose.yml up -d
 
       - name: Test (including integration and E2E) (Rust)
-        if: github.ref == 'refs/heads/main'
+        # if: github.ref == 'refs/heads/main'
         run: |
           cargo test --features integration_tests,e2e_tests
