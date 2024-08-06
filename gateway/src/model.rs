@@ -201,12 +201,17 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 location,
                 project_id,
             } => {
-                let credentials = env::var("GCP_VERTEX_CREDENTIALS_PATH")
-                    .map_err(|_| Error::ApiKeyMissing {
-                        provider_name: "GCP Vertex Gemini".to_string(),
+                let credentials_path = env::var("GCP_VERTEX_CREDENTIALS_PATH")
+                    .map_err(|e| Error::ApiKeyMissing {
+                        provider_name: format!("GCP Vertex Gemini credentials path: {}", e),
                     })
-                    .and_then(|path| GCPCredentials::from_env(path.as_str()))
                     .ok_or_log();
+                let credentials = match credentials_path {
+                    Some(path) => Some(GCPCredentials::from_env(path.as_str()).map_err(|e| {
+                        serde::de::Error::custom(format!("Failed to load GCP credentials: {}", e))
+                    })?),
+                    None => None,
+                };
                 // TODO: need to separate this out for streaming and non-streaming
                 let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:generateContent");
                 let audience = format!("https://{location}-aiplatform.googleapis.com/");

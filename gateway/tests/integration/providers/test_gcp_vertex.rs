@@ -8,8 +8,7 @@ async fn test_infer() {
     let mut provider_config_json = json!({"type": "gcp_vertex_gemini", "model_id": "gemini-1.5-flash-001", "location": "us-central1"});
     let gcp_project_id = "tensorzero-public";
     provider_config_json["project_id"] = Value::String(gcp_project_id.to_string());
-    let config: ProviderConfig = serde_json::from_value(provider_config_json)
-        .expect("Failed to deserialize provider config");
+    let config: ProviderConfig = serde_json::from_value(provider_config_json).unwrap();
     let client = reqwest::Client::new();
     let inference_request = create_simple_inference_request();
     let result = GCPVertexGeminiProvider::infer(&inference_request, &config, &client).await;
