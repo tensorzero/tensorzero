@@ -214,7 +214,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                     None => None,
                 };
                 let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:generateContent");
-                let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:streamGenerateContent");
+                let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:streamGenerateContent?alt=sse");
                 let audience = format!("https://{location}-aiplatform.googleapis.com/");
 
                 ProviderConfig::GCPVertexGemini {

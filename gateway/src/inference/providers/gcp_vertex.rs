@@ -1,14 +1,17 @@
 use std::time::Duration;
 
+use futures::{Stream, StreamExt};
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use reqwest::StatusCode;
+use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::time::Instant;
+use uuid::Uuid;
 
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
-use crate::inference::types::Latency;
+use crate::inference::types::{Latency, ToolCallChunk};
 use crate::{
     inference::types::{
         InferenceRequestMessage, InferenceResponseStream, ModelInferenceRequest,
@@ -17,7 +20,7 @@ use crate::{
     model::ProviderConfig,
 };
 
-/// Implements a subset ofthe GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/GenerateContentResponse) for non-streaming
+/// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/GenerateContentResponse) for non-streaming
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
 
 pub struct GCPVertexGeminiProvider;
@@ -155,7 +158,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         let start_time = Instant::now();
         let res = http_client
             .post(request_url)
-            .header("Authorization", format!("Bearer {}", token))
+            .bearer_auth(token)
             .json(&request_body)
             .send()
             .await
@@ -184,11 +187,97 @@ impl InferenceProvider for GCPVertexGeminiProvider {
 
     /// GCP Vertex Gemini streaming API request
     async fn infer_stream<'a>(
-        _request: &'a ModelInferenceRequest<'a>,
-        _model: &'a ProviderConfig,
-        _http_client: &'a reqwest::Client,
+        request: &'a ModelInferenceRequest<'a>,
+        model: &'a ProviderConfig,
+        http_client: &'a reqwest::Client,
     ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
-        todo!()
+        let (request_url, audience, credentials) = match model {
+            ProviderConfig::GCPVertexGemini {
+                streaming_request_url,
+                audience,
+                credentials,
+                ..
+            } => (
+                streaming_request_url,
+                audience,
+                credentials.as_ref().ok_or(Error::ApiKeyMissing {
+                    provider_name: "GCP Vertex Gemini".to_string(),
+                })?,
+            ),
+            _ => {
+                return Err(Error::InvalidProviderConfig {
+                    message: "Expected GCP Vertex Gemini provider config".to_string(),
+                })
+            }
+        };
+        let request_body: GCPVertexGeminiRequest = request.try_into()?;
+        let token = credentials.get_jwt_token(audience)?;
+        let start_time = Instant::now();
+        let event_source = http_client
+            .post(request_url)
+            .bearer_auth(token)
+            .json(&request_body)
+            .eventsource()
+            .map_err(|e| Error::InferenceClient {
+                message: format!("Error sending request to GCP Vertex Gemini: {e}"),
+            })?;
+        let mut stream = Box::pin(stream_gcp_vertex_gemini(event_source, start_time));
+        let chunk = match stream.next().await {
+            Some(Ok(chunk)) => chunk,
+            Some(Err(e)) => return Err(e),
+            None => {
+                return Err(Error::GCPVertexServer {
+                    message: "Stream ended before first chunk".to_string(),
+                })
+            }
+        };
+        Ok((chunk, stream))
+    }
+}
+
+fn stream_gcp_vertex_gemini(
+    mut event_source: EventSource,
+    start_time: Instant,
+) -> impl Stream<Item = Result<ModelInferenceResponseChunk, Error>> {
+    async_stream::stream! {
+        let inference_id = Uuid::now_v7();
+        while let Some(ev) = event_source.next().await {
+            match ev {
+                Err(e) => {
+                    if matches!(e, reqwest_eventsource::Error::StreamEnded) {
+                        break;
+                    }
+                    yield Err(Error::GCPVertexServer {
+                        message: e.to_string(),
+                    })
+                }
+                Ok(event) => match event {
+                    Event::Open => continue,
+                    Event::Message(message) => {
+                        println!("ok event: {:?}", message);
+                        let data: Result<GCPVertexGeminiResponse, Error> = serde_json::from_str(&message.data).map_err(|e| Error::GCPVertexServer {
+                            message: format!("Error parsing response: {e}"),
+                        });
+                        let data = match data {
+                            Ok(data) => data,
+                            Err(e) => {
+                                yield Err(e);
+                                continue;
+                            }
+                        };
+                        let response = GCPVertexGeminiStreamResponseWithMetadata {
+                            body: data,
+                            latency: start_time.elapsed(),
+                            inference_id,
+                        }.try_into();
+                        match response {
+                            Ok(response) => yield Ok(response),
+                            Err(e) => yield Err(e),
+                        }
+                    }
+                }
+            }
+         }
     }
 }
 
@@ -502,7 +591,7 @@ impl From<GCPVertexGeminiUsageMetadata> for Usage {
 #[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiResponse {
     candidates: Vec<GCPVertexGeminiResponseCandidate>,
-    usage_metadata: GCPVertexGeminiUsageMetadata,
+    usage_metadata: Option<GCPVertexGeminiUsageMetadata>,
 }
 
 struct GCPVertexGeminiResponseWithLatency {
@@ -548,12 +637,77 @@ impl TryFrom<GCPVertexGeminiResponseWithLatency> for ModelInferenceResponse {
                 }
             }
         }
+        let usage = body
+            .usage_metadata
+            .ok_or(Error::GCPVertexServer {
+                message: "GCP Vertex Gemini non-streaming response has no usage metadata"
+                    .to_string(),
+            })?
+            .into();
 
         Ok(ModelInferenceResponse::new(
             message_text,
             tool_calls,
             raw,
-            body.usage_metadata.into(),
+            usage,
+            latency,
+        ))
+    }
+}
+
+struct GCPVertexGeminiStreamResponseWithMetadata {
+    body: GCPVertexGeminiResponse,
+    latency: Duration,
+    inference_id: Uuid,
+}
+
+impl TryFrom<GCPVertexGeminiStreamResponseWithMetadata> for ModelInferenceResponseChunk {
+    type Error = Error;
+    fn try_from(response: GCPVertexGeminiStreamResponseWithMetadata) -> Result<Self, Self::Error> {
+        let GCPVertexGeminiStreamResponseWithMetadata {
+            body,
+            latency,
+            inference_id,
+        } = response;
+        let raw = serde_json::to_string(&body).map_err(|e| Error::GCPVertexServer {
+            message: format!("Error parsing response from GCP Vertex Gemini: {e}"),
+        })?;
+        let first_candidate = body
+            .candidates
+            .into_iter()
+            .next()
+            .ok_or(Error::GCPVertexServer {
+                message: "GCP Vertex Gemini response has no candidates".to_string(),
+            })?;
+        let mut message_text: Option<String> = None;
+        let mut tool_calls: Option<Vec<ToolCallChunk>> = None;
+        for part in first_candidate.content.parts {
+            match part {
+                GCPVertexGeminiResponseContentPart::Text { text } => match message_text {
+                    Some(message) => message_text = Some(format!("{}\n{}", message, text)),
+                    None => message_text = Some(text),
+                },
+                GCPVertexGeminiResponseContentPart::FunctionCall { function_call } => {
+                    let tool_call = ToolCallChunk {
+                        name: Some(function_call.name.clone()),
+                        arguments: Some(function_call.args),
+                        id: Some(function_call.name),
+                    };
+                    if let Some(calls) = tool_calls.as_mut() {
+                        calls.push(tool_call);
+                    } else {
+                        tool_calls = Some(vec![tool_call]);
+                    }
+                }
+            }
+        }
+        Ok(ModelInferenceResponseChunk::new(
+            inference_id,
+            message_text,
+            tool_calls,
+            body.usage_metadata
+                .map(|usage_metadata| usage_metadata.into()),
+            raw,
             latency,
         ))
     }
@@ -900,10 +1054,10 @@ mod tests {
         let candidate = GCPVertexGeminiResponseCandidate { content };
         let response = GCPVertexGeminiResponse {
             candidates: vec![candidate],
-            usage_metadata: GCPVertexGeminiUsageMetadata {
+            usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: 10,
                 candidates_token_count: 10,
-            },
+            }),
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_secs(1),
@@ -943,10 +1097,10 @@ mod tests {
         let candidate = GCPVertexGeminiResponseCandidate { content };
         let response = GCPVertexGeminiResponse {
             candidates: vec![candidate],
-            usage_metadata: GCPVertexGeminiUsageMetadata {
+            usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: 15,
                 candidates_token_count: 20,
-            },
+            }),
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_secs(2),
@@ -1008,10 +1162,10 @@ mod tests {
         let candidate = GCPVertexGeminiResponseCandidate { content };
         let response = GCPVertexGeminiResponse {
             candidates: vec![candidate],
-            usage_metadata: GCPVertexGeminiUsageMetadata {
+            usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: 25,
                 candidates_token_count: 40,
-            },
+            }),
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_secs(3),
