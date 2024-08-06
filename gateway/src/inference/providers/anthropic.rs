@@ -1,11 +1,10 @@
-use std::time::Duration;
-
-use futures::StreamExt;
+use futures::{Stream, StreamExt};
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::time::Duration;
 use tokio::time::Instant;
 use uuid::Uuid;
 
@@ -121,7 +120,7 @@ impl InferenceProvider for AnthropicProvider {
             .map_err(|e| Error::InferenceClient {
                 message: format!("Error sending request to Anthropic: {e}"),
             })?;
-        let mut stream = stream_anthropic(event_source, start_time).await;
+        let mut stream = Box::pin(stream_anthropic(event_source, start_time));
         let chunk = match stream.next().await {
             Some(Ok(chunk)) => chunk,
             Some(Err(e)) => return Err(e),
@@ -138,58 +137,48 @@ impl InferenceProvider for AnthropicProvider {
 /// Maps events from Anthropic into the TensorZero format
 /// Modified from the example [here](https://github.com/64bit/async-openai/blob/5c9c817b095e3bacb2b6c9804864cdf8b15c795e/async-openai/src/client.rs#L433)
 /// At a high level, this function is handling low-level EventSource details and mapping the objects returned by Anthropic into our `InferenceResponseChunk` type
-async fn stream_anthropic(
+
+fn stream_anthropic(
     mut event_source: EventSource,
     start_time: Instant,
-) -> InferenceResponseStream {
-    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-    tokio::spawn(async move {
+) -> impl Stream<Item = Result<ModelInferenceResponseChunk, Error>> {
+    async_stream::stream! {
         let inference_id = Uuid::now_v7();
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    if let Err(_e) = tx.send(Err(Error::AnthropicServer {
+                    yield Err(Error::AnthropicServer {
                         message: e.to_string(),
-                    })) {
-                        // rx dropped
-                        break;
-                    }
+                    });
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
                     Event::Message(message) => {
                         let data: Result<AnthropicStreamMessage, Error> =
-                            serde_json::from_str(&message.data).map_err(|e| {
-                                {
-                                    Error::AnthropicServer {
-                                        message: format!(
-                                            "Error parsing message: {}, Data: {}",
-                                            e, message.data
-                                        ),
-                                    }
-                                }
+                            serde_json::from_str(&message.data).map_err(|e| Error::AnthropicServer {
+                                message: format!(
+                                    "Error parsing message: {}, Data: {}",
+                                    e, message.data
+                                ),
                             });
-                        let response = match data {
-                            Err(e) => Err(e),
-                            Ok(data) => {
-                                // Anthropic streaming API docs specify that this is the last message
-                                if let AnthropicStreamMessage::MessageStop = data {
-                                    break;
-                                }
-                                anthropic_to_tensorzero_stream_message(
-                                    data,
-                                    inference_id,
-                                    start_time.elapsed(),
-                                )
-                            }
-                        }
-                        .transpose();
 
-                        if let Some(stream_message) = response {
-                            if tx.send(stream_message).is_err() {
-                                // rx dropped
-                                break;
-                            }
+                        // Anthropic streaming API docs specify that this is the last message
+                        if let Ok(AnthropicStreamMessage::MessageStop) = data {
+                            break;
+                        }
+
+                        let response = data.and_then(|data| {
+                            anthropic_to_tensorzero_stream_message(
+                                data,
+                                inference_id,
+                                start_time.elapsed(),
+                            )
+                        });
+
+                        match response {
+                            Ok(None) => {},
+                            Ok(Some(stream_message)) => yield Ok(stream_message),
+                            Err(e) => yield Err(e),
                         }
                     }
                 },
@@ -197,9 +186,7 @@ async fn stream_anthropic(
         }
 
         event_source.close();
-    });
-
-    Box::pin(tokio_stream::wrappers::UnboundedReceiverStream::new(rx))
+    }
 }
 
 #[derive(Serialize, PartialEq, Debug, Clone)]
@@ -656,7 +643,7 @@ enum AnthropicStreamMessage {
         message: Value,
     },
     MessageStop,
-    Ping {},
+    Ping,
 }
 
 fn anthropic_to_tensorzero_stream_message(
