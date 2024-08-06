@@ -106,6 +106,7 @@ pub enum ProviderConfig {
     },
     GCPVertexGemini {
         request_url: String,
+        streaming_request_url: String,
         audience: String,
         credentials: Option<GCPCredentials>,
     },
@@ -212,12 +213,13 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                     })?),
                     None => None,
                 };
-                // TODO: need to separate this out for streaming and non-streaming
                 let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:generateContent");
+                let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:streamGenerateContent");
                 let audience = format!("https://{location}-aiplatform.googleapis.com/");
 
                 ProviderConfig::GCPVertexGemini {
                     request_url,
+                    streaming_request_url,
                     audience,
                     credentials,
                 }

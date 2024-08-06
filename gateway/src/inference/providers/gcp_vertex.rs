@@ -17,7 +17,8 @@ use crate::{
     model::ProviderConfig,
 };
 
-/// Implements a subset ofthe GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/GenerateContentResponse)
+/// Implements a subset ofthe GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/GenerateContentResponse) for non-streaming
+/// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
 
 pub struct GCPVertexGeminiProvider;
 
@@ -134,6 +135,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 request_url,
                 audience,
                 credentials,
+                ..
             } => (
                 request_url,
                 audience,
