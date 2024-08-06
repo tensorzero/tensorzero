@@ -83,6 +83,9 @@ jobs:
       - name: List the github workspace
         run: ls -la $GITHUB_WORKSPACE
 
+      - name: Debugging with ssh
+        uses: lhotari/action-upterm@v1
+
       - name: Launch containers for E2E tests
         # if: github.ref == 'refs/heads/main'
         run: docker compose -f gateway/tests/e2e/docker-compose.yml up -d
