@@ -65,7 +65,7 @@ pub async fn feedback_handler(
 
     let dryrun = params.dryrun.unwrap_or(false);
 
-    // TODO: add test that metadata is not saved if dryrun is true
+    // TODO (#77): add test that metadata is not saved if dryrun is true
     match feedback_metadata.r#type {
         FeedbackType::Comment => {
             write_comment(
@@ -115,7 +115,7 @@ pub async fn feedback_handler(
     }
 
     if !dryrun {
-        // TODO: add integration/E2E test that checks the Prometheus endpoint
+        // TODO (#78): add integration/E2E test that checks the Prometheus endpoint
         counter!(
             "request_count",
             "endpoint" => "feedback",

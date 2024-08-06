@@ -1,7 +1,7 @@
 use reqwest::{Client, StatusCode};
 use serde_json::Value;
 
-// TODO: make this endpoint configurable with main.rs
+// TODO (#74): make this endpoint configurable with main.rs
 const HEALTH_URL: &str = "http://localhost:3000/health";
 
 #[tokio::test]

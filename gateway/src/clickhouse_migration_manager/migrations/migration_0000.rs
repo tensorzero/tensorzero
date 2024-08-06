@@ -63,7 +63,7 @@ impl<'a> Migration for Migration0000<'a> {
     }
 
     async fn apply(&self) -> Result<(), Error> {
-        // TODO: parametrize the database name
+        // TODO (#69): parametrize the database name
         // Create the database if it doesn't exist
         self.clickhouse.create_database("tensorzero").await?;
 

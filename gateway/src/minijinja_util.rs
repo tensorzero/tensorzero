@@ -2,12 +2,11 @@ use minijinja::{Environment, UndefinedBehavior};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::OnceLock;
+use tokio::sync::OnceCell;
 
 use crate::error::Error;
 
-// TODO: investigate `tokio::sync::OnceCell`
-static MINIJINJA_ENV: OnceLock<Environment> = OnceLock::new();
+static MINIJINJA_ENV: OnceCell<Environment> = OnceCell::const_new();
 
 /// Initializes the MINIJINJA_ENV with the given templates, given as a map from template names
 /// to template paths.

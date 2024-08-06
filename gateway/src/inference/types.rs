@@ -49,7 +49,7 @@ pub enum InputMessageRole {
     System,
     User,
     Assistant,
-    // TODO: add Tool
+    // TODO (#30): add Tool
 }
 
 impl fmt::Display for InputMessageRole {
@@ -130,7 +130,7 @@ pub struct Tool {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct UserInferenceRequestMessage {
-    pub content: String, // TODO: for now, we don't support image input. This would be the place to start.
+    pub content: String, // NOTEs: For now, we don't support image input. This would be the place to start.
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -203,7 +203,7 @@ pub struct ModelInference {
 
 impl ModelInference {
     pub fn new(response: ModelInferenceResponse, input: String, inference_id: Uuid) -> Self {
-        // TODO: deal with tools
+        // TODO (#30): deal with tools
         let (latency_ms, ttft_ms) = match response.latency {
             Latency::Streaming {
                 ttft,
@@ -447,8 +447,7 @@ pub fn collect_chunks(
     value: Vec<ModelInferenceResponseChunk>,
     output_schema: Option<&JSONSchemaFromPath>,
 ) -> Result<InferenceResponse, Error> {
-    // TODO: we will eventually need this to be per-inference-response-type
-    // and sensitive to the type of variant and function being called.
+    // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
 
     let inference_id = value
         .first()
@@ -486,7 +485,7 @@ pub fn collect_chunks(
         tool_calls = match tool_calls {
             Some(_) => {
                 unimplemented!()
-                // TODO: when we add this code back, make _ into mut t
+                // TODO (#30): when we add this code back, make _ into mut t
                 // for (j, tool_call) in chunk.tool_calls.unwrap_or_default().iter().enumerate() {
                 //     if let Some(existing_tool_call) = t.get_mut(j) {
                 //         existing_tool_call
@@ -494,7 +493,7 @@ pub fn collect_chunks(
                 //             .push_str(tool_call.arguments.as_deref().unwrap_or_default());
                 //     }
                 // }
-                // TODO: figure out latency for tool call streaming
+                // TODO (#30): figure out latency for tool call streaming
                 // Some(t)
             }
             None => chunk.tool_calls.map(|tool_calls| {
@@ -548,7 +547,7 @@ pub struct ToolCallChunk {
 
 impl From<ToolCallChunk> for ToolCall {
     fn from(tool_call: ToolCallChunk) -> Self {
-        // TODO: explicitly handle tools both for streaming and non-streaming
+        // TODO (#30): explicitly handle tools both for streaming and non-streaming
         // as well as for Chat and Tool-style Functions
         Self {
             id: tool_call.id.unwrap_or_default(),
@@ -567,7 +566,7 @@ mod tests {
 
     #[test]
     fn test_create_chat_inference_response() {
-        // TODO: handle the tool call case here. For now, we will always set those values to None.
+        // TODO (#30): handle the tool call case here. For now, we will always set those values to None.
         // Case 1: No output schema
         let inference_id = Uuid::now_v7();
         let content = Some("Hello, world!".to_string());
@@ -650,7 +649,7 @@ mod tests {
         assert_eq!(chat_inference_response.tool_calls, tool_calls);
         assert_eq!(chat_inference_response.usage, usage);
 
-        // TODO: assert that the appropriate errors were logged in the next two test cases
+        // TODO (#87): assert that the appropriate errors were logged in the next two test cases
         // Case 3: a JSON string that fails validation
         let invalid_json_content = r#"{"name": "John", "age": "thirty"}"#.to_string();
         let model_inference_responses = vec![ModelInferenceResponse::new(

@@ -10,7 +10,7 @@ use serde_json::json;
 
 #[tokio::main]
 async fn main() {
-    // TODO: make this configurable
+    // TODO (#76): make this configurable
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3030")
         .await
         .unwrap_or_else(|_| panic!("Failed to bind to port 3030"));
@@ -47,7 +47,7 @@ async fn completions_handler(Json(params): Json<serde_json::Value>) -> Response<
             .keep_alive(axum::response::sse::KeepAlive::new())
             .into_response()
     } else {
-        // TODO: map fixtures to functions in config
+        // TODO (#82): map fixtures to functions in config
         let response = if function_call {
             include_str!("../fixtures/openai/chat_completions_function_example.json")
         } else if json_mode {
@@ -67,7 +67,7 @@ fn create_stream(
     function_call: bool,
 ) -> impl Stream<Item = Result<Event, axum::Error>> {
     try_stream! {
-         // TODO: map fixtures to functions in config
+        // TODO (#82): map fixtures to functions in config
         let lines = if function_call {
             include_str!("../fixtures/openai/chat_completions_streaming_function_example.jsonl")
         } else if json_mode {

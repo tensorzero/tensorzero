@@ -15,12 +15,12 @@ use crate::e2e::common::{select_inference_clickhouse, select_model_inferences_cl
 /// - basic inference
 /// - streaming inference
 ///
-/// TODOs:
+/// TODOs (#81):
 /// - tool calling
 /// - JSON mode
 /// - other API parameters (temp, max_tokens, etc.)
 
-// TODO: make this endpoint configurable with some kind of env var
+// TODO (#74): make this endpoint configurable with some kind of env var
 const INFERENCE_URL: &str = "http://localhost:3000/inference";
 lazy_static::lazy_static! {
     static ref CLICKHOUSE_URL: String = std::env::var("CLICKHOUSE_URL").expect("Environment variable CLICKHOUSE_URL must be set");

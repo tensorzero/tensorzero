@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::e2e::common::clickhouse_flush_async_insert;
 
-// TODO: make this endpoint configurable with main.rs
+// TODO (#74): make this endpoint configurable with main.rs
 const INFERENCE_URL: &str = "http://localhost:3000/inference";
 lazy_static::lazy_static! {
     static ref CLICKHOUSE_URL: String = std::env::var("CLICKHOUSE_URL").expect("Environment variable CLICKHOUSE_URL must be set");
@@ -318,7 +318,7 @@ async fn e2e_test_inference_json_succeed() {
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, payload["input"]);
     let output = result.get("output").unwrap().as_str().unwrap();
-    // TODO: handle the fact that this should be Optional
+    // TODO (#89): handle the fact that this should be Optional
     assert_eq!(output, DUMMY_JSON_RESPONSE_RAW);
     let output_raw = result.get("raw_output").unwrap().as_str().unwrap();
     assert_eq!(output_raw, DUMMY_JSON_RESPONSE_RAW);
@@ -410,7 +410,7 @@ async fn e2e_test_variant_failover() {
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, payload["input"]);
     let output = result.get("output").unwrap().as_str().unwrap();
-    // TODO: handle the fact that this should be Optional
+    // TODO (#89): handle the fact that this should be Optional
     assert_eq!(output, DUMMY_INFER_RESPONSE_CONTENT);
     let output_raw = result.get("raw_output").unwrap().as_str().unwrap();
     assert_eq!(output_raw, DUMMY_INFER_RESPONSE_CONTENT);

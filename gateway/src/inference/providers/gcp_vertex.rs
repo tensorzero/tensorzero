@@ -299,7 +299,7 @@ struct GCPVertexGeminiFunctionCall<'a> {
     args: &'a str, // JSON as string
 }
 
-// TODO: use this when we do tool calling properly
+// TODO (#19): use this when we do tool calling properly
 // #[derive(Serialize)]
 // struct GCPVertexGeminiFunctionResponse<'a> {
 //     name: &'a str,
@@ -312,15 +312,16 @@ enum GCPVertexGeminiContentPart<'a> {
     Text {
         text: &'a str,
     },
-    // TODO: InlineData { inline_data: Blob },
-    // TODO: FileData { file_data: FileData },
+    // TODO (#19): InlineData { inline_data: Blob },
+    // TODO (#19): FileData { file_data: FileData },
     FunctionCall {
         function_call: GCPVertexGeminiFunctionCall<'a>,
     },
+    // TODO (#19):
     // FunctionResponse {
     //     function_response: GCPVertexGeminiFunctionResponse<'a>,
     // },
-    // TODO: VideoMetadata { video_metadata: VideoMetadata },
+    // TODO (#19): VideoMetadata { video_metadata: VideoMetadata },
 }
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -381,7 +382,7 @@ struct GCPVertexGeminiFunctionDeclaration<'a> {
     parameters: Option<&'a Value>, // Should be a JSONSchema as a Value
 }
 
-// TODO: implement [Retrieval](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/Tool#Retrieval)
+// TODO (#19): implement [Retrieval](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/Tool#Retrieval)
 // and [GoogleSearchRetrieval](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/Tool#GoogleSearchRetrieval)
 // tools.
 #[derive(Serialize, PartialEq, Debug)]
@@ -466,7 +467,7 @@ enum GCPVertexGeminiResponseMimeType {
     ApplicationJson,
 }
 
-// TODO: add the other options [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/GenerationConfig)
+// TODO (#19): add the other options [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/GenerationConfig)
 #[derive(Serialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiGenerationConfig<'a> {
@@ -485,7 +486,7 @@ struct GCPVertexGeminiRequest<'a> {
     tool_config: Option<GCPVertexGeminiToolConfig<'a>>,
     generation_config: Option<GCPVertexGeminiGenerationConfig<'a>>,
     system_instruction: Option<GCPVertexGeminiContent<'a>>,
-    // TODO: [Safety Settings](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/SafetySetting)
+    // TODO (#19): [Safety Settings](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/SafetySetting)
 }
 
 impl<'a> TryFrom<&'a ModelInferenceRequest<'a>> for GCPVertexGeminiRequest<'a> {
@@ -557,13 +558,13 @@ enum GCPVertexGeminiResponseContentPart {
     Text {
         text: String,
     },
-    // TODO: InlineData { inline_data: Blob },
-    // TODO: FileData { file_data: FileData },
+    // TODO (#19): InlineData { inline_data: Blob },
+    // TODO (#19): FileData { file_data: FileData },
     FunctionCall {
         function_call: GCPVertexGeminiResponseFunctionCall,
     },
-    // TODO (if ever needed): FunctionResponse
-    // TODO: VideoMetadata { video_metadata: VideoMetadata },
+    // TODO (#19, if ever needed): FunctionResponse
+    // TODO (#19): VideoMetadata { video_metadata: VideoMetadata },
 }
 
 #[derive(Deserialize, Serialize)]
