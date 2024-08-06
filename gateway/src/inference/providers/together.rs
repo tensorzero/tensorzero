@@ -56,10 +56,7 @@ impl InferenceProvider for TogetherProvider {
         let res = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
-            .header(
-                "Authorization",
-                format!("Bearer {}", api_key.expose_secret()),
-            )
+            .bearer_auth(api_key.expose_secret())
             .json(&request_body)
             .send()
             .await
@@ -121,10 +118,7 @@ impl InferenceProvider for TogetherProvider {
         let event_source = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
-            .header(
-                "Authorization",
-                format!("Bearer {}", api_key.expose_secret()),
-            )
+            .bearer_auth(api_key.expose_secret())
             .json(&request_body)
             .eventsource()
             .map_err(|e| Error::InferenceClient {
