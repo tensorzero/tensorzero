@@ -71,6 +71,9 @@ jobs:
       - name: Write GCP JWT key to file
         run: echo "${{ secrets.GCP_JWT_KEY }}" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
+      - name: List the github workspace
+        run: ls -la $GITHUB_WORKSPACE
+
       - name: Launch containers for E2E tests
         # if: github.ref == 'refs/heads/main'
         run: docker compose -f gateway/tests/e2e/docker-compose.yml up -d
