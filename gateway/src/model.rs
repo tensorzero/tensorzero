@@ -9,9 +9,14 @@ use crate::{
     error::Error,
     inference::{
         providers::{
-            anthropic::AnthropicProvider, aws_bedrock::AWSBedrockProvider, azure::AzureProvider,
-            fireworks::FireworksProvider, openai::OpenAIProvider,
-            provider_trait::InferenceProvider, together::TogetherProvider,
+            anthropic::AnthropicProvider,
+            aws_bedrock::AWSBedrockProvider,
+            azure::AzureProvider,
+            fireworks::FireworksProvider,
+            gcp_vertex::{GCPCredentials, GCPVertexGeminiProvider},
+            openai::OpenAIProvider,
+            provider_trait::InferenceProvider,
+            together::TogetherProvider,
         },
         types::{
             InferenceResponseStream, ModelInferenceRequest, ModelInferenceResponse,
@@ -99,6 +104,11 @@ pub enum ProviderConfig {
         model_name: String,
         api_key: Option<SecretString>,
     },
+    GCPVertexGemini {
+        request_url: String,
+        audience: String,
+        credentials: Option<GCPCredentials>,
+    },
     OpenAI {
         model_name: String,
         api_base: Option<String>,
@@ -140,6 +150,12 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 api_base: String,
                 deployment_id: String,
             },
+            #[serde(rename = "gcp_vertex_gemini")]
+            GCPVertexGemini {
+                model_id: String,
+                location: String,
+                project_id: String,
+            },
             Fireworks {
                 model_name: String,
             },
@@ -180,6 +196,31 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 model_name,
                 api_key: env::var("FIREWORKS_API_KEY").ok().map(SecretString::new),
             },
+            ProviderConfigHelper::GCPVertexGemini {
+                model_id,
+                location,
+                project_id,
+            } => {
+                // If the environment variable is not set, we will simply have None as our credentials.
+                let credentials_path = env::var("GCP_VERTEX_CREDENTIALS_PATH").ok();
+                // If the environment variable is set, we will load and validate (as much as possible)
+                // the credentials from the path. If this fails, we will throw an error and stop the startup.
+                let credentials = match credentials_path {
+                    Some(path) => Some(GCPCredentials::from_env(path.as_str()).map_err(|e| {
+                        serde::de::Error::custom(format!("Failed to load GCP credentials: {}", e))
+                    })?),
+                    None => None,
+                };
+                // TODO: need to separate this out for streaming and non-streaming
+                let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:generateContent");
+                let audience = format!("https://{location}-aiplatform.googleapis.com/");
+
+                ProviderConfig::GCPVertexGemini {
+                    request_url,
+                    audience,
+                    credentials,
+                }
+            }
             ProviderConfigHelper::OpenAI {
                 model_name,
                 api_base,
@@ -215,6 +256,9 @@ impl ProviderConfig {
             ProviderConfig::Fireworks { .. } => {
                 FireworksProvider::infer(request, self, client).await
             }
+            ProviderConfig::GCPVertexGemini { .. } => {
+                GCPVertexGeminiProvider::infer(request, self, client).await
+            }
             ProviderConfig::OpenAI { .. } => OpenAIProvider::infer(request, self, client).await,
             ProviderConfig::Together { .. } => TogetherProvider::infer(request, self, client).await,
             #[cfg(any(test, feature = "e2e_tests"))]
@@ -239,6 +283,9 @@ impl ProviderConfig {
             }
             ProviderConfig::Fireworks { .. } => {
                 FireworksProvider::infer_stream(request, self, client).await
+            }
+            ProviderConfig::GCPVertexGemini { .. } => {
+                GCPVertexGeminiProvider::infer_stream(request, self, client).await
             }
             ProviderConfig::OpenAI { .. } => {
                 OpenAIProvider::infer_stream(request, self, client).await

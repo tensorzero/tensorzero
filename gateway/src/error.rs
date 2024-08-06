@@ -54,6 +54,16 @@ pub enum Error {
     FireworksServer {
         message: String,
     },
+    GCPCredentials {
+        message: String,
+    },
+    GCPVertexClient {
+        message: String,
+        status_code: StatusCode,
+    },
+    GCPVertexServer {
+        message: String,
+    },
     InferenceClient {
         message: String,
     },
@@ -176,6 +186,9 @@ impl Error {
             Error::Config { .. } => tracing::Level::ERROR,
             Error::FireworksClient { .. } => tracing::Level::WARN,
             Error::FireworksServer { .. } => tracing::Level::ERROR,
+            Error::GCPCredentials { .. } => tracing::Level::ERROR,
+            Error::GCPVertexClient { .. } => tracing::Level::WARN,
+            Error::GCPVertexServer { .. } => tracing::Level::ERROR,
             Error::Inference { .. } => tracing::Level::ERROR,
             Error::InferenceClient { .. } => tracing::Level::ERROR,
             Error::InputValidation { .. } => tracing::Level::WARN,
@@ -229,6 +242,9 @@ impl Error {
             Error::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::FireworksServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::FireworksClient { status_code, .. } => *status_code,
+            Error::GCPCredentials { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::GCPVertexClient { status_code, .. } => *status_code,
+            Error::GCPVertexServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::Inference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InferenceClient { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InputValidation { .. } => StatusCode::BAD_REQUEST,
@@ -331,6 +347,15 @@ impl std::fmt::Display for Error {
             }
             Error::FireworksServer { message } => {
                 write!(f, "Error from Fireworks servers: {}", message)
+            }
+            Error::GCPCredentials { message } => {
+                write!(f, "Error in acquiring GCP credentials: {}", message)
+            }
+            Error::GCPVertexClient { message, .. } => {
+                write!(f, "Error from GCP Vertex client: {}", message)
+            }
+            Error::GCPVertexServer { message } => {
+                write!(f, "Error from GCP Vertex servers: {}", message)
             }
             Error::Inference { message } => write!(f, "{}", message),
             Error::InferenceClient { message } => write!(f, "{}", message),
