@@ -84,7 +84,7 @@ impl ModelConfig {
     }
 }
 
-// TODO: think about how we can manage typing here so we don't have to check every time this is passed that it is the correct type.
+// TODO (#83): merge variants with provider-specific structs `pub struct XXXProvider;` to avoid unnecessary checks
 #[derive(Clone, Debug)]
 pub enum ProviderConfig {
     Anthropic {
@@ -383,7 +383,7 @@ mod tests {
         assert_eq!(raw, DUMMY_INFER_RESPONSE_RAW);
         let usage = response.usage;
         assert_eq!(usage, DUMMY_INFER_USAGE);
-        // TODO: assert that an error was logged then do it in the other order and assert that one was not.
+        // TODO (#84): assert that an error was logged then do it in the other order and assert that one was not.
     }
 
     #[tokio::test]
@@ -476,6 +476,6 @@ mod tests {
             }
         }
         assert_eq!(collected_content, DUMMY_STREAMING_RESPONSE.join(""));
-        // TODO: assert that an error was logged then do it in the other order and assert that one was not.
+        // TODO (#84): assert that an error was logged then do it in the other order and assert that one was not.
     }
 }

@@ -17,7 +17,7 @@ use crate::model::ProviderConfig;
 static AWS_BEDROCK_CLIENT: OnceCell<aws_sdk_bedrockruntime::Client> = OnceCell::const_new();
 
 async fn get_aws_bedrock_client() -> &'static aws_sdk_bedrockruntime::Client {
-    // TODO: we should be able to customize the region per model provider => will require a client per region
+    // TODO (#73): we should be able to customize the region per model provider => will require a client per region
 
     AWS_BEDROCK_CLIENT
         .get_or_init(|| async {
@@ -55,7 +55,7 @@ impl InferenceProvider for AWSBedrockProvider {
             _ => (None, &request.messages[..]),
         };
 
-        // TODO: add support for guardrails and additional fields
+        // TODO (#55): add support for guardrails and additional fields
 
         let messages: Vec<Message> = request_messages
             .iter()
@@ -63,7 +63,7 @@ impl InferenceProvider for AWSBedrockProvider {
             .collect::<Result<Vec<_>, _>>()?;
 
         let mut inference_config = InferenceConfiguration::builder();
-        // TODO: add support for top_p, stop_sequences, etc.
+        // TODO (#55): add support for top_p, stop_sequences, etc.
         if let Some(max_tokens) = request.max_tokens {
             inference_config = inference_config.max_tokens(max_tokens as i32);
         }
@@ -81,9 +81,9 @@ impl InferenceProvider for AWSBedrockProvider {
             request = request.system(system);
         }
 
-        // TODO: .tool_config(...)
+        // TODO (#18, #30): .tool_config(...)
 
-        // TODO: add more granularity to error handling
+        // TODO (#88): add more granularity to error handling
         let start_time = Instant::now();
         let output = request.send().await.map_err(|e| Error::AWSBedrockServer {
             message: e.to_string(),
@@ -100,7 +100,7 @@ impl InferenceProvider for AWSBedrockProvider {
         _config: &'a ProviderConfig,
         _http_client: &'a reqwest::Client,
     ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
-        todo!()
+        todo!() // TODO (#30): implement streaming inference
     }
 }
 
@@ -126,12 +126,12 @@ impl TryFrom<&InferenceRequestMessage> for Message {
                     message_builder = message_builder.content(ContentBlock::Text(text.clone()));
                 }
 
-                // TODO: handle tool calls (like Anthropic)
+                // TODO (#30): handle tool calls (like Anthropic)
 
                 message_builder
             }
             InferenceRequestMessage::Tool(_) => {
-                todo!();
+                todo!(); // TODO (#30): handle tool calls (like Anthropic)
             }
         };
 
@@ -153,7 +153,7 @@ impl TryFrom<ConverseOutputWithLatency> for ModelInferenceResponse {
 
     fn try_from(value: ConverseOutputWithLatency) -> Result<Self, Self::Error> {
         let ConverseOutputWithLatency { output, latency } = value;
-        // TODO: is there something we can do about this?
+        // TODO (#79): is there something we can do about this?
         let raw = format!("{:?}", output); // AWS SDK doesn't implement Serialize :(
 
         let message = match output.output {
@@ -175,7 +175,7 @@ impl TryFrom<ConverseOutputWithLatency> for ModelInferenceResponse {
                         Some(message) => message_text = Some(format!("{}\n{}", message, text)),
                         None => message_text = Some(text),
                     },
-                    _ => todo!(), // TODO: handle tool use and other blocks
+                    _ => todo!(), // TODO (#18): handle tool use and other blocks
                 }
             }
         }
@@ -185,7 +185,7 @@ impl TryFrom<ConverseOutputWithLatency> for ModelInferenceResponse {
                 prompt_tokens: usage.input_tokens as u32,
                 completion_tokens: usage.output_tokens as u32,
             },
-            None => todo!(), // TODO: this should be nullable
+            None => todo!(), // TODO (#18): this should be nullable
         };
 
         Ok(ModelInferenceResponse::new(

@@ -25,7 +25,7 @@ use super::{
 
 pub struct TogetherProvider;
 
-// TODO: Add support for Llama 3.1 function calling as discussed [here](https://docs.together.ai/docs/llama-3-function-calling)
+// TODO (#80): Add support for Llama 3.1 function calling as discussed [here](https://docs.together.ai/docs/llama-3-function-calling)
 
 impl InferenceProvider for TogetherProvider {
     async fn infer<'a>(

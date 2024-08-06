@@ -4,7 +4,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-// TODO: make this endpoint configurable with main.rs
+// TODO (#74): make this endpoint configurable with main.rs
 const FEEDBACK_URL: &str = "http://localhost:3000/feedback";
 lazy_static::lazy_static! {
     static ref CLICKHOUSE_URL: String = std::env::var("CLICKHOUSE_URL").expect("CLICKHOUSE_URL must be set");
