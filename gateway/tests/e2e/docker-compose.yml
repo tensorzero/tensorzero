@@ -5,8 +5,8 @@ services:
     ports:
       - "8123:8123" # HTTP port
       - "9000:9000" # Native port
-    volumes:
-      - ../../../clickhouse/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    environment:
+      - CLICKHOUSE_DB=tensorzero # TODO: parameterize the database name
     ulimits:
       nofile:
         soft: 262144

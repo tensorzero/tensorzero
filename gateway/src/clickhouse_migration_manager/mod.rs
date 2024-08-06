@@ -20,14 +20,35 @@ async fn run_migration(migration: impl Migration) -> Result<(), Error> {
         let migration_name = std::any::type_name_of_val(&migration)
             .split("::")
             .last()
-            .unwrap_or_else(|| "Unknown migration");
+            .unwrap_or("Unknown migration");
 
         tracing::info!("Applying migration: {migration_name}");
 
-        migration.apply().await?;
+        if let Err(e) = migration.apply().await {
+            tracing::error!(
+                "Failed to apply migration: {migration_name}\n\n===== Rollback Instructions =====\n\n{}",
+                migration.rollback_instructions()
+            );
+            return Err(e);
+        }
 
-        if !migration.has_succeeded().await? {
-            migration.rollback().await?;
+        match migration.has_succeeded().await {
+            Ok(true) => {
+                tracing::info!("Migration succeeded: {migration_name}");
+            }
+            Ok(false) => {
+                tracing::error!(
+                    "Failed migration success check: {migration_name}\n\n===== Rollback Instructions =====\n\n{}",
+                    migration.rollback_instructions()
+                );
+            }
+            Err(e) => {
+                tracing::error!(
+                    "Failed to verify migration: {migration_name}\n\n===== Rollback Instructions =====\n\n{}",
+                    migration.rollback_instructions()
+                );
+                return Err(e);
+            }
         }
     }
 

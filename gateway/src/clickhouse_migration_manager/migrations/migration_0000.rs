@@ -45,10 +45,30 @@ impl<'a> Migration for Migration0000<'a> {
             }
         }
 
-        Ok(true)
+        Ok(false)
     }
 
     async fn apply(&self) -> Result<(), Error> {
+        // TODO: parametrize the database name
+        // Create the database if it doesn't exist
+        let query = r#"
+            CREATE DATABASE IF NOT EXISTS tensorzero;
+        "#;
+        let _ = self.clickhouse.run_query(query.to_string()).await?;
+
+        // Create the `BooleanMetricFeedback` table
+        let query = r#"
+            CREATE TABLE IF NOT EXISTS BooleanMetricFeedback
+            (
+                id UUID,
+                target_id UUID,
+                metric_name LowCardinality(String),
+                value Bool
+            ) ENGINE = MergeTree()
+            ORDER BY (metric_name, target_id);
+        "#;
+        let _ = self.clickhouse.run_query(query.to_string()).await?;
+
         // Create the `BooleanMetricFeedback` table
         let query = r#"
             CREATE TABLE IF NOT EXISTS BooleanMetricFeedback
@@ -139,13 +159,20 @@ impl<'a> Migration for Migration0000<'a> {
         Ok(())
     }
 
-    async fn rollback(&self) -> Result<(), Error> {
-        // TODO: Implement
-        Ok(())
+    fn rollback_instructions(&self) -> String {
+        "\
+        **CAREFUL: THIS WILL DELETE ALL DATA**\n\
+        \n\
+        -- Drop the database\n\
+        DROP DATABASE IF EXISTS tensorzero;\n\
+        \n\
+        **CAREFUL: THIS WILL DELETE ALL DATA**\n\
+        "
+        .to_string()
     }
 
-    /// Check if the migration has succeeded
+    /// Check if the migration has succeeded (i.e. it should not be applied again)
     async fn has_succeeded(&self) -> Result<bool, Error> {
-        self.should_apply().await
+        Ok(!self.should_apply().await?)
     }
 }
