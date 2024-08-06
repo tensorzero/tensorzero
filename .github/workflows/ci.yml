@@ -63,10 +63,10 @@ jobs:
         with:
           command: check bans
 
-      - name: Test (Rust)
-        if: github.ref != 'refs/heads/main'
-        run: |
-          cargo test
+      # - name: Test (Rust)
+      #   if: github.ref != 'refs/heads/main'
+      #   run: |
+      #     cargo test
 
       - name: Write GCP JWT key to file
         env:
@@ -74,10 +74,14 @@ jobs:
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
       - name: Launch containers for E2E tests
-        if: github.ref == 'refs/heads/main'
+        # if: github.ref == 'refs/heads/main'
         run: docker compose -f gateway/tests/e2e/docker-compose.yml up -d
 
+      - name: Launch containers for E2E tests
+        # if: github.ref == 'refs/heads/main'
+        run: docker compose -f gateway/tests/e2e/docker-compose.yml logs
+
       - name: Test (including integration and E2E) (Rust)
-        if: github.ref == 'refs/heads/main'
+        # if: github.ref == 'refs/heads/main'
         run: |
           cargo test --features integration_tests,e2e_tests
