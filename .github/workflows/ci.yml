@@ -69,13 +69,17 @@ jobs:
       #   cargo test
 
       - name: Write GCP JWT key to file
-        run: echo "${{ secrets.GCP_JWT_KEY }}" > $GITHUB_WORKSPACE/gcp_jwt_key.json
+        env:
+          GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
+        run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
       - name: Echo the GCP path
         run: echo $GCP_VERTEX_CREDENTIALS_PATH
 
       - name: Echo a hash of the JWT key
-        run: echo $(echo "${{ secrets.GCP_JWT_KEY }}" | sha256sum)
+        env:
+          GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
+        run: echo $(echo "$GCP_JWT_KEY" | sha256sum)
 
       - name: Echo the github workspace
         run: echo $GITHUB_WORKSPACE
