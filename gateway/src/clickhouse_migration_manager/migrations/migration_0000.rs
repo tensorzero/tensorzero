@@ -48,10 +48,14 @@ impl<'a> Migration for Migration0000<'a> {
                 )"#
             );
 
-            let response = self.clickhouse.run_query(query).await?;
-
-            if response.trim() != "1" {
-                return Ok(true);
+            match self.clickhouse.run_query(query).await {
+                // If `can_apply` succeeds but this fails, it likely means the database does not exist
+                Err(_) => return Ok(true),
+                Ok(response) => {
+                    if response.trim() != "1" {
+                        return Ok(true);
+                    }
+                }
             }
         }
 
@@ -61,10 +65,7 @@ impl<'a> Migration for Migration0000<'a> {
     async fn apply(&self) -> Result<(), Error> {
         // TODO: parametrize the database name
         // Create the database if it doesn't exist
-        let query = r#"
-            CREATE DATABASE IF NOT EXISTS tensorzero;
-        "#;
-        let _ = self.clickhouse.run_query(query.to_string()).await?;
+        self.clickhouse.create_database("tensorzero").await?;
 
         // Create the `BooleanMetricFeedback` table
         let query = r#"

@@ -6,3 +6,4 @@ services:
       target: gateway
     ports:
       - "3000:3000"
+      - "9090:9090" # Prometheus metrics

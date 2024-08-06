@@ -15,7 +15,8 @@ pub enum ClickHouseConnectionInfo {
         healthy: bool,
     },
     Production {
-        url: String,
+        base_url: Url,
+        database: String,
         client: Client,
     },
 }
@@ -28,17 +29,30 @@ impl ClickHouseConnectionInfo {
                 healthy: healthy.unwrap_or(true),
             });
         }
-        // TODO: parameterize the database name
-        let database_name = "tensorzero";
+
         // Add a query string for the database using the URL crate
-        let mut url = Url::parse(base_url).map_err(|e| Error::Config {
+        let base_url = Url::parse(base_url).map_err(|e| Error::Config {
             message: format!("Invalid ClickHouse base URL: {}", e),
         })?;
-        url.query_pairs_mut().append_pair("database", database_name);
+
         Ok(Self::Production {
-            url: url.to_string(),
+            base_url,
+            database: "tensorzero".to_string(), // TODO: parameterize the database name
             client: Client::new(),
         })
+    }
+
+    pub fn get_url(&self) -> String {
+        match self {
+            Self::Mock { .. } => unreachable!(),
+            Self::Production {
+                base_url, database, ..
+            } => {
+                let mut url = base_url.clone();
+                url.query_pairs_mut().append_pair("database", database);
+                url.to_string()
+            }
+        }
     }
 
     pub async fn write(
@@ -50,7 +64,9 @@ impl ClickHouseConnectionInfo {
             Self::Mock { mock_data, .. } => {
                 write_mock(row, table, &mut mock_data.write().await).await
             }
-            Self::Production { url, client } => write_production(url, client, row, table).await,
+            Self::Production { client, .. } => {
+                write_production(&self.get_url(), client, row, table).await
+            }
         }
     }
 
@@ -84,7 +100,9 @@ impl ClickHouseConnectionInfo {
                     Err("Mock ClickHouse is not healthy".into())
                 }
             }
-            Self::Production { url, client } => match client.get(url).send().await {
+            Self::Production {
+                base_url, client, ..
+            } => match client.get(base_url.clone()).send().await {
                 Ok(_) => Ok(()),
                 Err(e) => Err(format!("ClickHouse is not healthy: {}", e).into()),
             },
@@ -94,12 +112,15 @@ impl ClickHouseConnectionInfo {
     pub async fn run_query(&self, query: String) -> Result<String, Error> {
         match self {
             Self::Mock { .. } => unimplemented!(),
-            Self::Production { url, client } => {
-                let response = client.post(url).body(query).send().await.map_err(|e| {
-                    Error::ClickHouseQuery {
+            Self::Production { client, .. } => {
+                let response = client
+                    .post(self.get_url())
+                    .body(query)
+                    .send()
+                    .await
+                    .map_err(|e| Error::ClickHouseQuery {
                         message: e.to_string(),
-                    }
-                })?;
+                    })?;
 
                 let status = response.status();
 
@@ -109,6 +130,39 @@ impl ClickHouseConnectionInfo {
 
                 match status {
                     reqwest::StatusCode::OK => Ok(response_body),
+                    _ => Err(Error::ClickHouseQuery {
+                        message: response_body,
+                    }),
+                }
+            }
+        }
+    }
+
+    pub async fn create_database(&self, database: &str) -> Result<(), Error> {
+        match self {
+            Self::Mock { .. } => unimplemented!(),
+            Self::Production {
+                base_url, client, ..
+            } => {
+                let query = format!("CREATE DATABASE IF NOT EXISTS {}", database);
+
+                let response = client
+                    .post(base_url.clone())
+                    .body(query)
+                    .send()
+                    .await
+                    .map_err(|e| Error::ClickHouseQuery {
+                        message: e.to_string(),
+                    })?;
+
+                let status = response.status();
+
+                let response_body = response.text().await.map_err(|e| Error::ClickHouseQuery {
+                    message: e.to_string(),
+                })?;
+
+                match status {
+                    reqwest::StatusCode::OK => Ok(()),
                     _ => Err(Error::ClickHouseQuery {
                         message: response_body,
                     }),

@@ -5,9 +5,12 @@ services:
     ports:
       - "8123:8123" # HTTP port
       - "9000:9000" # Native port
-    environment:
-      - CLICKHOUSE_DB=tensorzero # TODO: parameterize the database name
     ulimits:
       nofile:
         soft: 262144
         hard: 262144
+    healthcheck:
+      test: ["CMD", "clickhouse", "local", "--query", "SELECT 1"]
+      interval: 1s
+      timeout: 1s
+      retries: 3

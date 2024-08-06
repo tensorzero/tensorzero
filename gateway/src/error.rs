@@ -321,7 +321,7 @@ impl std::fmt::Display for Error {
                 write!(f, "Error running ClickHouse migration {}: {}", id, message)
             }
             Error::ClickHouseQuery { message } => {
-                write!(f, "Error writing to ClickHouse: {}", message)
+                write!(f, "Failed to run ClickHouse query: {}", message)
             }
             Error::Config { message } => {
                 write!(f, "Error in TensorZero config: {}", message)
