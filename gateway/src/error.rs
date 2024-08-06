@@ -41,7 +41,7 @@ pub enum Error {
         id: String,
         message: String,
     },
-    ClickHouseWrite {
+    ClickHouseQuery {
         message: String,
     },
     Config {
@@ -172,7 +172,7 @@ impl Error {
             Error::AzureServer { .. } => tracing::Level::ERROR,
             Error::ChannelWrite { .. } => tracing::Level::ERROR,
             Error::ClickHouseMigration { .. } => tracing::Level::ERROR,
-            Error::ClickHouseWrite { .. } => tracing::Level::ERROR,
+            Error::ClickHouseQuery { .. } => tracing::Level::ERROR,
             Error::Config { .. } => tracing::Level::ERROR,
             Error::FireworksClient { .. } => tracing::Level::WARN,
             Error::FireworksServer { .. } => tracing::Level::ERROR,
@@ -225,7 +225,7 @@ impl Error {
             Error::AzureServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::ClickHouseWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::ClickHouseQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::FireworksServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::FireworksClient { status_code, .. } => *status_code,
@@ -320,7 +320,7 @@ impl std::fmt::Display for Error {
             Error::ClickHouseMigration { id, message } => {
                 write!(f, "Error running ClickHouse migration {}: {}", id, message)
             }
-            Error::ClickHouseWrite { message } => {
+            Error::ClickHouseQuery { message } => {
                 write!(f, "Error writing to ClickHouse: {}", message)
             }
             Error::Config { message } => {

@@ -96,20 +96,20 @@ impl ClickHouseConnectionInfo {
             Self::Mock { .. } => unimplemented!(),
             Self::Production { url, client } => {
                 let response = client.post(url).body(query).send().await.map_err(|e| {
-                    Error::ClickHouseWrite {
+                    Error::ClickHouseQuery {
                         message: e.to_string(),
                     }
                 })?;
 
                 let status = response.status();
 
-                let response_body = response.text().await.map_err(|e| Error::ClickHouseWrite {
+                let response_body = response.text().await.map_err(|e| Error::ClickHouseQuery {
                     message: e.to_string(),
                 })?;
 
                 match status {
                     reqwest::StatusCode::OK => Ok(response_body),
-                    _ => Err(Error::ClickHouseWrite {
+                    _ => Err(Error::ClickHouseQuery {
                         message: response_body,
                     }),
                 }
@@ -155,12 +155,12 @@ async fn write_production(
         .body(query.clone())
         .send()
         .await
-        .map_err(|e| Error::ClickHouseWrite {
+        .map_err(|e| Error::ClickHouseQuery {
             message: e.to_string(),
         })?;
     match response.status() {
         reqwest::StatusCode::OK => Ok(()),
-        _ => Err(Error::ClickHouseWrite {
+        _ => Err(Error::ClickHouseQuery {
             message: response
                 .text()
                 .await
