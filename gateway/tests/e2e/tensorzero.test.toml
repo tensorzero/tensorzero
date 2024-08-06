@@ -79,7 +79,7 @@ routing = ["together"]
 
 [models."llama3.1-8b-instruct-together".providers.together]
 type = "together"
-model_name = "llama3-8b-instruct"
+model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
 
 [models.test]
 routing = ["good"]
