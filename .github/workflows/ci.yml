@@ -23,7 +23,7 @@ env:
 
 jobs:
   run:
-    runs-on: ubuntu-22.04-8core
+    runs-on: ubuntu-22.04-64core
 
     timeout-minutes: 15
 
@@ -77,9 +77,16 @@ jobs:
         # if: github.ref == 'refs/heads/main'
         run: docker compose -f gateway/tests/e2e/docker-compose.yml up -d
 
-      - name: Launch containers for E2E tests
+      - name: LOGS TODO
         # if: github.ref == 'refs/heads/main'
         run: docker compose -f gateway/tests/e2e/docker-compose.yml logs
+
+      - name: PS TODO
+        # if: github.ref == 'refs/heads/main'
+        run: docker compose -f gateway/tests/e2e/docker-compose.yml ps
+
+      - name: Setup upterm session
+        uses: lhotari/action-upterm@v1
 
       - name: Test (including integration and E2E) (Rust)
         # if: github.ref == 'refs/heads/main'
