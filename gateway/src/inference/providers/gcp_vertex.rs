@@ -263,7 +263,6 @@ fn stream_gcp_vertex_gemini(
                 Ok(event) => match event {
                     Event::Open => continue,
                     Event::Message(message) => {
-                        println!("ok event: {:?}", message);
                         let data: Result<GCPVertexGeminiResponse, Error> = serde_json::from_str(&message.data).map_err(|e| Error::GCPVertexServer {
                             message: format!("Error parsing response: {e}"),
                         });
@@ -279,10 +278,7 @@ fn stream_gcp_vertex_gemini(
                             latency: start_time.elapsed(),
                             inference_id,
                         }.try_into();
-                        match response {
-                            Ok(response) => yield Ok(response),
-                            Err(e) => yield Err(e),
-                        }
+                        yield response
                     }
                 }
             }
@@ -577,7 +573,7 @@ struct GCPVertexGeminiResponseContent {
 
 #[derive(Deserialize, Serialize)]
 struct GCPVertexGeminiResponseCandidate {
-    content: GCPVertexGeminiResponseContent,
+    content: Option<GCPVertexGeminiResponseContent>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -626,7 +622,15 @@ impl TryFrom<GCPVertexGeminiResponseWithLatency> for ModelInferenceResponse {
             .ok_or(Error::GCPVertexServer {
                 message: "GCP Vertex Gemini response has no candidates".to_string(),
             })?;
-        for part in first_candidate.content.parts {
+        let parts = match first_candidate.content {
+            Some(content) => content.parts,
+            None => {
+                return Err(Error::GCPVertexServer {
+                    message: "GCP Vertex Gemini response has no content".to_string(),
+                })
+            }
+        };
+        for part in parts {
             match part {
                 GCPVertexGeminiResponseContentPart::Text { text } => match message_text {
                     Some(message) => message_text = Some(format!("{}\n{}", message, text)),
@@ -690,7 +694,11 @@ impl TryFrom<GCPVertexGeminiStreamResponseWithMetadata> for ModelInferenceRespon
             })?;
         let mut message_text: Option<String> = None;
         let mut tool_calls: Option<Vec<ToolCallChunk>> = None;
-        for part in first_candidate.content.parts {
+        let parts = match first_candidate.content {
+            Some(content) => content.parts,
+            None => vec![],
+        };
+        for part in parts {
             match part {
                 GCPVertexGeminiResponseContentPart::Text { text } => match message_text {
                     Some(message) => message_text = Some(format!("{}\n{}", message, text)),
@@ -1060,7 +1068,9 @@ mod tests {
             text: "test_assistant".to_string(),
         };
         let content = GCPVertexGeminiResponseContent { parts: vec![part] };
-        let candidate = GCPVertexGeminiResponseCandidate { content };
+        let candidate = GCPVertexGeminiResponseCandidate {
+            content: Some(content),
+        };
         let response = GCPVertexGeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
@@ -1103,7 +1113,9 @@ mod tests {
         let content = GCPVertexGeminiResponseContent {
             parts: vec![text_part, function_call_part],
         };
-        let candidate = GCPVertexGeminiResponseCandidate { content };
+        let candidate = GCPVertexGeminiResponseCandidate {
+            content: Some(content),
+        };
         let response = GCPVertexGeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
@@ -1168,7 +1180,9 @@ mod tests {
                 function_call_part2,
             ],
         };
-        let candidate = GCPVertexGeminiResponseCandidate { content };
+        let candidate = GCPVertexGeminiResponseCandidate {
+            content: Some(content),
+        };
         let response = GCPVertexGeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
