@@ -63,38 +63,21 @@ jobs:
         with:
           command: check bans
 
-      # - name: Test (Rust)
-      # if: github.ref != 'refs/heads/main'
-      # run: |
-      #   cargo test
+      - name: Test (Rust)
+        if: github.ref != 'refs/heads/main'
+        run: |
+          cargo test
 
       - name: Write GCP JWT key to file
         env:
           GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
-      - name: Echo the GCP path
-        run: echo $GCP_VERTEX_CREDENTIALS_PATH
-
-      - name: Echo a hash of the JWT key
-        env:
-          GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
-        run: echo $(echo "$GCP_JWT_KEY" | sha256sum)
-
-      - name: Echo the github workspace
-        run: echo $GITHUB_WORKSPACE
-
-      - name: List the github workspace
-        run: ls -la $GITHUB_WORKSPACE
-
-      # - name: Debugging with ssh
-      #   uses: lhotari/action-upterm@v1
-
       - name: Launch containers for E2E tests
-        # if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main'
         run: docker compose -f gateway/tests/e2e/docker-compose.yml up -d
 
       - name: Test (including integration and E2E) (Rust)
-        # if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main'
         run: |
           cargo test --features integration_tests,e2e_tests
