@@ -17,14 +17,14 @@ async fn test_clickhouse_migration_manager() {
         .await
         .unwrap();
 
-    // TODO: We need to check these when applying the migrations for the first time (i.e. need customd database).
+    // TODO (#69): We need to check these when applying the migrations for the first time (i.e. need customd database).
     assert!(!logs_contain("Applying migration"));
     assert!(!logs_contain("Failed to apply migration"));
     assert!(!logs_contain("Failed migration success check"));
     assert!(!logs_contain("Failed to verify migration"));
 }
 
-// TODO: Add a test that applies individual migrations in a cumulative (N^2) way.
+// TODO (#69, more): Add a test that applies individual migrations in a cumulative (N^2) way.
 //
 //       In sequence:
 //       - Migration0000

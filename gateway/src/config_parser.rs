@@ -65,7 +65,7 @@ impl TryFrom<toml::Table> for Config {
     type Error = Error;
 
     fn try_from(table: toml::Table) -> Result<Self, Self::Error> {
-        // TODO: We'd like to use `serde_path_to_error` here but it has a bug with enums:
+        // NOTE: We'd like to use `serde_path_to_error` here but it has a bug with enums:
         //       https://github.com/dtolnay/path-to-error/issues/1
         match table.try_into() {
             Ok(config) => Ok(config),

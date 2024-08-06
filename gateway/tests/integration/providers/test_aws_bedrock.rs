@@ -13,7 +13,7 @@ async fn test_infer() {
     assert!(result.unwrap().content.is_some());
 }
 
-// TODO: add tests for streaming and tool calls
+// TODO (#81): add tests for streaming and tool calls
 // #[tokio::test]
 // async fn test_infer_stream() {
 // }

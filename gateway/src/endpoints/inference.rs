@@ -33,7 +33,7 @@ pub struct Params {
     // the input for the inference
     input: Vec<InputMessage>,
     // the maximum number of tokens to generate (if not provided, the default value will be used)
-    #[allow(unused)] // TODO: remove
+    #[allow(unused)] // TODO (#55): remove
     max_tokens: Option<u32>,
     // default False
     stream: Option<bool>,
@@ -96,7 +96,7 @@ pub async fn inference_handler(
     }
 
     // Retrieve or generate the episode ID
-    // TODO: validate that the episode ID is a UUIDv7
+    // TODO (#72): validate that the episode ID is a UUIDv7
     let episode_id = params.episode_id.unwrap_or(Uuid::now_v7());
 
     // Should we store the results?
@@ -122,8 +122,7 @@ pub async fn inference_handler(
                 )
                 .await;
 
-            // Make sure the response worked (incl first chunk) prior to launching the thread and starting to return chunks
-            // TODO: how would we handle this for composite variants? it kind of breaks the abstraction.
+            // Make sure the response worked (incl. first chunk) prior to launching the thread and starting to return chunks
             let (chunk, stream) = match response {
                 Ok((chunk, stream)) => (chunk, stream),
                 Err(e) => {
@@ -131,6 +130,7 @@ pub async fn inference_handler(
                     continue;
                 }
             };
+
             // Create InferenceMetadata for a streaming inference
             let inference_metadata = InferenceMetadata {
                 function_name: params.function_name.clone(),
@@ -170,7 +170,7 @@ pub async fn inference_handler(
             };
             let response_to_write = response.clone();
             if !dryrun {
-                // TODO: add integration/E2E test that checks the Prometheus endpoint
+                // TODO (#78): add integration/E2E test that checks the Prometheus endpoint
                 counter!(
                     "request_count",
                     "endpoint" => "inference",
@@ -180,7 +180,7 @@ pub async fn inference_handler(
                 // Spawn a thread for a trailing write to ClickHouse so that it doesn't block the response
                 tokio::spawn(async move {
                     write_inference(
-                        clickhouse_connection_info,
+                        &clickhouse_connection_info,
                         params.function_name,
                         variant_name,
                         params.input,
@@ -248,7 +248,7 @@ fn create_stream(
             if let Some(inference_response) = inference_response {
                 tokio::spawn(async move {
                     write_inference(
-                        clickhouse_connection_info,
+                        &clickhouse_connection_info,
                         metadata.function_name,
                         metadata.variant_name,
                         metadata.input,
@@ -288,7 +288,7 @@ fn prepare_event(
 }
 
 async fn write_inference(
-    clickhouse_connection_info: ClickHouseConnectionInfo,
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
     function_name: String,
     variant_name: String,
     input: Vec<InputMessage>,
@@ -296,6 +296,7 @@ async fn write_inference(
     episode_id: Uuid,
     processing_time: Duration,
 ) {
+    // TODO (#77): add test that metadata is not saved if dryrun is true
     match response {
         InferenceResponse::Chat(response) => {
             let serialized_input =
@@ -305,16 +306,18 @@ async fn write_inference(
                     Ok(serialized_input) => serialized_input,
                     Err(_) => return,
                 };
+
+            // Write the model responses to the ModelInference table
             let model_responses: Vec<serde_json::Value> =
                 response.get_serialized_model_inferences(&serialized_input);
-            // TODO : make these writes concurrent
-            // (doesn't matter that much since they don't block the main thread but still wastes resources)
             for response in model_responses {
-                let res = clickhouse_connection_info
+                clickhouse_connection_info
                     .write(&response, "ModelInference")
-                    .await;
-                res.ok_or_log();
+                    .await
+                    .ok_or_log();
             }
+
+            // Write the inference to the Inference table
             let inference = Inference::new(
                 InferenceResponse::Chat(response),
                 serialized_input,
@@ -323,10 +326,10 @@ async fn write_inference(
                 variant_name,
                 processing_time,
             );
-            let res = clickhouse_connection_info
+            clickhouse_connection_info
                 .write(&inference, "Inference")
-                .await;
-            res.ok_or_log();
+                .await
+                .ok_or_log();
         }
     }
 }
@@ -370,7 +373,7 @@ mod tests {
 
         let result = prepare_event(&function, &inference_metadata, chunk);
         assert!(result.is_ok());
-        // TODO: You could get the values of the private members using unsafe Rust.
+        // TODO (#86): You could get the values of the private members using unsafe Rust.
         // For now, we won't and will rely on integration testing here.
         // This test doesn't do much so consider deleting or doing more.
     }
