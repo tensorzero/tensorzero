@@ -102,7 +102,7 @@ impl ClickHouseConnectionInfo {
             }
             Self::Production {
                 base_url, client, ..
-            } => match client.get(base_url.clone()).send().await {
+            } => match client.get(base_url.to_string()).send().await {
                 Ok(_) => Ok(()),
                 Err(e) => Err(format!("ClickHouse is not healthy: {}", e).into()),
             },
