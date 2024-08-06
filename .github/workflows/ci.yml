@@ -75,7 +75,10 @@ jobs:
 
       - name: Launch containers for E2E tests
         # if: github.ref == 'refs/heads/main'
-        run: docker compose -f gateway/tests/e2e/docker-compose.yml up -d --wait
+        run: |
+          docker compose -f gateway/tests/e2e/docker-compose.yml up -d --wait clickhouse
+          sleep 10
+          docker compose -f gateway/tests/e2e/docker-compose.yml up -d --wait gateway
 
       - name: LOGS TODO
         # if: github.ref == 'refs/heads/main'
