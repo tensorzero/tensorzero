@@ -74,6 +74,9 @@ jobs:
       - name: Echo the GCP path
         run: echo $GCP_VERTEX_CREDENTIALS_PATH
 
+      - name: Echo the github workspace
+        run: echo $GITHUB_WORKSPACE
+
       - name: List the github workspace
         run: ls -la $GITHUB_WORKSPACE
 
