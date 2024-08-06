@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal;
 
+use gateway::clickhouse_migration_manager;
 use gateway::config_parser;
 use gateway::endpoints;
 use gateway::gateway_util;
@@ -22,6 +23,11 @@ async fn main() {
 
     let app_state = gateway_util::AppStateData::with_config(config.clone())
         .expect_pretty("Failed to initialize AppState");
+
+    // Run ClickHouse migrations (if any)
+    clickhouse_migration_manager::run(&app_state.clickhouse_connection_info)
+        .await
+        .expect_pretty("Failed to run ClickHouse migrations");
 
     let router = Router::new()
         .route("/inference", post(endpoints::inference::inference_handler))

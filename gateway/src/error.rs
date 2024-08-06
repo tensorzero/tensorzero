@@ -37,7 +37,11 @@ pub enum Error {
     ChannelWrite {
         message: String,
     },
-    ClickHouseWrite {
+    ClickHouseMigration {
+        id: String,
+        message: String,
+    },
+    ClickHouseQuery {
         message: String,
     },
     Config {
@@ -177,7 +181,8 @@ impl Error {
             Error::AzureClient { .. } => tracing::Level::WARN,
             Error::AzureServer { .. } => tracing::Level::ERROR,
             Error::ChannelWrite { .. } => tracing::Level::ERROR,
-            Error::ClickHouseWrite { .. } => tracing::Level::ERROR,
+            Error::ClickHouseMigration { .. } => tracing::Level::ERROR,
+            Error::ClickHouseQuery { .. } => tracing::Level::ERROR,
             Error::Config { .. } => tracing::Level::ERROR,
             Error::FireworksClient { .. } => tracing::Level::WARN,
             Error::FireworksServer { .. } => tracing::Level::ERROR,
@@ -232,7 +237,8 @@ impl Error {
             Error::AzureClient { status_code, .. } => *status_code,
             Error::AzureServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::ClickHouseWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::ClickHouseQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::FireworksServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::FireworksClient { status_code, .. } => *status_code,
@@ -327,8 +333,11 @@ impl std::fmt::Display for Error {
             Error::ChannelWrite { message } => {
                 write!(f, "Error writing to channel: {}", message)
             }
-            Error::ClickHouseWrite { message } => {
-                write!(f, "Error writing to ClickHouse: {}", message)
+            Error::ClickHouseMigration { id, message } => {
+                write!(f, "Error running ClickHouse migration {}: {}", id, message)
+            }
+            Error::ClickHouseQuery { message } => {
+                write!(f, "Failed to run ClickHouse query: {}", message)
             }
             Error::Config { message } => {
                 write!(f, "Error in TensorZero config: {}", message)

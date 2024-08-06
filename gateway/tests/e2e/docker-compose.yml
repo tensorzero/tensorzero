@@ -5,12 +5,15 @@ services:
     ports:
       - "8123:8123" # HTTP port
       - "9000:9000" # Native port
-    volumes:
-      - ../../../clickhouse/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     ulimits:
       nofile:
         soft: 262144
         hard: 262144
+    healthcheck:
+      test: ["CMD", "clickhouse", "local", "--query", "SELECT 1"]
+      interval: 1s
+      timeout: 1s
+      retries: 3
   gateway:
     container_name: tensorzero-gateway-e2e-test
     build:
@@ -41,3 +44,6 @@ services:
       - ./tensorzero.toml:/app/tensorzero.toml
       - ../../../functions:/app/functions
       - ${GCP_VERTEX_CREDENTIALS_PATH:?Environment variable GCP_VERTEX_CREDENTIALS_PATH is not set}:/app/gcp-credentials.json
+    depends_on:
+      clickhouse:
+        condition: service_healthy
