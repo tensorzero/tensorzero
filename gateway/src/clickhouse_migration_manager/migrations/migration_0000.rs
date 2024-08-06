@@ -2,6 +2,16 @@ use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::clickhouse_migration_manager::migration_trait::Migration;
 use crate::error::Error;
 
+/// This migration is used to create the initial tables in the ClickHouse database.
+///
+/// It is used to create the following tables:
+/// - BooleanMetricFeedback
+/// - CommentFeedback
+/// - DemonstrationFeedback
+/// - FloatMetricFeedback
+/// - Inference
+/// - ModelInference
+
 pub struct Migration0000<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
