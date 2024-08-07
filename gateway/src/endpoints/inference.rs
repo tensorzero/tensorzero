@@ -303,7 +303,6 @@ async fn write_inference(
     episode_id: Uuid,
     processing_time: Duration,
 ) {
-    // TODO (#77): add test that metadata is not saved if dryrun is true
     match response {
         InferenceResponse::Chat(response) => {
             let serialized_input =
