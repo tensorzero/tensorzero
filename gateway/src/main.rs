@@ -116,7 +116,7 @@ impl<T, E: Display> ExpectPretty<T> for Result<T, E> {
         match self {
             Ok(value) => value,
             Err(err) => {
-                eprintln!("{msg}: {err}");
+                tracing::error!("{msg}: {err}");
                 std::process::exit(1);
             }
         }
@@ -128,7 +128,7 @@ impl<T> ExpectPretty<T> for Option<T> {
         match self {
             Some(value) => value,
             None => {
-                eprintln!("{msg}");
+                tracing::error!("{msg}");
                 std::process::exit(1);
             }
         }
