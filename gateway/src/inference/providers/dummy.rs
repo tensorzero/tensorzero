@@ -95,7 +95,7 @@ impl InferenceProvider for DummyProvider {
             created,
             content,
             tool_calls: None,
-            raw,
+            raw_response: raw,
             usage,
             latency,
         })
@@ -136,7 +136,7 @@ impl InferenceProvider for DummyProvider {
             content: Some(content_chunks[0].to_string()),
             tool_calls: None,
             usage: None,
-            raw: "".to_string(),
+            raw_response: "".to_string(),
             latency: Duration::from_millis(100),
         };
         let content_chunk_len = content_chunks.len();
@@ -148,7 +148,7 @@ impl InferenceProvider for DummyProvider {
                     content: Some(chunk.to_string()),
                     tool_calls: None,
                     usage: None,
-                    raw: "".to_string(),
+                    raw_response: "".to_string(),
                     latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
                 })
             })
@@ -161,7 +161,7 @@ impl InferenceProvider for DummyProvider {
                     prompt_tokens: 10,
                     completion_tokens: total_tokens,
                 }),
-                raw: "".to_string(),
+                raw_response: "".to_string(),
                 latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),
             })))
             .throttle(std::time::Duration::from_millis(10));

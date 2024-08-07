@@ -1397,7 +1397,8 @@ mod tests {
         assert!(inference_response.tool_calls.is_none());
 
         let raw_json = json!(anthropic_response_body).to_string();
-        let parsed_raw: serde_json::Value = serde_json::from_str(&inference_response.raw).unwrap();
+        let parsed_raw: serde_json::Value =
+            serde_json::from_str(&inference_response.raw_response).unwrap();
         assert_eq!(raw_json, serde_json::json!(parsed_raw).to_string());
         assert_eq!(inference_response.usage.prompt_tokens, 100);
         assert_eq!(inference_response.usage.completion_tokens, 50);
@@ -1436,7 +1437,8 @@ mod tests {
         assert_eq!(tool_calls[0].arguments, r#"{"location":"New York"}"#);
 
         let raw_json = json!(anthropic_response_body).to_string();
-        let parsed_raw: serde_json::Value = serde_json::from_str(&inference_response.raw).unwrap();
+        let parsed_raw: serde_json::Value =
+            serde_json::from_str(&inference_response.raw_response).unwrap();
         assert_eq!(raw_json, serde_json::json!(parsed_raw).to_string());
         assert_eq!(inference_response.usage.prompt_tokens, 100);
         assert_eq!(inference_response.usage.completion_tokens, 50);
@@ -1482,7 +1484,8 @@ mod tests {
         assert_eq!(tool_calls[0].arguments, r#"{"location":"London"}"#);
 
         let raw_json = json!(anthropic_response_body).to_string();
-        let parsed_raw: serde_json::Value = serde_json::from_str(&inference_response.raw).unwrap();
+        let parsed_raw: serde_json::Value =
+            serde_json::from_str(&inference_response.raw_response).unwrap();
         assert_eq!(raw_json, serde_json::json!(parsed_raw).to_string());
 
         assert_eq!(inference_response.usage.prompt_tokens, 100);

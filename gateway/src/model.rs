@@ -345,7 +345,7 @@ mod tests {
         let response = model_config.infer(&request, &Client::new()).await.unwrap();
         let content = response.content.unwrap();
         assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
-        let raw = response.raw;
+        let raw = response.raw_response;
         assert_eq!(raw, DUMMY_INFER_RESPONSE_RAW);
         let usage = response.usage;
         assert_eq!(usage, DUMMY_INFER_USAGE);
@@ -379,7 +379,7 @@ mod tests {
         let response = model_config.infer(&request, &Client::new()).await.unwrap();
         let content = response.content.unwrap();
         assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
-        let raw = response.raw;
+        let raw = response.raw_response;
         assert_eq!(raw, DUMMY_INFER_RESPONSE_RAW);
         let usage = response.usage;
         assert_eq!(usage, DUMMY_INFER_USAGE);

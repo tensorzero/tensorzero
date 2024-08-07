@@ -352,7 +352,7 @@ mod tests {
             tool_calls: None,
             created: 0,
             usage: None,
-            raw: "".to_string(),
+            raw_response: "".to_string(),
             latency: Duration::from_millis(100),
         };
         let function = FunctionConfig::Chat(FunctionConfigChat {
