@@ -193,17 +193,15 @@ async fn write_production(
     let row_json = serde_json::to_string(row).map_err(|e| Error::Serialization {
         message: e.to_string(),
     })?;
-    // TODO (#70): allow the user to parameterize whether to wait_for_async_insert
-    // Design we'll use:
-    //   1. Feedback should wait
-    //   2. Allow the user to optionally configure that a function is latency sensitive (default false). If so,
-    //      don't wait for the async insert to finish. Otherwise, wait.
+
+    // We can wait for the async insert since we're spawning a new tokio task to do the insert
     let query = format!(
         "INSERT INTO {table}\n\
-     SETTINGS async_insert=1, wait_for_async_insert=0\n\
-     FORMAT JSONEachRow\n\
-     {row_json}"
+        SETTINGS async_insert=1, wait_for_async_insert=1\n\
+        FORMAT JSONEachRow\n\
+        {row_json}"
     );
+
     let response = client
         .post(url)
         .body(query.clone())
