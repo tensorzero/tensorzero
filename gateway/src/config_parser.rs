@@ -669,7 +669,6 @@ mod tests {
 
         // Get all templates
         let templates = config.get_templates(PathBuf::from("/base/path"));
-        println!("templates: {:?}", templates);
 
         // Check if all expected templates are present
         assert_eq!(

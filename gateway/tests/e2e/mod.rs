@@ -10,4 +10,5 @@ mod gcp_vertex;
 mod health;
 mod inference;
 mod openai;
+mod prometheus;
 mod together;

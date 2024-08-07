@@ -65,6 +65,16 @@ pub async fn feedback_handler(
 
     let dryrun = params.dryrun.unwrap_or(false);
 
+    // Increment the request count if we're not in dryrun mode
+    if !dryrun {
+        counter!(
+            "request_count",
+            "endpoint" => "feedback",
+            "metric_name" => params.metric_name.to_string()
+        )
+        .increment(1);
+    }
+
     // TODO (#77): add test that metadata is not saved if dryrun is true
     match feedback_metadata.r#type {
         FeedbackType::Comment => {
@@ -112,16 +122,6 @@ pub async fn feedback_handler(
             )
             .await?
         }
-    }
-
-    if !dryrun {
-        // TODO (#78): add integration/E2E test that checks the Prometheus endpoint
-        counter!(
-            "request_count",
-            "endpoint" => "feedback",
-            "metric_name" => params.metric_name.to_string()
-        )
-        .increment(1);
     }
 
     Ok(Json(json!({"feedback_id": feedback_id})))
