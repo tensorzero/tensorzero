@@ -14,12 +14,15 @@ use gateway::observability;
 
 #[tokio::main]
 async fn main() {
-    // Set up observability
-    observability::setup().expect_pretty("Failed to set up observability");
+    // Set up logs
+    observability::setup_logs();
 
     // Load config
     let config =
         Arc::new(config_parser::Config::load().expect_pretty("Failed to load TensorZero config"));
+
+    // Set up metrics
+    observability::setup_metrics(&config).expect_pretty("Failed to set up metrics");
 
     let app_state = gateway_util::AppStateData::with_config(config.clone())
         .expect_pretty("Failed to initialize AppState");
@@ -113,7 +116,7 @@ impl<T, E: Display> ExpectPretty<T> for Result<T, E> {
         match self {
             Ok(value) => value,
             Err(err) => {
-                tracing::error!("{msg}: {err}");
+                eprintln!("{msg}: {err}");
                 std::process::exit(1);
             }
         }
@@ -125,7 +128,7 @@ impl<T> ExpectPretty<T> for Option<T> {
         match self {
             Some(value) => value,
             None => {
-                tracing::error!("{msg}");
+                eprintln!("{msg}");
                 std::process::exit(1);
             }
         }
