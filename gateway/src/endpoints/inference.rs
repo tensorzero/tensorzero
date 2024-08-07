@@ -19,6 +19,7 @@ use crate::inference::types::{
     collect_chunks, Inference, InferenceResponse, InferenceResponseChunk, InferenceResponseStream,
     InputMessage, ModelInferenceResponseChunk,
 };
+use crate::uuid_util::validate_episode_id;
 use crate::variant::Variant;
 
 /// The expected payload is a JSON object with the following fields:
@@ -96,8 +97,8 @@ pub async fn inference_handler(
     }
 
     // Retrieve or generate the episode ID
-    // TODO (#72): validate that the episode ID is a UUIDv7
     let episode_id = params.episode_id.unwrap_or(Uuid::now_v7());
+    validate_episode_id(episode_id)?;
 
     // Should we store the results?
     let dryrun = params.dryrun.unwrap_or(false);
