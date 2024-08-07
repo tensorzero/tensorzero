@@ -55,7 +55,7 @@ mod tests {
         let episode_id = uuid!("00000000-0000-0000-0000-000000000000");
         assert!(validate_episode_id(episode_id).is_err());
 
-        let early_timestamp = EARLIEST_TIMESTAMP - 1;
+        let early_timestamp = 946684800; // 2000-01-01:00:00:00 UTC
         let early_uuid = Uuid::new_v7(Timestamp::from_unix(NoContext, early_timestamp, 0));
         assert!(validate_episode_id(early_uuid).is_err());
 
