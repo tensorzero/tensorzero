@@ -75,7 +75,6 @@ pub async fn feedback_handler(
         .increment(1);
     }
 
-    // TODO (#77): add test that metadata is not saved if dryrun is true
     match feedback_metadata.r#type {
         FeedbackType::Comment => {
             write_comment(
