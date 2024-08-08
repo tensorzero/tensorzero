@@ -17,7 +17,7 @@ use crate::function::{sample_variant, FunctionConfig};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
     collect_chunks, Inference, InferenceResponse, InferenceResponseChunk, InferenceResponseStream,
-    InputMessage, ModelInferenceResponseChunk,
+    Input, InputMessage, ModelInferenceResponseChunk,
 };
 use crate::variant::Variant;
 
@@ -31,7 +31,7 @@ pub struct Params {
     // NOTE: DO NOT GENERATE EPISODE IDS MANUALLY. THE API WILL DO THAT FOR YOU.
     episode_id: Option<Uuid>,
     // the input for the inference
-    input: Vec<InputMessage>,
+    input: Input,
     // the maximum number of tokens to generate (if not provided, the default value will be used)
     #[allow(unused)] // TODO (#55): remove
     max_tokens: Option<u32>,
@@ -50,7 +50,7 @@ struct InferenceMetadata {
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
-    pub input: Vec<InputMessage>,
+    pub input: Input,
     pub dryrun: bool,
     pub start_time: Instant,
 }
@@ -291,7 +291,7 @@ async fn write_inference(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     function_name: String,
     variant_name: String,
-    input: Vec<InputMessage>,
+    input: Input,
     response: InferenceResponse,
     episode_id: Uuid,
     processing_time: Duration,
@@ -325,11 +325,14 @@ async fn write_inference(
                 function_name,
                 variant_name,
                 processing_time,
-            );
-            clickhouse_connection_info
-                .write(&inference, "Inference")
-                .await
-                .ok_or_log();
+            )
+            .ok_or_log();
+            if let Some(inference) = inference {
+                clickhouse_connection_info
+                    .write(&inference, "Inference")
+                    .await
+                    .ok_or_log();
+            }
         }
     }
 }

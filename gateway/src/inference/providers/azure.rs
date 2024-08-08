@@ -7,14 +7,14 @@ use tokio::time::Instant;
 
 use crate::error::Error;
 use crate::inference::types::{
-    InferenceResponseStream, Latency, ModelInferenceRequest, ModelInferenceResponse,
+    InferenceResponseStream, JSONMode, Latency, ModelInferenceRequest, ModelInferenceResponse,
     ModelInferenceResponseChunk,
 };
 use crate::model::ProviderConfig;
 
 use super::openai::{
-    handle_openai_error, stream_openai, OpenAIRequestMessage, OpenAIResponse,
-    OpenAIResponseWithLatency, OpenAITool, OpenAIToolChoice,
+    handle_openai_error, stream_openai, tensorzero_to_openai_messages, OpenAIRequestMessage,
+    OpenAIResponse, OpenAIResponseWithLatency, OpenAITool, OpenAIToolChoice,
 };
 use super::provider_trait::InferenceProvider;
 
@@ -198,11 +198,18 @@ struct AzureRequest<'a> {
 impl<'a> AzureRequest<'a> {
     pub fn new(model: &'a str, request: &'a ModelInferenceRequest) -> AzureRequest<'a> {
         let response_format = match request.json_mode {
-            true => AzureResponseFormat::JsonObject,
-            false => AzureResponseFormat::Text,
+            JSONMode::On | JSONMode::Strict => AzureResponseFormat::JsonObject,
+            JSONMode::Off => AzureResponseFormat::Text,
         };
+        let messages: Vec<OpenAIRequestMessage> = request
+            .messages
+            .iter()
+            .flat_map(|msg| tensorzero_to_openai_messages(msg))
+            .flatten()
+            .collect();
+        let tool_choice = Some((&request.tool_choice).into());
         AzureRequest {
-            messages: request.messages.iter().map(|m| m.into()).collect(),
+            messages,
             model,
             temperature: request.temperature,
             max_tokens: request.max_tokens,
@@ -212,7 +219,7 @@ impl<'a> AzureRequest<'a> {
                 .tools_available
                 .as_ref()
                 .map(|t| t.iter().map(|t| t.into()).collect()),
-            tool_choice: request.tool_choice.as_ref().map(OpenAIToolChoice::from),
+            tool_choice,
             parallel_tool_calls: request.parallel_tool_calls,
         }
     }
@@ -254,9 +261,9 @@ mod tests {
             temperature: None,
             max_tokens: None,
             stream: false,
-            json_mode: true,
+            json_mode: JSONMode::On,
             tools_available: Some(vec![tool]),
-            tool_choice: Some(ToolChoice::Auto),
+            tool_choice: ToolChoice::Auto,
             parallel_tool_calls: Some(true),
             function_type: FunctionType::Chat,
             output_schema: None,

@@ -10,10 +10,7 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::{
-    error::{Error, ResultExt},
-    jsonschema_util::JSONSchemaFromPath,
-};
+use crate::{error::Error, jsonschema_util::JSONSchemaFromPath};
 
 /// Data flow in TensorZero
 ///
@@ -45,15 +42,19 @@ use crate::{
 /// InputMessage and InputMessageRole are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum InputMessageRole {
-    System,
-    User,
-    Assistant,
-    // TODO (#30): add Tool
+pub struct Input {
+    pub system: Option<Value>,
+    pub messages: Vec<InputMessage>,
 }
 
-impl fmt::Display for InputMessageRole {
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum Role {
+    User,
+    Assistant,
+}
+
+impl fmt::Display for Role {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", serde_json::to_string(self).unwrap_or_default())
     }
@@ -63,7 +64,7 @@ impl fmt::Display for InputMessageRole {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct InputMessage {
-    pub role: InputMessageRole,
+    pub role: Role,
     pub content: serde_json::Value,
 }
 
@@ -79,6 +80,7 @@ pub struct ModelInferenceRequest<'a> {
     pub messages: Vec<RequestMessage>,
     pub system_instructions: Option<String>,
     pub tools_available: Option<Vec<Tool>>,
+    // TODO(viraj): make this a reference
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
     pub temperature: Option<f32>,
@@ -149,17 +151,17 @@ pub struct ToolResult {
     pub id: String,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum Role {
-    User,
-    Assistant,
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum ContentBlock {
     Text(String),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
+}
+
+impl Into<ContentBlock> for String {
+    fn into(self) -> ContentBlock {
+        ContentBlock::Text(self)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -226,7 +228,8 @@ impl ModelInference {
             id: Uuid::now_v7(),
             inference_id,
             input,
-            output: response.content.unwrap_or_default(),
+            // We write the serialized JSON form of the ContentBlocks output by the model
+            output: serde_json::to_string(&response.content).unwrap_or_default(),
             raw_response: response.raw_response,
             input_tokens: response.usage.prompt_tokens,
             output_tokens: response.usage.completion_tokens,
@@ -276,9 +279,8 @@ impl ChatInferenceResponse {
             .expect("Time went backwards")
             .as_secs();
         let parsed_output = match output_schema {
-            Some(schema) => {
-                Self::parse_output(raw_content.as_deref(), schema, tool_choice).ok_or_log()
-            }
+            // We write None for parsed_output if parsing fails
+            Some(schema) => Self::parse_output(&raw_content, schema, tool_choice).ok(),
             None => None,
         };
         Self {
@@ -304,7 +306,6 @@ impl ChatInferenceResponse {
         }
         match tool_choice {
             ToolChoice::Implicit => {
-                // TODO: grab the last tool call, parse the arguments passed, and return the result
                 for content in content.iter().rev() {
                     let arguments = match content {
                         ContentBlock::ToolCall(tool_call) => tool_call.arguments,
@@ -328,7 +329,7 @@ impl ChatInferenceResponse {
                 });
             }
             _ => {
-                // grab the last text content block, parse it, and return
+                // Grab the last text content block, parse it, and return
                 for content in content.iter().rev() {
                     let text = match content {
                         ContentBlock::Text(text) => text,
@@ -394,9 +395,9 @@ impl Inference {
         function_name: String,
         variant_name: String,
         processing_time: Duration,
-    ) -> Self {
+    ) -> Result<Self, Error> {
         let processing_time_ms = processing_time.as_millis() as u32;
-        match inference_response {
+        Ok(match inference_response {
             InferenceResponse::Chat(chat_response) => Self {
                 id: chat_response.inference_id,
                 function_name,
@@ -411,7 +412,7 @@ impl Inference {
                 parsed_output: chat_response.parsed_output,
                 processing_time_ms,
             },
-        }
+        })
     }
 }
 
@@ -434,6 +435,15 @@ pub struct TextChunk {
 pub enum ContentBlockChunk {
     Text(TextChunk),
     ToolCall(ToolCallChunk),
+}
+
+impl From<String> for ContentBlockChunk {
+    fn from(content: String) -> Self {
+        ContentBlockChunk::Text(TextChunk {
+            text: content,
+            id: Uuid::now_v7().to_string(),
+        })
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -527,11 +537,11 @@ pub fn collect_chunks(
                     match text_blocks.get_mut(&text.id) {
                         // If there is already a text block, append to it
                         Some(ContentBlock::Text(existing_text)) => {
-                            existing_text.push_str(&text);
+                            existing_text.push_str(&text.text);
                         }
                         // If there is no text block, create one
                         _ => {
-                            text_blocks.insert(text.id, ContentBlock::Text(text));
+                            text_blocks.insert(text.id, ContentBlock::Text(text.text));
                         }
                     }
                 }
@@ -539,12 +549,13 @@ pub fn collect_chunks(
                     match tool_call_blocks.get_mut(&tool_call.id) {
                         // If there is already a tool call block with this id, append to it
                         Some(ContentBlock::ToolCall(existing_tool_call)) => {
+                            // We assume that the name and ID are present and complete in the first chunk
                             existing_tool_call.arguments.push_str(&tool_call.arguments);
                         }
                         // If there is no tool call block, create one
                         _ => {
                             tool_call_blocks
-                                .insert(tool_call.id, ContentBlock::ToolCall(tool_call));
+                                .insert(tool_call.id, ContentBlock::ToolCall(tool_call.into()));
                         }
                     }
                 }
@@ -636,7 +647,7 @@ mod tests {
             usage.clone(),
             model_inference_responses,
             None,
-            Tool::None,
+            ToolChoice::None,
         );
         let parsed_content = content.as_ref().map(|c| Value::String(c.clone()));
         assert_eq!(chat_inference_response.inference_id, inference_id);

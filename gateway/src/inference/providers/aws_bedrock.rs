@@ -143,8 +143,8 @@ impl TryFrom<&RequestMessage> for Message {
         let blocks: Vec<BedrockContentBlock> = inference_message
             .content
             .iter()
-            .map(|block| block.into())
-            .collect();
+            .map(|block| block.try_into())
+            .collect::<Result<Vec<_>, _>>()?;
         let mut message_builder = Message::builder().role(role);
         for block in blocks {
             message_builder = message_builder.content(block);
@@ -180,8 +180,11 @@ impl TryFrom<ConverseOutputWithLatency> for ModelInferenceResponse {
         };
 
         let content: Vec<ContentBlock> = message
+            .ok_or(Error::AWSBedrockServer {
+                message: "AWS Bedrock returned an empty message.".to_string(),
+            })?
             .content
-            .iter()
+            .into_iter()
             .map(|block| block.try_into())
             .collect::<Result<Vec<ContentBlock>, _>>()?;
 
