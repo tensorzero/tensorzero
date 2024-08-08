@@ -12,7 +12,7 @@ async fn test_clickhouse_migration_manager() {
 
     let clickhouse = ClickHouseConnectionInfo::new(
         &CLICKHOUSE_URL,
-        &format!("e2e_tensorzero_migration_manager_{database}"),
+        &format!("tensorzero_e2e_tests_migration_manager_{database}"),
         false,
         None,
     )

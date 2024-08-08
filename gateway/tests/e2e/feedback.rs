@@ -30,7 +30,7 @@ async fn e2e_test_comment_feedback() {
 
     // Check ClickHouse
     let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "e2e_tensorzero", false, Some(true))
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, Some(true))
             .unwrap();
     let result = select_feedback_clickhouse(&clickhouse, "CommentFeedback", feedback_id)
         .await
@@ -64,7 +64,7 @@ async fn e2e_test_comment_feedback() {
 
     // Check ClickHouse
     let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "e2e_tensorzero", false, Some(true))
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, Some(true))
             .unwrap();
     let result = select_feedback_clickhouse(&clickhouse, "CommentFeedback", feedback_id)
         .await
@@ -102,7 +102,7 @@ async fn e2e_test_demonstration_feedback() {
 
     // Check ClickHouse
     let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "e2e_tensorzero", false, Some(true))
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, Some(true))
             .unwrap();
     let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
         .await
@@ -155,7 +155,7 @@ async fn e2e_test_float_feedback() {
 
     // Check ClickHouse
     let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "e2e_tensorzero", false, Some(true))
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, Some(true))
             .unwrap();
     let result = select_feedback_clickhouse(&clickhouse, "FloatMetricFeedback", feedback_id)
         .await
@@ -253,7 +253,7 @@ async fn e2e_test_boolean_feedback() {
 
     // Check ClickHouse
     let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "e2e_tensorzero", false, Some(true))
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, Some(true))
             .unwrap();
     let result = select_feedback_clickhouse(&clickhouse, "BooleanMetricFeedback", feedback_id)
         .await

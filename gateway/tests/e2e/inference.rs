@@ -75,7 +75,8 @@ async fn e2e_test_inference_basic() {
 
     // Check ClickHouse
     let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "e2e_tensorzero", false, None).unwrap();
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, None)
+            .unwrap();
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
@@ -154,7 +155,8 @@ async fn e2e_test_inference_model_fallback() {
 
     // Check ClickHouse
     let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "e2e_tensorzero", false, None).unwrap();
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, None)
+            .unwrap();
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
@@ -232,7 +234,8 @@ async fn e2e_test_inference_json_fail() {
 
     // Check ClickHouse
     let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "e2e_tensorzero", false, None).unwrap();
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, None)
+            .unwrap();
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
@@ -311,7 +314,8 @@ async fn e2e_test_inference_json_succeed() {
 
     // Check ClickHouse
     let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "e2e_tensorzero", false, None).unwrap();
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, None)
+            .unwrap();
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
@@ -404,7 +408,8 @@ async fn e2e_test_variant_failover() {
 
     // Check ClickHouse
     let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "e2e_tensorzero", false, None).unwrap();
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, None)
+            .unwrap();
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
@@ -486,7 +491,8 @@ async fn e2e_test_streaming() {
 
     // Check ClickHouse
     let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "e2e_tensorzero", false, None).unwrap();
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, None)
+            .unwrap();
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();

@@ -76,7 +76,8 @@ async fn test_inference_basic() {
 
     // Check ClickHouse
     let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "e2e_tensorzero", false, None).unwrap();
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, None)
+            .unwrap();
 
     // First, check Inference table
     let result = select_inference_clickhouse(&clickhouse, inference_id)
@@ -177,7 +178,8 @@ async fn test_streaming() {
 
     // Check ClickHouse
     let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "e2e_tensorzero", false, None).unwrap();
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, None)
+            .unwrap();
     // First, check Inference table
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await

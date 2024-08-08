@@ -13,7 +13,7 @@
 bind_address = "0.0.0.0:3000"
 
 [clickhouse]
-database = "e2e_tensorzero"
+database = "tensorzero_e2e_tests"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                   MODELS                                   │
