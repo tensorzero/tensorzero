@@ -150,11 +150,14 @@ impl ClickHouseConnectionInfo {
         }
     }
 
-    pub async fn create_database(&self, database: &str) -> Result<(), Error> {
+    pub async fn create_database(&self) -> Result<(), Error> {
         match self {
             Self::Mock { .. } => unimplemented!(),
             Self::Production {
-                base_url, client, ..
+                base_url,
+                database,
+                client,
+                ..
             } => {
                 let query = format!("CREATE DATABASE IF NOT EXISTS {}", database);
 
