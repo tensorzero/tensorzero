@@ -130,7 +130,9 @@ async fn e2e_test_inference_dryrun() {
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check ClickHouse
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None).unwrap();
+    let clickhouse =
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, None)
+            .unwrap();
     let result = select_inference_clickhouse(&clickhouse, inference_id).await;
     assert!(result.is_none()); // No inference should be written to ClickHouse when dryrun is true
 }
@@ -606,7 +608,9 @@ async fn e2e_test_streaming_dryrun() {
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check ClickHouse
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None).unwrap();
+    let clickhouse =
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, None)
+            .unwrap();
     let result = select_inference_clickhouse(&clickhouse, inference_id).await;
     assert!(result.is_none()); // No inference should be written to ClickHouse when dryrun is true
 }
