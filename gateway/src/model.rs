@@ -89,7 +89,6 @@ impl ModelConfig {
     }
 }
 
-// TODO (#83): merge variants with provider-specific structs `pub struct XXXProvider;` to avoid unnecessary checks
 #[derive(Clone, Debug)]
 pub enum ProviderConfig {
     Anthropic(AnthropicProvider),
