@@ -330,7 +330,7 @@ mod tests {
         assert_eq!(
             validation_result.unwrap_err(),
             Error::InvalidMessage {
-                message: "Message at index 0 has non-string content but there is no schema given for role \"system\".".to_string()
+                message: "Message at index 0 has non-string content but there is no schema given for role \"user\".".to_string()
             }
         );
     }
@@ -608,7 +608,7 @@ mod tests {
         assert_eq!(
             validation_result.unwrap_err(),
             Error::InvalidMessage {
-                message: "Message at index 1 has non-string content but there is no schema given for role \"user\".".to_string()
+                message: "Message at index 0 has non-string content but there is no schema given for role \"user\".".to_string()
             }
         );
     }

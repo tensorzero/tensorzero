@@ -16,7 +16,7 @@ use crate::{
 
 use super::{
     openai::{
-        get_chat_url, handle_openai_error, stream_openai, tensorzero_to_openai_messages,
+        get_chat_url, handle_openai_error, prepare_openai_messages, stream_openai,
         OpenAIRequestMessage, OpenAIResponse, OpenAIResponseWithLatency, OpenAITool,
         OpenAIToolChoice,
     },
@@ -210,12 +210,7 @@ impl<'a> FireworksRequest<'a> {
             }),
             JSONMode::Off => None,
         };
-        let messages: Vec<OpenAIRequestMessage> = request
-            .messages
-            .iter()
-            .flat_map(|msg| tensorzero_to_openai_messages(msg))
-            .flatten()
-            .collect();
+        let messages = prepare_openai_messages(request);
         let tool_choice: OpenAIToolChoice = (&request.tool_choice).into();
         FireworksRequest {
             messages,

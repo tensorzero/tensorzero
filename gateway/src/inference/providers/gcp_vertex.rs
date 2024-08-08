@@ -20,7 +20,7 @@ use crate::{
     model::ProviderConfig,
 };
 
-/// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/GenerateContentResponse) for non-streaming
+/// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
 
 pub struct GCPVertexGeminiProvider;
@@ -448,13 +448,13 @@ impl<'a> From<&'a ToolChoice> for GCPVertexGeminiToolConfig<'a> {
             },
             ToolChoice::Tool(tool_name) => GCPVertexGeminiToolConfig {
                 function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                    mode: GCPVertexGeminiFunctionCallingMode::Auto,
+                    mode: GCPVertexGeminiFunctionCallingMode::Any,
                     allowed_function_names: Some(vec![tool_name]),
                 },
             },
             ToolChoice::Implicit => GCPVertexGeminiToolConfig {
                 function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                    mode: GCPVertexGeminiFunctionCallingMode::Auto,
+                    mode: GCPVertexGeminiFunctionCallingMode::Any,
                     allowed_function_names: Some(vec!["respond"]),
                 },
             },
@@ -575,7 +575,7 @@ impl From<GCPVertexGeminiResponseContentPart> for ContentBlockChunk {
                     id: "0".to_string(),
                 })
             }
-            GCPVertexGeminiResponseContentPart::FunctionCall { function_call } => {
+            GCPVertexGeminiResponseContentPart::FunctionCall { .. } => {
                 unimplemented!()
                 // TODO (#19, #30): figure out how GCP does bookkeeping for streaming tool calls and implement this here.
                 // ContentBlock::ToolCall(ToolCall {
@@ -596,6 +596,7 @@ impl From<GCPVertexGeminiResponseContentPart> for ContentBlock {
                 ContentBlock::ToolCall(ToolCall {
                     name: function_call.name,
                     arguments: function_call.args,
+                    // GCP doesn't have the concept of tool call ID so we generate one for our bookkeeping
                     id: Uuid::now_v7().to_string(),
                 })
             }
@@ -821,7 +822,7 @@ mod tests {
             content.parts[0],
             GCPVertexGeminiContentPart::FunctionResponse {
                 function_response: GCPVertexGeminiFunctionResponse {
-                    name: "call_1",
+                    name: "get_weather",
                     response: r#"{"temperature": 25, "conditions": "sunny"}"#,
                 }
             }
@@ -885,7 +886,7 @@ mod tests {
             tool_config,
             GCPVertexGeminiToolConfig {
                 function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                    mode: GCPVertexGeminiFunctionCallingMode::Auto,
+                    mode: GCPVertexGeminiFunctionCallingMode::Any,
                     allowed_function_names: Some(vec!["get_weather"]),
                 }
             }
@@ -1129,17 +1130,18 @@ mod tests {
         let model_inference_response: ModelInferenceResponse =
             response_with_latency.try_into().unwrap();
 
-        assert_eq!(
-            model_inference_response.content,
-            vec![
-                ContentBlock::Text("Here's the weather information:".to_string()),
-                ContentBlock::ToolCall(ToolCall {
-                    id: "get_weather".to_string(),
-                    name: "get_weather".to_string(),
-                    arguments: r#"{"location": "New York", "unit": "celsius"}"#.to_string(),
-                }),
-            ]
-        );
+        if let [ContentBlock::Text(text), ContentBlock::ToolCall(tool_call)] =
+            &model_inference_response.content[..]
+        {
+            assert_eq!(text, "Here's the weather information:");
+            assert_eq!(tool_call.name, "get_weather");
+            assert_eq!(
+                tool_call.arguments,
+                r#"{"location": "New York", "unit": "celsius"}"#
+            );
+        } else {
+            panic!("Unexpected content in model_inference_response");
+        }
 
         assert_eq!(
             model_inference_response.usage,
@@ -1196,25 +1198,27 @@ mod tests {
         let model_inference_response: ModelInferenceResponse =
             response_with_latency.try_into().unwrap();
 
-        assert_eq!(
-            model_inference_response.content,
-            vec![
-                ContentBlock::Text(
-                    "Here's the weather information:\nAnd here's a restaurant recommendation:"
-                        .to_string()
-                ),
-                ContentBlock::ToolCall(ToolCall {
-                    id: "get_weather".to_string(),
-                    name: "get_weather".to_string(),
-                    arguments: r#"{"location": "New York", "unit": "celsius"}"#.to_string(),
-                }),
-                ContentBlock::ToolCall(ToolCall {
-                    id: "get_restaurant".to_string(),
-                    name: "get_restaurant".to_string(),
-                    arguments: r#"{"cuisine": "Italian", "price_range": "moderate"}"#.to_string(),
-                }),
-            ]
-        );
+        if let [ContentBlock::Text(text1), ContentBlock::ToolCall(tool_call1), ContentBlock::Text(text2), ContentBlock::ToolCall(tool_call2)] =
+            &model_inference_response.content[..]
+        {
+            assert_eq!(text1, "Here's the weather information:");
+            assert_eq!(text2, "And here's a restaurant recommendation:");
+            assert_eq!(tool_call1.name, "get_weather");
+            assert_eq!(
+                tool_call1.arguments,
+                r#"{"location": "New York", "unit": "celsius"}"#
+            );
+            assert_eq!(tool_call2.name, "get_restaurant");
+            assert_eq!(
+                tool_call2.arguments,
+                r#"{"cuisine": "Italian", "price_range": "moderate"}"#
+            );
+        } else {
+            panic!(
+                "Content does not match expected structure: {:?}",
+                model_inference_response.content
+            );
+        }
 
         assert_eq!(
             model_inference_response.usage,

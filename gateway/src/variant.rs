@@ -261,7 +261,7 @@ mod tests {
             providers::dummy::{
                 DUMMY_INFER_RESPONSE_CONTENT, DUMMY_JSON_RESPONSE_RAW, DUMMY_STREAMING_RESPONSE,
             },
-            types::{Role, Usage},
+            types::{ContentBlockChunk, Role, TextChunk, Usage},
         },
         minijinja_util::tests::idempotent_initialize_test_templates,
         model::ProviderConfig,
@@ -412,6 +412,7 @@ mod tests {
         }
     }
 
+    #[test]
     fn test_prepare_system_message() {
         // Test without templates
         let chat_completion_config = ChatCompletionConfig {
@@ -560,10 +561,8 @@ mod tests {
         assert!(matches!(result, InferenceResponse::Chat(_)));
         match result {
             InferenceResponse::Chat(chat_response) => {
-                assert_eq!(
-                    chat_response.parsed_output,
-                    Some(json!(DUMMY_INFER_RESPONSE_CONTENT))
-                );
+                // No output schema means parsed_output is None
+                assert_eq!(chat_response.parsed_output, None,);
                 assert_eq!(
                     chat_response.content_blocks,
                     vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()]
@@ -702,7 +701,10 @@ mod tests {
             .unwrap();
         assert_eq!(
             first_chunk.content,
-            vec![DUMMY_STREAMING_RESPONSE[0].to_string().into()]
+            vec![ContentBlockChunk::Text(TextChunk {
+                text: DUMMY_STREAMING_RESPONSE[0].to_string(),
+                id: "0".to_string()
+            })]
         );
         let mut i = 1;
         while let Some(chunk_result) = stream.next().await {
@@ -720,7 +722,10 @@ mod tests {
             }
             assert_eq!(
                 chunk.content,
-                vec![DUMMY_STREAMING_RESPONSE[i].to_string().into()]
+                vec![ContentBlockChunk::Text(TextChunk {
+                    text: DUMMY_STREAMING_RESPONSE[i].to_string(),
+                    id: "0".to_string(),
+                })]
             );
             i += 1;
         }

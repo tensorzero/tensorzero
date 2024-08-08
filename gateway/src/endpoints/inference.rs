@@ -345,14 +345,20 @@ mod tests {
     use std::{collections::HashMap, time::Duration};
     use uuid::Uuid;
 
-    use crate::{function::FunctionConfigChat, inference::types::ModelInferenceResponseChunk};
+    use crate::{
+        function::FunctionConfigChat,
+        inference::types::{ContentBlockChunk, ModelInferenceResponseChunk, TextChunk},
+    };
 
     #[tokio::test]
     async fn test_prepare_event() {
         // Test case 1: Valid ModelInferenceResponseChunk
         let chunk = ModelInferenceResponseChunk {
             inference_id: Uuid::now_v7(),
-            content: vec!["Test content".to_string().into()],
+            content: vec![ContentBlockChunk::Text(TextChunk {
+                text: "Test content".to_string(),
+                id: "0".to_string(),
+            })],
             created: 0,
             usage: None,
             raw_response: "".to_string(),

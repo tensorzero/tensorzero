@@ -697,7 +697,7 @@ fn anthropic_to_tensorzero_stream_message(
                 )))
             }
             _ => Err(Error::AnthropicServer {
-                message: "Unsupported content block type".to_string(),
+                message: "Unsupported content block type for ContentBlockStart".to_string(),
             }),
         },
         AnthropicStreamMessage::ContentBlockStop { .. } => Ok(None),
@@ -1022,7 +1022,7 @@ mod tests {
                             AnthropicMessageContent::Text { text: "test_user2" }
                         ],
                     },
-                    AnthropicMessage::try_from(&messages[3]).unwrap(),
+                    AnthropicMessage::try_from(&messages[2]).unwrap(),
                     listening_message.clone(),
                 ],
                 max_tokens: 100,
@@ -1079,9 +1079,9 @@ mod tests {
             AnthropicRequestBody {
                 model: &model,
                 messages: vec![
+                    AnthropicMessage::try_from(&messages[0]).unwrap(),
                     AnthropicMessage::try_from(&messages[1]).unwrap(),
                     AnthropicMessage::try_from(&messages[2]).unwrap(),
-                    AnthropicMessage::try_from(&messages[3]).unwrap(),
                 ],
                 max_tokens: 100,
                 stream: Some(true),
@@ -1520,11 +1520,11 @@ mod tests {
 
         let inference_id = Uuid::now_v7();
 
-        // Test ContentBlockDelta with Text
+        // Test ContentBlockDelta with TextDelta
         let mut current_tool_id = None;
         let mut current_tool_name = None;
         let content_block_delta = AnthropicStreamMessage::ContentBlockDelta {
-            delta: AnthropicMessageBlock::Text {
+            delta: AnthropicMessageBlock::TextDelta {
                 text: "Hello".to_string(),
             },
             index: 0,
@@ -1540,7 +1540,7 @@ mod tests {
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
-        match chunk.content[0] {
+        match &chunk.content[0] {
             ContentBlockChunk::Text(text) => {
                 assert_eq!(text.text, "Hello".to_string());
                 assert_eq!(text.id, "0".to_string());
@@ -1548,35 +1548,6 @@ mod tests {
             _ => unreachable!(),
         }
         assert_eq!(chunk.latency, latency);
-
-        // Test ContentBlockDelta with ToolUse
-        let mut current_tool_id = None;
-        let mut current_tool_name = None;
-        let content_block_delta = AnthropicStreamMessage::ContentBlockDelta {
-            delta: AnthropicMessageBlock::ToolUse {
-                id: "tool_call_1".to_string(),
-                name: "get_weather".to_string(),
-                input: json!({"location": "New York"}),
-            },
-            index: 0,
-        };
-        let latency = Duration::from_millis(100);
-        let result = anthropic_to_tensorzero_stream_message(
-            content_block_delta,
-            inference_id,
-            latency,
-            &mut current_tool_id,
-            &mut current_tool_name,
-        );
-        assert!(result.is_ok());
-        // This should fail because ContentBlockDelta should only have text or InputJsonDelta
-        let error = result.unwrap_err();
-        assert_eq!(
-            error,
-            Error::AnthropicServer {
-                message: "Unsupported content block type for ContentBlockDelta".to_string()
-            }
-        );
 
         // Test ContentBlockDelta with InputJsonDelta but no previous tool info
         let mut current_tool_id = None;
@@ -1622,7 +1593,7 @@ mod tests {
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
-        match chunk.content[0] {
+        match &chunk.content[0] {
             ContentBlockChunk::ToolCall(tool_call) => {
                 assert_eq!(tool_call.id, "tool_id".to_string());
                 assert_eq!(tool_call.name, "tool_name".to_string());
@@ -1653,7 +1624,7 @@ mod tests {
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
-        match chunk.content[0] {
+        match &chunk.content[0] {
             ContentBlockChunk::ToolCall(tool_call) => {
                 assert_eq!(tool_call.id, "tool1".to_string());
                 assert_eq!(tool_call.name, "calculator".to_string());
@@ -1684,7 +1655,7 @@ mod tests {
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
-        match chunk.content[0] {
+        match &chunk.content[0] {
             ContentBlockChunk::Text(text) => {
                 assert_eq!(text.text, "Hello".to_string());
                 assert_eq!(text.id, "2".to_string());

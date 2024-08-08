@@ -13,7 +13,7 @@ use crate::inference::types::{
 use crate::model::ProviderConfig;
 
 use super::openai::{
-    handle_openai_error, stream_openai, tensorzero_to_openai_messages, OpenAIRequestMessage,
+    handle_openai_error, prepare_openai_messages, stream_openai, OpenAIRequestMessage,
     OpenAIResponse, OpenAIResponseWithLatency, OpenAITool, OpenAIToolChoice,
 };
 use super::provider_trait::InferenceProvider;
@@ -177,7 +177,7 @@ enum AzureResponseFormat {
 /// We are not handling logprobs, top_logprobs, n, prompt_truncate_len
 /// presence_penalty, frequency_penalty, seed, service_tier, stop, user,
 /// or context_length_exceeded_behavior
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 struct AzureRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     model: &'a str,
@@ -201,12 +201,7 @@ impl<'a> AzureRequest<'a> {
             JSONMode::On | JSONMode::Strict => AzureResponseFormat::JsonObject,
             JSONMode::Off => AzureResponseFormat::Text,
         };
-        let messages: Vec<OpenAIRequestMessage> = request
-            .messages
-            .iter()
-            .flat_map(|msg| tensorzero_to_openai_messages(msg))
-            .flatten()
-            .collect();
+        let messages = prepare_openai_messages(request);
         let tool_choice = Some((&request.tool_choice).into());
         AzureRequest {
             messages,
@@ -272,6 +267,7 @@ mod tests {
         let azure_request = AzureRequest::new("togethercomputer/llama-v3-8b", &request_with_tools);
 
         assert_eq!(azure_request.model, "togethercomputer/llama-v3-8b");
+        println!("{:?}", azure_request);
         assert_eq!(azure_request.messages.len(), 1);
         assert_eq!(azure_request.temperature, None);
         assert_eq!(azure_request.max_tokens, None);

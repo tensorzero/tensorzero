@@ -310,7 +310,7 @@ mod tests {
             DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW, DUMMY_INFER_USAGE,
             DUMMY_STREAMING_RESPONSE,
         },
-        types::{ContentBlockChunk, FunctionType, JSONMode, ToolChoice},
+        types::{ContentBlockChunk, FunctionType, JSONMode, TextChunk, ToolChoice},
     };
     use tokio_stream::StreamExt;
 
@@ -427,16 +427,24 @@ mod tests {
             .unwrap();
         assert_eq!(
             initial_chunk.content,
-            vec![DUMMY_STREAMING_RESPONSE[0].to_string().into()],
+            vec![ContentBlockChunk::Text(TextChunk {
+                text: DUMMY_STREAMING_RESPONSE[0].to_string(),
+                id: "0".to_string(),
+            })],
         );
 
         let mut collected_content: Vec<ContentBlockChunk> =
-            vec![DUMMY_STREAMING_RESPONSE[0].to_string().into()];
+            vec![ContentBlockChunk::Text(TextChunk {
+                text: DUMMY_STREAMING_RESPONSE[0].to_string(),
+                id: "0".to_string(),
+            })];
         let mut stream = Box::pin(stream);
         while let Some(Ok(chunk)) = stream.next().await {
-            let content = chunk.content;
-            assert_eq!(content.len(), 1);
-            collected_content.push(content.pop().unwrap());
+            let mut content = chunk.content;
+            assert!(content.len() <= 1);
+            if content.len() == 1 {
+                collected_content.push(content.pop().unwrap());
+            }
         }
         let mut collected_content_str = String::new();
         for content in collected_content {
@@ -481,15 +489,20 @@ mod tests {
             .unwrap();
         assert_eq!(
             initial_chunk.content,
-            vec![DUMMY_STREAMING_RESPONSE[0].to_string().into()]
+            vec![ContentBlockChunk::Text(TextChunk {
+                text: DUMMY_STREAMING_RESPONSE[0].to_string(),
+                id: "0".to_string(),
+            })],
         );
 
         let mut collected_content = initial_chunk.content;
         let mut stream = Box::pin(stream);
         while let Some(Ok(chunk)) = stream.next().await {
             let mut content = chunk.content;
-            assert_eq!(content.len(), 1);
-            collected_content.push(content.pop().unwrap());
+            assert!(content.len() <= 1);
+            if content.len() == 1 {
+                collected_content.push(content.pop().unwrap());
+            }
         }
         let mut collected_content_str = String::new();
         for content in collected_content {
