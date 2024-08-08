@@ -137,8 +137,6 @@ async fn test_inference_basic() {
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
     assert!(result.get("ttft_ms").unwrap().is_null());
-    let _ = result.get("raw_response").unwrap().as_str().unwrap();
-    // TODO(viraj)
-    // AWS bedrock raw responses are Debug, not JSON
-    // let _ = serde_json::from_str::<Value>(raw_response).unwrap();
+    let raw_response = result.get("raw_response").unwrap();
+    let _ = raw_response.get("debug").unwrap().as_str().unwrap();
 }

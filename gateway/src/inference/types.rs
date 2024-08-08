@@ -259,8 +259,6 @@ impl ModelInferenceResponse {
 }
 
 // Determines the return type of Inference API for Chat-type functions (which is all of them right now)
-// TODO (viraj): add output_schema to this struct, don't serialize it and then have the serializer
-// only return parsed_output if output_schema is present
 #[derive(Serialize, Debug, Clone)]
 pub struct ChatInferenceResponse {
     inference_id: Uuid,
