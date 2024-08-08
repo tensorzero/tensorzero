@@ -2,17 +2,11 @@ use metrics_exporter_prometheus::PrometheusBuilder;
 use std::net::SocketAddr;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+use crate::config_parser::Config;
 use crate::error::Error;
 
-/// Set up observability
-pub fn setup() -> Result<(), Error> {
-    setup_logs();
-    setup_metrics()?;
-    Ok(())
-}
-
 /// Set up logs
-fn setup_logs() {
+pub fn setup_logs() {
     // Get the current log level from the environment variable `RUST_LOG`
     let log_level = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| "gateway=debug,warn".into());
@@ -30,9 +24,13 @@ fn setup_logs() {
 }
 
 /// Set up Prometheus metrics exporter
-fn setup_metrics() -> Result<(), Error> {
-    // TODO (#71): make this configurable
-    let prometheus_listener_addr = SocketAddr::from(([0, 0, 0, 0], 9090));
+pub fn setup_metrics(config: &Config) -> Result<(), Error> {
+    // Get the Prometheus listener address from the config, or default to 0.0.0.0:9090
+    let prometheus_listener_addr = config
+        .gateway
+        .as_ref()
+        .and_then(|gateway_config| gateway_config.prometheus_address)
+        .unwrap_or_else(|| SocketAddr::from(([0, 0, 0, 0], 9090)));
 
     PrometheusBuilder::new()
         .with_http_listener(prometheus_listener_addr)

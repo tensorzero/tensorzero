@@ -103,6 +103,16 @@ pub async fn inference_handler(
     // Should we store the results?
     let dryrun = params.dryrun.unwrap_or(false);
 
+    // Increment the request count if we're not in dryrun mode
+    if !dryrun {
+        counter!(
+            "request_count",
+            "endpoint" => "inference",
+            "function_name" => params.function_name.to_string(),
+        )
+        .increment(1);
+    }
+
     // Should we stream the inference?
     let stream = params.stream.unwrap_or(false);
 
@@ -170,14 +180,8 @@ pub async fn inference_handler(
                 }
             };
             let response_to_write = response.clone();
+
             if !dryrun {
-                // TODO (#78): add integration/E2E test that checks the Prometheus endpoint
-                counter!(
-                    "request_count",
-                    "endpoint" => "inference",
-                    "function_name" => params.function_name.to_string(),
-                )
-                .increment(1);
                 // Spawn a thread for a trailing write to ClickHouse so that it doesn't block the response
                 tokio::spawn(async move {
                     write_inference(
@@ -192,6 +196,7 @@ pub async fn inference_handler(
                     .await;
                 });
             }
+
             let response_value = serde_json::to_value(response).map_err(|e| Error::Inference {
                 message: format!("Failed to convert response to JSON: {}", e),
             })?;
@@ -234,14 +239,15 @@ fn create_stream(
         // Send the [DONE] event to signal the end of the stream
         yield Ok(Event::default().data("[DONE]"));
 
-        if !metadata.dryrun {
-            counter!(
-                "request_count",
-                "endpoint" => "inference",
-                "function_name" => metadata.function_name.to_string(),
-            )
-            .increment(1);
+        // IMPORTANT: The following code will not be reached if the stream is interrupted.
+        // Only do things that would be ok to skip in that case.
+        //
+        // For example, if we were using ClickHouse for billing, we would want to store the interrupted requests.
+        //
+        // If we really care about storing interrupted requests, we should use a drop guard:
+        // https://github.com/tokio-rs/axum/discussions/1060
 
+        if !metadata.dryrun {
             let inference_response: Result<InferenceResponse, Error> =
                 collect_chunks(buffer, function.output_schema());
             let inference_response = inference_response.ok_or_log();
@@ -297,7 +303,6 @@ async fn write_inference(
     episode_id: Uuid,
     processing_time: Duration,
 ) {
-    // TODO (#77): add test that metadata is not saved if dryrun is true
     match response {
         InferenceResponse::Chat(response) => {
             let serialized_input =

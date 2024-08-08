@@ -20,7 +20,6 @@ lazy_static::lazy_static! {
 
 #[tokio::test]
 async fn e2e_test_inference_basic() {
-    let client = Client::new();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -37,7 +36,7 @@ async fn e2e_test_inference_basic() {
         "stream": false,
     });
 
-    let response = client
+    let response = Client::new()
         .post(INFERENCE_URL)
         .json(&payload)
         .send()
@@ -95,12 +94,52 @@ async fn e2e_test_inference_basic() {
     assert_eq!(retrieved_episode_id, episode_id);
 }
 
+#[tokio::test]
+async fn e2e_test_inference_dryrun() {
+    let payload = json!({
+        "function_name": "basic_test",
+        "episode_id": Uuid::now_v7(),
+        "input":
+            [
+                {"role": "system", "content": {"assistant_name": "AskJeeves"}},
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
+                }
+            ],
+        "stream": false,
+        "dryrun": true,
+    });
+
+    let response = Client::new()
+        .post(INFERENCE_URL)
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check Response is OK, then fields in order
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    // Check that inference_id is here
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    // Sleep for 0.1 seconds to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // Check ClickHouse
+    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None).unwrap();
+    let result = select_inference_clickhouse(&clickhouse, inference_id).await;
+    assert!(result.is_none()); // No inference should be written to ClickHouse when dryrun is true
+}
+
 /// This test calls a function which calls a model where the first provider is broken but
 /// then the second provider works fine. We expect this request to work despite the first provider
 /// being broken.
 #[tokio::test]
 async fn e2e_test_inference_model_fallback() {
-    let client = Client::new();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -117,7 +156,7 @@ async fn e2e_test_inference_model_fallback() {
         "stream": false,
     });
 
-    let response = client
+    let response = Client::new()
         .post(INFERENCE_URL)
         .json(&payload)
         .send()
@@ -180,7 +219,6 @@ async fn e2e_test_inference_model_fallback() {
 /// We expect to see a null `content` field in the response and a null `output` field in the table.
 #[tokio::test]
 async fn e2e_test_inference_json_fail() {
-    let client = Client::new();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -197,7 +235,7 @@ async fn e2e_test_inference_json_fail() {
         "stream": false,
     });
 
-    let response = client
+    let response = Client::new()
         .post(INFERENCE_URL)
         .json(&payload)
         .send()
@@ -259,7 +297,6 @@ async fn e2e_test_inference_json_fail() {
 /// We expect to see a filled-out `content` field in the response and a filled-out `output` field in the table.
 #[tokio::test]
 async fn e2e_test_inference_json_succeed() {
-    let client = Client::new();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -276,7 +313,7 @@ async fn e2e_test_inference_json_succeed() {
         "stream": false,
     });
 
-    let response = client
+    let response = Client::new()
         .post(INFERENCE_URL)
         .json(&payload)
         .send()
@@ -341,7 +378,6 @@ async fn e2e_test_inference_json_succeed() {
 /// the response is correct for the last one.
 #[tokio::test]
 async fn e2e_test_variant_failover() {
-    let client = Client::new();
     let mut last_response = None;
     let mut last_payload = None;
     let mut last_episode_id = None;
@@ -362,7 +398,7 @@ async fn e2e_test_variant_failover() {
             "stream": false,
         });
 
-        let response = client
+        let response = Client::new()
             .post(INFERENCE_URL)
             .json(&payload)
             .send()
@@ -432,7 +468,6 @@ async fn e2e_test_variant_failover() {
 /// This test checks that streaming inference works as expected.
 #[tokio::test]
 async fn e2e_test_streaming() {
-    let client = Client::new();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -449,7 +484,7 @@ async fn e2e_test_streaming() {
         "stream": true,
     });
 
-    let mut event_source = client
+    let mut event_source = Client::new()
         .post(INFERENCE_URL)
         .json(&payload)
         .eventsource()
@@ -509,6 +544,71 @@ async fn e2e_test_streaming() {
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
     assert_eq!(retrieved_episode_id, episode_id);
+}
+
+/// This test checks that streaming inference works as expected when dryrun is true.
+#[tokio::test]
+async fn e2e_test_streaming_dryrun() {
+    let payload = json!({
+        "function_name": "basic_test",
+        "episode_id": Uuid::now_v7(),
+        "input":
+            [
+                {"role": "system", "content": {"assistant_name": "AskJeeves"}},
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
+                }
+            ],
+        "stream": true,
+        "dryrun": true,
+    });
+
+    let mut event_source = Client::new()
+        .post(INFERENCE_URL)
+        .json(&payload)
+        .eventsource()
+        .unwrap();
+    let mut chunks = vec![];
+    while let Some(event) = event_source.next().await {
+        let event = event.unwrap();
+        match event {
+            Event::Open => continue,
+            Event::Message(message) => {
+                if message.data == "[DONE]" {
+                    break;
+                }
+                chunks.push(message.data);
+            }
+        }
+    }
+    let mut inference_id = None;
+    for (i, chunk) in chunks.iter().enumerate() {
+        let chunk_json: Value = serde_json::from_str(chunk).unwrap();
+        if i < DUMMY_STREAMING_RESPONSE.len() {
+            let content = chunk_json.get("content").unwrap().as_str().unwrap();
+            assert_eq!(content, DUMMY_STREAMING_RESPONSE[i]);
+        } else {
+            assert!(chunk_json.get("content").unwrap().is_null());
+            let usage = chunk_json.get("usage").unwrap().as_object().unwrap();
+            let prompt_tokens = usage.get("prompt_tokens").unwrap().as_u64().unwrap();
+            let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
+            assert_eq!(prompt_tokens, 10);
+            assert_eq!(completion_tokens, 16);
+            inference_id = Some(
+                Uuid::parse_str(chunk_json.get("inference_id").unwrap().as_str().unwrap()).unwrap(),
+            );
+        }
+    }
+    let inference_id = inference_id.unwrap();
+
+    // Sleep for 0.1 seconds to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // Check ClickHouse
+    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None).unwrap();
+    let result = select_inference_clickhouse(&clickhouse, inference_id).await;
+    assert!(result.is_none()); // No inference should be written to ClickHouse when dryrun is true
 }
 
 async fn select_inference_clickhouse(
