@@ -1,8 +1,6 @@
-use metrics_exporter_prometheus::PrometheusBuilder;
-use std::net::SocketAddr;
+use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use crate::config_parser::Config;
 use crate::error::Error;
 
 /// Set up logs
@@ -24,20 +22,10 @@ pub fn setup_logs() {
 }
 
 /// Set up Prometheus metrics exporter
-pub fn setup_metrics(config: &Config) -> Result<(), Error> {
-    // Get the Prometheus listener address from the config, or default to 0.0.0.0:9090
-    let prometheus_listener_addr = config
-        .gateway
-        .as_ref()
-        .and_then(|gateway_config| gateway_config.prometheus_address)
-        .unwrap_or_else(|| SocketAddr::from(([0, 0, 0, 0], 9090)));
-
+pub fn setup_metrics() -> Result<PrometheusHandle, Error> {
     PrometheusBuilder::new()
-        .with_http_listener(prometheus_listener_addr)
-        .install()
+        .install_recorder()
         .map_err(|e| Error::Observability {
             message: format!("Failed to install Prometheus exporter: {}", e),
-        })?;
-
-    Ok(())
+        })
 }
