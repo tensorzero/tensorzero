@@ -1,7 +1,7 @@
 use futures::StreamExt;
 use gateway::inference::providers::provider_trait::InferenceProvider;
 use gateway::inference::types::{ContentBlock, Text};
-use gateway::{inference::providers::gcp_vertex::GCPVertexGeminiProvider, model::ProviderConfig};
+use gateway::model::ProviderConfig;
 use serde_json::{json, Value};
 
 use crate::integration::providers::common::{
@@ -13,10 +13,10 @@ async fn test_infer() {
     let mut provider_config_json = json!({"type": "gcp_vertex_gemini", "model_id": "gemini-1.5-flash-001", "location": "us-central1"});
     let gcp_project_id = "tensorzero-public";
     provider_config_json["project_id"] = Value::String(gcp_project_id.to_string());
-    let config: ProviderConfig = serde_json::from_value(provider_config_json).unwrap();
+    let provider: ProviderConfig = serde_json::from_value(provider_config_json).unwrap();
     let client = reqwest::Client::new();
     let inference_request = create_simple_inference_request();
-    let result = GCPVertexGeminiProvider::infer(&inference_request, &config, &client).await;
+    let result = provider.infer(&inference_request, &client).await;
     assert!(result.is_ok(), "{}", result.unwrap_err());
     let result = result.unwrap();
     assert!(result.content.len() == 1);
@@ -34,10 +34,10 @@ async fn test_infer_stream() {
     let mut provider_config_json = json!({"type": "gcp_vertex_gemini", "model_id": "gemini-1.5-flash-001", "location": "us-central1"});
     let gcp_project_id = "tensorzero-public";
     provider_config_json["project_id"] = Value::String(gcp_project_id.to_string());
-    let config: ProviderConfig = serde_json::from_value(provider_config_json).unwrap();
+    let provider: ProviderConfig = serde_json::from_value(provider_config_json).unwrap();
     let client = reqwest::Client::new();
     let inference_request = create_streaming_inference_request();
-    let result = GCPVertexGeminiProvider::infer_stream(&inference_request, &config, &client).await;
+    let result = provider.infer_stream(&inference_request, &client).await;
     let (chunk, mut stream) = result.unwrap();
     let mut collected_chunks = vec![chunk];
     while let Some(chunk) = stream.next().await {

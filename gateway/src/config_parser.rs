@@ -12,6 +12,7 @@ use crate::variant::VariantConfig;
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub gateway: Option<ApiConfig>,
+    pub clickhouse: Option<ClickHouseConfig>,
     pub models: HashMap<String, ModelConfig>, // model name => model config
     pub functions: HashMap<String, FunctionConfig>, // function name => function config
     pub metrics: Option<HashMap<String, MetricConfig>>, // metric name => metric config
@@ -21,6 +22,13 @@ pub struct Config {
 #[serde(deny_unknown_fields)]
 pub struct ApiConfig {
     pub bind_address: Option<std::net::SocketAddr>,
+    pub prometheus_address: Option<std::net::SocketAddr>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ClickHouseConfig {
+    pub database: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -257,6 +265,18 @@ impl Config {
                         }
                     }
                 }
+
+                // Validate variant-specific config
+                match variant {
+                    VariantConfig::ChatCompletion(params) => {
+                        // Ensure that the model exists
+                        if !self.models.contains_key(&params.model) {
+                            return Err(Error::Config {
+                                message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `model` must be a valid model name"),
+                            });
+                        }
+                    }
+                }
             }
         }
 
@@ -389,6 +409,50 @@ mod tests {
                 message: "Failed to parse config:\ninvalid socket address syntax\nin `gateway.bind_address`\n".to_string()
             }
         );
+    }
+
+    /// Ensure that the config parsing correctly handles the `gateway.prometheus_address` field
+    #[test]
+    fn test_config_gateway_prometheus_address() {
+        let mut config = get_sample_valid_config();
+
+        // Test with a valid Prometheus address
+        let parsed_config = Config::try_from(config.clone()).unwrap();
+        assert_eq!(
+            parsed_config
+                .gateway
+                .unwrap()
+                .prometheus_address
+                .unwrap()
+                .to_string(),
+            "0.0.0.0:9090"
+        );
+
+        // Test with missing gateway section
+        config.remove("gateway");
+        let parsed_config = Config::try_from(config.clone()).unwrap();
+        assert!(parsed_config.gateway.is_none());
+
+        // Test with missing prometheus_address
+        config.insert(
+            "gateway".to_string(),
+            toml::Value::Table(toml::Table::new()),
+        );
+        let parsed_config = Config::try_from(config.clone()).unwrap();
+        assert!(parsed_config.gateway.unwrap().bind_address.is_none());
+
+        // Test with invalid Prometheus address
+        config["gateway"].as_table_mut().unwrap().insert(
+            "prometheus_address".to_string(),
+            toml::Value::String("invalid_address".to_string()),
+        );
+        let result = Config::try_from(config);
+        assert_eq!(
+                result.unwrap_err(),
+                Error::Config {
+                    message: "Failed to parse config:\ninvalid socket address syntax\nin `gateway.prometheus_address`\n".to_string()
+                }
+            );
     }
 
     /// Ensure that the config parsing fails when the `[models]` section is missing
@@ -630,6 +694,29 @@ mod tests {
         );
     }
 
+    /// Ensure that the config validation fails when a variant has a model that does not exist in the models section
+    #[test]
+    fn test_config_validate_variant_model_not_in_models() {
+        let mut config = Config::try_from(get_sample_valid_config()).unwrap();
+
+        match config.functions.get_mut("generate_draft") {
+            Some(FunctionConfig::Chat(params)) => match params.variants.get_mut("openai_promptA") {
+                Some(VariantConfig::ChatCompletion(params)) => {
+                    params.model = "non_existent_model".to_string();
+                }
+                _ => unreachable!(),
+            },
+            _ => unreachable!(),
+        }
+
+        assert_eq!(
+            config.validate().unwrap_err(),
+            Error::Config {
+                message: "Invalid Config: `functions.generate_draft.variants.openai_promptA`: `model` must be a valid model name".to_string()
+            }
+        );
+    }
+
     /// Ensure that get_templates returns the correct templates
     #[test]
     fn test_get_all_templates() {
@@ -669,7 +756,6 @@ mod tests {
 
         // Get all templates
         let templates = config.get_templates(PathBuf::from("/base/path"));
-        println!("templates: {:?}", templates);
 
         // Check if all expected templates are present
         assert_eq!(
@@ -724,6 +810,7 @@ mod tests {
 
         [gateway]
         bind_address = "0.0.0.0:3000"
+        prometheus_address = "0.0.0.0:9090"
 
         # ┌────────────────────────────────────────────────────────────────────────────┐
         # │                                   MODELS                                   │

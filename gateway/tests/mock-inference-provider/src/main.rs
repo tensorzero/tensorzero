@@ -7,13 +7,25 @@ use axum::{
 };
 use futures_core::Stream;
 use serde_json::json;
+use std::net::SocketAddr;
+
+/// Get the socket address for the mock inference provider from the CLI arguments.
+/// Defaults to 0.0.0.0:3030 if no address is provided.
+fn get_listener_address() -> SocketAddr {
+    match std::env::args().nth(1) {
+        Some(path) => path
+            .parse()
+            .unwrap_or_else(|e| panic!("Invalid address: {path}: {e}")),
+        None => SocketAddr::from(([0, 0, 0, 0], 3030)),
+    }
+}
 
 #[tokio::main]
 async fn main() {
-    // TODO (#76): make this configurable
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3030")
+    let listener_address = get_listener_address();
+    let listener = tokio::net::TcpListener::bind(listener_address)
         .await
-        .unwrap_or_else(|_| panic!("Failed to bind to port 3030"));
+        .unwrap_or_else(|e| panic!("Failed to bind to {listener_address}: {e}"));
 
     axum::serve(listener, make_router()).await.unwrap();
 }

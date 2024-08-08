@@ -6,10 +6,10 @@ use gateway::{inference::providers::aws_bedrock::AWSBedrockProvider, model::Prov
 #[tokio::test]
 async fn test_infer() {
     let model_id = "anthropic.claude-3-haiku-20240307-v1:0".to_string();
-    let config = ProviderConfig::AWSBedrock { model_id };
+    let provider = ProviderConfig::AWSBedrock(AWSBedrockProvider { model_id });
     let client = reqwest::Client::new();
     let inference_request = create_simple_inference_request();
-    let result = AWSBedrockProvider::infer(&inference_request, &config, &client).await;
+    let result = provider.infer(&inference_request, &client).await;
     assert!(result.is_ok(), "{}", result.unwrap_err());
     let result = result.unwrap();
     assert!(result.content.len() == 1);

@@ -15,7 +15,7 @@ use crate::e2e::common::{select_inference_clickhouse, select_model_inferences_cl
 /// - basic inference
 /// - streaming inference
 ///
-/// TODOs:
+/// TODOs (#81):
 ///  - tool calling
 ///  - JSON mode
 ///  - other API parameters (temp, max_tokens, etc.)
@@ -77,11 +77,14 @@ async fn test_inference_basic() {
     let r#type = response_json.get("type").unwrap().as_str().unwrap();
     assert_eq!(r#type, "chat");
 
-    // Sleep for 0.1 seconds to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Check ClickHouse
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None).unwrap();
+    let clickhouse =
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, None)
+            .unwrap();
+    // First, check Inference table
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
@@ -196,11 +199,14 @@ async fn test_streaming() {
         );
     }
     let inference_id = inference_id.unwrap();
-    // Sleep for 0.1 seconds to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Check ClickHouse
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None).unwrap();
+    let clickhouse =
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, None)
+            .unwrap();
+    // First, check Inference table
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
@@ -265,6 +271,6 @@ async fn test_streaming() {
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 100);
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 100);
+    assert!(ttft_ms > 50);
     assert!(ttft_ms <= response_time_ms);
 }

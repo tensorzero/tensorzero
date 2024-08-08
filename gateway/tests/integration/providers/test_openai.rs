@@ -24,13 +24,12 @@ async fn test_infer() {
     let inference_request = create_simple_inference_request();
 
     let base_url = None;
-    let provider_config = ProviderConfig::OpenAI {
+    let provider = ProviderConfig::OpenAI(OpenAIProvider {
         model_name: model_name.to_string(),
         api_base: base_url,
         api_key: Some(api_key),
-    };
-    let result = OpenAIProvider::infer(&inference_request, &provider_config, &client).await;
-    println!("result: {:?}", result);
+    });
+    let result = provider.infer(&inference_request, &client).await;
     assert!(result.is_ok());
     let result = result.unwrap();
     assert!(result.content.len() == 1);
@@ -54,12 +53,12 @@ async fn test_infer_with_tool_calls() {
     let inference_request = create_tool_inference_request();
 
     let base_url = None;
-    let provider_config = ProviderConfig::OpenAI {
+    let provider = ProviderConfig::OpenAI(OpenAIProvider {
         model_name: model_name.to_string(),
         api_base: base_url,
         api_key: Some(api_key),
-    };
-    let result = OpenAIProvider::infer(&inference_request, &provider_config, &client).await;
+    });
+    let result = provider.infer(&inference_request, &client).await;
 
     assert!(result.is_ok());
     let response = result.unwrap();
@@ -86,12 +85,12 @@ async fn test_infer_stream() {
     let inference_request = create_streaming_inference_request();
 
     let base_url = None;
-    let provider_config = ProviderConfig::OpenAI {
+    let provider = ProviderConfig::OpenAI(OpenAIProvider {
         model_name: model_name.to_string(),
         api_base: base_url,
         api_key: Some(api_key),
-    };
-    let result = OpenAIProvider::infer_stream(&inference_request, &provider_config, &client).await;
+    });
+    let result = provider.infer_stream(&inference_request, &client).await;
     assert!(result.is_ok());
     let (chunk, mut stream) = result.unwrap();
     let mut collected_chunks = vec![chunk];
@@ -114,12 +113,12 @@ async fn test_json_request() {
     let client = reqwest::Client::new();
     let inference_request = create_json_inference_request();
 
-    let provider_config = ProviderConfig::OpenAI {
+    let provider = ProviderConfig::OpenAI(OpenAIProvider {
         model_name: model_name.to_string(),
         api_base: None,
         api_key: Some(api_key),
-    };
-    let result = OpenAIProvider::infer(&inference_request, &provider_config, &client).await;
+    });
+    let result = provider.infer(&inference_request, &client).await;
     assert!(result.is_ok());
     let result = result.unwrap();
     assert!(result.content.len() == 1);

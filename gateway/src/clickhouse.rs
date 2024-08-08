@@ -22,7 +22,12 @@ pub enum ClickHouseConnectionInfo {
 }
 
 impl ClickHouseConnectionInfo {
-    pub fn new(base_url: &str, mock: bool, healthy: Option<bool>) -> Result<Self, Error> {
+    pub fn new(
+        base_url: &str,
+        database: &str,
+        mock: bool,
+        healthy: Option<bool>,
+    ) -> Result<Self, Error> {
         if mock {
             return Ok(Self::Mock {
                 mock_data: Arc::new(RwLock::new(HashMap::new())),
@@ -37,9 +42,16 @@ impl ClickHouseConnectionInfo {
 
         Ok(Self::Production {
             base_url,
-            database: "tensorzero".to_string(), // TODO (#69): parameterize the database name
+            database: database.to_string(),
             client: Client::new(),
         })
+    }
+
+    pub fn database(&self) -> &str {
+        match self {
+            Self::Mock { .. } => unreachable!(),
+            Self::Production { database, .. } => database,
+        }
     }
 
     pub fn get_url(&self) -> String {
@@ -138,11 +150,14 @@ impl ClickHouseConnectionInfo {
         }
     }
 
-    pub async fn create_database(&self, database: &str) -> Result<(), Error> {
+    pub async fn create_database(&self) -> Result<(), Error> {
         match self {
             Self::Mock { .. } => unimplemented!(),
             Self::Production {
-                base_url, client, ..
+                base_url,
+                database,
+                client,
+                ..
             } => {
                 let query = format!("CREATE DATABASE IF NOT EXISTS {}", database);
 
@@ -193,17 +208,15 @@ async fn write_production(
     let row_json = serde_json::to_string(row).map_err(|e| Error::Serialization {
         message: e.to_string(),
     })?;
-    // TODO (#70): allow the user to parameterize whether to wait_for_async_insert
-    // Design we'll use:
-    //   1. Feedback should wait
-    //   2. Allow the user to optionally configure that a function is latency sensitive (default false). If so,
-    //      don't wait for the async insert to finish. Otherwise, wait.
+
+    // We can wait for the async insert since we're spawning a new tokio task to do the insert
     let query = format!(
         "INSERT INTO {table}\n\
-     SETTINGS async_insert=1, wait_for_async_insert=0\n\
-     FORMAT JSONEachRow\n\
-     {row_json}"
+        SETTINGS async_insert=1, wait_for_async_insert=1\n\
+        FORMAT JSONEachRow\n\
+        {row_json}"
     );
+
     let response = client
         .post(url)
         .body(query.clone())

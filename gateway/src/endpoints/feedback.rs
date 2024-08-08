@@ -65,7 +65,16 @@ pub async fn feedback_handler(
 
     let dryrun = params.dryrun.unwrap_or(false);
 
-    // TODO (#77): add test that metadata is not saved if dryrun is true
+    // Increment the request count if we're not in dryrun mode
+    if !dryrun {
+        counter!(
+            "request_count",
+            "endpoint" => "feedback",
+            "metric_name" => params.metric_name.to_string()
+        )
+        .increment(1);
+    }
+
     match feedback_metadata.r#type {
         FeedbackType::Comment => {
             write_comment(
@@ -112,16 +121,6 @@ pub async fn feedback_handler(
             )
             .await?
         }
-    }
-
-    if !dryrun {
-        // TODO (#78): add integration/E2E test that checks the Prometheus endpoint
-        counter!(
-            "request_count",
-            "endpoint" => "feedback",
-            "metric_name" => params.metric_name.to_string()
-        )
-        .increment(1);
     }
 
     Ok(Json(json!({"feedback_id": feedback_id})))
@@ -298,6 +297,7 @@ mod tests {
         );
         let config = Config {
             gateway: None,
+            clickhouse: None,
             models: HashMap::new(),
             metrics: Some(metrics),
             functions: HashMap::new(),
@@ -411,6 +411,7 @@ mod tests {
         metrics.insert("test_metric".to_string(), metric_config);
         let config = Config {
             gateway: None,
+            clickhouse: None,
             models: HashMap::new(),
             metrics: Some(metrics),
             functions: HashMap::new(),
@@ -439,6 +440,7 @@ mod tests {
         // Test a Comment Feedback
         let config = Config {
             gateway: None,
+            clickhouse: None,
             models: HashMap::new(),
             metrics: Some(HashMap::new()),
             functions: HashMap::new(),
@@ -537,6 +539,7 @@ mod tests {
         );
         let config = Config {
             gateway: None,
+            clickhouse: None,
             models: HashMap::new(),
             metrics: Some(metrics),
             functions: HashMap::new(),
@@ -603,6 +606,7 @@ mod tests {
         );
         let config = Config {
             gateway: None,
+            clickhouse: None,
             models: HashMap::new(),
             metrics: Some(metrics),
             functions: HashMap::new(),

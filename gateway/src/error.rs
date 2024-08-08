@@ -76,6 +76,9 @@ pub enum Error {
     InvalidBaseUrl {
         message: String,
     },
+    InvalidEpisodeId {
+        message: String,
+    },
     InvalidFunctionVariants {
         message: String,
     },
@@ -193,6 +196,7 @@ impl Error {
             Error::InferenceClient { .. } => tracing::Level::ERROR,
             Error::InputValidation { .. } => tracing::Level::WARN,
             Error::InvalidBaseUrl { .. } => tracing::Level::ERROR,
+            Error::InvalidEpisodeId { .. } => tracing::Level::WARN,
             Error::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
             Error::InvalidMessage { .. } => tracing::Level::WARN,
             Error::InvalidProviderConfig { .. } => tracing::Level::ERROR,
@@ -247,6 +251,7 @@ impl Error {
             Error::GCPVertexServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::Inference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InferenceClient { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::InvalidEpisodeId { .. } => StatusCode::BAD_REQUEST,
             Error::InputValidation { .. } => StatusCode::BAD_REQUEST,
             Error::InvalidBaseUrl { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -364,6 +369,7 @@ impl std::fmt::Display for Error {
             }
             Error::InvalidBaseUrl { message } => write!(f, "{}", message),
             Error::InvalidFunctionVariants { message } => write!(f, "{}", message),
+            Error::InvalidEpisodeId { message } => write!(f, "Invalid Episode ID: {}", message),
             Error::InvalidMessage { message } => write!(f, "{}", message),
             Error::InvalidProviderConfig { message } => write!(f, "{}", message),
             Error::InvalidRequest { message } => write!(f, "{}", message),

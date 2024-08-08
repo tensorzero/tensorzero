@@ -2,7 +2,7 @@ use futures::stream::Stream;
 use futures::StreamExt;
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
-use secrecy::ExposeSecret;
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::time::Duration;
@@ -17,38 +17,27 @@ use crate::inference::types::{
     ModelInferenceRequest, ModelInferenceResponse, ModelInferenceResponseChunk, RequestMessage,
     Role, Text, TextChunk, Tool, ToolCall, ToolCallChunk, ToolChoice, Usage,
 };
-use crate::model::ProviderConfig;
 
 const OPENAI_DEFAULT_BASE_URL: &str = "https://api.openai.com/v1/";
 
-pub struct OpenAIProvider;
+#[derive(Clone, Debug)]
+pub struct OpenAIProvider {
+    pub model_name: String,
+    pub api_base: Option<String>,
+    pub api_key: Option<SecretString>,
+}
 
 impl InferenceProvider for OpenAIProvider {
     async fn infer<'a>(
+        &'a self,
         request: &'a ModelInferenceRequest<'a>,
-        model: &'a ProviderConfig,
         http_client: &'a reqwest::Client,
     ) -> Result<ModelInferenceResponse, Error> {
-        let (model_name, api_base, api_key) = match model {
-            ProviderConfig::OpenAI {
-                model_name,
-                api_base,
-                api_key,
-            } => (
-                model_name,
-                api_base.as_deref(),
-                api_key.as_ref().ok_or(Error::ApiKeyMissing {
-                    provider_name: "OpenAI".to_string(),
-                })?,
-            ),
-            _ => {
-                return Err(Error::InvalidProviderConfig {
-                    message: "Expected OpenAI provider config".to_string(),
-                })
-            }
-        };
-        let request_body = OpenAIRequest::new(model_name, request);
-        let request_url = get_chat_url(api_base)?;
+        let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
+            provider_name: "OpenAI".to_string(),
+        })?;
+        let request_body = OpenAIRequest::new(&self.model_name, request);
+        let request_url = get_chat_url(self.api_base.as_deref())?;
         let start_time = Instant::now();
         let res = http_client
             .post(request_url)
@@ -86,30 +75,15 @@ impl InferenceProvider for OpenAIProvider {
     }
 
     async fn infer_stream<'a>(
+        &'a self,
         request: &'a ModelInferenceRequest<'a>,
-        model: &'a ProviderConfig,
         http_client: &'a reqwest::Client,
     ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
-        let (model_name, api_base, api_key) = match model {
-            ProviderConfig::OpenAI {
-                model_name,
-                api_base,
-                api_key,
-            } => (
-                model_name,
-                api_base.as_deref(),
-                api_key.as_ref().ok_or(Error::ApiKeyMissing {
-                    provider_name: "OpenAI".to_string(),
-                })?,
-            ),
-            _ => {
-                return Err(Error::InvalidProviderConfig {
-                    message: "Expected OpenAI provider config".to_string(),
-                })
-            }
-        };
-        let request_body = OpenAIRequest::new(model_name, request);
-        let request_url = get_chat_url(api_base)?;
+        let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
+            provider_name: "OpenAI".to_string(),
+        })?;
+        let request_body = OpenAIRequest::new(&self.model_name, request);
+        let request_url = get_chat_url(self.api_base.as_deref())?;
         let start_time = Instant::now();
         let event_source = http_client
             .post(request_url)

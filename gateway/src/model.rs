@@ -66,7 +66,7 @@ impl ModelConfig {
         request: &'a ModelInferenceRequest<'a>,
         client: &'a Client,
     ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
-        let mut provider_errors = Vec::new();
+        let mut provider_errors: Vec<Error> = Vec::new();
         for provider_name in &self.routing {
             let provider_config =
                 self.providers
@@ -76,7 +76,12 @@ impl ModelConfig {
                     })?;
             let response = provider_config.infer_stream(request, client).await;
             match response {
-                Ok(response) => return Ok(response),
+                Ok(response) => {
+                    for error in &provider_errors {
+                        error.log();
+                    }
+                    return Ok(response);
+                }
                 Err(error) => provider_errors.push(error),
             }
         }
@@ -84,45 +89,17 @@ impl ModelConfig {
     }
 }
 
-// TODO (#83): merge variants with provider-specific structs `pub struct XXXProvider;` to avoid unnecessary checks
 #[derive(Clone, Debug)]
 pub enum ProviderConfig {
-    Anthropic {
-        model_name: String,
-        api_key: Option<SecretString>,
-    },
-    AWSBedrock {
-        model_id: String,
-    },
-    Azure {
-        model_name: String,
-        api_base: String,
-        deployment_id: String,
-        api_key: Option<SecretString>,
-    },
-    Fireworks {
-        model_name: String,
-        api_key: Option<SecretString>,
-    },
-    GCPVertexGemini {
-        request_url: String,
-        streaming_request_url: String,
-        audience: String,
-        credentials: Option<GCPCredentials>,
-    },
-    OpenAI {
-        model_name: String,
-        api_base: Option<String>,
-        api_key: Option<SecretString>,
-    },
-    Together {
-        model_name: String,
-        api_key: Option<SecretString>,
-    },
+    Anthropic(AnthropicProvider),
+    AWSBedrock(AWSBedrockProvider),
+    Azure(AzureProvider),
+    Fireworks(FireworksProvider),
+    GCPVertexGemini(GCPVertexGeminiProvider),
+    OpenAI(OpenAIProvider),
+    Together(TogetherProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
-    Dummy {
-        model_name: String,
-    },
+    Dummy(DummyProvider),
 }
 
 impl<'de> Deserialize<'de> for ProviderConfig {
@@ -176,27 +153,31 @@ impl<'de> Deserialize<'de> for ProviderConfig {
         let helper = ProviderConfigHelper::deserialize(deserializer)?;
 
         Ok(match helper {
-            ProviderConfigHelper::Anthropic { model_name } => ProviderConfig::Anthropic {
-                model_name,
-                api_key: env::var("ANTHROPIC_API_KEY").ok().map(SecretString::new),
-            },
+            ProviderConfigHelper::Anthropic { model_name } => {
+                ProviderConfig::Anthropic(AnthropicProvider {
+                    model_name,
+                    api_key: env::var("ANTHROPIC_API_KEY").ok().map(SecretString::new),
+                })
+            }
             ProviderConfigHelper::AWSBedrock { model_id } => {
-                ProviderConfig::AWSBedrock { model_id }
+                ProviderConfig::AWSBedrock(AWSBedrockProvider { model_id })
             }
             ProviderConfigHelper::Azure {
                 model_name,
                 api_base,
                 deployment_id,
-            } => ProviderConfig::Azure {
+            } => ProviderConfig::Azure(AzureProvider {
                 model_name,
                 api_base,
                 deployment_id,
                 api_key: env::var("AZURE_OPENAI_API_KEY").ok().map(SecretString::new),
-            },
-            ProviderConfigHelper::Fireworks { model_name } => ProviderConfig::Fireworks {
-                model_name,
-                api_key: env::var("FIREWORKS_API_KEY").ok().map(SecretString::new),
-            },
+            }),
+            ProviderConfigHelper::Fireworks { model_name } => {
+                ProviderConfig::Fireworks(FireworksProvider {
+                    model_name,
+                    api_key: env::var("FIREWORKS_API_KEY").ok().map(SecretString::new),
+                })
+            }
             ProviderConfigHelper::GCPVertexGemini {
                 model_id,
                 location,
@@ -216,89 +197,71 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:streamGenerateContent?alt=sse");
                 let audience = format!("https://{location}-aiplatform.googleapis.com/");
 
-                ProviderConfig::GCPVertexGemini {
+                ProviderConfig::GCPVertexGemini(GCPVertexGeminiProvider {
                     request_url,
                     streaming_request_url,
                     audience,
                     credentials,
-                }
+                })
             }
             ProviderConfigHelper::OpenAI {
                 model_name,
                 api_base,
-            } => ProviderConfig::OpenAI {
+            } => ProviderConfig::OpenAI(OpenAIProvider {
                 model_name,
                 api_base,
                 api_key: env::var("OPENAI_API_KEY").ok().map(SecretString::new),
-            },
-            ProviderConfigHelper::Together { model_name } => ProviderConfig::Together {
-                model_name,
-                api_key: env::var("TOGETHER_API_KEY").ok().map(SecretString::new),
-            },
+            }),
+            ProviderConfigHelper::Together { model_name } => {
+                ProviderConfig::Together(TogetherProvider {
+                    model_name,
+                    api_key: env::var("TOGETHER_API_KEY").ok().map(SecretString::new),
+                })
+            }
             #[cfg(any(test, feature = "e2e_tests"))]
-            ProviderConfigHelper::Dummy { model_name } => ProviderConfig::Dummy { model_name },
+            ProviderConfigHelper::Dummy { model_name } => {
+                ProviderConfig::Dummy(DummyProvider { model_name })
+            }
         })
     }
 }
 
-impl ProviderConfig {
-    pub async fn infer<'a>(
+impl InferenceProvider for ProviderConfig {
+    async fn infer<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         client: &'a Client,
     ) -> Result<ModelInferenceResponse, Error> {
         match self {
-            ProviderConfig::Anthropic { .. } => {
-                AnthropicProvider::infer(request, self, client).await
-            }
-            ProviderConfig::AWSBedrock { .. } => {
-                AWSBedrockProvider::infer(request, self, client).await
-            }
-            ProviderConfig::Azure { .. } => AzureProvider::infer(request, self, client).await,
-            ProviderConfig::Fireworks { .. } => {
-                FireworksProvider::infer(request, self, client).await
-            }
-            ProviderConfig::GCPVertexGemini { .. } => {
-                GCPVertexGeminiProvider::infer(request, self, client).await
-            }
-            ProviderConfig::OpenAI { .. } => OpenAIProvider::infer(request, self, client).await,
-            ProviderConfig::Together { .. } => TogetherProvider::infer(request, self, client).await,
+            ProviderConfig::Anthropic(provider) => provider.infer(request, client).await,
+            ProviderConfig::AWSBedrock(provider) => provider.infer(request, client).await,
+            ProviderConfig::Azure(provider) => provider.infer(request, client).await,
+            ProviderConfig::Fireworks(provider) => provider.infer(request, client).await,
+            ProviderConfig::GCPVertexGemini(provider) => provider.infer(request, client).await,
+            ProviderConfig::OpenAI(provider) => provider.infer(request, client).await,
+            ProviderConfig::Together(provider) => provider.infer(request, client).await,
             #[cfg(any(test, feature = "e2e_tests"))]
-            ProviderConfig::Dummy { .. } => DummyProvider::infer(request, self, client).await,
+            ProviderConfig::Dummy(provider) => provider.infer(request, client).await,
         }
     }
 
-    pub async fn infer_stream<'a>(
+    async fn infer_stream<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         client: &'a Client,
     ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
         match self {
-            ProviderConfig::Anthropic { .. } => {
-                AnthropicProvider::infer_stream(request, self, client).await
+            ProviderConfig::Anthropic(provider) => provider.infer_stream(request, client).await,
+            ProviderConfig::AWSBedrock(provider) => provider.infer_stream(request, client).await,
+            ProviderConfig::Azure(provider) => provider.infer_stream(request, client).await,
+            ProviderConfig::Fireworks(provider) => provider.infer_stream(request, client).await,
+            ProviderConfig::GCPVertexGemini(provider) => {
+                provider.infer_stream(request, client).await
             }
-            ProviderConfig::AWSBedrock { .. } => {
-                AWSBedrockProvider::infer_stream(request, self, client).await
-            }
-            ProviderConfig::Azure { .. } => {
-                AzureProvider::infer_stream(request, self, client).await
-            }
-            ProviderConfig::Fireworks { .. } => {
-                FireworksProvider::infer_stream(request, self, client).await
-            }
-            ProviderConfig::GCPVertexGemini { .. } => {
-                GCPVertexGeminiProvider::infer_stream(request, self, client).await
-            }
-            ProviderConfig::OpenAI { .. } => {
-                OpenAIProvider::infer_stream(request, self, client).await
-            }
-            ProviderConfig::Together { .. } => {
-                TogetherProvider::infer_stream(request, self, client).await
-            }
+            ProviderConfig::OpenAI(provider) => provider.infer_stream(request, client).await,
+            ProviderConfig::Together(provider) => provider.infer_stream(request, client).await,
             #[cfg(any(test, feature = "e2e_tests"))]
-            ProviderConfig::Dummy { .. } => {
-                DummyProvider::infer_stream(request, self, client).await
-            }
+            ProviderConfig::Dummy(provider) => provider.infer_stream(request, client).await,
         }
     }
 }
@@ -313,17 +276,18 @@ mod tests {
         types::{ContentBlockChunk, FunctionType, JSONMode, TextChunk, ToolChoice},
     };
     use tokio_stream::StreamExt;
+    use tracing_test::traced_test;
 
     use super::*;
 
     #[tokio::test]
     async fn test_model_config_infer_routing() {
-        let good_provider_config = ProviderConfig::Dummy {
+        let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".to_string(),
-        };
-        let bad_provider_config = ProviderConfig::Dummy {
+        });
+        let bad_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "error".to_string(),
-        };
+        });
         let model_config = ModelConfig {
             routing: vec!["good".to_string()],
             providers: HashMap::from([("good".to_string(), good_provider_config.clone())]),
@@ -371,8 +335,35 @@ mod tests {
                 }]
             }
         );
+    }
 
-        // Try inferring the good model as a fallback
+    #[tokio::test]
+    #[traced_test]
+    async fn test_model_config_infer_routing_fallback() {
+        // Test that fallback works with bad --> good model provider
+
+        let good_provider_config = ProviderConfig::Dummy(DummyProvider {
+            model_name: "good".to_string(),
+        });
+        let bad_provider_config = ProviderConfig::Dummy(DummyProvider {
+            model_name: "error".to_string(),
+        });
+
+        // Try inferring the good model only
+        let request = ModelInferenceRequest {
+            messages: vec![],
+            system_instructions: None,
+            tools_available: None,
+            tool_choice: ToolChoice::None,
+            parallel_tool_calls: None,
+            temperature: None,
+            max_tokens: None,
+            stream: false,
+            json_mode: JSONMode::Off,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+
         let model_config = ModelConfig {
             routing: vec!["error".to_string(), "good".to_string()],
             providers: HashMap::from([
@@ -380,6 +371,7 @@ mod tests {
                 ("good".to_string(), good_provider_config),
             ]),
         };
+
         let response = model_config.infer(&request, &Client::new()).await.unwrap();
         let content = response.content;
         assert_eq!(
@@ -390,17 +382,16 @@ mod tests {
         assert_eq!(raw, DUMMY_INFER_RESPONSE_RAW);
         let usage = response.usage;
         assert_eq!(usage, DUMMY_INFER_USAGE);
-        // TODO (#84): assert that an error was logged then do it in the other order and assert that one was not.
     }
 
     #[tokio::test]
     async fn test_model_config_infer_stream_routing() {
-        let good_provider_config = ProviderConfig::Dummy {
+        let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".to_string(),
-        };
-        let bad_provider_config = ProviderConfig::Dummy {
+        });
+        let bad_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "error".to_string(),
-        };
+        });
 
         let request = ModelInferenceRequest {
             messages: vec![],
@@ -474,6 +465,33 @@ mod tests {
                 }]
             }
         );
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_model_config_infer_stream_routing_fallback() {
+        // Test that fallback works with bad --> good model provider (streaming)
+
+        let good_provider_config = ProviderConfig::Dummy(DummyProvider {
+            model_name: "good".to_string(),
+        });
+        let bad_provider_config = ProviderConfig::Dummy(DummyProvider {
+            model_name: "error".to_string(),
+        });
+
+        let request = ModelInferenceRequest {
+            messages: vec![],
+            system_instructions: None,
+            tools_available: None,
+            tool_choice: ToolChoice::None,
+            parallel_tool_calls: None,
+            temperature: None,
+            max_tokens: None,
+            stream: true,
+            json_mode: JSONMode::Off,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
 
         // Test fallback
         let model_config = ModelConfig {
@@ -487,6 +505,10 @@ mod tests {
             .infer_stream(&request, &Client::new())
             .await
             .unwrap();
+
+        // Ensure that the error for the bad provider was logged, but the request worked nonetheless
+        assert!(logs_contain("Error sending request to Dummy provider"));
+
         assert_eq!(
             initial_chunk.content,
             vec![ContentBlockChunk::Text(TextChunk {
