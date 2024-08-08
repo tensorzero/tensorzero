@@ -42,7 +42,6 @@ uuid = { version = "1.10.0", features = ["serde", "v7"] }
 
 
 [dev-dependencies]
-clap = { version = "4.5.14", features = ["derive"] }
 tempfile = "3.10.1"
 tracing-test = { version = "0.2.5", features = ["no-env-filter"] }
 
