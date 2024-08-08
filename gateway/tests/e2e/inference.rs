@@ -74,7 +74,8 @@ async fn e2e_test_inference_basic() {
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check ClickHouse
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None).unwrap();
+    let clickhouse =
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "e2e_tensorzero", false, None).unwrap();
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
@@ -152,7 +153,8 @@ async fn e2e_test_inference_model_fallback() {
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check ClickHouse
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None).unwrap();
+    let clickhouse =
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "e2e_tensorzero", false, None).unwrap();
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
@@ -229,7 +231,8 @@ async fn e2e_test_inference_json_fail() {
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check ClickHouse
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None).unwrap();
+    let clickhouse =
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "e2e_tensorzero", false, None).unwrap();
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
@@ -307,7 +310,8 @@ async fn e2e_test_inference_json_succeed() {
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check ClickHouse
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None).unwrap();
+    let clickhouse =
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "e2e_tensorzero", false, None).unwrap();
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
@@ -399,7 +403,8 @@ async fn e2e_test_variant_failover() {
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check ClickHouse
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None).unwrap();
+    let clickhouse =
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "e2e_tensorzero", false, None).unwrap();
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
@@ -480,7 +485,8 @@ async fn e2e_test_streaming() {
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check ClickHouse
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None).unwrap();
+    let clickhouse =
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "e2e_tensorzero", false, None).unwrap();
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();

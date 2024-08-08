@@ -73,7 +73,8 @@ async fn test_inference_basic() {
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check ClickHouse
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None).unwrap();
+    let clickhouse =
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "e2e_tensorzero", false, None).unwrap();
     // First, check Inference table
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await

@@ -30,6 +30,8 @@ impl<'a> Migration for Migration0000<'a> {
 
     /// Check if the tables exist
     async fn should_apply(&self) -> Result<bool, Error> {
+        let database = self.clickhouse.database();
+
         let tables = vec![
             "BooleanMetricFeedback",
             "CommentFeedback",
@@ -44,7 +46,7 @@ impl<'a> Migration for Migration0000<'a> {
                 r#"SELECT EXISTS(
                     SELECT 1
                     FROM system.tables
-                    WHERE database = 'tensorzero' AND name = '{table}'
+                    WHERE database = '{database}' AND name = '{table}'
                 )"#
             );
 
@@ -63,9 +65,10 @@ impl<'a> Migration for Migration0000<'a> {
     }
 
     async fn apply(&self) -> Result<(), Error> {
-        // TODO (#69): parametrize the database name
         // Create the database if it doesn't exist
-        self.clickhouse.create_database("tensorzero").await?;
+        self.clickhouse
+            .create_database(self.clickhouse.database())
+            .await?;
 
         // Create the `BooleanMetricFeedback` table
         let query = r#"
@@ -171,19 +174,23 @@ impl<'a> Migration for Migration0000<'a> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "\
-        **CAREFUL: THIS WILL DELETE ALL DATA**\n\
-        \n\
-        -- Drop the database\n\
-        DROP DATABASE IF EXISTS tensorzero;\n\
-        \n\
-        **CAREFUL: THIS WILL DELETE ALL DATA**\n\
-        "
-        .to_string()
+        let database = self.clickhouse.database();
+
+        format!(
+            "\
+            **CAREFUL: THIS WILL DELETE ALL DATA**\n\
+            \n\
+            -- Drop the database\n\
+            DROP DATABASE IF EXISTS {database};\n\
+            \n\
+            **CAREFUL: THIS WILL DELETE ALL DATA**\n\
+            "
+        )
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)
     async fn has_succeeded(&self) -> Result<bool, Error> {
-        Ok(!self.should_apply().await?)
+        let should_apply = self.should_apply().await?;
+        Ok(!should_apply)
     }
 }

@@ -22,8 +22,15 @@ impl AppStateData {
         let clickhouse_url = std::env::var("CLICKHOUSE_URL").map_err(|_| Error::AppState {
             message: "Missing environment variable CLICKHOUSE_URL".to_string(),
         })?;
+
+        let database = config
+            .clickhouse
+            .as_ref()
+            .map(|ch| ch.database.clone())
+            .unwrap_or("tensorzero".to_string());
+
         let clickhouse_connection_info =
-            ClickHouseConnectionInfo::new(&clickhouse_url, false, None)?;
+            ClickHouseConnectionInfo::new(&clickhouse_url, &database, false, None)?;
 
         let http_client = Client::new();
 

@@ -9,6 +9,19 @@ use migrations::migration_0000::Migration0000;
 pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     run_migration(&Migration0000 { clickhouse }).await?;
 
+    // NOTE:
+    // When we add more migrations, we need to add a test that applies them in a cumulative (N^2) way.
+    //
+    // In sequence:
+    // - Migration0000
+    // - Migration0000 (noop), Migration0001
+    // - Migration0000 (noop), Migration0001 (noop), Migration0002
+    //
+    // We need to check that previous migrations return false for should_apply() (i.e. are noops).
+    //
+    // You should expand gateway::tests::e2e::clickhouse_migration_manager::test_clickhouse_migration_manager
+    // to test this.
+
     Ok(())
 }
 

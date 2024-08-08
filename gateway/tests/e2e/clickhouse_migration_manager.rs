@@ -7,30 +7,52 @@ lazy_static::lazy_static! {
 }
 
 #[tokio::test]
-#[traced_test]
 async fn test_clickhouse_migration_manager() {
-    let clickhouse_connection_info =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, false, None).unwrap();
+    let database = uuid::Uuid::now_v7().simple().to_string();
 
-    // Run the migration manager again (it should've already been run on gateway startup)... there should be no changes
-    clickhouse_migration_manager::run(&clickhouse_connection_info)
+    let clickhouse = ClickHouseConnectionInfo::new(
+        &CLICKHOUSE_URL,
+        &format!("e2e_tensorzero_migration_manager_{database}"),
+        false,
+        None,
+    )
+    .unwrap();
+
+    // NOTE:
+    // We need to split the test into two sub-functions so we can reset `traced_test`'s subscriber between each call.
+    // Otherwise, `logs_contain` will return true if the first call triggers a log message that the second call shouldn't trigger.
+
+    #[traced_test]
+    async fn first(clickhouse: &ClickHouseConnectionInfo) {
+        // Run the migration manager for the first time... it should apply the migrations
+        clickhouse_migration_manager::run(clickhouse).await.unwrap();
+
+        assert!(logs_contain("Applying migration: Migration0000"));
+        assert!(logs_contain("Migration succeeded: Migration0000"));
+        assert!(!logs_contain("Failed to apply migration"));
+        assert!(!logs_contain("Failed migration success check"));
+        assert!(!logs_contain("Failed to verify migration"));
+    }
+
+    #[traced_test]
+    async fn second(clickhouse: &ClickHouseConnectionInfo) {
+        // Run the migration manager again (it should've already been run on gateway startup)... there should be no changes
+        clickhouse_migration_manager::run(clickhouse).await.unwrap();
+
+        assert!(!logs_contain("Applying migration: Migration0000"));
+        assert!(!logs_contain("Migration succeeded: Migration0000"));
+        assert!(!logs_contain("Failed to apply migration"));
+        assert!(!logs_contain("Failed migration success check"));
+        assert!(!logs_contain("Failed to verify migration"));
+    }
+
+    first(&clickhouse).await;
+    second(&clickhouse).await;
+
+    tracing::info!("Attempting to drop test database: {database}");
+
+    clickhouse
+        .run_query(format!("DROP DATABASE IF EXISTS {database}"))
         .await
         .unwrap();
-
-    // TODO (#69): We need to check these when applying the migrations for the first time (i.e. need customd database).
-    assert!(!logs_contain("Applying migration"));
-    assert!(!logs_contain("Failed to apply migration"));
-    assert!(!logs_contain("Failed migration success check"));
-    assert!(!logs_contain("Failed to verify migration"));
 }
-
-// TODO (#69, more): Add a test that applies individual migrations in a cumulative (N^2) way.
-//
-//       In sequence:
-//       - Migration0000
-//       - Migration0000 (noop), Migration0001
-//       - Migration0000 (noop), Migration0001 (noop), Migration0002
-//
-//       We need to check that previous migrations return false for should_apply() (i.e. are noops).
-//
-//       This will require the ability to create new databases for tests.
