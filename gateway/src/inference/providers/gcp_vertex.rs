@@ -11,19 +11,22 @@ use uuid::Uuid;
 
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
-use crate::inference::types::{Latency, ToolCallChunk};
-use crate::{
-    inference::types::{
-        InferenceRequestMessage, InferenceResponseStream, ModelInferenceRequest,
-        ModelInferenceResponse, ModelInferenceResponseChunk, Tool, ToolCall, ToolChoice, Usage,
-    },
-    model::ProviderConfig,
+use crate::inference::types::{
+    InferenceRequestMessage, InferenceResponseStream, ModelInferenceRequest,
+    ModelInferenceResponse, ModelInferenceResponseChunk, Tool, ToolCall, ToolChoice, Usage,
 };
+use crate::inference::types::{Latency, ToolCallChunk};
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/GenerateContentResponse) for non-streaming
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
 
-pub struct GCPVertexGeminiProvider;
+#[derive(Clone, Debug)]
+pub struct GCPVertexGeminiProvider {
+    pub request_url: String,
+    pub streaming_request_url: String,
+    pub audience: String,
+    pub credentials: Option<GCPCredentials>,
+}
 
 /// Auth
 ///
@@ -138,35 +141,18 @@ impl GCPCredentials {
 impl InferenceProvider for GCPVertexGeminiProvider {
     /// GCP Vertex Gemini non-streaming API request
     async fn infer<'a>(
+        &'a self,
         request: &'a ModelInferenceRequest<'a>,
-        model: &'a ProviderConfig,
         http_client: &'a reqwest::Client,
     ) -> Result<ModelInferenceResponse, Error> {
-        let (request_url, audience, credentials) = match model {
-            ProviderConfig::GCPVertexGemini {
-                request_url,
-                audience,
-                credentials,
-                ..
-            } => (
-                request_url,
-                audience,
-                credentials.as_ref().ok_or(Error::ApiKeyMissing {
-                    provider_name: "GCP Vertex Gemini".to_string(),
-                })?,
-            ),
-            _ => {
-                return Err(Error::InvalidProviderConfig {
-                    message: "Expected GCP Vertex Gemini provider config".to_string(),
-                })
-            }
-        };
-
+        let credentials = self.credentials.as_ref().ok_or(Error::ApiKeyMissing {
+            provider_name: "GCP Vertex Gemini".to_string(),
+        })?;
         let request_body: GCPVertexGeminiRequest = request.try_into()?;
-        let token = credentials.get_jwt_token(audience)?;
+        let token = credentials.get_jwt_token(&self.audience)?;
         let start_time = Instant::now();
         let res = http_client
-            .post(request_url)
+            .post(&self.request_url)
             .bearer_auth(token)
             .json(&request_body)
             .send()
@@ -196,34 +182,18 @@ impl InferenceProvider for GCPVertexGeminiProvider {
 
     /// GCP Vertex Gemini streaming API request
     async fn infer_stream<'a>(
+        &'a self,
         request: &'a ModelInferenceRequest<'a>,
-        model: &'a ProviderConfig,
         http_client: &'a reqwest::Client,
     ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
-        let (request_url, audience, credentials) = match model {
-            ProviderConfig::GCPVertexGemini {
-                streaming_request_url,
-                audience,
-                credentials,
-                ..
-            } => (
-                streaming_request_url,
-                audience,
-                credentials.as_ref().ok_or(Error::ApiKeyMissing {
-                    provider_name: "GCP Vertex Gemini".to_string(),
-                })?,
-            ),
-            _ => {
-                return Err(Error::InvalidProviderConfig {
-                    message: "Expected GCP Vertex Gemini provider config".to_string(),
-                })
-            }
-        };
+        let credentials = self.credentials.as_ref().ok_or(Error::ApiKeyMissing {
+            provider_name: "GCP Vertex Gemini".to_string(),
+        })?;
         let request_body: GCPVertexGeminiRequest = request.try_into()?;
-        let token = credentials.get_jwt_token(audience)?;
+        let token = credentials.get_jwt_token(&self.audience)?;
         let start_time = Instant::now();
         let event_source = http_client
-            .post(request_url)
+            .post(&self.streaming_request_url)
             .bearer_auth(token)
             .json(&request_body)
             .eventsource()

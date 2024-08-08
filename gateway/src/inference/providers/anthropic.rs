@@ -1,7 +1,7 @@
 use futures::{Stream, StreamExt};
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
-use secrecy::ExposeSecret;
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::time::Duration;
@@ -11,45 +11,32 @@ use uuid::Uuid;
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::Latency;
-use crate::{
-    inference::types::{
-        InferenceRequestMessage, InferenceResponseStream, ModelInferenceRequest,
-        ModelInferenceResponse, ModelInferenceResponseChunk, Tool, ToolCall, ToolCallChunk,
-        ToolChoice, ToolType, Usage,
-    },
-    model::ProviderConfig,
+use crate::inference::types::{
+    InferenceRequestMessage, InferenceResponseStream, ModelInferenceRequest,
+    ModelInferenceResponse, ModelInferenceResponseChunk, Tool, ToolCall, ToolCallChunk, ToolChoice,
+    ToolType, Usage,
 };
 
 const ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 
-pub struct AnthropicProvider;
+#[derive(Clone, Debug)]
+pub struct AnthropicProvider {
+    pub model_name: String,
+    pub api_key: Option<SecretString>,
+}
 
 impl InferenceProvider for AnthropicProvider {
     /// Anthropic non-streaming API request
     async fn infer<'a>(
+        &'a self,
         request: &'a ModelInferenceRequest<'a>,
-        model: &'a ProviderConfig,
         http_client: &'a reqwest::Client,
     ) -> Result<ModelInferenceResponse, Error> {
-        let (model_name, api_key) = match model {
-            ProviderConfig::Anthropic {
-                model_name,
-                api_key,
-            } => (
-                model_name,
-                api_key.as_ref().ok_or(Error::ApiKeyMissing {
-                    provider_name: "Anthropic".to_string(),
-                })?,
-            ),
-            _ => {
-                return Err(Error::InvalidProviderConfig {
-                    message: "Expected Anthropic provider config".to_string(),
-                })
-            }
-        };
-
-        let request_body = AnthropicRequestBody::new(model_name, request)?;
+        let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
+            provider_name: "Anthropic".to_string(),
+        })?;
+        let request_body = AnthropicRequestBody::new(&self.model_name, request)?;
         let start_time = Instant::now();
         let res = http_client
             .post(ANTHROPIC_BASE_URL)
@@ -88,27 +75,14 @@ impl InferenceProvider for AnthropicProvider {
 
     /// Anthropic streaming API request
     async fn infer_stream<'a>(
+        &'a self,
         request: &'a ModelInferenceRequest<'a>,
-        model: &'a ProviderConfig,
         http_client: &'a reqwest::Client,
     ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
-        let (model_name, api_key) = match model {
-            ProviderConfig::Anthropic {
-                model_name,
-                api_key,
-            } => (
-                model_name,
-                api_key.as_ref().ok_or(Error::ApiKeyMissing {
-                    provider_name: "Anthropic".to_string(),
-                })?,
-            ),
-            _ => {
-                return Err(Error::InvalidProviderConfig {
-                    message: "Expected Anthropic provider config".to_string(),
-                })
-            }
-        };
-        let request_body = AnthropicRequestBody::new(model_name, request)?;
+        let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
+            provider_name: "Anthropic".to_string(),
+        })?;
+        let request_body = AnthropicRequestBody::new(&self.model_name, request)?;
         let start_time = Instant::now();
         let event_source = http_client
             .post(ANTHROPIC_BASE_URL)
