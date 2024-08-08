@@ -265,6 +265,18 @@ impl Config {
                         }
                     }
                 }
+
+                // Validate variant-specific config
+                match variant {
+                    VariantConfig::ChatCompletion(params) => {
+                        // Ensure that the model exists
+                        if !self.models.contains_key(&params.model) {
+                            return Err(Error::Config {
+                                message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `model` must be a valid model name"),
+                            });
+                        }
+                    }
+                }
             }
         }
 
@@ -678,6 +690,29 @@ mod tests {
             Error::Config {
                 message: "Invalid Config: `functions.generate_draft.variants.openai_promptA.weight`: must be non-negative"
                     .to_string()
+            }
+        );
+    }
+
+    /// Ensure that the config validation fails when a variant has a model that does not exist in the models section
+    #[test]
+    fn test_config_validate_variant_model_not_in_models() {
+        let mut config = Config::try_from(get_sample_valid_config()).unwrap();
+
+        match config.functions.get_mut("generate_draft") {
+            Some(FunctionConfig::Chat(params)) => match params.variants.get_mut("openai_promptA") {
+                Some(VariantConfig::ChatCompletion(params)) => {
+                    params.model = "non_existent_model".to_string();
+                }
+                _ => unreachable!(),
+            },
+            _ => unreachable!(),
+        }
+
+        assert_eq!(
+            config.validate().unwrap_err(),
+            Error::Config {
+                message: "Invalid Config: `functions.generate_draft.variants.openai_promptA`: `model` must be a valid model name".to_string()
             }
         );
     }
