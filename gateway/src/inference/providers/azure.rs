@@ -13,8 +13,8 @@ use crate::inference::types::{
 use crate::model::ProviderConfig;
 
 use super::openai::{
-    handle_openai_error, prepare_openai_messages, stream_openai, OpenAIRequestMessage,
-    OpenAIResponse, OpenAIResponseWithLatency, OpenAITool, OpenAIToolChoice,
+    handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
+    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseWithLatency, OpenAITool, OpenAIToolChoice,
 };
 use super::provider_trait::InferenceProvider;
 
@@ -202,7 +202,7 @@ impl<'a> AzureRequest<'a> {
             JSONMode::Off => AzureResponseFormat::Text,
         };
         let messages = prepare_openai_messages(request);
-        let tool_choice = Some((&request.tool_choice).into());
+        let (tools, tool_choice) = prepare_openai_tools(request);
         AzureRequest {
             messages,
             model,
@@ -210,10 +210,7 @@ impl<'a> AzureRequest<'a> {
             max_tokens: request.max_tokens,
             stream: request.stream,
             response_format,
-            tools: request
-                .tools_available
-                .as_ref()
-                .map(|t| t.iter().map(|t| t.into()).collect()),
+            tools,
             tool_choice,
             parallel_tool_calls: request.parallel_tool_calls,
         }

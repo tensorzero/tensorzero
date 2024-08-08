@@ -17,8 +17,8 @@ use crate::{
 
 use super::{
     openai::{
-        get_chat_url, handle_openai_error, prepare_openai_messages, stream_openai,
-        OpenAIRequestMessage, OpenAIResponse, OpenAIResponseWithLatency, OpenAITool,
+        get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
+        stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseWithLatency, OpenAITool,
         OpenAIToolChoice,
     },
     provider_trait::InferenceProvider,
@@ -200,6 +200,7 @@ impl<'a> TogetherRequest<'a> {
             JSONMode::Off => None,
         };
         let messages = prepare_openai_messages(request);
+        let (tools, tool_choice) = prepare_openai_tools(request);
         TogetherRequest {
             messages,
             model,
@@ -207,11 +208,8 @@ impl<'a> TogetherRequest<'a> {
             max_tokens: request.max_tokens,
             stream: request.stream,
             response_format,
-            tools: request
-                .tools_available
-                .as_ref()
-                .map(|t| t.iter().map(|t| t.into()).collect()),
-            tool_choice: Some((&request.tool_choice).into()),
+            tools,
+            tool_choice,
             parallel_tool_calls: request.parallel_tool_calls,
         }
     }

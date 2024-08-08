@@ -1,43 +1,37 @@
 use gateway::inference::types::{
-    FunctionType, InferenceRequestMessage, ModelInferenceRequest, SystemInferenceRequestMessage,
-    Tool, ToolChoice, ToolType, UserInferenceRequestMessage,
+    FunctionType, JSONMode, ModelInferenceRequest, RequestMessage, Role, Tool, ToolChoice,
 };
 use serde_json::json;
 
 pub fn create_simple_inference_request<'a>() -> ModelInferenceRequest<'a> {
-    let messages = vec![
-        InferenceRequestMessage::System(SystemInferenceRequestMessage {
-            content: "You are a helpful but mischevious assistant.".to_string(),
-        }),
-        InferenceRequestMessage::User(UserInferenceRequestMessage {
-            content: "Is Santa Clause real?".to_string(),
-        }),
-    ];
+    let messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec!["Is Santa Clause real?".to_string().into()],
+    }];
+    let system_instructions = Some("You are a helpful but mischevious assistant.".to_string());
     let max_tokens = Some(100);
     let temperature = Some(1.);
     ModelInferenceRequest {
         messages,
+        system_instructions,
         tools_available: None,
-        tool_choice: None,
+        tool_choice: ToolChoice::None,
         parallel_tool_calls: None,
         temperature,
         max_tokens,
         stream: false,
-        json_mode: false,
+        json_mode: JSONMode::Off,
         function_type: FunctionType::Chat,
         output_schema: None,
     }
 }
 
 pub fn create_json_inference_request<'a>() -> ModelInferenceRequest<'a> {
-    let messages = vec![
-        InferenceRequestMessage::System(SystemInferenceRequestMessage {
-            content: "You are a helpful but mischevious assistant who returns in the JSON form {\"thinking\": \"...\", \"answer\": \"...\"}".to_string(),
-        }),
-        InferenceRequestMessage::User(UserInferenceRequestMessage {
-            content: "Is Santa Clause real? be brief".to_string(),
-        }),
-    ];
+    let messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec!["Is Santa Clause real? be brief".to_string().into()],
+    }];
+    let system_instructions = Some("You are a helpful but mischevious assistant who returns in the JSON form {\"thinking\": \"...\", \"answer\": \"...\"}".to_string());
     let max_tokens = Some(400);
     let temperature = Some(1.);
     let output_schema = json!({
@@ -50,13 +44,14 @@ pub fn create_json_inference_request<'a>() -> ModelInferenceRequest<'a> {
     });
     ModelInferenceRequest {
         messages,
+        system_instructions,
         tools_available: None,
-        tool_choice: None,
+        tool_choice: ToolChoice::None,
         parallel_tool_calls: None,
         temperature,
         max_tokens,
         stream: false,
-        json_mode: false,
+        json_mode: JSONMode::Off,
         function_type: FunctionType::Chat,
         output_schema: Some(Box::leak(Box::new(output_schema))),
     }
@@ -64,8 +59,7 @@ pub fn create_json_inference_request<'a>() -> ModelInferenceRequest<'a> {
 
 pub fn create_tool_inference_request<'a>() -> ModelInferenceRequest<'a> {
     // Define a tool
-    let tool = Tool {
-        r#type: ToolType::Function,
+    let tool = Tool::Function {
         description: Some("Get the current weather in a given location".to_string()),
         name: "get_weather".to_string(),
         parameters: json!({
@@ -84,44 +78,46 @@ pub fn create_tool_inference_request<'a>() -> ModelInferenceRequest<'a> {
         }),
     };
 
-    let messages = vec![InferenceRequestMessage::User(UserInferenceRequestMessage {
-        content: "What's the weather like in New York currently?".to_string(),
-    })];
+    let messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec!["What's the weather like in New York currently?"
+            .to_string()
+            .into()],
+    }];
 
     ModelInferenceRequest {
         messages,
+        system_instructions: None,
         tools_available: Some(vec![tool]),
-        tool_choice: Some(ToolChoice::Tool("get_weather".to_string())),
+        tool_choice: ToolChoice::Tool("get_weather".to_string()),
         parallel_tool_calls: None,
         temperature: Some(0.7),
         max_tokens: Some(300),
         stream: false,
-        json_mode: false,
-        function_type: FunctionType::Tool,
+        json_mode: JSONMode::Off,
+        function_type: FunctionType::Chat,
         output_schema: None,
     }
 }
 
 pub fn create_streaming_inference_request<'a>() -> ModelInferenceRequest<'a> {
-    let messages = vec![
-        InferenceRequestMessage::System(SystemInferenceRequestMessage {
-            content: "You are a helpful but mischevious assistant.".to_string(),
-        }),
-        InferenceRequestMessage::User(UserInferenceRequestMessage {
-            content: "Is Santa Clause real?".to_string(),
-        }),
-    ];
+    let messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec!["Is Santa Clause real?".to_string().into()],
+    }];
+    let system_instructions = Some("You are a helpful but mischevious assistant.".to_string());
     let max_tokens = Some(100);
     let temperature = Some(1.);
     ModelInferenceRequest {
         messages,
+        system_instructions,
         tools_available: None,
-        tool_choice: None,
+        tool_choice: ToolChoice::None,
         parallel_tool_calls: None,
         temperature,
         max_tokens,
         stream: true,
-        json_mode: false,
+        json_mode: JSONMode::Off,
         function_type: FunctionType::Chat,
         output_schema: None,
     }

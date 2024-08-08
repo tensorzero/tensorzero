@@ -16,8 +16,8 @@ use crate::{
 
 use super::{
     openai::{
-        get_chat_url, handle_openai_error, prepare_openai_messages, stream_openai,
-        OpenAIRequestMessage, OpenAIResponse, OpenAIResponseWithLatency, OpenAITool,
+        get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
+        stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseWithLatency, OpenAITool,
         OpenAIToolChoice,
     },
     provider_trait::InferenceProvider,
@@ -198,10 +198,6 @@ struct FireworksRequest<'a> {
 
 impl<'a> FireworksRequest<'a> {
     pub fn new(model: &'a str, request: &'a ModelInferenceRequest) -> FireworksRequest<'a> {
-        let tools = request
-            .tools_available
-            .as_ref()
-            .map(|t| t.iter().map(|t| t.into()).collect());
         // NB: Fireworks will throw an error if you give FireworksResponseFormat::Text and then also include tools.
         // So we just don't include it as Text is the same as None anyway.
         let response_format = match request.json_mode {
@@ -211,7 +207,7 @@ impl<'a> FireworksRequest<'a> {
             JSONMode::Off => None,
         };
         let messages = prepare_openai_messages(request);
-        let tool_choice: OpenAIToolChoice = (&request.tool_choice).into();
+        let (tools, tool_choice) = prepare_openai_tools(request);
         FireworksRequest {
             messages,
             model,
@@ -220,7 +216,7 @@ impl<'a> FireworksRequest<'a> {
             stream: request.stream,
             response_format,
             tools,
-            tool_choice: Some(tool_choice),
+            tool_choice,
             parallel_tool_calls: request.parallel_tool_calls,
         }
     }

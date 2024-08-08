@@ -6,8 +6,11 @@ use crate::integration::providers::common::{
 };
 use futures::StreamExt;
 use gateway::{
-    inference::providers::openai::OpenAIProvider,
-    inference::providers::provider_trait::InferenceProvider, model::ProviderConfig,
+    inference::{
+        providers::{openai::OpenAIProvider, provider_trait::InferenceProvider},
+        types::ContentBlock,
+    },
+    model::ProviderConfig,
 };
 use secrecy::SecretString;
 
@@ -27,8 +30,17 @@ async fn test_infer() {
         api_key: Some(api_key),
     };
     let result = OpenAIProvider::infer(&inference_request, &provider_config, &client).await;
+    println!("result: {:?}", result);
     assert!(result.is_ok());
-    assert!(result.unwrap().content.is_some());
+    let result = result.unwrap();
+    assert!(result.content.len() == 1);
+    let content = result.content.get(0).unwrap();
+    match content {
+        ContentBlock::Text(text) => {
+            assert!(text.len() > 0);
+        }
+        _ => panic!("Expected text"),
+    }
 }
 
 #[tokio::test]
@@ -51,17 +63,17 @@ async fn test_infer_with_tool_calls() {
 
     assert!(result.is_ok());
     let response = result.unwrap();
-    assert!(response.tool_calls.is_some());
-    let tool_calls = response.tool_calls.unwrap();
-    assert!(!tool_calls.is_empty());
-
-    let first_tool_call = &tool_calls[0];
-    assert_eq!(first_tool_call.name, "get_weather");
-
-    // Parse the arguments to ensure they're valid JSON
-    let arguments: serde_json::Value = serde_json::from_str(&first_tool_call.arguments)
-        .expect("Failed to parse tool call arguments");
-    assert!(arguments.get("location").is_some());
+    assert!(response.content.len() == 1);
+    let content = response.content.get(0).unwrap();
+    match content {
+        ContentBlock::ToolCall(tool_call) => {
+            assert!(tool_call.name == "get_weather");
+            let arguments: serde_json::Value = serde_json::from_str(&tool_call.arguments)
+                .expect("Failed to parse tool call arguments");
+            assert!(arguments.get("location").is_some());
+        }
+        _ => panic!("Expected tool call"),
+    }
 }
 
 #[tokio::test]
@@ -88,7 +100,8 @@ async fn test_infer_stream() {
         collected_chunks.push(chunk.unwrap());
     }
     assert!(!collected_chunks.is_empty());
-    assert!(collected_chunks.first().unwrap().content.is_some());
+    // Fourth as an arbitrary middle chunk, the first and last may contain only metadata
+    assert!(collected_chunks[4].content.len() == 1);
     assert!(collected_chunks.last().unwrap().usage.is_some());
 }
 
@@ -109,10 +122,15 @@ async fn test_json_request() {
     let result = OpenAIProvider::infer(&inference_request, &provider_config, &client).await;
     assert!(result.is_ok());
     let result = result.unwrap();
-    assert!(result.content.is_some());
-    // parse the result text and see if it matches the output schema
-    let result_text = result.content.unwrap();
-    let result_json: serde_json::Value = serde_json::from_str(&result_text).unwrap();
-    assert!(result_json.get("thinking").is_some());
-    assert!(result_json.get("answer").is_some());
+    assert!(result.content.len() == 1);
+    let content = result.content.get(0).unwrap();
+    match content {
+        ContentBlock::Text(text) => {
+            // parse the result text and see if it matches the output schema
+            let result_json: serde_json::Value = serde_json::from_str(&text).unwrap();
+            assert!(result_json.get("thinking").is_some());
+            assert!(result_json.get("answer").is_some());
+        }
+        _ => panic!("Expected text"),
+    }
 }

@@ -1,5 +1,6 @@
 use futures::StreamExt;
 use gateway::inference::providers::provider_trait::InferenceProvider;
+use gateway::inference::types::ContentBlock;
 use gateway::{inference::providers::gcp_vertex::GCPVertexGeminiProvider, model::ProviderConfig};
 use serde_json::{json, Value};
 
@@ -17,7 +18,15 @@ async fn test_infer() {
     let inference_request = create_simple_inference_request();
     let result = GCPVertexGeminiProvider::infer(&inference_request, &config, &client).await;
     assert!(result.is_ok(), "{}", result.unwrap_err());
-    assert!(result.unwrap().content.is_some());
+    let result = result.unwrap();
+    assert!(result.content.len() == 1);
+    let content = result.content.get(0).unwrap();
+    match content {
+        ContentBlock::Text(text) => {
+            assert!(text.len() > 0);
+        }
+        _ => panic!("Expected text"),
+    }
 }
 
 #[tokio::test]
@@ -36,8 +45,8 @@ async fn test_infer_stream() {
         collected_chunks.push(chunk.unwrap());
     }
     assert!(!collected_chunks.is_empty());
-    // Fourth as an arbitrary middle chunk
-    assert!(collected_chunks[4].content.is_some());
+    // Fourth as an arbitrary middle chunk, the first and last may contain only metadata
+    assert!(collected_chunks[4].content.len() == 1);
     assert!(collected_chunks.last().unwrap().usage.is_some());
 }
 

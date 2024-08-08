@@ -288,6 +288,22 @@ pub(super) fn prepare_openai_messages<'a>(
     messages
 }
 
+// TODO(viraj): unit test this
+pub(super) fn prepare_openai_tools<'a>(
+    request: &'a ModelInferenceRequest,
+) -> (Option<Vec<OpenAITool<'a>>>, Option<OpenAIToolChoice<'a>>) {
+    let tools = request
+        .tools_available
+        .as_ref()
+        .map(|t| t.iter().map(|tool| OpenAITool::from(tool)).collect());
+    let tool_choice: Option<OpenAIToolChoice<'a>> = match tools {
+        // TODO (Viraj): if this is an empty list, should we return None?
+        Some(_) => Some((&request.tool_choice).into()),
+        None => None,
+    };
+    (tools, tool_choice)
+}
+
 fn tensorzero_to_openai_system_message<'a>(
     system_instructions: Option<&'a str>,
 ) -> Option<OpenAIRequestMessage<'a>> {
@@ -506,7 +522,7 @@ impl<'a> OpenAIRequest<'a> {
         };
         let messages = prepare_openai_messages(request);
 
-        let tool_choice: OpenAIToolChoice = (&request.tool_choice).into();
+        let (tools, tool_choice) = prepare_openai_tools(request);
         OpenAIRequest {
             messages,
             model,
@@ -515,11 +531,8 @@ impl<'a> OpenAIRequest<'a> {
             stream: request.stream,
             stream_options,
             response_format,
-            tools: request
-                .tools_available
-                .as_ref()
-                .map(|t| t.iter().map(|t| t.into()).collect()),
-            tool_choice: Some(tool_choice),
+            tools,
+            tool_choice,
             parallel_tool_calls: request.parallel_tool_calls,
         }
     }
@@ -663,6 +676,8 @@ struct OpenAIChatChunk {
     usage: Option<OpenAIUsage>,
 }
 
+// TODO(Viraj): write a unit test for a chunk with no choices but only usage,
+// since this case happens and we should behave well
 fn openai_to_tensorzero_stream_message(
     mut chunk: OpenAIChatChunk,
     inference_id: Uuid,
@@ -678,43 +693,43 @@ fn openai_to_tensorzero_stream_message(
             message: "Response has invalid number of choices: {}. Expected 1.".to_string(),
         });
     }
-    let choice = chunk.choices.pop().ok_or(Error::OpenAIServer {
-        message: "Response has no choices (this should never happen)".to_string(),
-    })?;
     let usage = chunk.usage.map(|u| u.into());
     let mut content = vec![];
-    if let Some(text) = choice.delta.content {
-        content.push(ContentBlockChunk::Text(TextChunk {
-            text,
-            id: "0".to_string(),
-        }));
-    }
-    if let Some(tool_calls) = choice.delta.tool_calls {
-        for tool_call in tool_calls {
-            let index = tool_call.index;
-            let id = match tool_call.id {
-                Some(id) => {tool_call_ids.push(id.clone()); id}
-                None => {
-                    tool_call_ids.get(index as usize).ok_or(Error::OpenAIServer {
-                        message: "Tool call index out of bounds (meaning we haven't see this many ids in the stream)".to_string(),
-                    })?.clone()
-                }
-            };
-            let name = match tool_call.function.name {
-                Some(name) => {tool_names.push(name.clone()); name}
-                None => {
-                    tool_names.get(index as usize).ok_or(Error::OpenAIServer {
-                        message: "Tool call index out of bounds (meaning we haven't see this many names in the stream)".to_string(),
-                    })?.clone()
-                }
-            };
-            content.push(ContentBlockChunk::ToolCall(ToolCallChunk {
-                id,
-                name,
-                arguments: tool_call.function.arguments.unwrap_or_default(),
+    if let Some(choice) = chunk.choices.pop() {
+        if let Some(text) = choice.delta.content {
+            content.push(ContentBlockChunk::Text(TextChunk {
+                text,
+                id: "0".to_string(),
             }));
         }
+        if let Some(tool_calls) = choice.delta.tool_calls {
+            for tool_call in tool_calls {
+                let index = tool_call.index;
+                let id = match tool_call.id {
+                    Some(id) => {tool_call_ids.push(id.clone()); id}
+                    None => {
+                        tool_call_ids.get(index as usize).ok_or(Error::OpenAIServer {
+                            message: "Tool call index out of bounds (meaning we haven't see this many ids in the stream)".to_string(),
+                        })?.clone()
+                    }
+                };
+                let name = match tool_call.function.name {
+                    Some(name) => {tool_names.push(name.clone()); name}
+                    None => {
+                        tool_names.get(index as usize).ok_or(Error::OpenAIServer {
+                            message: "Tool call index out of bounds (meaning we haven't see this many names in the stream)".to_string(),
+                        })?.clone()
+                    }
+                };
+                content.push(ContentBlockChunk::ToolCall(ToolCallChunk {
+                    id,
+                    name,
+                    arguments: tool_call.function.arguments.unwrap_or_default(),
+                }));
+            }
+        }
     }
+
     Ok(ModelInferenceResponseChunk::new(
         inference_id,
         content,
@@ -852,10 +867,7 @@ mod tests {
         assert!(openai_request.stream);
         assert_eq!(openai_request.response_format, OpenAIResponseFormat::Text);
         assert!(openai_request.tools.is_none());
-        assert_eq!(
-            openai_request.tool_choice,
-            Some(OpenAIToolChoice::String(OpenAIToolChoiceString::None))
-        );
+        assert_eq!(openai_request.tool_choice, None);
         assert!(openai_request.parallel_tool_calls.is_none());
 
         // Test request with tools and JSON mode
