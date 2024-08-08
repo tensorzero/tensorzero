@@ -66,7 +66,7 @@ impl ModelConfig {
         request: &'a ModelInferenceRequest<'a>,
         client: &'a Client,
     ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
-        let mut provider_errors = Vec::new();
+        let mut provider_errors: Vec<Error> = Vec::new();
         for provider_name in &self.routing {
             let provider_config =
                 self.providers
@@ -76,7 +76,12 @@ impl ModelConfig {
                     })?;
             let response = provider_config.infer_stream(request, client).await;
             match response {
-                Ok(response) => return Ok(response),
+                Ok(response) => {
+                    for error in &provider_errors {
+                        error.log();
+                    }
+                    return Ok(response);
+                }
                 Err(error) => provider_errors.push(error),
             }
         }
@@ -313,6 +318,7 @@ mod tests {
         types::FunctionType,
     };
     use tokio_stream::StreamExt;
+    use tracing_test::traced_test;
 
     use super::*;
 
@@ -367,8 +373,34 @@ mod tests {
                 }]
             }
         );
+    }
 
-        // Try inferring the good model as a fallback
+    #[tokio::test]
+    #[traced_test]
+    async fn test_model_config_infer_routing_fallback() {
+        // Test that fallback works with bad --> good model provider
+
+        let good_provider_config = ProviderConfig::Dummy {
+            model_name: "good".to_string(),
+        };
+        let bad_provider_config = ProviderConfig::Dummy {
+            model_name: "error".to_string(),
+        };
+
+        // Try inferring the good model only
+        let request = ModelInferenceRequest {
+            messages: vec![],
+            tools_available: None,
+            tool_choice: None,
+            parallel_tool_calls: None,
+            temperature: None,
+            max_tokens: None,
+            stream: false,
+            json_mode: false,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+
         let model_config = ModelConfig {
             routing: vec!["error".to_string(), "good".to_string()],
             providers: HashMap::from([
@@ -376,14 +408,17 @@ mod tests {
                 ("good".to_string(), good_provider_config),
             ]),
         };
+
         let response = model_config.infer(&request, &Client::new()).await.unwrap();
+
+        // Ensure that the error for the bad provider was logged, but the request worked nonetheless
+        assert!(logs_contain("Error sending request to Dummy provider"));
         let content = response.content.unwrap();
         assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
         let raw = response.raw;
         assert_eq!(raw, DUMMY_INFER_RESPONSE_RAW);
         let usage = response.usage;
         assert_eq!(usage, DUMMY_INFER_USAGE);
-        // TODO (#84): assert that an error was logged then do it in the other order and assert that one was not.
     }
 
     #[tokio::test]
@@ -450,6 +485,32 @@ mod tests {
                 }]
             }
         );
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_model_config_infer_stream_routing_fallback() {
+        // Test that fallback works with bad --> good model provider (streaming)
+
+        let good_provider_config = ProviderConfig::Dummy {
+            model_name: "good".to_string(),
+        };
+        let bad_provider_config = ProviderConfig::Dummy {
+            model_name: "error".to_string(),
+        };
+
+        let request = ModelInferenceRequest {
+            messages: vec![],
+            tools_available: None,
+            tool_choice: None,
+            parallel_tool_calls: None,
+            temperature: None,
+            max_tokens: None,
+            stream: true,
+            json_mode: false,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
 
         // Test fallback
         let model_config = ModelConfig {
@@ -463,6 +524,10 @@ mod tests {
             .infer_stream(&request, &Client::new())
             .await
             .unwrap();
+
+        // Ensure that the error for the bad provider was logged, but the request worked nonetheless
+        assert!(logs_contain("Error sending request to Dummy provider"));
+
         assert_eq!(
             initial_chunk.content,
             Some(DUMMY_STREAMING_RESPONSE[0].to_string())
@@ -476,6 +541,5 @@ mod tests {
             }
         }
         assert_eq!(collected_content, DUMMY_STREAMING_RESPONSE.join(""));
-        // TODO (#84): assert that an error was logged then do it in the other order and assert that one was not.
     }
 }
