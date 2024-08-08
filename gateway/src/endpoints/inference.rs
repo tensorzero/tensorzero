@@ -17,7 +17,7 @@ use crate::function::{sample_variant, FunctionConfig};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
     collect_chunks, Inference, InferenceResponse, InferenceResponseChunk, InferenceResponseStream,
-    Input, ModelInferenceResponseChunk, ToolChoice,
+    InferenceResponseWithOutputSchema, Input, ModelInferenceResponseChunk, ToolChoice,
 };
 use crate::variant::Variant;
 
@@ -191,9 +191,16 @@ pub async fn inference_handler(
                     .await;
                 });
             }
-            let response_value = serde_json::to_value(response).map_err(|e| Error::Inference {
-                message: format!("Failed to convert response to JSON: {}", e),
-            })?;
+            let response_with_output_schema = InferenceResponseWithOutputSchema {
+                inference_response: response,
+                output_schema: function.output_schema(),
+            };
+            let response_value =
+                serde_json::to_value(response_with_output_schema).map_err(|e| {
+                    Error::Inference {
+                        message: format!("Failed to convert response to JSON: {}", e),
+                    }
+                })?;
             return Ok(Json(response_value).into_response());
         }
     }

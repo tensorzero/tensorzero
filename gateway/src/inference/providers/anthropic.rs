@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
-use crate::inference::types::{ContentBlock, ContentBlockChunk, Latency, Role};
+use crate::inference::types::{ContentBlock, ContentBlockChunk, Latency, Role, Text};
 use crate::{
     inference::types::{
         InferenceResponseStream, ModelInferenceRequest, ModelInferenceResponse,
@@ -286,7 +286,7 @@ enum AnthropicMessageContent<'a> {
 impl<'a> From<&'a ContentBlock> for AnthropicMessageContent<'a> {
     fn from(block: &'a ContentBlock) -> Self {
         match block {
-            ContentBlock::Text(text) => AnthropicMessageContent::Text { text },
+            ContentBlock::Text(Text { text }) => AnthropicMessageContent::Text { text },
             ContentBlock::ToolCall(tool) => AnthropicMessageContent::ToolUse {
                 id: &tool.id,
                 name: &tool.name,
@@ -475,7 +475,7 @@ impl TryFrom<AnthropicContentBlock> for ContentBlock {
     type Error = Error;
     fn try_from(block: AnthropicContentBlock) -> Result<Self, Self::Error> {
         match block {
-            AnthropicContentBlock::Text { text } => Ok(ContentBlock::Text(text)),
+            AnthropicContentBlock::Text { text } => Ok(text.into()),
             AnthropicContentBlock::ToolUse { id, name, input } => {
                 Ok(ContentBlock::ToolCall(ToolCall {
                     id,
@@ -817,7 +817,7 @@ mod tests {
 
     #[test]
     fn test_try_from_content_block() {
-        let text_content_block = ContentBlock::Text("test".to_string());
+        let text_content_block = "test".to_string().into();
         let anthropic_content_block = AnthropicMessageContent::try_from(&text_content_block);
         assert!(anthropic_content_block.is_ok());
         assert_eq!(
@@ -849,7 +849,7 @@ mod tests {
         // Test a User message
         let inference_request_message = RequestMessage {
             role: Role::User,
-            content: vec![ContentBlock::Text("test".to_string())],
+            content: vec!["test".to_string().into()],
         };
         let anthropic_message = AnthropicMessage::try_from(&inference_request_message);
         assert!(anthropic_message.is_ok());
@@ -864,7 +864,7 @@ mod tests {
         // Test an Assistant message
         let inference_request_message = RequestMessage {
             role: Role::Assistant,
-            content: vec![ContentBlock::Text("test_assistant".to_string())],
+            content: vec!["test_assistant".to_string().into()],
         };
         let anthropic_message = AnthropicMessage::try_from(&inference_request_message);
         assert!(anthropic_message.is_ok());
@@ -939,11 +939,11 @@ mod tests {
         let messages = vec![
             RequestMessage {
                 role: Role::User,
-                content: vec![ContentBlock::Text("test_user".to_string())],
+                content: vec!["test_user".to_string().into()],
             },
             RequestMessage {
                 role: Role::Assistant,
-                content: vec![ContentBlock::Text("test_assistant".to_string())],
+                content: vec!["test_assistant".to_string().into()],
             },
         ];
         let inference_request = ModelInferenceRequest {
@@ -984,15 +984,15 @@ mod tests {
         let messages = vec![
             RequestMessage {
                 role: Role::User,
-                content: vec![ContentBlock::Text("test_user".to_string())],
+                content: vec!["test_user".to_string().into()],
             },
             RequestMessage {
                 role: Role::User,
-                content: vec![ContentBlock::Text("test_user2".to_string())],
+                content: vec!["test_user2".to_string().into()],
             },
             RequestMessage {
                 role: Role::Assistant,
-                content: vec![ContentBlock::Text("test_assistant".to_string())],
+                content: vec!["test_assistant".to_string().into()],
             },
         ];
         let inference_request = ModelInferenceRequest {
@@ -1038,11 +1038,11 @@ mod tests {
         let messages = vec![
             RequestMessage {
                 role: Role::User,
-                content: vec![ContentBlock::Text("test_user".to_string())],
+                content: vec!["test_user".to_string().into()],
             },
             RequestMessage {
                 role: Role::Assistant,
-                content: vec![ContentBlock::Text("test_assistant".to_string())],
+                content: vec!["test_assistant".to_string().into()],
             },
             RequestMessage {
                 role: Role::User,
@@ -1408,7 +1408,7 @@ mod tests {
         let inference_response = ModelInferenceResponse::try_from(body_with_latency).unwrap();
         assert_eq!(
             inference_response.content,
-            vec![ContentBlock::Text("Response text".to_string())]
+            vec!["Response text".to_string().into()]
         );
 
         let raw_json = json!(anthropic_response_body).to_string();
@@ -1491,7 +1491,7 @@ mod tests {
         let inference_response = ModelInferenceResponse::try_from(body_with_latency).unwrap();
         assert_eq!(
             inference_response.content[0],
-            ContentBlock::Text("Here's the weather:".to_string())
+            "Here's the weather:".to_string().into()
         );
         assert!(inference_response.content.len() == 2);
         assert_eq!(

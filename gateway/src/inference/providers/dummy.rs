@@ -8,7 +8,7 @@ use super::provider_trait::InferenceProvider;
 use crate::error::Error;
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, InferenceResponseStream, Latency, ModelInferenceRequest,
-    ModelInferenceResponse, ModelInferenceResponseChunk, Usage,
+    ModelInferenceResponse, ModelInferenceResponseChunk, Text, Usage,
 };
 use crate::model::ProviderConfig;
 
@@ -82,7 +82,7 @@ impl InferenceProvider for DummyProvider {
             "json" => r#"{"answer":"Hello"}"#.to_string(),
             _ => DUMMY_INFER_RESPONSE_CONTENT.to_string(),
         };
-        let content = vec![ContentBlock::Text(message)];
+        let content = vec![ContentBlock::Text(Text { text: message })];
         let raw = match model_name.as_str() {
             "json" => DUMMY_JSON_RESPONSE_RAW.to_string(),
             _ => DUMMY_INFER_RESPONSE_RAW.to_string(),

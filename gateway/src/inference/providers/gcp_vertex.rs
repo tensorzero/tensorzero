@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
-use crate::inference::types::{ContentBlock, ContentBlockChunk, Latency, Role, TextChunk};
+use crate::inference::types::{ContentBlock, ContentBlockChunk, Latency, Role, Text, TextChunk};
 use crate::{
     inference::types::{
         InferenceResponseStream, ModelInferenceRequest, ModelInferenceResponse,
@@ -334,7 +334,7 @@ enum GCPVertexGeminiContentPart<'a> {
 impl<'a> From<&'a ContentBlock> for GCPVertexGeminiContentPart<'a> {
     fn from(block: &'a ContentBlock) -> Self {
         match block {
-            ContentBlock::Text(text) => GCPVertexGeminiContentPart::Text { text: text },
+            ContentBlock::Text(Text { text }) => GCPVertexGeminiContentPart::Text { text },
             ContentBlock::ToolResult(tool_result) => GCPVertexGeminiContentPart::FunctionResponse {
                 function_response: GCPVertexGeminiFunctionResponse {
                     name: &tool_result.name,
@@ -591,7 +591,7 @@ impl From<GCPVertexGeminiResponseContentPart> for ContentBlockChunk {
 impl From<GCPVertexGeminiResponseContentPart> for ContentBlock {
     fn from(part: GCPVertexGeminiResponseContentPart) -> Self {
         match part {
-            GCPVertexGeminiResponseContentPart::Text { text } => ContentBlock::Text(text),
+            GCPVertexGeminiResponseContentPart::Text { text } => text.into(),
             GCPVertexGeminiResponseContentPart::FunctionCall { function_call } => {
                 ContentBlock::ToolCall(ToolCall {
                     name: function_call.name,
@@ -752,7 +752,7 @@ mod tests {
     fn test_gcp_vertex_content_try_from() {
         let message = RequestMessage {
             role: Role::User,
-            content: vec![ContentBlock::Text("Hello, world!".to_string())],
+            content: vec!["Hello, world!".to_string().into()],
         };
         let content = GCPVertexGeminiContent::try_from(&message).unwrap();
         assert_eq!(content.role, GCPVertexGeminiRole::User);
@@ -766,7 +766,7 @@ mod tests {
 
         let message = RequestMessage {
             role: Role::Assistant,
-            content: vec![ContentBlock::Text("Hello, world!".to_string())],
+            content: vec!["Hello, world!".to_string().into()],
         };
         let content = GCPVertexGeminiContent::try_from(&message).unwrap();
         assert_eq!(content.role, GCPVertexGeminiRole::Model);
@@ -780,7 +780,7 @@ mod tests {
         let message = RequestMessage {
             role: Role::Assistant,
             content: vec![
-                ContentBlock::Text("Here's the result of the function call:".to_string()),
+                "Here's the result of the function call:".to_string().into(),
                 ContentBlock::ToolCall(ToolCall {
                     id: "call_1".to_string(),
                     name: "get_weather".to_string(),
@@ -958,11 +958,11 @@ mod tests {
         let messages = vec![
             RequestMessage {
                 role: Role::User,
-                content: vec![ContentBlock::Text("test_user".to_string())],
+                content: vec!["test_user".to_string().into()],
             },
             RequestMessage {
                 role: Role::Assistant,
-                content: vec![ContentBlock::Text("test_assistant".to_string())],
+                content: vec!["test_assistant".to_string().into()],
             },
         ];
         let inference_request = ModelInferenceRequest {
@@ -999,15 +999,15 @@ mod tests {
         let messages = vec![
             RequestMessage {
                 role: Role::User,
-                content: vec![ContentBlock::Text("test_user".to_string())],
+                content: vec!["test_user".to_string().into()],
             },
             RequestMessage {
                 role: Role::User,
-                content: vec![ContentBlock::Text("test_user2".to_string())],
+                content: vec!["test_user2".to_string().into()],
             },
             RequestMessage {
                 role: Role::Assistant,
-                content: vec![ContentBlock::Text("test_assistant".to_string())],
+                content: vec!["test_assistant".to_string().into()],
             },
         ];
         let inference_request = ModelInferenceRequest {
@@ -1087,7 +1087,7 @@ mod tests {
             response_with_latency.try_into().unwrap();
         assert_eq!(
             model_inference_response.content,
-            vec![ContentBlock::Text("test_assistant".to_string())]
+            vec!["test_assistant".to_string().into()]
         );
         assert_eq!(
             model_inference_response.usage,
@@ -1130,7 +1130,7 @@ mod tests {
         let model_inference_response: ModelInferenceResponse =
             response_with_latency.try_into().unwrap();
 
-        if let [ContentBlock::Text(text), ContentBlock::ToolCall(tool_call)] =
+        if let [ContentBlock::Text(Text { text }), ContentBlock::ToolCall(tool_call)] =
             &model_inference_response.content[..]
         {
             assert_eq!(text, "Here's the weather information:");
@@ -1198,7 +1198,7 @@ mod tests {
         let model_inference_response: ModelInferenceResponse =
             response_with_latency.try_into().unwrap();
 
-        if let [ContentBlock::Text(text1), ContentBlock::ToolCall(tool_call1), ContentBlock::Text(text2), ContentBlock::ToolCall(tool_call2)] =
+        if let [ContentBlock::Text(Text { text: text1 }), ContentBlock::ToolCall(tool_call1), ContentBlock::Text(Text { text: text2 }), ContentBlock::ToolCall(tool_call2)] =
             &model_inference_response.content[..]
         {
             assert_eq!(text1, "Here's the weather information:");

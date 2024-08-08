@@ -15,7 +15,7 @@ use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, InferenceResponseStream, JSONMode, Latency,
     ModelInferenceRequest, ModelInferenceResponse, ModelInferenceResponseChunk, RequestMessage,
-    Role, TextChunk, Tool, ToolCall, ToolCallChunk, ToolChoice, Usage,
+    Role, Text, TextChunk, Tool, ToolCall, ToolCallChunk, ToolChoice, Usage,
 };
 use crate::model::ProviderConfig;
 
@@ -320,7 +320,7 @@ fn tensorzero_to_openai_messages<'a>(message: &'a RequestMessage) -> Vec<OpenAIR
     let mut first_assistant_message_index: Option<usize> = None;
     for block in message.content.iter() {
         match block {
-            ContentBlock::Text(text) => match message.role {
+            ContentBlock::Text(Text { text }) => match message.role {
                 Role::User => {
                     messages.push(OpenAIRequestMessage::User(OpenAIUserRequestMessage {
                         content: text,
@@ -630,7 +630,7 @@ impl TryFrom<OpenAIResponseWithLatency> for ModelInferenceResponse {
             .message;
         let mut content: Vec<ContentBlock> = Vec::new();
         if let Some(text) = message.content {
-            content.push(ContentBlock::Text(text));
+            content.push(text.into());
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
@@ -839,11 +839,11 @@ mod tests {
             messages: vec![
                 RequestMessage {
                     role: Role::User,
-                    content: vec![ContentBlock::Text("Hello".to_string())],
+                    content: vec!["Hello".to_string().into()],
                 },
                 RequestMessage {
                     role: Role::Assistant,
-                    content: vec![ContentBlock::Text("Hi there!".to_string())],
+                    content: vec!["Hi there!".to_string().into()],
                 },
             ],
             system_instructions: None,
@@ -889,7 +889,7 @@ mod tests {
         let request_with_tools = ModelInferenceRequest {
             messages: vec![RequestMessage {
                 role: Role::User,
-                content: vec![ContentBlock::Text("What's the weather?".to_string())],
+                content: vec!["What's the weather?".to_string().into()],
             }],
             system_instructions: None,
             temperature: None,
@@ -951,7 +951,7 @@ mod tests {
         let inference_response = result.unwrap();
         assert_eq!(
             inference_response.content,
-            vec![ContentBlock::Text("Hello, world!".to_string())]
+            vec!["Hello, world!".to_string().into()]
         );
         assert_eq!(inference_response.usage.prompt_tokens, 10);
         assert_eq!(inference_response.usage.completion_tokens, 20);

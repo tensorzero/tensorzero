@@ -1,16 +1,15 @@
 use futures::StreamExt;
+use gateway::clickhouse::ClickHouseConnectionInfo;
 use gateway::inference::providers::dummy::{
-    DUMMY_INFER_RESPONSE_CONTENT, DUMMY_STREAMING_RESPONSE,
-};
-use gateway::{
-    clickhouse::ClickHouseConnectionInfo, inference::providers::dummy::DUMMY_JSON_RESPONSE_RAW,
+    DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW, DUMMY_JSON_RESPONSE_RAW,
+    DUMMY_STREAMING_RESPONSE,
 };
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use crate::e2e::common::clickhouse_flush_async_insert;
+use crate::e2e::common::{select_inference_clickhouse, select_model_inferences_clickhouse};
 
 // TODO (#74): make this endpoint configurable with main.rs
 const INFERENCE_URL: &str = "http://localhost:3000/inference";
@@ -26,14 +25,14 @@ async fn e2e_test_inference_basic() {
     let payload = json!({
         "function_name": "basic_test",
         "episode_id": episode_id,
-        "input":
-            [
-                {"role": "system", "content": {"assistant_name": "AskJeeves"}},
+        "input":{
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [
                 {
                     "role": "user",
                     "content": "Hello, world!"
                 }
-            ],
+            ]},
         "stream": false,
     });
 
@@ -46,22 +45,27 @@ async fn e2e_test_inference_basic() {
     // Check Response is OK, then fields in order
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
-    let content = response_json.get("content").unwrap();
-    let content = content.as_str().unwrap();
+    let content_blocks = response_json
+        .get("content_blocks")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    assert!(content_blocks.len() == 1);
+    let content_block = content_blocks.get(0).unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let content = content_block.get("text").unwrap().as_str().unwrap();
     assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
     // Check that created is here
     response_json.get("created").unwrap();
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-    // Check that raw_content is same as content
-    let raw_content = response_json.get("raw_content").unwrap();
-    assert_eq!(raw_content, content);
-    // Check that tool_calls is null
-    response_json.get("tool_calls").unwrap();
+    // Check that parsed_output is not here
+    assert!(response_json.get("parsed_output").is_none());
     // Check that type is "chat"
     let r#type = response_json.get("type").unwrap().as_str().unwrap();
-    assert_eq!(r#type, "Chat");
+    assert_eq!(r#type, "chat");
 
     // Check that usage is correct
     let usage = response_json.get("usage").unwrap();
@@ -84,13 +88,56 @@ async fn e2e_test_inference_basic() {
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, payload["input"]);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    assert_eq!(output, DUMMY_INFER_RESPONSE_CONTENT);
-    let output_raw = result.get("raw_output").unwrap().as_str().unwrap();
-    assert_eq!(output_raw, DUMMY_INFER_RESPONSE_CONTENT);
+    // Since there's no output schema, this should be empty
+    assert!(result.get("parsed_output").unwrap().is_null());
+    let content_blocks = result.get("content_blocks").unwrap().as_str().unwrap();
+    // Check that content_blocks is a list of blocks length 1
+    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    assert_eq!(content_blocks.len(), 1);
+    let content_block = content_blocks.get(0).unwrap();
+    // Check the type and content in the block
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
+    // Check that episode_id is here and correct
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
     assert_eq!(retrieved_episode_id, episode_id);
+    // Check the variant name
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, "test");
+
+    // Check the ModelInference Table
+    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    assert_eq!(input, payload["input"]);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
+    assert_eq!(content_blocks.len(), 1);
+    let content_block = content_blocks.get(0).unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
+
+    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    assert_eq!(input_tokens, 10);
+    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    assert_eq!(output_tokens, 10);
+    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    assert!(response_time_ms > 0);
+    assert!(result.get("ttft_ms").unwrap().is_null());
+    assert_eq!(
+        result.get("raw_response").unwrap().as_str().unwrap(),
+        DUMMY_INFER_RESPONSE_RAW
+    );
 }
 
 /// This test calls a function which calls a model where the first provider is broken but
@@ -104,14 +151,14 @@ async fn e2e_test_inference_model_fallback() {
     let payload = json!({
         "function_name": "model_fallback_test",
         "episode_id": episode_id,
-        "input":
-            [
-                {"role": "system", "content": {"assistant_name": "AskJeeves"}},
+        "input":{
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [
                 {
                     "role": "user",
                     "content": "Hello, world!"
                 }
-            ],
+            ]},
         "stream": false,
     });
 
@@ -124,22 +171,28 @@ async fn e2e_test_inference_model_fallback() {
     // Check Response is OK, then fields in order
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
-    let content = response_json.get("content").unwrap();
-    let content = content.as_str().unwrap();
-    assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
+    // No output schema so parsed content should not be in response
+    assert!(response_json.get("parsed_content").is_none());
     // Check that created is here
     response_json.get("created").unwrap();
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
     // Check that raw_content is same as content
-    let raw_content = response_json.get("raw_content").unwrap();
-    assert_eq!(raw_content, content);
-    // Check that tool_calls is null
-    response_json.get("tool_calls").unwrap();
+    let content_blocks: &Vec<Value> = response_json
+        .get("content_blocks")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    assert_eq!(content_blocks.len(), 1);
+    let content_block = content_blocks.get(0).unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
     // Check that type is "chat"
     let r#type = response_json.get("type").unwrap().as_str().unwrap();
-    assert_eq!(r#type, "Chat");
+    assert_eq!(r#type, "chat");
 
     // Check that usage is correct
     let usage = response_json.get("usage").unwrap();
@@ -162,18 +215,63 @@ async fn e2e_test_inference_model_fallback() {
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, payload["input"]);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    assert_eq!(output, DUMMY_INFER_RESPONSE_CONTENT);
-    let output_raw = result.get("raw_output").unwrap().as_str().unwrap();
-    assert_eq!(output_raw, DUMMY_INFER_RESPONSE_CONTENT);
+    // Since there's not output schema, parsed_output should be empty
+    assert!(result.get("parsed_output").unwrap().is_null());
+    // Check that content blocks are correct
+    let content_blocks = result.get("content_blocks").unwrap().as_str().unwrap();
+    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    assert_eq!(content_blocks.len(), 1);
+    let content_block = content_blocks.get(0).unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
+    // Check that episode_id is here and correct
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
     assert_eq!(retrieved_episode_id, episode_id);
+    // Check the variant name
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, "test");
+
+    // Check the ModelInference Table
+    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let _ = Uuid::parse_str(id).unwrap();
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+
+    let input_result = result.get("input").unwrap().as_str().unwrap();
+    let input_result: Value = serde_json::from_str(input_result).unwrap();
+    assert_eq!(input_result, payload["input"]);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
+    assert_eq!(content_blocks.len(), 1);
+    let content_block = content_blocks.get(0).unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
+
+    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    assert_eq!(input_tokens, 10);
+    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    assert_eq!(output_tokens, 10);
+    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    assert!(response_time_ms > 0);
+    assert!(result.get("ttft_ms").unwrap().is_null());
+    assert_eq!(
+        result.get("raw_response").unwrap().as_str().unwrap(),
+        DUMMY_INFER_RESPONSE_RAW
+    );
 }
 
 /// This test checks the return type and clickhouse writes for a function with an output schema and
 /// a response which does not satisfy the schema.
-/// We expect to see a null `content` field in the response and a null `output` field in the table.
+/// We expect to see a null `parsed_content` field in the response and a null `parsed_content` field in the table.
 #[tokio::test]
 async fn e2e_test_inference_json_fail() {
     let client = Client::new();
@@ -183,13 +281,14 @@ async fn e2e_test_inference_json_fail() {
         "function_name": "json_fail",
         "episode_id": episode_id,
         "input":
-            [
-                {"role": "system", "content": {"assistant_name": "AskJeeves"}},
+            {
+                "system": {"assistant_name": "AskJeeves"},
+                "messages": [
                 {
                     "role": "user",
                     "content": "Hello, world!"
                 }
-            ],
+            ]},
         "stream": false,
     });
 
@@ -202,21 +301,29 @@ async fn e2e_test_inference_json_fail() {
     // Check Response is OK, then fields in order
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
-    let content = response_json.get("content").unwrap();
-    assert!(content.is_null());
+    // Check that parsed_output is present but null
+    let parsed_output = response_json.get("parsed_output").unwrap();
+    assert!(parsed_output.is_null());
     // Check that created is here
     response_json.get("created").unwrap();
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-    // Check that raw_content is present
-    let raw_content = response_json.get("raw_content").unwrap();
-    assert_eq!(raw_content, DUMMY_INFER_RESPONSE_CONTENT);
-    // Check that tool_calls is null
-    response_json.get("tool_calls").unwrap();
+    // Check that content_blocks are present and correct
+    let content_blocks = response_json
+        .get("content_blocks")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    assert_eq!(content_blocks.len(), 1);
+    let content_block = content_blocks.get(0).unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
     // Check that type is "chat"
     let r#type = response_json.get("type").unwrap().as_str().unwrap();
-    assert_eq!(r#type, "Chat");
+    assert_eq!(r#type, "chat");
 
     // Check that usage is correct
     let usage = response_json.get("usage").unwrap();
@@ -239,13 +346,56 @@ async fn e2e_test_inference_json_fail() {
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, payload["input"]);
-    let output = result.get("output").unwrap();
-    assert!(output.is_null());
-    let output_raw = result.get("raw_output").unwrap().as_str().unwrap();
-    assert_eq!(output_raw, DUMMY_INFER_RESPONSE_CONTENT);
+    let parsed_output = result.get("parsed_output").unwrap();
+    assert!(parsed_output.is_null());
+    let content_blocks = result.get("content_blocks").unwrap().as_str().unwrap();
+    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    assert_eq!(content_blocks.len(), 1);
+    let content_block = content_blocks.get(0).unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
     assert_eq!(retrieved_episode_id, episode_id);
+    // Check the variant name
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, "test");
+
+    // Check the ModelInference Table
+    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let _ = Uuid::parse_str(id).unwrap();
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+
+    let input_result = result.get("input").unwrap().as_str().unwrap();
+    let input_result: Value = serde_json::from_str(input_result).unwrap();
+    assert_eq!(input_result, payload["input"]);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
+    assert_eq!(content_blocks.len(), 1);
+    let content_block = content_blocks.get(0).unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
+
+    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    assert_eq!(input_tokens, 10);
+    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    assert_eq!(output_tokens, 10);
+    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    assert!(response_time_ms > 0);
+    assert!(result.get("ttft_ms").unwrap().is_null());
+    assert_eq!(
+        result.get("raw_response").unwrap().as_str().unwrap(),
+        DUMMY_INFER_RESPONSE_RAW
+    );
 }
 
 /// This test checks the return type and clickhouse writes for a function with an output schema and
@@ -260,13 +410,14 @@ async fn e2e_test_inference_json_succeed() {
         "function_name": "json_succeed",
         "episode_id": episode_id,
         "input":
-            [
-                {"role": "system", "content": {"assistant_name": "AskJeeves"}},
+            {
+                "system": {"assistant_name": "AskJeeves"},
+                "messages": [
                 {
                     "role": "user",
                     "content": "Hello, world!"
                 }
-            ],
+            ]},
         "stream": false,
     });
 
@@ -279,22 +430,33 @@ async fn e2e_test_inference_json_succeed() {
     // Check Response is OK, then fields in order
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
-    let content = response_json.get("content").unwrap().as_object().unwrap();
-    let answer = content.get("answer").unwrap().as_str().unwrap();
+    let parsed_output = response_json
+        .get("parsed_output")
+        .unwrap()
+        .as_object()
+        .unwrap();
+    let answer = parsed_output.get("answer").unwrap().as_str().unwrap();
     assert_eq!(answer, "Hello");
     // Check that created is here
     response_json.get("created").unwrap();
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-    // Check that raw_content is present
-    let raw_content = response_json.get("raw_content").unwrap();
-    assert_eq!(raw_content, DUMMY_JSON_RESPONSE_RAW);
-    // Check that tool_calls is null
-    response_json.get("tool_calls").unwrap();
+    // Check that content blocks are present and correct
+    let content_blocks = response_json
+        .get("content_blocks")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    assert_eq!(content_blocks.len(), 1);
+    let content_block = content_blocks.get(0).unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(content, "{\"answer\":\"Hello\"}");
     // Check that type is "chat"
     let r#type = response_json.get("type").unwrap().as_str().unwrap();
-    assert_eq!(r#type, "Chat");
+    assert_eq!(r#type, "chat");
 
     // Check that usage is correct
     let usage = response_json.get("usage").unwrap();
@@ -317,14 +479,58 @@ async fn e2e_test_inference_json_succeed() {
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, payload["input"]);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    // TODO (#89): handle the fact that this should be Optional
-    assert_eq!(output, DUMMY_JSON_RESPONSE_RAW);
-    let output_raw = result.get("raw_output").unwrap().as_str().unwrap();
-    assert_eq!(output_raw, DUMMY_JSON_RESPONSE_RAW);
+    // Check that correctly parsed output is present
+    let parsed_output = result.get("parsed_output").unwrap().as_str().unwrap();
+    assert_eq!(parsed_output, "{\"answer\":\"Hello\"}");
+    // Check content blocks
+    let content_blocks = result.get("content_blocks").unwrap().as_str().unwrap();
+    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    assert_eq!(content_blocks.len(), 1);
+    let content_block = content_blocks.get(0).unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(content, "{\"answer\":\"Hello\"}");
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
     assert_eq!(retrieved_episode_id, episode_id);
+    // Check the variant name
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, "test");
+
+    // Check the ModelInference Table
+    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let _ = Uuid::parse_str(id).unwrap();
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+
+    let input_result = result.get("input").unwrap().as_str().unwrap();
+    let input_result: Value = serde_json::from_str(input_result).unwrap();
+    assert_eq!(input_result, payload["input"]);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
+    assert_eq!(content_blocks.len(), 1);
+    let content_block = content_blocks.get(0).unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(content, "{\"answer\":\"Hello\"}");
+
+    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    assert_eq!(input_tokens, 10);
+    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    assert_eq!(output_tokens, 10);
+    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    assert!(response_time_ms > 0);
+    assert!(result.get("ttft_ms").unwrap().is_null());
+    assert_eq!(
+        result.get("raw_response").unwrap().as_str().unwrap(),
+        DUMMY_JSON_RESPONSE_RAW
+    );
 }
 
 /// The variant_failover function has two variants: good and error, each with weight 0.5
@@ -344,13 +550,16 @@ async fn e2e_test_variant_failover() {
             "function_name": "variant_failover",
             "episode_id": episode_id,
             "input":
-                [
-                    {"role": "system", "content": {"assistant_name": "AskJeeves"}},
+                {
+                    "system": {
+                        "assistant_name": "AskJeeves"
+                    },
+                    "messages": [
                     {
                         "role": "user",
                         "content": "Hello, world!"
                     }
-                ],
+                ]},
             "stream": false,
         });
 
@@ -370,23 +579,27 @@ async fn e2e_test_variant_failover() {
     let payload = last_payload.unwrap();
     let episode_id = last_episode_id.unwrap();
     let response_json = response.json::<Value>().await.unwrap();
-    // Check Response is OK, then fields in order
-    let content = response_json.get("content").unwrap();
-    let content = content.as_str().unwrap();
+    let content_blocks = response_json
+        .get("content_blocks")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    assert!(content_blocks.len() == 1);
+    let content_block = content_blocks.get(0).unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let content = content_block.get("text").unwrap().as_str().unwrap();
     assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
     // Check that created is here
     response_json.get("created").unwrap();
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-    // Check that raw_content is same as content
-    let raw_content = response_json.get("raw_content").unwrap();
-    assert_eq!(raw_content, content);
-    // Check that tool_calls is null
-    response_json.get("tool_calls").unwrap();
+    // Check that parsed_output is not here
+    assert!(response_json.get("parsed_output").is_none());
     // Check that type is "chat"
     let r#type = response_json.get("type").unwrap().as_str().unwrap();
-    assert_eq!(r#type, "Chat");
+    assert_eq!(r#type, "chat");
 
     // Check that usage is correct
     let usage = response_json.get("usage").unwrap();
@@ -409,14 +622,56 @@ async fn e2e_test_variant_failover() {
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, payload["input"]);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    // TODO (#89): handle the fact that this should be Optional
-    assert_eq!(output, DUMMY_INFER_RESPONSE_CONTENT);
-    let output_raw = result.get("raw_output").unwrap().as_str().unwrap();
-    assert_eq!(output_raw, DUMMY_INFER_RESPONSE_CONTENT);
+    // Since there's no output schema, this should be empty
+    assert!(result.get("parsed_output").unwrap().is_null());
+    let content_blocks = result.get("content_blocks").unwrap().as_str().unwrap();
+    // Check that content_blocks is a list of blocks length 1
+    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    assert_eq!(content_blocks.len(), 1);
+    let content_block = content_blocks.get(0).unwrap();
+    // Check the type and content in the block
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
+    // Check that episode_id is here and correct
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
     assert_eq!(retrieved_episode_id, episode_id);
+    // Check the variant name
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, "good");
+
+    // Check the ModelInference Table
+    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    assert_eq!(input, payload["input"]);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
+    assert_eq!(content_blocks.len(), 1);
+    let content_block = content_blocks.get(0).unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
+
+    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    assert_eq!(input_tokens, 10);
+    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    assert_eq!(output_tokens, 10);
+    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    assert!(response_time_ms > 0);
+    assert!(result.get("ttft_ms").unwrap().is_null());
+    assert_eq!(
+        result.get("raw_response").unwrap().as_str().unwrap(),
+        DUMMY_INFER_RESPONSE_RAW
+    );
 }
 
 /// This test checks that streaming inference works as expected.
@@ -429,13 +684,16 @@ async fn e2e_test_streaming() {
         "function_name": "basic_test",
         "episode_id": episode_id,
         "input":
-            [
-                {"role": "system", "content": {"assistant_name": "AskJeeves"}},
+            {
+                "system": {
+                    "assistant_name": "AskJeeves"
+                },
+                "messages": [
                 {
                     "role": "user",
                     "content": "Hello, world!"
                 }
-            ],
+            ]},
         "stream": true,
     });
 
@@ -461,10 +719,20 @@ async fn e2e_test_streaming() {
     for (i, chunk) in chunks.iter().enumerate() {
         let chunk_json: Value = serde_json::from_str(chunk).unwrap();
         if i < DUMMY_STREAMING_RESPONSE.len() {
-            let content = chunk_json.get("content").unwrap().as_str().unwrap();
+            let content = chunk_json.get("content").unwrap().as_array().unwrap();
+            assert_eq!(content.len(), 1);
+            let content_block = content.get(0).unwrap();
+            let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+            assert_eq!(content_block_type, "text");
+            let content = content_block.get("text").unwrap().as_str().unwrap();
             assert_eq!(content, DUMMY_STREAMING_RESPONSE[i]);
         } else {
-            assert!(chunk_json.get("content").unwrap().is_null());
+            assert!(chunk_json
+                .get("content")
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .is_empty());
             let usage = chunk_json.get("usage").unwrap().as_object().unwrap();
             let prompt_tokens = usage.get("prompt_tokens").unwrap().as_u64().unwrap();
             let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
@@ -490,27 +758,52 @@ async fn e2e_test_streaming() {
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, payload["input"]);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    assert_eq!(output, DUMMY_STREAMING_RESPONSE.join(""));
-    let output_raw = result.get("raw_output").unwrap().as_str().unwrap();
-    assert_eq!(output_raw, DUMMY_STREAMING_RESPONSE.join(""));
+    // No output schema
+    assert!(result.get("parsed_output").unwrap().is_null());
+    // Check content blocks
+    let content_blocks = result.get("content_blocks").unwrap().as_str().unwrap();
+    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    assert_eq!(content_blocks.len(), 1);
+    let content_block = content_blocks.get(0).unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(content, DUMMY_STREAMING_RESPONSE.join(""));
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
     assert_eq!(retrieved_episode_id, episode_id);
-}
+    // Check the variant name
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, "test");
 
-async fn select_inference_clickhouse(
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
-    inference_id: Uuid,
-) -> Option<Value> {
-    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+    // Check the ModelInference Table
+    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let _ = Uuid::parse_str(id).unwrap();
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
 
-    let query = format!(
-        "SELECT * FROM Inference WHERE id = '{}' FORMAT JSONEachRow",
-        inference_id
-    );
+    let input_result = result.get("input").unwrap().as_str().unwrap();
+    let input_result: Value = serde_json::from_str(input_result).unwrap();
+    assert_eq!(input_result, payload["input"]);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
+    assert_eq!(content_blocks.len(), 1);
+    let content_block = content_blocks.get(0).unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(content, DUMMY_STREAMING_RESPONSE.join(""));
 
-    let text = clickhouse_connection_info.run_query(query).await.unwrap();
-    let json: Value = serde_json::from_str(&text).ok()?;
-    Some(json)
+    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    assert_eq!(input_tokens, 10);
+    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    assert_eq!(output_tokens, 16);
+    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    assert!(response_time_ms > 0);
+    let ttft = result.get("ttft_ms").unwrap().as_u64().unwrap();
+    assert!(ttft > 0 && ttft <= response_time_ms);
 }

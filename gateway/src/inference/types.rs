@@ -1,6 +1,6 @@
 use derive_builder::Builder;
 use futures::Stream;
-use serde::{Deserialize, Serialize};
+use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
 use serde_json::Value;
 use std::{
     collections::HashMap,
@@ -152,15 +152,21 @@ pub struct ToolResult {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Text {
+    pub text: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
 pub enum ContentBlock {
-    Text(String),
+    Text(Text),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
 }
 
 impl Into<ContentBlock> for String {
     fn into(self) -> ContentBlock {
-        ContentBlock::Text(self)
+        ContentBlock::Text(Text { text: self })
     }
 }
 
@@ -253,6 +259,8 @@ impl ModelInferenceResponse {
 }
 
 // Determines the return type of Inference API for Chat-type functions (which is all of them right now)
+// TODO (viraj): add output_schema to this struct, don't serialize it and then have the serializer
+// only return parsed_output if output_schema is present
 #[derive(Serialize, Debug, Clone)]
 pub struct ChatInferenceResponse {
     inference_id: Uuid,
@@ -333,7 +341,7 @@ impl ChatInferenceResponse {
                 // Grab the last text content block, parse it, and return
                 for content in content.iter().rev() {
                     let text = match content {
-                        ContentBlock::Text(text) => text,
+                        ContentBlock::Text(Text { text }) => text,
                         _ => continue,
                     };
                     let parsed_text =
@@ -369,9 +377,45 @@ impl ChatInferenceResponse {
 }
 
 #[derive(Serialize, Debug, Clone)]
-#[serde(tag = "type")]
+#[serde(tag = "type", rename_all = "lowercase")]
 pub enum InferenceResponse {
     Chat(ChatInferenceResponse),
+}
+
+pub struct InferenceResponseWithOutputSchema<'a> {
+    pub inference_response: InferenceResponse,
+    pub output_schema: Option<&'a JSONSchemaFromPath>,
+}
+
+impl<'a> Serialize for InferenceResponseWithOutputSchema<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match &self.inference_response {
+            InferenceResponse::Chat(chat_response) => {
+                // Count the number of fields we'll be serializing
+                let mut field_count = 5; // type, inference_id, created, content_blocks, usage
+                if self.output_schema.is_some() {
+                    field_count += 1; // We'll include parsed_output
+                }
+
+                let mut state = serializer.serialize_struct("InferenceResponse", field_count)?;
+
+                state.serialize_field("type", "chat")?;
+                state.serialize_field("inference_id", &chat_response.inference_id)?;
+                state.serialize_field("created", &chat_response.created)?;
+                state.serialize_field("content_blocks", &chat_response.content_blocks)?;
+                state.serialize_field("usage", &chat_response.usage)?;
+
+                if self.output_schema.is_some() {
+                    state.serialize_field("parsed_output", &chat_response.parsed_output)?;
+                }
+
+                state.end()
+            }
+        }
+    }
 }
 
 #[derive(Serialize, Debug)]
@@ -381,10 +425,8 @@ pub struct Inference {
     pub variant_name: String,
     pub episode_id: Uuid,
     pub input: String,
-    // only if there is an output schema
     pub parsed_output: Option<Value>,
-    // change to output blocks and make this a list of blocks
-    pub output_blocks: String,
+    pub content_blocks: String,
     pub processing_time_ms: u32,
 }
 
@@ -405,7 +447,7 @@ impl Inference {
                 variant_name,
                 episode_id,
                 input,
-                output_blocks: serde_json::to_string(&chat_response.content_blocks).map_err(
+                content_blocks: serde_json::to_string(&chat_response.content_blocks).map_err(
                     |e| Error::TypeConversion {
                         message: format!("Failed to serialize content blocks: {}.", e.to_string()),
                     },
@@ -433,6 +475,7 @@ pub struct TextChunk {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
 pub enum ContentBlockChunk {
     Text(TextChunk),
     ToolCall(ToolCallChunk),
@@ -527,7 +570,9 @@ pub fn collect_chunks(
                 ContentBlockChunk::Text(text) => {
                     match text_blocks.get_mut(&text.id) {
                         // If there is already a text block, append to it
-                        Some(ContentBlock::Text(existing_text)) => {
+                        Some(ContentBlock::Text(Text {
+                            text: existing_text,
+                        })) => {
                             existing_text.push_str(&text.text);
                         }
                         // If there is no text block, create one
@@ -535,7 +580,7 @@ pub fn collect_chunks(
                             if ttft.is_none() {
                                 ttft = Some(chunk.latency);
                             }
-                            text_blocks.insert(text.id, ContentBlock::Text(text.text));
+                            text_blocks.insert(text.id, text.text.into());
                         }
                     }
                 }
@@ -626,7 +671,7 @@ mod tests {
         // TODO (#30): handle the tool call case here. For now, we will always set those values to None.
         // Case 1: No output schema
         let inference_id = Uuid::now_v7();
-        let content = vec![ContentBlock::Text("Hello, world!".to_string())];
+        let content = vec!["Hello, world!".to_string().into()];
         let usage = Usage {
             prompt_tokens: 10,
             completion_tokens: 20,
@@ -655,7 +700,7 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let created = current_timestamp();
         let json_content = r#"{"name": "John", "age": 30}"#.to_string();
-        let content = vec![ContentBlock::Text(json_content.clone())];
+        let content = vec![json_content.clone().into()];
         let usage = Usage {
             prompt_tokens: 15,
             completion_tokens: 25,
@@ -702,7 +747,7 @@ mod tests {
         // TODO (#87): assert that the appropriate errors were logged in the next two test cases
         // Case 3: a JSON string that fails validation
         let invalid_json = r#"{"name": "John", "age": "thirty"}"#.to_string();
-        let invalid_json_content = vec![ContentBlock::Text(invalid_json)];
+        let invalid_json_content = vec![invalid_json.into()];
         let model_inference_responses = vec![ModelInferenceResponse::new(
             invalid_json_content.clone(),
             "".to_string(),
@@ -730,7 +775,7 @@ mod tests {
         // Case 4: a malformed JSON
         let malformed_json = r#"{"name": "John", "age": 30,"#.to_string();
         let model_inference_responses = vec![ModelInferenceResponse::new(
-            vec![ContentBlock::Text(malformed_json.clone())],
+            vec![malformed_json.clone().into()],
             "".to_string(),
             usage.clone(),
             Latency::NonStreaming {
@@ -740,7 +785,7 @@ mod tests {
 
         let chat_inference_response = ChatInferenceResponse::new(
             inference_id,
-            vec![ContentBlock::Text(malformed_json.clone())],
+            vec![malformed_json.clone().into()],
             usage.clone(),
             model_inference_responses,
             Some(&output_schema),
@@ -752,7 +797,7 @@ mod tests {
         // Content will be None if the JSON is malformed
         assert_eq!(
             chat_inference_response.content_blocks,
-            vec![ContentBlock::Text(malformed_json.clone())]
+            vec![malformed_json.clone().into()]
         );
         assert_eq!(chat_inference_response.parsed_output, None);
         assert_eq!(chat_inference_response.usage, usage);

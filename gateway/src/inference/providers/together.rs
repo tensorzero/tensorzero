@@ -222,7 +222,7 @@ mod tests {
 
     use crate::inference::{
         providers::openai::OpenAIToolChoiceString,
-        types::{ContentBlock, FunctionType, RequestMessage, Role, Tool, ToolChoice},
+        types::{FunctionType, RequestMessage, Role, Tool, ToolChoice},
     };
 
     #[test]
@@ -245,7 +245,7 @@ mod tests {
         let request_with_tools = ModelInferenceRequest {
             messages: vec![RequestMessage {
                 role: Role::User,
-                content: vec![ContentBlock::Text("What's the weather?".to_string())],
+                content: vec!["What's the weather?".to_string().into()],
             }],
             system_instructions: None,
             temperature: None,

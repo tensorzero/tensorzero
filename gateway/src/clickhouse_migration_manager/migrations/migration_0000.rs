@@ -140,10 +140,10 @@ impl<'a> Migration for Migration0000<'a> {
                 variant_name LowCardinality(String),
                 episode_id UUID,
                 input String,
-                output Nullable(String),
+                parsed_output Nullable(String),
                 processing_time_ms UInt32,
-                -- This is whatever string we got from the Inference, without output sanitization
-                raw_output String,
+                -- Serialized content blocks as output by model
+                content_blocks String,
             ) ENGINE = MergeTree()
             ORDER BY (function_name, variant_name, episode_id);
         "#;
@@ -156,6 +156,7 @@ impl<'a> Migration for Migration0000<'a> {
                 id UUID,
                 inference_id UUID,
                 input String,
+                -- Serialized content blocks as output by model
                 output String,
                 raw_response String,
                 input_tokens UInt32,

@@ -1,4 +1,4 @@
-use crate::e2e::common::clickhouse_flush_async_insert;
+use crate::e2e::common::select_feedback_clickhouse;
 use gateway::clickhouse::ClickHouseConnectionInfo;
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
@@ -319,21 +319,4 @@ async fn e2e_test_boolean_feedback() {
     assert_eq!(retrieved_episode_id_uuid, episode_id);
     let retrieved_value = result.get("value").unwrap().as_bool().unwrap();
     assert!(retrieved_value)
-}
-
-async fn select_feedback_clickhouse(
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
-    table_name: &str,
-    feedback_id: Uuid,
-) -> Option<Value> {
-    clickhouse_flush_async_insert(clickhouse_connection_info).await;
-
-    let query = format!(
-        "SELECT * FROM {} WHERE id = '{}' FORMAT JSONEachRow",
-        table_name, feedback_id
-    );
-
-    let text = clickhouse_connection_info.run_query(query).await.unwrap();
-    let json: Value = serde_json::from_str(&text).ok()?;
-    Some(json)
 }

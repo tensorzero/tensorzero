@@ -10,7 +10,7 @@ use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
     ContentBlock, InferenceResponseStream, Latency, ModelInferenceRequest, ModelInferenceResponse,
-    ModelInferenceResponseChunk, RequestMessage, Role, Usage,
+    ModelInferenceResponseChunk, RequestMessage, Role, Text, Usage,
 };
 use crate::model::ProviderConfig;
 
@@ -114,7 +114,7 @@ impl TryFrom<&ContentBlock> for BedrockContentBlock {
 
     fn try_from(block: &ContentBlock) -> Result<Self, Self::Error> {
         match block {
-            ContentBlock::Text(text) => Ok(BedrockContentBlock::Text(text.clone())),
+            ContentBlock::Text(Text { text }) => Ok(BedrockContentBlock::Text(text.clone())),
             _ => Err(Error::TypeConversion {
                 message: "Unsupported content block type for AWS Bedrock.".to_string(),
             }), // TODO (#18, #30): handle tool use and tool call blocks
@@ -127,7 +127,7 @@ impl TryFrom<BedrockContentBlock> for ContentBlock {
 
     fn try_from(block: BedrockContentBlock) -> Result<Self, Self::Error> {
         match block {
-            BedrockContentBlock::Text(text) => Ok(ContentBlock::Text(text)),
+            BedrockContentBlock::Text(text) => Ok(text.into()),
             _ => Err(Error::TypeConversion {
                 message: "Unsupported content block type for AWS Bedrock.".to_string(),
             }), // TODO (#18, #30): handle tool use and tool call blocks

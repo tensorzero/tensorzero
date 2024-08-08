@@ -1,6 +1,6 @@
 use crate::integration::providers::common::create_simple_inference_request;
 use gateway::inference::providers::provider_trait::InferenceProvider;
-use gateway::inference::types::ContentBlock;
+use gateway::inference::types::{ContentBlock, Text};
 use gateway::{inference::providers::aws_bedrock::AWSBedrockProvider, model::ProviderConfig};
 
 #[tokio::test]
@@ -15,7 +15,7 @@ async fn test_infer() {
     assert!(result.content.len() == 1);
     let content = result.content.get(0).unwrap();
     match content {
-        ContentBlock::Text(text) => {
+        ContentBlock::Text(Text { text }) => {
             assert!(text.len() > 0);
         }
         _ => panic!("Expected text"),

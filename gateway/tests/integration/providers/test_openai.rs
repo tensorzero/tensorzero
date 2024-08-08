@@ -8,7 +8,7 @@ use futures::StreamExt;
 use gateway::{
     inference::{
         providers::{openai::OpenAIProvider, provider_trait::InferenceProvider},
-        types::ContentBlock,
+        types::{ContentBlock, Text},
     },
     model::ProviderConfig,
 };
@@ -36,7 +36,7 @@ async fn test_infer() {
     assert!(result.content.len() == 1);
     let content = result.content.get(0).unwrap();
     match content {
-        ContentBlock::Text(text) => {
+        ContentBlock::Text(Text { text }) => {
             assert!(text.len() > 0);
         }
         _ => panic!("Expected text"),
@@ -125,7 +125,7 @@ async fn test_json_request() {
     assert!(result.content.len() == 1);
     let content = result.content.get(0).unwrap();
     match content {
-        ContentBlock::Text(text) => {
+        ContentBlock::Text(Text { text }) => {
             // parse the result text and see if it matches the output schema
             let result_json: serde_json::Value = serde_json::from_str(&text).unwrap();
             assert!(result_json.get("thinking").is_some());

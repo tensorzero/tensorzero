@@ -1,5 +1,5 @@
 use futures::StreamExt;
-use gateway::inference::types::ContentBlock;
+use gateway::inference::types::{ContentBlock, Text};
 use secrecy::SecretString;
 use std::env;
 
@@ -36,7 +36,7 @@ async fn test_infer() {
     assert!(result.content.len() == 1);
     let content = result.content.get(0).unwrap();
     match content {
-        ContentBlock::Text(text) => {
+        ContentBlock::Text(Text { text }) => {
             assert!(text.len() > 0);
         }
         _ => panic!("Expected text"),
@@ -143,7 +143,7 @@ async fn test_json_request() {
     assert!(result.content.len() == 1);
     let content = result.content.get(0).unwrap();
     match content {
-        ContentBlock::Text(text) => {
+        ContentBlock::Text(Text { text }) => {
             // parse the result text and see if it matches the output schema
             let result_json: serde_json::Value = serde_json::from_str(&text).unwrap();
             assert!(result_json.get("thinking").is_some());
