@@ -257,9 +257,9 @@ impl<'a> TryFrom<&'a Tool> for AnthropicTool<'a> {
                 description,
                 parameters,
             } => Ok(AnthropicTool {
-                name: &name,
+                name,
                 description: description.as_deref(),
-                input_schema: &parameters,
+                input_schema: parameters,
             }),
         }
     }
@@ -353,7 +353,7 @@ impl<'a> AnthropicRequestBody<'a> {
         let request_messages: Vec<AnthropicMessage> = request
             .messages
             .iter()
-            .map(|m| AnthropicMessage::from(m))
+            .map(AnthropicMessage::from)
             .collect();
         let messages = prepare_messages(request_messages)?;
         let tool_choice: Option<AnthropicToolChoice> =
@@ -818,10 +818,9 @@ mod tests {
     #[test]
     fn test_try_from_content_block() {
         let text_content_block = "test".to_string().into();
-        let anthropic_content_block = AnthropicMessageContent::try_from(&text_content_block);
-        assert!(anthropic_content_block.is_ok());
+        let anthropic_content_block = AnthropicMessageContent::from(&text_content_block);
         assert_eq!(
-            anthropic_content_block.unwrap(),
+            anthropic_content_block,
             AnthropicMessageContent::Text { text: "test" }
         );
 
@@ -830,10 +829,9 @@ mod tests {
             name: "test_name".to_string(),
             arguments: serde_json::to_string(&json!({"type": "string"})).unwrap(),
         });
-        let anthropic_content_block = AnthropicMessageContent::try_from(&tool_call_content_block);
-        assert!(anthropic_content_block.is_ok());
+        let anthropic_content_block = AnthropicMessageContent::from(&tool_call_content_block);
         assert_eq!(
-            anthropic_content_block.unwrap(),
+            anthropic_content_block,
             AnthropicMessageContent::ToolUse {
                 id: "test_id",
                 name: "test_name",
@@ -851,10 +849,9 @@ mod tests {
             role: Role::User,
             content: vec!["test".to_string().into()],
         };
-        let anthropic_message = AnthropicMessage::try_from(&inference_request_message);
-        assert!(anthropic_message.is_ok());
+        let anthropic_message = AnthropicMessage::from(&inference_request_message);
         assert_eq!(
-            anthropic_message.unwrap(),
+            anthropic_message,
             AnthropicMessage {
                 role: AnthropicRole::User,
                 content: vec![AnthropicMessageContent::Text { text: "test" }],
@@ -866,10 +863,9 @@ mod tests {
             role: Role::Assistant,
             content: vec!["test_assistant".to_string().into()],
         };
-        let anthropic_message = AnthropicMessage::try_from(&inference_request_message);
-        assert!(anthropic_message.is_ok());
+        let anthropic_message = AnthropicMessage::from(&inference_request_message);
         assert_eq!(
-            anthropic_message.unwrap(),
+            anthropic_message,
             AnthropicMessage {
                 role: AnthropicRole::Assistant,
                 content: vec![AnthropicMessageContent::Text {
@@ -887,10 +883,9 @@ mod tests {
                 result: "test_tool_response".to_string(),
             })],
         };
-        let anthropic_message = AnthropicMessage::try_from(&inference_request_message);
-        assert!(anthropic_message.is_ok());
+        let anthropic_message = AnthropicMessage::from(&inference_request_message);
         assert_eq!(
-            anthropic_message.unwrap(),
+            anthropic_message,
             AnthropicMessage {
                 role: AnthropicRole::User,
                 content: vec![AnthropicMessageContent::ToolResult {
@@ -966,8 +961,8 @@ mod tests {
             AnthropicRequestBody {
                 model: &model,
                 messages: vec![
-                    AnthropicMessage::try_from(&messages[0]).unwrap(),
-                    AnthropicMessage::try_from(&messages[1]).unwrap(),
+                    AnthropicMessage::from(&messages[0]),
+                    AnthropicMessage::from(&messages[1]),
                     listening_message.clone(),
                 ],
                 max_tokens: 4096,
@@ -1022,7 +1017,7 @@ mod tests {
                             AnthropicMessageContent::Text { text: "test_user2" }
                         ],
                     },
-                    AnthropicMessage::try_from(&messages[2]).unwrap(),
+                    AnthropicMessage::from(&messages[2]),
                     listening_message.clone(),
                 ],
                 max_tokens: 100,
@@ -1079,9 +1074,9 @@ mod tests {
             AnthropicRequestBody {
                 model: &model,
                 messages: vec![
-                    AnthropicMessage::try_from(&messages[0]).unwrap(),
-                    AnthropicMessage::try_from(&messages[1]).unwrap(),
-                    AnthropicMessage::try_from(&messages[2]).unwrap(),
+                    AnthropicMessage::from(&messages[0]),
+                    AnthropicMessage::from(&messages[1]),
+                    AnthropicMessage::from(&messages[2]),
                 ],
                 max_tokens: 100,
                 stream: Some(true),

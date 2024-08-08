@@ -91,7 +91,7 @@ impl FunctionConfig {
         input: &Input,
     ) -> Result<(), Error> {
         match (input.system.as_ref(), system_schema) {
-            (Some(system), Some(ref system_schema)) => system_schema.validate(&system),
+            (Some(system), Some(ref system_schema)) => system_schema.validate(system),
             (None, None) => Ok(()),
             (Some(system), None) => {
                 if system.is_string() {

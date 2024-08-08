@@ -164,9 +164,9 @@ pub enum ContentBlock {
     ToolResult(ToolResult),
 }
 
-impl Into<ContentBlock> for String {
-    fn into(self) -> ContentBlock {
-        ContentBlock::Text(Text { text: self })
+impl From<String> for ContentBlock {
+    fn from(text: String) -> Self {
+        ContentBlock::Text(Text { text })
     }
 }
 
@@ -303,7 +303,7 @@ impl ChatInferenceResponse {
     }
 
     fn parse_output(
-        content: &Vec<ContentBlock>,
+        content: &[ContentBlock],
         output_schema: &JSONSchemaFromPath,
         tool_choice: ToolChoice,
     ) -> Result<Value, Error> {
@@ -332,10 +332,10 @@ impl ChatInferenceResponse {
                     })?;
                     return Ok(parsed_arguments);
                 }
-                return Err(Error::OutputParsing {
+                Err(Error::OutputParsing {
                     raw_output: "".to_string(),
                     message: "Output parsing failed due to no tool calls".to_string(),
-                });
+                })
             }
             _ => {
                 // Grab the last text content block, parse it, and return
@@ -356,10 +356,10 @@ impl ChatInferenceResponse {
                         })?;
                     return Ok(parsed_text);
                 }
-                return Err(Error::OutputParsing {
+                Err(Error::OutputParsing {
                     raw_output: "".to_string(),
                     message: "Output parsing failed due to no text content".to_string(),
-                });
+                })
             }
         }
     }
@@ -449,7 +449,7 @@ impl Inference {
                 input,
                 content_blocks: serde_json::to_string(&chat_response.content_blocks).map_err(
                     |e| Error::TypeConversion {
-                        message: format!("Failed to serialize content blocks: {}.", e.to_string()),
+                        message: format!("Failed to serialize content blocks: {}.", e),
                     },
                 )?,
                 parsed_output: chat_response.parsed_output,

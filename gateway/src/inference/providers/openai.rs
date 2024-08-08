@@ -278,7 +278,7 @@ pub(super) fn prepare_openai_messages<'a>(
     let mut messages: Vec<OpenAIRequestMessage> = request
         .messages
         .iter()
-        .flat_map(|msg| tensorzero_to_openai_messages(msg))
+        .flat_map(tensorzero_to_openai_messages)
         .collect();
     if let Some(system_msg) =
         tensorzero_to_openai_system_message(request.system_instructions.as_deref())
@@ -295,18 +295,17 @@ pub(super) fn prepare_openai_tools<'a>(
     let tools = request
         .tools_available
         .as_ref()
-        .map(|t| t.iter().map(|tool| OpenAITool::from(tool)).collect());
-    let tool_choice: Option<OpenAIToolChoice<'a>> = match tools {
-        // TODO (Viraj): if this is an empty list, should we return None?
-        Some(_) => Some((&request.tool_choice).into()),
-        None => None,
-    };
+        .map(|t| t.iter().map(OpenAITool::from).collect());
+    // TODO (Viraj): if this is an empty list, should we return None?
+    // If `tools` is None, tool_choice will be as well
+    let tool_choice: Option<OpenAIToolChoice<'a>> =
+        tools.as_ref().map(|_| (&request.tool_choice).into());
     (tools, tool_choice)
 }
 
-fn tensorzero_to_openai_system_message<'a>(
-    system_instructions: Option<&'a str>,
-) -> Option<OpenAIRequestMessage<'a>> {
+fn tensorzero_to_openai_system_message(
+    system_instructions: Option<&str>,
+) -> Option<OpenAIRequestMessage<'_>> {
     system_instructions.map(|instructions| {
         OpenAIRequestMessage::System(OpenAISystemRequestMessage {
             content: instructions,
@@ -314,7 +313,7 @@ fn tensorzero_to_openai_system_message<'a>(
     })
 }
 
-fn tensorzero_to_openai_messages<'a>(message: &'a RequestMessage) -> Vec<OpenAIRequestMessage<'a>> {
+fn tensorzero_to_openai_messages(message: &RequestMessage) -> Vec<OpenAIRequestMessage<'_>> {
     let mut messages = Vec::new();
     let mut tool_calls = Vec::new();
     let mut first_assistant_message_index: Option<usize> = None;
@@ -417,9 +416,9 @@ impl<'a> From<&'a Tool> for OpenAITool<'a> {
             } => OpenAITool {
                 r#type: OpenAIToolType::Function,
                 function: OpenAIFunction {
-                    name: name,
+                    name,
                     description: description.as_deref(),
-                    parameters: parameters,
+                    parameters,
                 },
             },
         }

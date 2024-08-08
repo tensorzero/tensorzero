@@ -501,16 +501,16 @@ impl<'a> TryFrom<&'a ModelInferenceRequest<'a>> for GCPVertexGeminiRequest<'a> {
                 message: "GCP Vertex Gemini requires at least one message".to_string(),
             });
         }
-        let system_instruction = match &request.system_instructions {
-            Some(system_instruction) => Some(GCPVertexGeminiContentPart::Text {
+        let system_instruction = request
+            .system_instructions
+            .as_ref()
+            .map(|system_instruction| GCPVertexGeminiContentPart::Text {
                 text: system_instruction,
-            }),
-            None => None,
-        };
+            });
         let contents: Vec<GCPVertexGeminiContent> = request
             .messages
             .iter()
-            .map(|message| GCPVertexGeminiContent::from(message))
+            .map(GCPVertexGeminiContent::from)
             .collect();
         let tools = request
             .tools_available
@@ -754,7 +754,7 @@ mod tests {
             role: Role::User,
             content: vec!["Hello, world!".to_string().into()],
         };
-        let content = GCPVertexGeminiContent::try_from(&message).unwrap();
+        let content = GCPVertexGeminiContent::from(&message);
         assert_eq!(content.role, GCPVertexGeminiRole::User);
         assert_eq!(content.parts.len(), 1);
         assert_eq!(
@@ -768,7 +768,7 @@ mod tests {
             role: Role::Assistant,
             content: vec!["Hello, world!".to_string().into()],
         };
-        let content = GCPVertexGeminiContent::try_from(&message).unwrap();
+        let content = GCPVertexGeminiContent::from(&message);
         assert_eq!(content.role, GCPVertexGeminiRole::Model);
         assert_eq!(content.parts.len(), 1);
         assert_eq!(
@@ -788,7 +788,7 @@ mod tests {
                 }),
             ],
         };
-        let content = GCPVertexGeminiContent::try_from(&message).unwrap();
+        let content = GCPVertexGeminiContent::from(&message);
         assert_eq!(content.role, GCPVertexGeminiRole::Model);
         assert_eq!(content.parts.len(), 2);
         assert_eq!(
@@ -815,7 +815,7 @@ mod tests {
                 result: r#"{"temperature": 25, "conditions": "sunny"}"#.to_string(),
             })],
         };
-        let content = GCPVertexGeminiContent::try_from(&message).unwrap();
+        let content = GCPVertexGeminiContent::from(&message);
         assert_eq!(content.role, GCPVertexGeminiRole::User);
         assert_eq!(content.parts.len(), 1);
         assert_eq!(
@@ -1140,7 +1140,7 @@ mod tests {
                 r#"{"location": "New York", "unit": "celsius"}"#
             );
         } else {
-            panic!("Unexpected content in model_inference_response");
+            unreachable!()
         }
 
         assert_eq!(
@@ -1214,7 +1214,7 @@ mod tests {
                 r#"{"cuisine": "Italian", "price_range": "moderate"}"#
             );
         } else {
-            panic!(
+            unreachable!(
                 "Content does not match expected structure: {:?}",
                 model_inference_response.content
             );

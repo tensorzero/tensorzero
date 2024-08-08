@@ -165,7 +165,7 @@ impl Variant for ChatCompletionConfig {
         let system_instructions = input
             .system
             .as_ref()
-            .map(|system| self.prepare_system_message(&system))
+            .map(|system| self.prepare_system_message(system))
             .transpose()?;
         let output_schema_value = match output_schema {
             // We want this block to throw an error if somehow the jsonschema is missing
@@ -223,7 +223,7 @@ impl Variant for ChatCompletionConfig {
         let system_instructions = input
             .system
             .as_ref()
-            .map(|system| self.prepare_system_message(&system))
+            .map(|system| self.prepare_system_message(system))
             .transpose()?;
         let output_schema_value = match output_schema {
             // As above, we want this block to throw an error if somehow the jsonschema is missing
