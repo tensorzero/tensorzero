@@ -275,8 +275,8 @@ pub fn tensorzero_to_openai_messages<'a>(
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut messages = Vec::new();
     let mut tool_calls = Vec::new();
-    let mut first_assistant_message: Option<&mut OpenAIAssistantRequestMessage> = None;
-    for block in message.content.iter() {
+    let mut first_assistant_message_index: Option<usize> = None;
+    for (index, block) in message.content.iter().enumerate() {
         match block {
             ContentBlock::Text(text) => match message.role {
                 Role::User => {
@@ -285,15 +285,12 @@ pub fn tensorzero_to_openai_messages<'a>(
                     }));
                 }
                 Role::Assistant => {
-                    let message = OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
+                    messages.push(OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
                         content: Some(text),
                         tool_calls: None,
-                    });
-                    messages.push(message);
-                    if first_assistant_message.is_none() {
-                        if let Some(OpenAIRequestMessage::Assistant(ref mut msg)) = messages.last_mut() {
-                            first_assistant_message = Some(msg);
-                        }
+                    }));
+                    if first_assistant_message_index.is_none() {
+                        first_assistant_message_index = Some(messages.len() - 1);
                     }
                 }
             },
@@ -316,9 +313,11 @@ pub fn tensorzero_to_openai_messages<'a>(
             }
         }
     }
-    match first_assistant_message {
-        Some(first_assistant_message) => {
-            first_assistant_message.tool_calls = Some(tool_calls);
+    match first_assistant_message_index {
+        Some(index) => {
+            if let Some(OpenAIRequestMessage::Assistant(msg)) = messages.get_mut(index) {
+                msg.tool_calls = Some(tool_calls);
+            }
         }
         None => {
             messages.push(OpenAIRequestMessage::Assistant(
@@ -659,7 +658,7 @@ fn openai_to_tensorzero_stream_message(
         for tool_call in tool_calls {
             let index = tool_call.index;
             let id = match tool_call.id {
-                Some(id) => {tool_call_ids.push(id); id}
+                Some(id) => {tool_call_ids.push(id.clone()); id}
                 None => {
                     tool_call_ids.get(index as usize).ok_or(Error::OpenAIServer {
                         message: "Tool call index out of bounds (meaning we haven't see this many ids in the stream)".to_string(),
@@ -667,7 +666,7 @@ fn openai_to_tensorzero_stream_message(
                 }
             };
             let name = match tool_call.function.name {
-                Some(name) => {tool_names.push(name); name}
+                Some(name) => {tool_names.push(name.clone()); name}
                 None => {
                     tool_names.get(index as usize).ok_or(Error::OpenAIServer {
                         message: "Tool call index out of bounds (meaning we haven't see this many names in the stream)".to_string(),

@@ -310,7 +310,7 @@ mod tests {
             DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW, DUMMY_INFER_USAGE,
             DUMMY_STREAMING_RESPONSE,
         },
-        types::FunctionType,
+        types::{ContentBlockChunk, FunctionType, JSONMode, ToolChoice},
     };
     use tokio_stream::StreamExt;
 
@@ -332,19 +332,23 @@ mod tests {
         // Try inferring the good model only
         let request = ModelInferenceRequest {
             messages: vec![],
+            system_instructions: None,
             tools_available: None,
-            tool_choice: None,
+            tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             temperature: None,
             max_tokens: None,
             stream: false,
-            json_mode: false,
+            json_mode: JSONMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
         };
         let response = model_config.infer(&request, &Client::new()).await.unwrap();
-        let content = response.content.unwrap();
-        assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
+        let content = response.content;
+        assert_eq!(
+            content,
+            vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()]
+        );
         let raw = response.raw_response;
         assert_eq!(raw, DUMMY_INFER_RESPONSE_RAW);
         let usage = response.usage;
@@ -377,8 +381,11 @@ mod tests {
             ]),
         };
         let response = model_config.infer(&request, &Client::new()).await.unwrap();
-        let content = response.content.unwrap();
-        assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
+        let content = response.content;
+        assert_eq!(
+            content,
+            vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()]
+        );
         let raw = response.raw_response;
         assert_eq!(raw, DUMMY_INFER_RESPONSE_RAW);
         let usage = response.usage;
@@ -397,13 +404,14 @@ mod tests {
 
         let request = ModelInferenceRequest {
             messages: vec![],
+            system_instructions: None,
             tools_available: None,
-            tool_choice: None,
+            tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             temperature: None,
             max_tokens: None,
             stream: true,
-            json_mode: false,
+            json_mode: JSONMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -419,17 +427,25 @@ mod tests {
             .unwrap();
         assert_eq!(
             initial_chunk.content,
-            Some(DUMMY_STREAMING_RESPONSE[0].to_string())
+            vec![DUMMY_STREAMING_RESPONSE[0].to_string().into()],
         );
 
-        let mut collected_content = initial_chunk.content.unwrap_or_default();
+        let mut collected_content: Vec<ContentBlockChunk> =
+            vec![DUMMY_STREAMING_RESPONSE[0].to_string().into()];
         let mut stream = Box::pin(stream);
         while let Some(Ok(chunk)) = stream.next().await {
-            if let Some(content) = chunk.content {
-                collected_content.push_str(&content);
+            let content = chunk.content;
+            assert_eq!(content.len(), 1);
+            collected_content.push(content.pop().unwrap());
+        }
+        let mut collected_content_str = String::new();
+        for content in collected_content {
+            match content {
+                ContentBlockChunk::Text(text) => collected_content_str.push_str(&text.text),
+                _ => unreachable!(),
             }
         }
-        assert_eq!(collected_content, DUMMY_STREAMING_RESPONSE.join(""));
+        assert_eq!(collected_content_str, DUMMY_STREAMING_RESPONSE.join(""));
 
         // Test bad model
         let model_config = ModelConfig {
@@ -465,17 +481,24 @@ mod tests {
             .unwrap();
         assert_eq!(
             initial_chunk.content,
-            Some(DUMMY_STREAMING_RESPONSE[0].to_string())
+            vec![DUMMY_STREAMING_RESPONSE[0].to_string().into()]
         );
 
-        let mut collected_content = initial_chunk.content.unwrap_or_default();
+        let mut collected_content = initial_chunk.content;
         let mut stream = Box::pin(stream);
         while let Some(Ok(chunk)) = stream.next().await {
-            if let Some(content) = chunk.content {
-                collected_content.push_str(&content);
+            let mut content = chunk.content;
+            assert_eq!(content.len(), 1);
+            collected_content.push(content.pop().unwrap());
+        }
+        let mut collected_content_str = String::new();
+        for content in collected_content {
+            match content {
+                ContentBlockChunk::Text(text) => collected_content_str.push_str(&text.text),
+                _ => unreachable!(),
             }
         }
-        assert_eq!(collected_content, DUMMY_STREAMING_RESPONSE.join(""));
+        assert_eq!(collected_content_str, DUMMY_STREAMING_RESPONSE.join(""));
         // TODO (#84): assert that an error was logged then do it in the other order and assert that one was not.
     }
 }

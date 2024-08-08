@@ -17,7 +17,7 @@ use crate::function::{sample_variant, FunctionConfig};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
     collect_chunks, Inference, InferenceResponse, InferenceResponseChunk, InferenceResponseStream,
-    Input, InputMessage, ModelInferenceResponseChunk,
+    Input, InputMessage, ModelInferenceResponseChunk, ToolChoice,
 };
 use crate::variant::Variant;
 
@@ -242,7 +242,8 @@ fn create_stream(
             .increment(1);
 
             let inference_response: Result<InferenceResponse, Error> =
-                collect_chunks(buffer, function.output_schema());
+                // TODO (#30): probably get this from FunctionConfig
+                collect_chunks(buffer, function.output_schema(), ToolChoice::None);
             let inference_response = inference_response.ok_or_log();
 
             if let Some(inference_response) = inference_response {
@@ -351,8 +352,7 @@ mod tests {
         // Test case 1: Valid ModelInferenceResponseChunk
         let chunk = ModelInferenceResponseChunk {
             inference_id: Uuid::now_v7(),
-            content: Some("Test content".to_string()),
-            tool_calls: None,
+            content: vec!["Test content".to_string().into()],
             created: 0,
             usage: None,
             raw_response: "".to_string(),
@@ -369,7 +369,10 @@ mod tests {
             function_name: "test_function".to_string(),
             variant_name: "test_variant".to_string(),
             episode_id: Uuid::now_v7(),
-            input: vec![],
+            input: Input {
+                messages: vec![],
+                system: None,
+            },
             dryrun: false,
             start_time: Instant::now(),
         };

@@ -642,12 +642,12 @@ fn anthropic_to_tensorzero_stream_message(
                 Ok(Some(ModelInferenceResponseChunk::new(
                     inference_id,
                     vec![ContentBlockChunk::ToolCall(ToolCallChunk {
-                        name: current_tool_name.ok_or(Error::AnthropicServer {
+                        name: current_tool_name.clone().ok_or(Error::AnthropicServer {
                             message: "Got InputJsonDelta chunk from Anthropic without current tool name being set by a ToolUse".to_string(),
-                        })?.clone(),
-                        id: current_tool_id.ok_or(Error::AnthropicServer {
+                        })?,
+                        id: current_tool_id.clone().ok_or(Error::AnthropicServer {
                             message: "Got InputJsonDelta chunk from Anthropic without current tool id being set by a ToolUse".to_string(),
-                        })?.clone(),
+                        })?,
                         arguments: partial_json,
                     })],
                     None,

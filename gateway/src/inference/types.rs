@@ -39,7 +39,7 @@ use crate::{error::Error, jsonschema_util::JSONSchemaFromPath};
 /// Alongside the response, we also store information about what happened during the request.
 /// For this we convert the InferenceResponse into an Inference and ModelInferences, which are written to ClickHouse asynchronously.
 
-/// InputMessage and InputMessageRole are our representation of the input sent by the client
+/// InputMessage and Role are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Input {
@@ -47,7 +47,7 @@ pub struct Input {
     pub messages: Vec<InputMessage>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum Role {
     User,
