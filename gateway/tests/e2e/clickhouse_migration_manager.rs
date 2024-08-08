@@ -8,15 +8,13 @@ lazy_static::lazy_static! {
 
 #[tokio::test]
 async fn test_clickhouse_migration_manager() {
-    let database = uuid::Uuid::now_v7().simple().to_string();
+    let database = format!(
+        "tensorzero_e2e_tests_migration_manager_{}",
+        uuid::Uuid::now_v7().simple()
+    );
 
-    let clickhouse = ClickHouseConnectionInfo::new(
-        &CLICKHOUSE_URL,
-        &format!("tensorzero_e2e_tests_migration_manager_{database}"),
-        false,
-        None,
-    )
-    .unwrap();
+    let clickhouse =
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, &database, false, None).unwrap();
 
     // NOTE:
     // We need to split the test into two sub-functions so we can reset `traced_test`'s subscriber between each call.
@@ -52,7 +50,7 @@ async fn test_clickhouse_migration_manager() {
     tracing::info!("Attempting to drop test database: {database}");
 
     clickhouse
-        .run_query(format!("DROP DATABASE IF EXISTS {database}"))
+        .run_query(format!("DROP DATABASE {database}"))
         .await
         .unwrap();
 }
