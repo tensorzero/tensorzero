@@ -153,8 +153,16 @@ impl TryFrom<ConverseOutputWithLatency> for ModelInferenceResponse {
 
     fn try_from(value: ConverseOutputWithLatency) -> Result<Self, Self::Error> {
         let ConverseOutputWithLatency { output, latency } = value;
-        // TODO (#79): is there something we can do about this?
-        let raw = format!("{:?}", output); // AWS SDK doesn't implement Serialize :(
+
+        // NOTE: AWS SDK doesn't implement Serialize :(
+        // Therefore, we construct this unusual JSON object to store the raw output
+        //
+        // This feature request has been pending since 2022:
+        // https://github.com/awslabs/aws-sdk-rust/issues/645
+        let raw = serde_json::to_string(&serde_json::json!({"debug": format!("{:?}", output)}))
+            .map_err(|e| Error::AWSBedrockServer {
+                message: format!("Error parsing response from AWS Bedrock: {e}"),
+            })?;
 
         let message = match output.output {
             Some(ConverseOutputType::Message(message)) => Some(message),
