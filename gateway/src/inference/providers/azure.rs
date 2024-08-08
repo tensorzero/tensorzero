@@ -225,18 +225,14 @@ mod tests {
 
     use crate::inference::{
         providers::openai::OpenAIToolChoiceString,
-        types::{
-            FunctionType, InferenceRequestMessage, Tool, ToolChoice, ToolType,
-            UserInferenceRequestMessage,
-        },
+        types::{ContentBlock, FunctionType, RequestMessage, Role, Tool, ToolChoice},
     };
 
     #[test]
     fn test_azure_request_new() {
-        let tool = Tool {
+        let tool = Tool::Function {
             name: "get_weather".to_string(),
             description: Some("Get the current weather".to_string()),
-            r#type: ToolType::Function,
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -250,9 +246,11 @@ mod tests {
         };
 
         let request_with_tools = ModelInferenceRequest {
-            messages: vec![InferenceRequestMessage::User(UserInferenceRequestMessage {
-                content: "What's the weather?".to_string(),
-            })],
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec![ContentBlock::Text("What's the weather?".to_string())],
+            }],
+            system_instructions: None,
             temperature: None,
             max_tokens: None,
             stream: false,

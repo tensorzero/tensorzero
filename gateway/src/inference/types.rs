@@ -113,8 +113,9 @@ impl Default for FunctionType {
 /// and even specify which tool to be used.
 ///
 /// This enum is used to denote this tool choice.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default, Serialize)]
 pub enum ToolChoice {
+    #[default]
     None,
     Auto,
     Required,
@@ -126,15 +127,12 @@ pub enum ToolChoice {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Function {
-    pub description: Option<String>,
-    pub name: String,
-    pub parameters: Value,
-}
-
-#[derive(Clone, Debug, PartialEq)]
 pub enum Tool {
-    Function(Function),
+    Function {
+        description: Option<String>,
+        name: String,
+        parameters: Value,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -157,8 +155,8 @@ pub enum Role {
     Assistant,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum Content {
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub enum ContentBlock {
     Text(String),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
@@ -167,7 +165,7 @@ pub enum Content {
 #[derive(Clone, Debug, PartialEq)]
 pub struct RequestMessage {
     pub role: Role,
-    pub content: Vec<Content>,
+    pub content: Vec<ContentBlock>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
@@ -192,7 +190,7 @@ pub enum Latency {
 pub struct ModelInferenceResponse {
     pub id: Uuid,
     pub created: u64,
-    pub content: Vec<Content>,
+    pub content: Vec<ContentBlock>,
     pub raw_response: String,
     pub usage: Usage,
     pub latency: Latency,
@@ -239,7 +237,7 @@ impl ModelInference {
 }
 
 impl ModelInferenceResponse {
-    pub fn new(content: Vec<Content>, raw: String, usage: Usage, latency: Latency) -> Self {
+    pub fn new(content: Vec<ContentBlock>, raw: String, usage: Usage, latency: Latency) -> Self {
         Self {
             id: Uuid::now_v7(),
             created: current_timestamp(),
@@ -257,7 +255,7 @@ pub struct ChatInferenceResponse {
     inference_id: Uuid,
     created: u64,
     pub parsed_output: Option<Value>,
-    pub content_blocks: Vec<Content>,
+    pub content_blocks: Vec<ContentBlock>,
     pub usage: Usage,
     #[serde(skip_serializing)]
     pub model_inference_responses: Vec<ModelInferenceResponse>,
@@ -266,7 +264,7 @@ pub struct ChatInferenceResponse {
 impl ChatInferenceResponse {
     pub fn new(
         inference_id: Uuid,
-        raw_content: Vec<Content>,
+        raw_content: Vec<ContentBlock>,
         usage: Usage,
         model_inference_responses: Vec<ModelInferenceResponse>,
         output_schema: Option<&JSONSchemaFromPath>,
@@ -294,7 +292,7 @@ impl ChatInferenceResponse {
     }
 
     fn parse_output(
-        content: &Vec<Content>,
+        content: &Vec<ContentBlock>,
         output_schema: &JSONSchemaFromPath,
         tool_choice: ToolChoice,
     ) -> Result<Value, Error> {
@@ -305,11 +303,11 @@ impl ChatInferenceResponse {
             });
         }
         match tool_choice {
-            Some(ToolChoice::Implicit) => {
+            ToolChoice::Implicit => {
                 // TODO: grab the last tool call, parse the arguments passed, and return the result
                 for content in content.iter().rev() {
                     let arguments = match content {
-                        Content::ToolCall(tool_call) => tool_call.arguments,
+                        ContentBlock::ToolCall(tool_call) => tool_call.arguments,
                         _ => continue,
                     };
                     let parsed_arguments =
@@ -324,12 +322,16 @@ impl ChatInferenceResponse {
                     })?;
                     return Ok(parsed_arguments);
                 }
+                return Err(Error::OutputParsing {
+                    raw_output: "".to_string(),
+                    message: "Output parsing failed due to no tool calls".to_string(),
+                });
             }
             _ => {
                 // grab the last text content block, parse it, and return
                 for content in content.iter().rev() {
                     let text = match content {
-                        Content::Text(text) => text,
+                        ContentBlock::Text(text) => text,
                         _ => continue,
                     };
                     let parsed_text =
@@ -344,6 +346,10 @@ impl ChatInferenceResponse {
                         })?;
                     return Ok(parsed_text);
                 }
+                return Err(Error::OutputParsing {
+                    raw_output: "".to_string(),
+                    message: "Output parsing failed due to no text content".to_string(),
+                });
             }
         }
     }
@@ -418,16 +424,22 @@ fn current_timestamp() -> u64 {
         .as_secs()
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum ContentChunk {
-    Text(String),
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct TextChunk {
+    pub text: String,
+    pub id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub enum ContentBlockChunk {
+    Text(TextChunk),
     ToolCall(ToolCallChunk),
 }
 
 #[derive(Debug, Clone)]
 pub struct ModelInferenceResponseChunk {
     pub inference_id: Uuid,
-    pub content: Vec<ContentChunk>,
+    pub content: Vec<ContentBlockChunk>,
     pub created: u64,
     pub usage: Option<Usage>,
     pub raw_response: String,
@@ -437,7 +449,7 @@ pub struct ModelInferenceResponseChunk {
 impl ModelInferenceResponseChunk {
     pub fn new(
         inference_id: Uuid,
-        content: Vec<ContentChunk>,
+        content: Vec<ContentBlockChunk>,
         usage: Option<Usage>,
         raw: String,
         latency: Duration,
@@ -456,7 +468,7 @@ impl ModelInferenceResponseChunk {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ChatInferenceResponseChunk {
     pub inference_id: Uuid,
-    pub content: Vec<ContentChunk>,
+    pub content: Vec<ContentBlockChunk>,
     pub created: u64,
     pub usage: Option<Usage>,
 }
@@ -491,7 +503,8 @@ pub fn collect_chunks(
                 .to_string(),
         })?
         .inference_id;
-    let mut blocks: HashMap<String, Content> = HashMap::new();
+    let mut tool_call_blocks: HashMap<String, ContentBlock> = HashMap::new();
+    let mut text_blocks: HashMap<String, ContentBlock> = HashMap::new();
     let raw: String = value
         .iter()
         .map(|chunk| chunk.raw_response.as_str())
@@ -510,36 +523,32 @@ pub fn collect_chunks(
     for chunk in value {
         for content in chunk.content {
             match content {
-                ContentChunk::Text(text) => {
-                    match blocks.get_mut("text") {
+                ContentBlockChunk::Text(text) => {
+                    match text_blocks.get_mut(&text.id) {
                         // If there is already a text block, append to it
-                        Some(Content::Text(existing_text)) => {
+                        Some(ContentBlock::Text(existing_text)) => {
                             existing_text.push_str(&text);
                         }
                         // If there is no text block, create one
                         _ => {
-                            blocks.insert("text".to_string(), Content::Text(text));
+                            text_blocks.insert(text.id, ContentBlock::Text(text));
                         }
                     }
                 }
-                ContentChunk::ToolCall(tool_call) => match tool_call.id {
-                    Some(id) => {
-                        if id != last_tool_call_id {
-                            last_tool_call_id = Some(id);
-                            blocks.insert(id, Content::ToolCall(tool_call));
+                ContentBlockChunk::ToolCall(tool_call) => {
+                    match tool_call_blocks.get_mut(&tool_call.id) {
+                        // If there is already a tool call block with this id, append to it
+                        Some(ContentBlock::ToolCall(existing_tool_call)) => {
+                            existing_tool_call.arguments.push_str(&tool_call.arguments);
+                        }
+                        // If there is no tool call block, create one
+                        _ => {
+                            tool_call_blocks
+                                .insert(tool_call.id, ContentBlock::ToolCall(tool_call));
                         }
                     }
-                    None => match last_tool_call_id {
-                        Some(id) => {
-                            blocks.insert(id, Content::ToolCall(tool_call));
-                        }
-                        None => {
-                            last_tool_call_id = Some("tool".to_string());
-                            blocks.insert("tool".to_string(), Content::ToolCall(tool_call));
-                        }
-                    },
-                },
-            }
+                }
+            };
         }
         if let Some(chunk_usage) = chunk.usage {
             usage.prompt_tokens = usage
@@ -558,7 +567,8 @@ pub fn collect_chunks(
         ttft,
         response_time,
     };
-    let content_blocks: Vec<Content> = blocks.into_values().collect();
+    let mut content_blocks: Vec<ContentBlock> = tool_call_blocks.into_values().collect();
+    content_blocks.extend(text_blocks.into_values());
     let model_response = ModelInferenceResponse::new(
         content_blocks.clone(),
         raw.clone(),
@@ -577,9 +587,9 @@ pub fn collect_chunks(
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ToolCallChunk {
-    pub id: Option<String>,
-    pub name: Option<String>,
-    pub arguments: Option<String>,
+    pub id: String,
+    pub name: String,
+    pub arguments: String,
 }
 
 impl From<ToolCallChunk> for ToolCall {
@@ -587,9 +597,9 @@ impl From<ToolCallChunk> for ToolCall {
         // TODO (#30): explicitly handle tools both for streaming and non-streaming
         // as well as for Chat and Tool-style Functions
         Self {
-            id: tool_call.id.unwrap_or_default(),
-            name: tool_call.name.unwrap_or_default(),
-            arguments: tool_call.arguments.unwrap_or_default(),
+            id: tool_call.id,
+            name: tool_call.name,
+            arguments: tool_call.arguments,
         }
     }
 }
@@ -606,15 +616,14 @@ mod tests {
         // TODO (#30): handle the tool call case here. For now, we will always set those values to None.
         // Case 1: No output schema
         let inference_id = Uuid::now_v7();
-        let content = Some("Hello, world!".to_string());
+        let content = vec![ContentBlock::Text("Hello, world!".to_string())];
         let tool_calls = None;
         let usage = Usage {
             prompt_tokens: 10,
             completion_tokens: 20,
         };
         let model_inference_responses = vec![ModelInferenceResponse::new(
-            content.clone(),
-            tool_calls.clone(),
+            content,
             "".to_string(),
             usage.clone(),
             Latency::NonStreaming {
@@ -624,10 +633,10 @@ mod tests {
         let chat_inference_response = ChatInferenceResponse::new(
             inference_id,
             content.clone(),
-            tool_calls.clone(),
             usage.clone(),
             model_inference_responses,
             None,
+            Tool::None,
         );
         let parsed_content = content.as_ref().map(|c| Value::String(c.clone()));
         assert_eq!(chat_inference_response.inference_id, inference_id);
@@ -639,7 +648,7 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let created = current_timestamp();
         let json_content = r#"{"name": "John", "age": 30}"#.to_string();
-        let tool_calls = None;
+        let content = vec![ContentBlock::Text(json_content.clone())];
         let usage = Usage {
             prompt_tokens: 15,
             completion_tokens: 25,
@@ -649,9 +658,8 @@ mod tests {
             response_time: Duration::from_millis(400),
         };
         let model_inference_responses = vec![ModelInferenceResponse::new(
-            Some(json_content.clone()),
-            tool_calls.clone(),
-            json_content.clone(),
+            content.clone(),
+            "".to_string(),
             usage.clone(),
             latency.clone(),
         )];
@@ -668,11 +676,11 @@ mod tests {
 
         let chat_inference_response = ChatInferenceResponse::new(
             inference_id,
-            Some(json_content.clone()),
-            tool_calls.clone(),
+            content.clone(),
             usage.clone(),
             model_inference_responses,
             Some(&output_schema),
+            Tool::None,
         );
 
         assert_eq!(chat_inference_response.inference_id, inference_id);
@@ -688,11 +696,11 @@ mod tests {
 
         // TODO (#87): assert that the appropriate errors were logged in the next two test cases
         // Case 3: a JSON string that fails validation
-        let invalid_json_content = r#"{"name": "John", "age": "thirty"}"#.to_string();
+        let invalid_json = r#"{"name": "John", "age": "thirty"}"#.to_string();
+        let invalid_json_content = vec![ContentBlock::Text(invalid_json)];
         let model_inference_responses = vec![ModelInferenceResponse::new(
-            Some(invalid_json_content.clone()),
-            None,
             invalid_json_content.clone(),
+            "".to_string(),
             usage.clone(),
             Latency::NonStreaming {
                 response_time: Duration::from_millis(300),
@@ -701,11 +709,11 @@ mod tests {
 
         let chat_inference_response = ChatInferenceResponse::new(
             inference_id,
-            Some(invalid_json_content.clone()),
-            None,
+            invalid_json_content.clone(),
             usage.clone(),
             model_inference_responses,
             Some(&output_schema),
+            Tool::None,
         );
 
         assert_eq!(chat_inference_response.inference_id, inference_id);
@@ -722,9 +730,8 @@ mod tests {
         // Case 4: a malformed JSON
         let malformed_json = r#"{"name": "John", "age": 30,"#.to_string();
         let model_inference_responses = vec![ModelInferenceResponse::new(
-            Some(malformed_json.clone()),
-            None,
-            malformed_json.clone(),
+            vec![ContentBlock::Text(malformed_json.clone())],
+            "".to_string(),
             usage.clone(),
             Latency::NonStreaming {
                 response_time: Duration::from_millis(310),
@@ -734,10 +741,10 @@ mod tests {
         let chat_inference_response = ChatInferenceResponse::new(
             inference_id,
             Some(malformed_json.clone()),
-            None,
             usage.clone(),
             model_inference_responses,
             Some(&output_schema),
+            Tool::None,
         );
 
         assert_eq!(chat_inference_response.inference_id, inference_id);

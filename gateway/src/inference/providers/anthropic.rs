@@ -10,12 +10,12 @@ use uuid::Uuid;
 
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
-use crate::inference::types::Latency;
+use crate::inference::types::{ContentBlock, ContentBlockChunk, Latency, Role};
 use crate::{
     inference::types::{
-        InferenceRequestMessage, InferenceResponseStream, ModelInferenceRequest,
-        ModelInferenceResponse, ModelInferenceResponseChunk, Tool, ToolCall, ToolCallChunk,
-        ToolChoice, ToolType, Usage,
+        InferenceResponseStream, ModelInferenceRequest, ModelInferenceResponse,
+        ModelInferenceResponseChunk, RequestMessage, TextChunk, Tool, ToolCall, ToolCallChunk,
+        ToolChoice, Usage,
     },
     model::ProviderConfig,
 };
@@ -144,6 +144,8 @@ fn stream_anthropic(
 ) -> impl Stream<Item = Result<ModelInferenceResponseChunk, Error>> {
     async_stream::stream! {
         let inference_id = Uuid::now_v7();
+        let mut current_tool_id : Option<String> = None;
+        let mut current_tool_name: Option<String> = None;
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
@@ -161,7 +163,6 @@ fn stream_anthropic(
                                     e, message.data
                                 ),
                             });
-
                         // Anthropic streaming API docs specify that this is the last message
                         if let Ok(AnthropicStreamMessage::MessageStop) = data {
                             break;
@@ -172,6 +173,8 @@ fn stream_anthropic(
                                 data,
                                 inference_id,
                                 start_time.elapsed(),
+                                &mut current_tool_id,
+                                &mut current_tool_name,
                             )
                         });
 
@@ -198,6 +201,15 @@ enum AnthropicRole {
     Assistant,
 }
 
+impl From<Role> for AnthropicRole {
+    fn from(role: Role) -> Self {
+        match role {
+            Role::User => AnthropicRole::User,
+            Role::Assistant => AnthropicRole::Assistant,
+        }
+    }
+}
+
 /// We can instruct Anthropic to use a particular tool,
 /// any tool (but to use one), or to use a tool if needed.
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -221,6 +233,7 @@ impl<'a> TryFrom<&'a ToolChoice> for AnthropicToolChoice<'a> {
                 message: "Tool choice is None. Anthropic does not support tool choice None."
                     .to_string(),
             }),
+            ToolChoice::Implicit => Ok(AnthropicToolChoice::Tool { name: "respond" }),
         }
     }
 }
@@ -238,11 +251,15 @@ impl<'a> TryFrom<&'a Tool> for AnthropicTool<'a> {
 
     fn try_from(value: &'a Tool) -> Result<Self, Self::Error> {
         // In case we add more tool types in the future, the compiler will complain here.
-        match value.r#type {
-            ToolType::Function => Ok(AnthropicTool {
-                name: &value.name,
-                description: value.description.as_deref(),
-                input_schema: &value.parameters,
+        match value {
+            Tool::Function {
+                name,
+                description,
+                parameters,
+            } => Ok(AnthropicTool {
+                name: &name,
+                description: description.as_deref(),
+                input_schema: &parameters,
             }),
         }
     }
@@ -266,45 +283,41 @@ enum AnthropicMessageContent<'a> {
     }, // NB: Anthropic also supports Image blocks here but we won't for now
 }
 
+impl<'a> From<&'a ContentBlock> for AnthropicMessageContent<'a> {
+    fn from(block: &'a ContentBlock) -> Self {
+        match block {
+            ContentBlock::Text(text) => AnthropicMessageContent::Text { text },
+            ContentBlock::ToolCall(tool) => AnthropicMessageContent::ToolUse {
+                id: &tool.id,
+                name: &tool.name,
+                input: &tool.arguments,
+            },
+            ContentBlock::ToolResult(tool_result) => AnthropicMessageContent::ToolResult {
+                tool_use_id: &tool_result.id,
+                content: vec![AnthropicMessageContent::Text {
+                    text: &tool_result.result,
+                }],
+            },
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct AnthropicMessage<'a> {
     role: AnthropicRole,
     content: Vec<AnthropicMessageContent<'a>>,
 }
 
-impl<'a> TryFrom<&'a InferenceRequestMessage> for AnthropicMessage<'a> {
-    type Error = Error;
-    fn try_from(
-        inference_message: &'a InferenceRequestMessage,
-    ) -> Result<AnthropicMessage<'a>, Error> {
-        let (role, content) = match inference_message {
-            InferenceRequestMessage::System(_) => Err(Error::InvalidMessage {
-                message: "Can't convert System message to Anthropic message. Don't pass System message in except as the first message in the chat.".to_string(),
-            }),
-            InferenceRequestMessage::User(message) => Ok((AnthropicRole::User, vec![AnthropicMessageContent::Text { text: &message.content }])),
-            InferenceRequestMessage::Assistant(message) => {
-                let mut content = vec![];
-                if let Some(text) = &message.content {
-                    content.push(AnthropicMessageContent::Text { text });
-                }
-                for tool_call in message.tool_calls.as_ref().map(|v| v.iter()).unwrap_or_default() {
-                    content.push(AnthropicMessageContent::ToolUse {
-                        id: &tool_call.id,
-                        name: &tool_call.name,
-                        input: &tool_call.arguments,
-                    });
-                }
-                Ok((AnthropicRole::Assistant, content))
-            }
-            InferenceRequestMessage::Tool(message) =>
-                Ok((AnthropicRole::User, vec![AnthropicMessageContent::ToolResult {
-                    tool_use_id: &message.tool_call_id,
-                    content: vec![AnthropicMessageContent::Text {
-                        text: &message.content,
-                    }],
-                }]))
-        }?;
-        Ok(AnthropicMessage { role, content })
+impl<'a> From<&'a RequestMessage> for AnthropicMessage<'a> {
+    fn from(inference_message: &'a RequestMessage) -> AnthropicMessage<'a> {
+        AnthropicMessage {
+            role: inference_message.role.into(),
+            content: inference_message
+                .content
+                .iter()
+                .map(|block| block.into())
+                .collect(),
+        }
     }
 }
 
@@ -336,24 +349,15 @@ impl<'a> AnthropicRequestBody<'a> {
                 message: "Anthropic requires at least one message".to_string(),
             });
         }
-        let first_message = &request.messages[0];
-        let (system, request_messages) = match first_message {
-            InferenceRequestMessage::System(message) => {
-                (Some(message.content.as_str()), &request.messages[1..])
-            }
-            _ => (None, &request.messages[..]),
-        };
-        let messages: Vec<AnthropicMessage> = prepare_messages(
-            request_messages
-                .iter()
-                .map(AnthropicMessage::try_from)
-                .collect::<Result<Vec<_>, _>>()?,
-        )?;
-        let tool_choice = request
-            .tool_choice
-            .as_ref()
-            .map(AnthropicToolChoice::try_from)
-            .transpose()?;
+        let system = request.system_instructions.as_deref();
+        let request_messages: Vec<AnthropicMessage> = request
+            .messages
+            .iter()
+            .map(|m| AnthropicMessage::from(m))
+            .collect();
+        let messages = prepare_messages(request_messages)?;
+        let tool_choice: Option<AnthropicToolChoice> =
+            AnthropicToolChoice::try_from(&request.tool_choice).ok();
         let tools = request
             .tools_available
             .as_ref()
@@ -467,6 +471,26 @@ pub enum AnthropicContentBlock {
     },
 }
 
+impl TryFrom<AnthropicContentBlock> for ContentBlock {
+    type Error = Error;
+    fn try_from(block: AnthropicContentBlock) -> Result<Self, Self::Error> {
+        match block {
+            AnthropicContentBlock::Text { text } => Ok(ContentBlock::Text(text)),
+            AnthropicContentBlock::ToolUse { id, name, input } => {
+                Ok(ContentBlock::ToolCall(ToolCall {
+                    id,
+                    name,
+                    arguments: serde_json::to_string(&input).map_err(|e| {
+                        Error::AnthropicServer {
+                            message: format!("Error parsing input for tool call: {e}"),
+                        }
+                    })?,
+                }))
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct AnthropicUsage {
     input_tokens: u32,
@@ -507,34 +531,14 @@ impl TryFrom<AnthropicResponseBodyWithLatency> for ModelInferenceResponse {
         let raw = serde_json::to_string(&body).map_err(|e| Error::AnthropicServer {
             message: format!("Error parsing response from Anthropic: {e}"),
         })?;
-        let mut message_text: Option<String> = None;
-        let mut tool_calls: Option<Vec<ToolCall>> = None;
-        // Anthropic responses can in principle contain multiple content blocks.
-        // We stack them into one response to match our response types.
-        for block in body.content {
-            match block {
-                AnthropicContentBlock::Text { text } => match message_text {
-                    Some(message) => message_text = Some(format!("{}\n{}", message, text)),
-                    None => message_text = Some(text),
-                },
-                AnthropicContentBlock::ToolUse { id, name, input } => {
-                    let tool_call = ToolCall {
-                        name,
-                        arguments: input.to_string(),
-                        id,
-                    };
-                    if let Some(calls) = tool_calls.as_mut() {
-                        calls.push(tool_call);
-                    } else {
-                        tool_calls = Some(vec![tool_call]);
-                    }
-                }
-            }
-        }
+        let content: Vec<ContentBlock> = body
+            .content
+            .into_iter()
+            .map(|block| block.try_into())
+            .collect::<Result<Vec<_>, _>>()?;
 
         Ok(ModelInferenceResponse::new(
-            message_text,
-            tool_calls,
+            content,
             raw,
             body.usage.into(),
             latency,
@@ -581,42 +585,6 @@ enum AnthropicMessageBlock {
     },
 }
 
-struct StreamMessage {
-    message: Option<String>,
-    tool_calls: Option<Vec<ToolCallChunk>>,
-}
-
-impl From<AnthropicMessageBlock> for StreamMessage {
-    fn from(block: AnthropicMessageBlock) -> Self {
-        match block {
-            AnthropicMessageBlock::Text { text } => StreamMessage {
-                message: Some(text),
-                tool_calls: None,
-            },
-            AnthropicMessageBlock::TextDelta { text } => StreamMessage {
-                message: Some(text),
-                tool_calls: None,
-            },
-            AnthropicMessageBlock::ToolUse { id, name, input } => StreamMessage {
-                message: None,
-                tool_calls: Some(vec![ToolCallChunk {
-                    id: Some(id),
-                    name: Some(name),
-                    arguments: Some(input.to_string()),
-                }]),
-            },
-            AnthropicMessageBlock::InputJsonDelta { partial_json } => StreamMessage {
-                message: None,
-                tool_calls: Some(vec![ToolCallChunk {
-                    id: None,
-                    name: None,
-                    arguments: Some(partial_json),
-                }]),
-            },
-        }
-    }
-}
-
 #[derive(Deserialize, Debug, Serialize)]
 #[allow(dead_code)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -650,33 +618,88 @@ fn anthropic_to_tensorzero_stream_message(
     message: AnthropicStreamMessage,
     inference_id: Uuid,
     message_latency: Duration,
+    current_tool_id: &mut Option<String>,
+    current_tool_name: &mut Option<String>,
 ) -> Result<Option<ModelInferenceResponseChunk>, Error> {
     let raw_message = serde_json::to_string(&message).map_err(|e| Error::AnthropicServer {
         message: format!("Error parsing response from Anthropic: {e}"),
     })?;
     match message {
-        AnthropicStreamMessage::ContentBlockDelta { delta, .. } => {
-            let message: StreamMessage = delta.into();
-            Ok(Some(ModelInferenceResponseChunk::new(
-                inference_id,
-                message.message,
-                message.tool_calls,
-                None,
-                raw_message,
-                message_latency,
-            )))
-        }
-        AnthropicStreamMessage::ContentBlockStart { content_block, .. } => {
-            let message: StreamMessage = content_block.into();
-            Ok(Some(ModelInferenceResponseChunk::new(
-                inference_id,
-                message.message,
-                message.tool_calls,
-                None,
-                raw_message,
-                message_latency,
-            )))
-        }
+        AnthropicStreamMessage::ContentBlockDelta { delta, index } => match delta {
+            AnthropicMessageBlock::TextDelta { text } => {
+                Ok(Some(ModelInferenceResponseChunk::new(
+                    inference_id,
+                    vec![ContentBlockChunk::Text(TextChunk {
+                        text,
+                        id: index.to_string(),
+                    })],
+                    None,
+                    raw_message,
+                    message_latency,
+                )))
+            }
+            AnthropicMessageBlock::InputJsonDelta { partial_json } => {
+                Ok(Some(ModelInferenceResponseChunk::new(
+                    inference_id,
+                    vec![ContentBlockChunk::ToolCall(ToolCallChunk {
+                        name: current_tool_name.ok_or(Error::AnthropicServer {
+                            message: "Got InputJsonDelta chunk from Anthropic without current tool name being set by a ToolUse".to_string(),
+                        })?.clone(),
+                        id: current_tool_id.ok_or(Error::AnthropicServer {
+                            message: "Got InputJsonDelta chunk from Anthropic without current tool id being set by a ToolUse".to_string(),
+                        })?.clone(),
+                        arguments: partial_json,
+                    })],
+                    None,
+                    raw_message,
+                    message_latency,
+                )))
+            }
+            _ => Err(Error::AnthropicServer {
+                message: "Unsupported content block type for ContentBlockDelta".to_string(),
+            }),
+        },
+        AnthropicStreamMessage::ContentBlockStart {
+            content_block,
+            index,
+        } => match content_block {
+            AnthropicMessageBlock::Text { text } => {
+                let text_chunk = ContentBlockChunk::Text(TextChunk {
+                    text,
+                    id: index.to_string(),
+                });
+                Ok(Some(ModelInferenceResponseChunk::new(
+                    inference_id,
+                    vec![text_chunk],
+                    None,
+                    raw_message,
+                    message_latency,
+                )))
+            }
+            AnthropicMessageBlock::ToolUse { id, name, input } => {
+                // This is a new tool call, update the ID for future chunks
+                *current_tool_id = Some(id.clone());
+                *current_tool_name = Some(name.clone());
+                Ok(Some(ModelInferenceResponseChunk::new(
+                    inference_id,
+                    vec![ContentBlockChunk::ToolCall(ToolCallChunk {
+                        id,
+                        name,
+                        arguments: serde_json::to_string(&input).map_err(|e| {
+                            Error::AnthropicServer {
+                                message: format!("Error parsing input for tool call: {e}"),
+                            }
+                        })?,
+                    })],
+                    None,
+                    raw_message,
+                    message_latency,
+                )))
+            }
+            _ => Err(Error::AnthropicServer {
+                message: "Unsupported content block type".to_string(),
+            }),
+        },
         AnthropicStreamMessage::ContentBlockStop { .. } => Ok(None),
         AnthropicStreamMessage::Error { error } => Err(Error::AnthropicServer {
             message: error.to_string(),
@@ -685,8 +708,7 @@ fn anthropic_to_tensorzero_stream_message(
             let usage = parse_usage_info(&usage);
             Ok(Some(ModelInferenceResponseChunk::new(
                 inference_id,
-                None,
-                None,
+                vec![],
                 Some(usage.into()),
                 raw_message,
                 message_latency,
@@ -697,8 +719,7 @@ fn anthropic_to_tensorzero_stream_message(
                 let usage = parse_usage_info(usage_info);
                 Ok(Some(ModelInferenceResponseChunk::new(
                     inference_id,
-                    None,
-                    None,
+                    vec![],
                     Some(usage.into()),
                     raw_message,
                     message_latency,
@@ -728,14 +749,11 @@ fn parse_usage_info(usage_info: &Value) -> AnthropicUsage {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     use serde_json::json;
 
-    use crate::inference::types::{
-        AssistantInferenceRequestMessage, FunctionType, SystemInferenceRequestMessage,
-        ToolInferenceRequestMessage, UserInferenceRequestMessage,
-    };
-
-    use super::*;
+    use crate::inference::types::{FunctionType, JSONMode, Tool, ToolResult};
 
     #[test]
     fn test_try_from_tool_choice() {
@@ -768,14 +786,21 @@ mod tests {
             anthropic_tool_choice.unwrap(),
             AnthropicToolChoice::Tool { name: "test" }
         );
+
+        let tool_choice = ToolChoice::Implicit;
+        let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_choice);
+        assert!(anthropic_tool_choice.is_ok());
+        assert_eq!(
+            anthropic_tool_choice.unwrap(),
+            AnthropicToolChoice::Tool { name: "respond" }
+        );
     }
 
     #[test]
     fn test_try_from_tool() {
-        let tool = Tool {
+        let tool = Tool::Function {
             name: "test".to_string(),
             description: Some("test".to_string()),
-            r#type: ToolType::Function,
             parameters: Value::Null,
         };
         let anthropic_tool = AnthropicTool::try_from(&tool);
@@ -791,12 +816,41 @@ mod tests {
     }
 
     #[test]
-    fn test_try_from_inference_request_message() {
+    fn test_try_from_content_block() {
+        let text_content_block = ContentBlock::Text("test".to_string());
+        let anthropic_content_block = AnthropicMessageContent::try_from(&text_content_block);
+        assert!(anthropic_content_block.is_ok());
+        assert_eq!(
+            anthropic_content_block.unwrap(),
+            AnthropicMessageContent::Text { text: "test" }
+        );
+
+        let tool_call_content_block = ContentBlock::ToolCall(ToolCall {
+            id: "test_id".to_string(),
+            name: "test_name".to_string(),
+            arguments: serde_json::to_string(&json!({"type": "string"})).unwrap(),
+        });
+        let anthropic_content_block = AnthropicMessageContent::try_from(&tool_call_content_block);
+        assert!(anthropic_content_block.is_ok());
+        assert_eq!(
+            anthropic_content_block.unwrap(),
+            AnthropicMessageContent::ToolUse {
+                id: "test_id",
+                name: "test_name",
+                input: serde_json::to_string(&json!({"type": "string"}))
+                    .unwrap()
+                    .as_str(),
+            }
+        );
+    }
+
+    #[test]
+    fn test_try_from_request_message() {
         // Test a User message
-        let inference_request_message =
-            InferenceRequestMessage::User(UserInferenceRequestMessage {
-                content: "test".to_string(),
-            });
+        let inference_request_message = RequestMessage {
+            role: Role::User,
+            content: vec![ContentBlock::Text("test".to_string())],
+        };
         let anthropic_message = AnthropicMessage::try_from(&inference_request_message);
         assert!(anthropic_message.is_ok());
         assert_eq!(
@@ -808,11 +862,10 @@ mod tests {
         );
 
         // Test an Assistant message
-        let inference_request_message =
-            InferenceRequestMessage::Assistant(AssistantInferenceRequestMessage {
-                content: Some("test_assistant".to_string()),
-                tool_calls: None,
-            });
+        let inference_request_message = RequestMessage {
+            role: Role::Assistant,
+            content: vec![ContentBlock::Text("test_assistant".to_string())],
+        };
         let anthropic_message = AnthropicMessage::try_from(&inference_request_message);
         assert!(anthropic_message.is_ok());
         assert_eq!(
@@ -826,11 +879,14 @@ mod tests {
         );
 
         // Test a Tool message
-        let inference_request_message =
-            InferenceRequestMessage::Tool(ToolInferenceRequestMessage {
-                content: "test_tool_response".to_string(),
-                tool_call_id: "test_tool_call_id".to_string(),
-            });
+        let inference_request_message = RequestMessage {
+            role: Role::User,
+            content: vec![ContentBlock::ToolResult(ToolResult {
+                id: "test_tool_call_id".to_string(),
+                name: "test_tool_name".to_string(),
+                result: "test_tool_response".to_string(),
+            })],
+        };
         let anthropic_message = AnthropicMessage::try_from(&inference_request_message);
         assert!(anthropic_message.is_ok());
         assert_eq!(
@@ -845,14 +901,6 @@ mod tests {
                 }],
             }
         );
-
-        // Test a system message
-        let inference_request_message =
-            InferenceRequestMessage::System(SystemInferenceRequestMessage {
-                content: "test_system".to_string(),
-            });
-        let anthropic_message = AnthropicMessage::try_from(&inference_request_message);
-        assert!(anthropic_message.is_err());
     }
 
     #[test]
@@ -867,13 +915,14 @@ mod tests {
         // Test Case 1: Empty message list
         let inference_request = ModelInferenceRequest {
             messages: vec![],
+            system_instructions: None,
             tools_available: None,
-            tool_choice: None,
+            tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             temperature: None,
             max_tokens: None,
             stream: false,
-            json_mode: false,
+            json_mode: JSONMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -888,26 +937,25 @@ mod tests {
 
         // Test Case 2: Messages with System message
         let messages = vec![
-            InferenceRequestMessage::System(SystemInferenceRequestMessage {
-                content: "test_system".to_string(),
-            }),
-            InferenceRequestMessage::User(UserInferenceRequestMessage {
-                content: "test_user".to_string(),
-            }),
-            InferenceRequestMessage::Assistant(AssistantInferenceRequestMessage {
-                content: Some("test_assistant".to_string()),
-                tool_calls: None,
-            }),
+            RequestMessage {
+                role: Role::User,
+                content: vec![ContentBlock::Text("test_user".to_string())],
+            },
+            RequestMessage {
+                role: Role::Assistant,
+                content: vec![ContentBlock::Text("test_assistant".to_string())],
+            },
         ];
         let inference_request = ModelInferenceRequest {
             messages: messages.clone(),
+            system_instructions: Some("test_system".to_string()),
             tools_available: None,
-            tool_choice: None,
+            tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             temperature: None,
             max_tokens: None,
             stream: false,
-            json_mode: false,
+            json_mode: JSONMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -918,8 +966,8 @@ mod tests {
             AnthropicRequestBody {
                 model: &model,
                 messages: vec![
+                    AnthropicMessage::try_from(&messages[0]).unwrap(),
                     AnthropicMessage::try_from(&messages[1]).unwrap(),
-                    AnthropicMessage::try_from(&messages[2]).unwrap(),
                     listening_message.clone(),
                 ],
                 max_tokens: 4096,
@@ -934,29 +982,29 @@ mod tests {
         // Test case 3: Messages with system message that require consolidation
         // also some of the optional fields are tested
         let messages = vec![
-            InferenceRequestMessage::System(SystemInferenceRequestMessage {
-                content: "test_system".to_string(),
-            }),
-            InferenceRequestMessage::User(UserInferenceRequestMessage {
-                content: "test_user".to_string(),
-            }),
-            InferenceRequestMessage::User(UserInferenceRequestMessage {
-                content: "test_user2".to_string(),
-            }),
-            InferenceRequestMessage::Assistant(AssistantInferenceRequestMessage {
-                content: Some("test_assistant".to_string()),
-                tool_calls: None,
-            }),
+            RequestMessage {
+                role: Role::User,
+                content: vec![ContentBlock::Text("test_user".to_string())],
+            },
+            RequestMessage {
+                role: Role::User,
+                content: vec![ContentBlock::Text("test_user2".to_string())],
+            },
+            RequestMessage {
+                role: Role::Assistant,
+                content: vec![ContentBlock::Text("test_assistant".to_string())],
+            },
         ];
         let inference_request = ModelInferenceRequest {
             messages: messages.clone(),
+            system_instructions: Some("test_system".to_string()),
             tools_available: None,
-            tool_choice: None,
+            tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             temperature: Some(0.5),
             max_tokens: Some(100),
             stream: true,
-            json_mode: true,
+            json_mode: JSONMode::On,
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -988,36 +1036,38 @@ mod tests {
 
         // Test case 4: Tool use & choice
         let messages = vec![
-            InferenceRequestMessage::System(SystemInferenceRequestMessage {
-                content: "test_system".to_string(),
-            }),
-            InferenceRequestMessage::User(UserInferenceRequestMessage {
-                content: "test_user".to_string(),
-            }),
-            InferenceRequestMessage::Assistant(AssistantInferenceRequestMessage {
-                content: Some("test_assistant".to_string()),
-                tool_calls: None,
-            }),
-            InferenceRequestMessage::Tool(ToolInferenceRequestMessage {
-                tool_call_id: "tool_call_id".to_string(),
-                content: "tool_response".to_string(),
-            }),
+            RequestMessage {
+                role: Role::User,
+                content: vec![ContentBlock::Text("test_user".to_string())],
+            },
+            RequestMessage {
+                role: Role::Assistant,
+                content: vec![ContentBlock::Text("test_assistant".to_string())],
+            },
+            RequestMessage {
+                role: Role::User,
+                content: vec![ContentBlock::ToolResult(ToolResult {
+                    id: "tool_call_id".to_string(),
+                    name: "test_tool_name".to_string(),
+                    result: "tool_response".to_string(),
+                })],
+            },
         ];
-        let tool = Tool {
-            r#type: ToolType::Function,
+        let tool = Tool::Function {
             description: Some("test_description".to_string()),
             name: "test_name".to_string(),
             parameters: json!({"type": "string"}),
         };
         let inference_request = ModelInferenceRequest {
             messages: messages.clone(),
+            system_instructions: Some("test_system".to_string()),
             tools_available: Some(vec![tool.clone()]),
-            tool_choice: Some(ToolChoice::Auto),
+            tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             temperature: Some(0.5),
             max_tokens: Some(100),
             stream: true,
-            json_mode: true,
+            json_mode: JSONMode::On,
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -1043,40 +1093,6 @@ mod tests {
                     description: Some("test_description"),
                     input_schema: &json!({"type": "string"}),
                 }]),
-            }
-        );
-
-        // Test case 5: System message later in list
-        let messages = vec![
-            InferenceRequestMessage::User(UserInferenceRequestMessage {
-                content: "test_user".to_string(),
-            }),
-            InferenceRequestMessage::System(SystemInferenceRequestMessage {
-                content: "test_system".to_string(),
-            }),
-            InferenceRequestMessage::Assistant(AssistantInferenceRequestMessage {
-                content: Some("test_assistant".to_string()),
-                tool_calls: None,
-            }),
-        ];
-        let inference_request = ModelInferenceRequest {
-            messages: messages.clone(),
-            tools_available: None,
-            tool_choice: None,
-            parallel_tool_calls: None,
-            temperature: None,
-            max_tokens: None,
-            stream: false,
-            json_mode: false,
-            function_type: FunctionType::Chat,
-            output_schema: None,
-        };
-        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
-        assert!(anthropic_request_body.is_err());
-        assert_eq!(
-            anthropic_request_body.err().unwrap(),
-            Error::InvalidMessage {
-                message: "Can't convert System message to Anthropic message. Don't pass System message in except as the first message in the chat.".to_string(),
             }
         );
     }
@@ -1391,10 +1407,9 @@ mod tests {
 
         let inference_response = ModelInferenceResponse::try_from(body_with_latency).unwrap();
         assert_eq!(
-            inference_response.content.as_ref().unwrap(),
-            "Response text"
+            inference_response.content,
+            vec![ContentBlock::Text("Response text".to_string())]
         );
-        assert!(inference_response.tool_calls.is_none());
 
         let raw_json = json!(anthropic_response_body).to_string();
         let parsed_raw: serde_json::Value =
@@ -1428,13 +1443,15 @@ mod tests {
         };
 
         let inference_response: ModelInferenceResponse = body_with_latency.try_into().unwrap();
-        assert!(inference_response.content.is_none());
-        assert!(inference_response.tool_calls.is_some());
-        let tool_calls = inference_response.tool_calls.as_ref().unwrap();
-        assert_eq!(tool_calls.len(), 1);
-        assert_eq!(tool_calls[0].name, "get_weather");
-        assert_eq!(tool_calls[0].id, "tool_call_1");
-        assert_eq!(tool_calls[0].arguments, r#"{"location":"New York"}"#);
+        assert!(inference_response.content.len() == 1);
+        assert_eq!(
+            inference_response.content[0],
+            ContentBlock::ToolCall(ToolCall {
+                id: "tool_call_1".to_string(),
+                name: "get_weather".to_string(),
+                arguments: r#"{"location":"New York"}"#.to_string(),
+            })
+        );
 
         let raw_json = json!(anthropic_response_body).to_string();
         let parsed_raw: serde_json::Value =
@@ -1473,15 +1490,18 @@ mod tests {
         };
         let inference_response = ModelInferenceResponse::try_from(body_with_latency).unwrap();
         assert_eq!(
-            inference_response.content.as_ref().unwrap(),
-            "Here's the weather:"
+            inference_response.content[0],
+            ContentBlock::Text("Here's the weather:".to_string())
         );
-        assert!(inference_response.tool_calls.is_some());
-        let tool_calls = inference_response.tool_calls.as_ref().unwrap();
-        assert_eq!(tool_calls.len(), 1);
-        assert_eq!(tool_calls[0].name, "get_weather");
-        assert_eq!(tool_calls[0].id, "tool_call_2");
-        assert_eq!(tool_calls[0].arguments, r#"{"location":"London"}"#);
+        assert!(inference_response.content.len() == 2);
+        assert_eq!(
+            inference_response.content[1],
+            ContentBlock::ToolCall(ToolCall {
+                id: "tool_call_2".to_string(),
+                name: "get_weather".to_string(),
+                arguments: r#"{"location":"London"}"#.to_string(),
+            })
+        );
 
         let raw_json = json!(anthropic_response_body).to_string();
         let parsed_raw: serde_json::Value =
@@ -1494,65 +1514,15 @@ mod tests {
     }
 
     #[test]
-    fn test_anthropic_message_block_to_stream_message() {
-        use serde_json::json;
-
-        // Test Text block
-        let text_block = AnthropicMessageBlock::Text {
-            text: "Hello, world!".to_string(),
-        };
-        let stream_message: StreamMessage = text_block.into();
-        assert_eq!(stream_message.message, Some("Hello, world!".to_string()));
-        assert_eq!(stream_message.tool_calls, None);
-
-        // Test TextDelta block
-        let text_delta_block = AnthropicMessageBlock::TextDelta {
-            text: "Delta text".to_string(),
-        };
-        let stream_message: StreamMessage = text_delta_block.into();
-        assert_eq!(stream_message.message, Some("Delta text".to_string()));
-        assert_eq!(stream_message.tool_calls, None);
-
-        // Test ToolUse block
-        let tool_input = json!({"operation": "add", "numbers": [1, 2]});
-        let tool_use_block = AnthropicMessageBlock::ToolUse {
-            id: "tool123".to_string(),
-            name: "calculator".to_string(),
-            input: tool_input.clone(),
-        };
-        let stream_message: StreamMessage = tool_use_block.into();
-        assert_eq!(stream_message.message, None);
-        assert!(stream_message.tool_calls.is_some());
-        let tool_calls = stream_message.tool_calls.unwrap();
-        assert_eq!(tool_calls.len(), 1);
-        assert_eq!(tool_calls[0].id, Some("tool123".to_string()));
-        assert_eq!(tool_calls[0].name, Some("calculator".to_string()));
-        assert_eq!(tool_calls[0].arguments, Some(tool_input.to_string()));
-
-        // Test InputJsonDelta block
-        let input_json_delta_block = AnthropicMessageBlock::InputJsonDelta {
-            partial_json: r#"{"partial": "json"}"#.to_string(),
-        };
-        let stream_message: StreamMessage = input_json_delta_block.into();
-        assert_eq!(stream_message.message, None);
-        assert_eq!(
-            stream_message.tool_calls,
-            Some(vec![ToolCallChunk {
-                id: None,
-                name: None,
-                arguments: Some(r#"{"partial": "json"}"#.to_string()),
-            }])
-        );
-    }
-
-    #[test]
     fn test_anthropic_to_tensorzero_stream_message() {
         use serde_json::json;
         use uuid::Uuid;
 
         let inference_id = Uuid::now_v7();
 
-        // Test ContentBlockDelta
+        // Test ContentBlockDelta with Text
+        let mut current_tool_id = None;
+        let mut current_tool_name = None;
         let content_block_delta = AnthropicStreamMessage::ContentBlockDelta {
             delta: AnthropicMessageBlock::Text {
                 text: "Hello".to_string(),
@@ -1560,15 +1530,111 @@ mod tests {
             index: 0,
         };
         let latency = Duration::from_millis(100);
-        let result =
-            anthropic_to_tensorzero_stream_message(content_block_delta, inference_id, latency);
+        let result = anthropic_to_tensorzero_stream_message(
+            content_block_delta,
+            inference_id,
+            latency,
+            &mut current_tool_id,
+            &mut current_tool_name,
+        );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
-        assert_eq!(chunk.content, Some("Hello".to_string()));
-        assert_eq!(chunk.tool_calls, None);
+        assert_eq!(chunk.content.len(), 1);
+        match chunk.content[0] {
+            ContentBlockChunk::Text(text) => {
+                assert_eq!(text.text, "Hello".to_string());
+                assert_eq!(text.id, "0".to_string());
+            }
+            _ => unreachable!(),
+        }
         assert_eq!(chunk.latency, latency);
 
-        // Test ContentBlockStart
+        // Test ContentBlockDelta with ToolUse
+        let mut current_tool_id = None;
+        let mut current_tool_name = None;
+        let content_block_delta = AnthropicStreamMessage::ContentBlockDelta {
+            delta: AnthropicMessageBlock::ToolUse {
+                id: "tool_call_1".to_string(),
+                name: "get_weather".to_string(),
+                input: json!({"location": "New York"}),
+            },
+            index: 0,
+        };
+        let latency = Duration::from_millis(100);
+        let result = anthropic_to_tensorzero_stream_message(
+            content_block_delta,
+            inference_id,
+            latency,
+            &mut current_tool_id,
+            &mut current_tool_name,
+        );
+        assert!(result.is_ok());
+        // This should fail because ContentBlockDelta should only have text or InputJsonDelta
+        let error = result.unwrap_err();
+        assert_eq!(
+            error,
+            Error::AnthropicServer {
+                message: "Unsupported content block type for ContentBlockDelta".to_string()
+            }
+        );
+
+        // Test ContentBlockDelta with InputJsonDelta but no previous tool info
+        let mut current_tool_id = None;
+        let mut current_tool_name = None;
+        let content_block_delta = AnthropicStreamMessage::ContentBlockDelta {
+            delta: AnthropicMessageBlock::InputJsonDelta {
+                partial_json: "aaaa: bbbbb".to_string(),
+            },
+            index: 0,
+        };
+        let latency = Duration::from_millis(100);
+        let result = anthropic_to_tensorzero_stream_message(
+            content_block_delta,
+            inference_id,
+            latency,
+            &mut current_tool_id,
+            &mut current_tool_name,
+        );
+        let error = result.unwrap_err();
+        assert_eq!(
+            error,
+            Error::AnthropicServer {
+                message: "Got InputJsonDelta chunk from Anthropic without current tool name being set by a ToolUse".to_string()
+            }
+        );
+
+        // Test ContentBlockDelta with InputJsonDelta and previous tool info
+        let mut current_tool_id = Some("tool_id".to_string());
+        let mut current_tool_name = Some("tool_name".to_string());
+        let content_block_delta = AnthropicStreamMessage::ContentBlockDelta {
+            delta: AnthropicMessageBlock::InputJsonDelta {
+                partial_json: "aaaa: bbbbb".to_string(),
+            },
+            index: 0,
+        };
+        let latency = Duration::from_millis(100);
+        let result = anthropic_to_tensorzero_stream_message(
+            content_block_delta,
+            inference_id,
+            latency,
+            &mut current_tool_id,
+            &mut current_tool_name,
+        );
+        let chunk = result.unwrap().unwrap();
+        assert_eq!(chunk.content.len(), 1);
+        match chunk.content[0] {
+            ContentBlockChunk::ToolCall(tool_call) => {
+                assert_eq!(tool_call.id, "tool_id".to_string());
+                assert_eq!(tool_call.name, "tool_name".to_string());
+                assert_eq!(tool_call.arguments, "aaaa: bbbbb".to_string());
+            }
+            _ => unreachable!(),
+        }
+        assert_eq!(chunk.latency, latency);
+
+        // Test ContentBlockStart with ToolUse
+        let mut current_tool_id = None;
+        let mut current_tool_name = None;
         let content_block_start = AnthropicStreamMessage::ContentBlockStart {
             content_block: AnthropicMessageBlock::ToolUse {
                 id: "tool1".to_string(),
@@ -1578,26 +1644,90 @@ mod tests {
             index: 1,
         };
         let latency = Duration::from_millis(110);
-        let result =
-            anthropic_to_tensorzero_stream_message(content_block_start, inference_id, latency);
-        assert!(result.is_ok());
-        let chunk = result.unwrap().unwrap();
-        assert_eq!(chunk.content, None);
-        assert!(chunk.tool_calls.is_some());
-        let tool_calls = chunk.tool_calls.unwrap();
-        assert_eq!(tool_calls[0].id, Some("tool1".to_string()));
-        assert_eq!(tool_calls[0].name, Some("calculator".to_string()));
-        assert_eq!(
-            tool_calls[0].arguments,
-            Some(r#"{"operation":"add"}"#.to_string())
+        let result = anthropic_to_tensorzero_stream_message(
+            content_block_start,
+            inference_id,
+            latency,
+            &mut current_tool_id,
+            &mut current_tool_name,
         );
+        let chunk = result.unwrap().unwrap();
+        assert_eq!(chunk.content.len(), 1);
+        match chunk.content[0] {
+            ContentBlockChunk::ToolCall(tool_call) => {
+                assert_eq!(tool_call.id, "tool1".to_string());
+                assert_eq!(tool_call.name, "calculator".to_string());
+                assert_eq!(tool_call.arguments, r#"{"operation":"add"}"#.to_string());
+            }
+            _ => unreachable!(),
+        }
         assert_eq!(chunk.latency, latency);
+        assert_eq!(current_tool_id, Some("tool1".to_string()));
+        assert_eq!(current_tool_name, Some("calculator".to_string()));
+
+        // Test ContentBlockStart with Text
+        let mut current_tool_id = None;
+        let mut current_tool_name = None;
+        let content_block_start = AnthropicStreamMessage::ContentBlockStart {
+            content_block: AnthropicMessageBlock::Text {
+                text: "Hello".to_string(),
+            },
+            index: 2,
+        };
+        let latency = Duration::from_millis(120);
+        let result = anthropic_to_tensorzero_stream_message(
+            content_block_start,
+            inference_id,
+            latency,
+            &mut current_tool_id,
+            &mut current_tool_name,
+        );
+        let chunk = result.unwrap().unwrap();
+        assert_eq!(chunk.content.len(), 1);
+        match chunk.content[0] {
+            ContentBlockChunk::Text(text) => {
+                assert_eq!(text.text, "Hello".to_string());
+                assert_eq!(text.id, "2".to_string());
+            }
+            _ => unreachable!(),
+        }
+        assert_eq!(chunk.latency, latency);
+
+        // Test ContentBlockStart with InputJsonDelta (should fail)
+        let mut current_tool_id = None;
+        let mut current_tool_name = None;
+        let content_block_start = AnthropicStreamMessage::ContentBlockStart {
+            content_block: AnthropicMessageBlock::InputJsonDelta {
+                partial_json: "aaaa: bbbbb".to_string(),
+            },
+            index: 3,
+        };
+        let latency = Duration::from_millis(130);
+        let result = anthropic_to_tensorzero_stream_message(
+            content_block_start,
+            inference_id,
+            latency,
+            &mut current_tool_id,
+            &mut current_tool_name,
+        );
+        let error = result.unwrap_err();
+        assert_eq!(
+            error,
+            Error::AnthropicServer {
+                message: "Unsupported content block type for ContentBlockStart".to_string()
+            }
+        );
 
         // Test ContentBlockStop
         let content_block_stop = AnthropicStreamMessage::ContentBlockStop { index: 2 };
         let latency = Duration::from_millis(120);
-        let result =
-            anthropic_to_tensorzero_stream_message(content_block_stop, inference_id, latency);
+        let result = anthropic_to_tensorzero_stream_message(
+            content_block_stop,
+            inference_id,
+            latency,
+            &mut current_tool_id,
+            &mut current_tool_name,
+        );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
 
@@ -1606,7 +1736,13 @@ mod tests {
             error: json!({"message": "Test error"}),
         };
         let latency = Duration::from_millis(130);
-        let result = anthropic_to_tensorzero_stream_message(error_message, inference_id, latency);
+        let result = anthropic_to_tensorzero_stream_message(
+            error_message,
+            inference_id,
+            latency,
+            &mut current_tool_id,
+            &mut current_tool_name,
+        );
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err(),
@@ -1621,11 +1757,16 @@ mod tests {
             usage: json!({"input_tokens": 10, "output_tokens": 20}),
         };
         let latency = Duration::from_millis(140);
-        let result = anthropic_to_tensorzero_stream_message(message_delta, inference_id, latency);
+        let result = anthropic_to_tensorzero_stream_message(
+            message_delta,
+            inference_id,
+            latency,
+            &mut current_tool_id,
+            &mut current_tool_name,
+        );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
-        assert_eq!(chunk.content, None);
-        assert_eq!(chunk.tool_calls, None);
+        assert_eq!(chunk.content.len(), 0);
         assert!(chunk.usage.is_some());
         let usage = chunk.usage.unwrap();
         assert_eq!(usage.prompt_tokens, 10);
@@ -1637,11 +1778,16 @@ mod tests {
             message: json!({"usage": {"input_tokens": 5, "output_tokens": 15}}),
         };
         let latency = Duration::from_millis(150);
-        let result = anthropic_to_tensorzero_stream_message(message_start, inference_id, latency);
+        let result = anthropic_to_tensorzero_stream_message(
+            message_start,
+            inference_id,
+            latency,
+            &mut current_tool_id,
+            &mut current_tool_name,
+        );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
-        assert_eq!(chunk.content, None);
-        assert_eq!(chunk.tool_calls, None);
+        assert_eq!(chunk.content.len(), 0);
         assert!(chunk.usage.is_some());
         let usage = chunk.usage.unwrap();
         assert_eq!(usage.prompt_tokens, 5);
@@ -1651,14 +1797,26 @@ mod tests {
         // Test MessageStop
         let message_stop = AnthropicStreamMessage::MessageStop;
         let latency = Duration::from_millis(160);
-        let result = anthropic_to_tensorzero_stream_message(message_stop, inference_id, latency);
+        let result = anthropic_to_tensorzero_stream_message(
+            message_stop,
+            inference_id,
+            latency,
+            &mut current_tool_id,
+            &mut current_tool_name,
+        );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
 
         // Test Ping
         let ping = AnthropicStreamMessage::Ping {};
         let latency = Duration::from_millis(170);
-        let result = anthropic_to_tensorzero_stream_message(ping, inference_id, latency);
+        let result = anthropic_to_tensorzero_stream_message(
+            ping,
+            inference_id,
+            latency,
+            &mut current_tool_id,
+            &mut current_tool_name,
+        );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
     }

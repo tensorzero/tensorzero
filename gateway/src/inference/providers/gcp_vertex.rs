@@ -11,11 +11,11 @@ use uuid::Uuid;
 
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
-use crate::inference::types::{Latency, ToolCallChunk};
+use crate::inference::types::{ContentBlock, ContentBlockChunk, Latency, Role, TextChunk};
 use crate::{
     inference::types::{
-        InferenceRequestMessage, InferenceResponseStream, ModelInferenceRequest,
-        ModelInferenceResponse, ModelInferenceResponseChunk, Tool, ToolCall, ToolChoice, Usage,
+        InferenceResponseStream, ModelInferenceRequest, ModelInferenceResponse,
+        ModelInferenceResponseChunk, RequestMessage, Tool, ToolCall, ToolChoice, Usage,
     },
     model::ProviderConfig,
 };
@@ -293,18 +293,26 @@ enum GCPVertexGeminiRole {
     Model,
 }
 
+impl From<Role> for GCPVertexGeminiRole {
+    fn from(role: Role) -> Self {
+        match role {
+            Role::User => GCPVertexGeminiRole::User,
+            Role::Assistant => GCPVertexGeminiRole::Model,
+        }
+    }
+}
+
 #[derive(Serialize, PartialEq, Debug)]
 struct GCPVertexGeminiFunctionCall<'a> {
     name: &'a str,
     args: &'a str, // JSON as string
 }
 
-// TODO (#19): use this when we do tool calling properly
-// #[derive(Serialize)]
-// struct GCPVertexGeminiFunctionResponse<'a> {
-//     name: &'a str,
-//     response: &'a str, // JSON as string
-// }
+#[derive(Serialize, PartialEq, Debug)]
+struct GCPVertexGeminiFunctionResponse<'a> {
+    name: &'a str,
+    response: &'a str, // JSON as string
+}
 
 #[derive(Serialize, PartialEq, Debug)]
 #[serde(rename_all = "camelCase", untagged)]
@@ -317,11 +325,30 @@ enum GCPVertexGeminiContentPart<'a> {
     FunctionCall {
         function_call: GCPVertexGeminiFunctionCall<'a>,
     },
-    // TODO (#19):
-    // FunctionResponse {
-    //     function_response: GCPVertexGeminiFunctionResponse<'a>,
-    // },
+    FunctionResponse {
+        function_response: GCPVertexGeminiFunctionResponse<'a>,
+    },
     // TODO (#19): VideoMetadata { video_metadata: VideoMetadata },
+}
+
+impl<'a> From<&'a ContentBlock> for GCPVertexGeminiContentPart<'a> {
+    fn from(block: &'a ContentBlock) -> Self {
+        match block {
+            ContentBlock::Text(text) => GCPVertexGeminiContentPart::Text { text: text },
+            ContentBlock::ToolResult(tool_result) => GCPVertexGeminiContentPart::FunctionResponse {
+                function_response: GCPVertexGeminiFunctionResponse {
+                    name: &tool_result.name,
+                    response: &tool_result.result,
+                },
+            },
+            ContentBlock::ToolCall(tool_call) => GCPVertexGeminiContentPart::FunctionCall {
+                function_call: GCPVertexGeminiFunctionCall {
+                    name: &tool_call.name,
+                    args: &tool_call.arguments,
+                },
+            },
+        }
+    }
 }
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -330,48 +357,12 @@ struct GCPVertexGeminiContent<'a> {
     parts: Vec<GCPVertexGeminiContentPart<'a>>,
 }
 
-impl<'a> TryFrom<&'a InferenceRequestMessage> for GCPVertexGeminiContent<'a> {
-    type Error = Error;
-    fn try_from(message: &'a InferenceRequestMessage) -> Result<Self, Self::Error> {
-        Ok(match message {
-            InferenceRequestMessage::User(message) => GCPVertexGeminiContent {
-                role: GCPVertexGeminiRole::User,
-                parts: vec![GCPVertexGeminiContentPart::Text {
-                    text: &message.content,
-                }],
-            },
-            InferenceRequestMessage::Assistant(message) => {
-                let mut parts = vec![];
-                if let Some(content) = &message.content {
-                    parts.push(GCPVertexGeminiContentPart::Text { text: content });
-                }
-                if let Some(tool_calls) = &message.tool_calls {
-                    for tool_call in tool_calls {
-                        let function_call = GCPVertexGeminiFunctionCall {
-                            name: tool_call.name.as_str(),
-                            args: tool_call.arguments.as_str(),
-                        };
-                        parts.push(GCPVertexGeminiContentPart::FunctionCall { function_call });
-                    }
-                }
-                GCPVertexGeminiContent {
-                    role: GCPVertexGeminiRole::Model,
-                    parts,
-                }
-            }
-            InferenceRequestMessage::System(_message) => return Err(Error::InvalidMessage {
-                message: "Can't convert System message to GCP Vertex Gemini message. Don't pass System message in except as the first message in the chat.".to_string(),
-            }),
-            InferenceRequestMessage::Tool(message) => GCPVertexGeminiContent {
-                role: GCPVertexGeminiRole::User,
-                parts: vec![GCPVertexGeminiContentPart::FunctionCall {
-                    function_call: GCPVertexGeminiFunctionCall {
-                        name: &message.tool_call_id,
-                        args: &message.content,
-                    },
-                }],
-            },
-        })
+impl<'a> From<&'a RequestMessage> for GCPVertexGeminiContent<'a> {
+    fn from(message: &'a RequestMessage) -> Self {
+        let role = GCPVertexGeminiRole::from(message.role);
+        let parts: Vec<GCPVertexGeminiContentPart> =
+            message.content.iter().map(|block| block.into()).collect();
+        GCPVertexGeminiContent { role, parts }
     }
 }
 
@@ -391,18 +382,25 @@ enum GCPVertexGeminiTool<'a> {
     FunctionDeclarations(Vec<GCPVertexGeminiFunctionDeclaration<'a>>),
 }
 
+impl From<&Tool> for GCPVertexGeminiFunctionDeclaration<'_> {
+    fn from(tool: &Tool) -> Self {
+        match tool {
+            Tool::Function {
+                description,
+                name,
+                parameters,
+            } => GCPVertexGeminiFunctionDeclaration {
+                name,
+                description: description.as_deref(),
+                parameters: Some(parameters),
+            },
+        }
+    }
+}
+
 impl<'a> From<&'a Vec<Tool>> for GCPVertexGeminiTool<'a> {
     fn from(tools: &'a Vec<Tool>) -> Self {
-        GCPVertexGeminiTool::FunctionDeclarations(
-            tools
-                .iter()
-                .map(|tool| GCPVertexGeminiFunctionDeclaration {
-                    name: &tool.name,
-                    description: tool.description.as_deref(),
-                    parameters: Some(&tool.parameters),
-                })
-                .collect(),
-        )
+        GCPVertexGeminiTool::FunctionDeclarations(tools.iter().map(|tool| tool.into()).collect())
     }
 }
 
@@ -454,6 +452,12 @@ impl<'a> From<&'a ToolChoice> for GCPVertexGeminiToolConfig<'a> {
                     allowed_function_names: Some(vec![tool_name]),
                 },
             },
+            ToolChoice::Implicit => GCPVertexGeminiToolConfig {
+                function_calling_config: GCPVertexGeminiFunctionCallingConfig {
+                    mode: GCPVertexGeminiFunctionCallingMode::Auto,
+                    allowed_function_names: Some(vec!["respond"]),
+                },
+            },
         }
     }
 }
@@ -497,31 +501,22 @@ impl<'a> TryFrom<&'a ModelInferenceRequest<'a>> for GCPVertexGeminiRequest<'a> {
                 message: "GCP Vertex Gemini requires at least one message".to_string(),
             });
         }
-        let first_message = &request.messages[0];
-        let (system_instruction, request_messages) = match first_message {
-            InferenceRequestMessage::System(message) => {
-                let content = GCPVertexGeminiContent {
-                    role: GCPVertexGeminiRole::Model,
-                    parts: vec![GCPVertexGeminiContentPart::Text {
-                        text: message.content.as_str(),
-                    }],
-                };
-                (Some(content), &request.messages[1..])
-            }
-            _ => (None, &request.messages[..]),
+        let system_instruction = match &request.system_instructions {
+            Some(system_instruction) => Some(GCPVertexGeminiContentPart::Text {
+                text: system_instruction,
+            }),
+            None => None,
         };
-        let contents = request_messages
+        let contents: Vec<GCPVertexGeminiContent> = request
+            .messages
             .iter()
-            .map(GCPVertexGeminiContent::try_from)
-            .collect::<Result<Vec<_>, _>>()?;
+            .map(|message| GCPVertexGeminiContent::from(message))
+            .collect();
         let tools = request
             .tools_available
             .as_ref()
             .map(|tools| vec![GCPVertexGeminiTool::from(tools)]);
-        let tool_config = request
-            .tool_choice
-            .as_ref()
-            .map(GCPVertexGeminiToolConfig::from);
+        let tool_config = Some(GCPVertexGeminiToolConfig::from(&request.tool_choice));
         let (response_mime_type, response_schema) = match request.output_schema {
             Some(output_schema) => (
                 Some(GCPVertexGeminiResponseMimeType::ApplicationJson),
@@ -541,7 +536,10 @@ impl<'a> TryFrom<&'a ModelInferenceRequest<'a>> for GCPVertexGeminiRequest<'a> {
             tools,
             tool_config,
             generation_config,
-            system_instruction,
+            system_instruction: system_instruction.map(|content| GCPVertexGeminiContent {
+                role: GCPVertexGeminiRole::Model,
+                parts: vec![content],
+            }),
         })
     }
 }
@@ -565,6 +563,44 @@ enum GCPVertexGeminiResponseContentPart {
     },
     // TODO (#19, if ever needed): FunctionResponse
     // TODO (#19): VideoMetadata { video_metadata: VideoMetadata },
+}
+
+impl From<GCPVertexGeminiResponseContentPart> for ContentBlockChunk {
+    fn from(part: GCPVertexGeminiResponseContentPart) -> Self {
+        match part {
+            GCPVertexGeminiResponseContentPart::Text { text } => {
+                ContentBlockChunk::Text(TextChunk {
+                    text,
+                    // TODO as below
+                    id: "0".to_string(),
+                })
+            }
+            GCPVertexGeminiResponseContentPart::FunctionCall { function_call } => {
+                unimplemented!()
+                // TODO (#19, #30): figure out how GCP does bookkeeping for streaming tool calls and implement this here.
+                // ContentBlock::ToolCall(ToolCall {
+                //     name: function_call.name,
+                //     arguments: function_call.args,
+                //     id: Uuid::now_v7().to_string(),
+                // })
+            }
+        }
+    }
+}
+
+impl From<GCPVertexGeminiResponseContentPart> for ContentBlock {
+    fn from(part: GCPVertexGeminiResponseContentPart) -> Self {
+        match part {
+            GCPVertexGeminiResponseContentPart::Text { text } => ContentBlock::Text(text),
+            GCPVertexGeminiResponseContentPart::FunctionCall { function_call } => {
+                ContentBlock::ToolCall(ToolCall {
+                    name: function_call.name,
+                    arguments: function_call.args,
+                    id: Uuid::now_v7().to_string(),
+                })
+            }
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize)]
@@ -631,26 +667,7 @@ impl TryFrom<GCPVertexGeminiResponseWithLatency> for ModelInferenceResponse {
                 })
             }
         };
-        for part in parts {
-            match part {
-                GCPVertexGeminiResponseContentPart::Text { text } => match message_text {
-                    Some(message) => message_text = Some(format!("{}\n{}", message, text)),
-                    None => message_text = Some(text),
-                },
-                GCPVertexGeminiResponseContentPart::FunctionCall { function_call } => {
-                    let tool_call = ToolCall {
-                        name: function_call.name.clone(),
-                        arguments: function_call.args,
-                        id: function_call.name,
-                    };
-                    if let Some(calls) = tool_calls.as_mut() {
-                        calls.push(tool_call);
-                    } else {
-                        tool_calls = Some(vec![tool_call]);
-                    }
-                }
-            }
-        }
+        let content: Vec<ContentBlock> = parts.into_iter().map(|part| part.into()).collect();
         let usage = body
             .usage_metadata
             .ok_or(Error::GCPVertexServer {
@@ -659,13 +676,7 @@ impl TryFrom<GCPVertexGeminiResponseWithLatency> for ModelInferenceResponse {
             })?
             .into();
 
-        Ok(ModelInferenceResponse::new(
-            message_text,
-            tool_calls,
-            raw,
-            usage,
-            latency,
-        ))
+        Ok(ModelInferenceResponse::new(content, raw, usage, latency))
     }
 }
 
@@ -693,36 +704,18 @@ impl TryFrom<GCPVertexGeminiStreamResponseWithMetadata> for ModelInferenceRespon
             .ok_or(Error::GCPVertexServer {
                 message: "GCP Vertex Gemini response has no candidates".to_string(),
             })?;
-        let mut message_text: Option<String> = None;
-        let mut tool_calls: Option<Vec<ToolCallChunk>> = None;
         let parts = match first_candidate.content {
             Some(content) => content.parts,
-            None => vec![],
-        };
-        for part in parts {
-            match part {
-                GCPVertexGeminiResponseContentPart::Text { text } => match message_text {
-                    Some(message) => message_text = Some(format!("{}\n{}", message, text)),
-                    None => message_text = Some(text),
-                },
-                GCPVertexGeminiResponseContentPart::FunctionCall { function_call } => {
-                    let tool_call = ToolCallChunk {
-                        name: Some(function_call.name.clone()),
-                        arguments: Some(function_call.args),
-                        id: Some(function_call.name),
-                    };
-                    if let Some(calls) = tool_calls.as_mut() {
-                        calls.push(tool_call);
-                    } else {
-                        tool_calls = Some(vec![tool_call]);
-                    }
-                }
+            None => {
+                return Err(Error::GCPVertexServer {
+                    message: "GCP Vertex Gemini response has no content".to_string(),
+                })
             }
-        }
+        };
+        let content: Vec<ContentBlockChunk> = parts.into_iter().map(|part| part.into()).collect();
         Ok(ModelInferenceResponseChunk::new(
             inference_id,
-            message_text,
-            tool_calls,
+            content,
             body.usage_metadata
                 .map(|usage_metadata| usage_metadata.into()),
             raw,
@@ -754,16 +747,14 @@ fn handle_gcp_vertex_gemini_error(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::inference::types::{
-        AssistantInferenceRequestMessage, FunctionType, SystemInferenceRequestMessage,
-        ToolInferenceRequestMessage, ToolType, UserInferenceRequestMessage,
-    };
+    use crate::inference::types::{FunctionType, JSONMode, Tool, ToolResult};
 
     #[test]
     fn test_gcp_vertex_content_try_from() {
-        let message = InferenceRequestMessage::User(UserInferenceRequestMessage {
-            content: "Hello, world!".to_string(),
-        });
+        let message = RequestMessage {
+            role: Role::User,
+            content: vec![ContentBlock::Text("Hello, world!".to_string())],
+        };
         let content = GCPVertexGeminiContent::try_from(&message).unwrap();
         assert_eq!(content.role, GCPVertexGeminiRole::User);
         assert_eq!(content.parts.len(), 1);
@@ -774,10 +765,10 @@ mod tests {
             }
         );
 
-        let message = InferenceRequestMessage::Assistant(AssistantInferenceRequestMessage {
-            content: Some("Hello, world!".to_string()),
-            tool_calls: None,
-        });
+        let message = RequestMessage {
+            role: Role::Assistant,
+            content: vec![ContentBlock::Text("Hello, world!".to_string())],
+        };
         let content = GCPVertexGeminiContent::try_from(&message).unwrap();
         assert_eq!(content.role, GCPVertexGeminiRole::Model);
         assert_eq!(content.parts.len(), 1);
@@ -787,14 +778,17 @@ mod tests {
                 text: "Hello, world!"
             }
         );
-        let message = InferenceRequestMessage::Assistant(AssistantInferenceRequestMessage {
-            content: Some("Here's the result of the function call:".to_string()),
-            tool_calls: Some(vec![ToolCall {
-                id: "call_1".to_string(),
-                name: "get_weather".to_string(),
-                arguments: r#"{"location": "New York", "unit": "celsius"}"#.to_string(),
-            }]),
-        });
+        let message = RequestMessage {
+            role: Role::Assistant,
+            content: vec![
+                ContentBlock::Text("Here's the result of the function call:".to_string()),
+                ContentBlock::ToolCall(ToolCall {
+                    id: "call_1".to_string(),
+                    name: "get_weather".to_string(),
+                    arguments: r#"{"location": "New York", "unit": "celsius"}"#.to_string(),
+                }),
+            ],
+        };
         let content = GCPVertexGeminiContent::try_from(&message).unwrap();
         assert_eq!(content.role, GCPVertexGeminiRole::Model);
         assert_eq!(content.parts.len(), 2);
@@ -813,32 +807,24 @@ mod tests {
                 }
             }
         );
-        let message = InferenceRequestMessage::System(SystemInferenceRequestMessage {
-            content: "You are a helpful assistant.".to_string(),
-        });
-        let result = GCPVertexGeminiContent::try_from(&message);
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert_eq!(
-            error,
-            Error::InvalidMessage {
-                message: "Can't convert System message to GCP Vertex Gemini message. Don't pass System message in except as the first message in the chat.".to_string()
-            }
-        );
 
-        let message = InferenceRequestMessage::Tool(ToolInferenceRequestMessage {
-            tool_call_id: "call_1".to_string(),
-            content: r#"{"temperature": 25, "conditions": "sunny"}"#.to_string(),
-        });
+        let message = RequestMessage {
+            role: Role::User,
+            content: vec![ContentBlock::ToolResult(ToolResult {
+                id: "call_1".to_string(),
+                name: "get_weather".to_string(),
+                result: r#"{"temperature": 25, "conditions": "sunny"}"#.to_string(),
+            })],
+        };
         let content = GCPVertexGeminiContent::try_from(&message).unwrap();
         assert_eq!(content.role, GCPVertexGeminiRole::User);
         assert_eq!(content.parts.len(), 1);
         assert_eq!(
             content.parts[0],
-            GCPVertexGeminiContentPart::FunctionCall {
-                function_call: GCPVertexGeminiFunctionCall {
+            GCPVertexGeminiContentPart::FunctionResponse {
+                function_response: GCPVertexGeminiFunctionResponse {
                     name: "call_1",
-                    args: r#"{"temperature": 25, "conditions": "sunny"}"#,
+                    response: r#"{"temperature": 25, "conditions": "sunny"}"#,
                 }
             }
         );
@@ -846,21 +832,21 @@ mod tests {
 
     #[test]
     fn test_from_vec_tool() {
+        let parameters = vec![
+            serde_json::to_value(r#"{"location": {"type": "string"}, "unit": {"type": "string"}}"#)
+                .unwrap(),
+            serde_json::to_value(r#"{"timezone": {"type": "string"}}"#).unwrap(),
+        ];
         let tools = vec![
-            Tool {
+            Tool::Function {
                 name: "get_weather".to_string(),
                 description: Some("Get the weather for a given location".to_string()),
-                parameters: serde_json::to_value(
-                    r#"{"location": {"type": "string"}, "unit": {"type": "string"}}"#,
-                )
-                .unwrap(),
-                r#type: ToolType::Function,
+                parameters: parameters[0].clone(),
             },
-            Tool {
+            Tool::Function {
                 name: "get_time".to_string(),
                 description: Some("Get the current time for a given timezone".to_string()),
-                parameters: serde_json::to_value(r#"{"timezone": {"type": "string"}}"#).unwrap(),
-                r#type: ToolType::Function,
+                parameters: parameters[1].clone(),
             },
         ];
         let tool = GCPVertexGeminiTool::from(&tools);
@@ -870,12 +856,12 @@ mod tests {
                 GCPVertexGeminiFunctionDeclaration {
                     name: "get_weather",
                     description: Some("Get the weather for a given location"),
-                    parameters: Some(&tools[0].parameters),
+                    parameters: Some(&parameters[0]),
                 },
                 GCPVertexGeminiFunctionDeclaration {
                     name: "get_time",
                     description: Some("Get the current time for a given timezone"),
-                    parameters: Some(&tools[1].parameters),
+                    parameters: Some(&parameters[1]),
                 }
             ])
         );
@@ -930,6 +916,18 @@ mod tests {
                 }
             }
         );
+
+        let tool_choice = ToolChoice::Implicit;
+        let tool_config = GCPVertexGeminiToolConfig::from(&tool_choice);
+        assert_eq!(
+            tool_config,
+            GCPVertexGeminiToolConfig {
+                function_calling_config: GCPVertexGeminiFunctionCallingConfig {
+                    mode: GCPVertexGeminiFunctionCallingMode::Any,
+                    allowed_function_names: Some(vec!["respond"]),
+                }
+            }
+        );
     }
 
     #[test]
@@ -937,13 +935,14 @@ mod tests {
         // Test Case 1: Empty message list
         let inference_request = ModelInferenceRequest {
             messages: vec![],
+            system_instructions: None,
             tools_available: None,
-            tool_choice: None,
+            tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             temperature: None,
             max_tokens: None,
             stream: false,
-            json_mode: false,
+            json_mode: JSONMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -956,28 +955,27 @@ mod tests {
             }
         );
 
-        // Test Case 2: Messages with System message
+        // Test Case 2: Messages with System instructions
         let messages = vec![
-            InferenceRequestMessage::System(SystemInferenceRequestMessage {
-                content: "test_system".to_string(),
-            }),
-            InferenceRequestMessage::User(UserInferenceRequestMessage {
-                content: "test_user".to_string(),
-            }),
-            InferenceRequestMessage::Assistant(AssistantInferenceRequestMessage {
-                content: Some("test_assistant".to_string()),
-                tool_calls: None,
-            }),
+            RequestMessage {
+                role: Role::User,
+                content: vec![ContentBlock::Text("test_user".to_string())],
+            },
+            RequestMessage {
+                role: Role::Assistant,
+                content: vec![ContentBlock::Text("test_assistant".to_string())],
+            },
         ];
         let inference_request = ModelInferenceRequest {
             messages: messages.clone(),
+            system_instructions: Some("test_system".to_string()),
             tools_available: None,
-            tool_choice: None,
+            tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             temperature: None,
             max_tokens: None,
             stream: false,
-            json_mode: false,
+            json_mode: JSONMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -1000,29 +998,29 @@ mod tests {
 
         // Test case 3: Messages with system message and some of the optional fields are tested
         let messages = vec![
-            InferenceRequestMessage::System(SystemInferenceRequestMessage {
-                content: "test_system".to_string(),
-            }),
-            InferenceRequestMessage::User(UserInferenceRequestMessage {
-                content: "test_user".to_string(),
-            }),
-            InferenceRequestMessage::User(UserInferenceRequestMessage {
-                content: "test_user2".to_string(),
-            }),
-            InferenceRequestMessage::Assistant(AssistantInferenceRequestMessage {
-                content: Some("test_assistant".to_string()),
-                tool_calls: None,
-            }),
+            RequestMessage {
+                role: Role::User,
+                content: vec![ContentBlock::Text("test_user".to_string())],
+            },
+            RequestMessage {
+                role: Role::User,
+                content: vec![ContentBlock::Text("test_user2".to_string())],
+            },
+            RequestMessage {
+                role: Role::Assistant,
+                content: vec![ContentBlock::Text("test_assistant".to_string())],
+            },
         ];
         let inference_request = ModelInferenceRequest {
             messages: messages.clone(),
+            system_instructions: Some("test_system".to_string()),
             tools_available: None,
-            tool_choice: None,
+            tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             temperature: Some(0.5),
             max_tokens: Some(100),
             stream: true,
-            json_mode: true,
+            json_mode: JSONMode::On,
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -1090,9 +1088,8 @@ mod tests {
             response_with_latency.try_into().unwrap();
         assert_eq!(
             model_inference_response.content,
-            Some("test_assistant".to_string())
+            vec![ContentBlock::Text("test_assistant".to_string())]
         );
-        assert_eq!(model_inference_response.tool_calls, None);
         assert_eq!(
             model_inference_response.usage,
             Usage {
@@ -1136,16 +1133,16 @@ mod tests {
 
         assert_eq!(
             model_inference_response.content,
-            Some("Here's the weather information:".to_string())
+            vec![
+                ContentBlock::Text("Here's the weather information:".to_string()),
+                ContentBlock::ToolCall(ToolCall {
+                    id: "get_weather".to_string(),
+                    name: "get_weather".to_string(),
+                    arguments: r#"{"location": "New York", "unit": "celsius"}"#.to_string(),
+                }),
+            ]
         );
-        assert_eq!(
-            model_inference_response.tool_calls,
-            Some(vec![ToolCall {
-                id: "get_weather".to_string(), // GCP doesn't do IDs
-                name: "get_weather".to_string(),
-                arguments: r#"{"location": "New York", "unit": "celsius"}"#.to_string(),
-            }])
-        );
+
         assert_eq!(
             model_inference_response.usage,
             Usage {
@@ -1203,26 +1200,24 @@ mod tests {
 
         assert_eq!(
             model_inference_response.content,
-            Some(
-                "Here's the weather information:\nAnd here's a restaurant recommendation:"
-                    .to_string()
-            )
-        );
-        assert_eq!(
-            model_inference_response.tool_calls,
-            Some(vec![
-                ToolCall {
+            vec![
+                ContentBlock::Text(
+                    "Here's the weather information:\nAnd here's a restaurant recommendation:"
+                        .to_string()
+                ),
+                ContentBlock::ToolCall(ToolCall {
                     id: "get_weather".to_string(),
                     name: "get_weather".to_string(),
                     arguments: r#"{"location": "New York", "unit": "celsius"}"#.to_string(),
-                },
-                ToolCall {
+                }),
+                ContentBlock::ToolCall(ToolCall {
                     id: "get_restaurant".to_string(),
                     name: "get_restaurant".to_string(),
                     arguments: r#"{"cuisine": "Italian", "price_range": "moderate"}"#.to_string(),
-                }
-            ])
+                }),
+            ]
         );
+
         assert_eq!(
             model_inference_response.usage,
             Usage {
