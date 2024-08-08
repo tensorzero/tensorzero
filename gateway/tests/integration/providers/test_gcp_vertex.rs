@@ -20,12 +20,12 @@ async fn test_infer() {
     assert!(result.is_ok(), "{}", result.unwrap_err());
     let result = result.unwrap();
     assert!(result.content.len() == 1);
-    let content = result.content.get(0).unwrap();
+    let content = result.content.first().unwrap();
     match content {
         ContentBlock::Text(Text { text }) => {
-            assert!(text.len() > 0);
+            assert!(!text.is_empty());
         }
-        _ => panic!("Expected text"),
+        _ => unreachable!(),
     }
 }
 

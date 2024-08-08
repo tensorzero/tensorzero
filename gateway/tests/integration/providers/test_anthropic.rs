@@ -25,12 +25,12 @@ async fn test_infer() {
     assert!(result.is_ok());
     let result = result.unwrap();
     assert!(result.content.len() == 1);
-    let content = result.content.get(0).unwrap();
+    let content = result.content.first().unwrap();
     match content {
         ContentBlock::Text(Text { text }) => {
-            assert!(text.len() > 0);
+            assert!(!text.is_empty());
         }
-        _ => panic!("Expected text"),
+        _ => unreachable!(),
     }
 }
 
@@ -78,7 +78,7 @@ async fn test_infer_with_tool_calls() {
     assert!(result.is_ok());
     let response = result.unwrap();
     assert!(response.content.len() == 1);
-    let content = response.content.get(0).unwrap();
+    let content = response.content.first().unwrap();
     match content {
         ContentBlock::ToolCall(tool_call) => {
             assert!(tool_call.name == "get_weather");
@@ -86,6 +86,6 @@ async fn test_infer_with_tool_calls() {
                 .expect("Failed to parse tool call arguments");
             assert!(arguments.get("location").is_some());
         }
-        _ => panic!("Expected tool call"),
+        _ => unreachable!(),
     }
 }

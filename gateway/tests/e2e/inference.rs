@@ -51,7 +51,7 @@ async fn e2e_test_inference_basic() {
         .as_array()
         .unwrap();
     assert!(content_blocks.len() == 1);
-    let content_block = content_blocks.get(0).unwrap();
+    let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
@@ -94,7 +94,7 @@ async fn e2e_test_inference_basic() {
     // Check that content_blocks is a list of blocks length 1
     let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
     assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.get(0).unwrap();
+    let content_block = content_blocks.first().unwrap();
     // Check the type and content in the block
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
@@ -121,7 +121,7 @@ async fn e2e_test_inference_basic() {
     let output = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
     assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.get(0).unwrap();
+    let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
@@ -185,7 +185,7 @@ async fn e2e_test_inference_model_fallback() {
         .as_array()
         .unwrap();
     assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.get(0).unwrap();
+    let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
@@ -221,7 +221,7 @@ async fn e2e_test_inference_model_fallback() {
     let content_blocks = result.get("content_blocks").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
     assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.get(0).unwrap();
+    let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
@@ -250,7 +250,7 @@ async fn e2e_test_inference_model_fallback() {
     let output = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
     assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.get(0).unwrap();
+    let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
@@ -316,7 +316,7 @@ async fn e2e_test_inference_json_fail() {
         .as_array()
         .unwrap();
     assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.get(0).unwrap();
+    let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
@@ -351,7 +351,7 @@ async fn e2e_test_inference_json_fail() {
     let content_blocks = result.get("content_blocks").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
     assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.get(0).unwrap();
+    let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
@@ -379,7 +379,7 @@ async fn e2e_test_inference_json_fail() {
     let output = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
     assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.get(0).unwrap();
+    let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
@@ -449,7 +449,7 @@ async fn e2e_test_inference_json_succeed() {
         .as_array()
         .unwrap();
     assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.get(0).unwrap();
+    let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
@@ -486,7 +486,7 @@ async fn e2e_test_inference_json_succeed() {
     let content_blocks = result.get("content_blocks").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
     assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.get(0).unwrap();
+    let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
@@ -514,7 +514,7 @@ async fn e2e_test_inference_json_succeed() {
     let output = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
     assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.get(0).unwrap();
+    let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
@@ -585,7 +585,7 @@ async fn e2e_test_variant_failover() {
         .as_array()
         .unwrap();
     assert!(content_blocks.len() == 1);
-    let content_block = content_blocks.get(0).unwrap();
+    let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
@@ -628,7 +628,7 @@ async fn e2e_test_variant_failover() {
     // Check that content_blocks is a list of blocks length 1
     let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
     assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.get(0).unwrap();
+    let content_block = content_blocks.first().unwrap();
     // Check the type and content in the block
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
@@ -655,7 +655,7 @@ async fn e2e_test_variant_failover() {
     let output = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
     assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.get(0).unwrap();
+    let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
@@ -721,7 +721,7 @@ async fn e2e_test_streaming() {
         if i < DUMMY_STREAMING_RESPONSE.len() {
             let content = chunk_json.get("content").unwrap().as_array().unwrap();
             assert_eq!(content.len(), 1);
-            let content_block = content.get(0).unwrap();
+            let content_block = content.first().unwrap();
             let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
             assert_eq!(content_block_type, "text");
             let content = content_block.get("text").unwrap().as_str().unwrap();
@@ -764,7 +764,7 @@ async fn e2e_test_streaming() {
     let content_blocks = result.get("content_blocks").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
     assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.get(0).unwrap();
+    let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
@@ -792,7 +792,7 @@ async fn e2e_test_streaming() {
     let output = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
     assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.get(0).unwrap();
+    let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();

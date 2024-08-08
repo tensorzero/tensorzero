@@ -59,7 +59,7 @@ async fn test_inference_basic() {
         .as_array()
         .unwrap();
     assert!(content_blocks.len() == 1);
-    let content_block = content_blocks.get(0).unwrap();
+    let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
@@ -94,7 +94,7 @@ async fn test_inference_basic() {
     // Check that content_blocks is a list of blocks length 1
     let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
     assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.get(0).unwrap();
+    let content_block = content_blocks.first().unwrap();
     // Check the type and content in the block
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
@@ -121,7 +121,7 @@ async fn test_inference_basic() {
     let output = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
     assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.get(0).unwrap();
+    let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
     let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
