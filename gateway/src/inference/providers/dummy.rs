@@ -10,9 +10,11 @@ use crate::inference::types::{
     InferenceResponseStream, Latency, ModelInferenceRequest, ModelInferenceResponse,
     ModelInferenceResponseChunk, Usage,
 };
-use crate::model::ProviderConfig;
 
-pub struct DummyProvider;
+#[derive(Clone, Debug)]
+pub struct DummyProvider {
+    pub model_name: String,
+}
 
 pub static DUMMY_INFER_RESPONSE_CONTENT: &str = "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.";
 pub static DUMMY_INFER_RESPONSE_RAW: &str = r#"{
@@ -55,19 +57,11 @@ pub static DUMMY_STREAMING_RESPONSE: [&str; 16] = [
 
 impl InferenceProvider for DummyProvider {
     async fn infer<'a>(
+        &'a self,
         _request: &'a ModelInferenceRequest<'a>,
-        model: &'a ProviderConfig,
         _http_client: &'a reqwest::Client,
     ) -> Result<ModelInferenceResponse, Error> {
-        let model_name = match model {
-            ProviderConfig::Dummy { model_name } => model_name,
-            _ => {
-                return Err(Error::InvalidProviderConfig {
-                    message: "Expected Dummy provider config.".to_string(),
-                })
-            }
-        };
-        if model_name == "error" {
+        if self.model_name == "error" {
             return Err(Error::InferenceClient {
                 message: "Error sending request to Dummy provider.".to_string(),
             });
@@ -78,11 +72,11 @@ impl InferenceProvider for DummyProvider {
             .duration_since(std::time::UNIX_EPOCH)
             .expect("Time went backwards")
             .as_secs();
-        let content = match model_name.as_str() {
+        let content = match self.model_name.as_str() {
             "json" => Some(r#"{"answer":"Hello"}"#.to_string()),
             _ => Some(DUMMY_INFER_RESPONSE_CONTENT.to_string()),
         };
-        let raw = match model_name.as_str() {
+        let raw = match self.model_name.as_str() {
             "json" => DUMMY_JSON_RESPONSE_RAW.to_string(),
             _ => DUMMY_INFER_RESPONSE_RAW.to_string(),
         };
@@ -102,19 +96,11 @@ impl InferenceProvider for DummyProvider {
     }
 
     async fn infer_stream<'a>(
+        &'a self,
         _request: &'a ModelInferenceRequest<'a>,
-        model: &'a ProviderConfig,
         _http_client: &'a reqwest::Client,
     ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
-        let model_name = match model {
-            ProviderConfig::Dummy { model_name } => model_name,
-            _ => {
-                return Err(Error::InvalidProviderConfig {
-                    message: "Expected Dummy provider config.".to_string(),
-                })
-            }
-        };
-        if model_name == "error" {
+        if self.model_name == "error" {
             return Err(Error::InferenceClient {
                 message: "Error sending request to Dummy provider.".to_string(),
             });

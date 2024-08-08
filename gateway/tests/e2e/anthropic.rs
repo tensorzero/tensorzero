@@ -71,8 +71,8 @@ async fn test_inference_basic() {
     let r#type = response_json.get("type").unwrap().as_str().unwrap();
     assert_eq!(r#type, "Chat");
 
-    // Sleep for 0.1 seconds to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Check ClickHouse
     let clickhouse =
@@ -173,8 +173,8 @@ async fn test_streaming() {
         );
     }
     let inference_id = inference_id.unwrap();
-    // Sleep for 0.1 seconds to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Check ClickHouse
     let clickhouse =

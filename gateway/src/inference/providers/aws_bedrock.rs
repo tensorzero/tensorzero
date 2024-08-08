@@ -12,7 +12,6 @@ use crate::inference::types::{
     InferenceRequestMessage, InferenceResponseStream, Latency, ModelInferenceRequest,
     ModelInferenceResponse, ModelInferenceResponseChunk, ToolCall, Usage,
 };
-use crate::model::ProviderConfig;
 
 static AWS_BEDROCK_CLIENT: OnceCell<aws_sdk_bedrockruntime::Client> = OnceCell::const_new();
 
@@ -27,24 +26,18 @@ async fn get_aws_bedrock_client() -> &'static aws_sdk_bedrockruntime::Client {
         .await
 }
 
-pub struct AWSBedrockProvider;
+#[derive(Clone, Debug)]
+pub struct AWSBedrockProvider {
+    pub model_id: String,
+}
 
 impl InferenceProvider for AWSBedrockProvider {
     async fn infer<'a>(
+        &'a self,
         request: &'a ModelInferenceRequest<'a>,
-        config: &'a ProviderConfig,
         _http_client: &'a reqwest::Client,
     ) -> Result<ModelInferenceResponse, Error> {
         let aws_bedrock_client = get_aws_bedrock_client().await;
-
-        let model_id = match config {
-            ProviderConfig::AWSBedrock { model_id } => model_id,
-            _ => {
-                return Err(Error::InvalidProviderConfig {
-                    message: "Expected AWS Bedrock provider config".to_string(),
-                })
-            }
-        };
 
         let first_message = &request.messages[0];
         let (system, request_messages) = match first_message {
@@ -73,7 +66,7 @@ impl InferenceProvider for AWSBedrockProvider {
 
         let mut request = aws_bedrock_client
             .converse()
-            .model_id(model_id)
+            .model_id(&self.model_id)
             .set_messages(Some(messages))
             .inference_config(inference_config.build());
 
@@ -96,8 +89,8 @@ impl InferenceProvider for AWSBedrockProvider {
     }
 
     async fn infer_stream<'a>(
+        &'a self,
         _request: &'a ModelInferenceRequest<'a>,
-        _config: &'a ProviderConfig,
         _http_client: &'a reqwest::Client,
     ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
         todo!() // TODO (#30): implement streaming inference

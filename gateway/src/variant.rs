@@ -237,17 +237,14 @@ impl Variant for ChatCompletionConfig {
 mod tests {
     use super::*;
 
-    use crate::{
-        error::Error,
-        inference::{
-            providers::dummy::{
-                DUMMY_INFER_RESPONSE_CONTENT, DUMMY_JSON_RESPONSE_RAW, DUMMY_STREAMING_RESPONSE,
-            },
-            types::Usage,
-        },
-        minijinja_util::tests::idempotent_initialize_test_templates,
-        model::ProviderConfig,
+    use crate::error::Error;
+    use crate::inference::providers::dummy::{
+        DummyProvider, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_JSON_RESPONSE_RAW,
+        DUMMY_STREAMING_RESPONSE,
     };
+    use crate::inference::types::Usage;
+    use crate::minijinja_util::tests::idempotent_initialize_test_templates;
+    use crate::model::ProviderConfig;
     use futures::StreamExt;
     use serde_json::{json, Value};
 
@@ -424,15 +421,15 @@ mod tests {
             user_template: Some(user_template_name.into()),
             assistant_template: None,
         };
-        let good_provider_config = ProviderConfig::Dummy {
+        let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".to_string(),
-        };
-        let error_provider_config = ProviderConfig::Dummy {
+        });
+        let error_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "error".to_string(),
-        };
-        let json_provider_config = ProviderConfig::Dummy {
+        });
+        let json_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "json".to_string(),
-        };
+        });
         let text_model_config = ModelConfig {
             routing: vec!["good".to_string()],
             providers: HashMap::from([("good".to_string(), good_provider_config)]),
@@ -604,12 +601,12 @@ mod tests {
         idempotent_initialize_test_templates();
         let system_template_name = "system";
         let user_template_name = "greeting_with_age";
-        let good_provider_config = ProviderConfig::Dummy {
+        let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".to_string(),
-        };
-        let error_provider_config = ProviderConfig::Dummy {
+        });
+        let error_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "error".to_string(),
-        };
+        });
         let text_model_config = ModelConfig {
             routing: vec!["good".to_string()],
             providers: HashMap::from([("good".to_string(), good_provider_config)]),

@@ -1,7 +1,7 @@
 use futures::{StreamExt, TryStreamExt};
 use reqwest::StatusCode;
 use reqwest_eventsource::RequestBuilderExt;
-use secrecy::ExposeSecret;
+use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
 use serde_json::Value;
 use tokio::time::Instant;
@@ -12,7 +12,6 @@ use crate::{
         InferenceResponseStream, Latency, ModelInferenceRequest, ModelInferenceResponse,
         ModelInferenceResponseChunk,
     },
-    model::ProviderConfig,
 };
 
 use super::{
@@ -23,34 +22,25 @@ use super::{
     provider_trait::InferenceProvider,
 };
 
-pub struct TogetherProvider;
+#[derive(Clone, Debug)]
+pub struct TogetherProvider {
+    pub model_name: String,
+    pub api_key: Option<SecretString>,
+}
 
 // TODO (#80): Add support for Llama 3.1 function calling as discussed [here](https://docs.together.ai/docs/llama-3-function-calling)
 
 impl InferenceProvider for TogetherProvider {
     async fn infer<'a>(
+        &'a self,
         request: &'a ModelInferenceRequest<'a>,
-        model: &'a ProviderConfig,
         http_client: &'a reqwest::Client,
     ) -> Result<ModelInferenceResponse, Error> {
-        let (model_name, api_key) = match model {
-            ProviderConfig::Together {
-                model_name,
-                api_key,
-            } => (
-                model_name,
-                api_key.as_ref().ok_or(Error::ApiKeyMissing {
-                    provider_name: "Together".to_string(),
-                })?,
-            ),
-            _ => {
-                return Err(Error::InvalidProviderConfig {
-                    message: "Expected Together provider config".to_string(),
-                })
-            }
-        };
+        let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
+            provider_name: "Together".to_string(),
+        })?;
         let api_base = Some("https://api.together.xyz/v1");
-        let request_body = TogetherRequest::new(model_name, request);
+        let request_body = TogetherRequest::new(&self.model_name, request);
         let request_url = get_chat_url(api_base)?;
         let start_time = Instant::now();
         let res = http_client
@@ -91,27 +81,14 @@ impl InferenceProvider for TogetherProvider {
     }
 
     async fn infer_stream<'a>(
+        &'a self,
         request: &'a ModelInferenceRequest<'a>,
-        model: &'a ProviderConfig,
         http_client: &'a reqwest::Client,
     ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
-        let (model_name, api_key) = match model {
-            ProviderConfig::Together {
-                model_name,
-                api_key,
-            } => (
-                model_name,
-                api_key.as_ref().ok_or(Error::ApiKeyMissing {
-                    provider_name: "Together".to_string(),
-                })?,
-            ),
-            _ => {
-                return Err(Error::InvalidProviderConfig {
-                    message: "Expected Together provider config".to_string(),
-                })
-            }
-        };
-        let request_body = TogetherRequest::new(model_name, request);
+        let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
+            provider_name: "Together".to_string(),
+        })?;
+        let request_body = TogetherRequest::new(&self.model_name, request);
         let api_base = Some("https://api.together.xyz/v1");
         let request_url = get_chat_url(api_base)?;
         let start_time = Instant::now();
