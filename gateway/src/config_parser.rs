@@ -21,6 +21,7 @@ pub struct Config {
 #[serde(deny_unknown_fields)]
 pub struct ApiConfig {
     pub bind_address: Option<std::net::SocketAddr>,
+    pub prometheus_address: Option<std::net::SocketAddr>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -391,6 +392,50 @@ mod tests {
         );
     }
 
+    /// Ensure that the config parsing correctly handles the `gateway.prometheus_address` field
+    #[test]
+    fn test_config_gateway_prometheus_address() {
+        let mut config = get_sample_valid_config();
+
+        // Test with a valid Prometheus address
+        let parsed_config = Config::try_from(config.clone()).unwrap();
+        assert_eq!(
+            parsed_config
+                .gateway
+                .unwrap()
+                .prometheus_address
+                .unwrap()
+                .to_string(),
+            "0.0.0.0:9090"
+        );
+
+        // Test with missing gateway section
+        config.remove("gateway");
+        let parsed_config = Config::try_from(config.clone()).unwrap();
+        assert!(parsed_config.gateway.is_none());
+
+        // Test with missing prometheus_address
+        config.insert(
+            "gateway".to_string(),
+            toml::Value::Table(toml::Table::new()),
+        );
+        let parsed_config = Config::try_from(config.clone()).unwrap();
+        assert!(parsed_config.gateway.unwrap().bind_address.is_none());
+
+        // Test with invalid Prometheus address
+        config["gateway"].as_table_mut().unwrap().insert(
+            "prometheus_address".to_string(),
+            toml::Value::String("invalid_address".to_string()),
+        );
+        let result = Config::try_from(config);
+        assert_eq!(
+                result.unwrap_err(),
+                Error::Config {
+                    message: "Failed to parse config:\ninvalid socket address syntax\nin `gateway.prometheus_address`\n".to_string()
+                }
+            );
+    }
+
     /// Ensure that the config parsing fails when the `[models]` section is missing
     #[test]
     fn test_config_from_toml_table_missing_models() {
@@ -669,7 +714,6 @@ mod tests {
 
         // Get all templates
         let templates = config.get_templates(PathBuf::from("/base/path"));
-        println!("templates: {:?}", templates);
 
         // Check if all expected templates are present
         assert_eq!(
@@ -724,6 +768,7 @@ mod tests {
 
         [gateway]
         bind_address = "0.0.0.0:3000"
+        prometheus_address = "0.0.0.0:9090"
 
         # ┌────────────────────────────────────────────────────────────────────────────┐
         # │                                   MODELS                                   │

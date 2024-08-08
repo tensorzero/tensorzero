@@ -220,6 +220,38 @@ weight = 0.5
 model = "error"
 system_template = "functions/basic_test/prompt/system_template.minijinja"
 
+[functions.prometheus_test1]
+type = "chat"
+
+[functions.prometheus_test1.variants.variant]
+type = "chat_completion"
+weight = 1
+model = "test"
+
+[functions.prometheus_test2]
+type = "chat"
+
+[functions.prometheus_test2.variants.variant]
+type = "chat_completion"
+weight = 1
+model = "test"
+
+[functions.prometheus_test3]
+type = "chat"
+
+[functions.prometheus_test3.variants.variant]
+type = "chat_completion"
+weight = 1
+model = "test"
+
+[functions.prometheus_test4]
+type = "chat"
+
+[functions.prometheus_test4.variants.variant]
+type = "chat_completion"
+weight = 1
+model = "test"
+
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
@@ -241,6 +273,26 @@ optimize = "max"
 level = "episode"
 
 [metrics.brevity_score]
+type = "float"
+optimize = "max"
+level = "inference"
+
+[metrics.prometheus_test_boolean1]
+type = "boolean"
+optimize = "max"
+level = "inference"
+
+[metrics.prometheus_test_boolean2]
+type = "boolean"
+optimize = "max"
+level = "inference"
+
+[metrics.prometheus_test_float1]
+type = "float"
+optimize = "max"
+level = "inference"
+
+[metrics.prometheus_test_float2]
 type = "float"
 optimize = "max"
 level = "inference"
