@@ -42,6 +42,7 @@ mod tests {
     async fn test_health_handler() {
         let config = Config {
             gateway: None,
+            clickhouse: None,
             models: HashMap::new(),
             functions: HashMap::new(),
             metrics: None,

@@ -12,6 +12,7 @@ use crate::variant::VariantConfig;
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub gateway: Option<ApiConfig>,
+    pub clickhouse: Option<ClickHouseConfig>,
     pub models: HashMap<String, ModelConfig>, // model name => model config
     pub functions: HashMap<String, FunctionConfig>, // function name => function config
     pub metrics: Option<HashMap<String, MetricConfig>>, // metric name => metric config
@@ -22,6 +23,12 @@ pub struct Config {
 pub struct ApiConfig {
     pub bind_address: Option<std::net::SocketAddr>,
     pub prometheus_address: Option<std::net::SocketAddr>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ClickHouseConfig {
+    pub database: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]

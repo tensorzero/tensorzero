@@ -22,7 +22,12 @@ pub enum ClickHouseConnectionInfo {
 }
 
 impl ClickHouseConnectionInfo {
-    pub fn new(base_url: &str, mock: bool, healthy: Option<bool>) -> Result<Self, Error> {
+    pub fn new(
+        base_url: &str,
+        database: &str,
+        mock: bool,
+        healthy: Option<bool>,
+    ) -> Result<Self, Error> {
         if mock {
             return Ok(Self::Mock {
                 mock_data: Arc::new(RwLock::new(HashMap::new())),
@@ -37,9 +42,16 @@ impl ClickHouseConnectionInfo {
 
         Ok(Self::Production {
             base_url,
-            database: "tensorzero".to_string(), // TODO (#69): parameterize the database name
+            database: database.to_string(),
             client: Client::new(),
         })
+    }
+
+    pub fn database(&self) -> &str {
+        match self {
+            Self::Mock { .. } => unreachable!(),
+            Self::Production { database, .. } => database,
+        }
     }
 
     pub fn get_url(&self) -> String {
@@ -138,11 +150,14 @@ impl ClickHouseConnectionInfo {
         }
     }
 
-    pub async fn create_database(&self, database: &str) -> Result<(), Error> {
+    pub async fn create_database(&self) -> Result<(), Error> {
         match self {
             Self::Mock { .. } => unimplemented!(),
             Self::Production {
-                base_url, client, ..
+                base_url,
+                database,
+                client,
+                ..
             } => {
                 let query = format!("CREATE DATABASE IF NOT EXISTS {}", database);
 

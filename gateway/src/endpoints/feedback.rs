@@ -297,6 +297,7 @@ mod tests {
         );
         let config = Config {
             gateway: None,
+            clickhouse: None,
             models: HashMap::new(),
             metrics: Some(metrics),
             functions: HashMap::new(),
@@ -410,6 +411,7 @@ mod tests {
         metrics.insert("test_metric".to_string(), metric_config);
         let config = Config {
             gateway: None,
+            clickhouse: None,
             models: HashMap::new(),
             metrics: Some(metrics),
             functions: HashMap::new(),
@@ -438,6 +440,7 @@ mod tests {
         // Test a Comment Feedback
         let config = Config {
             gateway: None,
+            clickhouse: None,
             models: HashMap::new(),
             metrics: Some(HashMap::new()),
             functions: HashMap::new(),
@@ -536,6 +539,7 @@ mod tests {
         );
         let config = Config {
             gateway: None,
+            clickhouse: None,
             models: HashMap::new(),
             metrics: Some(metrics),
             functions: HashMap::new(),
@@ -602,6 +606,7 @@ mod tests {
         );
         let config = Config {
             gateway: None,
+            clickhouse: None,
             models: HashMap::new(),
             metrics: Some(metrics),
             functions: HashMap::new(),

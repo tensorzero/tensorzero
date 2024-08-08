@@ -43,7 +43,7 @@ uuid = { version = "1.10.0", features = ["serde", "v7"] }
 
 [dev-dependencies]
 tempfile = "3.10.1"
-tracing-test = "0.2.5"
+tracing-test = { version = "0.2.5", features = ["no-env-filter"] }
 
 
 [lints]
