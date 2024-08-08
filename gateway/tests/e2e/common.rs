@@ -5,15 +5,13 @@ use uuid::Uuid;
 
 lazy_static::lazy_static! {
     pub static ref CLICKHOUSE_URL: String = std::env::var("CLICKHOUSE_URL").expect("Environment variable CLICKHOUSE_URL must be set");
-    static ref GATEWAY_URL: String = std::env::var("E2E_TESTS_GATEWAY_URL").unwrap_or("http://localhost:3000".to_string());
+    static ref GATEWAY_URL: String = std::env::var("GATEWAY_URL").unwrap_or("http://localhost:3000".to_string());
 }
 
 pub fn get_gateway_endpoint(endpoint: &str) -> Url {
-    println!("GATEWAY_URL: {}", *GATEWAY_URL);
     let base_url: Url = GATEWAY_URL
         .parse()
-        .expect(format!("Invalid gateway URL: {}", *GATEWAY_URL).as_str());
-    println!("base_url: {}", base_url);
+        .expect("Invalid gateway URL (check environment variable GATEWAY_URL)");
 
     base_url.join(endpoint).unwrap()
 }
