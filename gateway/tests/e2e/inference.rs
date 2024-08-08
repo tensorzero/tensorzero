@@ -69,8 +69,8 @@ async fn e2e_test_inference_basic() {
     let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
     assert_eq!(prompt_tokens, 10);
     assert_eq!(completion_tokens, 10);
-    // Sleep for 0.1 seconds to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Check ClickHouse
     let clickhouse =
@@ -126,8 +126,8 @@ async fn e2e_test_inference_dryrun() {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    // Sleep for 0.1 seconds to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Check ClickHouse
     let clickhouse =
@@ -191,8 +191,8 @@ async fn e2e_test_inference_model_fallback() {
     let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
     assert_eq!(prompt_tokens, 10);
     assert_eq!(completion_tokens, 10);
-    // Sleep for 0.1 seconds to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Check ClickHouse
     let clickhouse =
@@ -269,8 +269,8 @@ async fn e2e_test_inference_json_fail() {
     let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
     assert_eq!(prompt_tokens, 10);
     assert_eq!(completion_tokens, 10);
-    // Sleep for 0.1 seconds to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Check ClickHouse
     let clickhouse =
@@ -348,8 +348,8 @@ async fn e2e_test_inference_json_succeed() {
     let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
     assert_eq!(prompt_tokens, 10);
     assert_eq!(completion_tokens, 10);
-    // Sleep for 0.1 seconds to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Check ClickHouse
     let clickhouse =
@@ -440,8 +440,8 @@ async fn e2e_test_variant_failover() {
     let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
     assert_eq!(prompt_tokens, 10);
     assert_eq!(completion_tokens, 10);
-    // Sleep for 0.1 seconds to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Check ClickHouse
     let clickhouse =
@@ -521,8 +521,8 @@ async fn e2e_test_streaming() {
         }
     }
     let inference_id = inference_id.unwrap();
-    // Sleep for 0.1 seconds to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Check ClickHouse
     let clickhouse =
@@ -602,8 +602,8 @@ async fn e2e_test_streaming_dryrun() {
     }
     let inference_id = inference_id.unwrap();
 
-    // Sleep for 0.1 seconds to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Check ClickHouse
     let clickhouse =
