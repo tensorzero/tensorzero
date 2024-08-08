@@ -1,6 +1,6 @@
 use futures::{StreamExt, TryStreamExt};
 use reqwest_eventsource::RequestBuilderExt;
-use secrecy::ExposeSecret;
+use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
 use serde_json::Value;
 use tokio::time::Instant;
@@ -11,7 +11,6 @@ use crate::{
         InferenceResponseStream, Latency, ModelInferenceRequest, ModelInferenceResponse,
         ModelInferenceResponseChunk,
     },
-    model::ProviderConfig,
 };
 
 use super::{
@@ -22,7 +21,11 @@ use super::{
     provider_trait::InferenceProvider,
 };
 
-pub struct FireworksProvider;
+#[derive(Clone, Debug)]
+pub struct FireworksProvider {
+    pub model_name: String,
+    pub api_key: Option<SecretString>,
+}
 
 /// Key differences between Fireworks and OpenAI inference:
 /// - Fireworks allows you to specify output format in JSON mode
@@ -31,28 +34,15 @@ pub struct FireworksProvider;
 ///   (there are 2 ways to do it, we have the default of auto-truncation to the max window size)
 impl InferenceProvider for FireworksProvider {
     async fn infer<'a>(
+        &'a self,
         request: &'a ModelInferenceRequest<'a>,
-        model: &'a ProviderConfig,
         http_client: &'a reqwest::Client,
     ) -> Result<ModelInferenceResponse, Error> {
-        let (model_name, api_key) = match model {
-            ProviderConfig::Fireworks {
-                model_name,
-                api_key,
-            } => (
-                model_name,
-                api_key.as_ref().ok_or(Error::ApiKeyMissing {
-                    provider_name: "Fireworks".to_string(),
-                })?,
-            ),
-            _ => {
-                return Err(Error::InvalidProviderConfig {
-                    message: "Expected Fireworks provider config".to_string(),
-                })
-            }
-        };
+        let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
+            provider_name: "Fireworks".to_string(),
+        })?;
         let api_base = Some("https://api.fireworks.ai/inference/v1/");
-        let request_body = FireworksRequest::new(model_name, request);
+        let request_body = FireworksRequest::new(&self.model_name, request);
         let request_url = get_chat_url(api_base)?;
         let start_time = Instant::now();
         let res = http_client
@@ -93,27 +83,14 @@ impl InferenceProvider for FireworksProvider {
     }
 
     async fn infer_stream<'a>(
+        &'a self,
         request: &'a ModelInferenceRequest<'a>,
-        model: &'a ProviderConfig,
         http_client: &'a reqwest::Client,
     ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
-        let (model_name, api_key) = match model {
-            ProviderConfig::Fireworks {
-                model_name,
-                api_key,
-            } => (
-                model_name,
-                api_key.as_ref().ok_or(Error::ApiKeyMissing {
-                    provider_name: "Fireworks".to_string(),
-                })?,
-            ),
-            _ => {
-                return Err(Error::InvalidProviderConfig {
-                    message: "Expected Fireworks provider config".to_string(),
-                })
-            }
-        };
-        let request_body = FireworksRequest::new(model_name, request);
+        let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
+            provider_name: "Fireworks".to_string(),
+        })?;
+        let request_body = FireworksRequest::new(&self.model_name, request);
         let api_base = Some("https://api.fireworks.ai/inference/v1/");
         let request_url = get_chat_url(api_base)?;
         let start_time = Instant::now();

@@ -14,13 +14,13 @@ async fn test_infer() {
     let api_key = env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY must be set");
     let api_key = SecretString::new(api_key);
     let model_name = "claude-3-haiku-20240307";
-    let config = ProviderConfig::Anthropic {
+    let provider = ProviderConfig::Anthropic(AnthropicProvider {
         model_name: model_name.to_string(),
         api_key: Some(api_key),
-    };
+    });
     let client = reqwest::Client::new();
     let inference_request = create_simple_inference_request();
-    let result = AnthropicProvider::infer(&inference_request, &config, &client).await;
+    let result = provider.infer(&inference_request, &client).await;
     assert!(result.is_ok());
     assert!(result.unwrap().content.is_some());
 }
@@ -31,13 +31,13 @@ async fn test_infer_stream() {
     let api_key = env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY must be set");
     let api_key = SecretString::new(api_key);
     let model_name = "claude-3-haiku-20240307";
-    let config = ProviderConfig::Anthropic {
+    let provider = ProviderConfig::Anthropic(AnthropicProvider {
         model_name: model_name.to_string(),
         api_key: Some(api_key),
-    };
+    });
     let client = reqwest::Client::new();
     let inference_request = create_streaming_inference_request();
-    let result = AnthropicProvider::infer_stream(&inference_request, &config, &client).await;
+    let result = provider.infer_stream(&inference_request, &client).await;
     assert!(result.is_ok());
     let (chunk, mut stream) = result.unwrap();
     let mut collected_chunks = vec![chunk];
@@ -60,11 +60,11 @@ async fn test_infer_with_tool_calls() {
     let client = reqwest::Client::new();
 
     let inference_request = create_tool_inference_request();
-    let config = ProviderConfig::Anthropic {
+    let provider = ProviderConfig::Anthropic(AnthropicProvider {
         model_name: model_name.to_string(),
         api_key: Some(api_key),
-    };
-    let result = AnthropicProvider::infer(&inference_request, &config, &client).await;
+    });
+    let result = provider.infer(&inference_request, &client).await;
 
     assert!(result.is_ok());
     let response = result.unwrap();

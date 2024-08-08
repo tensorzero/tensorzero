@@ -20,11 +20,11 @@ async fn test_infer() {
     let client = reqwest::Client::new();
     let inference_request = create_simple_inference_request();
 
-    let provider_config = ProviderConfig::Fireworks {
+    let provider = ProviderConfig::Fireworks(FireworksProvider {
         model_name: model_name.to_string(),
         api_key: Some(api_key),
-    };
-    let result = FireworksProvider::infer(&inference_request, &provider_config, &client).await;
+    });
+    let result = provider.infer(&inference_request, &client).await;
     assert!(result.is_ok());
     assert!(result.unwrap().content.is_some());
 }
@@ -39,11 +39,11 @@ async fn test_infer_with_tool_calls() {
 
     let inference_request = create_tool_inference_request();
 
-    let provider_config = ProviderConfig::Fireworks {
+    let provider = ProviderConfig::Fireworks(FireworksProvider {
         model_name: model_name.to_string(),
         api_key: Some(api_key),
-    };
-    let result = FireworksProvider::infer(&inference_request, &provider_config, &client).await;
+    });
+    let result = provider.infer(&inference_request, &client).await;
 
     assert!(result.is_ok());
     let response = result.unwrap();
@@ -69,12 +69,11 @@ async fn test_infer_stream() {
     let client = reqwest::Client::new();
     let inference_request = create_streaming_inference_request();
 
-    let provider_config = ProviderConfig::Fireworks {
+    let provider = ProviderConfig::Fireworks(FireworksProvider {
         model_name: model_name.to_string(),
         api_key: Some(api_key),
-    };
-    let result =
-        FireworksProvider::infer_stream(&inference_request, &provider_config, &client).await;
+    });
+    let result = provider.infer_stream(&inference_request, &client).await;
     assert!(result.is_ok());
     let (chunk, mut stream) = result.unwrap();
     let mut collected_chunks = vec![chunk];
@@ -97,11 +96,11 @@ async fn test_json_request() {
     let client = reqwest::Client::new();
     let inference_request = create_json_inference_request();
 
-    let provider_config = ProviderConfig::Fireworks {
+    let provider = ProviderConfig::Fireworks(FireworksProvider {
         model_name: model_name.to_string(),
         api_key: Some(api_key),
-    };
-    let result = FireworksProvider::infer(&inference_request, &provider_config, &client).await;
+    });
+    let result = provider.infer(&inference_request, &client).await;
     assert!(result.is_ok());
     let result = result.unwrap();
     assert!(result.content.is_some());

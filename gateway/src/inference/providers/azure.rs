@@ -1,7 +1,7 @@
 use futures::{StreamExt, TryStreamExt};
 use reqwest::StatusCode;
 use reqwest_eventsource::RequestBuilderExt;
-use secrecy::ExposeSecret;
+use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
 use tokio::time::Instant;
 
@@ -10,7 +10,6 @@ use crate::inference::types::{
     InferenceResponseStream, Latency, ModelInferenceRequest, ModelInferenceResponse,
     ModelInferenceResponseChunk,
 };
-use crate::model::ProviderConfig;
 
 use super::openai::{
     handle_openai_error, stream_openai, OpenAIRequestMessage, OpenAIResponse,
@@ -18,36 +17,25 @@ use super::openai::{
 };
 use super::provider_trait::InferenceProvider;
 
-pub struct AzureProvider;
+#[derive(Clone, Debug)]
+pub struct AzureProvider {
+    pub model_name: String,
+    pub api_base: String,
+    pub deployment_id: String,
+    pub api_key: Option<SecretString>,
+}
 
 impl InferenceProvider for AzureProvider {
     async fn infer<'a>(
+        &'a self,
         request: &'a ModelInferenceRequest<'a>,
-        model: &'a ProviderConfig,
         http_client: &'a reqwest::Client,
     ) -> Result<ModelInferenceResponse, Error> {
-        let (model_name, api_base, deployment_id, api_key) = match model {
-            ProviderConfig::Azure {
-                model_name,
-                api_base,
-                deployment_id,
-                api_key,
-            } => (
-                model_name,
-                api_base,
-                deployment_id,
-                api_key.as_ref().ok_or(Error::ApiKeyMissing {
-                    provider_name: "Azure".to_string(),
-                })?,
-            ),
-            _ => {
-                return Err(Error::InvalidProviderConfig {
-                    message: "Expected Azure provider config".to_string(),
-                })
-            }
-        };
-        let request_body = AzureRequest::new(model_name, request);
-        let request_url = get_azure_chat_url(api_base, deployment_id);
+        let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
+            provider_name: "Azure".to_string(),
+        })?;
+        let request_body = AzureRequest::new(&self.model_name, request);
+        let request_url = get_azure_chat_url(&self.api_base, &self.deployment_id);
         let start_time = Instant::now();
         let res = http_client
             .post(request_url)
@@ -88,32 +76,15 @@ impl InferenceProvider for AzureProvider {
     }
 
     async fn infer_stream<'a>(
+        &'a self,
         request: &'a ModelInferenceRequest<'a>,
-        model: &'a ProviderConfig,
         http_client: &'a reqwest::Client,
     ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
-        let (model_name, api_key, api_base, deployment_id) = match model {
-            ProviderConfig::Azure {
-                model_name,
-                api_key,
-                api_base,
-                deployment_id,
-            } => (
-                model_name,
-                api_key.as_ref().ok_or(Error::ApiKeyMissing {
-                    provider_name: "Azure".to_string(),
-                })?,
-                api_base,
-                deployment_id,
-            ),
-            _ => {
-                return Err(Error::InvalidProviderConfig {
-                    message: "Expected Azure provider config".to_string(),
-                })
-            }
-        };
-        let request_body = AzureRequest::new(model_name, request);
-        let request_url = get_azure_chat_url(api_base, deployment_id);
+        let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
+            provider_name: "Azure".to_string(),
+        })?;
+        let request_body = AzureRequest::new(&self.model_name, request);
+        let request_url = get_azure_chat_url(&self.api_base, &self.deployment_id);
         let start_time = Instant::now();
         let event_source = http_client
             .post(request_url)
