@@ -308,11 +308,11 @@ impl ChatInferenceResponse {
             ToolChoice::Implicit => {
                 for content in content.iter().rev() {
                     let arguments = match content {
-                        ContentBlock::ToolCall(tool_call) => tool_call.arguments,
+                        ContentBlock::ToolCall(tool_call) => &tool_call.arguments,
                         _ => continue,
                     };
                     let parsed_arguments =
-                        serde_json::from_str(&arguments).map_err(|e| Error::OutputParsing {
+                        serde_json::from_str(arguments).map_err(|e| Error::OutputParsing {
                             raw_output: arguments.to_string(),
                             message: e.to_string(),
                         })?;
@@ -529,7 +529,6 @@ pub fn collect_chunks(
                 .to_string(),
         })?
         .latency;
-    let mut last_tool_call_id: Option<String> = None;
     for chunk in value {
         for content in chunk.content {
             match content {
@@ -541,6 +540,9 @@ pub fn collect_chunks(
                         }
                         // If there is no text block, create one
                         _ => {
+                            if ttft.is_none() {
+                                ttft = Some(chunk.latency);
+                            }
                             text_blocks.insert(text.id, ContentBlock::Text(text.text));
                         }
                     }
@@ -554,8 +556,13 @@ pub fn collect_chunks(
                         }
                         // If there is no tool call block, create one
                         _ => {
-                            tool_call_blocks
-                                .insert(tool_call.id, ContentBlock::ToolCall(tool_call.into()));
+                            if ttft.is_none() {
+                                ttft = Some(chunk.latency);
+                            }
+                            tool_call_blocks.insert(
+                                tool_call.id.clone(),
+                                ContentBlock::ToolCall(tool_call.into()),
+                            );
                         }
                     }
                 }

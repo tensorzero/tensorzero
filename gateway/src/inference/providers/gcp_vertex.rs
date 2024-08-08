@@ -382,8 +382,8 @@ enum GCPVertexGeminiTool<'a> {
     FunctionDeclarations(Vec<GCPVertexGeminiFunctionDeclaration<'a>>),
 }
 
-impl From<&Tool> for GCPVertexGeminiFunctionDeclaration<'_> {
-    fn from(tool: &Tool) -> Self {
+impl<'a> From<&'a Tool> for GCPVertexGeminiFunctionDeclaration<'a> {
+    fn from(tool: &'a Tool) -> Self {
         match tool {
             Tool::Function {
                 description,
@@ -648,8 +648,6 @@ impl TryFrom<GCPVertexGeminiResponseWithLatency> for ModelInferenceResponse {
         let raw = serde_json::to_string(&body).map_err(|e| Error::GCPVertexServer {
             message: format!("Error parsing response from GCP Vertex Gemini: {e}"),
         })?;
-        let mut message_text: Option<String> = None;
-        let mut tool_calls: Option<Vec<ToolCall>> = None;
         // GCP Vertex Gemini response can contain multiple candidates and each of these can contain
         // multiple content parts. We will only use the first candidate but handle all parts of the response therein.
         let first_candidate = body

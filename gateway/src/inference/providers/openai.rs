@@ -276,7 +276,7 @@ pub fn tensorzero_to_openai_messages<'a>(
     let mut messages = Vec::new();
     let mut tool_calls = Vec::new();
     let mut first_assistant_message_index: Option<usize> = None;
-    for (index, block) in message.content.iter().enumerate() {
+    for block in message.content.iter() {
         match block {
             ContentBlock::Text(text) => match message.role {
                 Role::User => {

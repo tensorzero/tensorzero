@@ -17,7 +17,7 @@ use crate::function::{sample_variant, FunctionConfig};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
     collect_chunks, Inference, InferenceResponse, InferenceResponseChunk, InferenceResponseStream,
-    Input, InputMessage, ModelInferenceResponseChunk, ToolChoice,
+    Input, ModelInferenceResponseChunk, ToolChoice,
 };
 use crate::variant::Variant;
 

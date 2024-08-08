@@ -261,7 +261,7 @@ mod tests {
             providers::dummy::{
                 DUMMY_INFER_RESPONSE_CONTENT, DUMMY_JSON_RESPONSE_RAW, DUMMY_STREAMING_RESPONSE,
             },
-            types::{ContentBlock, Role, Usage},
+            types::{Role, Usage},
         },
         minijinja_util::tests::idempotent_initialize_test_templates,
         model::ProviderConfig,
