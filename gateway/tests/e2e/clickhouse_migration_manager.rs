@@ -34,7 +34,7 @@ async fn test_clickhouse_migration_manager() {
 
     #[traced_test]
     async fn second(clickhouse: &ClickHouseConnectionInfo) {
-        // Run the migration manager again (it should've already been run on gateway startup)... there should be no changes
+        // Run the migration manager again (it should've already been run above)... there should be no changes
         clickhouse_migration_manager::run(clickhouse).await.unwrap();
 
         assert!(!logs_contain("Applying migration: Migration0000"));
