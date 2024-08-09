@@ -187,6 +187,7 @@ pub enum Latency {
 /// As a Variant might make use of multiple model inferences, we then combine
 /// one or more ModelInferenceResponses into a single InferenceResponse (but we keep the original ModelInferenceResponses around).
 /// In the non-streaming case, this InferenceResponse is serialized into the TensorZero response format.
+/// See below for streaming case.
 
 #[derive(Debug, Clone)]
 pub enum InferenceResponse {
