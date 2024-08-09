@@ -1,9 +1,14 @@
+use aws_config::meta::region::RegionProviderChain;
 use aws_sdk_bedrockruntime::operation::converse::ConverseOutput;
 use aws_sdk_bedrockruntime::types::{
     ContentBlock, ConversationRole, ConverseOutput as ConverseOutputType, InferenceConfiguration,
     Message, SystemContentBlock,
 };
-use tokio::sync::OnceCell;
+use aws_types::region::Region;
+use lazy_static::lazy_static;
+use reqwest::StatusCode;
+use std::collections::{hash_map::Entry as HashMapEntry, HashMap};
+use tokio::sync::Mutex;
 use tokio::time::Instant;
 
 use crate::error::Error;
@@ -13,22 +18,47 @@ use crate::inference::types::{
     ModelInferenceResponse, ModelInferenceResponseChunk, ToolCall, Usage,
 };
 
-static AWS_BEDROCK_CLIENT: OnceCell<aws_sdk_bedrockruntime::Client> = OnceCell::const_new();
+lazy_static! {
+    static ref AWS_BEDROCK_CLIENTS: Mutex<HashMap<Region, &'static aws_sdk_bedrockruntime::Client>> =
+        Mutex::new(HashMap::new());
+}
 
-async fn get_aws_bedrock_client() -> &'static aws_sdk_bedrockruntime::Client {
-    // TODO (#73): we should be able to customize the region per model provider => will require a client per region
-
-    AWS_BEDROCK_CLIENT
-        .get_or_init(|| async {
-            let config = aws_config::load_from_env().await;
-            aws_sdk_bedrockruntime::Client::new(&config)
-        })
+async fn get_aws_bedrock_client(
+    region: Option<String>,
+) -> Result<&'static aws_sdk_bedrockruntime::Client, Error> {
+    // Decide which AWS region to use. We try the following in order:
+    // - The provided `region` argument
+    // - The region defined by the credentials (e.g. `AWS_REGION` environment variable)
+    // - The default region (us-east-1)
+    let region = RegionProviderChain::first_try(region.map(Region::new))
+        .or_default_provider()
+        .or_else(Region::new("us-east-1"))
+        .region()
         .await
+        .ok_or(Error::AWSBedrockClient {
+            status_code: StatusCode::INTERNAL_SERVER_ERROR,
+            message: format!("Failed to determine AWS region."),
+        })?;
+
+    let mut clients = AWS_BEDROCK_CLIENTS.lock().await;
+
+    let client: &aws_sdk_bedrockruntime::Client = match clients.entry(region.clone()) {
+        HashMapEntry::Occupied(entry) => entry.get(),
+        HashMapEntry::Vacant(entry) => {
+            let config = aws_config::from_env().region(region).load().await;
+            let client = Box::leak(Box::new(aws_sdk_bedrockruntime::Client::new(&config)));
+            entry.insert(client);
+            client
+        }
+    };
+
+    Ok(client)
 }
 
 #[derive(Clone, Debug)]
 pub struct AWSBedrockProvider {
     pub model_id: String,
+    pub region: Option<String>,
 }
 
 impl InferenceProvider for AWSBedrockProvider {
@@ -37,7 +67,7 @@ impl InferenceProvider for AWSBedrockProvider {
         request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
     ) -> Result<ModelInferenceResponse, Error> {
-        let aws_bedrock_client = get_aws_bedrock_client().await;
+        let aws_bedrock_client = get_aws_bedrock_client(self.region.clone()).await?;
 
         let first_message = &request.messages[0];
         let (system, request_messages) = match first_message {
