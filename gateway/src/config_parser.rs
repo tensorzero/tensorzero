@@ -6,6 +6,7 @@ use crate::error::Error;
 use crate::function::FunctionConfig;
 use crate::minijinja_util::initialize_templates;
 use crate::model::ModelConfig;
+use crate::tool::ToolConfig;
 use crate::variant::VariantConfig;
 
 #[derive(Clone, Debug, Deserialize)]
@@ -16,6 +17,7 @@ pub struct Config {
     pub models: HashMap<String, ModelConfig>, // model name => model config
     pub functions: HashMap<String, FunctionConfig>, // function name => function config
     pub metrics: Option<HashMap<String, MetricConfig>>, // metric name => metric config
+    pub tools: Option<HashMap<String, ToolConfig>>, // tool name => tool config
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -99,15 +101,24 @@ impl Config {
                 })
             }
         };
-        config.load_functions(&base_path)?;
+        config.load_schemas(&base_path)?;
         config.validate()?;
         initialize_templates(config.get_templates(&base_path))?;
         Ok(config)
     }
 
-    pub fn load_functions<P: AsRef<Path>>(&mut self, base_path: P) -> Result<(), Error> {
+    pub fn load_schemas<P: AsRef<Path>>(&mut self, base_path: P) -> Result<(), Error> {
+        println!(
+            "Loading schemas from {}",
+            base_path.as_ref().to_string_lossy()
+        );
         for function in self.functions.values_mut() {
             function.load(&base_path)?;
+        }
+        if let Some(tools) = self.tools.as_mut() {
+            for tool in tools.values_mut() {
+                tool.load(&base_path)?;
+            }
         }
         Ok(())
     }
@@ -224,8 +235,24 @@ impl Config {
                             }
                             _ => {}
                         }
+
+                        // Check that tools that are specified are present
+                        if let Some(tools) = &function.tools {
+                            for tool in tools {
+                                if self
+                                    .tools
+                                    .as_ref()
+                                    .and_then(|tools| tools.get(tool))
+                                    .is_none()
+                                {
+                                    return Err(Error::Config {
+                                        message: format!("Invalid Config: `functions.{function_name}.tools`: tool `{tool}` is not present in the config"),
+                                    });
+                                }
+                            }
+                        }
                     }
-                    FunctionConfig::Tool(function) => {
+                    FunctionConfig::Json(function) => {
                         // Check that the variant type matches the function type
                         if !matches!(variant, VariantConfig::ChatCompletion(_)) {
                             return Err(Error::Config {
@@ -312,6 +339,16 @@ impl Config {
             .and_then(|metrics| metrics.get(metric_name))
             .ok_or_else(|| Error::UnknownMetric {
                 name: metric_name.to_string(),
+            })
+    }
+
+    /// Get a tool by name
+    pub fn get_tool<'a>(&'a self, tool_name: &str) -> Result<&'a ToolConfig, Error> {
+        self.tools
+            .as_ref()
+            .and_then(|tools| tools.get(tool_name))
+            .ok_or_else(|| Error::UnknownTool {
+                name: tool_name.to_string(),
             })
     }
 
@@ -699,7 +736,7 @@ mod tests {
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
-            output_schema: None,
+            tools: None,
         };
 
         // Create the new function
@@ -714,27 +751,27 @@ mod tests {
 
         // Check if all expected templates are present
         assert_eq!(
-            templates.get("../functions/generate_draft/promptA/system.jinja"),
+            templates.get("../config/functions/generate_draft/promptA/system.jinja"),
             Some(&PathBuf::from(
-                "/base/path/../functions/generate_draft/promptA/system.jinja"
+                "/base/path/../config/functions/generate_draft/promptA/system.jinja"
             ))
         );
         assert_eq!(
-            templates.get("../functions/generate_draft/promptA/system.jinja"),
+            templates.get("../config/functions/generate_draft/promptA/system.jinja"),
             Some(&PathBuf::from(
-                "/base/path/../functions/generate_draft/promptA/system.jinja"
+                "/base/path/../config/functions/generate_draft/promptA/system.jinja"
             ))
         );
         assert_eq!(
-            templates.get("../functions/extract_data/promptA/system.jinja"),
+            templates.get("../config/functions/extract_data/promptA/system.jinja"),
             Some(&PathBuf::from(
-                "/base/path/../functions/extract_data/promptA/system.jinja"
+                "/base/path/../config/functions/extract_data/promptA/system.jinja"
             ))
         );
         assert_eq!(
-            templates.get("../functions/extract_data/promptB/system.jinja"),
+            templates.get("../config/functions/extract_data/promptB/system.jinja"),
             Some(&PathBuf::from(
-                "/base/path/../functions/extract_data/promptB/system.jinja"
+                "/base/path/../config/functions/extract_data/promptB/system.jinja"
             ))
         );
         assert_eq!(
@@ -796,37 +833,36 @@ mod tests {
 
         [functions.generate_draft]
         type = "chat"
-        system_schema = "../functions/generate_draft/system_schema.json"
-        output_schema = "../functions/generate_draft/output_schema.json"
+        system_schema = "../config/functions/generate_draft/system_schema.json"
 
         [functions.generate_draft.variants.openai_promptA]
         type = "chat_completion"
         weight = 0.9
         model = "gpt-3.5-turbo"
-        system_template = "../functions/generate_draft/promptA/system.jinja"
+        system_template = "../config/functions/generate_draft/promptA/system.jinja"
 
         [functions.generate_draft.variants.openai_promptB]
         type = "chat_completion"
         weight = 0.1
         model = "gpt-3.5-turbo"
-        system_template = "../functions/generate_draft/promptB/system.jinja"
+        system_template = "../config/functions/generate_draft/promptB/system.jinja"
 
         [functions.extract_data]
-        type = "tool"
-        system_schema = "../functions/extract_data/system_schema.json"
-        output_schema = "../functions/extract_data/output_schema.json"
+        type = "json"
+        system_schema = "../config/functions/extract_data/system_schema.json"
+        output_schema = "../config/functions/extract_data/output_schema.json"
 
         [functions.extract_data.variants.openai_promptA]
         type = "chat_completion"
         weight = 0.9
         model = "gpt-3.5-turbo"
-        system_template = "../functions/extract_data/promptA/system.jinja"
+        system_template = "../config/functions/extract_data/promptA/system.jinja"
 
         [functions.extract_data.variants.openai_promptB]
         type = "chat_completion"
         weight = 0.1
         model = "gpt-3.5-turbo"
-        system_template = "../functions/extract_data/promptB/system.jinja"
+        system_template = "../config/functions/extract_data/promptB/system.jinja"
 
         # ┌────────────────────────────────────────────────────────────────────────────┐
         # │                                  METRICS                                   │
@@ -841,6 +877,13 @@ mod tests {
         type = "float"
         optimize = "max"
         level = "episode"
+
+        # ┌────────────────────────────────────────────────────────────────────────────┐
+        # │                                   TOOLS                                    │
+        # └────────────────────────────────────────────────────────────────────────────┘
+        [tools.get_weather]
+        description = "Get the weather for a given location"
+        parameters = "../config/tools/get_weather.json"
         "#;
 
         toml::from_str(config_str).expect("Failed to parse sample config")
@@ -850,11 +893,15 @@ mod tests {
     fn test_tensorzero_example_file() {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let config_path = format!("{}/../tensorzero.example.toml", manifest_dir);
+        let config_pathbuf = PathBuf::from(&config_path);
+        let base_path = config_pathbuf
+            .parent()
+            .expect("Failed to get parent directory of config file");
         let config_table = Config::read_toml_config(config_path.as_str())
             .expect("Failed to read tensorzero.example.toml");
         let mut config = Config::try_from(config_table).expect("Failed to parse config");
         config
-            .load_functions(PathBuf::from(&config_path))
+            .load_schemas(base_path)
             .expect("Failed to load functions");
         config.validate().expect("Failed to validate config");
     }

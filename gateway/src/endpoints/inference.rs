@@ -289,7 +289,7 @@ fn prepare_event(
                 message: format!("Failed to convert chunk to JSON: {}", e),
             })?
         }
-        FunctionConfig::Tool(_) => {
+        FunctionConfig::Json(_) => {
             unimplemented!()
         }
     };
@@ -378,7 +378,7 @@ mod tests {
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
-            output_schema: None,
+            tools: None,
         });
         let inference_metadata = InferenceMetadata {
             function_name: "test_function".to_string(),

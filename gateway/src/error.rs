@@ -162,6 +162,9 @@ pub enum Error {
     UnknownFunction {
         name: String,
     },
+    UnknownTool {
+        name: String,
+    },
     UnknownVariant {
         name: String,
     },
@@ -223,6 +226,7 @@ impl Error {
             Error::TogetherServer { .. } => tracing::Level::ERROR,
             Error::TypeConversion { .. } => tracing::Level::ERROR,
             Error::UnknownFunction { .. } => tracing::Level::WARN,
+            Error::UnknownTool { .. } => tracing::Level::ERROR,
             Error::UnknownVariant { .. } => tracing::Level::WARN,
             Error::UnknownMetric { .. } => tracing::Level::WARN,
         }
@@ -280,6 +284,7 @@ impl Error {
             Error::TogetherServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::TypeConversion { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::UnknownFunction { .. } => StatusCode::NOT_FOUND,
+            Error::UnknownTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::UnknownVariant { .. } => StatusCode::NOT_FOUND,
             Error::UnknownMetric { .. } => StatusCode::NOT_FOUND,
         }
@@ -464,6 +469,7 @@ impl std::fmt::Display for Error {
                 write!(f, "Error from Together servers: {}", message)
             }
             Error::UnknownFunction { name } => write!(f, "Unknown function: {}", name),
+            Error::UnknownTool { name } => write!(f, "Unknown tool: {}", name),
             Error::UnknownVariant { name } => write!(f, "Unknown variant: {}", name),
             Error::UnknownMetric { name } => write!(f, "Unknown metric: {}", name),
         }

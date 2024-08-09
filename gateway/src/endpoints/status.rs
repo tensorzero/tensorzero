@@ -46,6 +46,7 @@ mod tests {
             models: HashMap::new(),
             functions: HashMap::new(),
             metrics: None,
+            tools: None,
         };
         let app_state_data = get_unit_test_app_state_data(config.clone(), Some(true));
         let response = health_handler(State(app_state_data)).await;

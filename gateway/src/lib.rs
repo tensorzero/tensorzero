@@ -11,5 +11,6 @@ mod minijinja_util; // utilities for working with MiniJinja templates
 pub mod model; // types and methods for working with TensorZero-supported models
 pub mod observability; // utilities for observability (logs, metrics, etc.)
 mod testing;
+mod tool; // types and methods for working with TensorZero tools
 mod uuid_util; // utilities for working with UUIDs
 mod variant; // types and methods for working with TensorZero variants
