@@ -804,7 +804,7 @@ mod tests {
 
     #[test]
     fn test_from_vec_tool() {
-        let parameters = vec![
+        let parameters = [
             serde_json::to_value(r#"{"location": {"type": "string"}, "unit": {"type": "string"}}"#)
                 .unwrap(),
             serde_json::to_value(r#"{"timezone": {"type": "string"}}"#).unwrap(),
