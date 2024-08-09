@@ -1,7 +1,6 @@
-name: PR Checks
+name: General Checks
 
 on:
-  merge_group:
   push:
     branches: ["main"]
   pull_request:
@@ -11,7 +10,7 @@ env:
   FORCE_COLOR: 1
 
 jobs:
-  run:
+  validate:
     runs-on: ubuntu-22.04-8core
 
     timeout-minutes: 15

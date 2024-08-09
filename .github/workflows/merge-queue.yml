@@ -19,7 +19,7 @@ env:
   TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }} # for integration/E2E tests
 
 jobs:
-  run:
+  validate:
     runs-on: ubuntu-22.04-8core
 
     timeout-minutes: 15
