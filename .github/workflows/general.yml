@@ -1,4 +1,4 @@
-name: PR Checks
+name: General Checks
 
 on:
   push:
