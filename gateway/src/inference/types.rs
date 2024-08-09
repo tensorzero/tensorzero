@@ -188,21 +188,20 @@ pub enum Latency {
 /// one or more ModelInferenceResponses into a single InferenceResponse (but we keep the original ModelInferenceResponses around).
 /// In the non-streaming case, this InferenceResponse is serialized into the TensorZero response format.
 
-#[derive(Serialize, Debug, Clone)]
-#[serde(tag = "type", rename_all = "lowercase")]
+#[derive(Debug, Clone)]
 pub enum InferenceResponse {
     Chat(ChatInferenceResponse),
 }
 
 // Determines the return type of Inference API for Chat-type functions (which is all of them right now)
-#[derive(Serialize, Debug, Clone)]
+/// See InferenceResponseWithOutputSchema below for details
+#[derive(Debug, Clone)]
 pub struct ChatInferenceResponse {
     inference_id: Uuid,
     created: u64,
     pub parsed_output: Option<Value>,
     pub content_blocks: Vec<ContentBlock>,
     pub usage: Usage,
-    #[serde(skip_serializing)]
     pub model_inference_responses: Vec<ModelInferenceResponse>,
 }
 
