@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "location": {
+      "type": "string"
+    },
+    "units": {
+      "type": "string",
+      "enum": ["fahrenheit", "celsius"]
+    }
+  },
+  "required": ["location", "units"],
+  "additionalProperties": false
+}
