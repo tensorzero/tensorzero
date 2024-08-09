@@ -8,12 +8,12 @@ pub fn create_simple_inference_request<'a>() -> ModelInferenceRequest<'a> {
         role: Role::User,
         content: vec!["Is Santa Clause real?".to_string().into()],
     }];
-    let system_instructions = Some("You are a helpful but mischevious assistant.".to_string());
+    let system = Some("You are a helpful but mischevious assistant.".to_string());
     let max_tokens = Some(100);
     let temperature = Some(1.);
     ModelInferenceRequest {
         messages,
-        system_instructions,
+        system,
         tools_available: None,
         tool_choice: ToolChoice::None,
         parallel_tool_calls: None,
@@ -31,7 +31,7 @@ pub fn create_json_inference_request<'a>() -> ModelInferenceRequest<'a> {
         role: Role::User,
         content: vec!["Is Santa Clause real? be brief".to_string().into()],
     }];
-    let system_instructions = Some("You are a helpful but mischevious assistant who returns in the JSON form {\"thinking\": \"...\", \"answer\": \"...\"}".to_string());
+    let system = Some("You are a helpful but mischevious assistant who returns in the JSON form {\"thinking\": \"...\", \"answer\": \"...\"}".to_string());
     let max_tokens = Some(400);
     let temperature = Some(1.);
     let output_schema = json!({
@@ -44,7 +44,7 @@ pub fn create_json_inference_request<'a>() -> ModelInferenceRequest<'a> {
     });
     ModelInferenceRequest {
         messages,
-        system_instructions,
+        system,
         tools_available: None,
         tool_choice: ToolChoice::None,
         parallel_tool_calls: None,
@@ -87,7 +87,7 @@ pub fn create_tool_inference_request<'a>() -> ModelInferenceRequest<'a> {
 
     ModelInferenceRequest {
         messages,
-        system_instructions: None,
+        system: None,
         tools_available: Some(vec![tool]),
         tool_choice: ToolChoice::Tool("get_weather".to_string()),
         parallel_tool_calls: None,
@@ -105,12 +105,12 @@ pub fn create_streaming_inference_request<'a>() -> ModelInferenceRequest<'a> {
         role: Role::User,
         content: vec!["Is Santa Clause real?".to_string().into()],
     }];
-    let system_instructions = Some("You are a helpful but mischevious assistant.".to_string());
+    let system = Some("You are a helpful but mischevious assistant.".to_string());
     let max_tokens = Some(100);
     let temperature = Some(1.);
     ModelInferenceRequest {
         messages,
-        system_instructions,
+        system,
         tools_available: None,
         tool_choice: ToolChoice::None,
         parallel_tool_calls: None,

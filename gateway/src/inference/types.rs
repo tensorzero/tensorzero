@@ -16,7 +16,7 @@ use crate::{error::Error, jsonschema_util::JSONSchemaFromPath};
 ///
 /// The flow of an inference request through TensorZero can be viewed as a series of transformations between types.
 /// Most of them are defined below.
-///
+
 /// A request is made that contains an Input
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Input {
@@ -40,14 +40,14 @@ pub enum Role {
     Assistant,
 }
 
-/// These are validated against the input schema of the Function
+/// InputMessages are validated against the input schema of the Function
 /// and then templated and transformed into RequestMessages for a particular Variant.
+/// They might contain tool calls or tool results along with text.
+/// The abstraction we use to represent this is ContentBlock, which is a union of Text, ToolCall, and ToolResult.
+/// ContentBlocks are collected into RequestMessages.
 /// These RequestMessages are collected into a ModelInferenceRequest,
 /// which should contain all information needed by a ModelProvider to perform the
 /// inference that is called for.
-/// They might contain tool calls or tool results along with text.
-/// The abstraction we use to represent this is ContentBlock, which is a union of Text, ToolCall, and ToolResult.
-/// The ContentBlocks are collected into a RequestMessage, which is then collected into a ModelInferenceRequest.
 
 /// The Tool type is used to represent a tool that is available to the model.
 #[derive(Clone, Debug, PartialEq)]
@@ -137,7 +137,7 @@ pub enum JSONMode {
 #[builder(setter(into, strip_option), default)]
 pub struct ModelInferenceRequest<'a> {
     pub messages: Vec<RequestMessage>,
-    pub system_instructions: Option<String>,
+    pub system: Option<String>,
     pub tools_available: Option<Vec<Tool>>,
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
@@ -228,8 +228,8 @@ pub enum ContentBlockChunk {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct TextChunk {
-    pub text: String,
     pub id: String,
+    pub text: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -285,7 +285,10 @@ pub struct ModelInference {
 
 impl fmt::Display for Role {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", serde_json::to_string(self).unwrap_or_default())
+        match self {
+            Role::User => write!(f, "user"),
+            Role::Assistant => write!(f, "assistant"),
+        }
     }
 }
 
@@ -374,11 +377,12 @@ impl ChatInferenceResponse {
         if content.is_empty() {
             return Err(Error::OutputParsing {
                 raw_output: "".to_string(),
-                message: "Output parsing failed due to None content".to_string(),
+                message: "Output parsing failed due to empty content".to_string(),
             });
         }
         match tool_choice {
             ToolChoice::Implicit => {
+                // TODO(#30): handle tool calls and fully think this through
                 for content in content.iter().rev() {
                     let arguments = match content {
                         ContentBlock::ToolCall(tool_call) => &tool_call.arguments,
@@ -448,6 +452,8 @@ pub struct InferenceResponseWithOutputSchema<'a> {
     pub output_schema: Option<&'a JSONSchemaFromPath>,
 }
 
+/// Custom serializer is required since we want to only return the `parsed_output` field
+/// if there is an output schema for the Function being called (null-valued if output parsing fails).
 impl<'a> Serialize for InferenceResponseWithOutputSchema<'a> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -519,7 +525,7 @@ impl ModelInferenceResponseChunk {
         inference_id: Uuid,
         content: Vec<ContentBlockChunk>,
         usage: Option<Usage>,
-        raw: String,
+        raw_response: String,
         latency: Duration,
     ) -> Self {
         Self {
@@ -527,7 +533,7 @@ impl ModelInferenceResponseChunk {
             content,
             created: current_timestamp(),
             usage,
-            raw_response: raw,
+            raw_response,
             latency,
         }
     }
@@ -587,6 +593,8 @@ pub fn collect_chunks(
                         }
                         // If there is no text block, create one
                         _ => {
+                            // We put this here and below rather than in the loop start because we
+                            // only want to set TTFT if there is some real content
                             if ttft.is_none() {
                                 ttft = Some(chunk.latency);
                             }

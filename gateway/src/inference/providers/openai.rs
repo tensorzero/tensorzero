@@ -254,9 +254,7 @@ pub(super) fn prepare_openai_messages<'a>(
         .iter()
         .flat_map(tensorzero_to_openai_messages)
         .collect();
-    if let Some(system_msg) =
-        tensorzero_to_openai_system_message(request.system_instructions.as_deref())
-    {
+    if let Some(system_msg) = tensorzero_to_openai_system_message(request.system.as_deref()) {
         messages.insert(0, system_msg);
     }
     messages
@@ -282,10 +280,8 @@ pub(super) fn prepare_openai_tools<'a>(
     (tools, tool_choice)
 }
 
-fn tensorzero_to_openai_system_message(
-    system_instructions: Option<&str>,
-) -> Option<OpenAIRequestMessage<'_>> {
-    system_instructions.map(|instructions| {
+fn tensorzero_to_openai_system_message(system: Option<&str>) -> Option<OpenAIRequestMessage<'_>> {
+    system.map(|instructions| {
         OpenAIRequestMessage::System(OpenAISystemRequestMessage {
             content: instructions,
         })
@@ -653,8 +649,7 @@ struct OpenAIChatChunk {
     usage: Option<OpenAIUsage>,
 }
 
-// TODO(Viraj): write a unit test for a chunk with no choices but only usage,
-// since this case happens and we should behave well
+/// Maps an OpenAI chunk to a TensorZero chunk for streaming inferences
 fn openai_to_tensorzero_chunk(
     mut chunk: OpenAIChatChunk,
     inference_id: Uuid,
@@ -823,7 +818,7 @@ mod tests {
                     content: vec!["Hi there!".to_string().into()],
                 },
             ],
-            system_instructions: None,
+            system: None,
             temperature: Some(0.7),
             max_tokens: Some(100),
             stream: true,
@@ -868,7 +863,7 @@ mod tests {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
             }],
-            system_instructions: None,
+            system: None,
             temperature: None,
             max_tokens: None,
             stream: false,
@@ -1064,7 +1059,7 @@ mod tests {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
             }],
-            system_instructions: None,
+            system: None,
             temperature: None,
             max_tokens: None,
             stream: false,
@@ -1092,7 +1087,7 @@ mod tests {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
             }],
-            system_instructions: None,
+            system: None,
             temperature: None,
             max_tokens: None,
             stream: false,
@@ -1113,7 +1108,7 @@ mod tests {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
             }],
-            system_instructions: None,
+            system: None,
             temperature: None,
             max_tokens: None,
             stream: false,
@@ -1224,7 +1219,7 @@ mod tests {
     }
 
     #[test]
-    fn test_openai_to_tensorzero_stream_message() {
+    fn test_openai_to_tensorzero_chunk() {
         let chunk = OpenAIChatChunk {
             choices: vec![OpenAIChatChunkChoice {
                 delta: OpenAIDelta {
@@ -1354,6 +1349,33 @@ mod tests {
         assert_eq!(
             tool_call_names,
             vec!["name1".to_string(), "name2".to_string()]
+        );
+
+        // Check a chunk with no choices and only usage
+        // Test a correct new tool chunk
+        let chunk = OpenAIChatChunk {
+            choices: vec![],
+            usage: Some(OpenAIUsage {
+                prompt_tokens: 10,
+                completion_tokens: 20,
+                total_tokens: 30,
+            }),
+        };
+        let message = openai_to_tensorzero_chunk(
+            chunk.clone(),
+            inference_id,
+            Duration::from_millis(50),
+            &mut tool_call_ids,
+            &mut tool_call_names,
+        )
+        .unwrap();
+        assert_eq!(message.content, vec![]);
+        assert_eq!(
+            message.usage,
+            Some(Usage {
+                prompt_tokens: 10,
+                completion_tokens: 20,
+            })
         );
     }
 }

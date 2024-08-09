@@ -232,7 +232,7 @@ mod tests {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
             }],
-            system_instructions: None,
+            system: None,
             temperature: None,
             max_tokens: None,
             stream: false,

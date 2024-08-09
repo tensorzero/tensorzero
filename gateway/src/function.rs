@@ -97,11 +97,11 @@ impl FunctionConfig {
                 if system.is_string() {
                     Ok(())
                 } else {
-                    Err(Error::InvalidMessage { message: "input.system has non-string content but there is no schema given for `system`.".to_string() })
+                    Err(Error::InvalidMessage { message: "`input.system` has non-string content but there is no schema given for `system`.".to_string() })
                 }
             }
             (None, Some(_)) => Err(Error::InvalidMessage {
-                message: "input.system is empty but a system template is present.".to_string(),
+                message: "`input.system` is empty but a system template is present.".to_string(),
             }),
         }?;
         for (index, message) in input.messages.iter().enumerate() {
@@ -330,7 +330,7 @@ mod tests {
         assert_eq!(
             validation_result.unwrap_err(),
             Error::InvalidMessage {
-                message: "Message at index 0 has non-string content but there is no schema given for role \"user\".".to_string()
+                message: "Message at index 0 has non-string content but there is no schema given for role user.".to_string()
             }
         );
     }
@@ -608,7 +608,7 @@ mod tests {
         assert_eq!(
             validation_result.unwrap_err(),
             Error::InvalidMessage {
-                message: "Message at index 0 has non-string content but there is no schema given for role \"user\".".to_string()
+                message: "Message at index 0 has non-string content but there is no schema given for role user.".to_string()
             }
         );
     }

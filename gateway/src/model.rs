@@ -296,7 +296,7 @@ mod tests {
         // Try inferring the good model only
         let request = ModelInferenceRequest {
             messages: vec![],
-            system_instructions: None,
+            system: None,
             tools_available: None,
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
@@ -352,7 +352,7 @@ mod tests {
         // Try inferring the good model only
         let request = ModelInferenceRequest {
             messages: vec![],
-            system_instructions: None,
+            system: None,
             tools_available: None,
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
@@ -397,7 +397,7 @@ mod tests {
 
         let request = ModelInferenceRequest {
             messages: vec![],
-            system_instructions: None,
+            system: None,
             tools_available: None,
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
@@ -483,7 +483,7 @@ mod tests {
 
         let request = ModelInferenceRequest {
             messages: vec![],
-            system_instructions: None,
+            system: None,
             tools_available: None,
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,

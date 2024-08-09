@@ -323,7 +323,7 @@ impl<'a> AnthropicRequestBody<'a> {
                 message: "Anthropic requires at least one message".to_string(),
             });
         }
-        let system = request.system_instructions.as_deref();
+        let system = request.system.as_deref();
         let request_messages: Vec<AnthropicMessage> = request
             .messages
             .iter()
@@ -893,7 +893,7 @@ mod tests {
         // Test Case 1: Empty message list
         let inference_request = ModelInferenceRequest {
             messages: vec![],
-            system_instructions: None,
+            system: None,
             tools_available: None,
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
@@ -926,7 +926,7 @@ mod tests {
         ];
         let inference_request = ModelInferenceRequest {
             messages: messages.clone(),
-            system_instructions: Some("test_system".to_string()),
+            system: Some("test_system".to_string()),
             tools_available: None,
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
@@ -975,7 +975,7 @@ mod tests {
         ];
         let inference_request = ModelInferenceRequest {
             messages: messages.clone(),
-            system_instructions: Some("test_system".to_string()),
+            system: Some("test_system".to_string()),
             tools_available: None,
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
@@ -1038,7 +1038,7 @@ mod tests {
         };
         let inference_request = ModelInferenceRequest {
             messages: messages.clone(),
-            system_instructions: Some("test_system".to_string()),
+            system: Some("test_system".to_string()),
             tools_available: Some(vec![tool.clone()]),
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,

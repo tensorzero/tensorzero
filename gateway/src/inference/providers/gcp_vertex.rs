@@ -474,12 +474,13 @@ impl<'a> TryFrom<&'a ModelInferenceRequest<'a>> for GCPVertexGeminiRequest<'a> {
                 message: "GCP Vertex Gemini requires at least one message".to_string(),
             });
         }
-        let system_instruction = request
-            .system_instructions
-            .as_ref()
-            .map(|system_instruction| GCPVertexGeminiContentPart::Text {
-                text: system_instruction,
-            });
+        let system_instruction =
+            request
+                .system
+                .as_ref()
+                .map(|system_instruction| GCPVertexGeminiContentPart::Text {
+                    text: system_instruction,
+                });
         let contents: Vec<GCPVertexGeminiContent> = request
             .messages
             .iter()
@@ -907,7 +908,7 @@ mod tests {
         // Test Case 1: Empty message list
         let inference_request = ModelInferenceRequest {
             messages: vec![],
-            system_instructions: None,
+            system: None,
             tools_available: None,
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
@@ -940,7 +941,7 @@ mod tests {
         ];
         let inference_request = ModelInferenceRequest {
             messages: messages.clone(),
-            system_instructions: Some("test_system".to_string()),
+            system: Some("test_system".to_string()),
             tools_available: None,
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
@@ -985,7 +986,7 @@ mod tests {
         ];
         let inference_request = ModelInferenceRequest {
             messages: messages.clone(),
-            system_instructions: Some("test_system".to_string()),
+            system: Some("test_system".to_string()),
             tools_available: None,
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,

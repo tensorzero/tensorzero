@@ -162,7 +162,7 @@ impl Variant for ChatCompletionConfig {
             .iter()
             .map(|message| self.prepare_request_message(message))
             .collect::<Result<Vec<_>, _>>()?;
-        let system_instructions = input
+        let system = input
             .system
             .as_ref()
             .map(|system| self.prepare_system_message(system))
@@ -176,7 +176,7 @@ impl Variant for ChatCompletionConfig {
         let tool_choice = ToolChoice::None;
         let request = ModelInferenceRequest {
             messages,
-            system_instructions,
+            system,
             tools_available: None,
             tool_choice: tool_choice.clone(),
             parallel_tool_calls: None,
@@ -220,7 +220,7 @@ impl Variant for ChatCompletionConfig {
             .iter()
             .map(|message| self.prepare_request_message(message))
             .collect::<Result<Vec<_>, _>>()?;
-        let system_instructions = input
+        let system = input
             .system
             .as_ref()
             .map(|system| self.prepare_system_message(system))
@@ -233,7 +233,7 @@ impl Variant for ChatCompletionConfig {
         };
         let request = ModelInferenceRequest {
             messages,
-            system_instructions,
+            system,
             tools_available: None,
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
@@ -329,7 +329,7 @@ mod tests {
         let result = chat_completion_config
             .prepare_request_message(&input_message)
             .unwrap_err();
-        assert_eq!(result, Error::InvalidMessage { message: "Request message content {\"invalid\":\"json\"} is not a string but there is no variant template for Role \"user\"".to_string()});
+        assert_eq!(result, Error::InvalidMessage { message: "Request message content {\"invalid\":\"json\"} is not a string but there is no variant template for Role user".to_string()});
 
         // Part 2: test with templates
         idempotent_initialize_test_templates();

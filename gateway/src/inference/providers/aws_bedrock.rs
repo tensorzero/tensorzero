@@ -62,7 +62,7 @@ impl InferenceProvider for AWSBedrockProvider {
             .set_messages(Some(messages))
             .inference_config(inference_config.build());
 
-        if let Some(system) = &request.system_instructions {
+        if let Some(system) = &request.system {
             let system_block = SystemContentBlock::Text(system.clone());
             bedrock_request = bedrock_request.system(system_block);
         }
