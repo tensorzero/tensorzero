@@ -1,8 +1,7 @@
 name: General Checks
 
 on:
-  push:
-    branches: ["main"]
+  merge_group:
   pull_request:
     branches: ["main"]
 
@@ -48,3 +47,9 @@ jobs:
       - name: Test (Rust)
         run: |
           cargo test
+
+  # Only run live tests on merge_group
+  live-tests:
+    runs-on: ubuntu-22.04-8core
+    timeout-minutes: 15
+    steps: []
