@@ -17,34 +17,20 @@ use crate::{error::Error, jsonschema_util::JSONSchemaFromPath};
 /// The flow of an inference request through TensorZero can be viewed as a series of transformations between types.
 /// Most of them are defined below.
 ///
-/// A request is made that contains a list of InputMessages.
-/// These are validated against the input schema of the Function
-/// and then templated and transformed into InferenceRequestMessages for a particular Variant.
-/// These InferenceRequestMessages are collected into a ModelInferenceRequest,
-/// which should contain all information needed by a ModelProvider to perform the
-/// inference that is called for.
-///
-/// Each provider transforms a ModelInferenceRequest into a provider-specific (private) inference request type
-/// that is suitable for serialization directly into a request to the provider.
-///
-/// In both non-streaming and streaming inference, each ModelProvider recieves data from the provider in a
-/// a (private) provider-specific format that is then transformed into a ModelInferenceResponse (non-streaming)
-/// or a stream of ModelInferenceResponseChunks (streaming).
-/// As a Variant might make use of multiple model inferences, we then combine
-/// one or more ModelInferenceResponses into a single InferenceResponse (but we keep the original ModelInferenceResponses around).
-/// In the non-streaming case, this InferenceResponse is serialized into the TensorZero response format.
-/// In the streaming case we convert ModelInferenceResponseChunks into serialized InferenceResponseChunks to the client.
-/// We then collect all the InferenceResponseChunks into an InferenceResponse for validation and storage after the fact.
-///
-/// Alongside the response, we also store information about what happened during the request.
-/// For this we convert the InferenceResponse into an Inference and ModelInferences, which are written to ClickHouse asynchronously.
-
-/// InputMessage and Role are our representation of the input sent by the client
-/// prior to any processing into LLM representations below.
+/// A request is made that contains an Input
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Input {
     pub system: Option<Value>,
     pub messages: Vec<InputMessage>,
+}
+
+/// InputMessage and Role are our representation of the input sent by the client
+/// prior to any processing into LLM representations below.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct InputMessage {
+    pub role: Role,
+    pub content: serde_json::Value,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
@@ -54,61 +40,39 @@ pub enum Role {
     Assistant,
 }
 
-impl fmt::Display for Role {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", serde_json::to_string(self).unwrap_or_default())
-    }
+/// These are validated against the input schema of the Function
+/// and then templated and transformed into RequestMessages for a particular Variant.
+/// These RequestMessages are collected into a ModelInferenceRequest,
+/// which should contain all information needed by a ModelProvider to perform the
+/// inference that is called for.
+/// They might contain tool calls or tool results along with text.
+/// The abstraction we use to represent this is ContentBlock, which is a union of Text, ToolCall, and ToolResult.
+/// The ContentBlocks are collected into a RequestMessage, which is then collected into a ModelInferenceRequest.
+
+/// The Tool type is used to represent a tool that is available to the model.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Tool {
+    Function {
+        description: Option<String>,
+        name: String,
+        parameters: Value,
+    },
 }
 
-// TODO: enforce that only the first message (or none) is a system message
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct InputMessage {
-    pub role: Role,
-    pub content: serde_json::Value,
+/// A ToolCall is a request by a model to call a Tool
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ToolCall {
+    pub name: String,
+    pub arguments: String,
+    pub id: String,
 }
 
-/// Top-level TensorZero type for an inference request to a particular model.
-/// This should contain all the information required to make a valid inference request
-/// for a provider, except for information about what model to actually request,
-/// and to convert it back to the appropriate response format.
-/// An example of the latter is that we might have prepared a request with Tools available
-/// but the client actually just wants a chat response.
-#[derive(Builder, Clone, Debug, Default, PartialEq)]
-#[builder(setter(into, strip_option), default)]
-pub struct ModelInferenceRequest<'a> {
-    pub messages: Vec<RequestMessage>,
-    pub system_instructions: Option<String>,
-    pub tools_available: Option<Vec<Tool>>,
-    // TODO(viraj): make this a reference
-    pub tool_choice: ToolChoice,
-    pub parallel_tool_calls: Option<bool>,
-    pub temperature: Option<f32>,
-    pub max_tokens: Option<u32>,
-    pub stream: bool,
-    pub json_mode: JSONMode,
-    pub function_type: FunctionType,
-    pub output_schema: Option<&'a Value>,
-}
-
-#[derive(Clone, Default, Debug, PartialEq)]
-pub enum JSONMode {
-    #[default]
-    Off,
-    On,
-    Strict,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub enum FunctionType {
-    Chat,
-}
-
-/// The default FunctionType is Chat
-impl Default for FunctionType {
-    fn default() -> Self {
-        FunctionType::Chat
-    }
+/// A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ToolResult {
+    pub name: String,
+    pub result: String,
+    pub id: String,
 }
 
 /// Most inference providers allow the user to force a tool to be used
@@ -128,34 +92,12 @@ pub enum ToolChoice {
               // before response.
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum Tool {
-    Function {
-        description: Option<String>,
-        name: String,
-        parameters: Value,
-    },
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ToolCall {
-    pub name: String,
-    pub arguments: String,
-    pub id: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ToolResult {
-    pub name: String,
-    pub result: String,
-    pub id: String,
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Text {
     pub text: String,
 }
 
+/// Core representation of the types of content that could go in or out of a model
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum ContentBlock {
@@ -164,16 +106,64 @@ pub enum ContentBlock {
     ToolResult(ToolResult),
 }
 
-impl From<String> for ContentBlock {
-    fn from(text: String) -> Self {
-        ContentBlock::Text(Text { text })
-    }
-}
-
+/// A RequestMessage is a message sent to a model
 #[derive(Clone, Debug, PartialEq)]
 pub struct RequestMessage {
     pub role: Role,
     pub content: Vec<ContentBlock>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+pub enum FunctionType {
+    #[default]
+    Chat,
+}
+
+#[derive(Clone, Default, Debug, PartialEq)]
+pub enum JSONMode {
+    #[default]
+    Off,
+    On,
+    Strict,
+}
+
+/// Top-level TensorZero type for an inference request to a particular model.
+/// This should contain all the information required to make a valid inference request
+/// for a provider, except for information about what model to actually request,
+/// and to convert it back to the appropriate response format.
+/// An example of the latter is that we might have prepared a request with Tools available
+/// but the client actually just wants a chat response.
+#[derive(Builder, Clone, Debug, Default, PartialEq)]
+#[builder(setter(into, strip_option), default)]
+pub struct ModelInferenceRequest<'a> {
+    pub messages: Vec<RequestMessage>,
+    pub system_instructions: Option<String>,
+    pub tools_available: Option<Vec<Tool>>,
+    pub tool_choice: ToolChoice,
+    pub parallel_tool_calls: Option<bool>,
+    pub temperature: Option<f32>,
+    pub max_tokens: Option<u32>,
+    pub stream: bool,
+    pub json_mode: JSONMode,
+    pub function_type: FunctionType,
+    pub output_schema: Option<&'a Value>,
+}
+
+/// Each provider transforms a ModelInferenceRequest into a provider-specific (private) inference request type
+/// that is suitable for serialization directly into a request to the provider.
+///
+/// In both non-streaming and streaming inference, each ModelProvider recieves data from the provider in a
+/// a (private) provider-specific format that is then transformed into a ModelInferenceResponse (non-streaming)
+/// or a stream of ModelInferenceResponseChunks (streaming).
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ModelInferenceResponse {
+    pub id: Uuid,
+    pub created: u64,
+    pub content: Vec<ContentBlock>,
+    pub raw_response: String,
+    pub usage: Usage,
+    pub latency: Latency,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
@@ -194,14 +184,90 @@ pub enum Latency {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ModelInferenceResponse {
-    pub id: Uuid,
-    pub created: u64,
-    pub content: Vec<ContentBlock>,
-    pub raw_response: String,
+/// As a Variant might make use of multiple model inferences, we then combine
+/// one or more ModelInferenceResponses into a single InferenceResponse (but we keep the original ModelInferenceResponses around).
+/// In the non-streaming case, this InferenceResponse is serialized into the TensorZero response format.
+
+#[derive(Serialize, Debug, Clone)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum InferenceResponse {
+    Chat(ChatInferenceResponse),
+}
+
+// Determines the return type of Inference API for Chat-type functions (which is all of them right now)
+#[derive(Serialize, Debug, Clone)]
+pub struct ChatInferenceResponse {
+    inference_id: Uuid,
+    created: u64,
+    pub parsed_output: Option<Value>,
+    pub content_blocks: Vec<ContentBlock>,
     pub usage: Usage,
-    pub latency: Latency,
+    #[serde(skip_serializing)]
+    pub model_inference_responses: Vec<ModelInferenceResponse>,
+}
+
+/// In the streaming case we convert ModelInferenceResponseChunks into serialized InferenceResponseChunks to the client.
+/// We then collect all the InferenceResponseChunks into an InferenceResponse for validation and storage after the fact.
+
+#[derive(Debug, Clone)]
+pub struct ModelInferenceResponseChunk {
+    pub inference_id: Uuid,
+    pub content: Vec<ContentBlockChunk>,
+    pub created: u64,
+    pub usage: Option<Usage>,
+    pub raw_response: String,
+    pub latency: Duration,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum ContentBlockChunk {
+    Text(TextChunk),
+    ToolCall(ToolCallChunk),
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct TextChunk {
+    pub text: String,
+    pub id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ToolCallChunk {
+    pub id: String,
+    pub name: String,
+    pub arguments: String,
+}
+
+// This determines what gets serialized in streaming Chat functions
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ChatInferenceResponseChunk {
+    pub inference_id: Uuid,
+    pub content: Vec<ContentBlockChunk>,
+    pub created: u64,
+    pub usage: Option<Usage>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(tag = "type")]
+pub enum InferenceResponseChunk {
+    Chat(ChatInferenceResponseChunk),
+}
+
+/// Alongside the response, we also store information about what happened during the request.
+/// For this we convert the InferenceResponse into an Inference and ModelInferences,
+/// which are written to ClickHouse tables of the same name asynchronously.
+
+#[derive(Serialize, Debug)]
+pub struct Inference {
+    pub id: Uuid,
+    pub function_name: String,
+    pub variant_name: String,
+    pub episode_id: Uuid,
+    pub input: String,
+    pub parsed_output: Option<Value>,
+    pub content_blocks: String,
+    pub processing_time_ms: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -215,6 +281,18 @@ pub struct ModelInference {
     pub output_tokens: u32,
     pub response_time_ms: u32,
     pub ttft_ms: Option<u32>,
+}
+
+impl fmt::Display for Role {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", serde_json::to_string(self).unwrap_or_default())
+    }
+}
+
+impl From<String> for ContentBlock {
+    fn from(text: String) -> Self {
+        ContentBlock::Text(Text { text })
+    }
 }
 
 impl ModelInference {
@@ -256,18 +334,6 @@ impl ModelInferenceResponse {
             latency,
         }
     }
-}
-
-// Determines the return type of Inference API for Chat-type functions (which is all of them right now)
-#[derive(Serialize, Debug, Clone)]
-pub struct ChatInferenceResponse {
-    inference_id: Uuid,
-    created: u64,
-    pub parsed_output: Option<Value>,
-    pub content_blocks: Vec<ContentBlock>,
-    pub usage: Usage,
-    #[serde(skip_serializing)]
-    pub model_inference_responses: Vec<ModelInferenceResponse>,
 }
 
 impl ChatInferenceResponse {
@@ -374,12 +440,9 @@ impl ChatInferenceResponse {
     }
 }
 
-#[derive(Serialize, Debug, Clone)]
-#[serde(tag = "type", rename_all = "lowercase")]
-pub enum InferenceResponse {
-    Chat(ChatInferenceResponse),
-}
-
+/// Helper type for output serialization of non-streaming responses.
+/// This is required since we want to only return the `parsed_output` field
+/// if there is an output schema for the Function being called.
 pub struct InferenceResponseWithOutputSchema<'a> {
     pub inference_response: InferenceResponse,
     pub output_schema: Option<&'a JSONSchemaFromPath>,
@@ -414,18 +477,6 @@ impl<'a> Serialize for InferenceResponseWithOutputSchema<'a> {
             }
         }
     }
-}
-
-#[derive(Serialize, Debug)]
-pub struct Inference {
-    pub id: Uuid,
-    pub function_name: String,
-    pub variant_name: String,
-    pub episode_id: Uuid,
-    pub input: String,
-    pub parsed_output: Option<Value>,
-    pub content_blocks: String,
-    pub processing_time_ms: u32,
 }
 
 impl Inference {
@@ -463,29 +514,6 @@ fn current_timestamp() -> u64 {
         .as_secs()
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct TextChunk {
-    pub text: String,
-    pub id: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
-pub enum ContentBlockChunk {
-    Text(TextChunk),
-    ToolCall(ToolCallChunk),
-}
-
-#[derive(Debug, Clone)]
-pub struct ModelInferenceResponseChunk {
-    pub inference_id: Uuid,
-    pub content: Vec<ContentBlockChunk>,
-    pub created: u64,
-    pub usage: Option<Usage>,
-    pub raw_response: String,
-    pub latency: Duration,
-}
-
 impl ModelInferenceResponseChunk {
     pub fn new(
         inference_id: Uuid,
@@ -505,14 +533,6 @@ impl ModelInferenceResponseChunk {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ChatInferenceResponseChunk {
-    pub inference_id: Uuid,
-    pub content: Vec<ContentBlockChunk>,
-    pub created: u64,
-    pub usage: Option<Usage>,
-}
-
 impl From<ModelInferenceResponseChunk> for ChatInferenceResponseChunk {
     fn from(chunk: ModelInferenceResponseChunk) -> Self {
         Self {
@@ -522,11 +542,6 @@ impl From<ModelInferenceResponseChunk> for ChatInferenceResponseChunk {
             usage: chunk.usage,
         }
     }
-}
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(tag = "type")]
-pub enum InferenceResponseChunk {
-    Chat(ChatInferenceResponseChunk),
 }
 
 pub fn collect_chunks(
@@ -633,13 +648,6 @@ pub fn collect_chunks(
         output_schema,
         tool_choice,
     )))
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ToolCallChunk {
-    pub id: String,
-    pub name: String,
-    pub arguments: String,
 }
 
 impl From<ToolCallChunk> for ToolCall {
