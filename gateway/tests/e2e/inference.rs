@@ -10,13 +10,7 @@ use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use crate::e2e::common::clickhouse_flush_async_insert;
-
-// TODO (#74): make this endpoint configurable with main.rs
-const INFERENCE_URL: &str = "http://localhost:3000/inference";
-lazy_static::lazy_static! {
-    static ref CLICKHOUSE_URL: String = std::env::var("CLICKHOUSE_URL").expect("Environment variable CLICKHOUSE_URL must be set");
-}
+use crate::e2e::common::{clickhouse_flush_async_insert, get_clickhouse, get_gateway_endpoint};
 
 #[tokio::test]
 async fn e2e_test_inference_basic() {
@@ -37,7 +31,7 @@ async fn e2e_test_inference_basic() {
     });
 
     let response = Client::new()
-        .post(INFERENCE_URL)
+        .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .send()
         .await
@@ -73,9 +67,7 @@ async fn e2e_test_inference_basic() {
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Check ClickHouse
-    let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, None)
-            .unwrap();
+    let clickhouse = get_clickhouse().await;
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
@@ -112,7 +104,7 @@ async fn e2e_test_inference_dryrun() {
     });
 
     let response = Client::new()
-        .post(INFERENCE_URL)
+        .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .send()
         .await
@@ -130,9 +122,7 @@ async fn e2e_test_inference_dryrun() {
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Check ClickHouse
-    let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, None)
-            .unwrap();
+    let clickhouse = get_clickhouse().await;
     let result = select_inference_clickhouse(&clickhouse, inference_id).await;
     assert!(result.is_none()); // No inference should be written to ClickHouse when dryrun is true
 }
@@ -159,7 +149,7 @@ async fn e2e_test_inference_model_fallback() {
     });
 
     let response = Client::new()
-        .post(INFERENCE_URL)
+        .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .send()
         .await
@@ -195,9 +185,7 @@ async fn e2e_test_inference_model_fallback() {
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Check ClickHouse
-    let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, None)
-            .unwrap();
+    let clickhouse = get_clickhouse().await;
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
@@ -238,7 +226,7 @@ async fn e2e_test_inference_json_fail() {
     });
 
     let response = Client::new()
-        .post(INFERENCE_URL)
+        .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .send()
         .await
@@ -273,9 +261,7 @@ async fn e2e_test_inference_json_fail() {
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Check ClickHouse
-    let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, None)
-            .unwrap();
+    let clickhouse = get_clickhouse().await;
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
@@ -316,7 +302,7 @@ async fn e2e_test_inference_json_succeed() {
     });
 
     let response = Client::new()
-        .post(INFERENCE_URL)
+        .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .send()
         .await
@@ -352,9 +338,7 @@ async fn e2e_test_inference_json_succeed() {
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Check ClickHouse
-    let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, None)
-            .unwrap();
+    let clickhouse = get_clickhouse().await;
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
@@ -400,7 +384,7 @@ async fn e2e_test_variant_failover() {
         });
 
         let response = Client::new()
-            .post(INFERENCE_URL)
+            .post(get_gateway_endpoint("/inference"))
             .json(&payload)
             .send()
             .await
@@ -444,9 +428,7 @@ async fn e2e_test_variant_failover() {
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Check ClickHouse
-    let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, None)
-            .unwrap();
+    let clickhouse = get_clickhouse().await;
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
@@ -485,7 +467,7 @@ async fn e2e_test_streaming() {
     });
 
     let mut event_source = Client::new()
-        .post(INFERENCE_URL)
+        .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
         .unwrap();
@@ -525,9 +507,7 @@ async fn e2e_test_streaming() {
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Check ClickHouse
-    let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, None)
-            .unwrap();
+    let clickhouse = get_clickhouse().await;
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
@@ -565,7 +545,7 @@ async fn e2e_test_streaming_dryrun() {
     });
 
     let mut event_source = Client::new()
-        .post(INFERENCE_URL)
+        .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
         .unwrap();
@@ -606,9 +586,7 @@ async fn e2e_test_streaming_dryrun() {
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Check ClickHouse
-    let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, None)
-            .unwrap();
+    let clickhouse = get_clickhouse().await;
     let result = select_inference_clickhouse(&clickhouse, inference_id).await;
     assert!(result.is_none()); // No inference should be written to ClickHouse when dryrun is true
 }
