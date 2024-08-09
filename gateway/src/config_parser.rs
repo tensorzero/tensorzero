@@ -572,6 +572,20 @@ mod tests {
             .contains("Failed to parse config:\nunknown field `enable_agi`, expected"));
     }
 
+    /// Ensure that the config parsing fails when a JSON function has no output schema
+    #[test]
+    fn test_config_from_toml_table_json_function_no_output_schema() {
+        let mut config = get_sample_valid_config();
+        config["functions"]["extract_data"]
+            .as_table_mut()
+            .expect("Failed to get `functions.generate_draft` section")
+            .remove("output_schema");
+        let result = Config::try_from(config);
+        assert!(result.unwrap_err().to_string().contains(
+            "Failed to parse config:\nmissing field `output_schema`\nin `functions.extract_data`\n"
+        ));
+    }
+
     /// Ensure that the config parsing fails when there are extra variables for variants
     #[test]
     fn test_config_from_toml_table_extra_variables_variants() {
