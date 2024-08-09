@@ -12,8 +12,8 @@ use crate::inference::types::{
 };
 
 use super::openai::{
-    handle_openai_error, stream_openai, OpenAIRequestMessage, OpenAIResponse,
-    OpenAIResponseWithLatency, OpenAITool, OpenAIToolChoice,
+    handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
+    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseWithLatency, OpenAITool, OpenAIToolChoice,
 };
 use super::provider_trait::InferenceProvider;
 
@@ -137,6 +137,7 @@ fn get_azure_chat_url(api_base: &str, deployment_id: &str) -> String {
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "type")]
 enum AzureResponseFormat {
+    #[allow(dead_code)]
     JsonObject,
     #[default]
     Text,
@@ -148,7 +149,7 @@ enum AzureResponseFormat {
 /// We are not handling logprobs, top_logprobs, n, prompt_truncate_len
 /// presence_penalty, frequency_penalty, seed, service_tier, stop, user,
 /// or context_length_exceeded_behavior
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 struct AzureRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     model: &'a str,
@@ -168,22 +169,24 @@ struct AzureRequest<'a> {
 
 impl<'a> AzureRequest<'a> {
     pub fn new(model: &'a str, request: &'a ModelInferenceRequest) -> AzureRequest<'a> {
-        let response_format = match request.json_mode {
-            true => AzureResponseFormat::JsonObject,
-            false => AzureResponseFormat::Text,
-        };
+        // TODO (#99): Currently Azure seems to be getting mad about JSON mode, let's figure this out later
+        // let response_format = match request.json_mode {
+        // JSONMode::On | JSONMode::Strict => AzureResponseFormat::JsonObject,
+        // JSONMode::Off => AzureResponseFormat::Text,
+        // _ => AzureResponseFormat::Text,
+        // };
+        let response_format = AzureResponseFormat::Text;
+        let messages = prepare_openai_messages(request);
+        let (tools, tool_choice) = prepare_openai_tools(request);
         AzureRequest {
-            messages: request.messages.iter().map(|m| m.into()).collect(),
+            messages,
             model,
             temperature: request.temperature,
             max_tokens: request.max_tokens,
             stream: request.stream,
             response_format,
-            tools: request
-                .tools_available
-                .as_ref()
-                .map(|t| t.iter().map(|t| t.into()).collect()),
-            tool_choice: request.tool_choice.as_ref().map(OpenAIToolChoice::from),
+            tools,
+            tool_choice,
             parallel_tool_calls: request.parallel_tool_calls,
         }
     }
@@ -196,18 +199,14 @@ mod tests {
 
     use crate::inference::{
         providers::openai::OpenAIToolChoiceString,
-        types::{
-            FunctionType, InferenceRequestMessage, Tool, ToolChoice, ToolType,
-            UserInferenceRequestMessage,
-        },
+        types::{FunctionType, JSONMode, RequestMessage, Role, Tool, ToolChoice},
     };
 
     #[test]
     fn test_azure_request_new() {
-        let tool = Tool {
+        let tool = Tool::Function {
             name: "get_weather".to_string(),
             description: Some("Get the current weather".to_string()),
-            r#type: ToolType::Function,
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -221,15 +220,17 @@ mod tests {
         };
 
         let request_with_tools = ModelInferenceRequest {
-            messages: vec![InferenceRequestMessage::User(UserInferenceRequestMessage {
-                content: "What's the weather?".to_string(),
-            })],
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
             temperature: None,
             max_tokens: None,
             stream: false,
-            json_mode: true,
+            json_mode: JSONMode::On,
             tools_available: Some(vec![tool]),
-            tool_choice: Some(ToolChoice::Auto),
+            tool_choice: ToolChoice::Auto,
             parallel_tool_calls: Some(true),
             function_type: FunctionType::Chat,
             output_schema: None,
@@ -242,10 +243,11 @@ mod tests {
         assert_eq!(azure_request.temperature, None);
         assert_eq!(azure_request.max_tokens, None);
         assert!(!azure_request.stream);
-        assert_eq!(
-            azure_request.response_format,
-            AzureResponseFormat::JsonObject
-        );
+        // TODO (#99): Currently Azure seems to be getting mad about JSON mode, let's figure this out later
+        // assert_eq!(
+        //     azure_request.response_format,
+        //     AzureResponseFormat::JsonObject
+        // );
         assert!(azure_request.tools.is_some());
         assert_eq!(azure_request.tools.as_ref().unwrap().len(), 1);
         assert_eq!(

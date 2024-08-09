@@ -122,6 +122,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
             #[serde(rename = "aws_bedrock")]
             AWSBedrock {
                 model_id: String,
+                region: Option<String>,
             },
             Azure {
                 model_name: String,
@@ -159,8 +160,8 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                     api_key: env::var("ANTHROPIC_API_KEY").ok().map(SecretString::new),
                 })
             }
-            ProviderConfigHelper::AWSBedrock { model_id } => {
-                ProviderConfig::AWSBedrock(AWSBedrockProvider { model_id })
+            ProviderConfigHelper::AWSBedrock { model_id, region } => {
+                ProviderConfig::AWSBedrock(AWSBedrockProvider { model_id, region })
             }
             ProviderConfigHelper::Azure {
                 model_name,
@@ -273,7 +274,7 @@ mod tests {
             DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW, DUMMY_INFER_USAGE,
             DUMMY_STREAMING_RESPONSE,
         },
-        types::FunctionType,
+        types::{ContentBlockChunk, FunctionType, JSONMode, TextChunk, ToolChoice},
     };
     use tokio_stream::StreamExt;
     use tracing_test::traced_test;
@@ -296,20 +297,24 @@ mod tests {
         // Try inferring the good model only
         let request = ModelInferenceRequest {
             messages: vec![],
+            system: None,
             tools_available: None,
-            tool_choice: None,
+            tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             temperature: None,
             max_tokens: None,
             stream: false,
-            json_mode: false,
+            json_mode: JSONMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
         };
         let response = model_config.infer(&request, &Client::new()).await.unwrap();
-        let content = response.content.unwrap();
-        assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
-        let raw = response.raw;
+        let content = response.content;
+        assert_eq!(
+            content,
+            vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()]
+        );
+        let raw = response.raw_response;
         assert_eq!(raw, DUMMY_INFER_RESPONSE_RAW);
         let usage = response.usage;
         assert_eq!(usage, DUMMY_INFER_USAGE);
@@ -348,13 +353,14 @@ mod tests {
         // Try inferring the good model only
         let request = ModelInferenceRequest {
             messages: vec![],
+            system: None,
             tools_available: None,
-            tool_choice: None,
+            tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             temperature: None,
             max_tokens: None,
             stream: false,
-            json_mode: false,
+            json_mode: JSONMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -368,12 +374,14 @@ mod tests {
         };
 
         let response = model_config.infer(&request, &Client::new()).await.unwrap();
-
         // Ensure that the error for the bad provider was logged, but the request worked nonetheless
         assert!(logs_contain("Error sending request to Dummy provider"));
-        let content = response.content.unwrap();
-        assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
-        let raw = response.raw;
+        let content = response.content;
+        assert_eq!(
+            content,
+            vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()]
+        );
+        let raw = response.raw_response;
         assert_eq!(raw, DUMMY_INFER_RESPONSE_RAW);
         let usage = response.usage;
         assert_eq!(usage, DUMMY_INFER_USAGE);
@@ -390,13 +398,14 @@ mod tests {
 
         let request = ModelInferenceRequest {
             messages: vec![],
+            system: None,
             tools_available: None,
-            tool_choice: None,
+            tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             temperature: None,
             max_tokens: None,
             stream: true,
-            json_mode: false,
+            json_mode: JSONMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -412,17 +421,33 @@ mod tests {
             .unwrap();
         assert_eq!(
             initial_chunk.content,
-            Some(DUMMY_STREAMING_RESPONSE[0].to_string())
+            vec![ContentBlockChunk::Text(TextChunk {
+                text: DUMMY_STREAMING_RESPONSE[0].to_string(),
+                id: "0".to_string(),
+            })],
         );
 
-        let mut collected_content = initial_chunk.content.unwrap_or_default();
+        let mut collected_content: Vec<ContentBlockChunk> =
+            vec![ContentBlockChunk::Text(TextChunk {
+                text: DUMMY_STREAMING_RESPONSE[0].to_string(),
+                id: "0".to_string(),
+            })];
         let mut stream = Box::pin(stream);
         while let Some(Ok(chunk)) = stream.next().await {
-            if let Some(content) = chunk.content {
-                collected_content.push_str(&content);
+            let mut content = chunk.content;
+            assert!(content.len() <= 1);
+            if content.len() == 1 {
+                collected_content.push(content.pop().unwrap());
             }
         }
-        assert_eq!(collected_content, DUMMY_STREAMING_RESPONSE.join(""));
+        let mut collected_content_str = String::new();
+        for content in collected_content {
+            match content {
+                ContentBlockChunk::Text(text) => collected_content_str.push_str(&text.text),
+                _ => unreachable!(),
+            }
+        }
+        assert_eq!(collected_content_str, DUMMY_STREAMING_RESPONSE.join(""));
 
         // Test bad model
         let model_config = ModelConfig {
@@ -459,13 +484,14 @@ mod tests {
 
         let request = ModelInferenceRequest {
             messages: vec![],
+            system: None,
             tools_available: None,
-            tool_choice: None,
+            tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             temperature: None,
             max_tokens: None,
             stream: true,
-            json_mode: false,
+            json_mode: JSONMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -488,16 +514,28 @@ mod tests {
 
         assert_eq!(
             initial_chunk.content,
-            Some(DUMMY_STREAMING_RESPONSE[0].to_string())
+            vec![ContentBlockChunk::Text(TextChunk {
+                text: DUMMY_STREAMING_RESPONSE[0].to_string(),
+                id: "0".to_string(),
+            })],
         );
 
-        let mut collected_content = initial_chunk.content.unwrap_or_default();
+        let mut collected_content = initial_chunk.content;
         let mut stream = Box::pin(stream);
         while let Some(Ok(chunk)) = stream.next().await {
-            if let Some(content) = chunk.content {
-                collected_content.push_str(&content);
+            let mut content = chunk.content;
+            assert!(content.len() <= 1);
+            if content.len() == 1 {
+                collected_content.push(content.pop().unwrap());
             }
         }
-        assert_eq!(collected_content, DUMMY_STREAMING_RESPONSE.join(""));
+        let mut collected_content_str = String::new();
+        for content in collected_content {
+            match content {
+                ContentBlockChunk::Text(text) => collected_content_str.push_str(&text.text),
+                _ => unreachable!(),
+            }
+        }
+        assert_eq!(collected_content_str, DUMMY_STREAMING_RESPONSE.join(""));
     }
 }
