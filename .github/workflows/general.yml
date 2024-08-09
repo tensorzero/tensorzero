@@ -1,0 +1,51 @@
+name: PR Checks
+
+on:
+  merge_group:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+env:
+  FORCE_COLOR: 1
+
+jobs:
+  run:
+    runs-on: ubuntu-22.04-8core
+
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Cargo Home
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/git/
+            ~/.cargo/registry/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+          save-always: true
+
+      - name: Build (Rust)
+        run: cargo build --verbose
+
+      - name: Lint (Rust)
+        run: |
+          cargo fmt -- --check
+          cargo clippy --all-targets --all-features -- -D warnings
+
+      - uses: EmbarkStudios/cargo-deny-action@v1
+        with:
+          command: check bans
+
+      - name: Test (Rust)
+        run: |
+          cargo test
