@@ -14,15 +14,13 @@ use gateway::observability;
 
 #[tokio::main]
 async fn main() {
-    // Set up logs
+    // Set up logs and metrics
     observability::setup_logs();
+    let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
 
     // Load config
     let config =
         Arc::new(config_parser::Config::load().expect_pretty("Failed to load TensorZero config"));
-
-    // Set up metrics
-    observability::setup_metrics(&config).expect_pretty("Failed to set up metrics");
 
     let app_state = gateway_util::AppStateData::with_config(config.clone())
         .expect_pretty("Failed to initialize AppState");
@@ -37,6 +35,10 @@ async fn main() {
         .route("/feedback", post(endpoints::feedback::feedback_handler))
         .route("/status", get(endpoints::status::status_handler))
         .route("/health", get(endpoints::status::health_handler))
+        .route(
+            "/metrics",
+            get(move || std::future::ready(metrics_handle.render())),
+        )
         .with_state(app_state);
 
     // Bind to the socket address specified in the config, or default to 0.0.0.0:3000

@@ -1,11 +1,13 @@
 use futures::StreamExt;
-use gateway::clickhouse::ClickHouseConnectionInfo;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use crate::e2e::common::{select_inference_clickhouse, select_model_inferences_clickhouse};
+use crate::e2e::common::{
+    get_clickhouse, get_gateway_endpoint, select_inference_clickhouse,
+    select_model_inferences_clickhouse,
+};
 
 /// GCP Vertex E2E tests
 ///
@@ -19,12 +21,6 @@ use crate::e2e::common::{select_inference_clickhouse, select_model_inferences_cl
 /// - tool calling
 /// - JSON mode
 /// - other API parameters (temp, max_tokens, etc.)
-
-// TODO (#74): make this endpoint configurable with some kind of env var
-const INFERENCE_URL: &str = "http://localhost:3000/inference";
-lazy_static::lazy_static! {
-    static ref CLICKHOUSE_URL: String = std::env::var("CLICKHOUSE_URL").expect("Environment variable CLICKHOUSE_URL must be set");
-}
 
 #[tokio::test]
 async fn test_inference_basic() {
@@ -47,7 +43,7 @@ async fn test_inference_basic() {
     });
 
     let response = client
-        .post(INFERENCE_URL)
+        .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .send()
         .await
@@ -75,9 +71,8 @@ async fn test_inference_basic() {
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Check ClickHouse
-    let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, None)
-            .unwrap();
+    let clickhouse = get_clickhouse().await;
+
     // First, check Inference table
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
@@ -143,7 +138,7 @@ async fn test_streaming() {
     });
 
     let mut event_source = client
-        .post(INFERENCE_URL)
+        .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()
         .unwrap();
@@ -176,9 +171,8 @@ async fn test_streaming() {
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Check ClickHouse
-    let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, None)
-            .unwrap();
+    let clickhouse = get_clickhouse().await;
+
     // First, check Inference table
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
