@@ -4,6 +4,7 @@ use crate::integration::providers::common::{
 };
 use futures::StreamExt;
 use gateway::inference::providers::provider_trait::InferenceProvider;
+use gateway::inference::types::{ContentBlock, Text};
 use gateway::{inference::providers::anthropic::AnthropicProvider, model::ProviderConfig};
 use secrecy::SecretString;
 use std::env;
@@ -22,7 +23,15 @@ async fn test_infer() {
     let inference_request = create_simple_inference_request();
     let result = provider.infer(&inference_request, &client).await;
     assert!(result.is_ok());
-    assert!(result.unwrap().content.is_some());
+    let result = result.unwrap();
+    assert!(result.content.len() == 1);
+    let content = result.content.first().unwrap();
+    match content {
+        ContentBlock::Text(Text { text }) => {
+            assert!(!text.is_empty());
+        }
+        _ => unreachable!(),
+    }
 }
 
 #[tokio::test]
@@ -47,7 +56,7 @@ async fn test_infer_stream() {
     }
     assert!(!collected_chunks.is_empty());
     // Fourth as an arbitrary middle chunk, the first and last contain only metadata for Anthropic
-    assert!(collected_chunks[4].content.is_some());
+    assert!(collected_chunks[4].content.len() == 1);
     assert!(collected_chunks.last().unwrap().usage.is_some());
 }
 
@@ -68,15 +77,15 @@ async fn test_infer_with_tool_calls() {
 
     assert!(result.is_ok());
     let response = result.unwrap();
-    assert!(response.tool_calls.is_some());
-    let tool_calls = response.tool_calls.unwrap();
-    assert!(!tool_calls.is_empty());
-
-    let first_tool_call = &tool_calls[0];
-    assert_eq!(first_tool_call.name, "get_weather");
-
-    // Parse the arguments to ensure they're valid JSON
-    let arguments: serde_json::Value = serde_json::from_str(&first_tool_call.arguments)
-        .expect("Failed to parse tool call arguments");
-    assert!(arguments.get("location").is_some());
+    assert!(response.content.len() == 1);
+    let content = response.content.first().unwrap();
+    match content {
+        ContentBlock::ToolCall(tool_call) => {
+            assert!(tool_call.name == "get_weather");
+            let arguments: serde_json::Value = serde_json::from_str(&tool_call.arguments)
+                .expect("Failed to parse tool call arguments");
+            assert!(arguments.get("location").is_some());
+        }
+        _ => unreachable!(),
+    }
 }

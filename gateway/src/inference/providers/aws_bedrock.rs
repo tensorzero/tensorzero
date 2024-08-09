@@ -1,7 +1,7 @@
 use aws_sdk_bedrockruntime::operation::converse::ConverseOutput;
 use aws_sdk_bedrockruntime::types::{
-    ContentBlock, ConversationRole, ConverseOutput as ConverseOutputType, InferenceConfiguration,
-    Message, SystemContentBlock,
+    ContentBlock as BedrockContentBlock, ConversationRole, ConverseOutput as ConverseOutputType,
+    InferenceConfiguration, Message, SystemContentBlock,
 };
 use tokio::sync::OnceCell;
 use tokio::time::Instant;
@@ -9,8 +9,8 @@ use tokio::time::Instant;
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
-    InferenceRequestMessage, InferenceResponseStream, Latency, ModelInferenceRequest,
-    ModelInferenceResponse, ModelInferenceResponseChunk, ToolCall, Usage,
+    ContentBlock, InferenceResponseStream, Latency, ModelInferenceRequest, ModelInferenceResponse,
+    ModelInferenceResponseChunk, RequestMessage, Role, Text, Usage,
 };
 
 static AWS_BEDROCK_CLIENT: OnceCell<aws_sdk_bedrockruntime::Client> = OnceCell::const_new();
@@ -39,18 +39,10 @@ impl InferenceProvider for AWSBedrockProvider {
     ) -> Result<ModelInferenceResponse, Error> {
         let aws_bedrock_client = get_aws_bedrock_client().await;
 
-        let first_message = &request.messages[0];
-        let (system, request_messages) = match first_message {
-            InferenceRequestMessage::System(message) => {
-                let system = SystemContentBlock::Text(message.content.clone());
-                (Some(system), &request.messages[1..])
-            }
-            _ => (None, &request.messages[..]),
-        };
-
         // TODO (#55): add support for guardrails and additional fields
 
-        let messages: Vec<Message> = request_messages
+        let messages: Vec<Message> = request
+            .messages
             .iter()
             .map(Message::try_from)
             .collect::<Result<Vec<_>, _>>()?;
@@ -64,23 +56,27 @@ impl InferenceProvider for AWSBedrockProvider {
             inference_config = inference_config.temperature(temperature);
         }
 
-        let mut request = aws_bedrock_client
+        let mut bedrock_request = aws_bedrock_client
             .converse()
             .model_id(&self.model_id)
             .set_messages(Some(messages))
             .inference_config(inference_config.build());
 
-        if let Some(system) = system {
-            request = request.system(system);
+        if let Some(system) = &request.system {
+            let system_block = SystemContentBlock::Text(system.clone());
+            bedrock_request = bedrock_request.system(system_block);
         }
 
         // TODO (#18, #30): .tool_config(...)
 
         // TODO (#88): add more granularity to error handling
         let start_time = Instant::now();
-        let output = request.send().await.map_err(|e| Error::AWSBedrockServer {
-            message: e.to_string(),
-        })?;
+        let output = bedrock_request
+            .send()
+            .await
+            .map_err(|e| Error::AWSBedrockServer {
+                message: e.to_string(),
+            })?;
         let latency = Latency::NonStreaming {
             response_time: start_time.elapsed(),
         };
@@ -97,37 +93,55 @@ impl InferenceProvider for AWSBedrockProvider {
     }
 }
 
-impl TryFrom<&InferenceRequestMessage> for Message {
+impl From<Role> for ConversationRole {
+    fn from(role: Role) -> Self {
+        match role {
+            Role::User => ConversationRole::User,
+            Role::Assistant => ConversationRole::Assistant,
+        }
+    }
+}
+
+impl TryFrom<&ContentBlock> for BedrockContentBlock {
     type Error = Error;
 
-    fn try_from(inference_message: &InferenceRequestMessage) -> Result<Message, Error> {
-        let message_builder = match inference_message {
-            InferenceRequestMessage::System(_) => {
-                return Err(Error::InvalidMessage {
-                    message: "Can't convert System message to AWS Bedrock message. Don't pass System message in except as the first message in the chat.".to_string(),
-                })
-            }
-            InferenceRequestMessage::User(message) => {
-                Message::builder()
-                    .role(ConversationRole::User)
-                    .content(ContentBlock::Text(message.content.clone()))
-            }
-            InferenceRequestMessage::Assistant(message) => {
-                let mut message_builder = Message::builder().role(ConversationRole::Assistant);
+    fn try_from(block: &ContentBlock) -> Result<Self, Self::Error> {
+        match block {
+            ContentBlock::Text(Text { text }) => Ok(BedrockContentBlock::Text(text.clone())),
+            _ => Err(Error::TypeConversion {
+                message: "Unsupported content block type for AWS Bedrock.".to_string(),
+            }), // TODO (#18, #30): handle tool use and tool call blocks
+        }
+    }
+}
 
-                if let Some(text) = &message.content {
-                    message_builder = message_builder.content(ContentBlock::Text(text.clone()));
-                }
+impl TryFrom<BedrockContentBlock> for ContentBlock {
+    type Error = Error;
 
-                // TODO (#30): handle tool calls (like Anthropic)
+    fn try_from(block: BedrockContentBlock) -> Result<Self, Self::Error> {
+        match block {
+            BedrockContentBlock::Text(text) => Ok(text.into()),
+            _ => Err(Error::TypeConversion {
+                message: "Unsupported content block type for AWS Bedrock.".to_string(),
+            }), // TODO (#18, #30): handle tool use and tool call blocks
+        }
+    }
+}
 
-                message_builder
-            }
-            InferenceRequestMessage::Tool(_) => {
-                todo!(); // TODO (#30): handle tool calls (like Anthropic)
-            }
-        };
+impl TryFrom<&RequestMessage> for Message {
+    type Error = Error;
 
+    fn try_from(inference_message: &RequestMessage) -> Result<Message, Error> {
+        let role: ConversationRole = inference_message.role.into();
+        let blocks: Vec<BedrockContentBlock> = inference_message
+            .content
+            .iter()
+            .map(|block| block.try_into())
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut message_builder = Message::builder().role(role);
+        for block in blocks {
+            message_builder = message_builder.content(block);
+        }
         let message = message_builder.build().map_err(|e| Error::InvalidMessage {
             message: e.to_string(),
         })?;
@@ -166,20 +180,14 @@ impl TryFrom<ConverseOutputWithLatency> for ModelInferenceResponse {
             }
         };
 
-        let mut message_text: Option<String> = None;
-        let tool_calls: Option<Vec<ToolCall>> = None;
-
-        if let Some(message) = message {
-            for block in message.content {
-                match block {
-                    ContentBlock::Text(text) => match message_text {
-                        Some(message) => message_text = Some(format!("{}\n{}", message, text)),
-                        None => message_text = Some(text),
-                    },
-                    _ => todo!(), // TODO (#18): handle tool use and other blocks
-                }
-            }
-        }
+        let content: Vec<ContentBlock> = message
+            .ok_or(Error::AWSBedrockServer {
+                message: "AWS Bedrock returned an empty message.".to_string(),
+            })?
+            .content
+            .into_iter()
+            .map(|block| block.try_into())
+            .collect::<Result<Vec<ContentBlock>, _>>()?;
 
         let usage = match output.usage {
             Some(usage) => Usage {
@@ -189,12 +197,6 @@ impl TryFrom<ConverseOutputWithLatency> for ModelInferenceResponse {
             None => todo!(), // TODO (#18): this should be nullable
         };
 
-        Ok(ModelInferenceResponse::new(
-            message_text,
-            tool_calls,
-            raw,
-            usage,
-            latency,
-        ))
+        Ok(ModelInferenceResponse::new(content, raw, usage, latency))
     }
 }

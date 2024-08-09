@@ -18,9 +18,9 @@ async fn test_prometheus_metrics_inference_nonstreaming() {
     // Run inference (standard)
     let inference_payload = serde_json::json!({
         "function_name": "prometheus_test1",
-        "input": [
-            {"role": "user", "content": "Hello, world!"}
-        ],
+        "input": {
+            "messages": [{"role": "user", "content": "Hello, world!"}]
+        },
         "stream": false,
     });
 
@@ -56,9 +56,9 @@ async fn test_prometheus_metrics_inference_nonstreaming_dryrun() {
     // Run inference (standard, dryrun)
     let inference_payload = serde_json::json!({
         "function_name": "prometheus_test2",
-        "input": [
-            {"role": "user", "content": "Hello, world!"}
-        ],
+        "input": {
+            "messages": [{"role": "user", "content": "Hello, world!"}]
+        },
         "stream": false,
         "dryrun": true,
     });
@@ -95,9 +95,9 @@ async fn test_prometheus_metrics_inference_streaming() {
     // Run inference (streaming)
     let inference_payload = serde_json::json!({
         "function_name": "prometheus_test3",
-        "input": [
-            {"role": "user", "content": "Hello, world!"}
-        ],
+        "input": {
+            "messages": [{"role": "user", "content": "Hello, world!"}]
+        },
         "stream": true,
     });
 
@@ -134,9 +134,9 @@ async fn test_prometheus_metrics_inference_streaming_dryrun() {
     // Run inference (streaming, dryrun)
     let inference_payload = serde_json::json!({
         "function_name": "prometheus_test4",
-        "input": [
-            {"role": "user", "content": "Hello, world!"}
-        ],
+        "input": {
+            "messages": [{"role": "user", "content": "Hello, world!"}]
+        },
         "stream": true,
         "dryrun": true,
     });

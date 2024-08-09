@@ -8,15 +8,16 @@ use tokio::time::Instant;
 use crate::{
     error::Error,
     inference::types::{
-        InferenceResponseStream, Latency, ModelInferenceRequest, ModelInferenceResponse,
+        InferenceResponseStream, JSONMode, Latency, ModelInferenceRequest, ModelInferenceResponse,
         ModelInferenceResponseChunk,
     },
 };
 
 use super::{
     openai::{
-        get_chat_url, handle_openai_error, stream_openai, OpenAIRequestMessage, OpenAIResponse,
-        OpenAIResponseWithLatency, OpenAITool, OpenAIToolChoice,
+        get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
+        stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseWithLatency, OpenAITool,
+        OpenAIToolChoice,
     },
     provider_trait::InferenceProvider,
 };
@@ -174,27 +175,25 @@ struct FireworksRequest<'a> {
 
 impl<'a> FireworksRequest<'a> {
     pub fn new(model: &'a str, request: &'a ModelInferenceRequest) -> FireworksRequest<'a> {
-        let tools = request
-            .tools_available
-            .as_ref()
-            .map(|t| t.iter().map(|t| t.into()).collect());
         // NB: Fireworks will throw an error if you give FireworksResponseFormat::Text and then also include tools.
         // So we just don't include it as Text is the same as None anyway.
         let response_format = match request.json_mode {
-            true => Some(FireworksResponseFormat::JsonObject {
+            JSONMode::On | JSONMode::Strict => Some(FireworksResponseFormat::JsonObject {
                 schema: request.output_schema,
             }),
-            false => None,
+            JSONMode::Off => None,
         };
+        let messages = prepare_openai_messages(request);
+        let (tools, tool_choice) = prepare_openai_tools(request);
         FireworksRequest {
-            messages: request.messages.iter().map(|m| m.into()).collect(),
+            messages,
             model,
             temperature: request.temperature,
             max_tokens: request.max_tokens,
             stream: request.stream,
             response_format,
             tools,
-            tool_choice: request.tool_choice.as_ref().map(OpenAIToolChoice::from),
+            tool_choice,
             parallel_tool_calls: request.parallel_tool_calls,
         }
     }
@@ -208,18 +207,14 @@ mod tests {
 
     use crate::inference::{
         providers::openai::OpenAIToolChoiceString,
-        types::{
-            FunctionType, InferenceRequestMessage, Tool, ToolChoice, ToolType,
-            UserInferenceRequestMessage,
-        },
+        types::{FunctionType, RequestMessage, Role, Tool, ToolChoice},
     };
 
     #[test]
     fn test_fireworks_request_new() {
-        let tool = Tool {
+        let tool = Tool::Function {
             name: "get_weather".to_string(),
             description: Some("Get the current weather".to_string()),
-            r#type: ToolType::Function,
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -233,15 +228,17 @@ mod tests {
         };
 
         let request_with_tools = ModelInferenceRequest {
-            messages: vec![InferenceRequestMessage::User(UserInferenceRequestMessage {
-                content: "What's the weather?".to_string(),
-            })],
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
             temperature: None,
             max_tokens: None,
             stream: false,
-            json_mode: true,
+            json_mode: JSONMode::On,
             tools_available: Some(vec![tool]),
-            tool_choice: Some(ToolChoice::Auto),
+            tool_choice: ToolChoice::Auto,
             parallel_tool_calls: Some(true),
             function_type: FunctionType::Chat,
             output_schema: None,

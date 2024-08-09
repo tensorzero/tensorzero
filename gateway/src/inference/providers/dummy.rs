@@ -7,8 +7,8 @@ use super::provider_trait::InferenceProvider;
 
 use crate::error::Error;
 use crate::inference::types::{
-    InferenceResponseStream, Latency, ModelInferenceRequest, ModelInferenceResponse,
-    ModelInferenceResponseChunk, Usage,
+    ContentBlock, ContentBlockChunk, InferenceResponseStream, Latency, ModelInferenceRequest,
+    ModelInferenceResponse, ModelInferenceResponseChunk, Text, Usage,
 };
 
 #[derive(Clone, Debug)]
@@ -72,10 +72,11 @@ impl InferenceProvider for DummyProvider {
             .duration_since(std::time::UNIX_EPOCH)
             .expect("Time went backwards")
             .as_secs();
-        let content = match self.model_name.as_str() {
-            "json" => Some(r#"{"answer":"Hello"}"#.to_string()),
-            _ => Some(DUMMY_INFER_RESPONSE_CONTENT.to_string()),
+        let message = match self.model_name.as_str() {
+            "json" => r#"{"answer":"Hello"}"#.to_string(),
+            _ => DUMMY_INFER_RESPONSE_CONTENT.to_string(),
         };
+        let content = vec![ContentBlock::Text(Text { text: message })];
         let raw = match self.model_name.as_str() {
             "json" => DUMMY_JSON_RESPONSE_RAW.to_string(),
             _ => DUMMY_INFER_RESPONSE_RAW.to_string(),
@@ -88,8 +89,7 @@ impl InferenceProvider for DummyProvider {
             id,
             created,
             content,
-            tool_calls: None,
-            raw,
+            raw_response: raw,
             usage,
             latency,
         })
@@ -119,10 +119,14 @@ impl InferenceProvider for DummyProvider {
         let initial_chunk = ModelInferenceResponseChunk {
             inference_id: id,
             created,
-            content: Some(content_chunks[0].to_string()),
-            tool_calls: None,
+            content: vec![ContentBlockChunk::Text(
+                crate::inference::types::TextChunk {
+                    text: content_chunks[0].to_string(),
+                    id: "0".to_string(),
+                },
+            )],
             usage: None,
-            raw: "".to_string(),
+            raw_response: "".to_string(),
             latency: Duration::from_millis(100),
         };
         let content_chunk_len = content_chunks.len();
@@ -131,23 +135,26 @@ impl InferenceProvider for DummyProvider {
                 Ok(ModelInferenceResponseChunk {
                     inference_id: id,
                     created,
-                    content: Some(chunk.to_string()),
-                    tool_calls: None,
+                    content: vec![ContentBlockChunk::Text(
+                        crate::inference::types::TextChunk {
+                            text: chunk.to_string(),
+                            id: "0".to_string(),
+                        },
+                    )],
                     usage: None,
-                    raw: "".to_string(),
+                    raw_response: "".to_string(),
                     latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
                 })
             })
             .chain(tokio_stream::once(Ok(ModelInferenceResponseChunk {
                 inference_id: id,
                 created,
-                content: None,
-                tool_calls: None,
+                content: vec![],
                 usage: Some(crate::inference::types::Usage {
                     prompt_tokens: 10,
                     completion_tokens: total_tokens,
                 }),
-                raw: "".to_string(),
+                raw_response: "".to_string(),
                 latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),
             })))
             .throttle(std::time::Duration::from_millis(10));
