@@ -1,10 +1,7 @@
-name: Build and Test
+name: Merge Queue Checks
 
 on:
-  push:
-    branches: ["main"]
-  pull_request:
-    branches: ["main"]
+  merge_group:
 
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }} # for integration/E2E tests
@@ -51,33 +48,14 @@ jobs:
             ${{ runner.os }}-cargo-
           save-always: true
 
-      - name: Build (Rust)
-        run: cargo build --verbose
-
-      - name: Lint (Rust)
-        run: |
-          cargo fmt -- --check
-          cargo clippy --all-targets --all-features -- -D warnings
-
-      - uses: EmbarkStudios/cargo-deny-action@v1
-        with:
-          command: check bans
-
-      - name: Test (Rust)
-        if: github.ref != 'refs/heads/main'
-        run: |
-          cargo test
-
       - name: Write GCP JWT key to file
         env:
           GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
       - name: Launch containers for E2E tests
-        if: github.ref == 'refs/heads/main'
         run: docker compose -f gateway/tests/e2e/docker-compose.yml up -d --wait
 
-      - name: Test (including integration and E2E) (Rust)
-        if: github.ref == 'refs/heads/main'
+      - name: Run integration and E2E tests
         run: |
           cargo test --features integration_tests,e2e_tests
