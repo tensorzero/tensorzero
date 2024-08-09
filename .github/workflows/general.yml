@@ -47,9 +47,3 @@ jobs:
       - name: Test (Rust)
         run: |
           cargo test
-
-  # Only run live tests on merge_group
-  live-tests:
-    runs-on: ubuntu-22.04-8core
-    timeout-minutes: 15
-    steps: []
