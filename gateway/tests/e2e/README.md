@@ -8,6 +8,8 @@ Before running the tests, you should spin up the gateway and ClickHouse containe
 docker compose -f gateway/tests/e2e/docker-compose.yml up -d --build --force-recreate --remove-orphans  --wait
 ```
 
+Set the `CLICKHOUSE_URL` environment variable to the URL of the ClickHouse container (e.g. `CLICKHOUSE_URL=http://localhost:8123`).
+
 Then, you can run the tests using Cargo:
 
 ```sh
