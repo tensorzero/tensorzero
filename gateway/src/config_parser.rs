@@ -719,6 +719,29 @@ mod tests {
         let mut config = Config::try_from(get_sample_valid_config()).unwrap();
 
         match config.functions.get_mut("generate_draft") {
+            Some(FunctionConfig::Chat(params)) => match params.variants.get_mut("openai_promptA") {
+                Some(VariantConfig::ChatCompletion(params)) => {
+                    params.model = "non_existent_model".to_string();
+                }
+                _ => unreachable!(),
+            },
+            _ => unreachable!(),
+        }
+
+        assert_eq!(
+            config.validate().unwrap_err(),
+            Error::Config {
+                message: "Invalid Config: `functions.generate_draft.variants.openai_promptA`: `model` must be a valid model name".to_string()
+            }
+        );
+    }
+
+    /// Ensure that the config validation fails when a variant has a model that does not exist in the models section
+    #[test]
+    fn test_config_validate_variant_nonexistent_tool() {
+        let mut config = Config::try_from(get_sample_valid_config()).unwrap();
+
+        match config.functions.get_mut("generate_draft") {
             Some(FunctionConfig::Chat(params)) => {
                 params.tools = Some(vec!["non_existent_tool".to_string()]);
             }
