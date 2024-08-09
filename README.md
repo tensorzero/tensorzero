@@ -12,3 +12,5 @@
   ```
   CLICKHOUSE_URL="https://USERNAME:PASSWORD@XXXXXXXX.XXXXXXXX.XXX.clickhouse.cloud:8443"
   ```
+
+:)
