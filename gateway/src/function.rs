@@ -251,8 +251,6 @@ fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
     truncated_hash as f64 / u32::MAX as f64
 }
 
-impl FunctionConfigJSON {}
-
 #[cfg(test)]
 mod tests {
     use crate::{inference::types::InputMessage, variant::ChatCompletionConfig};
