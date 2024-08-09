@@ -1,13 +1,12 @@
 use reqwest::{Client, StatusCode};
 use serde_json::Value;
 
-// TODO (#74): make this endpoint configurable with main.rs
-const HEALTH_URL: &str = "http://localhost:3000/health";
+use crate::e2e::common::get_gateway_endpoint;
 
 #[tokio::test]
 async fn test_health_handler() {
     let client = Client::new();
-    let response = client.get(HEALTH_URL).send().await;
+    let response = client.get(get_gateway_endpoint("/health")).send().await;
     assert!(response.is_ok());
     let response = response.unwrap();
     assert_eq!(response.status(), StatusCode::OK);

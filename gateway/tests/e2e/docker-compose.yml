@@ -35,7 +35,6 @@ services:
         - type=gha
     ports:
       - "3000:3000"
-      - "9090:9090" # Prometheus metrics
     command: ["gateway", "/app/tensorzero.toml"]
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:?Environemnt variable ANTHROPIC_API_KEY is not set}

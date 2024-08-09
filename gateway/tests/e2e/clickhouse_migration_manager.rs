@@ -2,9 +2,7 @@ use gateway::clickhouse::ClickHouseConnectionInfo;
 use gateway::clickhouse_migration_manager;
 use tracing_test::traced_test;
 
-lazy_static::lazy_static! {
-    static ref CLICKHOUSE_URL: String = std::env::var("CLICKHOUSE_URL").expect("Environment variable CLICKHOUSE_URL must be set");
-}
+use crate::e2e::common::CLICKHOUSE_URL;
 
 #[tokio::test]
 async fn test_clickhouse_migration_manager() {

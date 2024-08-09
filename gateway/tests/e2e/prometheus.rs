@@ -1,16 +1,11 @@
 use reqwest::Client;
 use std::collections::HashMap;
 
+use crate::e2e::common::get_gateway_endpoint;
+
 /// This file is used to test the Prometheus metrics endpoint of the gateway.
 ///
 /// Namely, it tests that `request_count` is incremented correctly for inference and feedback requests.
-
-// TODO (#74): make this endpoint configurable with some kind of env var
-const INFERENCE_URL: &str = "http://localhost:3000/inference";
-const FEEDBACK_URL: &str = "http://localhost:3000/feedback";
-const METRICS_URL: &str = "http://localhost:9090/metrics";
-
-// TODO: comments, demonstrations
 
 #[tokio::test]
 async fn test_prometheus_metrics_inference_nonstreaming() {
@@ -30,7 +25,7 @@ async fn test_prometheus_metrics_inference_nonstreaming() {
     });
 
     let response = client
-        .post(INFERENCE_URL)
+        .post(get_gateway_endpoint("/inference"))
         .json(&inference_payload)
         .send()
         .await
@@ -69,7 +64,7 @@ async fn test_prometheus_metrics_inference_nonstreaming_dryrun() {
     });
 
     let response = client
-        .post(INFERENCE_URL)
+        .post(get_gateway_endpoint("/inference"))
         .json(&inference_payload)
         .send()
         .await
@@ -107,7 +102,7 @@ async fn test_prometheus_metrics_inference_streaming() {
     });
 
     let response = client
-        .post(INFERENCE_URL)
+        .post(get_gateway_endpoint("/inference"))
         .json(&inference_payload)
         .send()
         .await
@@ -147,7 +142,7 @@ async fn test_prometheus_metrics_inference_streaming_dryrun() {
     });
 
     let response = client
-        .post(INFERENCE_URL)
+        .post(get_gateway_endpoint("/inference"))
         .json(&inference_payload)
         .send()
         .await
@@ -183,7 +178,7 @@ async fn test_prometheus_metrics_feedback_boolean() {
     });
 
     let response = client
-        .post(FEEDBACK_URL)
+        .post(get_gateway_endpoint("/feedback"))
         .json(&feedback_payload)
         .send()
         .await
@@ -221,7 +216,7 @@ async fn test_prometheus_metrics_feedback_boolean_dryrun() {
     });
 
     let response = client
-        .post(FEEDBACK_URL)
+        .post(get_gateway_endpoint("/feedback"))
         .json(&feedback_payload)
         .send()
         .await
@@ -257,7 +252,7 @@ async fn test_prometheus_metrics_feedback_float() {
     });
 
     let response = client
-        .post(FEEDBACK_URL)
+        .post(get_gateway_endpoint("/feedback"))
         .json(&feedback_payload)
         .send()
         .await
@@ -295,7 +290,7 @@ async fn test_prometheus_metrics_feedback_float_dryrun() {
     });
 
     let response = client
-        .post(FEEDBACK_URL)
+        .post(get_gateway_endpoint("/feedback"))
         .json(&feedback_payload)
         .send()
         .await
@@ -336,7 +331,7 @@ async fn test_prometheus_metrics_feedback_comment() {
     });
 
     let response = client
-        .post(FEEDBACK_URL)
+        .post(get_gateway_endpoint("/feedback"))
         .json(&feedback_payload)
         .send()
         .await
@@ -365,7 +360,7 @@ async fn test_prometheus_metrics_feedback_comment() {
     });
 
     let response = client
-        .post(FEEDBACK_URL)
+        .post(get_gateway_endpoint("/feedback"))
         .json(&feedback_payload)
         .send()
         .await
@@ -407,7 +402,7 @@ async fn test_prometheus_metrics_feedback_demonstration() {
     });
 
     let response = client
-        .post(FEEDBACK_URL)
+        .post(get_gateway_endpoint("/feedback"))
         .json(&feedback_payload)
         .send()
         .await
@@ -436,7 +431,7 @@ async fn test_prometheus_metrics_feedback_demonstration() {
     });
 
     let response = client
-        .post(FEEDBACK_URL)
+        .post(get_gateway_endpoint("/feedback"))
         .json(&feedback_payload)
         .send()
         .await
@@ -468,7 +463,7 @@ async fn get_metric_u32(client: &Client, metric_name: &str) -> u32 {
 
 async fn get_metrics(client: &Client) -> HashMap<String, String> {
     let response = client
-        .get(METRICS_URL)
+        .get(get_gateway_endpoint("/metrics"))
         .send()
         .await
         .unwrap()
