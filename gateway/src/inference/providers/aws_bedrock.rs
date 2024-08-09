@@ -105,7 +105,6 @@ impl InferenceProvider for AWSBedrockProvider {
 
         // TODO (#18, #30): .tool_config(...)
 
-        // TODO (#88): add more granularity to error handling
         let start_time = Instant::now();
         let output = bedrock_request
             .send()
