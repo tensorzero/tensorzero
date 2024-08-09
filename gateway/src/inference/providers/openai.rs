@@ -13,9 +13,9 @@ use uuid::Uuid;
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
-    InferenceRequestMessage, InferenceResponseStream, Latency, ModelInferenceRequest,
-    ModelInferenceResponse, ModelInferenceResponseChunk, Tool, ToolCall, ToolCallChunk, ToolChoice,
-    ToolType, Usage,
+    ContentBlock, ContentBlockChunk, InferenceResponseStream, JSONMode, Latency,
+    ModelInferenceRequest, ModelInferenceResponse, ModelInferenceResponseChunk, RequestMessage,
+    Role, Text, TextChunk, Tool, ToolCall, ToolCallChunk, ToolChoice, Usage,
 };
 
 const OPENAI_DEFAULT_BASE_URL: &str = "https://api.openai.com/v1/";
@@ -115,6 +115,8 @@ pub fn stream_openai(
     mut event_source: EventSource,
     start_time: Instant,
 ) -> impl Stream<Item = Result<ModelInferenceResponseChunk, Error>> {
+    let mut tool_call_ids = Vec::new();
+    let mut tool_call_names = Vec::new();
     async_stream::stream! {
         let inference_id = Uuid::now_v7();
         while let Some(ev) = event_source.next().await {
@@ -139,7 +141,7 @@ pub fn stream_openai(
                             });
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            openai_to_tensorzero_stream_message(d, inference_id, latency)
+                            openai_to_tensorzero_chunk(d, inference_id, latency, &mut tool_call_ids, &mut tool_call_names)
                         });
                         yield stream_message;
                     }
@@ -244,36 +246,109 @@ pub(super) enum OpenAIRequestMessage<'a> {
     Tool(OpenAIToolRequestMessage<'a>),
 }
 
-impl<'a> From<&'a InferenceRequestMessage> for OpenAIRequestMessage<'a> {
-    fn from(inference_message: &'a InferenceRequestMessage) -> Self {
-        match inference_message {
-            InferenceRequestMessage::System(message) => {
-                OpenAIRequestMessage::System(OpenAISystemRequestMessage {
-                    content: &message.content,
-                })
+pub(super) fn prepare_openai_messages<'a>(
+    request: &'a ModelInferenceRequest,
+) -> Vec<OpenAIRequestMessage<'a>> {
+    let mut messages: Vec<OpenAIRequestMessage> = request
+        .messages
+        .iter()
+        .flat_map(tensorzero_to_openai_messages)
+        .collect();
+    if let Some(system_msg) = tensorzero_to_openai_system_message(request.system.as_deref()) {
+        messages.insert(0, system_msg);
+    }
+    messages
+}
+
+/// If there are no tools passed or the tools are empty, return None for both tools and tool_choice
+/// Otherwise convert the tool choice and tools to OpenAI format
+pub(super) fn prepare_openai_tools<'a>(
+    request: &'a ModelInferenceRequest,
+) -> (Option<Vec<OpenAITool<'a>>>, Option<OpenAIToolChoice<'a>>) {
+    if let Some(tools) = &request.tools_available {
+        if tools.is_empty() {
+            return (None, None);
+        }
+    }
+    let tools = request
+        .tools_available
+        .as_ref()
+        .map(|t| t.iter().map(OpenAITool::from).collect());
+    // If `tools` is None, tool_choice will be as well
+    let tool_choice: Option<OpenAIToolChoice<'a>> =
+        tools.as_ref().map(|_| (&request.tool_choice).into());
+    (tools, tool_choice)
+}
+
+fn tensorzero_to_openai_system_message(system: Option<&str>) -> Option<OpenAIRequestMessage<'_>> {
+    system.map(|instructions| {
+        OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+            content: instructions,
+        })
+    })
+}
+
+fn tensorzero_to_openai_messages(message: &RequestMessage) -> Vec<OpenAIRequestMessage<'_>> {
+    let mut messages = Vec::new();
+    let mut tool_calls = Vec::new();
+    let mut first_assistant_message_index: Option<usize> = None;
+    for block in message.content.iter() {
+        match block {
+            ContentBlock::Text(Text { text }) => match message.role {
+                Role::User => {
+                    messages.push(OpenAIRequestMessage::User(OpenAIUserRequestMessage {
+                        content: text,
+                    }));
+                }
+                Role::Assistant => {
+                    messages.push(OpenAIRequestMessage::Assistant(
+                        OpenAIAssistantRequestMessage {
+                            content: Some(text),
+                            tool_calls: None,
+                        },
+                    ));
+                    if first_assistant_message_index.is_none() {
+                        first_assistant_message_index = Some(messages.len() - 1);
+                    }
+                }
+            },
+            ContentBlock::ToolCall(tool_call) => {
+                tool_calls.push(OpenAIRequestToolCall {
+                    id: &tool_call.id,
+                    r#type: OpenAIToolType::Function,
+                    function: OpenAIRequestFunctionCall {
+                        name: &tool_call.name,
+                        arguments: &tool_call.arguments,
+                    },
+                });
             }
-            InferenceRequestMessage::User(message) => {
-                OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                    content: &message.content,
-                })
-            }
-            InferenceRequestMessage::Assistant(message) => {
-                OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                    content: message.content.as_deref(),
-                    tool_calls: message
-                        .tool_calls
-                        .as_ref()
-                        .map(|t| t.iter().map(|t| t.into()).collect()),
-                })
-            }
-            InferenceRequestMessage::Tool(message) => {
-                OpenAIRequestMessage::Tool(OpenAIToolRequestMessage {
-                    content: &message.content,
-                    tool_call_id: &message.tool_call_id,
-                })
+            ContentBlock::ToolResult(tool_result) => {
+                let message = OpenAIRequestMessage::Tool(OpenAIToolRequestMessage {
+                    content: &tool_result.result,
+                    tool_call_id: &tool_result.id,
+                });
+                messages.push(message);
             }
         }
     }
+    if !tool_calls.is_empty() {
+        match first_assistant_message_index {
+            Some(index) => {
+                if let Some(OpenAIRequestMessage::Assistant(msg)) = messages.get_mut(index) {
+                    msg.tool_calls = Some(tool_calls);
+                }
+            }
+            None => {
+                messages.push(OpenAIRequestMessage::Assistant(
+                    OpenAIAssistantRequestMessage {
+                        content: None,
+                        tool_calls: Some(tool_calls),
+                    },
+                ));
+            }
+        }
+    }
+    messages
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
@@ -289,16 +364,6 @@ enum OpenAIResponseFormat {
 #[serde(rename_all = "lowercase")]
 enum OpenAIToolType {
     Function,
-}
-
-// NB: if we ever add more complex tool types, should convert to references and lifetimes here
-// as we do above.
-impl From<ToolType> for OpenAIToolType {
-    fn from(tool_type: ToolType) -> Self {
-        match tool_type {
-            ToolType::Function => OpenAIToolType::Function,
-        }
-    }
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -317,12 +382,18 @@ pub(super) struct OpenAITool<'a> {
 
 impl<'a> From<&'a Tool> for OpenAITool<'a> {
     fn from(tool: &'a Tool) -> Self {
-        OpenAITool {
-            r#type: tool.r#type.clone().into(),
-            function: OpenAIFunction {
-                name: &tool.name,
-                description: tool.description.as_deref(),
-                parameters: &tool.parameters,
+        match tool {
+            Tool::Function {
+                description,
+                name,
+                parameters,
+            } => OpenAITool {
+                r#type: OpenAIToolType::Function,
+                function: OpenAIFunction {
+                    name,
+                    description: description.as_deref(),
+                    parameters,
+                },
             },
         }
     }
@@ -335,7 +406,7 @@ pub(super) enum OpenAIToolChoice<'a> {
     Specific(SpecificToolChoice<'a>),
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub(super) enum OpenAIToolChoiceString {
     None,
@@ -369,6 +440,10 @@ impl<'a> From<&'a ToolChoice> for OpenAIToolChoice<'a> {
             ToolChoice::Tool(tool_name) => OpenAIToolChoice::Specific(SpecificToolChoice {
                 r#type: OpenAIToolType::Function,
                 function: SpecificToolFunction { name: tool_name },
+            }),
+            ToolChoice::Implicit => OpenAIToolChoice::Specific(SpecificToolChoice {
+                r#type: OpenAIToolType::Function,
+                function: SpecificToolFunction { name: "respond" },
             }),
         }
     }
@@ -408,8 +483,9 @@ struct OpenAIRequest<'a> {
 impl<'a> OpenAIRequest<'a> {
     pub fn new(model: &'a str, request: &'a ModelInferenceRequest) -> OpenAIRequest<'a> {
         let response_format = match request.json_mode {
-            true => OpenAIResponseFormat::JsonObject,
-            false => OpenAIResponseFormat::Text,
+            // TODO(#68): Implement structured output here
+            JSONMode::On | JSONMode::Strict => OpenAIResponseFormat::JsonObject,
+            JSONMode::Off => OpenAIResponseFormat::Text,
         };
         let stream_options = match request.stream {
             true => Some(StreamOptions {
@@ -417,19 +493,19 @@ impl<'a> OpenAIRequest<'a> {
             }),
             false => None,
         };
+        let messages = prepare_openai_messages(request);
+
+        let (tools, tool_choice) = prepare_openai_tools(request);
         OpenAIRequest {
-            messages: request.messages.iter().map(|m| m.into()).collect(),
+            messages,
             model,
             temperature: request.temperature,
             max_tokens: request.max_tokens,
             stream: request.stream,
             stream_options,
             response_format,
-            tools: request
-                .tools_available
-                .as_ref()
-                .map(|t| t.iter().map(|t| t.into()).collect()),
-            tool_choice: request.tool_choice.as_ref().map(OpenAIToolChoice::from),
+            tools,
+            tool_choice,
             parallel_tool_calls: request.parallel_tool_calls,
         }
     }
@@ -470,16 +546,6 @@ impl From<OpenAIResponseToolCall> for ToolCall {
             id: openai_tool_call.id,
             name: openai_tool_call.function.name,
             arguments: openai_tool_call.function.arguments,
-        }
-    }
-}
-
-impl From<OpenAIResponseToolCall> for ToolCallChunk {
-    fn from(tool_call: OpenAIResponseToolCall) -> Self {
-        ToolCallChunk {
-            id: Some(tool_call.id),
-            name: Some(tool_call.function.name),
-            arguments: Some(tool_call.function.arguments),
         }
     }
 }
@@ -535,42 +601,61 @@ impl TryFrom<OpenAIResponseWithLatency> for ModelInferenceResponse {
                 message: "Response has no choices (this should never happen)".to_string(),
             })?
             .message;
+        let mut content: Vec<ContentBlock> = Vec::new();
+        if let Some(text) = message.content {
+            content.push(text.into());
+        }
+        if let Some(tool_calls) = message.tool_calls {
+            for tool_call in tool_calls {
+                content.push(ContentBlock::ToolCall(tool_call.into()));
+            }
+        }
 
-        Ok(ModelInferenceResponse::new(
-            message.content,
-            message
-                .tool_calls
-                .map(|t| t.into_iter().map(|t| t.into()).collect()),
-            raw,
-            usage,
-            latency,
-        ))
+        Ok(ModelInferenceResponse::new(content, raw, usage, latency))
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+struct OpenAIFunctionCallChunk {
+    name: Option<String>,
+    arguments: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+struct OpenAIToolCallChunk {
+    index: u8,
+    id: Option<String>,
+    // NOTE: these are externally tagged enums, for now we're gonna just keep this hardcoded as there's only one option
+    // If we were to do this better, we would need to check the `type` field
+    function: OpenAIFunctionCallChunk,
+}
+
 // This doesn't include role
-#[derive(Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Deserialize, Serialize, Clone)]
 struct OpenAIDelta {
     content: Option<String>,
-    tool_calls: Option<Vec<OpenAIResponseToolCall>>,
+    tool_calls: Option<Vec<OpenAIToolCallChunk>>,
 }
 
 // This doesn't include logprobs, finish_reason, and index
-#[derive(Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Deserialize, Serialize, Clone)]
 struct OpenAIChatChunkChoice {
     delta: OpenAIDelta,
 }
 
-#[derive(Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Deserialize, Serialize, Clone)]
 struct OpenAIChatChunk {
     choices: Vec<OpenAIChatChunkChoice>,
     usage: Option<OpenAIUsage>,
 }
 
-fn openai_to_tensorzero_stream_message(
+/// Maps an OpenAI chunk to a TensorZero chunk for streaming inferences
+fn openai_to_tensorzero_chunk(
     mut chunk: OpenAIChatChunk,
     inference_id: Uuid,
     latency: Duration,
+    tool_call_ids: &mut Vec<String>,
+    tool_names: &mut Vec<String>,
 ) -> Result<ModelInferenceResponseChunk, Error> {
     let raw_message = serde_json::to_string(&chunk).map_err(|e| Error::OpenAIServer {
         message: format!("Error parsing response from OpenAI: {e}"),
@@ -580,21 +665,46 @@ fn openai_to_tensorzero_stream_message(
             message: "Response has invalid number of choices: {}. Expected 1.".to_string(),
         });
     }
-    let (content, tool_calls) = match chunk.choices.pop() {
-        Some(choice) => (
-            choice.delta.content,
-            choice
-                .delta
-                .tool_calls
-                .map(|t| t.into_iter().map(|t| t.into()).collect()),
-        ),
-        None => (None, None),
-    };
     let usage = chunk.usage.map(|u| u.into());
+    let mut content = vec![];
+    if let Some(choice) = chunk.choices.pop() {
+        if let Some(text) = choice.delta.content {
+            content.push(ContentBlockChunk::Text(TextChunk {
+                text,
+                id: "0".to_string(),
+            }));
+        }
+        if let Some(tool_calls) = choice.delta.tool_calls {
+            for tool_call in tool_calls {
+                let index = tool_call.index;
+                let id = match tool_call.id {
+                    Some(id) => {tool_call_ids.push(id.clone()); id}
+                    None => {
+                        tool_call_ids.get(index as usize).ok_or(Error::OpenAIServer {
+                            message: "Tool call index out of bounds (meaning we haven't seen this many ids in the stream)".to_string(),
+                        })?.clone()
+                    }
+                };
+                let name = match tool_call.function.name {
+                    Some(name) => {tool_names.push(name.clone()); name}
+                    None => {
+                        tool_names.get(index as usize).ok_or(Error::OpenAIServer {
+                            message: "Tool call index out of bounds (meaning we haven't seen this many names in the stream)".to_string(),
+                        })?.clone()
+                    }
+                };
+                content.push(ContentBlockChunk::ToolCall(ToolCallChunk {
+                    id,
+                    name,
+                    arguments: tool_call.function.arguments.unwrap_or_default(),
+                }));
+            }
+        }
+    }
+
     Ok(ModelInferenceResponseChunk::new(
         inference_id,
         content,
-        tool_calls,
         usage,
         raw_message,
         latency,
@@ -605,9 +715,7 @@ fn openai_to_tensorzero_stream_message(
 mod tests {
     use serde_json::json;
 
-    use crate::inference::types::{
-        AssistantInferenceRequestMessage, FunctionType, UserInferenceRequestMessage,
-    };
+    use crate::inference::types::{FunctionType, Tool};
 
     use super::*;
 
@@ -698,28 +806,25 @@ mod tests {
 
     #[test]
     fn test_openai_request_new() {
-        use crate::inference::types::{
-            InferenceRequestMessage, ModelInferenceRequest, Tool, ToolChoice,
-        };
-        use serde_json::json;
-
         // Test basic request
         let basic_request = ModelInferenceRequest {
             messages: vec![
-                InferenceRequestMessage::User(UserInferenceRequestMessage {
-                    content: "Hello".to_string(),
-                }),
-                InferenceRequestMessage::Assistant(AssistantInferenceRequestMessage {
-                    content: Some("Hi there!".to_string()),
-                    tool_calls: None,
-                }),
+                RequestMessage {
+                    role: Role::User,
+                    content: vec!["Hello".to_string().into()],
+                },
+                RequestMessage {
+                    role: Role::Assistant,
+                    content: vec!["Hi there!".to_string().into()],
+                },
             ],
+            system: None,
             temperature: Some(0.7),
             max_tokens: Some(100),
             stream: true,
-            json_mode: false,
+            json_mode: JSONMode::Off,
             tools_available: None,
-            tool_choice: None,
+            tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             function_type: FunctionType::Chat,
             output_schema: None,
@@ -734,14 +839,13 @@ mod tests {
         assert!(openai_request.stream);
         assert_eq!(openai_request.response_format, OpenAIResponseFormat::Text);
         assert!(openai_request.tools.is_none());
-        assert!(openai_request.tool_choice.is_none());
+        assert_eq!(openai_request.tool_choice, None);
         assert!(openai_request.parallel_tool_calls.is_none());
 
         // Test request with tools and JSON mode
-        let tool = Tool {
+        let tool = Tool::Function {
             name: "get_weather".to_string(),
             description: Some("Get the current weather".to_string()),
-            r#type: ToolType::Function,
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -755,15 +859,17 @@ mod tests {
         };
 
         let request_with_tools = ModelInferenceRequest {
-            messages: vec![InferenceRequestMessage::User(UserInferenceRequestMessage {
-                content: "What's the weather?".to_string(),
-            })],
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
             temperature: None,
             max_tokens: None,
             stream: false,
-            json_mode: true,
+            json_mode: JSONMode::On,
             tools_available: Some(vec![tool]),
-            tool_choice: Some(ToolChoice::Auto),
+            tool_choice: ToolChoice::Auto,
             parallel_tool_calls: Some(true),
             function_type: FunctionType::Chat,
             output_schema: None,
@@ -817,9 +923,8 @@ mod tests {
         let inference_response = result.unwrap();
         assert_eq!(
             inference_response.content,
-            Some("Hello, world!".to_string())
+            vec!["Hello, world!".to_string().into()]
         );
-        assert_eq!(inference_response.tool_calls, None);
         assert_eq!(inference_response.usage.prompt_tokens, 10);
         assert_eq!(inference_response.usage.completion_tokens, 20);
         assert_eq!(
@@ -860,9 +965,14 @@ mod tests {
         });
         assert!(result.is_ok());
         let inference_response = result.unwrap();
-        assert_eq!(inference_response.content, None);
-        assert!(inference_response.tool_calls.is_some());
-        assert_eq!(inference_response.tool_calls.unwrap().len(), 1);
+        assert_eq!(
+            inference_response.content,
+            vec![ContentBlock::ToolCall(ToolCall {
+                id: "call1".to_string(),
+                name: "test_function".to_string(),
+                arguments: "{}".to_string(),
+            })]
+        );
         assert_eq!(inference_response.usage.prompt_tokens, 15);
         assert_eq!(inference_response.usage.completion_tokens, 25);
         assert_eq!(
@@ -924,5 +1034,348 @@ mod tests {
         });
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), Error::OpenAIServer { .. }));
+    }
+
+    #[test]
+    fn test_prepare_openai_tools() {
+        let parameters = json!({
+            "type": "object",
+            "properties": {
+                "location": {
+                    "type": "string",
+                    "description": "The city and state, e.g. San Francisco, CA"
+                }
+            },
+            "required": ["location"]
+        });
+
+        let tool = Tool::Function {
+            name: "get_weather".to_string(),
+            description: Some("Get the current weather".to_string()),
+            parameters: parameters.clone(),
+        };
+        let request_with_tools = ModelInferenceRequest {
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            max_tokens: None,
+            stream: false,
+            json_mode: JSONMode::On,
+            tools_available: Some(vec![tool]),
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: Some(true),
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+        let (tools, tool_choice) = prepare_openai_tools(&request_with_tools);
+        let tools = tools.unwrap();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].function.name, "get_weather");
+        assert_eq!(tools[0].function.parameters, &parameters);
+        let tool_choice = tool_choice.unwrap();
+        assert_eq!(
+            tool_choice,
+            OpenAIToolChoice::String(OpenAIToolChoiceString::Auto)
+        );
+
+        // Test no tools but a tool choice and make sure tool choice output is None
+        let request_without_tools = ModelInferenceRequest {
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            max_tokens: None,
+            stream: false,
+            json_mode: JSONMode::On,
+            tools_available: Some(vec![]),
+            tool_choice: ToolChoice::Required,
+            parallel_tool_calls: Some(true),
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+        let (tools, tool_choice) = prepare_openai_tools(&request_without_tools);
+        assert!(tools.is_none());
+        assert!(tool_choice.is_none());
+
+        // Test tools_available=None but a tool choice and make sure tool choice output is None
+        let request_without_tools = ModelInferenceRequest {
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            max_tokens: None,
+            stream: false,
+            json_mode: JSONMode::On,
+            tools_available: None,
+            tool_choice: ToolChoice::Required,
+            parallel_tool_calls: Some(true),
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+        let (tools, tool_choice) = prepare_openai_tools(&request_without_tools);
+        assert!(tools.is_none());
+        assert!(tool_choice.is_none());
+    }
+
+    #[test]
+    fn test_tensorzero_to_openai_messages() {
+        let simple_request_message = RequestMessage {
+            role: Role::User,
+            content: vec!["Hello".to_string().into()],
+        };
+        let openai_messages = tensorzero_to_openai_messages(&simple_request_message);
+        assert_eq!(openai_messages.len(), 1);
+        match &openai_messages[0] {
+            OpenAIRequestMessage::User(content) => {
+                assert_eq!(content.content, "Hello");
+            }
+            _ => unreachable!(),
+        }
+
+        // Message with multiple blocks
+        let multi_block_message = RequestMessage {
+            role: Role::User,
+            content: vec![
+                "Hello".to_string().into(),
+                "How are you?".to_string().into(),
+            ],
+        };
+        let openai_messages = tensorzero_to_openai_messages(&multi_block_message);
+        assert_eq!(openai_messages.len(), 2);
+        match &openai_messages[0] {
+            OpenAIRequestMessage::User(content) => {
+                assert_eq!(content.content, "Hello");
+            }
+            _ => unreachable!(),
+        }
+        match &openai_messages[1] {
+            OpenAIRequestMessage::User(content) => {
+                assert_eq!(content.content, "How are you?");
+            }
+            _ => unreachable!(),
+        }
+
+        // Assistant message with one string and one tool block
+        let tool_block = ContentBlock::ToolCall(ToolCall {
+            id: "call1".to_string(),
+            name: "test_function".to_string(),
+            arguments: "{}".to_string(),
+        });
+        let multi_block_message = RequestMessage {
+            role: Role::Assistant,
+            content: vec!["Hello".to_string().into(), tool_block],
+        };
+        let openai_messages = tensorzero_to_openai_messages(&multi_block_message);
+        assert_eq!(openai_messages.len(), 1);
+        match &openai_messages[0] {
+            OpenAIRequestMessage::Assistant(content) => {
+                assert_eq!(content.content, Some("Hello"));
+                let tool_calls = content.tool_calls.as_ref().unwrap();
+                assert_eq!(tool_calls.len(), 1);
+                assert_eq!(tool_calls[0].id, "call1");
+                assert_eq!(tool_calls[0].function.name, "test_function");
+                assert_eq!(tool_calls[0].function.arguments, "{}");
+            }
+            _ => unreachable!(),
+        }
+
+        // User message with one string and one tool call block
+        // Since user messages in OpenAI land can't contain tool calls (nor should they honestly),
+        // We split the tool call out into a separate assistant message
+        let tool_block = ContentBlock::ToolCall(ToolCall {
+            id: "call1".to_string(),
+            name: "test_function".to_string(),
+            arguments: "{}".to_string(),
+        });
+        let multi_block_message = RequestMessage {
+            role: Role::User,
+            content: vec!["Hello".to_string().into(), tool_block],
+        };
+        let openai_messages = tensorzero_to_openai_messages(&multi_block_message);
+        assert_eq!(openai_messages.len(), 2);
+        match &openai_messages[0] {
+            OpenAIRequestMessage::User(content) => {
+                assert_eq!(content.content, "Hello");
+            }
+            _ => unreachable!(),
+        }
+        match &openai_messages[1] {
+            OpenAIRequestMessage::Assistant(content) => {
+                let tool_calls = content.tool_calls.as_ref().unwrap();
+                assert_eq!(tool_calls.len(), 1);
+                assert_eq!(tool_calls[0].id, "call1");
+                assert_eq!(tool_calls[0].function.name, "test_function");
+                assert_eq!(tool_calls[0].function.arguments, "{}");
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    #[test]
+    fn test_openai_to_tensorzero_chunk() {
+        let chunk = OpenAIChatChunk {
+            choices: vec![OpenAIChatChunkChoice {
+                delta: OpenAIDelta {
+                    content: Some("Hello".to_string()),
+                    tool_calls: None,
+                },
+            }],
+            usage: None,
+        };
+        let mut tool_call_ids = vec!["id1".to_string()];
+        let mut tool_call_names = vec!["name1".to_string()];
+        let inference_id = Uuid::now_v7();
+        let message = openai_to_tensorzero_chunk(
+            chunk.clone(),
+            inference_id,
+            Duration::from_millis(50),
+            &mut tool_call_ids,
+            &mut tool_call_names,
+        )
+        .unwrap();
+        assert_eq!(
+            message.content,
+            vec![ContentBlockChunk::Text(TextChunk {
+                text: "Hello".to_string(),
+                id: "0".to_string(),
+            })],
+        );
+        // Test what an intermediate tool chunk should look like
+        let chunk = OpenAIChatChunk {
+            choices: vec![OpenAIChatChunkChoice {
+                delta: OpenAIDelta {
+                    content: None,
+                    tool_calls: Some(vec![OpenAIToolCallChunk {
+                        index: 0,
+                        id: None,
+                        function: OpenAIFunctionCallChunk {
+                            name: None,
+                            arguments: Some("{\"hello\":\"world\"}".to_string()),
+                        },
+                    }]),
+                },
+            }],
+            usage: None,
+        };
+        let message = openai_to_tensorzero_chunk(
+            chunk.clone(),
+            inference_id,
+            Duration::from_millis(50),
+            &mut tool_call_ids,
+            &mut tool_call_names,
+        )
+        .unwrap();
+        assert_eq!(
+            message.content,
+            vec![ContentBlockChunk::ToolCall(ToolCallChunk {
+                id: "id1".to_string(),
+                name: "name1".to_string(),
+                arguments: "{\"hello\":\"world\"}".to_string(),
+            })]
+        );
+        // Test what a bad tool chunk would do (new ID but no names)
+        let chunk = OpenAIChatChunk {
+            choices: vec![OpenAIChatChunkChoice {
+                delta: OpenAIDelta {
+                    content: None,
+                    tool_calls: Some(vec![OpenAIToolCallChunk {
+                        index: 1,
+                        id: None,
+                        function: OpenAIFunctionCallChunk {
+                            name: None,
+                            arguments: Some("{\"hello\":\"world\"}".to_string()),
+                        },
+                    }]),
+                },
+            }],
+            usage: None,
+        };
+        let error = openai_to_tensorzero_chunk(
+            chunk.clone(),
+            inference_id,
+            Duration::from_millis(50),
+            &mut tool_call_ids,
+            &mut tool_call_names,
+        )
+        .unwrap_err();
+        assert_eq!(
+            error,
+            Error::OpenAIServer {
+                message: "Tool call index out of bounds (meaning we haven't seen this many ids in the stream)".to_string(),
+            }
+        );
+        // Test a correct new tool chunk
+        let chunk = OpenAIChatChunk {
+            choices: vec![OpenAIChatChunkChoice {
+                delta: OpenAIDelta {
+                    content: None,
+                    tool_calls: Some(vec![OpenAIToolCallChunk {
+                        index: 1,
+                        id: Some("id2".to_string()),
+                        function: OpenAIFunctionCallChunk {
+                            name: Some("name2".to_string()),
+                            arguments: Some("{\"hello\":\"world\"}".to_string()),
+                        },
+                    }]),
+                },
+            }],
+            usage: None,
+        };
+        let message = openai_to_tensorzero_chunk(
+            chunk.clone(),
+            inference_id,
+            Duration::from_millis(50),
+            &mut tool_call_ids,
+            &mut tool_call_names,
+        )
+        .unwrap();
+        assert_eq!(
+            message.content,
+            vec![ContentBlockChunk::ToolCall(ToolCallChunk {
+                id: "id2".to_string(),
+                name: "name2".to_string(),
+                arguments: "{\"hello\":\"world\"}".to_string(),
+            })]
+        );
+        // Check that the lists were updated
+        assert_eq!(tool_call_ids, vec!["id1".to_string(), "id2".to_string()]);
+        assert_eq!(
+            tool_call_names,
+            vec!["name1".to_string(), "name2".to_string()]
+        );
+
+        // Check a chunk with no choices and only usage
+        // Test a correct new tool chunk
+        let chunk = OpenAIChatChunk {
+            choices: vec![],
+            usage: Some(OpenAIUsage {
+                prompt_tokens: 10,
+                completion_tokens: 20,
+                total_tokens: 30,
+            }),
+        };
+        let message = openai_to_tensorzero_chunk(
+            chunk.clone(),
+            inference_id,
+            Duration::from_millis(50),
+            &mut tool_call_ids,
+            &mut tool_call_names,
+        )
+        .unwrap();
+        assert_eq!(message.content, vec![]);
+        assert_eq!(
+            message.usage,
+            Some(Usage {
+                prompt_tokens: 10,
+                completion_tokens: 20,
+            })
+        );
     }
 }

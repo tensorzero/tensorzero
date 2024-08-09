@@ -17,7 +17,7 @@ use crate::function::{sample_variant, FunctionConfig};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
     collect_chunks, Inference, InferenceResponse, InferenceResponseChunk, InferenceResponseStream,
-    InputMessage, ModelInferenceResponseChunk,
+    InferenceResponseWithOutputSchema, Input, ModelInferenceResponseChunk, ToolChoice,
 };
 use crate::uuid_util::validate_episode_id;
 use crate::variant::Variant;
@@ -32,7 +32,7 @@ pub struct Params {
     // NOTE: DO NOT GENERATE EPISODE IDS MANUALLY. THE API WILL DO THAT FOR YOU.
     episode_id: Option<Uuid>,
     // the input for the inference
-    input: Vec<InputMessage>,
+    input: Input,
     // the maximum number of tokens to generate (if not provided, the default value will be used)
     #[allow(unused)] // TODO (#55): remove
     max_tokens: Option<u32>,
@@ -51,7 +51,7 @@ struct InferenceMetadata {
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
-    pub input: Vec<InputMessage>,
+    pub input: Input,
     pub dryrun: bool,
     pub start_time: Instant,
 }
@@ -196,10 +196,16 @@ pub async fn inference_handler(
                     .await;
                 });
             }
-
-            let response_value = serde_json::to_value(response).map_err(|e| Error::Inference {
-                message: format!("Failed to convert response to JSON: {}", e),
-            })?;
+            let response_with_output_schema = InferenceResponseWithOutputSchema {
+                inference_response: response,
+                output_schema: function.output_schema(),
+            };
+            let response_value =
+                serde_json::to_value(response_with_output_schema).map_err(|e| {
+                    Error::Inference {
+                        message: format!("Failed to convert response to JSON: {}", e),
+                    }
+                })?;
             return Ok(Json(response_value).into_response());
         }
     }
@@ -249,7 +255,8 @@ fn create_stream(
 
         if !metadata.dryrun {
             let inference_response: Result<InferenceResponse, Error> =
-                collect_chunks(buffer, function.output_schema());
+                // TODO (#30): probably get this from FunctionConfig
+                collect_chunks(buffer, function.output_schema(), ToolChoice::None);
             let inference_response = inference_response.ok_or_log();
 
             if let Some(inference_response) = inference_response {
@@ -298,7 +305,7 @@ async fn write_inference(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     function_name: String,
     variant_name: String,
-    input: Vec<InputMessage>,
+    input: Input,
     response: InferenceResponse,
     episode_id: Uuid,
     processing_time: Duration,
@@ -347,18 +354,23 @@ mod tests {
     use std::{collections::HashMap, time::Duration};
     use uuid::Uuid;
 
-    use crate::{function::FunctionConfigChat, inference::types::ModelInferenceResponseChunk};
+    use crate::{
+        function::FunctionConfigChat,
+        inference::types::{ContentBlockChunk, ModelInferenceResponseChunk, TextChunk},
+    };
 
     #[tokio::test]
     async fn test_prepare_event() {
         // Test case 1: Valid ModelInferenceResponseChunk
         let chunk = ModelInferenceResponseChunk {
             inference_id: Uuid::now_v7(),
-            content: Some("Test content".to_string()),
-            tool_calls: None,
+            content: vec![ContentBlockChunk::Text(TextChunk {
+                text: "Test content".to_string(),
+                id: "0".to_string(),
+            })],
             created: 0,
             usage: None,
-            raw: "".to_string(),
+            raw_response: "".to_string(),
             latency: Duration::from_millis(100),
         };
         let function = FunctionConfig::Chat(FunctionConfigChat {
@@ -372,7 +384,10 @@ mod tests {
             function_name: "test_function".to_string(),
             variant_name: "test_variant".to_string(),
             episode_id: Uuid::now_v7(),
-            input: vec![],
+            input: Input {
+                messages: vec![],
+                system: None,
+            },
             dryrun: false,
             start_time: Instant::now(),
         };
