@@ -400,7 +400,8 @@ mod tests {
         config
             .remove("metrics")
             .expect("Failed to remove `[metrics]` section");
-        let _ = Config::try_from(config).unwrap();
+        let mut config = Config::try_from(config).unwrap();
+        config.load_schemas(".").unwrap();
     }
 
     /// Ensure that the config parsing correctly handles the `gateway.bind_address` field
@@ -669,6 +670,23 @@ mod tests {
             Error::Config {
                 message: "Invalid Config: `models.gpt-3.5-turbo`: `routing` contains entry `closedai` that does not exist in `providers`"
                     .to_string()
+            }
+        );
+    }
+
+    /// Ensure that the config loading fails when the system schema does not exist
+    #[test]
+    fn test_config_bad_schemas_fail() {
+        let mut sample_config = get_sample_valid_config();
+        sample_config["functions"]["generate_draft"]["system_schema"] =
+            "non_existent_file.json".into();
+        let mut config = Config::try_from(sample_config).unwrap();
+        let err = config.load_schemas(".").unwrap_err();
+        println!("{:?}", err);
+        assert_eq!(
+            err,
+            Error::JsonSchema {
+                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
             }
         );
     }
