@@ -7,7 +7,7 @@ use tokio::time::Instant;
 
 use crate::error::Error;
 use crate::inference::types::{
-    InferenceResponseStream, JSONMode, Latency, ModelInferenceRequest, ModelInferenceResponse,
+    InferenceResponseStream, Latency, ModelInferenceRequest, ModelInferenceResponse,
     ModelInferenceResponseChunk,
 };
 
@@ -137,6 +137,7 @@ fn get_azure_chat_url(api_base: &str, deployment_id: &str) -> String {
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "type")]
 enum AzureResponseFormat {
+    #[allow(dead_code)]
     JsonObject,
     #[default]
     Text,
@@ -168,10 +169,13 @@ struct AzureRequest<'a> {
 
 impl<'a> AzureRequest<'a> {
     pub fn new(model: &'a str, request: &'a ModelInferenceRequest) -> AzureRequest<'a> {
-        let response_format = match request.json_mode {
-            JSONMode::On | JSONMode::Strict => AzureResponseFormat::JsonObject,
-            JSONMode::Off => AzureResponseFormat::Text,
-        };
+        // TODO (#99): Currently Azure seems to be getting mad about JSON mode, let's figure this out later
+        // let response_format = match request.json_mode {
+        // JSONMode::On | JSONMode::Strict => AzureResponseFormat::JsonObject,
+        // JSONMode::Off => AzureResponseFormat::Text,
+        // _ => AzureResponseFormat::Text,
+        // };
+        let response_format = AzureResponseFormat::Text;
         let messages = prepare_openai_messages(request);
         let (tools, tool_choice) = prepare_openai_tools(request);
         AzureRequest {
@@ -195,7 +199,7 @@ mod tests {
 
     use crate::inference::{
         providers::openai::OpenAIToolChoiceString,
-        types::{FunctionType, RequestMessage, Role, Tool, ToolChoice},
+        types::{FunctionType, JSONMode, RequestMessage, Role, Tool, ToolChoice},
     };
 
     #[test]
@@ -235,15 +239,15 @@ mod tests {
         let azure_request = AzureRequest::new("togethercomputer/llama-v3-8b", &request_with_tools);
 
         assert_eq!(azure_request.model, "togethercomputer/llama-v3-8b");
-        println!("{:?}", azure_request);
         assert_eq!(azure_request.messages.len(), 1);
         assert_eq!(azure_request.temperature, None);
         assert_eq!(azure_request.max_tokens, None);
         assert!(!azure_request.stream);
-        assert_eq!(
-            azure_request.response_format,
-            AzureResponseFormat::JsonObject
-        );
+        // TODO (#99): Currently Azure seems to be getting mad about JSON mode, let's figure this out later
+        // assert_eq!(
+        //     azure_request.response_format,
+        //     AzureResponseFormat::JsonObject
+        // );
         assert!(azure_request.tools.is_some());
         assert_eq!(azure_request.tools.as_ref().unwrap().len(), 1);
         assert_eq!(

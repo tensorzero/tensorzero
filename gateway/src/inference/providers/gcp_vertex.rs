@@ -395,6 +395,9 @@ struct GCPVertexGeminiToolConfig<'a> {
     function_calling_config: GCPVertexGeminiFunctionCallingConfig<'a>,
 }
 
+// Auto is the default mode where a tool could be called but it isn't required.
+// Any is a mode where a tool is required and if allowed_function_names is Some it has to be from that list.
+// See [the documentation](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/ToolConfig) for details.
 impl<'a> From<&'a ToolChoice> for GCPVertexGeminiToolConfig<'a> {
     fn from(tool_choice: &'a ToolChoice) -> Self {
         match tool_choice {

@@ -588,6 +588,12 @@ enum AnthropicStreamMessage {
     Ping,
 }
 
+/// This function converts an Anthropic stream message to a TensorZero stream message.
+/// It must keep track of the current tool ID and name in order to correctly handle ToolCallChunks (which we force to always contain the tool name and ID)
+/// Anthropic only sends the tool ID and name in the ToolUse chunk so we need to keep the most recent ones as mutable references so
+/// subsequent InputJSONDelta chunks can be initialized with this information as well.
+/// There is no need to do the same bookkeeping for TextDelta chunks since they come with an index (which we use as an ID for a text chunk).
+/// See the Anthropic [docs](https://docs.anthropic.com/en/api/messages-streaming) on streaming messages for details on the types of events and their semantics.
 fn anthropic_to_tensorzero_stream_message(
     message: AnthropicStreamMessage,
     inference_id: Uuid,
@@ -615,6 +621,9 @@ fn anthropic_to_tensorzero_stream_message(
             AnthropicMessageBlock::InputJsonDelta { partial_json } => {
                 Ok(Some(ModelInferenceResponseChunk::new(
                     inference_id,
+                    // Take the current tool name and ID and use them to create a ToolCallChunk
+                    // This is necessary because the ToolCallChunk must always contain the tool name and ID
+                    // even though Anthropic only sends the tool ID and name in the ToolUse chunk and not InputJSONDelta
                     vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                         name: current_tool_name.clone().ok_or(Error::AnthropicServer {
                             message: "Got InputJsonDelta chunk from Anthropic without current tool name being set by a ToolUse".to_string(),

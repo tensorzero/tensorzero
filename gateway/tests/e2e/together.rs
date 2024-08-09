@@ -108,6 +108,9 @@ async fn test_inference_basic() {
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "together");
+    // Check the processing time
+    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+    assert!(processing_time_ms > 0);
 
     // Check the ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -230,6 +233,9 @@ async fn test_streaming() {
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "together");
+    // Check the processing time
+    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+    assert!(processing_time_ms > 0);
 
     // Check the ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)

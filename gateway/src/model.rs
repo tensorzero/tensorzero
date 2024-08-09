@@ -373,6 +373,8 @@ mod tests {
         };
 
         let response = model_config.infer(&request, &Client::new()).await.unwrap();
+        // Ensure that the error for the bad provider was logged, but the request worked nonetheless
+        assert!(logs_contain("Error sending request to Dummy provider"));
         let content = response.content;
         assert_eq!(
             content,
@@ -534,6 +536,5 @@ mod tests {
             }
         }
         assert_eq!(collected_content_str, DUMMY_STREAMING_RESPONSE.join(""));
-        // TODO (#84): assert that an error was logged then do it in the other order and assert that one was not.
     }
 }

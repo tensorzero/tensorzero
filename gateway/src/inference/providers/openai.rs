@@ -287,6 +287,7 @@ fn tensorzero_to_openai_system_message(
     })
 }
 
+// TODO(viraj): test this
 fn tensorzero_to_openai_messages(message: &RequestMessage) -> Vec<OpenAIRequestMessage<'_>> {
     let mut messages = Vec::new();
     let mut tool_calls = Vec::new();

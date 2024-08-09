@@ -436,24 +436,21 @@ impl Inference {
         function_name: String,
         variant_name: String,
         processing_time: Duration,
-    ) -> Result<Self, Error> {
+    ) -> Self {
         let processing_time_ms = processing_time.as_millis() as u32;
-        Ok(match inference_response {
+        match inference_response {
             InferenceResponse::Chat(chat_response) => Self {
                 id: chat_response.inference_id,
                 function_name,
                 variant_name,
                 episode_id,
                 input,
-                content_blocks: serde_json::to_string(&chat_response.content_blocks).map_err(
-                    |e| Error::TypeConversion {
-                        message: format!("Failed to serialize content blocks: {}.", e),
-                    },
-                )?,
+                content_blocks: serde_json::to_string(&chat_response.content_blocks)
+                    .unwrap_or_default(),
                 parsed_output: chat_response.parsed_output,
                 processing_time_ms,
             },
-        })
+        }
     }
 }
 

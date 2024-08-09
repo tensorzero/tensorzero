@@ -338,14 +338,11 @@ async fn write_inference(
                 function_name,
                 variant_name,
                 processing_time,
-            )
-            .ok_or_log();
-            if let Some(inference) = inference {
-                clickhouse_connection_info
-                    .write(&inference, "Inference")
-                    .await
-                    .ok_or_log();
-            }
+            );
+            clickhouse_connection_info
+                .write(&inference, "Inference")
+                .await
+                .ok_or_log();
         }
     }
 }

@@ -366,7 +366,7 @@ mod tests {
             _ => unreachable!("Expected Assistant message"),
         }
 
-        // Test case 6: User message with template
+        // Test case 5: User message with template
         let input_message = InputMessage {
             role: Role::User,
             content: json!({"name": "John", "age": 30}),
@@ -387,7 +387,7 @@ mod tests {
             _ => unreachable!("Expected User message"),
         }
 
-        // Test case 7: User message with bad input (missing required field)
+        // Test case 6: User message with bad input (missing required field)
         let input_message = InputMessage {
             role: Role::User,
             content: json!({"name": "Alice"}), // Missing "age" field
@@ -400,7 +400,7 @@ mod tests {
             }
             _ => unreachable!("Expected MiniJinjaTemplateRender error"),
         }
-        // Test case 8: User message with string content when template is provided
+        // Test case 7: User message with string content when template is provided
         let input_message = InputMessage {
             role: Role::User,
             content: Value::String("This is a plain string".to_string()),
@@ -425,14 +425,13 @@ mod tests {
             user_template: None,
             assistant_template: None,
         };
-        //  System message
         let input_message = Value::String("You are a helpful assistant.".to_string());
         let result = chat_completion_config.prepare_system_message(&input_message);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
         assert_eq!(prepared_message, "You are a helpful assistant.".to_string());
 
-        // Part 2: test with templates
+        // Test with templates
         idempotent_initialize_test_templates();
         let system_template_name = "system";
 
@@ -444,7 +443,6 @@ mod tests {
             assistant_template: None,
         };
 
-        // Test case 4: System message with template
         let input_message = serde_json::json!({"assistant_name": "ChatGPT"});
         let result = chat_completion_config.prepare_system_message(&input_message);
         assert!(result.is_ok());
