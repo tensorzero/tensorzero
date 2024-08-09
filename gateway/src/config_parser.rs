@@ -108,10 +108,6 @@ impl Config {
     }
 
     pub fn load_schemas<P: AsRef<Path>>(&mut self, base_path: P) -> Result<(), Error> {
-        println!(
-            "Loading schemas from {}",
-            base_path.as_ref().to_string_lossy()
-        );
         for function in self.functions.values_mut() {
             function.load(&base_path)?;
         }
@@ -682,7 +678,6 @@ mod tests {
             "non_existent_file.json".into();
         let mut config = Config::try_from(sample_config).unwrap();
         let err = config.load_schemas(".").unwrap_err();
-        println!("{:?}", err);
         assert_eq!(
             err,
             Error::JsonSchema {
