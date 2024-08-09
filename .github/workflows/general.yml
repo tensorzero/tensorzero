@@ -1,7 +1,6 @@
 name: PR Checks
 
 on:
-  merge_group:
   push:
     branches: ["main"]
   pull_request:
