@@ -1,11 +1,10 @@
-use crate::e2e::common::clickhouse_flush_async_insert;
 use gateway::clickhouse::ClickHouseConnectionInfo;
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-// TODO (#74): make this endpoint configurable with main.rs
-const FEEDBACK_URL: &str = "http://localhost:3000/feedback";
+use crate::e2e::common::{clickhouse_flush_async_insert, get_gateway_endpoint};
+
 lazy_static::lazy_static! {
     static ref CLICKHOUSE_URL: String = std::env::var("CLICKHOUSE_URL").expect("CLICKHOUSE_URL must be set");
 }
@@ -17,7 +16,7 @@ async fn e2e_test_comment_feedback() {
     // Test comment feedback on episode
     let payload = json!({"episode_id": episode_id, "metric_name": "comment", "value": "good job!"});
     let response = client
-        .post(FEEDBACK_URL)
+        .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
         .send()
         .await
@@ -51,7 +50,7 @@ async fn e2e_test_comment_feedback() {
     let payload =
         json!({"inference_id": inference_id, "metric_name": "comment", "value": "bad job!"});
     let response = client
-        .post(FEEDBACK_URL)
+        .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
         .send()
         .await
@@ -89,7 +88,7 @@ async fn e2e_test_demonstration_feedback() {
     let payload =
         json!({"inference_id": inference_id, "metric_name": "demonstration", "value": "do this!"});
     let response = client
-        .post(FEEDBACK_URL)
+        .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
         .send()
         .await
@@ -121,7 +120,7 @@ async fn e2e_test_demonstration_feedback() {
     let payload =
         json!({"episode_id": episode_id, "metric_name": "demonstration", "value": "do this!"});
     let response = client
-        .post(FEEDBACK_URL)
+        .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
         .send()
         .await
@@ -142,7 +141,7 @@ async fn e2e_test_float_feedback() {
     // Test Float feedback on episode
     let payload = json!({"episode_id": episode_id, "metric_name": "user_rating", "value": 32.8});
     let response = client
-        .post(FEEDBACK_URL)
+        .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
         .send()
         .await
@@ -172,7 +171,7 @@ async fn e2e_test_float_feedback() {
     // Test boolean feedback on episode (should fail)
     let payload = json!({"episode_id": episode_id, "metric_name": "user_rating", "value": true});
     let response = client
-        .post(FEEDBACK_URL)
+        .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
         .send()
         .await
@@ -189,7 +188,7 @@ async fn e2e_test_float_feedback() {
     let inference_id = Uuid::now_v7();
     let payload = json!({"inference_id": inference_id, "metric_name": "user_rating", "value": 4.5});
     let response = client
-        .post(FEEDBACK_URL)
+        .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
         .send()
         .await
@@ -208,7 +207,7 @@ async fn e2e_test_float_feedback() {
     let payload =
         json!({"inference_id": inference_id, "metric_name": "brevity_score", "value": 0.5});
     let response = client
-        .post(FEEDBACK_URL)
+        .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
         .send()
         .await
@@ -240,7 +239,7 @@ async fn e2e_test_boolean_feedback() {
     let payload =
         json!({"inference_id": inference_id, "metric_name": "task_success", "value": true});
     let response = client
-        .post(FEEDBACK_URL)
+        .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
         .send()
         .await
@@ -271,7 +270,7 @@ async fn e2e_test_boolean_feedback() {
     let episode_id = Uuid::now_v7();
     let payload = json!({"episode_id": episode_id, "metric_name": "task_success", "value": true});
     let response = client
-        .post(FEEDBACK_URL)
+        .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
         .send()
         .await
@@ -289,7 +288,7 @@ async fn e2e_test_boolean_feedback() {
     let payload =
         json!({"inference_id": inference_id, "metric_name": "task_success", "value": "true"});
     let response = client
-        .post(FEEDBACK_URL)
+        .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
         .send()
         .await
@@ -306,7 +305,7 @@ async fn e2e_test_boolean_feedback() {
     let episode_id = Uuid::now_v7();
     let payload = json!({"episode_id": episode_id, "metric_name": "goal_achieved", "value": true});
     let response = client
-        .post(FEEDBACK_URL)
+        .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
         .send()
         .await
