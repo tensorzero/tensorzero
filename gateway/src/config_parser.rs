@@ -692,19 +692,16 @@ mod tests {
         let mut config = Config::try_from(get_sample_valid_config()).unwrap();
 
         match config.functions.get_mut("generate_draft") {
-            Some(FunctionConfig::Chat(params)) => match params.variants.get_mut("openai_promptA") {
-                Some(VariantConfig::ChatCompletion(params)) => {
-                    params.model = "non_existent_model".to_string();
-                }
-                _ => unreachable!(),
-            },
+            Some(FunctionConfig::Chat(params)) => {
+                params.tools = Some(vec!["non_existent_tool".to_string()]);
+            }
             _ => unreachable!(),
         }
 
         assert_eq!(
             config.validate().unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `functions.generate_draft.variants.openai_promptA`: `model` must be a valid model name".to_string()
+                message: "Invalid Config: `functions.generate_draft.tools`: tool `non_existent_tool` is not present in the config".to_string()
             }
         );
     }
@@ -863,6 +860,15 @@ mod tests {
         weight = 0.1
         model = "gpt-3.5-turbo"
         system_template = "../config/functions/extract_data/promptB/system.jinja"
+
+        [functions.weather_helper]
+        type = "chat"
+        tools = ["get_weather"]
+
+        [functions.weather_helper.variants.openai_promptA]
+        type = "chat_completion"
+        weight = 1.0
+        model = "gpt-3.5-turbo"
 
         # ┌────────────────────────────────────────────────────────────────────────────┐
         # │                                  METRICS                                   │
