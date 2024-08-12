@@ -49,7 +49,7 @@ services:
       - TOGETHER_API_KEY=${TOGETHER_API_KEY:?Environment variable TOGETHER_API_KEY is not set}
     volumes:
       - ./tensorzero.toml:/app/tensorzero.toml
-      - ../../../functions:/app/functions
+      - ../../../config:/app/config
       - ${GCP_VERTEX_CREDENTIALS_PATH:?Environment variable GCP_VERTEX_CREDENTIALS_PATH is not set}:/app/gcp-credentials.json
     depends_on:
       clickhouse:

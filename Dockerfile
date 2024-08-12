@@ -28,6 +28,6 @@ FROM base AS gateway
 
 COPY --from=builder /release/gateway /usr/local/bin/gateway
 
-COPY ./functions ./functions
+COPY ./config ./config
 
 CMD ["gateway"]
