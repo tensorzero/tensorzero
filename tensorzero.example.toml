@@ -39,37 +39,36 @@ model_name = "claude-3-haiku-20240307"
 
 [functions.generate_draft]
 type = "chat"
-system_schema = "functions/generate_draft/system_schema.json"
-output_schema = "functions/generate_draft/output_schema.json"
+system_schema = "config/functions/generate_draft/system_schema.json"
 
 [functions.generate_draft.variants.openai_promptA]
 type = "chat_completion"
 weight = 0.9
 model = "gpt-3.5-turbo"
-system_template = "functions/generate_draft/promptA/system_template.minijinja"
+system_template = "config/functions/generate_draft/promptA/system_template.minijinja"
 
 [functions.generate_draft.variants.openai_promptB]
 type = "chat_completion"
 weight = 0.1
 model = "gpt-3.5-turbo"
-system_template = "functions/generate_draft/promptB/system_template.minijinja"
+system_template = "config/functions/generate_draft/promptB/system_template.minijinja"
 
 [functions.extract_data]
-type = "tool"
-system_schema = "functions/extract_data/system_schema.json"
-output_schema = "functions/extract_data/output_schema.json"
+type = "json"
+system_schema = "config/functions/extract_data/system_schema.json"
+output_schema = "config/functions/extract_data/output_schema.json"
 
 [functions.extract_data.variants.openai_promptA]
 type = "chat_completion"
 weight = 0.9
 model = "gpt-3.5-turbo"
-system_template = "functions/extract_data/promptA/system_template.minijinja"
+system_template = "config/functions/extract_data/promptA/system_template.minijinja"
 
 [functions.extract_data.variants.openai_promptB]
 type = "chat_completion"
 weight = 0.1
 model = "gpt-3.5-turbo"
-system_template = "functions/extract_data/promptB/system_template.minijinja"
+system_template = "config/functions/extract_data/promptB/system_template.minijinja"
 
 
 # ┌────────────────────────────────────────────────────────────────────────────┐

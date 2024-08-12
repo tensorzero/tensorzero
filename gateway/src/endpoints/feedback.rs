@@ -301,6 +301,7 @@ mod tests {
             models: HashMap::new(),
             metrics: Some(metrics),
             functions: HashMap::new(),
+            tools: None,
         };
         let inference_id = Uuid::now_v7();
         let metadata =
@@ -415,6 +416,7 @@ mod tests {
             models: HashMap::new(),
             metrics: Some(metrics),
             functions: HashMap::new(),
+            tools: None,
         };
         let episode_id = Uuid::now_v7();
         let metadata =
@@ -444,6 +446,7 @@ mod tests {
             models: HashMap::new(),
             metrics: Some(HashMap::new()),
             functions: HashMap::new(),
+            tools: None,
         };
         let app_state_data = get_unit_test_app_state_data(config, Some(true));
         let episode_id = Uuid::now_v7();
@@ -543,6 +546,7 @@ mod tests {
             models: HashMap::new(),
             metrics: Some(metrics),
             functions: HashMap::new(),
+            tools: None,
         };
         let app_state_data = get_unit_test_app_state_data(config, Some(true));
         let value = json!(4.5);
@@ -610,6 +614,7 @@ mod tests {
             models: HashMap::new(),
             metrics: Some(metrics),
             functions: HashMap::new(),
+            tools: None,
         };
         let app_state_data = get_unit_test_app_state_data(config, Some(true));
         let value = json!(true);

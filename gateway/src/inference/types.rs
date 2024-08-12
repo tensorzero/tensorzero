@@ -81,8 +81,8 @@ pub struct ToolResult {
 /// This enum is used to denote this tool choice.
 #[derive(Clone, Debug, PartialEq, Default, Serialize)]
 pub enum ToolChoice {
-    #[default]
     None,
+    #[default]
     Auto,
     Required,
     Tool(String), // Forces the LLM to call a particular tool, the String is the name of the Tool

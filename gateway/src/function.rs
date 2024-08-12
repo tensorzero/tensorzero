@@ -11,25 +11,26 @@ use crate::variant::VariantConfig;
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "type")]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
 pub enum FunctionConfig {
     Chat(FunctionConfigChat),
-    Tool(FunctionConfigTool),
+    Json(FunctionConfigJson),
 }
 
 impl FunctionConfig {
     pub fn variants(&self) -> &HashMap<String, VariantConfig> {
         match self {
             FunctionConfig::Chat(params) => &params.variants,
-            FunctionConfig::Tool(params) => &params.variants,
+            FunctionConfig::Json(params) => &params.variants,
         }
     }
 
+    // TODO (viraj): rip this in the next PR
     pub fn output_schema(&self) -> Option<&JSONSchemaFromPath> {
         match self {
-            FunctionConfig::Chat(params) => params.output_schema.as_ref(),
-            FunctionConfig::Tool(params) => params.output_schema.as_ref(),
+            FunctionConfig::Chat(_) => None,
+            FunctionConfig::Json(params) => Some(&params.output_schema),
         }
     }
 }
@@ -41,24 +42,24 @@ pub struct FunctionConfigChat {
     pub system_schema: Option<JSONSchemaFromPath>,
     pub user_schema: Option<JSONSchemaFromPath>,
     pub assistant_schema: Option<JSONSchemaFromPath>,
-    pub output_schema: Option<JSONSchemaFromPath>,
+    pub tools: Option<Vec<String>>, // tool names
 }
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct FunctionConfigTool {
+pub struct FunctionConfigJson {
     pub variants: HashMap<String, VariantConfig>, // variant name => variant config
     pub system_schema: Option<JSONSchemaFromPath>,
     pub user_schema: Option<JSONSchemaFromPath>,
     pub assistant_schema: Option<JSONSchemaFromPath>,
-    pub output_schema: Option<JSONSchemaFromPath>,
+    output_schema: JSONSchemaFromPath, // schema is mandatory for JSON functions
 }
 
 impl FunctionConfig {
     /// Validate the input against the function's input schemas.
     /// The validation is done based on the function's type:
     /// - For a chat function, the input is validated against the system, user, and assistant schemas.
-    /// - For a tool function, the input is validated against the system, user, and assistant schemas.
+    /// - For a JSON function, the input is validated against the system, user, and assistant schemas.
     pub fn validate_input(&self, input: &Input) -> Result<(), Error> {
         match &self {
             FunctionConfig::Chat(params) => {
@@ -69,7 +70,7 @@ impl FunctionConfig {
                     input,
                 )?;
             }
-            FunctionConfig::Tool(params) => {
+            FunctionConfig::Json(params) => {
                 FunctionConfig::validate_chat_like_input(
                     &params.system_schema,
                     &params.user_schema,
@@ -128,41 +129,41 @@ impl FunctionConfig {
     pub fn load<P: AsRef<Path>>(&mut self, base_path: P) -> Result<(), Error> {
         match self {
             FunctionConfig::Chat(params) => {
+                // TODO (viraj): add a test that checks what happens if the schema load fails
                 params
                     .system_schema
                     .as_mut()
-                    .map(|schema| schema.load(base_path.as_ref()));
+                    .map(|schema| schema.load(base_path.as_ref()))
+                    .transpose()?;
                 params
                     .user_schema
                     .as_mut()
-                    .map(|schema| schema.load(base_path.as_ref()));
+                    .map(|schema| schema.load(base_path.as_ref()))
+                    .transpose()?;
                 params
                     .assistant_schema
                     .as_mut()
-                    .map(|schema| schema.load(base_path.as_ref()));
-                params
-                    .output_schema
-                    .as_mut()
-                    .map(|schema| schema.load(base_path.as_ref()));
+                    .map(|schema| schema.load(base_path.as_ref()))
+                    .transpose()?;
                 Ok(())
             }
-            FunctionConfig::Tool(params) => {
+            FunctionConfig::Json(params) => {
                 params
                     .system_schema
                     .as_mut()
-                    .map(|schema| schema.load(base_path.as_ref()));
+                    .map(|schema| schema.load(base_path.as_ref()))
+                    .transpose()?;
                 params
                     .user_schema
                     .as_mut()
-                    .map(|schema| schema.load(base_path.as_ref()));
+                    .map(|schema| schema.load(base_path.as_ref()))
+                    .transpose()?;
                 params
                     .assistant_schema
                     .as_mut()
-                    .map(|schema| schema.load(base_path.as_ref()));
-                params
-                    .output_schema
-                    .as_mut()
-                    .map(|schema| schema.load(base_path.as_ref()));
+                    .map(|schema| schema.load(base_path.as_ref()))
+                    .transpose()?;
+                params.output_schema.load(base_path.as_ref())?;
                 Ok(())
             }
         }
@@ -289,7 +290,7 @@ mod tests {
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
-            output_schema: None,
+            tools: None,
         };
         let function_config = FunctionConfig::Chat(chat_config);
 
@@ -343,7 +344,7 @@ mod tests {
             system_schema: Some(system_schema.clone()),
             user_schema: None,
             assistant_schema: None,
-            output_schema: None,
+            tools: None,
         };
         let function_config = FunctionConfig::Chat(chat_config);
 
@@ -398,7 +399,7 @@ mod tests {
             system_schema: None,
             user_schema: Some(user_schema.clone()),
             assistant_schema: None,
-            output_schema: None,
+            tools: None,
         };
         let function_config = FunctionConfig::Chat(chat_config);
 
@@ -453,7 +454,7 @@ mod tests {
             system_schema: None,
             user_schema: None,
             assistant_schema: Some(assistant_schema.clone()),
-            output_schema: None,
+            tools: None,
         };
         let function_config = FunctionConfig::Chat(chat_config);
 
@@ -510,7 +511,7 @@ mod tests {
             system_schema: Some(system_schema.clone()),
             user_schema: Some(user_schema),
             assistant_schema: Some(assistant_schema),
-            output_schema: None,
+            tools: None,
         };
         let function_config = FunctionConfig::Chat(chat_config);
 
@@ -560,15 +561,15 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_input_tool_no_schema() {
-        let tool_config = FunctionConfigTool {
+    fn test_validate_input_json_no_schema() {
+        let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
-            output_schema: None,
+            output_schema: JSONSchemaFromPath::from_value(&json!({})),
         };
-        let function_config = FunctionConfig::Tool(tool_config);
+        let function_config = FunctionConfig::Json(tool_config);
 
         let messages = vec![
             InputMessage {
@@ -614,16 +615,16 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_input_tool_system_schema() {
+    fn test_validate_input_json_system_schema() {
         let system_schema = create_test_schema();
-        let tool_config = FunctionConfigTool {
+        let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: Some(system_schema.clone()),
             user_schema: None,
             assistant_schema: None,
-            output_schema: None,
+            output_schema: JSONSchemaFromPath::from_value(&json!({})),
         };
-        let function_config = FunctionConfig::Tool(tool_config);
+        let function_config = FunctionConfig::Json(tool_config);
 
         let messages = vec![
             InputMessage {
@@ -671,16 +672,16 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_input_tool_user_schema() {
+    fn test_validate_input_json_user_schema() {
         let user_schema = create_test_schema();
-        let tool_config = FunctionConfigTool {
+        let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: Some(user_schema.clone()),
             assistant_schema: None,
-            output_schema: None,
+            output_schema: JSONSchemaFromPath::from_value(&json!({})),
         };
-        let function_config = FunctionConfig::Tool(tool_config);
+        let function_config = FunctionConfig::Json(tool_config);
 
         let messages = vec![
             InputMessage {
@@ -727,16 +728,16 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_input_tool_assistant_schema() {
+    fn test_validate_input_json_assistant_schema() {
         let assistant_schema = create_test_schema();
-        let tool_config = FunctionConfigTool {
+        let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: None,
             assistant_schema: Some(assistant_schema.clone()),
-            output_schema: None,
+            output_schema: JSONSchemaFromPath::from_value(&json!({})),
         };
-        let function_config = FunctionConfig::Tool(tool_config);
+        let function_config = FunctionConfig::Json(tool_config);
 
         let messages = vec![
             InputMessage {
@@ -782,18 +783,18 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_input_tool_all_schemas() {
+    fn test_validate_input_json_all_schemas() {
         let system_schema = create_test_schema();
         let user_schema = create_test_schema();
         let assistant_schema = create_test_schema();
-        let tool_config = FunctionConfigTool {
+        let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: Some(system_schema.clone()),
             user_schema: Some(user_schema),
             assistant_schema: Some(assistant_schema),
-            output_schema: None,
+            output_schema: JSONSchemaFromPath::from_value(&json!({})),
         };
-        let function_config = FunctionConfig::Tool(tool_config);
+        let function_config = FunctionConfig::Json(tool_config);
 
         let messages = vec![
             InputMessage {
