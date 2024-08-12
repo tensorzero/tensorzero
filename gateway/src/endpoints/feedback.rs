@@ -299,9 +299,9 @@ mod tests {
             gateway: None,
             clickhouse: None,
             models: HashMap::new(),
-            metrics: Some(metrics),
+            metrics: metrics,
             functions: HashMap::new(),
-            tools: None,
+            tools: HashMap::new(),
         };
         let inference_id = Uuid::now_v7();
         let metadata =
@@ -414,9 +414,9 @@ mod tests {
             gateway: None,
             clickhouse: None,
             models: HashMap::new(),
-            metrics: Some(metrics),
+            metrics: metrics,
             functions: HashMap::new(),
-            tools: None,
+            tools: HashMap::new(),
         };
         let episode_id = Uuid::now_v7();
         let metadata =
@@ -444,9 +444,9 @@ mod tests {
             gateway: None,
             clickhouse: None,
             models: HashMap::new(),
-            metrics: Some(HashMap::new()),
+            metrics: HashMap::new(),
             functions: HashMap::new(),
-            tools: None,
+            tools: HashMap::new(),
         };
         let app_state_data = get_unit_test_app_state_data(config, Some(true));
         let episode_id = Uuid::now_v7();
@@ -544,9 +544,9 @@ mod tests {
             gateway: None,
             clickhouse: None,
             models: HashMap::new(),
-            metrics: Some(metrics),
+            metrics: metrics,
             functions: HashMap::new(),
-            tools: None,
+            tools: HashMap::new(),
         };
         let app_state_data = get_unit_test_app_state_data(config, Some(true));
         let value = json!(4.5);
@@ -612,9 +612,9 @@ mod tests {
             gateway: None,
             clickhouse: None,
             models: HashMap::new(),
-            metrics: Some(metrics),
+            metrics: metrics,
             functions: HashMap::new(),
-            tools: None,
+            tools: HashMap::new(),
         };
         let app_state_data = get_unit_test_app_state_data(config, Some(true));
         let value = json!(true);

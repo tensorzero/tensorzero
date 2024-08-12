@@ -197,11 +197,14 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    use crate::inference::{
-        providers::openai::OpenAIToolChoiceString,
-        types::{FunctionType, JSONMode, RequestMessage, Role},
-    };
     use crate::tool::{Tool, ToolChoice};
+    use crate::{
+        inference::{
+            providers::openai::OpenAIToolChoiceString,
+            types::{FunctionType, JSONMode, RequestMessage, Role},
+        },
+        tool::ToolCallConfig,
+    };
 
     #[test]
     fn test_azure_request_new() {
@@ -219,6 +222,11 @@ mod tests {
                 "required": ["location"]
             }),
         };
+        let tool_config = ToolCallConfig {
+            tools_available: vec![&tool],
+            tool_choice: &ToolChoice::Auto,
+            parallel_tool_calls: true,
+        };
 
         let request_with_tools = ModelInferenceRequest {
             messages: vec![RequestMessage {
@@ -230,9 +238,7 @@ mod tests {
             max_tokens: None,
             stream: false,
             json_mode: JSONMode::On,
-            tools_available: Some(vec![tool]),
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: Some(true),
+            tool_config: Some(&tool_config),
             function_type: FunctionType::Chat,
             output_schema: None,
         };

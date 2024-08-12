@@ -739,7 +739,7 @@ mod tests {
     use serde_json::json;
 
     use crate::inference::types::{FunctionType, JSONMode};
-    use crate::tool::{Tool, ToolResult};
+    use crate::tool::{Tool, ToolCallConfig, ToolResult};
 
     #[test]
     fn test_try_from_tool_choice() {
@@ -897,9 +897,7 @@ mod tests {
         let inference_request = ModelInferenceRequest {
             messages: vec![],
             system: None,
-            tools_available: None,
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
+            tool_config: None,
             temperature: None,
             max_tokens: None,
             stream: false,
@@ -930,9 +928,7 @@ mod tests {
         let inference_request = ModelInferenceRequest {
             messages: messages.clone(),
             system: Some("test_system".to_string()),
-            tools_available: None,
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
+            tool_config: None,
             temperature: None,
             max_tokens: None,
             stream: false,
@@ -979,9 +975,7 @@ mod tests {
         let inference_request = ModelInferenceRequest {
             messages: messages.clone(),
             system: Some("test_system".to_string()),
-            tools_available: None,
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
+            tool_config: None,
             temperature: Some(0.5),
             max_tokens: Some(100),
             stream: true,
@@ -1039,12 +1033,15 @@ mod tests {
             name: "test_name".to_string(),
             parameters: json!({"type": "string"}),
         };
+        let tool_config = ToolCallConfig {
+            tools_available: vec![&tool],
+            tool_choice: &ToolChoice::Auto,
+            parallel_tool_calls: false,
+        };
         let inference_request = ModelInferenceRequest {
             messages: messages.clone(),
             system: Some("test_system".to_string()),
-            tools_available: Some(vec![tool.clone()]),
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
+            tool_config: Some(&tool_config),
             temperature: Some(0.5),
             max_tokens: Some(100),
             stream: true,

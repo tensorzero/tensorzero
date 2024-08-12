@@ -728,7 +728,7 @@ fn handle_gcp_vertex_gemini_error(
 mod tests {
     use super::*;
     use crate::inference::types::{FunctionType, JSONMode};
-    use crate::tool::{Tool, ToolResult};
+    use crate::tool::{Tool, ToolCallConfig, ToolResult};
 
     #[test]
     fn test_gcp_vertex_content_try_from() {
@@ -818,18 +818,17 @@ mod tests {
                 .unwrap(),
             serde_json::to_value(r#"{"timezone": {"type": "string"}}"#).unwrap(),
         ];
-        let tools = vec![
-            Tool::Function {
-                name: "get_weather".to_string(),
-                description: Some("Get the weather for a given location".to_string()),
-                parameters: parameters[0].clone(),
-            },
-            Tool::Function {
-                name: "get_time".to_string(),
-                description: Some("Get the current time for a given timezone".to_string()),
-                parameters: parameters[1].clone(),
-            },
-        ];
+        let tool1 = Tool::Function {
+            name: "get_weather".to_string(),
+            description: Some("Get the weather for a given location".to_string()),
+            parameters: parameters[0].clone(),
+        };
+        let tool2 = Tool::Function {
+            name: "get_time".to_string(),
+            description: Some("Get the current time for a given timezone".to_string()),
+            parameters: parameters[1].clone(),
+        };
+        let tools = vec![&tool1, &tool2];
         let tool = GCPVertexGeminiTool::from(&tools);
         assert_eq!(
             tool,
@@ -914,12 +913,15 @@ mod tests {
     #[test]
     fn test_gcp_vertex_request_try_from() {
         // Test Case 1: Empty message list
+        let tool_config = ToolCallConfig {
+            tools_available: vec![],
+            tool_choice: &ToolChoice::None,
+            parallel_tool_calls: false,
+        };
         let inference_request = ModelInferenceRequest {
             messages: vec![],
             system: None,
-            tools_available: None,
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
+            tool_config: Some(&tool_config),
             temperature: None,
             max_tokens: None,
             stream: false,
@@ -950,9 +952,7 @@ mod tests {
         let inference_request = ModelInferenceRequest {
             messages: messages.clone(),
             system: Some("test_system".to_string()),
-            tools_available: None,
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
+            tool_config: Some(&tool_config),
             temperature: None,
             max_tokens: None,
             stream: false,
@@ -995,9 +995,7 @@ mod tests {
         let inference_request = ModelInferenceRequest {
             messages: messages.clone(),
             system: Some("test_system".to_string()),
-            tools_available: None,
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
+            tool_config: Some(&tool_config),
             temperature: Some(0.5),
             max_tokens: Some(100),
             stream: true,

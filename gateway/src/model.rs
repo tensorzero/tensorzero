@@ -277,7 +277,7 @@ mod tests {
         },
         types::{ContentBlockChunk, FunctionType, JSONMode, TextChunk},
     };
-    use crate::tool::ToolChoice;
+    use crate::tool::{ToolCallConfig, ToolChoice};
     use tokio_stream::StreamExt;
     use tracing_test::traced_test;
 
@@ -295,14 +295,17 @@ mod tests {
             routing: vec!["good".to_string()],
             providers: HashMap::from([("good".to_string(), good_provider_config.clone())]),
         };
+        let tool_config = ToolCallConfig {
+            tools_available: vec![],
+            tool_choice: &ToolChoice::Auto,
+            parallel_tool_calls: false,
+        };
 
         // Try inferring the good model only
         let request = ModelInferenceRequest {
             messages: vec![],
             system: None,
-            tools_available: None,
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
+            tool_config: Some(&tool_config),
             temperature: None,
             max_tokens: None,
             stream: false,
@@ -356,9 +359,7 @@ mod tests {
         let request = ModelInferenceRequest {
             messages: vec![],
             system: None,
-            tools_available: None,
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
+            tool_config: None,
             temperature: None,
             max_tokens: None,
             stream: false,
@@ -401,9 +402,7 @@ mod tests {
         let request = ModelInferenceRequest {
             messages: vec![],
             system: None,
-            tools_available: None,
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
+            tool_config: None,
             temperature: None,
             max_tokens: None,
             stream: true,
@@ -487,9 +486,7 @@ mod tests {
         let request = ModelInferenceRequest {
             messages: vec![],
             system: None,
-            tools_available: None,
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
+            tool_config: None,
             temperature: None,
             max_tokens: None,
             stream: true,

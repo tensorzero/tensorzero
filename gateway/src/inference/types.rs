@@ -43,6 +43,19 @@ pub enum InputMessageContent {
     // We may extend this in the future to include other types of content
 }
 
+#[cfg(test)]
+impl From<String> for InputMessageContent {
+    fn from(text: String) -> Self {
+        InputMessageContent::Text(Value::String(text))
+    }
+}
+
+impl From<Value> for InputMessageContent {
+    fn from(value: Value) -> Self {
+        InputMessageContent::Text(value)
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum Role {
@@ -713,7 +726,6 @@ mod tests {
             usage.clone(),
             model_inference_responses,
             None,
-            ToolChoice::None,
         );
         assert_eq!(chat_inference_response.parsed_output, None);
         assert_eq!(chat_inference_response.content_blocks, content);
@@ -755,7 +767,6 @@ mod tests {
             usage.clone(),
             model_inference_responses,
             Some(&output_schema),
-            ToolChoice::None,
         );
 
         assert_eq!(chat_inference_response.inference_id, inference_id);
@@ -786,7 +797,6 @@ mod tests {
             usage.clone(),
             model_inference_responses,
             Some(&output_schema),
-            ToolChoice::None,
         );
 
         assert_eq!(chat_inference_response.inference_id, inference_id);
@@ -812,7 +822,6 @@ mod tests {
             usage.clone(),
             model_inference_responses,
             Some(&output_schema),
-            ToolChoice::None,
         );
 
         assert_eq!(chat_inference_response.inference_id, inference_id);
@@ -831,7 +840,7 @@ mod tests {
         // Test case 1: empty chunks (should error)
         let chunks = vec![];
         let output_schema = None;
-        let result = collect_chunks(chunks, output_schema, ToolChoice::None);
+        let result = collect_chunks(chunks, output_schema);
         assert_eq!(
             result.unwrap_err(),
             Error::TypeConversion {
@@ -873,7 +882,7 @@ mod tests {
                 latency: Duration::from_millis(250),
             },
         ];
-        let response = collect_chunks(chunks, None, ToolChoice::None).unwrap();
+        let response = collect_chunks(chunks, None).unwrap();
         let InferenceResponse::Chat(chat_response) = response;
         assert_eq!(chat_response.inference_id, inference_id);
         assert_eq!(chat_response.created, created);
@@ -932,7 +941,7 @@ mod tests {
                 latency: Duration::from_millis(250),
             },
         ];
-        let response = collect_chunks(chunks, Some(&schema), ToolChoice::None).unwrap();
+        let response = collect_chunks(chunks, Some(&schema)).unwrap();
         let InferenceResponse::Chat(chat_response) = response;
         assert_eq!(chat_response.inference_id, inference_id);
         assert_eq!(
@@ -990,7 +999,7 @@ mod tests {
                 latency: Duration::from_millis(200),
             },
         ];
-        let result = collect_chunks(chunks, Some(&schema), ToolChoice::None);
+        let result = collect_chunks(chunks, Some(&schema));
         assert!(result.is_ok());
         if let Ok(InferenceResponse::Chat(chat_response)) = result {
             assert_eq!(chat_response.inference_id, inference_id);
@@ -1053,7 +1062,7 @@ mod tests {
                 latency: Duration::from_millis(300),
             },
         ];
-        let result = collect_chunks(chunks, Some(&schema), ToolChoice::None);
+        let result = collect_chunks(chunks, Some(&schema));
         assert!(result.is_ok());
         if let Ok(InferenceResponse::Chat(chat_response)) = result {
             assert_eq!(chat_response.inference_id, inference_id);

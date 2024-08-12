@@ -45,8 +45,8 @@ mod tests {
             clickhouse: None,
             models: HashMap::new(),
             functions: HashMap::new(),
-            metrics: None,
-            tools: None,
+            metrics: HashMap::new(),
+            tools: HashMap::new(),
         };
         let app_state_data = get_unit_test_app_state_data(config.clone(), Some(true));
         let response = health_handler(State(app_state_data)).await;

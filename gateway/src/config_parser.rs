@@ -729,7 +729,7 @@ mod tests {
 
         match config.functions.get_mut("generate_draft") {
             Some(FunctionConfig::Chat(params)) => {
-                params.tools = Some(vec!["non_existent_tool".to_string()]);
+                params.tools = vec!["non_existent_tool".to_string()];
             }
             _ => unreachable!(),
         }
@@ -769,7 +769,7 @@ mod tests {
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
-            tools: None,
+            tools: vec![],
             ..Default::default()
         };
 

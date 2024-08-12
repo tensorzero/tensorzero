@@ -294,7 +294,9 @@ fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use crate::inference::types::{ChatCompletionConfig, InputMessage};
+    use crate::inference::types::{
+        ChatCompletionConfig, FunctionConfigChat, FunctionConfigJson, InputMessage,
+    };
 
     use super::*;
     use serde_json::json;
@@ -330,7 +332,7 @@ mod tests {
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
-            tools: None,
+            tools: vec![],
             ..Default::default()
         };
         let function_config = FunctionConfig::Chat(chat_config);
@@ -338,11 +340,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec!["assistant content".to_string().into()],
             },
         ];
 
@@ -356,11 +358,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!({ "name": "user name" }),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!({ "name": "assistant name" }),
+                content: vec![json!({ "name": "assistant name" }).into()],
             },
         ];
         let input = Input {
@@ -372,7 +374,7 @@ mod tests {
         assert_eq!(
             validation_result.unwrap_err(),
             Error::InvalidMessage {
-                message: "Message at index 0 has non-string content but there is no schema given for role user.".to_string()
+                message: "Message at index 1 has non-string content but there is no schema given for role assistant.".to_string()
             }
         );
     }
@@ -385,7 +387,7 @@ mod tests {
             system_schema: Some(system_schema.clone()),
             user_schema: None,
             assistant_schema: None,
-            tools: None,
+            tools: vec![],
             ..Default::default()
         };
         let function_config = FunctionConfig::Chat(chat_config);
@@ -393,11 +395,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec!["assistant content".to_string().into()],
             },
         ];
         let input = Input {
@@ -418,11 +420,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec!["assistant content".to_string().into()],
             },
         ];
         let input = Input {
@@ -441,7 +443,7 @@ mod tests {
             system_schema: None,
             user_schema: Some(user_schema.clone()),
             assistant_schema: None,
-            tools: None,
+            tools: vec![],
             ..Default::default()
         };
         let function_config = FunctionConfig::Chat(chat_config);
@@ -449,11 +451,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec!["assistant content".to_string().into()],
             },
         ];
         let input = Input {
@@ -474,11 +476,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!({ "name": "user name" }),
+                content: vec![json!({ "name": "user name" }).into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec!["assistant content".to_string().into()],
             },
         ];
         let input = Input {
@@ -497,7 +499,7 @@ mod tests {
             system_schema: None,
             user_schema: None,
             assistant_schema: Some(assistant_schema.clone()),
-            tools: None,
+            tools: vec![],
             ..Default::default()
         };
         let function_config = FunctionConfig::Chat(chat_config);
@@ -505,11 +507,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec!["assistant content".to_string().into()],
             },
         ];
         let input = Input {
@@ -530,11 +532,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!({ "name": "assistant name" }),
+                content: vec![json!({ "name": "assistant name" }).into()],
             },
         ];
         let input = Input {
@@ -555,7 +557,7 @@ mod tests {
             system_schema: Some(system_schema.clone()),
             user_schema: Some(user_schema),
             assistant_schema: Some(assistant_schema),
-            tools: None,
+            tools: vec![],
             ..Default::default()
         };
         let function_config = FunctionConfig::Chat(chat_config);
@@ -563,11 +565,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec!["assistant content".to_string().into()],
             },
         ];
 
@@ -589,11 +591,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!({ "name": "user name" }),
+                content: vec![json!({ "name": "user name" }).into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!({ "name": "assistant name" }),
+                content: vec![json!({ "name": "assistant name" }).into()],
             },
         ];
 
@@ -619,11 +621,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec!["assistant content".to_string().into()],
             },
         ];
 
@@ -637,11 +639,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!({ "name": "user name" }),
+                content: vec![json!({ "name": "user name" }).into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!({ "name": "assistant name" }),
+                content: vec![json!({ "name": "assistant name" }).into()],
             },
         ];
 
@@ -674,11 +676,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec![json!("assistant content").to_string().into()],
             },
         ];
 
@@ -700,11 +702,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec![json!("assistant content").to_string().into()],
             },
         ];
 
@@ -731,11 +733,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec![json!("assistant content").to_string().into()],
             },
         ];
 
@@ -757,11 +759,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!({ "name": "user name" }),
+                content: vec![json!({ "name": "user name" }).into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec!["assistant content".to_string().into()],
             },
         ];
         let input = Input {
@@ -787,11 +789,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec!["assistant content".to_string().into()],
             },
         ];
         let input = Input {
@@ -812,11 +814,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!({ "name": "assistant name" }),
+                content: vec![json!({ "name": "assistant name" }).into()],
             },
         ];
         let input = Input {
@@ -844,11 +846,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec![json!("assistant content").to_string().into()],
             },
         ];
         let input = Input {
@@ -869,11 +871,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!({ "name": "user name" }),
+                content: vec![json!({ "name": "user name" }).into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!({ "name": "assistant name" }),
+                content: vec![json!({ "name": "assistant name" }).into()],
             },
         ];
 

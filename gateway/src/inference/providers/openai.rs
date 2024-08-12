@@ -269,6 +269,9 @@ pub(super) fn prepare_openai_tools<'a>(
     match request.tool_config {
         None => (None, None),
         Some(tool_config) => {
+            if tool_config.tools_available.is_empty() {
+                return (None, None);
+            }
             let tools = Some(
                 tool_config
                     .tools_available
@@ -717,7 +720,7 @@ fn openai_to_tensorzero_chunk(
 mod tests {
     use serde_json::json;
 
-    use crate::inference::types::FunctionType;
+    use crate::{inference::types::FunctionType, tool::ToolCallConfig};
 
     use super::*;
 
@@ -821,13 +824,11 @@ mod tests {
                 },
             ],
             system: None,
+            tool_config: None,
             temperature: Some(0.7),
             max_tokens: Some(100),
             stream: true,
             json_mode: JSONMode::Off,
-            tools_available: None,
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -859,6 +860,11 @@ mod tests {
                 "required": ["location"]
             }),
         };
+        let tool_config = ToolCallConfig {
+            tools_available: vec![&tool],
+            tool_choice: &ToolChoice::Auto,
+            parallel_tool_calls: true,
+        };
 
         let request_with_tools = ModelInferenceRequest {
             messages: vec![RequestMessage {
@@ -870,9 +876,7 @@ mod tests {
             max_tokens: None,
             stream: false,
             json_mode: JSONMode::On,
-            tools_available: Some(vec![tool]),
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: Some(true),
+            tool_config: Some(&tool_config),
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -1056,6 +1060,11 @@ mod tests {
             description: Some("Get the current weather".to_string()),
             parameters: parameters.clone(),
         };
+        let tool_config = ToolCallConfig {
+            tools_available: vec![&tool],
+            tool_choice: &ToolChoice::Auto,
+            parallel_tool_calls: true,
+        };
         let request_with_tools = ModelInferenceRequest {
             messages: vec![RequestMessage {
                 role: Role::User,
@@ -1066,9 +1075,7 @@ mod tests {
             max_tokens: None,
             stream: false,
             json_mode: JSONMode::On,
-            tools_available: Some(vec![tool]),
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: Some(true),
+            tool_config: Some(&tool_config),
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -1082,6 +1089,11 @@ mod tests {
             tool_choice,
             OpenAIToolChoice::String(OpenAIToolChoiceString::Auto)
         );
+        let tool_config = ToolCallConfig {
+            tools_available: vec![],
+            tool_choice: &ToolChoice::Required,
+            parallel_tool_calls: true,
+        };
 
         // Test no tools but a tool choice and make sure tool choice output is None
         let request_without_tools = ModelInferenceRequest {
@@ -1094,30 +1106,7 @@ mod tests {
             max_tokens: None,
             stream: false,
             json_mode: JSONMode::On,
-            tools_available: Some(vec![]),
-            tool_choice: ToolChoice::Required,
-            parallel_tool_calls: Some(true),
-            function_type: FunctionType::Chat,
-            output_schema: None,
-        };
-        let (tools, tool_choice) = prepare_openai_tools(&request_without_tools);
-        assert!(tools.is_none());
-        assert!(tool_choice.is_none());
-
-        // Test tools_available=None but a tool choice and make sure tool choice output is None
-        let request_without_tools = ModelInferenceRequest {
-            messages: vec![RequestMessage {
-                role: Role::User,
-                content: vec!["What's the weather?".to_string().into()],
-            }],
-            system: None,
-            temperature: None,
-            max_tokens: None,
-            stream: false,
-            json_mode: JSONMode::On,
-            tools_available: None,
-            tool_choice: ToolChoice::Required,
-            parallel_tool_calls: Some(true),
+            tool_config: Some(&tool_config),
             function_type: FunctionType::Chat,
             output_schema: None,
         };
