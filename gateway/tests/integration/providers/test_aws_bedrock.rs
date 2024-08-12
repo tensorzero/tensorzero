@@ -50,7 +50,7 @@ fn test_infer_with_region() {
         let model_id = "anthropic.claude-3-haiku-20240307-v1:0".to_string();
         let provider = ProviderConfig::AWSBedrock(AWSBedrockProvider {
             model_id,
-            region: Some("us-east-1".to_string()),
+            region: Some(aws_types::region::Region::new("us-east-1")),
         });
         let client = reqwest::Client::new();
         let inference_request = create_simple_inference_request();
@@ -76,7 +76,7 @@ fn test_infer_with_broken_region() {
         let model_id = "anthropic.claude-3-haiku-20240307-v1:0".to_string();
         let provider = ProviderConfig::AWSBedrock(AWSBedrockProvider {
             model_id,
-            region: Some("uk-hogwarts-1".to_string()),
+            region: Some(aws_types::region::Region::new("uk-hogwarts-1")),
         });
         let client = reqwest::Client::new();
         let inference_request = create_simple_inference_request();

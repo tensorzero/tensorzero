@@ -6,10 +6,9 @@ use aws_sdk_bedrockruntime::types::{
 };
 use aws_smithy_types::error::display::DisplayErrorContext;
 use aws_types::region::Region;
+use dashmap::{DashMap, Entry as DashMapEntry};
 use lazy_static::lazy_static;
 use reqwest::StatusCode;
-use std::collections::{hash_map::Entry as HashMapEntry, HashMap};
-use tokio::sync::Mutex;
 use tokio::time::Instant;
 
 use crate::error::Error;
@@ -24,18 +23,17 @@ lazy_static! {
      /// spawns a new runtime for each test, causing intermittent issues with the AWS client. For tests,
      /// use a shared runtime like in our integration tests. This isn't an issue when running the gateway
      /// normally since that uses a single runtime.
-    static ref AWS_BEDROCK_CLIENTS: Mutex<HashMap<Region, &'static aws_sdk_bedrockruntime::Client>> =
-        Mutex::new(HashMap::new());
+    static ref AWS_BEDROCK_CLIENTS: DashMap<Region, &'static aws_sdk_bedrockruntime::Client> = DashMap::new();
 }
 
 async fn get_aws_bedrock_client(
-    region: Option<String>,
+    region: Option<Region>,
 ) -> Result<&'static aws_sdk_bedrockruntime::Client, Error> {
     // Decide which AWS region to use. We try the following in order:
     // - The provided `region` argument
     // - The region defined by the credentials (e.g. `AWS_REGION` environment variable)
     // - The default region (us-east-1)
-    let region = RegionProviderChain::first_try(region.map(Region::new))
+    let region = RegionProviderChain::first_try(region)
         .or_default_provider()
         .or_else(Region::new("us-east-1"))
         .region()
@@ -45,13 +43,17 @@ async fn get_aws_bedrock_client(
             message: "Failed to determine AWS region.".to_string(),
         })?;
 
-    let mut clients = AWS_BEDROCK_CLIENTS.lock().await;
-
-    let client: &aws_sdk_bedrockruntime::Client = match clients.entry(region.clone()) {
-        HashMapEntry::Occupied(entry) => entry.get(),
-        HashMapEntry::Vacant(entry) => {
-            tracing::trace!("Creating new AWS Bedrock client for region: {}", region);
-            let config = aws_config::from_env().region(region).load().await;
+    let client: &aws_sdk_bedrockruntime::Client = match AWS_BEDROCK_CLIENTS.entry(region) {
+        DashMapEntry::Occupied(entry) => entry.get(),
+        DashMapEntry::Vacant(entry) => {
+            tracing::trace!(
+                "Creating new AWS Bedrock client for region: {}",
+                entry.key()
+            );
+            let config = aws_config::from_env()
+                .region(entry.key().clone())
+                .load()
+                .await;
             let client = Box::leak(Box::new(aws_sdk_bedrockruntime::Client::new(&config)));
             entry.insert(client);
             client
@@ -64,7 +66,7 @@ async fn get_aws_bedrock_client(
 #[derive(Clone, Debug)]
 pub struct AWSBedrockProvider {
     pub model_id: String,
-    pub region: Option<String>,
+    pub region: Option<Region>,
 }
 
 impl InferenceProvider for AWSBedrockProvider {
@@ -250,7 +252,7 @@ mod tests {
     async fn test_get_aws_bedrock_client() {
         #[traced_test]
         async fn first_run() {
-            get_aws_bedrock_client(Some("uk-hogwarts-1".to_string()))
+            get_aws_bedrock_client(Some(Region::new("uk-hogwarts-1")))
                 .await
                 .unwrap();
 
@@ -261,7 +263,7 @@ mod tests {
 
         #[traced_test]
         async fn second_run() {
-            get_aws_bedrock_client(Some("uk-hogwarts-1".to_string()))
+            get_aws_bedrock_client(Some(Region::new("uk-hogwarts-1")))
                 .await
                 .unwrap();
 
@@ -277,7 +279,7 @@ mod tests {
 
         #[traced_test]
         async fn fourth_run() {
-            get_aws_bedrock_client(Some("me-shire-2".to_string()))
+            get_aws_bedrock_client(Some(Region::new("me-shire-2")))
                 .await
                 .unwrap();
 

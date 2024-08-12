@@ -161,6 +161,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 })
             }
             ProviderConfigHelper::AWSBedrock { model_id, region } => {
+                let region = region.map(aws_types::region::Region::new);
                 ProviderConfig::AWSBedrock(AWSBedrockProvider { model_id, region })
             }
             ProviderConfigHelper::Azure {
