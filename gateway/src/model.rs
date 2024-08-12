@@ -122,6 +122,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
             #[serde(rename = "aws_bedrock")]
             AWSBedrock {
                 model_id: String,
+                region: Option<String>,
             },
             Azure {
                 model_name: String,
@@ -159,8 +160,9 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                     api_key: env::var("ANTHROPIC_API_KEY").ok().map(SecretString::new),
                 })
             }
-            ProviderConfigHelper::AWSBedrock { model_id } => {
-                ProviderConfig::AWSBedrock(AWSBedrockProvider { model_id })
+            ProviderConfigHelper::AWSBedrock { model_id, region } => {
+                let region = region.map(aws_types::region::Region::new);
+                ProviderConfig::AWSBedrock(AWSBedrockProvider { model_id, region })
             }
             ProviderConfigHelper::Azure {
                 model_name,
