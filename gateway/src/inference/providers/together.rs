@@ -187,7 +187,7 @@ impl<'a> TogetherRequest<'a> {
             response_format,
             tools,
             tool_choice,
-            parallel_tool_calls: request.parallel_tool_calls,
+            parallel_tool_calls: request.tool_config.map(|c| c.parallel_tool_calls),
         }
     }
 }

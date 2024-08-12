@@ -330,15 +330,17 @@ impl<'a> AnthropicRequestBody<'a> {
             .map(AnthropicMessage::from)
             .collect();
         let messages = prepare_messages(request_messages)?;
-        let tool_choice: Option<AnthropicToolChoice> =
-            AnthropicToolChoice::try_from(&request.tool_choice).ok();
+        let tool_choice: Option<AnthropicToolChoice> = request
+            .tool_config
+            .map(|c| c.tool_choice)
+            .and_then(|c| c.try_into().ok());
         let tools = request
-            .tools_available
-            .as_ref()
+            .tool_config
+            .map(|c| &c.tools_available)
             .map(|tools| {
                 tools
                     .iter()
-                    .map(AnthropicTool::try_from)
+                    .map(|tool| AnthropicTool::try_from(*tool))
                     .collect::<Result<Vec<_>, _>>()
             })
             .transpose()?;

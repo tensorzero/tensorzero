@@ -141,10 +141,9 @@ impl<'a> Migration for Migration0000<'a> {
                 variant_name LowCardinality(String),
                 episode_id UUID,
                 input String,
-                parsed_output Nullable(String),
+                output String,
+                dynamic_tool_config String,
                 processing_time_ms UInt32,
-                -- Serialized content blocks as output by model
-                content_blocks String,
             ) ENGINE = MergeTree()
             ORDER BY (function_name, variant_name, episode_id);
         "#;

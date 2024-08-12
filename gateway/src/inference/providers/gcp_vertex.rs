@@ -369,9 +369,15 @@ impl<'a> From<&'a Tool> for GCPVertexGeminiFunctionDeclaration<'a> {
     }
 }
 
-impl<'a> From<&'a Vec<Tool>> for GCPVertexGeminiTool<'a> {
-    fn from(tools: &'a Vec<Tool>) -> Self {
-        GCPVertexGeminiTool::FunctionDeclarations(tools.iter().map(|tool| tool.into()).collect())
+impl<'a> From<&'a Vec<&'a Tool>> for GCPVertexGeminiTool<'a> {
+    fn from(tools: &'a Vec<&'a Tool>) -> Self {
+        // let mut function_declarations = Vec::new();
+        // for tool in tools {
+        //     function_declarations.push(tool.into());
+        // }
+        // GCPVertexGeminiTool::FunctionDeclarations(function_declarations)
+        let function_declarations: Vec<_> = tools.iter().map(|&tool| tool.into()).collect();
+        GCPVertexGeminiTool::FunctionDeclarations(function_declarations)
     }
 }
 
@@ -488,10 +494,10 @@ impl<'a> TryFrom<&'a ModelInferenceRequest<'a>> for GCPVertexGeminiRequest<'a> {
             .map(GCPVertexGeminiContent::from)
             .collect();
         let tools = request
-            .tools_available
-            .as_ref()
+            .tool_config
+            .map(|c| &c.tools_available)
             .map(|tools| vec![GCPVertexGeminiTool::from(tools)]);
-        let tool_config = Some(GCPVertexGeminiToolConfig::from(&request.tool_choice));
+        let tool_config = request.tool_config.map(|c| c.tool_choice.into());
         let (response_mime_type, response_schema) = match request.output_schema {
             Some(output_schema) => (
                 Some(GCPVertexGeminiResponseMimeType::ApplicationJson),

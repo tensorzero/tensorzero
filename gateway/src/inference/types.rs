@@ -5,12 +5,13 @@ use serde_json::Value;
 use std::{
     collections::HashMap,
     fmt,
+    path::PathBuf,
     pin::Pin,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use uuid::Uuid;
 
-use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice, ToolResult};
+use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolResult};
 use crate::{error::Error, jsonschema_util::JSONSchemaFromPath};
 /// Data flow in TensorZero
 ///
@@ -30,7 +31,16 @@ pub struct Input {
 #[serde(deny_unknown_fields)]
 pub struct InputMessage {
     pub role: Role,
-    pub content: serde_json::Value,
+    pub content: Vec<InputMessageContent>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum InputMessageContent {
+    Text(Value),
+    ToolCall(ToolCall),
+    ToolResult(ToolResult),
+    // We may extend this in the future to include other types of content
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
@@ -74,6 +84,7 @@ pub struct RequestMessage {
 pub enum FunctionType {
     #[default]
     Chat,
+    Json,
 }
 
 #[derive(Clone, Default, Debug, PartialEq)]
@@ -95,9 +106,7 @@ pub enum JSONMode {
 pub struct ModelInferenceRequest<'a> {
     pub messages: Vec<RequestMessage>,
     pub system: Option<String>,
-    pub tools_available: Option<Vec<Tool>>,
-    pub tool_choice: ToolChoice,
-    pub parallel_tool_calls: Option<bool>,
+    pub tool_config: Option<&'a ToolCallConfig<'a>>,
     pub temperature: Option<f32>,
     pub max_tokens: Option<u32>,
     pub stream: bool,
@@ -215,8 +224,8 @@ pub struct Inference {
     pub variant_name: String,
     pub episode_id: Uuid,
     pub input: String,
-    pub parsed_output: Option<Value>,
-    pub content_blocks: String,
+    pub output: String,
+    pub dynamic_tool_config: String,
     pub processing_time_ms: u32,
 }
 
@@ -296,7 +305,6 @@ impl ChatInferenceResponse {
         usage: Usage,
         model_inference_responses: Vec<ModelInferenceResponse>,
         output_schema: Option<&JSONSchemaFromPath>,
-        tool_choice: ToolChoice,
     ) -> Self {
         #[allow(clippy::expect_used)]
         let created = SystemTime::now()
@@ -305,7 +313,7 @@ impl ChatInferenceResponse {
             .as_secs();
         let parsed_output = match output_schema {
             // We write None for parsed_output if parsing fails
-            Some(schema) => Self::parse_output(&raw_content, schema, tool_choice).ok(),
+            Some(schema) => Self::parse_output(&raw_content, schema).ok(),
             // We also write None if there is no output schema
             None => None,
         };
@@ -322,7 +330,6 @@ impl ChatInferenceResponse {
     fn parse_output(
         content: &[ContentBlock],
         output_schema: &JSONSchemaFromPath,
-        tool_choice: ToolChoice,
     ) -> Result<Value, Error> {
         if content.is_empty() {
             return Err(Error::OutputParsing {
@@ -330,56 +337,57 @@ impl ChatInferenceResponse {
                 message: "Output parsing failed due to empty content".to_string(),
             });
         }
-        match tool_choice {
-            ToolChoice::Implicit => {
-                // TODO(#30): handle tool calls and fully think this through
-                for content in content.iter().rev() {
-                    let arguments = match content {
-                        ContentBlock::ToolCall(tool_call) => &tool_call.arguments,
-                        _ => continue,
-                    };
-                    let parsed_arguments =
-                        serde_json::from_str(arguments).map_err(|e| Error::OutputParsing {
-                            raw_output: arguments.to_string(),
-                            message: e.to_string(),
-                        })?;
-                    output_schema.validate(&parsed_arguments).map_err(|e| {
-                        Error::OutputValidation {
-                            source: Box::new(e),
-                        }
-                    })?;
-                    return Ok(parsed_arguments);
-                }
-                Err(Error::OutputParsing {
-                    raw_output: "".to_string(),
-                    message: "Output parsing failed due to no tool calls".to_string(),
-                })
-            }
-            _ => {
-                // Grab the last text content block, parse it, and return
-                for content in content.iter().rev() {
-                    let text = match content {
-                        ContentBlock::Text(Text { text }) => text,
-                        _ => continue,
-                    };
-                    let parsed_text =
-                        serde_json::from_str(text).map_err(|e| Error::OutputParsing {
-                            raw_output: text.to_string(),
-                            message: e.to_string(),
-                        })?;
-                    output_schema
-                        .validate(&parsed_text)
-                        .map_err(|e| Error::OutputValidation {
-                            source: Box::new(e),
-                        })?;
-                    return Ok(parsed_text);
-                }
-                Err(Error::OutputParsing {
-                    raw_output: "".to_string(),
-                    message: "Output parsing failed due to no text content".to_string(),
-                })
-            }
+        // let tool_choice = match tool_config {
+        //     Some(config) => config.tool_choice,
+        //     None => &ToolChoice::None,
+        // };
+        // match tool_choice {
+        //     ToolChoice::Implicit => {
+        //         // TODO(#30): handle tool calls and fully think this through
+        //         for content in content.iter().rev() {
+        //             let arguments = match content {
+        //                 ContentBlock::ToolCall(tool_call) => &tool_call.arguments,
+        //                 _ => continue,
+        //             };
+        //             let parsed_arguments =
+        //                 serde_json::from_str(arguments).map_err(|e| Error::OutputParsing {
+        //                     raw_output: arguments.to_string(),
+        //                     message: e.to_string(),
+        //                 })?;
+        //             output_schema.validate(&parsed_arguments).map_err(|e| {
+        //                 Error::OutputValidation {
+        //                     source: Box::new(e),
+        //                 }
+        //             })?;
+        //             return Ok(parsed_arguments);
+        //         }
+        //         Err(Error::OutputParsing {
+        //             raw_output: "".to_string(),
+        //             message: "Output parsing failed due to no tool calls".to_string(),
+        //         })
+        //     }
+        //     _ => {
+        // Grab the last text content block, parse it, and return
+        for content in content.iter().rev() {
+            let text = match content {
+                ContentBlock::Text(Text { text }) => text,
+                _ => continue,
+            };
+            let parsed_text = serde_json::from_str(text).map_err(|e| Error::OutputParsing {
+                raw_output: text.to_string(),
+                message: e.to_string(),
+            })?;
+            output_schema
+                .validate(&parsed_text)
+                .map_err(|e| Error::OutputValidation {
+                    source: Box::new(e),
+                })?;
+            return Ok(parsed_text);
         }
+        Err(Error::OutputParsing {
+            raw_output: "".to_string(),
+            message: "Output parsing failed due to no text content".to_string(),
+        })
     }
 
     pub fn get_serialized_model_inferences(&self, input: &str) -> Vec<serde_json::Value> {
@@ -442,6 +450,7 @@ impl Inference {
         episode_id: Uuid,
         function_name: String,
         variant_name: String,
+        dynamic_tool_config: String,
         processing_time: Duration,
     ) -> Self {
         let processing_time_ms = processing_time.as_millis() as u32;
@@ -452,9 +461,8 @@ impl Inference {
                 variant_name,
                 episode_id,
                 input,
-                content_blocks: serde_json::to_string(&chat_response.content_blocks)
-                    .unwrap_or_default(),
-                parsed_output: chat_response.parsed_output,
+                dynamic_tool_config,
+                output: serde_json::to_string(&chat_response.content_blocks).unwrap_or_default(),
                 processing_time_ms,
             },
         }
@@ -503,7 +511,6 @@ impl From<ModelInferenceResponseChunk> for ChatInferenceResponseChunk {
 pub fn collect_chunks(
     value: Vec<ModelInferenceResponseChunk>,
     output_schema: Option<&JSONSchemaFromPath>,
-    tool_choice: ToolChoice,
 ) -> Result<InferenceResponse, Error> {
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
 
@@ -604,7 +611,6 @@ pub fn collect_chunks(
         usage,
         vec![model_response],
         output_schema,
-        tool_choice,
     )))
 }
 
@@ -622,6 +628,62 @@ impl From<ToolCallChunk> for ToolCall {
 
 pub type InferenceResponseStream =
     Pin<Box<dyn Stream<Item = Result<ModelInferenceResponseChunk, Error>> + Send>>;
+
+/// Types that go with `function.rs`
+/// See that file for impls
+#[derive(Clone, Debug, Deserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "lowercase")]
+#[serde(deny_unknown_fields)]
+pub enum FunctionConfig {
+    Chat(FunctionConfigChat),
+    Json(FunctionConfigJson),
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FunctionConfigChat {
+    pub variants: HashMap<String, VariantConfig>, // variant name => variant config
+    pub system_schema: Option<JSONSchemaFromPath>,
+    pub user_schema: Option<JSONSchemaFromPath>,
+    pub assistant_schema: Option<JSONSchemaFromPath>,
+    #[serde(default)]
+    pub tools: Vec<String>, // tool names
+    #[serde(default)]
+    pub tool_choice: ToolChoice,
+    #[serde(default)] // defaults to false
+    pub parallel_tool_calls: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FunctionConfigJson {
+    pub variants: HashMap<String, VariantConfig>, // variant name => variant config
+    pub system_schema: Option<JSONSchemaFromPath>,
+    pub user_schema: Option<JSONSchemaFromPath>,
+    pub assistant_schema: Option<JSONSchemaFromPath>,
+    pub output_schema: JSONSchemaFromPath, // schema is mandatory for JSON functions
+}
+
+/// Types that go with `variant.rs`
+/// See that file for impls
+#[derive(Clone, Debug, Deserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
+pub enum VariantConfig {
+    ChatCompletion(ChatCompletionConfig),
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChatCompletionConfig {
+    pub weight: f64,
+    pub model: String, // TODO (#85): validate that this model exists in the model config
+    pub system_template: Option<PathBuf>,
+    pub user_template: Option<PathBuf>,
+    pub assistant_template: Option<PathBuf>,
+}
 
 #[cfg(test)]
 mod tests {

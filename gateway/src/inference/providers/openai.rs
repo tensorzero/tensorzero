@@ -266,19 +266,20 @@ pub(super) fn prepare_openai_messages<'a>(
 pub(super) fn prepare_openai_tools<'a>(
     request: &'a ModelInferenceRequest,
 ) -> (Option<Vec<OpenAITool<'a>>>, Option<OpenAIToolChoice<'a>>) {
-    if let Some(tools) = &request.tools_available {
-        if tools.is_empty() {
-            return (None, None);
+    match request.tool_config {
+        None => (None, None),
+        Some(tool_config) => {
+            let tools = Some(
+                tool_config
+                    .tools_available
+                    .iter()
+                    .map(|tool| OpenAITool::from(*tool))
+                    .collect(),
+            );
+            let tool_choice = Some(tool_config.tool_choice.into());
+            (tools, tool_choice)
         }
     }
-    let tools = request
-        .tools_available
-        .as_ref()
-        .map(|t| t.iter().map(OpenAITool::from).collect());
-    // If `tools` is None, tool_choice will be as well
-    let tool_choice: Option<OpenAIToolChoice<'a>> =
-        tools.as_ref().map(|_| (&request.tool_choice).into());
-    (tools, tool_choice)
 }
 
 fn tensorzero_to_openai_system_message(system: Option<&str>) -> Option<OpenAIRequestMessage<'_>> {
@@ -507,7 +508,7 @@ impl<'a> OpenAIRequest<'a> {
             response_format,
             tools,
             tool_choice,
-            parallel_tool_calls: request.parallel_tool_calls,
+            parallel_tool_calls: request.tool_config.map(|r| r.parallel_tool_calls),
         }
     }
 }

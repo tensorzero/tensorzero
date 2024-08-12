@@ -156,6 +156,12 @@ pub enum Error {
     TogetherServer {
         message: String,
     },
+    ToolNotFound {
+        name: String,
+    },
+    ToolNotLoaded {
+        name: String,
+    },
     TypeConversion {
         message: String,
     },
@@ -224,6 +230,8 @@ impl Error {
             Error::Serialization { .. } => tracing::Level::ERROR,
             Error::TogetherClient { .. } => tracing::Level::WARN,
             Error::TogetherServer { .. } => tracing::Level::ERROR,
+            Error::ToolNotFound { .. } => tracing::Level::WARN,
+            Error::ToolNotLoaded { .. } => tracing::Level::ERROR,
             Error::TypeConversion { .. } => tracing::Level::ERROR,
             Error::UnknownFunction { .. } => tracing::Level::WARN,
             Error::UnknownTool { .. } => tracing::Level::ERROR,
@@ -282,6 +290,8 @@ impl Error {
             Error::Serialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::TogetherClient { status_code, .. } => *status_code,
             Error::TogetherServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::ToolNotFound { .. } => StatusCode::NOT_FOUND,
+            Error::ToolNotLoaded { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::TypeConversion { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::UnknownFunction { .. } => StatusCode::NOT_FOUND,
             Error::UnknownTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -468,6 +478,8 @@ impl std::fmt::Display for Error {
             Error::TogetherServer { message } => {
                 write!(f, "Error from Together servers: {}", message)
             }
+            Error::ToolNotFound { name } => write!(f, "Tool not found: {}", name),
+            Error::ToolNotLoaded { name } => write!(f, "Tool not loaded: {}", name),
             Error::UnknownFunction { name } => write!(f, "Unknown function: {}", name),
             Error::UnknownTool { name } => write!(f, "Unknown tool: {}", name),
             Error::UnknownVariant { name } => write!(f, "Unknown variant: {}", name),

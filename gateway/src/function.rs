@@ -1,23 +1,13 @@
-use serde::Deserialize;
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::path::Path;
 use uuid::Uuid;
 
 use crate::error::Error;
-use crate::inference::types::{Input, Role};
+use crate::inference::types::{FunctionConfig, Input, InputMessageContent, Role, VariantConfig};
 use crate::jsonschema_util::JSONSchemaFromPath;
-use crate::tool::ToolChoice;
-use crate::variant::VariantConfig;
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(tag = "type")]
-#[serde(rename_all = "lowercase")]
-#[serde(deny_unknown_fields)]
-pub enum FunctionConfig {
-    Chat(FunctionConfigChat),
-    Json(FunctionConfigJson),
-}
+use crate::tool::{DynamicToolConfig, ToolCallConfig, ToolConfig};
 
 impl FunctionConfig {
     pub fn variants(&self) -> &HashMap<String, VariantConfig> {
@@ -27,7 +17,7 @@ impl FunctionConfig {
         }
     }
 
-    // TODO (viraj): rip this in the next PR
+    // TODO (viraj): rip this
     pub fn output_schema(&self) -> Option<&JSONSchemaFromPath> {
         match self {
             FunctionConfig::Chat(_) => None,
@@ -36,97 +26,67 @@ impl FunctionConfig {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct FunctionConfigChat {
-    pub variants: HashMap<String, VariantConfig>, // variant name => variant config
-    pub system_schema: Option<JSONSchemaFromPath>,
-    pub user_schema: Option<JSONSchemaFromPath>,
-    pub assistant_schema: Option<JSONSchemaFromPath>,
-    pub tools: Option<Vec<String>>, // tool names
-    #[serde(default)]
-    pub tool_choice: ToolChoice,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct FunctionConfigJson {
-    pub variants: HashMap<String, VariantConfig>, // variant name => variant config
-    pub system_schema: Option<JSONSchemaFromPath>,
-    pub user_schema: Option<JSONSchemaFromPath>,
-    pub assistant_schema: Option<JSONSchemaFromPath>,
-    output_schema: JSONSchemaFromPath, // schema is mandatory for JSON functions
-}
-
 impl FunctionConfig {
     /// Validate the input against the function's input schemas.
     /// The validation is done based on the function's type:
     /// - For a chat function, the input is validated against the system, user, and assistant schemas.
     /// - For a JSON function, the input is validated against the system, user, and assistant schemas.
+    ///   We also enforce that no dynamic tool calling information should be passed to JSON functions
+    ///   as they can't call tools.
     pub fn validate_input(&self, input: &Input) -> Result<(), Error> {
         match &self {
             FunctionConfig::Chat(params) => {
-                FunctionConfig::validate_chat_like_input(
-                    &params.system_schema,
-                    &params.user_schema,
-                    &params.assistant_schema,
+                validate_all_text_input(
+                    params.system_schema.as_ref(),
+                    params.user_schema.as_ref(),
+                    params.assistant_schema.as_ref(),
                     input,
                 )?;
             }
             FunctionConfig::Json(params) => {
-                FunctionConfig::validate_chat_like_input(
-                    &params.system_schema,
-                    &params.user_schema,
-                    &params.assistant_schema,
+                validate_all_text_input(
+                    params.system_schema.as_ref(),
+                    params.user_schema.as_ref(),
+                    params.assistant_schema.as_ref(),
                     input,
                 )?;
             }
         }
-
         Ok(())
     }
 
-    /// Validate an input that is a chat-like function (i.e. chat or tool).
-    /// The validation is done based on the input's role and the function's schemas.
-    fn validate_chat_like_input(
-        system_schema: &Option<JSONSchemaFromPath>,
-        user_schema: &Option<JSONSchemaFromPath>,
-        assistant_schema: &Option<JSONSchemaFromPath>,
-        input: &Input,
-    ) -> Result<(), Error> {
-        match (input.system.as_ref(), system_schema) {
-            (Some(system), Some(ref system_schema)) => system_schema.validate(system),
-            (None, None) => Ok(()),
-            (Some(system), None) => {
-                if system.is_string() {
-                    Ok(())
-                } else {
-                    Err(Error::InvalidMessage { message: "`input.system` has non-string content but there is no schema given for `system`.".to_string() })
+    pub fn prepare_tool_config<'a>(
+        &'a self,
+        dynamic_tool_config: &'a DynamicToolConfig,
+        static_tools: &'a HashMap<String, ToolConfig>,
+    ) -> Result<Option<ToolCallConfig<'a>>, Error> {
+        match self {
+            FunctionConfig::Chat(params) => Ok(Some(ToolCallConfig::new(
+                &params.tools,
+                &params.tool_choice,
+                params.parallel_tool_calls,
+                static_tools,
+                dynamic_tool_config,
+            )?)),
+            FunctionConfig::Json(_) => {
+                if dynamic_tool_config.allowed_tools.is_some() {
+                    return Err(Error::InvalidRequest {
+                        message: "Cannot pass `allowed_tools` to a JSON function.".to_string(),
+                    });
                 }
+                if dynamic_tool_config.additional_tools.is_some() {
+                    return Err(Error::InvalidRequest {
+                        message: "Cannot pass `additional_tools` to a JSON function.".to_string(),
+                    });
+                }
+                if dynamic_tool_config.tool_choice.is_some() {
+                    return Err(Error::InvalidRequest {
+                        message: "Cannot pass `tool_choice` to a JSON function".to_string(),
+                    });
+                }
+                Ok(None)
             }
-            (None, Some(_)) => Err(Error::InvalidMessage {
-                message: "`input.system` is empty but a system template is present.".to_string(),
-            }),
-        }?;
-        for (index, message) in input.messages.iter().enumerate() {
-            match (&message.role, &user_schema, &assistant_schema) {
-                (Role::User, Some(ref user_schema), _) => user_schema.validate(&message.content),
-                (Role::Assistant, _, Some(ref assistant_schema)) => {
-                    assistant_schema.validate(&message.content)
-                }
-                _ => {
-                    if !message.content.is_string() {
-                        return Err(Error::InvalidMessage {
-                            message: format!("Message at index {} has non-string content but there is no schema given for role {}.", index, message.role),
-                        });
-                    } else {
-                        Ok(())
-                    }
-                }
-            }?;
         }
-
-        Ok(())
     }
 
     pub fn load<P: AsRef<Path>>(&mut self, base_path: P) -> Result<(), Error> {
@@ -168,6 +128,83 @@ impl FunctionConfig {
                     .transpose()?;
                 params.output_schema.load(base_path.as_ref())?;
                 Ok(())
+            }
+        }
+    }
+}
+
+/// Validate all input messages that contain text.
+/// The validation is done based on the input's role and the function's schemas.
+/// We first validate the system message (if it exists)
+/// Next we validate all messages containing text blocks.
+/// If there are multiple text blocks in a message we reject.
+fn validate_all_text_input(
+    system_schema: Option<&JSONSchemaFromPath>,
+    user_schema: Option<&JSONSchemaFromPath>,
+    assistant_schema: Option<&JSONSchemaFromPath>,
+    input: &Input,
+) -> Result<(), Error> {
+    match (input.system.as_ref(), system_schema) {
+        // If there is any system message passed we validate it
+        (Some(system), _) => validate_single_message(system, system_schema, None),
+        // If there is no system message and no schema we accept
+        (None, None) => Ok(()),
+        // If no system message is passed and we have a schema we fail
+        (None, Some(_)) => Err(Error::InvalidMessage {
+            message: "`input.system` is empty but a system template is present.".to_string(),
+        }),
+    }?;
+    for (index, message) in input.messages.iter().enumerate() {
+        let mut content: Option<&Value> = None;
+        for block in message.content.iter() {
+            if let InputMessageContent::Text(value) = block {
+                // Throw an error if we have multiple text blocks in a message
+                if content.is_some() {
+                    return Err(Error::InvalidMessage {
+                        message: format!(
+                            "Message at index {index} has multiple text content blocks"
+                        ),
+                    });
+                }
+                content = Some(value);
+            }
+        }
+        if let Some(content) = content {
+            match &message.role {
+                Role::Assistant => validate_single_message(
+                    content,
+                    assistant_schema,
+                    Some((index, &message.role)),
+                )?,
+                Role::User => {
+                    validate_single_message(content, user_schema, Some((index, &message.role)))?
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Validates a single message according to the following rules:
+/// If there is no schema, the message `content` must be a string
+/// Otherwise, the message must contain JSON content that matches the schema
+fn validate_single_message(
+    content: &Value,
+    schema: Option<&JSONSchemaFromPath>,
+    index_role: Option<(usize, &Role)>,
+) -> Result<(), Error> {
+    match schema {
+        Some(ref schema) => schema.validate(content),
+        None => {
+            if content.is_string() {
+                Ok(())
+            } else {
+                Err(match index_role {
+                    Some(index_role) => Error::InvalidMessage {
+                        message: format!("Message at index {} has non-string content but there is no schema given for role {}.", index_role.0, index_role.1),
+                    },
+                    None => Error::InvalidMessage {message:format!("Message has non-string content but there is no schema given for role system.")},
+                })
             }
         }
     }
@@ -257,7 +294,7 @@ fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use crate::{inference::types::InputMessage, variant::ChatCompletionConfig};
+    use crate::inference::types::{ChatCompletionConfig, InputMessage};
 
     use super::*;
     use serde_json::json;

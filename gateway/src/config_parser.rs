@@ -3,11 +3,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::error::Error;
-use crate::function::FunctionConfig;
+use crate::inference::types::{FunctionConfig, VariantConfig};
 use crate::minijinja_util::initialize_templates;
 use crate::model::ModelConfig;
 use crate::tool::ToolConfig;
-use crate::variant::VariantConfig;
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -16,8 +15,10 @@ pub struct Config {
     pub clickhouse: Option<ClickHouseConfig>,
     pub models: HashMap<String, ModelConfig>, // model name => model config
     pub functions: HashMap<String, FunctionConfig>, // function name => function config
-    pub metrics: Option<HashMap<String, MetricConfig>>, // metric name => metric config
-    pub tools: Option<HashMap<String, ToolConfig>>, // tool name => tool config
+    #[serde(default)]
+    pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
+    #[serde(default)]
+    pub tools: HashMap<String, ToolConfig>, // tool name => tool config
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -111,10 +112,8 @@ impl Config {
         for function in self.functions.values_mut() {
             function.load(&base_path)?;
         }
-        if let Some(tools) = self.tools.as_mut() {
-            for tool in tools.values_mut() {
-                tool.load(&base_path)?;
-            }
+        for (name, tool) in self.tools.iter_mut() {
+            tool.load(name.to_string(), &base_path)?;
         }
         Ok(())
     }
@@ -233,14 +232,12 @@ impl Config {
                         }
 
                         // Check that tools that are specified are present
-                        if let Some(tools) = &function.tools {
-                            for tool in tools {
-                                self.get_tool(tool).map_err(|_| {
+                        for tool in &function.tools {
+                            self.get_tool(tool).map_err(|_| {
                                     Error::Config {
                                         message: format!("Invalid Config: `functions.{function_name}.tools`: tool `{tool}` is not present in the config"),
                                     }
                                 })?;
-                            }
                         }
                     }
                     FunctionConfig::Json(function) => {
@@ -298,16 +295,14 @@ impl Config {
         }
 
         // Ensure that no metrics are named "comment" or "demonstration"
-        if let Some(metrics) = &self.metrics {
-            for metric_name in metrics.keys() {
-                if metric_name == "comment" || metric_name == "demonstration" {
-                    return Err(Error::Config {
-                        message: format!(
-                            "Invalid Config: Metric name '{}' is reserved and cannot be used",
-                            metric_name
-                        ),
-                    });
-                }
+        for metric_name in self.metrics.keys() {
+            if metric_name == "comment" || metric_name == "demonstration" {
+                return Err(Error::Config {
+                    message: format!(
+                        "Invalid Config: Metric name '{}' is reserved and cannot be used",
+                        metric_name
+                    ),
+                });
             }
         }
 
@@ -326,8 +321,7 @@ impl Config {
     /// Get a metric by name
     pub fn get_metric<'a>(&'a self, metric_name: &str) -> Result<&'a MetricConfig, Error> {
         self.metrics
-            .as_ref()
-            .and_then(|metrics| metrics.get(metric_name))
+            .get(metric_name)
             .ok_or_else(|| Error::UnknownMetric {
                 name: metric_name.to_string(),
             })
@@ -335,12 +329,9 @@ impl Config {
 
     /// Get a tool by name
     pub fn get_tool<'a>(&'a self, tool_name: &str) -> Result<&'a ToolConfig, Error> {
-        self.tools
-            .as_ref()
-            .and_then(|tools| tools.get(tool_name))
-            .ok_or_else(|| Error::UnknownTool {
-                name: tool_name.to_string(),
-            })
+        self.tools.get(tool_name).ok_or_else(|| Error::UnknownTool {
+            name: tool_name.to_string(),
+        })
     }
 
     /// Get all templates from the config
@@ -376,7 +367,7 @@ impl Config {
 
 #[cfg(test)]
 mod tests {
-    use crate::{function::FunctionConfigChat, variant::ChatCompletionConfig};
+    use crate::inference::types::{ChatCompletionConfig, FunctionConfigChat, VariantConfig};
 
     use super::*;
 

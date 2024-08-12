@@ -1,36 +1,30 @@
 use reqwest::Client;
-use serde::Deserialize;
 use serde_json::Value;
 use std::{collections::HashMap, path::PathBuf};
 use uuid::Uuid;
 
 use crate::error::Error;
 use crate::inference::types::{
-    ChatInferenceResponse, FunctionType, Input, JSONMode, ModelInferenceRequest,
-    ModelInferenceResponseChunk, RequestMessage, Role,
+    ChatInferenceResponse, ContentBlock, FunctionConfig, FunctionType, Input, InputMessageContent,
+    JSONMode, ModelInferenceRequest, ModelInferenceResponseChunk, RequestMessage, Role,
 };
-use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::template_message;
-use crate::tool::ToolChoice;
+use crate::tool::ToolCallConfig;
 use crate::{
-    inference::types::{InferenceResponse, InferenceResponseStream, InputMessage},
+    inference::types::{
+        ChatCompletionConfig, InferenceResponse, InferenceResponseStream, InputMessage,
+        VariantConfig,
+    },
     model::ModelConfig,
 };
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(tag = "type")]
-#[serde(rename_all = "snake_case")]
-#[serde(deny_unknown_fields)]
-pub enum VariantConfig {
-    ChatCompletion(ChatCompletionConfig),
-}
 
 pub trait Variant {
     async fn infer(
         &self,
         input: &Input,
         models: &HashMap<String, ModelConfig>,
-        output_schema: Option<&JSONSchemaFromPath>,
+        function: &FunctionConfig,
+        tool_config: Option<&ToolCallConfig>,
         client: &Client,
     ) -> Result<InferenceResponse, Error>;
 
@@ -38,7 +32,8 @@ pub trait Variant {
         &self,
         input: &Input,
         models: &HashMap<String, ModelConfig>,
-        output_schema: Option<&JSONSchemaFromPath>,
+        function: &FunctionConfig,
+        tool_config: Option<&ToolCallConfig>,
         client: &Client,
     ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error>;
 }
@@ -69,45 +64,39 @@ impl VariantConfig {
 }
 
 impl Variant for VariantConfig {
-    async fn infer(
+    async fn infer<'a>(
         &self,
         input: &Input,
         models: &HashMap<String, ModelConfig>,
-        output_schema: Option<&JSONSchemaFromPath>,
+        function: &FunctionConfig,
+        tool_config: Option<&ToolCallConfig<'a>>,
         client: &Client,
     ) -> Result<InferenceResponse, Error> {
         match self {
             VariantConfig::ChatCompletion(params) => {
-                params.infer(input, models, output_schema, client).await
+                params
+                    .infer(input, models, function, tool_config, client)
+                    .await
             }
         }
     }
 
-    async fn infer_stream(
+    async fn infer_stream<'a>(
         &self,
         input: &Input,
         models: &HashMap<String, ModelConfig>,
-        output_schema: Option<&JSONSchemaFromPath>,
+        function: &FunctionConfig,
+        tool_config: Option<&ToolCallConfig<'a>>,
         client: &Client,
     ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
         match self {
             VariantConfig::ChatCompletion(params) => {
                 params
-                    .infer_stream(input, models, output_schema, client)
+                    .infer_stream(input, models, function, tool_config, client)
                     .await
             }
         }
     }
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ChatCompletionConfig {
-    pub weight: f64,
-    pub model: String, // TODO (#85): validate that this model exists in the model config
-    pub system_template: Option<PathBuf>,
-    pub user_template: Option<PathBuf>,
-    pub assistant_template: Option<PathBuf>,
 }
 
 impl ChatCompletionConfig {
@@ -116,19 +105,32 @@ impl ChatCompletionConfig {
             Role::User => self.user_template.as_ref(),
             Role::Assistant => self.assistant_template.as_ref(),
         };
-        let content = match template_path {
-            Some(template_path) => template_message(
-                template_path.to_str().ok_or(Error::InvalidTemplatePath)?,
-                &message.content,
-            )?,
-            None => {
-                // If there is no template, we assume the `content` is a raw string
-                message.content.as_str().ok_or(Error::InvalidMessage{ message: format!("Request message content {} is not a string but there is no variant template for Role {}", message.content, message.role) })?.to_string()
+        let mut content = Vec::new();
+        for block in message.content.iter() {
+            match block {
+                InputMessageContent::Text(text) => {
+                    let text_content= match template_path {
+                        Some(template_path) => template_message(
+                            template_path.to_str().ok_or(Error::InvalidTemplatePath)?,
+                            &text,
+                        )?,
+                        None => text.as_str().ok_or(Error::InvalidMessage { message: format!("Request message content {} is not a string but there is no variant template for Role {}", text, message.role) })?.to_string(),
+                    };
+                    content.push(text_content.into());
+                }
+                // The following two clones are probably removable.
+                // We will need to implement a ToolCallRef type or something so that we can avoid cloning the ToolCall and ToolResult.
+                InputMessageContent::ToolCall(tool_call) => {
+                    content.push(ContentBlock::ToolCall(tool_call.clone()));
+                }
+                InputMessageContent::ToolResult(tool_result) => {
+                    content.push(ContentBlock::ToolResult(tool_result.clone()));
+                }
             }
-        };
+        }
         Ok(RequestMessage {
             role: message.role,
-            content: vec![content.into()],
+            content,
         })
     }
 
@@ -151,11 +153,12 @@ impl ChatCompletionConfig {
 }
 
 impl Variant for ChatCompletionConfig {
-    async fn infer(
+    async fn infer<'a>(
         &self,
         input: &Input,
         models: &HashMap<String, ModelConfig>,
-        output_schema: Option<&JSONSchemaFromPath>,
+        function: &FunctionConfig,
+        tool_config: Option<&ToolCallConfig<'a>>,
         client: &Client,
     ) -> Result<InferenceResponse, Error> {
         let messages = input
@@ -168,26 +171,33 @@ impl Variant for ChatCompletionConfig {
             .as_ref()
             .map(|system| self.prepare_system_message(system))
             .transpose()?;
-        let output_schema_value = match output_schema {
-            // We want this block to throw an error if somehow the jsonschema is missing
-            // but return None if the output schema is not provided.
-            Some(s) => Some(s.value()?),
-            None => None,
-        };
-        let tool_choice = ToolChoice::None;
-        let request = ModelInferenceRequest {
-            messages,
-            system,
-            tools_available: None,
-            tool_choice: tool_choice.clone(),
-            parallel_tool_calls: None,
-            temperature: None,
-            max_tokens: None,
-            stream: false,
-            // TODO (#99): add support for JSON mode
-            json_mode: JSONMode::Off,
-            function_type: FunctionType::Chat,
-            output_schema: output_schema_value,
+        let request = match function {
+            FunctionConfig::Chat(_) => ModelInferenceRequest {
+                messages,
+                system,
+                tool_config,
+                temperature: None,
+                max_tokens: None,
+                stream: false,
+                json_mode: JSONMode::Off,
+                function_type: FunctionType::Chat,
+                output_schema: None,
+            },
+            FunctionConfig::Json(_) => ModelInferenceRequest {
+                messages,
+                system,
+                tool_config: None,
+                temperature: None,
+                max_tokens: None,
+                stream: false,
+                json_mode: JSONMode::Off,
+                function_type: FunctionType::Json,
+                output_schema: None,
+            }, // TODO (#30): do JSON mode properly
+
+               // We want this block to throw an error if somehow the jsonschema is missing
+               // but return None if the output schema is not provided.
+               // FunctionConfig::Json(json_function) => Some(json_function.output_schema.value()?),
         };
         let model_config = models.get(&self.model).ok_or(Error::ModelNotFound {
             model: self.model.clone(),
@@ -199,21 +209,22 @@ impl Variant for ChatCompletionConfig {
         let raw_content = model_inference_response.content.clone();
         let usage = model_inference_response.usage.clone();
         let model_inference_responses = vec![model_inference_response];
+        let output_schema = function.output_schema();
         Ok(InferenceResponse::Chat(ChatInferenceResponse::new(
             inference_id,
             raw_content,
             usage,
             model_inference_responses,
             output_schema,
-            tool_choice,
         )))
     }
 
-    async fn infer_stream(
+    async fn infer_stream<'a>(
         &self,
         input: &Input,
         models: &HashMap<String, ModelConfig>,
-        output_schema: Option<&JSONSchemaFromPath>,
+        function: &FunctionConfig,
+        tool_config: Option<&ToolCallConfig<'a>>,
         client: &Client,
     ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
         let messages = input
@@ -226,24 +237,33 @@ impl Variant for ChatCompletionConfig {
             .as_ref()
             .map(|system| self.prepare_system_message(system))
             .transpose()?;
-        let output_schema_value = match output_schema {
-            // As above, we want this block to throw an error if somehow the jsonschema is missing
-            // but return None if the output schema is not provided
-            Some(s) => Some(s.value()?),
-            None => None,
-        };
-        let request = ModelInferenceRequest {
-            messages,
-            system,
-            tools_available: None,
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
-            temperature: None,
-            max_tokens: None,
-            stream: true,
-            json_mode: JSONMode::Off,
-            function_type: FunctionType::Chat,
-            output_schema: output_schema_value,
+        let request = match function {
+            FunctionConfig::Chat(_) => ModelInferenceRequest {
+                messages,
+                system,
+                tool_config,
+                temperature: None,
+                max_tokens: None,
+                stream: true,
+                json_mode: JSONMode::Off,
+                function_type: FunctionType::Chat,
+                output_schema: None,
+            },
+            FunctionConfig::Json(_) => ModelInferenceRequest {
+                messages,
+                system,
+                tool_config: None,
+                temperature: None,
+                max_tokens: None,
+                stream: true,
+                json_mode: JSONMode::Off,
+                function_type: FunctionType::Json,
+                output_schema: None,
+            }, // TODO (#30): do JSON mode properly
+
+               // We want this block to throw an error if somehow the jsonschema is missing
+               // but return None if the output schema is not provided.
+               // FunctionConfig::Json(json_function) => Some(json_function.output_schema.value()?),
         };
         let model_config = models.get(&self.model).ok_or(Error::ModelNotFound {
             model: self.model.clone(),
