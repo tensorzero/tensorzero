@@ -29,18 +29,33 @@ pub fn create_simple_inference_request<'a>() -> ModelInferenceRequest<'a> {
 pub fn create_json_inference_request<'a>() -> ModelInferenceRequest<'a> {
     let messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["Is Santa Clause real? be brief".to_string().into()],
+        content: vec!["Is Santa Clause real? Be concise.".to_string().into()],
     }];
-    let system = Some("You are a helpful but mischevious assistant who returns in the JSON form {\"thinking\": \"...\", \"answer\": \"...\"}".to_string());
+    let system = Some(
+        r#"\
+        # Instructions\n\
+        You are a helpful but mischevious assistant who returns in the JSON form {"honest_answer": "...", "mischevious_answer": "..."}.\n\
+        \n\
+        # Examples\n\
+        \n\
+        {"honest_answer": "Yes.", "mischevious_answer": "No way."}\n\
+        \n\
+        {"honest_answer": "No.", "mischevious_answer": "Of course!"}\n\
+        \n\
+        {"honest_answer": "No idea.", "mischevious_answer": "Definitely."}\n\
+        \n\
+        {"honest_answer": "Frequently.", "mischevious_answer": "Never."}\n\
+        "#.into(),
+    );
     let max_tokens = Some(400);
     let temperature = Some(1.);
     let output_schema = json!({
         "type": "object",
         "properties": {
-            "thinking": {"type": "string"},
-            "answer": {"type": "string"}
+            "honest_answer": {"type": "string"},
+            "mischevious_answer": {"type": "string"}
         },
-        "required": ["thinking", "answer"]
+        "required": ["honest_answer", "mischevious_answer"]
     });
     ModelInferenceRequest {
         messages,

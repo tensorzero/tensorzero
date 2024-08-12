@@ -119,9 +119,11 @@ async fn test_json_request() {
     match content {
         ContentBlock::Text(Text { text }) => {
             // parse the result text and see if it matches the output schema
-            let result_json: serde_json::Value = serde_json::from_str(text).unwrap();
-            assert!(result_json.get("thinking").is_some());
-            assert!(result_json.get("answer").is_some());
+            let result_json: serde_json::Value = serde_json::from_str(text)
+                .map_err(|_| format!(r#"Failed to parse JSON: "{text}""#))
+                .unwrap();
+            assert!(result_json.get("honest_answer").is_some());
+            assert!(result_json.get("mischevious_answer").is_some());
         }
         _ => unreachable!(),
     }

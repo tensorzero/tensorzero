@@ -1,9 +1,14 @@
+use aws_config::meta::region::RegionProviderChain;
 use aws_sdk_bedrockruntime::operation::converse::ConverseOutput;
 use aws_sdk_bedrockruntime::types::{
     ContentBlock as BedrockContentBlock, ConversationRole, ConverseOutput as ConverseOutputType,
     InferenceConfiguration, Message, SystemContentBlock,
 };
-use tokio::sync::OnceCell;
+use aws_smithy_types::error::display::DisplayErrorContext;
+use aws_types::region::Region;
+use dashmap::{DashMap, Entry as DashMapEntry};
+use lazy_static::lazy_static;
+use reqwest::StatusCode;
 use tokio::time::Instant;
 
 use crate::error::Error;
@@ -13,22 +18,55 @@ use crate::inference::types::{
     ModelInferenceResponseChunk, RequestMessage, Role, Text, Usage,
 };
 
-static AWS_BEDROCK_CLIENT: OnceCell<aws_sdk_bedrockruntime::Client> = OnceCell::const_new();
+lazy_static! {
+     /// NOTE: The AWS client is thread-safe but not safe across Tokio runtimes. By default, `tokio::test`
+     /// spawns a new runtime for each test, causing intermittent issues with the AWS client. For tests,
+     /// use a shared runtime like in our integration tests. This isn't an issue when running the gateway
+     /// normally since that uses a single runtime.
+    static ref AWS_BEDROCK_CLIENTS: DashMap<Region, &'static aws_sdk_bedrockruntime::Client> = DashMap::new();
+}
 
-async fn get_aws_bedrock_client() -> &'static aws_sdk_bedrockruntime::Client {
-    // TODO (#73): we should be able to customize the region per model provider => will require a client per region
-
-    AWS_BEDROCK_CLIENT
-        .get_or_init(|| async {
-            let config = aws_config::load_from_env().await;
-            aws_sdk_bedrockruntime::Client::new(&config)
-        })
+async fn get_aws_bedrock_client(
+    region: Option<Region>,
+) -> Result<&'static aws_sdk_bedrockruntime::Client, Error> {
+    // Decide which AWS region to use. We try the following in order:
+    // - The provided `region` argument
+    // - The region defined by the credentials (e.g. `AWS_REGION` environment variable)
+    // - The default region (us-east-1)
+    let region = RegionProviderChain::first_try(region)
+        .or_default_provider()
+        .or_else(Region::new("us-east-1"))
+        .region()
         .await
+        .ok_or(Error::AWSBedrockClient {
+            status_code: StatusCode::INTERNAL_SERVER_ERROR,
+            message: "Failed to determine AWS region.".to_string(),
+        })?;
+
+    let client: &aws_sdk_bedrockruntime::Client = match AWS_BEDROCK_CLIENTS.entry(region) {
+        DashMapEntry::Occupied(entry) => entry.get(),
+        DashMapEntry::Vacant(entry) => {
+            tracing::trace!(
+                "Creating new AWS Bedrock client for region: {}",
+                entry.key()
+            );
+            let config = aws_config::from_env()
+                .region(entry.key().clone())
+                .load()
+                .await;
+            let client = Box::leak(Box::new(aws_sdk_bedrockruntime::Client::new(&config)));
+            entry.insert(client);
+            client
+        }
+    };
+
+    Ok(client)
 }
 
 #[derive(Clone, Debug)]
 pub struct AWSBedrockProvider {
     pub model_id: String,
+    pub region: Option<Region>,
 }
 
 impl InferenceProvider for AWSBedrockProvider {
@@ -37,7 +75,7 @@ impl InferenceProvider for AWSBedrockProvider {
         request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
     ) -> Result<ModelInferenceResponse, Error> {
-        let aws_bedrock_client = get_aws_bedrock_client().await;
+        let aws_bedrock_client = get_aws_bedrock_client(self.region.clone()).await?;
 
         // TODO (#55): add support for guardrails and additional fields
 
@@ -69,14 +107,17 @@ impl InferenceProvider for AWSBedrockProvider {
 
         // TODO (#18, #30): .tool_config(...)
 
-        // TODO (#88): add more granularity to error handling
         let start_time = Instant::now();
         let output = bedrock_request
             .send()
             .await
             .map_err(|e| Error::AWSBedrockServer {
-                message: e.to_string(),
+                message: format!(
+                    "Error sending request to AWS Bedrock: {}",
+                    DisplayErrorContext(&e)
+                ),
             })?;
+
         let latency = Latency::NonStreaming {
             response_time: start_time.elapsed(),
         };
@@ -198,5 +239,78 @@ impl TryFrom<ConverseOutputWithLatency> for ModelInferenceResponse {
         };
 
         Ok(ModelInferenceResponse::new(content, raw, usage, latency))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use tracing_test::traced_test;
+
+    #[tokio::test]
+    async fn test_get_aws_bedrock_client() {
+        #[traced_test]
+        async fn first_run() {
+            get_aws_bedrock_client(Some(Region::new("uk-hogwarts-1")))
+                .await
+                .unwrap();
+
+            assert!(logs_contain(
+                "Creating new AWS Bedrock client for region: uk-hogwarts-1"
+            ));
+        }
+
+        #[traced_test]
+        async fn second_run() {
+            get_aws_bedrock_client(Some(Region::new("uk-hogwarts-1")))
+                .await
+                .unwrap();
+
+            assert!(!logs_contain(
+                "Creating new AWS Bedrock client for region: uk-hogwarts-1"
+            ));
+        }
+
+        #[traced_test]
+        async fn third_run() {
+            get_aws_bedrock_client(None).await.unwrap();
+        }
+
+        #[traced_test]
+        async fn fourth_run() {
+            get_aws_bedrock_client(Some(Region::new("me-shire-2")))
+                .await
+                .unwrap();
+
+            assert!(logs_contain(
+                "Creating new AWS Bedrock client for region: me-shire-2"
+            ));
+        }
+
+        #[traced_test]
+        async fn fifth_run() {
+            get_aws_bedrock_client(None).await.unwrap();
+
+            assert!(!logs_contain("Creating new AWS Bedrock client for region:"));
+        }
+
+        // First call ("uk-hogwarts-1") should trigger client creation
+        first_run().await;
+
+        // Second call ("uk-hogwarts-1") should not trigger client creation
+        second_run().await;
+
+        // Third call (None) is unclear: we also can't guarantee that it will create a provider because another test might have already created it.
+        third_run().await;
+
+        // Fourth call ("me-shire-2") should trigger client creation
+        fourth_run().await;
+
+        // Fifth call (None) should not trigger client creation
+        fifth_run().await;
+
+        // NOTE: There isn't an easy way to test the fallback between the default provider and the last-resort fallback region.
+        // We can only test that the method returns either of these regions when an explicit region is not provided.
     }
 }
