@@ -275,8 +275,9 @@ mod tests {
             DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW, DUMMY_INFER_USAGE,
             DUMMY_STREAMING_RESPONSE,
         },
-        types::{ContentBlockChunk, FunctionType, JSONMode, TextChunk, ToolChoice},
+        types::{ContentBlockChunk, FunctionType, JSONMode, TextChunk},
     };
+    use crate::tool::ToolChoice;
     use tokio_stream::StreamExt;
     use tracing_test::traced_test;
 

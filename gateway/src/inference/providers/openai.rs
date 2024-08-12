@@ -15,8 +15,9 @@ use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, InferenceResponseStream, JSONMode, Latency,
     ModelInferenceRequest, ModelInferenceResponse, ModelInferenceResponseChunk, RequestMessage,
-    Role, Text, TextChunk, Tool, ToolCall, ToolCallChunk, ToolChoice, Usage,
+    Role, Text, TextChunk, Usage,
 };
+use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice};
 
 const OPENAI_DEFAULT_BASE_URL: &str = "https://api.openai.com/v1/";
 
@@ -715,7 +716,7 @@ fn openai_to_tensorzero_chunk(
 mod tests {
     use serde_json::json;
 
-    use crate::inference::types::{FunctionType, Tool};
+    use crate::inference::types::FunctionType;
 
     use super::*;
 

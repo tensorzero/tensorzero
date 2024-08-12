@@ -1,6 +1,7 @@
 use gateway::inference::types::{
-    FunctionType, JSONMode, ModelInferenceRequest, RequestMessage, Role, Tool, ToolChoice,
+    FunctionType, JSONMode, ModelInferenceRequest, RequestMessage, Role,
 };
+use gateway::tool::{Tool, ToolChoice};
 use serde_json::json;
 
 pub fn create_simple_inference_request<'a>() -> ModelInferenceRequest<'a> {

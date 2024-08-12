@@ -13,9 +13,9 @@ use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{ContentBlock, ContentBlockChunk, Latency, Role, Text};
 use crate::inference::types::{
     InferenceResponseStream, ModelInferenceRequest, ModelInferenceResponse,
-    ModelInferenceResponseChunk, RequestMessage, TextChunk, Tool, ToolCall, ToolCallChunk,
-    ToolChoice, Usage,
+    ModelInferenceResponseChunk, RequestMessage, TextChunk, Usage,
 };
+use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice};
 
 const ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
@@ -736,7 +736,8 @@ mod tests {
 
     use serde_json::json;
 
-    use crate::inference::types::{FunctionType, JSONMode, Tool, ToolResult};
+    use crate::inference::types::{FunctionType, JSONMode};
+    use crate::tool::{Tool, ToolResult};
 
     #[test]
     fn test_try_from_tool_choice() {

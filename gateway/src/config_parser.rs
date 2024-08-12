@@ -779,6 +779,7 @@ mod tests {
             user_schema: None,
             assistant_schema: None,
             tools: None,
+            ..Default::default()
         };
 
         // Create the new function

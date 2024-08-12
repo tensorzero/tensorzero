@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::error::Error;
 use crate::inference::types::{Input, Role};
 use crate::jsonschema_util::JSONSchemaFromPath;
+use crate::tool::ToolChoice;
 use crate::variant::VariantConfig;
 
 #[derive(Clone, Debug, Deserialize)]
@@ -35,7 +36,7 @@ impl FunctionConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FunctionConfigChat {
     pub variants: HashMap<String, VariantConfig>, // variant name => variant config
@@ -43,6 +44,8 @@ pub struct FunctionConfigChat {
     pub user_schema: Option<JSONSchemaFromPath>,
     pub assistant_schema: Option<JSONSchemaFromPath>,
     pub tools: Option<Vec<String>>, // tool names
+    #[serde(default)]
+    pub tool_choice: ToolChoice,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -291,6 +294,7 @@ mod tests {
             user_schema: None,
             assistant_schema: None,
             tools: None,
+            ..Default::default()
         };
         let function_config = FunctionConfig::Chat(chat_config);
 
@@ -345,6 +349,7 @@ mod tests {
             user_schema: None,
             assistant_schema: None,
             tools: None,
+            ..Default::default()
         };
         let function_config = FunctionConfig::Chat(chat_config);
 
@@ -400,6 +405,7 @@ mod tests {
             user_schema: Some(user_schema.clone()),
             assistant_schema: None,
             tools: None,
+            ..Default::default()
         };
         let function_config = FunctionConfig::Chat(chat_config);
 
@@ -455,6 +461,7 @@ mod tests {
             user_schema: None,
             assistant_schema: Some(assistant_schema.clone()),
             tools: None,
+            ..Default::default()
         };
         let function_config = FunctionConfig::Chat(chat_config);
 
@@ -512,6 +519,7 @@ mod tests {
             user_schema: Some(user_schema),
             assistant_schema: Some(assistant_schema),
             tools: None,
+            ..Default::default()
         };
         let function_config = FunctionConfig::Chat(chat_config);
 

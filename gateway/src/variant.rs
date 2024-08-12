@@ -7,10 +7,11 @@ use uuid::Uuid;
 use crate::error::Error;
 use crate::inference::types::{
     ChatInferenceResponse, FunctionType, Input, JSONMode, ModelInferenceRequest,
-    ModelInferenceResponseChunk, RequestMessage, Role, ToolChoice,
+    ModelInferenceResponseChunk, RequestMessage, Role,
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::template_message;
+use crate::tool::ToolChoice;
 use crate::{
     inference::types::{InferenceResponse, InferenceResponseStream, InputMessage},
     model::ModelConfig,

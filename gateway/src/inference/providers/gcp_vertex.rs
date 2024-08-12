@@ -14,8 +14,9 @@ use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{ContentBlock, ContentBlockChunk, Latency, Role, Text, TextChunk};
 use crate::inference::types::{
     InferenceResponseStream, ModelInferenceRequest, ModelInferenceResponse,
-    ModelInferenceResponseChunk, RequestMessage, Tool, ToolCall, ToolChoice, Usage,
+    ModelInferenceResponseChunk, RequestMessage, Usage,
 };
+use crate::tool::{Tool, ToolCall, ToolChoice};
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
@@ -720,7 +721,8 @@ fn handle_gcp_vertex_gemini_error(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::inference::types::{FunctionType, JSONMode, Tool, ToolResult};
+    use crate::inference::types::{FunctionType, JSONMode};
+    use crate::tool::{Tool, ToolResult};
 
     #[test]
     fn test_gcp_vertex_content_try_from() {

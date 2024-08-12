@@ -207,8 +207,9 @@ mod tests {
 
     use crate::inference::{
         providers::openai::OpenAIToolChoiceString,
-        types::{FunctionType, RequestMessage, Role, Tool, ToolChoice},
+        types::{FunctionType, RequestMessage, Role},
     };
+    use crate::tool::{Tool, ToolChoice};
 
     #[test]
     fn test_fireworks_request_new() {

@@ -17,8 +17,9 @@ use crate::function::{sample_variant, FunctionConfig};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
     collect_chunks, Inference, InferenceResponse, InferenceResponseChunk, InferenceResponseStream,
-    InferenceResponseWithOutputSchema, Input, ModelInferenceResponseChunk, ToolChoice,
+    InferenceResponseWithOutputSchema, Input, ModelInferenceResponseChunk,
 };
+use crate::tool::ToolChoice;
 use crate::uuid_util::validate_episode_id;
 use crate::variant::Variant;
 
@@ -379,6 +380,7 @@ mod tests {
             user_schema: None,
             assistant_schema: None,
             tools: None,
+            ..Default::default()
         });
         let inference_metadata = InferenceMetadata {
             function_name: "test_function".to_string(),

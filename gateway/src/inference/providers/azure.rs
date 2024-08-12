@@ -199,8 +199,9 @@ mod tests {
 
     use crate::inference::{
         providers::openai::OpenAIToolChoiceString,
-        types::{FunctionType, JSONMode, RequestMessage, Role, Tool, ToolChoice},
+        types::{FunctionType, JSONMode, RequestMessage, Role},
     };
+    use crate::tool::{Tool, ToolChoice};
 
     #[test]
     fn test_azure_request_new() {
