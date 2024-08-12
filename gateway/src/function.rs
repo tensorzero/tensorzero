@@ -15,7 +15,7 @@ use crate::variant::VariantConfig;
 #[serde(deny_unknown_fields)]
 pub enum FunctionConfig {
     Chat(FunctionConfigChat),
-    Json(FunctionConfigJSON),
+    Json(FunctionConfigJson),
 }
 
 impl FunctionConfig {
@@ -26,6 +26,7 @@ impl FunctionConfig {
         }
     }
 
+    // TODO (viraj): rip this in the next PR
     pub fn output_schema(&self) -> Option<&JSONSchemaFromPath> {
         match self {
             FunctionConfig::Chat(_) => None,
@@ -46,7 +47,7 @@ pub struct FunctionConfigChat {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct FunctionConfigJSON {
+pub struct FunctionConfigJson {
     pub variants: HashMap<String, VariantConfig>, // variant name => variant config
     pub system_schema: Option<JSONSchemaFromPath>,
     pub user_schema: Option<JSONSchemaFromPath>,
@@ -561,7 +562,7 @@ mod tests {
 
     #[test]
     fn test_validate_input_json_no_schema() {
-        let tool_config = FunctionConfigJSON {
+        let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: None,
@@ -616,7 +617,7 @@ mod tests {
     #[test]
     fn test_validate_input_json_system_schema() {
         let system_schema = create_test_schema();
-        let tool_config = FunctionConfigJSON {
+        let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: Some(system_schema.clone()),
             user_schema: None,
@@ -673,7 +674,7 @@ mod tests {
     #[test]
     fn test_validate_input_json_user_schema() {
         let user_schema = create_test_schema();
-        let tool_config = FunctionConfigJSON {
+        let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: Some(user_schema.clone()),
@@ -729,7 +730,7 @@ mod tests {
     #[test]
     fn test_validate_input_json_assistant_schema() {
         let assistant_schema = create_test_schema();
-        let tool_config = FunctionConfigJSON {
+        let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: None,
@@ -786,7 +787,7 @@ mod tests {
         let system_schema = create_test_schema();
         let user_schema = create_test_schema();
         let assistant_schema = create_test_schema();
-        let tool_config = FunctionConfigJSON {
+        let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: Some(system_schema.clone()),
             user_schema: Some(user_schema),

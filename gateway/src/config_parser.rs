@@ -235,16 +235,11 @@ impl Config {
                         // Check that tools that are specified are present
                         if let Some(tools) = &function.tools {
                             for tool in tools {
-                                if self
-                                    .tools
-                                    .as_ref()
-                                    .and_then(|tools| tools.get(tool))
-                                    .is_none()
-                                {
-                                    return Err(Error::Config {
+                                self.get_tool(tool).map_err(|_| {
+                                    Error::Config {
                                         message: format!("Invalid Config: `functions.{function_name}.tools`: tool `{tool}` is not present in the config"),
-                                    });
-                                }
+                                    }
+                                })?;
                             }
                         }
                     }
