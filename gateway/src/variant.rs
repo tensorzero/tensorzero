@@ -108,7 +108,7 @@ impl ChatCompletionConfig {
         let mut content = Vec::new();
         for block in message.content.iter() {
             match block {
-                InputMessageContent::Text(text) => {
+                InputMessageContent::Text { value: text } => {
                     let text_content= match template_path {
                         Some(template_path) => template_message(
                             template_path.to_str().ok_or(Error::InvalidTemplatePath)?,

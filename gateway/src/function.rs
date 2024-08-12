@@ -157,7 +157,7 @@ fn validate_all_text_input(
     for (index, message) in input.messages.iter().enumerate() {
         let mut content: Option<&Value> = None;
         for block in message.content.iter() {
-            if let InputMessageContent::Text(value) = block {
+            if let InputMessageContent::Text { value } = block {
                 // Throw an error if we have multiple text blocks in a message
                 if content.is_some() {
                     return Err(Error::InvalidMessage {

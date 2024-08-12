@@ -1,6 +1,6 @@
 use derive_builder::Builder;
 use futures::Stream;
-use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
+use serde::{ser::SerializeStruct, Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 use std::{
     collections::HashMap,
@@ -27,7 +27,7 @@ pub struct Input {
 
 /// InputMessage and Role are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct InputMessage {
     pub role: Role,
@@ -35,25 +35,12 @@ pub struct InputMessage {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum InputMessageContent {
-    Text(Value),
+    Text { value: Value },
     ToolCall(ToolCall),
     ToolResult(ToolResult),
     // We may extend this in the future to include other types of content
-}
-
-#[cfg(test)]
-impl From<String> for InputMessageContent {
-    fn from(text: String) -> Self {
-        InputMessageContent::Text(Value::String(text))
-    }
-}
-
-impl From<Value> for InputMessageContent {
-    fn from(value: Value) -> Self {
-        InputMessageContent::Text(value)
-    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
@@ -253,6 +240,57 @@ pub struct ModelInference {
     pub output_tokens: u32,
     pub response_time_ms: u32,
     pub ttft_ms: Option<u32>,
+}
+
+#[cfg(test)]
+impl From<String> for InputMessageContent {
+    fn from(text: String) -> Self {
+        InputMessageContent::Text {
+            value: Value::String(text),
+        }
+    }
+}
+
+impl From<Value> for InputMessageContent {
+    fn from(value: Value) -> Self {
+        InputMessageContent::Text { value }
+    }
+}
+
+impl<'de> Deserialize<'de> for InputMessage {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct Helper {
+            role: Role,
+            content: ContentHelper,
+        }
+
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum ContentHelper {
+            Single(String),
+            Multiple(Vec<InputMessageContent>),
+        }
+
+        let helper = Helper::deserialize(deserializer)?;
+
+        let content = match helper.content {
+            ContentHelper::Single(text) => {
+                vec![InputMessageContent::Text {
+                    value: Value::String(text),
+                }]
+            }
+            ContentHelper::Multiple(content) => content,
+        };
+
+        Ok(InputMessage {
+            role: helper.role,
+            content,
+        })
+    }
 }
 
 impl fmt::Display for Role {
