@@ -4,7 +4,7 @@ use serde::de::DeserializeOwned;
 use tracing::instrument;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::config_parser::CONFIG;
+use crate::config_parser::get_config;
 use crate::error::Error;
 
 /// State for the API
@@ -21,7 +21,7 @@ impl AppStateData {
             message: "Missing environment variable CLICKHOUSE_URL".to_string(),
         })?;
 
-        let database = CONFIG
+        let database = get_config()
             .clickhouse
             .as_ref()
             .map(|ch| ch.database.clone())

@@ -6,7 +6,7 @@ use std::time::Duration;
 use tokio::signal;
 
 use gateway::clickhouse_migration_manager;
-use gateway::config_parser::CONFIG;
+use gateway::config_parser::get_config;
 use gateway::endpoints;
 use gateway::gateway_util;
 use gateway::observability;
@@ -18,7 +18,7 @@ async fn main() {
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
 
     // Load config
-    println!("Configuration loaded: {:?}", *CONFIG);
+    let config = get_config();
 
     let app_state =
         gateway_util::AppStateData::new().expect_pretty("Failed to initialize AppState");
@@ -40,7 +40,7 @@ async fn main() {
         .with_state(app_state);
 
     // Bind to the socket address specified in the config, or default to 0.0.0.0:3000
-    let bind_address = CONFIG
+    let bind_address = config
         .gateway
         .as_ref()
         .and_then(|gateway_config| gateway_config.bind_address)

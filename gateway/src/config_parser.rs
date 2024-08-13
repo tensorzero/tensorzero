@@ -1,7 +1,7 @@
-use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use crate::error::Error;
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
@@ -11,11 +11,11 @@ use crate::model::ModelConfig;
 use crate::tool::ToolConfig;
 use crate::variant::VariantConfig;
 
-lazy_static! {
-    pub static ref CONFIG: Config = {
-        #[allow(clippy::expect_used)]
-        load().expect("Failed to load configuration")
-    };
+static CONFIG: OnceLock<Config> = OnceLock::new();
+
+pub fn get_config() -> &'static Config {
+    #[allow(clippy::expect_used)]
+    CONFIG.get_or_init(|| Config::load().expect("Failed to load configuration"))
 }
 
 #[derive(Debug)]
@@ -69,46 +69,6 @@ pub enum MetricConfigLevel {
     Episode,
 }
 
-pub fn load() -> Result<Config, Error> {
-    let config_path = ConfigDeserialized::get_config_path();
-    let config_table = ConfigDeserialized::read_toml_config(&config_path)?;
-    let base_path = match PathBuf::from(&config_path).parent() {
-        Some(base_path) => base_path.to_path_buf(),
-        None => {
-            return Err(Error::Config {
-                message: format!("Failed to get parent directory of config file: {config_path}"),
-            })
-        }
-    };
-    let config = load_from_toml(config_table, &base_path)?;
-    initialize_templates(config.get_templates(&base_path))?;
-    Ok(config)
-}
-
-fn load_from_toml(table: toml::Table, base_path: &PathBuf) -> Result<Config, Error> {
-    let config = ConfigDeserialized::try_from(table)?;
-    let functions = config
-        .functions
-        .into_iter()
-        .map(|(name, config)| config.load(base_path).map(|c| (name, c)))
-        .collect::<Result<HashMap<String, FunctionConfig>, Error>>()?;
-    let tools = config
-        .tools
-        .into_iter()
-        .map(|(name, config)| config.load(base_path).map(|c| (name, c)))
-        .collect::<Result<HashMap<String, ToolConfig>, Error>>()?;
-    let config = Config {
-        gateway: config.gateway,
-        clickhouse: config.clickhouse,
-        models: config.models,
-        functions,
-        metrics: config.metrics,
-        tools,
-    };
-    config.validate()?;
-    Ok(config)
-}
-
 impl std::fmt::Display for MetricConfigLevel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let serialized = serde_json::to_string(self).map_err(|_| std::fmt::Error)?;
@@ -118,6 +78,48 @@ impl std::fmt::Display for MetricConfigLevel {
 }
 
 impl Config {
+    fn load() -> Result<Config, Error> {
+        let config_path = UninitializedConfig::get_config_path();
+        let config_table = UninitializedConfig::read_toml_config(&config_path)?;
+        let base_path = match PathBuf::from(&config_path).parent() {
+            Some(base_path) => base_path.to_path_buf(),
+            None => {
+                return Err(Error::Config {
+                    message: format!(
+                        "Failed to get parent directory of config file: {config_path}"
+                    ),
+                })
+            }
+        };
+        let config = Self::load_from_toml(config_table, &base_path)?;
+        initialize_templates(config.get_templates(&base_path))?;
+        Ok(config)
+    }
+
+    fn load_from_toml(table: toml::Table, base_path: &PathBuf) -> Result<Config, Error> {
+        let config = UninitializedConfig::try_from(table)?;
+        let functions = config
+            .functions
+            .into_iter()
+            .map(|(name, config)| config.load(base_path).map(|c| (name, c)))
+            .collect::<Result<HashMap<String, FunctionConfig>, Error>>()?;
+        let tools = config
+            .tools
+            .into_iter()
+            .map(|(name, config)| config.load(base_path).map(|c| (name, c)))
+            .collect::<Result<HashMap<String, ToolConfig>, Error>>()?;
+        let config = Config {
+            gateway: config.gateway,
+            clickhouse: config.clickhouse,
+            models: config.models,
+            functions,
+            metrics: config.metrics,
+            tools,
+        };
+        config.validate()?;
+        Ok(config)
+    }
+
     /// Validate the config
     fn validate(&self) -> Result<(), Error> {
         // Validate each model
@@ -351,24 +353,29 @@ impl Config {
     }
 }
 
+/// This struct is used to deserialize the TOML config file
+/// It does not contain the information that needs to be loaded from the filesystem
+/// such as the JSON schemas for the functions and tools.
+/// If should be used as part of the `Config::load` method only.
+///
+/// This allows us to avoid using Option types to represent variables that are initialized after the
+/// config is initially parsed.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ConfigDeserialized {
+struct UninitializedConfig {
     pub gateway: Option<ApiConfig>,
     pub clickhouse: Option<ClickHouseConfig>,
     pub models: HashMap<String, ModelConfig>, // model name => model config
-    pub functions: HashMap<String, FunctionConfigDeserialized>, // function name => function config
+    pub functions: HashMap<String, UninitializedFunctionConfig>, // function name => function config
     #[serde(default)]
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
     #[serde(default)]
     pub tools: HashMap<String, ToolConfigDeserialized>, // tool name => tool config
 }
 
-impl ConfigDeserialized {
+impl UninitializedConfig {
     /// Load and validate the TensorZero config file
 
-    /// Get the path for the TensorZero config file
-    ///
     /// Use a path provided as a CLI argument (`./gateway path/to/tensorzero.toml`), or default to
     /// `tensorzero.toml` in the current directory if no path is provided.
     fn get_config_path() -> String {
@@ -391,8 +398,8 @@ impl ConfigDeserialized {
     }
 }
 
-/// Deserialize a TOML table into `Config`
-impl TryFrom<toml::Table> for ConfigDeserialized {
+/// Deserialize a TOML table into `UninitializedConfig`
+impl TryFrom<toml::Table> for UninitializedConfig {
     type Error = Error;
 
     fn try_from(table: toml::Table) -> Result<Self, Self::Error> {
@@ -411,14 +418,14 @@ impl TryFrom<toml::Table> for ConfigDeserialized {
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
-pub enum FunctionConfigDeserialized {
-    Chat(FunctionConfigChatDeserialized),
-    Json(FunctionConfigJsonDeserialized),
+enum UninitializedFunctionConfig {
+    Chat(UninitializedFunctionConfigChat),
+    Json(UninitializedFunctionConfigJson),
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct FunctionConfigChatDeserialized {
+struct UninitializedFunctionConfigChat {
     variants: HashMap<String, VariantConfig>, // variant name => variant config
     system_schema: Option<PathBuf>,
     user_schema: Option<PathBuf>,
@@ -429,7 +436,7 @@ pub struct FunctionConfigChatDeserialized {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct FunctionConfigJsonDeserialized {
+struct UninitializedFunctionConfigJson {
     variants: HashMap<String, VariantConfig>, // variant name => variant config
     system_schema: Option<PathBuf>,
     user_schema: Option<PathBuf>,
@@ -437,10 +444,10 @@ pub struct FunctionConfigJsonDeserialized {
     output_schema: PathBuf, // schema is mandatory for JSON functions
 }
 
-impl FunctionConfigDeserialized {
+impl UninitializedFunctionConfig {
     pub fn load<P: AsRef<Path>>(self, base_path: P) -> Result<FunctionConfig, Error> {
         match self {
-            FunctionConfigDeserialized::Chat(params) => {
+            UninitializedFunctionConfig::Chat(params) => {
                 let system_schema = params
                     .system_schema
                     .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
@@ -461,7 +468,7 @@ impl FunctionConfigDeserialized {
                     tools: params.tools,
                 }))
             }
-            FunctionConfigDeserialized::Json(params) => {
+            UninitializedFunctionConfig::Json(params) => {
                 let system_schema = params
                     .system_schema
                     .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
@@ -513,16 +520,15 @@ mod tests {
     #[test]
     fn test_config_from_toml_table_valid() {
         let config = get_sample_valid_config();
-        // let base_path = PathBuf::new();
         let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        load_from_toml(config, &base_path).expect("Failed to load config");
+        Config::load_from_toml(config, &base_path).expect("Failed to load config");
 
         // Ensure that removing the `[metrics]` section still parses the config
         let mut config = get_sample_valid_config();
         config
             .remove("metrics")
             .expect("Failed to remove `[metrics]` section");
-        load_from_toml(config, &base_path).expect("Failed to load config");
+        Config::load_from_toml(config, &base_path).expect("Failed to load config");
     }
 
     /// Ensure that the config parsing correctly handles the `gateway.bind_address` field
@@ -532,7 +538,7 @@ mod tests {
         let base_path = PathBuf::new();
 
         // Test with a valid bind address
-        let parsed_config = load_from_toml(config.clone(), &base_path).unwrap();
+        let parsed_config = Config::load_from_toml(config.clone(), &base_path).unwrap();
         assert_eq!(
             parsed_config
                 .gateway
@@ -545,7 +551,7 @@ mod tests {
 
         // Test with missing gateway section
         config.remove("gateway");
-        let parsed_config = load_from_toml(config.clone(), &base_path).unwrap();
+        let parsed_config = Config::load_from_toml(config.clone(), &base_path).unwrap();
         assert!(parsed_config.gateway.is_none());
 
         // Test with missing bind_address
@@ -553,7 +559,7 @@ mod tests {
             "gateway".to_string(),
             toml::Value::Table(toml::Table::new()),
         );
-        let parsed_config = load_from_toml(config.clone(), &base_path).unwrap();
+        let parsed_config = Config::load_from_toml(config.clone(), &base_path).unwrap();
         assert!(parsed_config.gateway.unwrap().bind_address.is_none());
 
         // Test with invalid bind address
@@ -561,7 +567,7 @@ mod tests {
             "bind_address".to_string(),
             toml::Value::String("invalid_address".to_string()),
         );
-        let result = load_from_toml(config, &base_path);
+        let result = Config::load_from_toml(config, &base_path);
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
@@ -580,7 +586,7 @@ mod tests {
             .expect("Failed to remove `[models]` section");
 
         assert_eq!(
-            load_from_toml(config, &base_path).unwrap_err(),
+            Config::load_from_toml(config, &base_path).unwrap_err(),
             Error::Config {
                 message: "Failed to parse config:\nmissing field `models`\n".to_string()
             }
@@ -597,7 +603,7 @@ mod tests {
             .remove("providers")
             .expect("Failed to remove `[providers]` section");
         let base_path = PathBuf::new();
-        let result = load_from_toml(config, &base_path);
+        let result = Config::load_from_toml(config, &base_path);
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
@@ -614,7 +620,7 @@ mod tests {
             .remove("functions")
             .expect("Failed to remove `[functions]` section");
         let base_path = PathBuf::new();
-        let result = load_from_toml(config, &base_path);
+        let result = Config::load_from_toml(config, &base_path);
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
@@ -633,7 +639,7 @@ mod tests {
             .remove("variants")
             .expect("Failed to remove `[variants]` section");
         let base_path = PathBuf::new();
-        let result = load_from_toml(config, &base_path);
+        let result = Config::load_from_toml(config, &base_path);
         assert_eq!(result
             .unwrap_err(),
             Error::Config {
@@ -648,7 +654,7 @@ mod tests {
         let mut config = get_sample_valid_config();
         config.insert("enable_agi".into(), true.into());
         let base_path = PathBuf::new();
-        let result = load_from_toml(config, &base_path);
+        let result = Config::load_from_toml(config, &base_path);
         println!("{:?}", result);
         assert!(result
             .unwrap_err()
@@ -665,7 +671,7 @@ mod tests {
             .expect("Failed to get `models.claude-3-haiku-20240307` section")
             .insert("enable_agi".into(), true.into());
         let base_path = PathBuf::new();
-        let result = load_from_toml(config, &base_path);
+        let result = Config::load_from_toml(config, &base_path);
         assert!(result
             .unwrap_err()
             .to_string()
@@ -681,7 +687,7 @@ mod tests {
             .expect("Failed to get `models.claude-3-haiku-20240307.providers.anthropic` section")
             .insert("enable_agi".into(), true.into());
         let base_path = PathBuf::new();
-        let result = load_from_toml(config, &base_path);
+        let result = Config::load_from_toml(config, &base_path);
         assert!(result
             .unwrap_err()
             .to_string()
@@ -697,7 +703,7 @@ mod tests {
             .expect("Failed to get `functions.generate_draft` section")
             .insert("enable_agi".into(), true.into());
         let base_path = PathBuf::new();
-        let result = load_from_toml(config, &base_path);
+        let result = Config::load_from_toml(config, &base_path);
         assert!(result
             .unwrap_err()
             .to_string()
@@ -713,7 +719,7 @@ mod tests {
             .expect("Failed to get `functions.generate_draft` section")
             .remove("output_schema");
         let base_path = PathBuf::new();
-        let result = load_from_toml(config, &base_path);
+        let result = Config::load_from_toml(config, &base_path);
         assert!(result.unwrap_err().to_string().contains(
             "Failed to parse config:\nmissing field `output_schema`\nin `functions.extract_data`\n"
         ));
@@ -728,7 +734,7 @@ mod tests {
             .expect("Failed to get `functions.generate_draft.variants.openai_promptA` section")
             .insert("enable_agi".into(), true.into());
         let base_path = PathBuf::new();
-        let result = load_from_toml(config, &base_path);
+        let result = Config::load_from_toml(config, &base_path);
         assert!(result
             .unwrap_err()
             .to_string()
@@ -744,7 +750,7 @@ mod tests {
             .expect("Failed to get `metrics.task_success` section")
             .insert("enable_agi".into(), true.into());
         let base_path = PathBuf::new();
-        let result = load_from_toml(config, &base_path);
+        let result = Config::load_from_toml(config, &base_path);
         assert!(result
             .unwrap_err()
             .to_string()
@@ -757,7 +763,7 @@ mod tests {
         let mut config = get_sample_valid_config();
         config["models"]["gpt-3.5-turbo"]["routing"] = toml::Value::Array(vec![]);
         let base_path = PathBuf::new();
-        let result = load_from_toml(config, &base_path);
+        let result = Config::load_from_toml(config, &base_path);
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
@@ -773,7 +779,7 @@ mod tests {
         let mut config = get_sample_valid_config();
         config["models"]["gpt-3.5-turbo"]["routing"] =
             toml::Value::Array(vec!["openai".into(), "openai".into()]);
-        let result = load_from_toml(config, &PathBuf::new());
+        let result = Config::load_from_toml(config, &PathBuf::new());
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
@@ -788,7 +794,7 @@ mod tests {
     fn test_config_validate_model_routing_entry_not_in_providers() {
         let mut config = get_sample_valid_config();
         config["models"]["gpt-3.5-turbo"]["routing"] = toml::Value::Array(vec!["closedai".into()]);
-        let result = load_from_toml(config, &PathBuf::new());
+        let result = Config::load_from_toml(config, &PathBuf::new());
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
@@ -805,7 +811,7 @@ mod tests {
         sample_config["functions"]["generate_draft"]["system_schema"] =
             "non_existent_file.json".into();
         let base_path = PathBuf::new();
-        let result = load_from_toml(sample_config, &base_path);
+        let result = Config::load_from_toml(sample_config, &base_path);
         assert_eq!(
             result.unwrap_err(),
             Error::JsonSchema {
@@ -821,7 +827,7 @@ mod tests {
         config["functions"]["generate_draft"]["variants"]["openai_promptA"]["weight"] =
             toml::Value::Float(-1.0);
         let base_path = PathBuf::new();
-        let result = load_from_toml(config, &base_path);
+        let result = Config::load_from_toml(config, &base_path);
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
@@ -838,7 +844,7 @@ mod tests {
         config["functions"]["generate_draft"]["variants"]["openai_promptA"]["model"] =
             "non_existent_model".into();
         let base_path = PathBuf::new();
-        let result = load_from_toml(config, &base_path);
+        let result = Config::load_from_toml(config, &base_path);
 
         assert_eq!(
             result.unwrap_err(),
@@ -859,7 +865,7 @@ mod tests {
         config["functions"]["generate_draft"]["tools"] =
             toml::Value::Array(vec!["non_existent_tool".into()]);
         let base_path = PathBuf::new();
-        let result = load_from_toml(config, &base_path);
+        let result = Config::load_from_toml(config, &base_path);
 
         assert_eq!(
             result.unwrap_err(),
@@ -873,7 +879,8 @@ mod tests {
     #[test]
     fn test_get_all_templates() {
         let config_table = get_sample_valid_config();
-        let config = load_from_toml(config_table, &PathBuf::new()).expect("Failed to load config");
+        let config =
+            Config::load_from_toml(config_table, &PathBuf::new()).expect("Failed to load config");
 
         // Get all templates
         let templates = config.get_templates(PathBuf::from("/base/path"));
@@ -918,7 +925,7 @@ mod tests {
         [gateway]
         bind_address = "0.0.0.0:3000"
 
-        # ┌───────��────────────────────────────────────────────────────────────────────┐
+        # ┌────────────────────────────────────────────────────────────────────────────┐
         # │                                   MODELS                                   │
         # └────────────────────────────────────────────────────────────────────────────┘
 
@@ -1021,9 +1028,10 @@ mod tests {
         let base_path = config_pathbuf
             .parent()
             .expect("Failed to get parent directory of config file");
-        let config_table = ConfigDeserialized::read_toml_config(&config_path)
+        let config_table = UninitializedConfig::read_toml_config(&config_path)
             .expect("Failed to read tensorzero.example.toml");
 
-        load_from_toml(config_table, &base_path.to_path_buf()).expect("Failed to load config");
+        Config::load_from_toml(config_table, &base_path.to_path_buf())
+            .expect("Failed to load config");
     }
 }

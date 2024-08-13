@@ -12,7 +12,7 @@ use tokio_stream::StreamExt;
 use uuid::Uuid;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::config_parser::CONFIG;
+use crate::config_parser::get_config;
 use crate::error::{Error, ResultExt};
 use crate::function::{sample_variant, FunctionConfig};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
@@ -69,7 +69,7 @@ pub async fn inference_handler(
     // To be used for the Inference table processing_time measurements
     let start_time = Instant::now();
     // Get the function config or return an error if it doesn't exist
-    let function = CONFIG.get_function(&params.function_name)?;
+    let function = get_config().get_function(&params.function_name)?;
 
     // Clone the function variants so we can modify the collection as we sample them
     let mut variants = function.variants().clone();
@@ -127,7 +127,7 @@ pub async fn inference_handler(
             let response = variant
                 .infer_stream(
                     &params.input,
-                    &CONFIG.models,
+                    &get_config().models,
                     function.output_schema(),
                     &http_client,
                 )
@@ -167,7 +167,7 @@ pub async fn inference_handler(
             let response = variant
                 .infer(
                     &params.input,
-                    &CONFIG.models,
+                    &get_config().models,
                     function.output_schema(),
                     &http_client,
                 )
