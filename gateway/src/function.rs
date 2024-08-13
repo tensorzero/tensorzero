@@ -194,7 +194,7 @@ fn validate_single_message(
     index_role: Option<(usize, &Role)>,
 ) -> Result<(), Error> {
     match schema {
-        Some(ref schema) => schema.validate(content),
+        Some(schema) => schema.validate(content),
         None => {
             if content.is_string() {
                 Ok(())
@@ -203,7 +203,7 @@ fn validate_single_message(
                     Some(index_role) => Error::InvalidMessage {
                         message: format!("Message at index {} has non-string content but there is no schema given for role {}.", index_role.0, index_role.1),
                     },
-                    None => Error::InvalidMessage {message:format!("Message has non-string content but there is no schema given for role system.")},
+                    None => Error::InvalidMessage {message:"Message has non-string content but there is no schema given for role system.".to_string()},
                 })
             }
         }

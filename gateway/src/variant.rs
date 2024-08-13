@@ -112,7 +112,7 @@ impl ChatCompletionConfig {
                     let text_content= match template_path {
                         Some(template_path) => template_message(
                             template_path.to_str().ok_or(Error::InvalidTemplatePath)?,
-                            &text,
+                            text,
                         )?,
                         None => text.as_str().ok_or(Error::InvalidMessage { message: format!("Request message content {} is not a string but there is no variant template for Role {}", text, message.role) })?.to_string(),
                     };

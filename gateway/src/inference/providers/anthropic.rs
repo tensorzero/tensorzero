@@ -344,7 +344,7 @@ impl<'a> AnthropicRequestBody<'a> {
         let tool_choice: Option<AnthropicToolChoice> = tools
             .as_ref()
             .filter(|t| !t.is_empty())
-            .and_then(|_| request.tool_config)
+            .and(request.tool_config)
             .and_then(|c| c.tool_choice.try_into().ok());
         Ok(AnthropicRequestBody {
             model: model_name,

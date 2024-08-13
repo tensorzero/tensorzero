@@ -299,7 +299,7 @@ mod tests {
             gateway: None,
             clickhouse: None,
             models: HashMap::new(),
-            metrics: metrics,
+            metrics,
             functions: HashMap::new(),
             tools: HashMap::new(),
         };
@@ -414,7 +414,7 @@ mod tests {
             gateway: None,
             clickhouse: None,
             models: HashMap::new(),
-            metrics: metrics,
+            metrics,
             functions: HashMap::new(),
             tools: HashMap::new(),
         };
@@ -544,7 +544,7 @@ mod tests {
             gateway: None,
             clickhouse: None,
             models: HashMap::new(),
-            metrics: metrics,
+            metrics,
             functions: HashMap::new(),
             tools: HashMap::new(),
         };
@@ -612,7 +612,7 @@ mod tests {
             gateway: None,
             clickhouse: None,
             models: HashMap::new(),
-            metrics: metrics,
+            metrics,
             functions: HashMap::new(),
             tools: HashMap::new(),
         };
