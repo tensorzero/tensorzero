@@ -370,7 +370,7 @@ struct UninitializedConfig {
     #[serde(default)]
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
     #[serde(default)]
-    pub tools: HashMap<String, ToolConfigDeserialized>, // tool name => tool config
+    pub tools: HashMap<String, UninitializedToolConfig>, // tool name => tool config
 }
 
 impl UninitializedConfig {
@@ -496,12 +496,12 @@ impl UninitializedFunctionConfig {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct ToolConfigDeserialized {
+pub struct UninitializedToolConfig {
     pub description: String,
     pub parameters: PathBuf,
 }
 
-impl ToolConfigDeserialized {
+impl UninitializedToolConfig {
     pub fn load<P: AsRef<Path>>(self, base_path: P) -> Result<ToolConfig, Error> {
         let parameters = JSONSchemaFromPath::new(self.parameters, base_path.as_ref())?;
         Ok(ToolConfig {
