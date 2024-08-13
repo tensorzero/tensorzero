@@ -45,7 +45,7 @@ pub struct FunctionConfigJson {
     pub system_schema: Option<JSONSchemaFromPath>,
     pub user_schema: Option<JSONSchemaFromPath>,
     pub assistant_schema: Option<JSONSchemaFromPath>,
-    pub output_schema: JSONSchemaFromPath, // schema is mandatory for JSON functions
+    pub output_schema: JSONSchemaFromPath,
 }
 
 impl FunctionConfig {
