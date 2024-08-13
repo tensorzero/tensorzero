@@ -16,6 +16,8 @@ pub fn initialize_templates(template_paths: HashMap<String, PathBuf>) -> Result<
     env.set_undefined_behavior(UndefinedBehavior::Strict);
 
     for (template_name, path) in template_paths {
+        println!("Template name: {}", template_name);
+        println!("Template path: {}", path.display());
         let template_content =
             std::fs::read_to_string(&path).map_err(|e| Error::MiniJinjaTemplate {
                 template_name: path.display().to_string(),

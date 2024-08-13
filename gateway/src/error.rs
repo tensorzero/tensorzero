@@ -120,9 +120,6 @@ pub enum Error {
         template_name: String,
         message: String,
     },
-    ModelNotFound {
-        model: String,
-    },
     ModelProvidersExhausted {
         provider_errors: Vec<Error>,
     },
@@ -160,6 +157,9 @@ pub enum Error {
         message: String,
     },
     UnknownFunction {
+        name: String,
+    },
+    UnknownModel {
         name: String,
     },
     UnknownTool {
@@ -213,7 +213,6 @@ impl Error {
             Error::MiniJinjaTemplate { .. } => tracing::Level::ERROR,
             Error::MiniJinjaTemplateMissing { .. } => tracing::Level::ERROR,
             Error::MiniJinjaTemplateRender { .. } => tracing::Level::ERROR,
-            Error::ModelNotFound { .. } => tracing::Level::ERROR,
             Error::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
             Error::Observability { .. } => tracing::Level::ERROR,
             Error::OpenAIClient { .. } => tracing::Level::WARN,
@@ -226,6 +225,7 @@ impl Error {
             Error::TogetherServer { .. } => tracing::Level::ERROR,
             Error::TypeConversion { .. } => tracing::Level::ERROR,
             Error::UnknownFunction { .. } => tracing::Level::WARN,
+            Error::UnknownModel { .. } => tracing::Level::ERROR,
             Error::UnknownTool { .. } => tracing::Level::ERROR,
             Error::UnknownVariant { .. } => tracing::Level::WARN,
             Error::UnknownMetric { .. } => tracing::Level::WARN,
@@ -271,7 +271,6 @@ impl Error {
             Error::MiniJinjaTemplate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::MiniJinjaTemplateMissing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::MiniJinjaTemplateRender { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::ModelNotFound { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::OpenAIClient { status_code, .. } => *status_code,
@@ -284,6 +283,7 @@ impl Error {
             Error::TogetherServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::TypeConversion { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::UnknownFunction { .. } => StatusCode::NOT_FOUND,
+            Error::UnknownModel { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::UnknownTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::UnknownVariant { .. } => StatusCode::NOT_FOUND,
             Error::UnknownMetric { .. } => StatusCode::NOT_FOUND,
@@ -423,9 +423,6 @@ impl std::fmt::Display for Error {
             } => {
                 write!(f, "Error rendering template {}: {}", template_name, message)
             }
-            Error::ModelNotFound { model } => {
-                write!(f, "Model not found: {}", model)
-            }
             Error::ModelProvidersExhausted { provider_errors } => {
                 write!(
                     f,
@@ -469,6 +466,7 @@ impl std::fmt::Display for Error {
                 write!(f, "Error from Together servers: {}", message)
             }
             Error::UnknownFunction { name } => write!(f, "Unknown function: {}", name),
+            Error::UnknownModel { name } => write!(f, "Unknown model: {}", name),
             Error::UnknownTool { name } => write!(f, "Unknown tool: {}", name),
             Error::UnknownVariant { name } => write!(f, "Unknown variant: {}", name),
             Error::UnknownMetric { name } => write!(f, "Unknown metric: {}", name),

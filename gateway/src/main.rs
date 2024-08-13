@@ -2,12 +2,11 @@ use axum::routing::{get, post};
 use axum::Router;
 use std::fmt::Display;
 use std::net::SocketAddr;
-use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal;
 
 use gateway::clickhouse_migration_manager;
-use gateway::config_parser;
+use gateway::config_parser::CONFIG;
 use gateway::endpoints;
 use gateway::gateway_util;
 use gateway::observability;
@@ -19,11 +18,10 @@ async fn main() {
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
 
     // Load config
-    let config =
-        Arc::new(config_parser::Config::load().expect_pretty("Failed to load TensorZero config"));
+    println!("Configuration loaded: {:?}", *CONFIG);
 
-    let app_state = gateway_util::AppStateData::with_config(config.clone())
-        .expect_pretty("Failed to initialize AppState");
+    let app_state =
+        gateway_util::AppStateData::new().expect_pretty("Failed to initialize AppState");
 
     // Run ClickHouse migrations (if any)
     clickhouse_migration_manager::run(&app_state.clickhouse_connection_info)
@@ -42,7 +40,7 @@ async fn main() {
         .with_state(app_state);
 
     // Bind to the socket address specified in the config, or default to 0.0.0.0:3000
-    let bind_address = config
+    let bind_address = CONFIG
         .gateway
         .as_ref()
         .and_then(|gateway_config| gateway_config.bind_address)
