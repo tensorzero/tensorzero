@@ -54,8 +54,8 @@ impl FunctionConfig {
         Ok(())
     }
 
-    pub fn prepare_tool_config<'a>(
-        &'a self,
+    pub fn prepare_tool_config(
+        &'static self,
         // dynamic_tool_config: &'a DynamicToolConfig,
         static_tools: &'static HashMap<String, ToolConfig>,
     ) -> Result<Option<ToolCallConfig>, Error> {
@@ -453,7 +453,7 @@ mod tests {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: None,
-            assistant_schema: Some(assistant_schema.clone()),
+            assistant_schema: Some(assistant_schema),
             tools: vec![],
             ..Default::default()
         };

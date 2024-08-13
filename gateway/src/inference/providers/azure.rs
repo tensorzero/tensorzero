@@ -194,7 +194,8 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    use crate::tool::{Tool, ToolChoice};
+    use crate::jsonschema_util::JSONSchemaFromPath;
+    use crate::tool::{Tool, ToolChoice, ToolConfig};
     use crate::{
         inference::{
             providers::openai::OpenAIToolChoiceString,
@@ -205,26 +206,32 @@ mod tests {
 
     #[test]
     fn test_azure_request_new() {
+        let parameters = json!({
+            "type": "object",
+            "properties": {
+                "location": {
+                    "type": "string",
+                    "description": "The city and state, e.g. San Francisco, CA"
+                }
+            },
+            "required": ["location"]
+        });
         let tool = Tool::Function {
             name: "get_weather".to_string(),
             description: Some("Get the current weather".to_string()),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "location": {
-                        "type": "string",
-                        "description": "The city and state, e.g. San Francisco, CA"
-                    }
-                },
-                "required": ["location"]
-            }),
+            parameters: parameters.clone(),
         };
+        let tool_config = ToolConfig {
+            description: "Get the current weather".to_string(),
+            parameters: JSONSchemaFromPath::from_value(&parameters),
+            tool: tool,
+        };
+        let tool_config = Box::leak(Box::new(tool_config));
         let tool_config = ToolCallConfig {
-            tools_available: vec![&tool],
+            tools_available: vec![tool_config],
             tool_choice: &ToolChoice::Auto,
             parallel_tool_calls: true,
         };
-
         let request_with_tools = ModelInferenceRequest {
             messages: vec![RequestMessage {
                 role: Role::User,

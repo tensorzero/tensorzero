@@ -280,7 +280,7 @@ pub(super) fn prepare_openai_tools<'a>(
                 tool_config
                     .tools_available
                     .iter()
-                    .map(|tool| OpenAITool::from(*tool))
+                    .map(|tool| OpenAITool::from(&tool.tool))
                     .collect(),
             );
             let tool_choice = Some(tool_config.tool_choice.into());
@@ -725,7 +725,11 @@ fn openai_to_tensorzero_chunk(
 mod tests {
     use serde_json::json;
 
-    use crate::{inference::types::FunctionType, tool::ToolCallConfig};
+    use crate::{
+        inference::types::FunctionType,
+        jsonschema_util::JSONSchemaFromPath,
+        tool::{ToolCallConfig, ToolConfig},
+    };
 
     use super::*;
 
@@ -851,22 +855,29 @@ mod tests {
         assert!(openai_request.parallel_tool_calls.is_none());
 
         // Test request with tools and JSON mode
+        let parameters = json!({
+            "type": "object",
+            "properties": {
+                "location": {
+                    "type": "string",
+                    "description": "The city and state, e.g. San Francisco, CA"
+                }
+            },
+            "required": ["location"]
+        });
         let tool = Tool::Function {
             name: "get_weather".to_string(),
             description: Some("Get the current weather".to_string()),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "location": {
-                        "type": "string",
-                        "description": "The city and state, e.g. San Francisco, CA"
-                    }
-                },
-                "required": ["location"]
-            }),
+            parameters: parameters.clone(),
         };
+        let tool_config = ToolConfig {
+            description: "Get the current weather".to_string(),
+            parameters: JSONSchemaFromPath::from_value(&parameters),
+            tool: tool,
+        };
+        let tool_config = Box::leak(Box::new(tool_config));
         let tool_config = ToolCallConfig {
-            tools_available: vec![&tool],
+            tools_available: vec![tool_config],
             tool_choice: &ToolChoice::Auto,
             parallel_tool_calls: true,
         };
@@ -1059,14 +1070,19 @@ mod tests {
             },
             "required": ["location"]
         });
-
         let tool = Tool::Function {
             name: "get_weather".to_string(),
             description: Some("Get the current weather".to_string()),
             parameters: parameters.clone(),
         };
+        let tool_config = ToolConfig {
+            description: "Get the current weather".to_string(),
+            parameters: JSONSchemaFromPath::from_value(&parameters),
+            tool: tool,
+        };
+        let tool_config = Box::leak(Box::new(tool_config));
         let tool_config = ToolCallConfig {
-            tools_available: vec![&tool],
+            tools_available: vec![tool_config],
             tool_choice: &ToolChoice::Auto,
             parallel_tool_calls: true,
         };

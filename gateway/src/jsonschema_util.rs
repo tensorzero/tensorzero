@@ -12,12 +12,6 @@ pub struct JSONSchemaFromPath {
     pub value: &'static serde_json::Value,
 }
 
-impl PartialEq for JSONSchemaFromPath {
-    fn eq(&self, other: &Self) -> bool {
-        self.path == other.path && self.value == other.value
-    }
-}
-
 impl JSONSchemaFromPath {
     /// Just instantiates the struct, does not load the schema
     /// You should call `load` to load the schema
@@ -45,7 +39,7 @@ impl JSONSchemaFromPath {
         })
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "integration_tests"))]
     pub fn from_value(value: &serde_json::Value) -> Self {
         let schema_boxed: &'static serde_json::Value = Box::leak(Box::new(value.clone()));
         let compiled_schema = JSONSchema::compile(schema_boxed).unwrap();

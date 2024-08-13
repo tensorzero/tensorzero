@@ -6,7 +6,7 @@ use serde_json::Value;
 use crate::{error::Error, jsonschema_util::JSONSchemaFromPath};
 
 /// Contains the configuration information for a specific tool
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct ToolConfig {
     pub description: String,
     pub parameters: JSONSchemaFromPath,
@@ -16,7 +16,7 @@ pub struct ToolConfig {
 
 /// Contains all information required to tell an LLM what tools it can call
 /// and what sorts of tool calls (parallel, none, etc) it is allowed to respond with.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct ToolCallConfig {
     pub tools_available: Vec<&'static ToolConfig>,
     pub tool_choice: &'static ToolChoice,
@@ -45,7 +45,7 @@ impl ToolCallConfig {
                 })
             })
             .collect();
-        let mut tools_available = tools_available?;
+        let tools_available = tools_available?;
         // if let Some(additional_tools) = dynamic_tool_config.additional_tools {
         //     tools_available.extend(additional_tools);
         // }
@@ -68,7 +68,7 @@ impl ToolCallConfig {
     pub fn get_tool(&self, name: &str) -> Option<&ToolConfig> {
         self.tools_available
             .iter()
-            .find(|tool_cfg| matches!(tool_cfg.tool, Tool::Function { name: n, .. } if n == name))
+            .find(|tool_cfg| matches!(&tool_cfg.tool, Tool::Function { name: n, .. } if n == name))
             .copied()
     }
 }
@@ -117,8 +117,8 @@ pub struct ToolCallOutput {
 impl ToolCallOutput {
     pub fn new(tool_call: ToolCall, tool_cfg: Option<&ToolConfig>) -> Self {
         let mut tool_call_output = Self {
-            name: tool_call.name,
-            arguments: tool_call.arguments,
+            name: tool_call.name.clone(),
+            arguments: tool_call.arguments.clone(),
             id: tool_call.id,
             parsed_name: None,
             parsed_arguments: None,

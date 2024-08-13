@@ -16,7 +16,7 @@ use crate::inference::types::{
     InferenceResponseStream, ModelInferenceRequest, ModelInferenceResponse,
     ModelInferenceResponseChunk, RequestMessage, Usage,
 };
-use crate::tool::{Tool, ToolCall, ToolChoice};
+use crate::tool::{Tool, ToolCall, ToolChoice, ToolConfig};
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
@@ -369,14 +369,15 @@ impl<'a> From<&'a Tool> for GCPVertexGeminiFunctionDeclaration<'a> {
     }
 }
 
-impl<'a> From<&'a Vec<&'a Tool>> for GCPVertexGeminiTool<'a> {
-    fn from(tools: &'a Vec<&'a Tool>) -> Self {
+impl<'a> From<&'a Vec<&'a ToolConfig>> for GCPVertexGeminiTool<'a> {
+    fn from(tools: &'a Vec<&'a ToolConfig>) -> Self {
         // let mut function_declarations = Vec::new();
         // for tool in tools {
         //     function_declarations.push(tool.into());
         // }
         // GCPVertexGeminiTool::FunctionDeclarations(function_declarations)
-        let function_declarations: Vec<_> = tools.iter().map(|&tool| tool.into()).collect();
+        let function_declarations: Vec<GCPVertexGeminiFunctionDeclaration<'a>> =
+            tools.iter().map(|&tc| (&tc.tool).into()).collect();
         GCPVertexGeminiTool::FunctionDeclarations(function_declarations)
     }
 }
@@ -745,6 +746,7 @@ mod tests {
 
     use super::*;
     use crate::inference::types::{FunctionType, JSONMode};
+    use crate::jsonschema_util::JSONSchemaFromPath;
     use crate::tool::{Tool, ToolCallConfig, ToolResult};
 
     #[test]
@@ -840,12 +842,22 @@ mod tests {
             description: Some("Get the weather for a given location".to_string()),
             parameters: parameters[0].clone(),
         };
+        let tool_config1 = ToolConfig {
+            tool: tool1,
+            parameters: JSONSchemaFromPath::from_value(&parameters[0]),
+            description: "Get the weather for a given location".to_string(),
+        };
         let tool2 = Tool::Function {
             name: "get_time".to_string(),
             description: Some("Get the current time for a given timezone".to_string()),
             parameters: parameters[1].clone(),
         };
-        let tools = vec![&tool1, &tool2];
+        let tool_config2 = ToolConfig {
+            tool: tool2,
+            parameters: JSONSchemaFromPath::from_value(&parameters[1]),
+            description: "Get the current time for a given timezone".to_string(),
+        };
+        let tools = vec![&tool_config1, &tool_config2];
         let tool = GCPVertexGeminiTool::from(&tools);
         assert_eq!(
             tool,
@@ -1245,8 +1257,14 @@ mod tests {
             description: Some("Get the current weather".to_string()),
             parameters: parameters.clone(),
         };
+        let tool_config = ToolConfig {
+            tool: tool,
+            parameters: JSONSchemaFromPath::from_value(&parameters),
+            description: "Get the current weather".to_string(),
+        };
+        let tool_config = Box::leak(Box::new(tool_config));
         let tool_config = ToolCallConfig {
-            tools_available: vec![&tool],
+            tools_available: vec![tool_config],
             tool_choice: &ToolChoice::Auto,
             parallel_tool_calls: true,
         };

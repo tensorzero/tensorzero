@@ -107,7 +107,7 @@ impl Config {
         let tools = config
             .tools
             .into_iter()
-            .map(|(name, config)| config.load(base_path, name).map(|c| (name, c)))
+            .map(|(name, config)| config.load(base_path, name.clone()).map(|c| (name, c)))
             .collect::<Result<HashMap<String, ToolConfig>, Error>>()?;
         let config = Config {
             gateway: config.gateway,
@@ -511,7 +511,7 @@ impl UninitializedToolConfig {
         let parameters = JSONSchemaFromPath::new(self.parameters, base_path.as_ref())?;
         let tool = Tool::Function {
             name,
-            description: Some(self.description),
+            description: Some(self.description.clone()),
             parameters: parameters.value.clone(),
         };
         Ok(ToolConfig {

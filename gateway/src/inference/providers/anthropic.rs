@@ -336,7 +336,7 @@ impl<'a> AnthropicRequestBody<'a> {
             .map(|tools| {
                 tools
                     .iter()
-                    .map(|tool| AnthropicTool::try_from(*tool))
+                    .map(|tool| AnthropicTool::try_from(&tool.tool))
                     .collect::<Result<Vec<_>, _>>()
             })
             .transpose()?;
@@ -741,7 +741,8 @@ mod tests {
     use serde_json::json;
 
     use crate::inference::types::{FunctionType, JSONMode};
-    use crate::tool::{Tool, ToolCallConfig, ToolResult};
+    use crate::jsonschema_util::JSONSchemaFromPath;
+    use crate::tool::{Tool, ToolCallConfig, ToolConfig, ToolResult};
 
     #[test]
     fn test_try_from_tool_choice() {
@@ -1030,13 +1031,30 @@ mod tests {
                 })],
             },
         ];
+        let parameters = json!({
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string"
+            }
+          },
+          "required": ["answer"],
+          "additionalProperties": false
+        });
         let tool = Tool::Function {
             description: Some("test_description".to_string()),
             name: "test_name".to_string(),
-            parameters: json!({"type": "string"}),
+            parameters: parameters.clone(),
         };
+        let tool_config = ToolConfig {
+            description: "test_description".to_string(),
+            parameters: JSONSchemaFromPath::from_value(&parameters),
+            tool: tool,
+        };
+        let tool_config = Box::leak(Box::new(tool_config));
         let tool_config = ToolCallConfig {
-            tools_available: vec![&tool],
+            tools_available: vec![tool_config],
             tool_choice: &ToolChoice::Auto,
             parallel_tool_calls: false,
         };

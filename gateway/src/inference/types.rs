@@ -110,7 +110,7 @@ pub enum JSONMode {
 /// and to convert it back to the appropriate response format.
 /// An example of the latter is that we might have prepared a request with Tools available
 /// but the client actually just wants a chat response.
-#[derive(Builder, Clone, Debug, Default, PartialEq)]
+#[derive(Builder, Clone, Debug, Default)]
 #[builder(setter(into, strip_option), default)]
 pub struct ModelInferenceRequest<'a> {
     pub messages: Vec<RequestMessage>,
@@ -504,7 +504,7 @@ impl From<ModelInferenceResponseChunk> for ChatInferenceResponseChunk {
 
 pub fn collect_chunks(
     value: Vec<ModelInferenceResponseChunk>,
-    output_schema: Option<&JSONSchemaFromPath>,
+    _output_schema: Option<&JSONSchemaFromPath>,
     tool_config: Option<&ToolCallConfig>,
 ) -> Result<InferenceResponse, Error> {
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
@@ -809,10 +809,10 @@ mod tests {
             tool_choice: &ToolChoice::Auto,
             parallel_tool_calls: false,
         };
-
+        let tool_config = Box::leak(Box::new(tool_config));
         let chunks = vec![];
         let output_schema = None;
-        let result = collect_chunks(chunks, output_schema, Some(tool_config).as_ref());
+        let result = collect_chunks(chunks, output_schema, Some(tool_config));
         assert_eq!(
             result.unwrap_err(),
             Error::TypeConversion {
@@ -854,7 +854,7 @@ mod tests {
                 latency: Duration::from_millis(250),
             },
         ];
-        let response = collect_chunks(chunks, None, Some(tool_config).as_ref()).unwrap();
+        let response = collect_chunks(chunks, None, Some(tool_config)).unwrap();
         let InferenceResponse::Chat(chat_response) = response;
         assert_eq!(chat_response.inference_id, inference_id);
         assert_eq!(chat_response.created, created);
@@ -1033,7 +1033,7 @@ mod tests {
                 latency: Duration::from_millis(300),
             },
         ];
-        let result = collect_chunks(chunks, Some(&schema), Some(tool_config).as_ref());
+        let result = collect_chunks(chunks, Some(&schema), Some(tool_config));
         assert!(result.is_ok());
         if let Ok(InferenceResponse::Chat(chat_response)) = result {
             assert_eq!(chat_response.inference_id, inference_id);
