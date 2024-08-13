@@ -25,7 +25,7 @@ pub struct ToolCallConfig {
 
 impl ToolCallConfig {
     pub fn new(
-        function_tools: &'static Vec<String>,
+        function_tools: &'static [String],
         function_tool_choice: &'static ToolChoice,
         function_parallel_tool_calls: bool,
         static_tools: &'static HashMap<String, ToolConfig>,

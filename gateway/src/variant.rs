@@ -591,7 +591,10 @@ mod tests {
         assert!(matches!(result, InferenceResponse::Chat(_)));
         match result {
             InferenceResponse::Chat(chat_response) => {
-                assert_eq!(chat_response.output, vec![]);
+                assert_eq!(
+                    chat_response.output,
+                    vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()]
+                );
                 assert_eq!(
                     chat_response.usage,
                     Usage {

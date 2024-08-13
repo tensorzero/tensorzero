@@ -433,7 +433,9 @@ struct UninitializedFunctionConfigChat {
     assistant_schema: Option<PathBuf>,
     #[serde(default)]
     tools: Vec<String>, // tool names
+    #[serde(default)]
     tool_choice: ToolChoice,
+    #[serde(default)]
     parallel_tool_calls: bool,
 }
 
@@ -683,6 +685,7 @@ mod tests {
             .insert("enable_agi".into(), true.into());
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, &base_path);
+        println!("{:?}", result);
         assert!(result
             .unwrap_err()
             .to_string()

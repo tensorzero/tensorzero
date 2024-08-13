@@ -42,6 +42,7 @@ impl JSONSchemaFromPath {
     #[cfg(any(test, feature = "integration_tests"))]
     pub fn from_value(value: &serde_json::Value) -> Self {
         let schema_boxed: &'static serde_json::Value = Box::leak(Box::new(value.clone()));
+        #[allow(clippy::unwrap_used)]
         let compiled_schema = JSONSchema::compile(schema_boxed).unwrap();
         Self {
             path: PathBuf::new(),

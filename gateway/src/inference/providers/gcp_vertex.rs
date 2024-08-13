@@ -833,9 +833,21 @@ mod tests {
     #[test]
     fn test_from_vec_tool() {
         let parameters = [
-            serde_json::to_value(r#"{"location": {"type": "string"}, "unit": {"type": "string"}}"#)
-                .unwrap(),
-            serde_json::to_value(r#"{"timezone": {"type": "string"}}"#).unwrap(),
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "location": {"type": "string"},
+                    "unit": {"type": "string"}
+                },
+                "required": ["location", "unit"]
+            }),
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "timezone": {"type": "string"}
+                },
+                "required": ["timezone"]
+            }),
         ];
         let tool1 = Tool::Function {
             name: "get_weather".to_string(),
@@ -1258,7 +1270,7 @@ mod tests {
             parameters: parameters.clone(),
         };
         let tool_config = ToolConfig {
-            tool: tool,
+            tool,
             parameters: JSONSchemaFromPath::from_value(&parameters),
             description: "Get the current weather".to_string(),
         };

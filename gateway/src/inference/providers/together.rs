@@ -227,7 +227,7 @@ mod tests {
         let tool_config = ToolConfig {
             description: "Get the current weather".to_string(),
             parameters: JSONSchemaFromPath::from_value(&parameters),
-            tool: tool,
+            tool,
         };
         let tool_config = Box::leak(Box::new(tool_config));
         let tool_config = ToolCallConfig {

@@ -1050,7 +1050,7 @@ mod tests {
         let tool_config = ToolConfig {
             description: "test_description".to_string(),
             parameters: JSONSchemaFromPath::from_value(&parameters),
-            tool: tool,
+            tool,
         };
         let tool_config = Box::leak(Box::new(tool_config));
         let tool_config = ToolCallConfig {
@@ -1089,7 +1089,7 @@ mod tests {
                 tools: Some(vec![AnthropicTool {
                     name: "test_name",
                     description: Some("test_description"),
-                    input_schema: &json!({"type": "string"}),
+                    input_schema: &parameters,
                 }]),
             }
         );
