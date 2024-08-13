@@ -64,12 +64,12 @@ impl VariantConfig {
 }
 
 impl Variant for VariantConfig {
-    async fn infer<'a>(
+    async fn infer(
         &self,
         input: &Input,
         models: &HashMap<String, ModelConfig>,
         function: &FunctionConfig,
-        tool_config: Option<&ToolCallConfig<'a>>,
+        tool_config: Option<&ToolCallConfig>,
         client: &Client,
     ) -> Result<InferenceResponse, Error> {
         match self {
@@ -81,12 +81,12 @@ impl Variant for VariantConfig {
         }
     }
 
-    async fn infer_stream<'a>(
+    async fn infer_stream(
         &self,
         input: &Input,
         models: &HashMap<String, ModelConfig>,
         function: &FunctionConfig,
-        tool_config: Option<&ToolCallConfig<'a>>,
+        tool_config: Option<&ToolCallConfig>,
         client: &Client,
     ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
         match self {
@@ -153,12 +153,12 @@ impl ChatCompletionConfig {
 }
 
 impl Variant for ChatCompletionConfig {
-    async fn infer<'a>(
+    async fn infer(
         &self,
         input: &Input,
         models: &HashMap<String, ModelConfig>,
         function: &FunctionConfig,
-        tool_config: Option<&ToolCallConfig<'a>>,
+        tool_config: Option<&ToolCallConfig>,
         client: &Client,
     ) -> Result<InferenceResponse, Error> {
         let messages = input
@@ -199,8 +199,8 @@ impl Variant for ChatCompletionConfig {
                // but return None if the output schema is not provided.
                // FunctionConfig::Json(json_function) => Some(json_function.output_schema.value()?),
         };
-        let model_config = models.get(&self.model).ok_or(Error::ModelNotFound {
-            model: self.model.clone(),
+        let model_config = models.get(&self.model).ok_or(Error::UnknownModel {
+            name: self.model.clone(),
         })?;
         let model_inference_response = model_config.infer(&request, client).await?;
 
@@ -218,12 +218,12 @@ impl Variant for ChatCompletionConfig {
         )))
     }
 
-    async fn infer_stream<'a>(
+    async fn infer_stream(
         &self,
         input: &Input,
         models: &HashMap<String, ModelConfig>,
         function: &FunctionConfig,
-        tool_config: Option<&ToolCallConfig<'a>>,
+        tool_config: Option<&ToolCallConfig>,
         client: &Client,
     ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
         let messages = input
@@ -264,8 +264,8 @@ impl Variant for ChatCompletionConfig {
                // but return None if the output schema is not provided.
                // FunctionConfig::Json(json_function) => Some(json_function.output_schema.value()?),
         };
-        let model_config = models.get(&self.model).ok_or(Error::ModelNotFound {
-            model: self.model.clone(),
+        let model_config = models.get(&self.model).ok_or(Error::UnknownModel {
+            name: self.model.clone(),
         })?;
         model_config.infer_stream(&request, client).await
     }
@@ -551,7 +551,7 @@ mod tests {
             .infer(&input, &models, &function_config, None, &client)
             .await
             .unwrap_err();
-        assert!(matches!(result, Error::ModelNotFound { .. }), "{}", result);
+        assert!(matches!(result, Error::UnknownModel { .. }), "{}", result);
         // Test case 3: Model inference fails because of model issues
 
         let chat_completion_config = ChatCompletionConfig {

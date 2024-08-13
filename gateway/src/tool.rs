@@ -6,31 +6,30 @@ use serde_json::Value;
 use crate::{error::Error, jsonschema_util::JSONSchemaFromPath};
 
 /// Contains the configuration information for a specific tool
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct ToolConfig {
     pub description: String,
     pub parameters: JSONSchemaFromPath,
     // This should get set at `load` time
-    #[serde(default)]
-    pub tool: Option<Tool>,
+    pub tool: Tool,
 }
 
 /// Contains all information required to tell an LLM what tools it can call
 /// and what sorts of tool calls (parallel, none, etc) it is allowed to respond with.
 #[derive(Clone, Debug, PartialEq)]
-pub struct ToolCallConfig<'a> {
-    pub tools_available: Vec<&'a ToolConfig>,
-    pub tool_choice: &'a ToolChoice,
+pub struct ToolCallConfig {
+    pub tools_available: Vec<&'static ToolConfig>,
+    pub tool_choice: &'static ToolChoice,
     pub parallel_tool_calls: bool,
 }
 
-impl<'a> ToolCallConfig<'a> {
+impl ToolCallConfig {
     pub fn new(
-        function_tools: &'a Vec<String>,
-        function_tool_choice: &'a ToolChoice,
+        function_tools: &'static Vec<String>,
+        function_tool_choice: &'static ToolChoice,
         function_parallel_tool_calls: bool,
-        static_tools: &'a HashMap<String, ToolConfig>,
-        _dynamic_tool_config: &'a DynamicToolConfig,
+        static_tools: &'static HashMap<String, ToolConfig>,
+        // _dynamic_tool_config: &'a DynamicToolConfig,
     ) -> Result<Self, Error> {
         // TODO (add issue): support dynamic tool calling properly
         // let allowed_tool_names = match dynamic_tool_config.allowed_tools {
@@ -67,9 +66,10 @@ impl<'a> ToolCallConfig<'a> {
     }
 
     pub fn get_tool(&self, name: &str) -> Option<&ToolConfig> {
-        self.tools_available.iter().find(
-            |tool_cfg| matches!(tool_cfg.tool, Some(Tool::Function { name: n, .. }) if n == name),
-        ).copied()
+        self.tools_available
+            .iter()
+            .find(|tool_cfg| matches!(tool_cfg.tool, Tool::Function { name: n, .. } if n == name))
+            .copied()
     }
 }
 
@@ -80,19 +80,6 @@ pub struct DynamicToolConfig<'a> {
     pub additional_tools: Option<&'a Vec<Tool>>,
     pub tool_choice: Option<&'a ToolChoice>,
     pub parallel_tool_calls: Option<bool>,
-}
-
-impl ToolConfig {
-    pub fn load<P: AsRef<Path>>(&mut self, name: String, base_path: P) -> Result<(), Error> {
-        self.parameters.load(base_path)?;
-        let parameters = self.parameters.value()?.clone();
-        self.tool = Some(Tool::Function {
-            name,
-            parameters,
-            description: Some(self.description.clone()),
-        });
-        Ok(())
-    }
 }
 
 /// The Tool type is used to represent a tool that is available to the model.

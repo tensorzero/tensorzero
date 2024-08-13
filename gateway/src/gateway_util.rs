@@ -1,29 +1,27 @@
 use axum::extract::{rejection::JsonRejection, FromRequest, Json, Request};
 use reqwest::Client;
 use serde::de::DeserializeOwned;
-use std::sync::Arc;
 use tracing::instrument;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::config_parser::Config;
+use crate::config_parser::get_config;
 use crate::error::Error;
 
 /// State for the API
 #[derive(Clone)]
 pub struct AppStateData {
-    pub config: Arc<Config>,
     pub http_client: Client,
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
 }
 pub type AppState = axum::extract::State<AppStateData>;
 
 impl AppStateData {
-    pub fn with_config(config: Arc<Config>) -> Result<Self, Error> {
+    pub fn new() -> Result<Self, Error> {
         let clickhouse_url = std::env::var("CLICKHOUSE_URL").map_err(|_| Error::AppState {
             message: "Missing environment variable CLICKHOUSE_URL".to_string(),
         })?;
 
-        let database = config
+        let database = get_config()
             .clickhouse
             .as_ref()
             .map(|ch| ch.database.clone())
@@ -35,7 +33,6 @@ impl AppStateData {
         let http_client = Client::new();
 
         Ok(Self {
-            config,
             http_client,
             clickhouse_connection_info,
         })

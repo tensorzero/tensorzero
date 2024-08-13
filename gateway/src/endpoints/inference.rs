@@ -6,14 +6,13 @@ use axum::{debug_handler, Json};
 use futures::stream::Stream;
 use metrics::counter;
 use serde::Deserialize;
-use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::Instant;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::config_parser::Config;
+use crate::config_parser::get_config;
 use crate::error::{Error, ResultExt};
 use crate::function::sample_variant;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
@@ -21,7 +20,7 @@ use crate::inference::types::{
     collect_chunks, FunctionConfig, Inference, InferenceResponse, InferenceResponseChunk,
     InferenceResponseStream, Input, ModelInferenceResponseChunk,
 };
-use crate::tool::{DynamicToolConfig, Tool, ToolCallConfig, ToolChoice};
+use crate::tool::{DynamicToolConfig, ToolCallConfig};
 use crate::uuid_util::validate_episode_id;
 use crate::variant::Variant;
 
@@ -72,7 +71,6 @@ struct InferenceMetadata {
 #[debug_handler(state = AppStateData)]
 pub async fn inference_handler(
     State(AppStateData {
-        config,
         http_client,
         clickhouse_connection_info,
     }): AppState,
@@ -81,6 +79,7 @@ pub async fn inference_handler(
     // To be used for the Inference table processing_time measurements
     let start_time = Instant::now();
     // Get the function config or return an error if it doesn't exist
+    let config = get_config();
     let function = config.get_function(&params.function_name)?;
     // Collect the dynamic tool config
     // let dynamic_tool_config = DynamicToolConfig {
@@ -99,7 +98,7 @@ pub async fn inference_handler(
         serde_json::to_string(&dynamic_tool_config).map_err(|e| Error::Serialization {
             message: e.to_string(),
         })?;
-    let tool_config = function.prepare_tool_config(&dynamic_tool_config, &config.tools)?;
+    let tool_config = function.prepare_tool_config(&config.tools)?;
     // Clone the function variants so we can modify the collection as we sample them
     let mut variants = function.variants().clone();
 
@@ -183,7 +182,7 @@ pub async fn inference_handler(
             };
 
             let stream = create_stream(
-                config.clone(),
+                function,
                 inference_metadata,
                 chunk,
                 stream,
@@ -243,7 +242,7 @@ pub async fn inference_handler(
 }
 
 fn create_stream(
-    config: Arc<Config>,
+    function: &'static FunctionConfig,
     metadata: InferenceMetadata,
     first_chunk: ModelInferenceResponseChunk,
     mut stream: InferenceResponseStream,
@@ -251,21 +250,12 @@ fn create_stream(
     tool_config: Option<ToolCallConfig>,
     dynamic_tool_config_string: String,
 ) -> impl Stream<Item = Result<Event, Error>> + Send {
-    let tool_config = Arc::new(tool_config);
     async_stream::stream! {
-        let function_result = config.get_function(&metadata.function_name);
-        let function = match function_result {
-            Ok(function) => function,
-            Err(e) => {
-                // This should never happen, we can't get this far without a valid function
-                yield Err(e);
-                return;
-            }
-        };
+
         let mut buffer = vec![first_chunk.clone()];
 
         // Send the first chunk
-        if let Some(event) = prepare_event(&function, &metadata, first_chunk).ok_or_log() {
+        if let Some(event) = prepare_event(function, &metadata, first_chunk).ok_or_log() {
             yield Ok(event);
         }
 
@@ -275,7 +265,7 @@ fn create_stream(
                 None => continue,
             };
             buffer.push(chunk.clone());
-            let event = prepare_event(&function, &metadata, chunk).ok_or_log();
+            let event = prepare_event(function, &metadata, chunk).ok_or_log();
             if let Some(event) = event {
                 yield Ok(event);
             }
@@ -295,7 +285,7 @@ fn create_stream(
         if !metadata.dryrun {
             let inference_response: Result<InferenceResponse, Error> =
                 // TODO (#30): probably get this from FunctionConfig
-                collect_chunks(buffer, function.output_schema(), tool_config.as_deref());
+                collect_chunks(buffer, function.output_schema(), tool_config.as_ref());
 
             let inference_response = inference_response.ok_or_log();
 

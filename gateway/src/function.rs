@@ -1,13 +1,12 @@
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::path::Path;
 use uuid::Uuid;
 
 use crate::error::Error;
 use crate::inference::types::{FunctionConfig, Input, InputMessageContent, Role, VariantConfig};
 use crate::jsonschema_util::JSONSchemaFromPath;
-use crate::tool::{DynamicToolConfig, ToolCallConfig, ToolConfig};
+use crate::tool::{ToolCallConfig, ToolConfig};
 
 impl FunctionConfig {
     pub fn variants(&self) -> &HashMap<String, VariantConfig> {
@@ -57,77 +56,34 @@ impl FunctionConfig {
 
     pub fn prepare_tool_config<'a>(
         &'a self,
-        dynamic_tool_config: &'a DynamicToolConfig,
-        static_tools: &'a HashMap<String, ToolConfig>,
-    ) -> Result<Option<ToolCallConfig<'a>>, Error> {
+        // dynamic_tool_config: &'a DynamicToolConfig,
+        static_tools: &'static HashMap<String, ToolConfig>,
+    ) -> Result<Option<ToolCallConfig>, Error> {
         match self {
             FunctionConfig::Chat(params) => Ok(Some(ToolCallConfig::new(
                 &params.tools,
                 &params.tool_choice,
                 params.parallel_tool_calls,
                 static_tools,
-                dynamic_tool_config,
+                // dynamic_tool_config,
             )?)),
             FunctionConfig::Json(_) => {
-                if dynamic_tool_config.allowed_tools.is_some() {
-                    return Err(Error::InvalidRequest {
-                        message: "Cannot pass `allowed_tools` to a JSON function.".to_string(),
-                    });
-                }
-                if dynamic_tool_config.additional_tools.is_some() {
-                    return Err(Error::InvalidRequest {
-                        message: "Cannot pass `additional_tools` to a JSON function.".to_string(),
-                    });
-                }
-                if dynamic_tool_config.tool_choice.is_some() {
-                    return Err(Error::InvalidRequest {
-                        message: "Cannot pass `tool_choice` to a JSON function".to_string(),
-                    });
-                }
+                // if dynamic_tool_config.allowed_tools.is_some() {
+                //     return Err(Error::InvalidRequest {
+                //         message: "Cannot pass `allowed_tools` to a JSON function.".to_string(),
+                //     });
+                // }
+                // if dynamic_tool_config.additional_tools.is_some() {
+                //     return Err(Error::InvalidRequest {
+                //         message: "Cannot pass `additional_tools` to a JSON function.".to_string(),
+                //     });
+                // }
+                // if dynamic_tool_config.tool_choice.is_some() {
+                //     return Err(Error::InvalidRequest {
+                //         message: "Cannot pass `tool_choice` to a JSON function".to_string(),
+                //     });
+                // }
                 Ok(None)
-            }
-        }
-    }
-
-    pub fn load<P: AsRef<Path>>(&mut self, base_path: P) -> Result<(), Error> {
-        match self {
-            FunctionConfig::Chat(params) => {
-                // TODO (viraj): add a test that checks what happens if the schema load fails
-                params
-                    .system_schema
-                    .as_mut()
-                    .map(|schema| schema.load(base_path.as_ref()))
-                    .transpose()?;
-                params
-                    .user_schema
-                    .as_mut()
-                    .map(|schema| schema.load(base_path.as_ref()))
-                    .transpose()?;
-                params
-                    .assistant_schema
-                    .as_mut()
-                    .map(|schema| schema.load(base_path.as_ref()))
-                    .transpose()?;
-                Ok(())
-            }
-            FunctionConfig::Json(params) => {
-                params
-                    .system_schema
-                    .as_mut()
-                    .map(|schema| schema.load(base_path.as_ref()))
-                    .transpose()?;
-                params
-                    .user_schema
-                    .as_mut()
-                    .map(|schema| schema.load(base_path.as_ref()))
-                    .transpose()?;
-                params
-                    .assistant_schema
-                    .as_mut()
-                    .map(|schema| schema.load(base_path.as_ref()))
-                    .transpose()?;
-                params.output_schema.load(base_path.as_ref())?;
-                Ok(())
             }
         }
     }
@@ -318,11 +274,8 @@ mod tests {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{}", schema).expect("Failed to write schema to temporary file");
 
-        let mut schema = JSONSchemaFromPath::new(temp_file.path().to_owned());
-        schema
-            .load::<&std::path::Path>(&PathBuf::from(""))
-            .expect("Failed to load schema");
-        schema
+        JSONSchemaFromPath::new(temp_file.path().to_owned(), PathBuf::new())
+            .expect("Failed to create schema")
     }
 
     #[test]
@@ -382,9 +335,10 @@ mod tests {
     #[test]
     fn test_validate_input_chat_system_schema() {
         let system_schema = create_test_schema();
+        let system_value = system_schema.value.clone();
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: Some(system_schema.clone()),
+            system_schema: Some(system_schema),
             user_schema: None,
             assistant_schema: None,
             tools: vec![],
@@ -413,7 +367,7 @@ mod tests {
             Error::JsonSchemaValidation {
                 messages: vec!["\"system content\" is not of type \"object\"".to_string()],
                 data: json!("system content"),
-                schema: system_schema.value().unwrap().clone(),
+                schema: system_value,
             }
         );
 
@@ -438,10 +392,11 @@ mod tests {
     #[test]
     fn test_validate_input_chat_user_schema() {
         let user_schema = create_test_schema();
+        let user_value = user_schema.value.clone();
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
             system_schema: None,
-            user_schema: Some(user_schema.clone()),
+            user_schema: Some(user_schema),
             assistant_schema: None,
             tools: vec![],
             ..Default::default()
@@ -462,14 +417,13 @@ mod tests {
             system: Some(json!("system content")),
             messages,
         };
-
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
             validation_result.unwrap_err(),
             Error::JsonSchemaValidation {
                 messages: vec!["\"user content\" is not of type \"object\"".to_string()],
                 data: json!("user content"),
-                schema: user_schema.value().unwrap().clone(),
+                schema: user_value,
             }
         );
 
@@ -494,6 +448,7 @@ mod tests {
     #[test]
     fn test_validate_input_chat_assistant_schema() {
         let assistant_schema = create_test_schema();
+        let assistant_value = assistant_schema.value.clone();
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
             system_schema: None,
@@ -518,14 +473,13 @@ mod tests {
             system: Some(json!("system content")),
             messages,
         };
-
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
             validation_result.unwrap_err(),
             Error::JsonSchemaValidation {
                 messages: vec!["\"assistant content\" is not of type \"object\"".to_string()],
                 data: json!("assistant content"),
-                schema: assistant_schema.value().unwrap().clone(),
+                schema: assistant_value,
             }
         );
 
@@ -552,9 +506,10 @@ mod tests {
         let system_schema = create_test_schema();
         let user_schema = create_test_schema();
         let assistant_schema = create_test_schema();
+        let system_value = system_schema.value.clone();
         let chat_config = FunctionConfigChat {
             variants: HashMap::new(),
-            system_schema: Some(system_schema.clone()),
+            system_schema: Some(system_schema),
             user_schema: Some(user_schema),
             assistant_schema: Some(assistant_schema),
             tools: vec![],
@@ -584,7 +539,7 @@ mod tests {
             Error::JsonSchemaValidation {
                 messages: vec!["\"system content\" is not of type \"object\"".to_string()],
                 data: json!("system content"),
-                schema: system_schema.value().unwrap().clone(),
+                schema: system_value,
             }
         );
 
@@ -664,9 +619,10 @@ mod tests {
     #[test]
     fn test_validate_input_json_system_schema() {
         let system_schema = create_test_schema();
+        let system_value = system_schema.value.clone();
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: Some(system_schema.clone()),
+            system_schema: Some(system_schema),
             user_schema: None,
             assistant_schema: None,
             output_schema: JSONSchemaFromPath::from_value(&json!({})),
@@ -695,7 +651,7 @@ mod tests {
             Error::JsonSchemaValidation {
                 messages: vec!["\"system content\" is not of type \"object\"".to_string()],
                 data: json!("system content"),
-                schema: system_schema.value().unwrap().clone(),
+                schema: system_value,
             }
         );
 
@@ -721,10 +677,11 @@ mod tests {
     #[test]
     fn test_validate_input_json_user_schema() {
         let user_schema = create_test_schema();
+        let user_value = user_schema.value.clone();
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
-            user_schema: Some(user_schema.clone()),
+            user_schema: Some(user_schema),
             assistant_schema: None,
             output_schema: JSONSchemaFromPath::from_value(&json!({})),
         };
@@ -752,7 +709,7 @@ mod tests {
             Error::JsonSchemaValidation {
                 messages: vec!["\"user content\" is not of type \"object\"".to_string()],
                 data: json!("user content"),
-                schema: user_schema.value().unwrap().clone(),
+                schema: user_value,
             }
         );
 
@@ -777,11 +734,12 @@ mod tests {
     #[test]
     fn test_validate_input_json_assistant_schema() {
         let assistant_schema = create_test_schema();
+        let assistant_value = assistant_schema.value.clone();
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: None,
-            assistant_schema: Some(assistant_schema.clone()),
+            assistant_schema: Some(assistant_schema),
             output_schema: JSONSchemaFromPath::from_value(&json!({})),
         };
         let function_config = FunctionConfig::Json(tool_config);
@@ -807,7 +765,7 @@ mod tests {
             Error::JsonSchemaValidation {
                 messages: vec!["\"assistant content\" is not of type \"object\"".to_string()],
                 data: json!("assistant content"),
-                schema: assistant_schema.value().unwrap().clone(),
+                schema: assistant_value,
             }
         );
 
@@ -834,9 +792,10 @@ mod tests {
         let system_schema = create_test_schema();
         let user_schema = create_test_schema();
         let assistant_schema = create_test_schema();
+        let system_value = system_schema.value.clone();
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
-            system_schema: Some(system_schema.clone()),
+            system_schema: Some(system_schema),
             user_schema: Some(user_schema),
             assistant_schema: Some(assistant_schema),
             output_schema: JSONSchemaFromPath::from_value(&json!({})),
@@ -864,7 +823,7 @@ mod tests {
             Error::JsonSchemaValidation {
                 messages: vec!["\"system content\" is not of type \"object\"".to_string()],
                 data: json!("system content"),
-                schema: system_schema.value().unwrap().clone(),
+                schema: system_value,
             }
         );
 
