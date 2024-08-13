@@ -1,7 +1,6 @@
 use futures::StreamExt;
 use gateway::inference::providers::dummy::{
-    DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW, DUMMY_JSON_RESPONSE_RAW,
-    DUMMY_STREAMING_RESPONSE,
+    DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW, DUMMY_STREAMING_RESPONSE,
 };
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
@@ -584,7 +583,6 @@ async fn e2e_test_inference_model_fallback() {
 #[tokio::test]
 async fn e2e_test_variant_failover() {
     let mut last_response = None;
-    let mut last_payload = None;
     let mut last_episode_id = None;
     for _ in 0..50 {
         let episode_id = Uuid::now_v7();
@@ -615,11 +613,9 @@ async fn e2e_test_variant_failover() {
         // Check Response is OK, then fields in order
         assert_eq!(response.status(), StatusCode::OK);
         last_response = Some(response);
-        last_payload = Some(payload);
         last_episode_id = Some(episode_id);
     }
     let response = last_response.unwrap();
-    let payload = last_payload.unwrap();
     let episode_id = last_episode_id.unwrap();
     let response_json = response.json::<Value>().await.unwrap();
     let content_blocks = response_json

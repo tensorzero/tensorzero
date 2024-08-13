@@ -63,6 +63,7 @@ async fn test_infer_with_tool_calls() {
         deployment_id,
     });
     let result = provider.infer(&inference_request, &client).await;
+    println!("result: {:?}", result);
 
     assert!(result.is_ok());
     let response = result.unwrap();

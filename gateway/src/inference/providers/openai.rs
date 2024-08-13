@@ -265,12 +265,16 @@ pub(super) fn prepare_openai_messages<'a>(
 /// Otherwise convert the tool choice and tools to OpenAI format
 pub(super) fn prepare_openai_tools<'a>(
     request: &'a ModelInferenceRequest,
-) -> (Option<Vec<OpenAITool<'a>>>, Option<OpenAIToolChoice<'a>>) {
+) -> (
+    Option<Vec<OpenAITool<'a>>>,
+    Option<OpenAIToolChoice<'a>>,
+    Option<bool>,
+) {
     match request.tool_config {
-        None => (None, None),
+        None => (None, None, None),
         Some(tool_config) => {
             if tool_config.tools_available.is_empty() {
-                return (None, None);
+                return (None, None, None);
             }
             let tools = Some(
                 tool_config
@@ -280,7 +284,8 @@ pub(super) fn prepare_openai_tools<'a>(
                     .collect(),
             );
             let tool_choice = Some(tool_config.tool_choice.into());
-            (tools, tool_choice)
+            let parallel_tool_calls = Some(tool_config.parallel_tool_calls);
+            (tools, tool_choice, parallel_tool_calls)
         }
     }
 }
@@ -500,7 +505,7 @@ impl<'a> OpenAIRequest<'a> {
         };
         let messages = prepare_openai_messages(request);
 
-        let (tools, tool_choice) = prepare_openai_tools(request);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
         OpenAIRequest {
             messages,
             model,
@@ -511,7 +516,7 @@ impl<'a> OpenAIRequest<'a> {
             response_format,
             tools,
             tool_choice,
-            parallel_tool_calls: request.tool_config.map(|r| r.parallel_tool_calls),
+            parallel_tool_calls,
         }
     }
 }
@@ -1079,7 +1084,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
         };
-        let (tools, tool_choice) = prepare_openai_tools(&request_with_tools);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(&request_with_tools);
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].function.name, "get_weather");
@@ -1089,6 +1094,8 @@ mod tests {
             tool_choice,
             OpenAIToolChoice::String(OpenAIToolChoiceString::Auto)
         );
+        let parallel_tool_calls = parallel_tool_calls.unwrap();
+        assert!(parallel_tool_calls);
         let tool_config = ToolCallConfig {
             tools_available: vec![],
             tool_choice: &ToolChoice::Required,
@@ -1110,9 +1117,11 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
         };
-        let (tools, tool_choice) = prepare_openai_tools(&request_without_tools);
+        let (tools, tool_choice, parallel_tool_calls) =
+            prepare_openai_tools(&request_without_tools);
         assert!(tools.is_none());
         assert!(tool_choice.is_none());
+        assert!(parallel_tool_calls.is_none());
     }
 
     #[test]

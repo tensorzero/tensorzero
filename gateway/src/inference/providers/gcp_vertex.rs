@@ -493,11 +493,7 @@ impl<'a> TryFrom<&'a ModelInferenceRequest<'a>> for GCPVertexGeminiRequest<'a> {
             .iter()
             .map(GCPVertexGeminiContent::from)
             .collect();
-        let tools = request
-            .tool_config
-            .map(|c| &c.tools_available)
-            .map(|tools| vec![GCPVertexGeminiTool::from(tools)]);
-        let tool_config = request.tool_config.map(|c| c.tool_choice.into());
+        let (tools, tool_config) = prepare_tools(request);
         let (response_mime_type, response_schema) = match request.output_schema {
             Some(output_schema) => (
                 Some(GCPVertexGeminiResponseMimeType::ApplicationJson),
@@ -522,6 +518,25 @@ impl<'a> TryFrom<&'a ModelInferenceRequest<'a>> for GCPVertexGeminiRequest<'a> {
                 parts: vec![content],
             }),
         })
+    }
+}
+
+fn prepare_tools<'a>(
+    request: &'a ModelInferenceRequest<'a>,
+) -> (
+    Option<Vec<GCPVertexGeminiTool<'a>>>,
+    Option<GCPVertexGeminiToolConfig<'a>>,
+) {
+    match request.tool_config {
+        Some(tool_config) => {
+            if tool_config.tools_available.is_empty() {
+                return (None, None);
+            }
+            let tools = Some(vec![(&tool_config.tools_available).into()]);
+            let tool_config = Some(tool_config.tool_choice.into());
+            (tools, tool_config)
+        }
+        None => (None, None),
     }
 }
 
@@ -726,6 +741,8 @@ fn handle_gcp_vertex_gemini_error(
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::*;
     use crate::inference::types::{FunctionType, JSONMode};
     use crate::tool::{Tool, ToolCallConfig, ToolResult};
@@ -1208,5 +1225,83 @@ mod tests {
             }
         );
         assert_eq!(model_inference_response.latency, latency);
+    }
+
+    #[test]
+    fn test_prepare_tools() {
+        let parameters = json!({
+            "type": "object",
+            "properties": {
+                "location": {
+                    "type": "string",
+                    "description": "The city and state, e.g. San Francisco, CA"
+                }
+            },
+            "required": ["location"]
+        });
+
+        let tool = Tool::Function {
+            name: "get_weather".to_string(),
+            description: Some("Get the current weather".to_string()),
+            parameters: parameters.clone(),
+        };
+        let tool_config = ToolCallConfig {
+            tools_available: vec![&tool],
+            tool_choice: &ToolChoice::Auto,
+            parallel_tool_calls: true,
+        };
+        let request_with_tools = ModelInferenceRequest {
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            max_tokens: None,
+            stream: false,
+            json_mode: JSONMode::On,
+            tool_config: Some(&tool_config),
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+        let (tools, tool_choice) = prepare_tools(&request_with_tools);
+        let tools = tools.unwrap();
+        assert_eq!(tools.len(), 1);
+        match &tools[0] {
+            GCPVertexGeminiTool::FunctionDeclarations(functions) => {
+                assert_eq!(functions[0].name, "get_weather");
+                assert_eq!(functions[0].description, Some("Get the current weather"));
+                assert_eq!(functions[0].parameters, Some(&parameters));
+            }
+        }
+        let tool_choice = tool_choice.unwrap();
+        assert_eq!(
+            tool_choice.function_calling_config.mode,
+            GCPVertexGeminiFunctionCallingMode::Auto
+        );
+        let tool_config = ToolCallConfig {
+            tools_available: vec![],
+            tool_choice: &ToolChoice::Required,
+            parallel_tool_calls: true,
+        };
+
+        // Test no tools but a tool choice and make sure tool choice output is None
+        let request_without_tools = ModelInferenceRequest {
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            max_tokens: None,
+            stream: false,
+            json_mode: JSONMode::On,
+            tool_config: Some(&tool_config),
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+        let (tools, tool_choice) = prepare_tools(&request_without_tools);
+        assert!(tools.is_none());
+        assert!(tool_choice.is_none());
     }
 }

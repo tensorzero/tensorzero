@@ -330,10 +330,6 @@ impl<'a> AnthropicRequestBody<'a> {
             .map(AnthropicMessage::from)
             .collect();
         let messages = prepare_messages(request_messages)?;
-        let tool_choice: Option<AnthropicToolChoice> = request
-            .tool_config
-            .map(|c| c.tool_choice)
-            .and_then(|c| c.try_into().ok());
         let tools = request
             .tool_config
             .map(|c| &c.tools_available)
@@ -344,6 +340,12 @@ impl<'a> AnthropicRequestBody<'a> {
                     .collect::<Result<Vec<_>, _>>()
             })
             .transpose()?;
+        // tool_choice should only be set if tools are set and non-empty
+        let tool_choice: Option<AnthropicToolChoice> = tools
+            .as_ref()
+            .filter(|t| !t.is_empty())
+            .and_then(|_| request.tool_config)
+            .and_then(|c| c.tool_choice.try_into().ok());
         Ok(AnthropicRequestBody {
             model: model_name,
             messages,

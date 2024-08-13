@@ -177,7 +177,7 @@ impl<'a> TogetherRequest<'a> {
             JSONMode::Off => None,
         };
         let messages = prepare_openai_messages(request);
-        let (tools, tool_choice) = prepare_openai_tools(request);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
         TogetherRequest {
             messages,
             model,
@@ -187,7 +187,7 @@ impl<'a> TogetherRequest<'a> {
             response_format,
             tools,
             tool_choice,
-            parallel_tool_calls: request.tool_config.map(|c| c.parallel_tool_calls),
+            parallel_tool_calls,
         }
     }
 }

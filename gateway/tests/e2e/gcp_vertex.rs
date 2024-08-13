@@ -88,10 +88,20 @@ async fn test_inference_basic() {
     assert_eq!(id_uuid, inference_id);
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, payload["input"]);
-    // Since there's no output schema, this should be empty
-    assert!(result.get("parsed_output").unwrap().is_null());
-    let content_blocks = result.get("content_blocks").unwrap().as_str().unwrap();
+    let correct_input = json!({
+        "system": {"assistant_name": "AskJeeves"},
+        "messages": [
+            {
+                "role": "user",
+                "content": [{
+                    "type": "text",
+                    "value": "Hello, world!"
+                }]
+            }
+        ]
+    });
+    assert_eq!(input, correct_input);
+    let content_blocks = result.get("output").unwrap().as_str().unwrap();
     // Check that content_blocks is a list of blocks length 1
     let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
     assert_eq!(content_blocks.len(), 1);
@@ -121,7 +131,7 @@ async fn test_inference_basic() {
     assert_eq!(inference_id_result, inference_id);
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, payload["input"]);
+    assert_eq!(input, correct_input);
     let output = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
     assert_eq!(content_blocks.len(), 1);
@@ -213,10 +223,20 @@ async fn test_streaming() {
     assert_eq!(id_uuid, inference_id);
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, payload["input"]);
-    // Since there's no output schema, this should be empty
-    assert!(result.get("parsed_output").unwrap().is_null());
-    let content_blocks = result.get("content_blocks").unwrap().as_str().unwrap();
+    let correct_input = json!({
+        "system": {"assistant_name": "AskJeeves"},
+        "messages": [
+            {
+                "role": "user",
+                "content": [{
+                    "type": "text",
+                    "value": "Hello, world!"
+                }]
+            }
+        ]
+    });
+    assert_eq!(input, correct_input);
+    let content_blocks = result.get("output").unwrap().as_str().unwrap();
     // Check that content_blocks is a list of blocks length 1
     let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
     assert_eq!(content_blocks.len(), 1);
@@ -246,7 +266,7 @@ async fn test_streaming() {
     assert_eq!(inference_id_result, inference_id);
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, payload["input"]);
+    assert_eq!(input, correct_input);
     let output = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
     assert_eq!(content_blocks.len(), 1);
