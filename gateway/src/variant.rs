@@ -591,12 +591,7 @@ mod tests {
         assert!(matches!(result, InferenceResponse::Chat(_)));
         match result {
             InferenceResponse::Chat(chat_response) => {
-                // No output schema means parsed_output is None
-                assert_eq!(chat_response.parsed_output, None,);
-                assert_eq!(
-                    chat_response.content_blocks,
-                    vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()]
-                );
+                assert_eq!(chat_response.output, vec![]);
                 assert_eq!(
                     chat_response.usage,
                     Usage {
