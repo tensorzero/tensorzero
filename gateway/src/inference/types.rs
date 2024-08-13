@@ -66,7 +66,7 @@ pub struct Text {
 
 /// Core representation of the types of content that could go in or out of a model
 #[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlock {
     Text(Text),
     ToolCall(ToolCall),
