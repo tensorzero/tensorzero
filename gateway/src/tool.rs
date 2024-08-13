@@ -6,7 +6,7 @@ use serde_json::Value;
 use crate::{error::Error, jsonschema_util::JSONSchemaFromPath};
 
 /// Contains the configuration information for a specific tool
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct ToolConfig {
     pub description: String,
     pub parameters: JSONSchemaFromPath,
@@ -19,7 +19,7 @@ pub struct ToolConfig {
 /// and what sorts of tool calls (parallel, none, etc) it is allowed to respond with.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ToolCallConfig<'a> {
-    pub tools_available: Vec<&'a Tool>,
+    pub tools_available: Vec<&'a ToolConfig>,
     pub tool_choice: &'a ToolChoice,
     pub parallel_tool_calls: bool,
 }
@@ -30,43 +30,46 @@ impl<'a> ToolCallConfig<'a> {
         function_tool_choice: &'a ToolChoice,
         function_parallel_tool_calls: bool,
         static_tools: &'a HashMap<String, ToolConfig>,
-        dynamic_tool_config: &'a DynamicToolConfig,
+        _dynamic_tool_config: &'a DynamicToolConfig,
     ) -> Result<Self, Error> {
-        let allowed_tool_names = match dynamic_tool_config.allowed_tools {
-            Some(allowed_tools) => allowed_tools,
-            None => function_tools,
-        };
-        let tools_available: Result<Vec<&Tool>, Error> = allowed_tool_names
+        // TODO (add issue): support dynamic tool calling properly
+        // let allowed_tool_names = match dynamic_tool_config.allowed_tools {
+        //     Some(allowed_tools) => allowed_tools,
+        //     None => function_tools,
+        // };
+        let allowed_tool_names = function_tools;
+        let tools_available: Result<Vec<&ToolConfig>, Error> = allowed_tool_names
             .iter()
             .map(|tool_name| {
-                static_tools
-                    .get(tool_name)
-                    .ok_or(Error::ToolNotFound {
-                        name: tool_name.clone(),
-                    })?
-                    .tool
-                    .as_ref()
-                    .ok_or(Error::ToolNotLoaded {
-                        name: tool_name.clone(),
-                    })
+                static_tools.get(tool_name).ok_or(Error::ToolNotFound {
+                    name: tool_name.clone(),
+                })
             })
             .collect();
         let mut tools_available = tools_available?;
-        if let Some(additional_tools) = dynamic_tool_config.additional_tools {
-            tools_available.extend(additional_tools);
-        }
-        let tool_choice = dynamic_tool_config
-            .tool_choice
-            .unwrap_or(function_tool_choice);
-        let parallel_tool_calls = dynamic_tool_config
-            .parallel_tool_calls
-            .unwrap_or(function_parallel_tool_calls);
+        // if let Some(additional_tools) = dynamic_tool_config.additional_tools {
+        //     tools_available.extend(additional_tools);
+        // }
+        // let tool_choice = dynamic_tool_config
+        //     .tool_choice
+        //     .unwrap_or(function_tool_choice);
+        let tool_choice = function_tool_choice;
+        // let parallel_tool_calls = dynamic_tool_config
+        //     .parallel_tool_calls
+        //     .unwrap_or(function_parallel_tool_calls);
+        let parallel_tool_calls = function_parallel_tool_calls;
 
         Ok(Self {
             tools_available,
             tool_choice,
             parallel_tool_calls,
         })
+    }
+
+    pub fn get_tool(&self, name: &str) -> Option<&ToolConfig> {
+        self.tools_available.iter().find(
+            |tool_cfg| matches!(tool_cfg.tool, Some(Tool::Function { name: n, .. }) if n == name),
+        ).copied()
     }
 }
 
@@ -111,6 +114,39 @@ pub struct ToolCall {
     pub name: String,
     pub arguments: String,
     pub id: String,
+}
+
+/// A ToolCallOutput is a request by a model to call a Tool
+/// in the form that we return to the client / ClickHouse
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ToolCallOutput {
+    pub name: String,
+    pub arguments: String,
+    pub id: String,
+    pub parsed_name: Option<String>,
+    pub parsed_arguments: Option<Value>,
+}
+
+impl ToolCallOutput {
+    pub fn new(tool_call: ToolCall, tool_cfg: Option<&ToolConfig>) -> Self {
+        let mut tool_call_output = Self {
+            name: tool_call.name,
+            arguments: tool_call.arguments,
+            id: tool_call.id,
+            parsed_name: None,
+            parsed_arguments: None,
+        };
+        if let Some(tool_cfg) = tool_cfg {
+            tool_call_output.parsed_name = Some(tool_call.name.clone());
+            if let Ok(arguments) = serde_json::from_str(&tool_call.arguments) {
+                // validate parameters
+                if tool_cfg.parameters.validate(&arguments).is_ok() {
+                    tool_call_output.parsed_arguments = Some(arguments);
+                }
+            }
+        }
+        tool_call_output
+    }
 }
 
 /// A ToolResult is the outcome of a ToolCall, which we may want to present back to the model

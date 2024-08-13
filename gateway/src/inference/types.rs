@@ -2,6 +2,7 @@ use derive_builder::Builder;
 use futures::Stream;
 use serde::{ser::SerializeStruct, Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
+use sha2::digest::OutputSizeUser;
 use std::{
     collections::HashMap,
     fmt,
@@ -11,7 +12,9 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolResult};
+use crate::tool::{
+    ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolChoice, ToolResult,
+};
 use crate::{error::Error, jsonschema_util::JSONSchemaFromPath};
 /// Data flow in TensorZero
 ///
@@ -72,6 +75,13 @@ pub enum ContentBlock {
     ToolCall(ToolCall),
     ToolResult(ToolResult),
 }
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub enum ContentBlockOutput {
+    Text(Text),
+    ToolCall(ToolCallOutput),
+}
+//TODO(viraj): make an output content block that has a tool call with extra fields "parsed_name" and "parsed_output"
 
 /// A RequestMessage is a message sent to a model
 #[derive(Clone, Debug, PartialEq)]
@@ -155,19 +165,19 @@ pub enum Latency {
 /// In the non-streaming case, this InferenceResponse is serialized into the TensorZero response format.
 /// See below for streaming case.
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum InferenceResponse {
     Chat(ChatInferenceResponse),
 }
 
 // Determines the return type of Inference API for Chat-type functions (which is all of them right now)
 /// See InferenceResponseWithOutputSchema below for details
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ChatInferenceResponse {
     inference_id: Uuid,
     created: u64,
-    pub parsed_output: Option<Value>,
-    pub content_blocks: Vec<ContentBlock>,
+    pub output: Vec<ContentBlockOutput>,
     pub usage: Usage,
     pub model_inference_responses: Vec<ModelInferenceResponse>,
 }
@@ -355,90 +365,58 @@ impl ChatInferenceResponse {
         raw_content: Vec<ContentBlock>,
         usage: Usage,
         model_inference_responses: Vec<ModelInferenceResponse>,
-        output_schema: Option<&JSONSchemaFromPath>,
+        tool_config: Option<&ToolCallConfig>,
     ) -> Self {
         #[allow(clippy::expect_used)]
         let created = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards")
             .as_secs();
-        let parsed_output = match output_schema {
-            // We write None for parsed_output if parsing fails
-            Some(schema) => Self::parse_output(&raw_content, schema).ok(),
-            // We also write None if there is no output schema
-            None => None,
-        };
+        let output = Self::parse_output(raw_content, tool_config);
         Self {
             inference_id,
             created,
-            parsed_output,
-            content_blocks: raw_content,
+            output,
             usage,
             model_inference_responses,
         }
     }
 
     fn parse_output(
-        content: &[ContentBlock],
-        output_schema: &JSONSchemaFromPath,
-    ) -> Result<Value, Error> {
+        content: Vec<ContentBlock>,
+        tool_config: Option<&ToolCallConfig>,
+    ) -> Vec<ContentBlockOutput> {
         if content.is_empty() {
-            return Err(Error::OutputParsing {
+            Error::OutputParsing {
                 raw_output: "".to_string(),
                 message: "Output parsing failed due to empty content".to_string(),
-            });
+            }
+            .log();
+            return vec![];
         }
-        // let tool_choice = match tool_config {
-        //     Some(config) => config.tool_choice,
-        //     None => &ToolChoice::None,
-        // };
-        // match tool_choice {
-        //     ToolChoice::Implicit => {
-        //         // TODO(#30): handle tool calls and fully think this through
-        //         for content in content.iter().rev() {
-        //             let arguments = match content {
-        //                 ContentBlock::ToolCall(tool_call) => &tool_call.arguments,
-        //                 _ => continue,
-        //             };
-        //             let parsed_arguments =
-        //                 serde_json::from_str(arguments).map_err(|e| Error::OutputParsing {
-        //                     raw_output: arguments.to_string(),
-        //                     message: e.to_string(),
-        //                 })?;
-        //             output_schema.validate(&parsed_arguments).map_err(|e| {
-        //                 Error::OutputValidation {
-        //                     source: Box::new(e),
-        //                 }
-        //             })?;
-        //             return Ok(parsed_arguments);
-        //         }
-        //         Err(Error::OutputParsing {
-        //             raw_output: "".to_string(),
-        //             message: "Output parsing failed due to no tool calls".to_string(),
-        //         })
-        //     }
-        //     _ => {
-        // Grab the last text content block, parse it, and return
-        for content in content.iter().rev() {
-            let text = match content {
-                ContentBlock::Text(Text { text }) => text,
-                _ => continue,
-            };
-            let parsed_text = serde_json::from_str(text).map_err(|e| Error::OutputParsing {
-                raw_output: text.to_string(),
-                message: e.to_string(),
-            })?;
-            output_schema
-                .validate(&parsed_text)
-                .map_err(|e| Error::OutputValidation {
-                    source: Box::new(e),
-                })?;
-            return Ok(parsed_text);
+        let mut output = Vec::new();
+        for content in content.into_iter() {
+            match content {
+                ContentBlock::Text(text) => {
+                    output.push(ContentBlockOutput::Text(text));
+                }
+                ContentBlock::ToolCall(tool_call) => {
+                    // Parse the tool call arguments
+                    let tool = tool_config.and_then(|t| t.get_tool(&tool_call.name));
+                    let tool_call_output = ToolCallOutput::new(tool_call, tool);
+                    output.push(ContentBlockOutput::ToolCall(tool_call_output));
+                }
+                ContentBlock::ToolResult(tool_result) => {
+                    Error::OutputParsing {
+                        raw_output: serde_json::to_string(&tool_result).unwrap_or_default(),
+                        message: "Tool results are not supported in output for Chat functions"
+                            .to_string(),
+                    }
+                    .log();
+                }
+            }
         }
-        Err(Error::OutputParsing {
-            raw_output: "".to_string(),
-            message: "Output parsing failed due to no text content".to_string(),
-        })
+        output
     }
 
     pub fn get_serialized_model_inferences(&self, input: &str) -> Vec<serde_json::Value> {
@@ -450,47 +428,6 @@ impl ChatInferenceResponse {
                 serde_json::to_value(model_inference).unwrap_or_default()
             })
             .collect()
-    }
-}
-
-/// Helper type for output serialization of non-streaming responses.
-/// This is required since we want to only return the `parsed_output` field
-/// if there is an output schema for the Function being called.
-pub struct InferenceResponseWithOutputSchema<'a> {
-    pub inference_response: InferenceResponse,
-    pub output_schema: Option<&'a JSONSchemaFromPath>,
-}
-
-/// Custom serializer is required since we want to only return the `parsed_output` field
-/// if there is an output schema for the Function being called (null-valued if output parsing fails).
-impl<'a> Serialize for InferenceResponseWithOutputSchema<'a> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match &self.inference_response {
-            InferenceResponse::Chat(chat_response) => {
-                // Count the number of fields we'll be serializing
-                let mut field_count = 5; // type, inference_id, created, content_blocks, usage
-                if self.output_schema.is_some() {
-                    field_count += 1; // We'll include parsed_output
-                }
-
-                let mut state = serializer.serialize_struct("InferenceResponse", field_count)?;
-
-                state.serialize_field("type", "chat")?;
-                state.serialize_field("inference_id", &chat_response.inference_id)?;
-                state.serialize_field("created", &chat_response.created)?;
-                state.serialize_field("content_blocks", &chat_response.content_blocks)?;
-                state.serialize_field("usage", &chat_response.usage)?;
-
-                if self.output_schema.is_some() {
-                    state.serialize_field("parsed_output", &chat_response.parsed_output)?;
-                }
-
-                state.end()
-            }
-        }
     }
 }
 
@@ -513,7 +450,7 @@ impl Inference {
                 episode_id,
                 input,
                 dynamic_tool_config,
-                output: serde_json::to_string(&chat_response.content_blocks).unwrap_or_default(),
+                output: serde_json::to_string(&chat_response.output).unwrap_or_default(),
                 processing_time_ms,
             },
         }
@@ -562,6 +499,7 @@ impl From<ModelInferenceResponseChunk> for ChatInferenceResponseChunk {
 pub fn collect_chunks(
     value: Vec<ModelInferenceResponseChunk>,
     output_schema: Option<&JSONSchemaFromPath>,
+    tool_config: Option<&ToolCallConfig>,
 ) -> Result<InferenceResponse, Error> {
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
 
@@ -661,7 +599,7 @@ pub fn collect_chunks(
         content_blocks,
         usage,
         vec![model_response],
-        output_schema,
+        tool_config,
     )))
 }
 

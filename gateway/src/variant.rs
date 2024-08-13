@@ -209,13 +209,12 @@ impl Variant for ChatCompletionConfig {
         let raw_content = model_inference_response.content.clone();
         let usage = model_inference_response.usage.clone();
         let model_inference_responses = vec![model_inference_response];
-        let output_schema = function.output_schema();
         Ok(InferenceResponse::Chat(ChatInferenceResponse::new(
             inference_id,
             raw_content,
             usage,
             model_inference_responses,
-            output_schema,
+            tool_config,
         )))
     }
 

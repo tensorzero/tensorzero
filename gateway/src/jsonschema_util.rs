@@ -13,6 +13,12 @@ pub struct JSONSchemaFromPath {
     value: Option<&'static serde_json::Value>,
 }
 
+impl PartialEq for JSONSchemaFromPath {
+    fn eq(&self, other: &Self) -> bool {
+        self.path == other.path && self.value == other.value
+    }
+}
+
 impl JSONSchemaFromPath {
     /// Just instantiates the struct, does not load the schema
     /// You should call `load` to load the schema

@@ -6,20 +6,22 @@ use axum::{debug_handler, Json};
 use futures::stream::Stream;
 use metrics::counter;
 use serde::Deserialize;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::Instant;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::config_parser::Config;
 use crate::error::{Error, ResultExt};
 use crate::function::sample_variant;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
     collect_chunks, FunctionConfig, Inference, InferenceResponse, InferenceResponseChunk,
-    InferenceResponseStream, InferenceResponseWithOutputSchema, Input, ModelInferenceResponseChunk,
+    InferenceResponseStream, Input, ModelInferenceResponseChunk,
 };
-use crate::tool::{DynamicToolConfig, Tool, ToolChoice};
+use crate::tool::{DynamicToolConfig, Tool, ToolCallConfig, ToolChoice};
 use crate::uuid_util::validate_episode_id;
 use crate::variant::Variant;
 
@@ -45,14 +47,15 @@ pub struct Params {
     variant_name: Option<String>,
     // if true, the inference will not be stored
     dryrun: Option<bool>,
+    // TODO (make an issue): properly implement dynamic tool calling
     // If provided, the inference will only use the specified tools (a subset of the function's tools)
-    allowed_tools: Option<Vec<String>>,
+    // allowed_tools: Option<Vec<String>>,
     // If provided, the inference will use the specified tools in addition to the function's tools
-    additional_tools: Option<Vec<Tool>>,
+    // additional_tools: Option<Vec<Tool>>,
     // If provided, the inference will use the specified tool choice
-    tool_choice: Option<ToolChoice>,
+    // tool_choice: Option<ToolChoice>,
     // If true, the inference will use parallel tool calls
-    parallel_tool_calls: Option<bool>,
+    // parallel_tool_calls: Option<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -80,17 +83,23 @@ pub async fn inference_handler(
     // Get the function config or return an error if it doesn't exist
     let function = config.get_function(&params.function_name)?;
     // Collect the dynamic tool config
+    // let dynamic_tool_config = DynamicToolConfig {
+    //     allowed_tools: params.allowed_tools.as_ref(),
+    //     additional_tools: params.additional_tools.as_ref(),
+    //     tool_choice: params.tool_choice.as_ref(),
+    //     parallel_tool_calls: params.parallel_tool_calls,
+    // };
     let dynamic_tool_config = DynamicToolConfig {
-        allowed_tools: params.allowed_tools.as_ref(),
-        additional_tools: params.additional_tools.as_ref(),
-        tool_choice: params.tool_choice.as_ref(),
-        parallel_tool_calls: params.parallel_tool_calls,
+        allowed_tools: None,
+        additional_tools: None,
+        tool_choice: None,
+        parallel_tool_calls: None,
     };
-    let tool_config = function.prepare_tool_config(&dynamic_tool_config, &config.tools)?;
     let dynamic_tool_config_string =
         serde_json::to_string(&dynamic_tool_config).map_err(|e| Error::Serialization {
             message: e.to_string(),
         })?;
+    let tool_config = function.prepare_tool_config(&dynamic_tool_config, &config.tools)?;
     // Clone the function variants so we can modify the collection as we sample them
     let mut variants = function.variants().clone();
 
@@ -174,11 +183,12 @@ pub async fn inference_handler(
             };
 
             let stream = create_stream(
-                function.clone(),
+                config.clone(),
                 inference_metadata,
                 chunk,
                 stream,
                 clickhouse_connection_info,
+                tool_config,
                 dynamic_tool_config_string,
             );
 
@@ -220,16 +230,9 @@ pub async fn inference_handler(
                     .await;
                 });
             }
-            let response_with_output_schema = InferenceResponseWithOutputSchema {
-                inference_response: response,
-                output_schema: function.output_schema(),
-            };
-            let response_value =
-                serde_json::to_value(response_with_output_schema).map_err(|e| {
-                    Error::Inference {
-                        message: format!("Failed to convert response to JSON: {}", e),
-                    }
-                })?;
+            let response_value = serde_json::to_value(response).map_err(|e| Error::Inference {
+                message: format!("Failed to convert response to JSON: {}", e),
+            })?;
             return Ok(Json(response_value).into_response());
         }
     }
@@ -240,14 +243,25 @@ pub async fn inference_handler(
 }
 
 fn create_stream(
-    function: FunctionConfig,
+    config: Arc<Config>,
     metadata: InferenceMetadata,
     first_chunk: ModelInferenceResponseChunk,
     mut stream: InferenceResponseStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
+    tool_config: Option<ToolCallConfig>,
     dynamic_tool_config_string: String,
 ) -> impl Stream<Item = Result<Event, Error>> + Send {
+    let tool_config = Arc::new(tool_config);
     async_stream::stream! {
+        let function_result = config.get_function(&metadata.function_name);
+        let function = match function_result {
+            Ok(function) => function,
+            Err(e) => {
+                // This should never happen, we can't get this far without a valid function
+                yield Err(e);
+                return;
+            }
+        };
         let mut buffer = vec![first_chunk.clone()];
 
         // Send the first chunk
@@ -281,10 +295,12 @@ fn create_stream(
         if !metadata.dryrun {
             let inference_response: Result<InferenceResponse, Error> =
                 // TODO (#30): probably get this from FunctionConfig
-                collect_chunks(buffer, function.output_schema());
+                collect_chunks(buffer, function.output_schema(), tool_config.as_deref());
+
             let inference_response = inference_response.ok_or_log();
 
             if let Some(inference_response) = inference_response {
+
                 tokio::spawn(async move {
                     write_inference(
                         &clickhouse_connection_info,
