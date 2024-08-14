@@ -1,4 +1,6 @@
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+#!/bin/bash
+
+SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 
 echo 'POST http://localhost:4000/chat/completions' \
 | vegeta attack \
