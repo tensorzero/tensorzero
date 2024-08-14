@@ -10,7 +10,7 @@ use crate::inference::types::{
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::initialize_templates;
 use crate::model::ModelConfig;
-use crate::tool::{Tool, ToolChoice, ToolConfig};
+use crate::tool::{ToolChoice, ToolConfig};
 
 static CONFIG: OnceLock<Config> = OnceLock::new();
 
@@ -511,15 +511,10 @@ pub struct UninitializedToolConfig {
 impl UninitializedToolConfig {
     pub fn load<P: AsRef<Path>>(self, base_path: P, name: String) -> Result<ToolConfig, Error> {
         let parameters = JSONSchemaFromPath::new(self.parameters, base_path.as_ref())?;
-        let tool = Tool::Function {
-            name,
-            description: Some(self.description.clone()),
-            parameters: parameters.value.clone(),
-        };
         Ok(ToolConfig {
+            name,
             description: self.description,
             parameters,
-            tool,
         })
     }
 }

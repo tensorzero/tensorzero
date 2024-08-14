@@ -6,12 +6,11 @@ use serde_json::Value;
 use crate::{error::Error, jsonschema_util::JSONSchemaFromPath};
 
 /// Contains the configuration information for a specific tool
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Serialize)]
 pub struct ToolConfig {
     pub description: String,
     pub parameters: JSONSchemaFromPath,
-    // This should get set at `load` time
-    pub tool: Tool,
+    pub name: String,
 }
 
 /// Contains all information required to tell an LLM what tools it can call
@@ -68,7 +67,7 @@ impl ToolCallConfig {
     pub fn get_tool(&self, name: &str) -> Option<&ToolConfig> {
         self.tools_available
             .iter()
-            .find(|tool_cfg| matches!(&tool_cfg.tool, Tool::Function { name: n, .. } if n == name))
+            .find(|tool_cfg| matches!(&tool_cfg.name, n if n == name))
             .copied()
     }
 }
@@ -77,22 +76,9 @@ impl ToolCallConfig {
 #[derive(Debug, PartialEq, Serialize)]
 pub struct DynamicToolConfig<'a> {
     pub allowed_tools: Option<&'a Vec<String>>,
-    pub additional_tools: Option<&'a Vec<Tool>>,
+    pub additional_tools: Option<&'a Vec<ToolConfig>>,
     pub tool_choice: Option<&'a ToolChoice>,
     pub parallel_tool_calls: Option<bool>,
-}
-
-/// The Tool type is used to represent a tool that is available to the model.
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-pub enum Tool {
-    Function {
-        // TODO(maybe, otherwise remove this): make these references somehow
-        // The difficulty here is that Tools are sometimes deserialized from input (need to be owned)
-        // or they are constructed from ToolConfigs in schema validation (need to be references)
-        description: Option<String>,
-        name: String,
-        parameters: Value,
-    },
 }
 
 /// A ToolCall is a request by a model to call a Tool

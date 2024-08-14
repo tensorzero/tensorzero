@@ -2,7 +2,7 @@ use gateway::inference::types::{
     FunctionType, JSONMode, ModelInferenceRequest, RequestMessage, Role,
 };
 use gateway::jsonschema_util::JSONSchemaFromPath;
-use gateway::tool::{Tool, ToolCallConfig, ToolChoice, ToolConfig};
+use gateway::tool::{ToolCallConfig, ToolChoice, ToolConfig};
 use lazy_static::lazy_static;
 use serde_json::json;
 
@@ -73,24 +73,7 @@ pub fn create_json_inference_request<'a>() -> ModelInferenceRequest<'a> {
 
 lazy_static! {
     static ref WEATHER_TOOL: ToolConfig = ToolConfig {
-        tool: Tool::Function {
-            description: Some("Get the current weather in a given location".to_string()),
-            name: "get_weather".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "location": {
-                        "type": "string",
-                        "description": "The city and state, e.g. San Francisco, CA"
-                    },
-                    "unit": {
-                        "type": "string",
-                        "enum": ["celsius", "fahrenheit"]
-                    }
-                },
-                "required": ["location"]
-            }),
-        },
+        name: "get_weather".to_string(),
         description: "Get the current weather in a given location".to_string(),
         parameters: JSONSchemaFromPath::from_value(&json!({
             "type": "object",

@@ -203,7 +203,7 @@ mod tests {
     use serde_json::json;
 
     use crate::jsonschema_util::JSONSchemaFromPath;
-    use crate::tool::{Tool, ToolChoice, ToolConfig};
+    use crate::tool::{ToolChoice, ToolConfig};
     use crate::{
         inference::{
             providers::openai::OpenAIToolChoiceString,
@@ -224,15 +224,10 @@ mod tests {
             },
             "required": ["location"]
         });
-        let tool = Tool::Function {
-            name: "get_weather".to_string(),
-            description: Some("Get the current weather".to_string()),
-            parameters: parameters.clone(),
-        };
         let tool_config = ToolConfig {
             description: "Get the current weather".to_string(),
             parameters: JSONSchemaFromPath::from_value(&parameters),
-            tool,
+            name: "get_weather".to_string(),
         };
         let tool_config = Box::leak(Box::new(tool_config));
         let tool_config = ToolCallConfig {

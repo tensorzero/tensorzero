@@ -17,7 +17,7 @@ use crate::inference::types::{
     ModelInferenceRequest, ModelInferenceResponse, ModelInferenceResponseChunk, RequestMessage,
     Role, Text, TextChunk, Usage,
 };
-use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice};
+use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 const OPENAI_DEFAULT_BASE_URL: &str = "https://api.openai.com/v1/";
 
@@ -280,7 +280,7 @@ pub(super) fn prepare_openai_tools<'a>(
                 tool_config
                     .tools_available
                     .iter()
-                    .map(|tool| OpenAITool::from(&tool.tool))
+                    .map(|tool| (*tool).into())
                     .collect(),
             );
             let tool_choice = Some(tool_config.tool_choice.into());
@@ -390,20 +390,14 @@ pub(super) struct OpenAITool<'a> {
     function: OpenAIFunction<'a>,
 }
 
-impl<'a> From<&'a Tool> for OpenAITool<'a> {
-    fn from(tool: &'a Tool) -> Self {
-        match tool {
-            Tool::Function {
-                description,
-                name,
-                parameters,
-            } => OpenAITool {
-                r#type: OpenAIToolType::Function,
-                function: OpenAIFunction {
-                    name,
-                    description: description.as_deref(),
-                    parameters,
-                },
+impl<'a> From<&'a ToolConfig> for OpenAITool<'a> {
+    fn from(tool: &'a ToolConfig) -> Self {
+        OpenAITool {
+            r#type: OpenAIToolType::Function,
+            function: OpenAIFunction {
+                name: &tool.name,
+                description: Some(&tool.description),
+                parameters: tool.parameters.value,
             },
         }
     }
@@ -865,15 +859,10 @@ mod tests {
             },
             "required": ["location"]
         });
-        let tool = Tool::Function {
-            name: "get_weather".to_string(),
-            description: Some("Get the current weather".to_string()),
-            parameters: parameters.clone(),
-        };
         let tool_config = ToolConfig {
             description: "Get the current weather".to_string(),
             parameters: JSONSchemaFromPath::from_value(&parameters),
-            tool,
+            name: "get_weather".to_string(),
         };
         let tool_config = Box::leak(Box::new(tool_config));
         let tool_config = ToolCallConfig {
@@ -1070,15 +1059,10 @@ mod tests {
             },
             "required": ["location"]
         });
-        let tool = Tool::Function {
-            name: "get_weather".to_string(),
-            description: Some("Get the current weather".to_string()),
-            parameters: parameters.clone(),
-        };
         let tool_config = ToolConfig {
             description: "Get the current weather".to_string(),
             parameters: JSONSchemaFromPath::from_value(&parameters),
-            tool,
+            name: "get_weather".to_string(),
         };
         let tool_config = Box::leak(Box::new(tool_config));
         let tool_config = ToolCallConfig {

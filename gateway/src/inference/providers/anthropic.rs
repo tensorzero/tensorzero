@@ -15,7 +15,7 @@ use crate::inference::types::{
     InferenceResponseStream, ModelInferenceRequest, ModelInferenceResponse,
     ModelInferenceResponseChunk, RequestMessage, TextChunk, Usage,
 };
-use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice};
+use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 const ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
@@ -220,21 +220,13 @@ struct AnthropicTool<'a> {
     input_schema: &'a Value,
 }
 
-impl<'a> TryFrom<&'a Tool> for AnthropicTool<'a> {
-    type Error = Error;
-
-    fn try_from(value: &'a Tool) -> Result<Self, Self::Error> {
+impl<'a> From<&'a ToolConfig> for AnthropicTool<'a> {
+    fn from(value: &'a ToolConfig) -> Self {
         // In case we add more tool types in the future, the compiler will complain here.
-        match value {
-            Tool::Function {
-                name,
-                description,
-                parameters,
-            } => Ok(AnthropicTool {
-                name,
-                description: description.as_deref(),
-                input_schema: parameters,
-            }),
+        AnthropicTool {
+            name: &value.name,
+            description: Some(&value.description),
+            input_schema: value.parameters.value,
         }
     }
 }
@@ -333,13 +325,7 @@ impl<'a> AnthropicRequestBody<'a> {
         let tools = request
             .tool_config
             .map(|c| &c.tools_available)
-            .map(|tools| {
-                tools
-                    .iter()
-                    .map(|tool| AnthropicTool::try_from(&tool.tool))
-                    .collect::<Result<Vec<_>, _>>()
-            })
-            .transpose()?;
+            .map(|tools| tools.iter().map(|tool| (*tool).into()).collect::<Vec<_>>());
         // tool_choice should only be set if tools are set and non-empty
         let tool_choice: Option<AnthropicToolChoice> = tools
             .as_ref()
@@ -742,7 +728,7 @@ mod tests {
 
     use crate::inference::types::{FunctionType, JSONMode};
     use crate::jsonschema_util::JSONSchemaFromPath;
-    use crate::tool::{Tool, ToolCallConfig, ToolConfig, ToolResult};
+    use crate::tool::{ToolCallConfig, ToolConfig, ToolResult};
 
     #[test]
     fn test_try_from_tool_choice() {
@@ -787,19 +773,26 @@ mod tests {
 
     #[test]
     fn test_try_from_tool() {
-        let tool = Tool::Function {
+        let parameters = json!({
+            "type": "object",
+            "properties": {
+                "location": {"type": "string"},
+                "unit": {"type": "string"}
+            },
+            "required": ["location", "unit"]
+        });
+        let tool = ToolConfig {
             name: "test".to_string(),
-            description: Some("test".to_string()),
-            parameters: Value::Null,
+            description: "test".to_string(),
+            parameters: JSONSchemaFromPath::from_value(&parameters),
         };
-        let anthropic_tool = AnthropicTool::try_from(&tool);
-        assert!(anthropic_tool.is_ok());
+        let anthropic_tool: AnthropicTool = (&tool).into();
         assert_eq!(
-            anthropic_tool.unwrap(),
+            anthropic_tool,
             AnthropicTool {
                 name: "test",
                 description: Some("test"),
-                input_schema: &Value::Null,
+                input_schema: &parameters,
             }
         );
     }
@@ -1042,15 +1035,10 @@ mod tests {
           "required": ["answer"],
           "additionalProperties": false
         });
-        let tool = Tool::Function {
-            description: Some("test_description".to_string()),
-            name: "test_name".to_string(),
-            parameters: parameters.clone(),
-        };
         let tool_config = ToolConfig {
+            name: "test_name".to_string(),
             description: "test_description".to_string(),
             parameters: JSONSchemaFromPath::from_value(&parameters),
-            tool,
         };
         let tool_config = Box::leak(Box::new(tool_config));
         let tool_config = ToolCallConfig {

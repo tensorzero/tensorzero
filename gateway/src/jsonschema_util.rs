@@ -1,15 +1,21 @@
 use jsonschema::JSONSchema;
+use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::error::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct JSONSchemaFromPath {
-    #[allow(dead_code)] // Will use this in Implicit JSON mode
-    path: PathBuf,
+    #[serde(skip)]
     pub compiled: JSONSchema,
     pub value: &'static serde_json::Value,
+}
+
+impl PartialEq for JSONSchemaFromPath {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
 }
 
 impl JSONSchemaFromPath {
@@ -32,11 +38,7 @@ impl JSONSchemaFromPath {
         })?;
         let compiled = compiled_schema;
         let value = schema_boxed;
-        Ok(Self {
-            path,
-            compiled,
-            value,
-        })
+        Ok(Self { compiled, value })
     }
 
     #[cfg(any(test, feature = "integration_tests"))]
@@ -45,7 +47,6 @@ impl JSONSchemaFromPath {
         #[allow(clippy::unwrap_used)]
         let compiled_schema = JSONSchema::compile(schema_boxed).unwrap();
         Self {
-            path: PathBuf::new(),
             compiled: compiled_schema,
             value: schema_boxed,
         }
