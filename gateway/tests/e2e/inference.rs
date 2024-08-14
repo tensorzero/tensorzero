@@ -919,7 +919,7 @@ async fn e2e_test_variant_failover() {
                     "messages": [
                     {
                         "role": "user",
-                        "content": "Hello, world!"
+                        "content": [{"type": "text", "value": {"type": "tacos", "quantity": 13}}],
                     }
                 ]},
             "stream": false,
@@ -983,7 +983,7 @@ async fn e2e_test_variant_failover() {
             "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "Hello, world!"}]
+                "content": [{"type": "text", "value": {"type": "tacos", "quantity": 13}}]
             }
         ]}
     );
