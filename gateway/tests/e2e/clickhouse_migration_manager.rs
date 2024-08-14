@@ -11,8 +11,7 @@ async fn test_clickhouse_migration_manager() {
         uuid::Uuid::now_v7().simple()
     );
 
-    let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, &database, false, None).unwrap();
+    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, &database).unwrap();
 
     // NOTE:
     // We need to split the test into two sub-functions so we can reset `traced_test`'s subscriber between each call.
