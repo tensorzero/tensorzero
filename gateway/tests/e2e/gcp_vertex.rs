@@ -52,11 +52,7 @@ async fn test_inference_basic() {
     // Check Response is OK, then fields in order
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
-    let content_blocks = response_json
-        .get("content_blocks")
-        .unwrap()
-        .as_array()
-        .unwrap();
+    let content_blocks = response_json.get("output").unwrap().as_array().unwrap();
     assert!(content_blocks.len() == 1);
     let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
@@ -67,8 +63,6 @@ async fn test_inference_basic() {
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-    // Check that parsed_output is not here
-    assert!(response_json.get("parsed_output").is_none());
     // Check that type is "chat"
     let r#type = response_json.get("type").unwrap().as_str().unwrap();
     assert_eq!(r#type, "chat");

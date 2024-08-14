@@ -130,6 +130,12 @@ routing = ["json"]
 type = "dummy"
 model_name = "json"
 
+[models.tool]
+routing = ["tool"]
+
+[models.tool.providers.tool]
+type = "dummy"
+model_name = "tool"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
@@ -280,6 +286,19 @@ type = "chat_completion"
 weight = 1
 model = "test"
 
+[functions.weather_helper]
+type = "chat"
+system_schema = "config/functions/weather_helper/system_schema.json"
+tools = ["get_weather"]
+tool_choice = "required"
+parallel_tool_calls = false
+
+[functions.weather_helper.variants.variant]
+type = "chat_completion"
+weight = 1
+model = "tool"
+system_template = "config/functions/weather_helper/prompt/system_template.minijinja"
+
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
@@ -324,3 +343,14 @@ level = "inference"
 type = "float"
 optimize = "max"
 level = "inference"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  TOOLS                                     │
+# └────────────────────────────────────────────────────────────────────────────┘
+[tools.get_weather]
+description = "Get the current weather in a given location"
+parameters = "config/tools/get_weather.json"
+
+[tools.query_articles]
+description = "Query articles from Wikipedia"
+parameters = "config/tools/query_articles.json"

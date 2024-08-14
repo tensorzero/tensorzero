@@ -84,3 +84,14 @@ level = "inference" # "inference", "episode"
 type = "float"
 optimize = "max"
 level = "episode"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  TOOLS                                     │
+# └────────────────────────────────────────────────────────────────────────────┘
+[tools.get_weather]
+description = "Get the current weather in a given location"
+parameters = "config/tools/get_weather.json"
+
+[tools.query_articles]
+description = "Query articles from Wikipedia"
+parameters = "config/tools/query_articles.json"
