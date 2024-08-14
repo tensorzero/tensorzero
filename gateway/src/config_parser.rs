@@ -1,23 +1,31 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use crate::error::Error;
-use crate::function::FunctionConfig;
+use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
+use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::initialize_templates;
 use crate::model::ModelConfig;
 use crate::tool::ToolConfig;
 use crate::variant::VariantConfig;
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+static CONFIG: OnceLock<Config> = OnceLock::new();
+
+pub fn get_config() -> &'static Config {
+    #[allow(clippy::expect_used)]
+    CONFIG.get_or_init(|| Config::load().expect("Failed to load configuration"))
+}
+
+#[derive(Debug)]
 pub struct Config {
     pub gateway: Option<ApiConfig>,
     pub clickhouse: Option<ClickHouseConfig>,
     pub models: HashMap<String, ModelConfig>, // model name => model config
     pub functions: HashMap<String, FunctionConfig>, // function name => function config
-    pub metrics: Option<HashMap<String, MetricConfig>>, // metric name => metric config
-    pub tools: Option<HashMap<String, ToolConfig>>, // tool name => tool config
+    pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
+    pub tools: HashMap<String, ToolConfig>,   // tool name => tool config
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -69,28 +77,10 @@ impl std::fmt::Display for MetricConfigLevel {
     }
 }
 
-/// Deserialize a TOML table into `Config`
-impl TryFrom<toml::Table> for Config {
-    type Error = Error;
-
-    fn try_from(table: toml::Table) -> Result<Self, Self::Error> {
-        // NOTE: We'd like to use `serde_path_to_error` here but it has a bug with enums:
-        //       https://github.com/dtolnay/path-to-error/issues/1
-        match table.try_into() {
-            Ok(config) => Ok(config),
-            Err(e) => Err(Error::Config {
-                message: format!("Failed to parse config:\n{e}"),
-            }),
-        }
-    }
-}
-
 impl Config {
-    /// Load and validate the TensorZero config file
-    pub fn load() -> Result<Config, Error> {
-        let config_path = Config::get_config_path();
-        let config_table = Config::read_toml_config(&config_path)?;
-        let mut config = Config::try_from(config_table)?;
+    fn load() -> Result<Config, Error> {
+        let config_path = UninitializedConfig::get_config_path();
+        let config_table = UninitializedConfig::read_toml_config(&config_path)?;
         let base_path = match PathBuf::from(&config_path).parent() {
             Some(base_path) => base_path.to_path_buf(),
             None => {
@@ -101,45 +91,33 @@ impl Config {
                 })
             }
         };
-        config.load_schemas(&base_path)?;
-        config.validate()?;
+        let config = Self::load_from_toml(config_table, &base_path)?;
         initialize_templates(config.get_templates(&base_path))?;
         Ok(config)
     }
 
-    pub fn load_schemas<P: AsRef<Path>>(&mut self, base_path: P) -> Result<(), Error> {
-        for function in self.functions.values_mut() {
-            function.load(&base_path)?;
-        }
-        if let Some(tools) = self.tools.as_mut() {
-            for tool in tools.values_mut() {
-                tool.load(&base_path)?;
-            }
-        }
-        Ok(())
-    }
-
-    /// Get the path for the TensorZero config file
-    ///
-    /// Use a path provided as a CLI argument (`./gateway path/to/tensorzero.toml`), or default to
-    /// `tensorzero.toml` in the current directory if no path is provided.
-    fn get_config_path() -> String {
-        match std::env::args().nth(1) {
-            Some(path) => path,
-            None => "tensorzero.toml".to_string(),
-        }
-    }
-
-    /// Read a file from the file system and parse it as TOML
-    fn read_toml_config(path: &str) -> Result<toml::Table, Error> {
-        std::fs::read_to_string(path)
-            .map_err(|_| Error::Config {
-                message: format!("Failed to read config file: {path}"),
-            })?
-            .parse::<toml::Table>()
-            .map_err(|_| Error::Config {
-                message: format!("Failed to parse config file as valid TOML: {path}"),
-            })
+    fn load_from_toml(table: toml::Table, base_path: &PathBuf) -> Result<Config, Error> {
+        let config = UninitializedConfig::try_from(table)?;
+        let functions = config
+            .functions
+            .into_iter()
+            .map(|(name, config)| config.load(base_path).map(|c| (name, c)))
+            .collect::<Result<HashMap<String, FunctionConfig>, Error>>()?;
+        let tools = config
+            .tools
+            .into_iter()
+            .map(|(name, config)| config.load(base_path).map(|c| (name, c)))
+            .collect::<Result<HashMap<String, ToolConfig>, Error>>()?;
+        let config = Config {
+            gateway: config.gateway,
+            clickhouse: config.clickhouse,
+            models: config.models,
+            functions,
+            metrics: config.metrics,
+            tools,
+        };
+        config.validate()?;
+        Ok(config)
     }
 
     /// Validate the config
@@ -233,14 +211,12 @@ impl Config {
                         }
 
                         // Check that tools that are specified are present
-                        if let Some(tools) = &function.tools {
-                            for tool in tools {
-                                self.get_tool(tool).map_err(|_| {
-                                    Error::Config {
-                                        message: format!("Invalid Config: `functions.{function_name}.tools`: tool `{tool}` is not present in the config"),
-                                    }
-                                })?;
-                            }
+                        for tool in function.tools.iter() {
+                            self.get_tool(tool).map_err(|_| {
+                                Error::Config {
+                                    message: format!("Invalid Config: `functions.{function_name}.tools`: tool `{tool}` is not present in the config"),
+                                }
+                            })?;
                         }
                     }
                     FunctionConfig::Json(function) => {
@@ -298,16 +274,14 @@ impl Config {
         }
 
         // Ensure that no metrics are named "comment" or "demonstration"
-        if let Some(metrics) = &self.metrics {
-            for metric_name in metrics.keys() {
-                if metric_name == "comment" || metric_name == "demonstration" {
-                    return Err(Error::Config {
-                        message: format!(
-                            "Invalid Config: Metric name '{}' is reserved and cannot be used",
-                            metric_name
-                        ),
-                    });
-                }
+        for metric_name in self.metrics.keys() {
+            if metric_name == "comment" || metric_name == "demonstration" {
+                return Err(Error::Config {
+                    message: format!(
+                        "Invalid Config: Metric name '{}' is reserved and cannot be used",
+                        metric_name
+                    ),
+                });
             }
         }
 
@@ -326,8 +300,7 @@ impl Config {
     /// Get a metric by name
     pub fn get_metric<'a>(&'a self, metric_name: &str) -> Result<&'a MetricConfig, Error> {
         self.metrics
-            .as_ref()
-            .and_then(|metrics| metrics.get(metric_name))
+            .get(metric_name)
             .ok_or_else(|| Error::UnknownMetric {
                 name: metric_name.to_string(),
             })
@@ -335,11 +308,17 @@ impl Config {
 
     /// Get a tool by name
     pub fn get_tool<'a>(&'a self, tool_name: &str) -> Result<&'a ToolConfig, Error> {
-        self.tools
-            .as_ref()
-            .and_then(|tools| tools.get(tool_name))
-            .ok_or_else(|| Error::UnknownTool {
-                name: tool_name.to_string(),
+        self.tools.get(tool_name).ok_or_else(|| Error::UnknownTool {
+            name: tool_name.to_string(),
+        })
+    }
+
+    /// Get a model by name
+    pub fn get_model<'a>(&'a self, model_name: &str) -> Result<&'a ModelConfig, Error> {
+        self.models
+            .get(model_name)
+            .ok_or_else(|| Error::UnknownModel {
+                name: model_name.to_string(),
             })
     }
 
@@ -374,9 +353,166 @@ impl Config {
     }
 }
 
+/// This struct is used to deserialize the TOML config file
+/// It does not contain the information that needs to be loaded from the filesystem
+/// such as the JSON schemas for the functions and tools.
+/// If should be used as part of the `Config::load` method only.
+///
+/// This allows us to avoid using Option types to represent variables that are initialized after the
+/// config is initially parsed.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct UninitializedConfig {
+    pub gateway: Option<ApiConfig>,
+    pub clickhouse: Option<ClickHouseConfig>,
+    pub models: HashMap<String, ModelConfig>, // model name => model config
+    pub functions: HashMap<String, UninitializedFunctionConfig>, // function name => function config
+    #[serde(default)]
+    pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
+    #[serde(default)]
+    pub tools: HashMap<String, UninitializedToolConfig>, // tool name => tool config
+}
+
+impl UninitializedConfig {
+    /// Load and validate the TensorZero config file
+
+    /// Use a path provided as a CLI argument (`./gateway path/to/tensorzero.toml`), or default to
+    /// `tensorzero.toml` in the current directory if no path is provided.
+    fn get_config_path() -> String {
+        match std::env::args().nth(1) {
+            Some(path) => path,
+            None => "tensorzero.toml".to_string(),
+        }
+    }
+
+    /// Read a file from the file system and parse it as TOML
+    fn read_toml_config(path: &str) -> Result<toml::Table, Error> {
+        std::fs::read_to_string(path)
+            .map_err(|_| Error::Config {
+                message: format!("Failed to read config file: {path}"),
+            })?
+            .parse::<toml::Table>()
+            .map_err(|_| Error::Config {
+                message: format!("Failed to parse config file as valid TOML: {path}"),
+            })
+    }
+}
+
+/// Deserialize a TOML table into `UninitializedConfig`
+impl TryFrom<toml::Table> for UninitializedConfig {
+    type Error = Error;
+
+    fn try_from(table: toml::Table) -> Result<Self, Self::Error> {
+        // NOTE: We'd like to use `serde_path_to_error` here but it has a bug with enums:
+        //       https://github.com/dtolnay/path-to-error/issues/1
+        match table.try_into() {
+            Ok(config) => Ok(config),
+            Err(e) => Err(Error::Config {
+                message: format!("Failed to parse config:\n{e}"),
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "lowercase")]
+#[serde(deny_unknown_fields)]
+enum UninitializedFunctionConfig {
+    Chat(UninitializedFunctionConfigChat),
+    Json(UninitializedFunctionConfigJson),
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct UninitializedFunctionConfigChat {
+    variants: HashMap<String, VariantConfig>, // variant name => variant config
+    system_schema: Option<PathBuf>,
+    user_schema: Option<PathBuf>,
+    assistant_schema: Option<PathBuf>,
+    #[serde(default)]
+    tools: Vec<String>, // tool names
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct UninitializedFunctionConfigJson {
+    variants: HashMap<String, VariantConfig>, // variant name => variant config
+    system_schema: Option<PathBuf>,
+    user_schema: Option<PathBuf>,
+    assistant_schema: Option<PathBuf>,
+    output_schema: PathBuf, // schema is mandatory for JSON functions
+}
+
+impl UninitializedFunctionConfig {
+    pub fn load<P: AsRef<Path>>(self, base_path: P) -> Result<FunctionConfig, Error> {
+        match self {
+            UninitializedFunctionConfig::Chat(params) => {
+                let system_schema = params
+                    .system_schema
+                    .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
+                    .transpose()?;
+                let user_schema = params
+                    .user_schema
+                    .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
+                    .transpose()?;
+                let assistant_schema = params
+                    .assistant_schema
+                    .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
+                    .transpose()?;
+                Ok(FunctionConfig::Chat(FunctionConfigChat {
+                    variants: params.variants,
+                    system_schema,
+                    user_schema,
+                    assistant_schema,
+                    tools: params.tools,
+                }))
+            }
+            UninitializedFunctionConfig::Json(params) => {
+                let system_schema = params
+                    .system_schema
+                    .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
+                    .transpose()?;
+                let user_schema = params
+                    .user_schema
+                    .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
+                    .transpose()?;
+                let assistant_schema = params
+                    .assistant_schema
+                    .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
+                    .transpose()?;
+                let output_schema =
+                    JSONSchemaFromPath::new(params.output_schema, base_path.as_ref())?;
+                Ok(FunctionConfig::Json(FunctionConfigJson {
+                    variants: params.variants,
+                    system_schema,
+                    user_schema,
+                    assistant_schema,
+                    output_schema,
+                }))
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct UninitializedToolConfig {
+    pub description: String,
+    pub parameters: PathBuf,
+}
+
+impl UninitializedToolConfig {
+    pub fn load<P: AsRef<Path>>(self, base_path: P) -> Result<ToolConfig, Error> {
+        let parameters = JSONSchemaFromPath::new(self.parameters, base_path.as_ref())?;
+        Ok(ToolConfig {
+            description: self.description,
+            parameters,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::{function::FunctionConfigChat, variant::ChatCompletionConfig};
 
     use super::*;
 
@@ -384,24 +520,25 @@ mod tests {
     #[test]
     fn test_config_from_toml_table_valid() {
         let config = get_sample_valid_config();
-        let _ = Config::try_from(config).unwrap();
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        Config::load_from_toml(config, &base_path).expect("Failed to load config");
 
         // Ensure that removing the `[metrics]` section still parses the config
         let mut config = get_sample_valid_config();
         config
             .remove("metrics")
             .expect("Failed to remove `[metrics]` section");
-        let mut config = Config::try_from(config).unwrap();
-        config.load_schemas(".").unwrap();
+        Config::load_from_toml(config, &base_path).expect("Failed to load config");
     }
 
     /// Ensure that the config parsing correctly handles the `gateway.bind_address` field
     #[test]
     fn test_config_gateway_bind_address() {
         let mut config = get_sample_valid_config();
+        let base_path = PathBuf::new();
 
         // Test with a valid bind address
-        let parsed_config = Config::try_from(config.clone()).unwrap();
+        let parsed_config = Config::load_from_toml(config.clone(), &base_path).unwrap();
         assert_eq!(
             parsed_config
                 .gateway
@@ -414,7 +551,7 @@ mod tests {
 
         // Test with missing gateway section
         config.remove("gateway");
-        let parsed_config = Config::try_from(config.clone()).unwrap();
+        let parsed_config = Config::load_from_toml(config.clone(), &base_path).unwrap();
         assert!(parsed_config.gateway.is_none());
 
         // Test with missing bind_address
@@ -422,7 +559,7 @@ mod tests {
             "gateway".to_string(),
             toml::Value::Table(toml::Table::new()),
         );
-        let parsed_config = Config::try_from(config.clone()).unwrap();
+        let parsed_config = Config::load_from_toml(config.clone(), &base_path).unwrap();
         assert!(parsed_config.gateway.unwrap().bind_address.is_none());
 
         // Test with invalid bind address
@@ -430,7 +567,7 @@ mod tests {
             "bind_address".to_string(),
             toml::Value::String("invalid_address".to_string()),
         );
-        let result = Config::try_from(config);
+        let result = Config::load_from_toml(config, &base_path);
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
@@ -443,12 +580,13 @@ mod tests {
     #[test]
     fn test_config_from_toml_table_missing_models() {
         let mut config = get_sample_valid_config();
+        let base_path = PathBuf::new();
         config
             .remove("models")
             .expect("Failed to remove `[models]` section");
 
         assert_eq!(
-            Config::try_from(config).unwrap_err(),
+            Config::load_from_toml(config, &base_path).unwrap_err(),
             Error::Config {
                 message: "Failed to parse config:\nmissing field `models`\n".to_string()
             }
@@ -464,7 +602,8 @@ mod tests {
             .expect("Failed to get `models.claude-3-haiku-20240307` section")
             .remove("providers")
             .expect("Failed to remove `[providers]` section");
-        let result = Config::try_from(config);
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, &base_path);
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
@@ -480,7 +619,8 @@ mod tests {
         config
             .remove("functions")
             .expect("Failed to remove `[functions]` section");
-        let result = Config::try_from(config);
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, &base_path);
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
@@ -498,7 +638,8 @@ mod tests {
             .expect("Failed to get `functions.generate_draft` section")
             .remove("variants")
             .expect("Failed to remove `[variants]` section");
-        let result = Config::try_from(config);
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, &base_path);
         assert_eq!(result
             .unwrap_err(),
             Error::Config {
@@ -512,7 +653,9 @@ mod tests {
     fn test_config_from_toml_table_extra_variables_root() {
         let mut config = get_sample_valid_config();
         config.insert("enable_agi".into(), true.into());
-        let result = Config::try_from(config);
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, &base_path);
+        println!("{:?}", result);
         assert!(result
             .unwrap_err()
             .to_string()
@@ -527,7 +670,8 @@ mod tests {
             .as_table_mut()
             .expect("Failed to get `models.claude-3-haiku-20240307` section")
             .insert("enable_agi".into(), true.into());
-        let result = Config::try_from(config);
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, &base_path);
         assert!(result
             .unwrap_err()
             .to_string()
@@ -542,7 +686,8 @@ mod tests {
             .as_table_mut()
             .expect("Failed to get `models.claude-3-haiku-20240307.providers.anthropic` section")
             .insert("enable_agi".into(), true.into());
-        let result = Config::try_from(config);
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, &base_path);
         assert!(result
             .unwrap_err()
             .to_string()
@@ -557,7 +702,8 @@ mod tests {
             .as_table_mut()
             .expect("Failed to get `functions.generate_draft` section")
             .insert("enable_agi".into(), true.into());
-        let result = Config::try_from(config);
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, &base_path);
         assert!(result
             .unwrap_err()
             .to_string()
@@ -572,7 +718,8 @@ mod tests {
             .as_table_mut()
             .expect("Failed to get `functions.generate_draft` section")
             .remove("output_schema");
-        let result = Config::try_from(config);
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, &base_path);
         assert!(result.unwrap_err().to_string().contains(
             "Failed to parse config:\nmissing field `output_schema`\nin `functions.extract_data`\n"
         ));
@@ -586,7 +733,8 @@ mod tests {
             .as_table_mut()
             .expect("Failed to get `functions.generate_draft.variants.openai_promptA` section")
             .insert("enable_agi".into(), true.into());
-        let result = Config::try_from(config);
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, &base_path);
         assert!(result
             .unwrap_err()
             .to_string()
@@ -601,7 +749,8 @@ mod tests {
             .as_table_mut()
             .expect("Failed to get `metrics.task_success` section")
             .insert("enable_agi".into(), true.into());
-        let result = Config::try_from(config);
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, &base_path);
         assert!(result
             .unwrap_err()
             .to_string()
@@ -611,15 +760,12 @@ mod tests {
     /// Ensure that the config validation fails when a model has no providers in `routing`
     #[test]
     fn test_config_validate_model_empty_providers() {
-        let mut config = Config::try_from(get_sample_valid_config()).unwrap();
-        config
-            .models
-            .get_mut("gpt-3.5-turbo")
-            .expect("Failed to get `models.gpt-3.5-turbo`")
-            .routing
-            .clear();
+        let mut config = get_sample_valid_config();
+        config["models"]["gpt-3.5-turbo"]["routing"] = toml::Value::Array(vec![]);
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, &base_path);
         assert_eq!(
-            config.validate().unwrap_err(),
+            result.unwrap_err(),
             Error::Config {
                 message: "Invalid Config: `models.gpt-3.5-turbo`: `routing` must not be empty"
                     .to_string()
@@ -630,15 +776,12 @@ mod tests {
     /// Ensure that the config validation fails when there are duplicate routing entries
     #[test]
     fn test_config_validate_model_duplicate_routing_entry() {
-        let mut config = Config::try_from(get_sample_valid_config()).unwrap();
-        config
-            .models
-            .get_mut("gpt-3.5-turbo")
-            .expect("Failed to get `models.gpt-3.5-turbo`")
-            .routing
-            .push("openai".into());
+        let mut config = get_sample_valid_config();
+        config["models"]["gpt-3.5-turbo"]["routing"] =
+            toml::Value::Array(vec!["openai".into(), "openai".into()]);
+        let result = Config::load_from_toml(config, &PathBuf::new());
         assert_eq!(
-            config.validate().unwrap_err(),
+            result.unwrap_err(),
             Error::Config {
                 message: "Invalid Config: `models.gpt-3.5-turbo.routing`: duplicate entry `openai`"
                     .to_string()
@@ -649,15 +792,11 @@ mod tests {
     /// Ensure that the config validation fails when a routing entry does not exist in providers
     #[test]
     fn test_config_validate_model_routing_entry_not_in_providers() {
-        let mut config = Config::try_from(get_sample_valid_config()).unwrap();
-        config
-            .models
-            .get_mut("gpt-3.5-turbo")
-            .expect("Failed to get `models.gpt-3.5-turbo`")
-            .routing
-            .push("closedai".into());
+        let mut config = get_sample_valid_config();
+        config["models"]["gpt-3.5-turbo"]["routing"] = toml::Value::Array(vec!["closedai".into()]);
+        let result = Config::load_from_toml(config, &PathBuf::new());
         assert_eq!(
-            config.validate().unwrap_err(),
+            result.unwrap_err(),
             Error::Config {
                 message: "Invalid Config: `models.gpt-3.5-turbo`: `routing` contains entry `closedai` that does not exist in `providers`"
                     .to_string()
@@ -671,10 +810,10 @@ mod tests {
         let mut sample_config = get_sample_valid_config();
         sample_config["functions"]["generate_draft"]["system_schema"] =
             "non_existent_file.json".into();
-        let mut config = Config::try_from(sample_config).unwrap();
-        let err = config.load_schemas(".").unwrap_err();
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(sample_config, &base_path);
         assert_eq!(
-            err,
+            result.unwrap_err(),
             Error::JsonSchema {
                 message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
             }
@@ -684,23 +823,13 @@ mod tests {
     /// Ensure that the config validation fails when a function variant has a negative weight
     #[test]
     fn test_config_validate_function_variant_negative_weight() {
-        let mut config = Config::try_from(get_sample_valid_config()).unwrap();
-        match config
-            .functions
-            .get_mut("generate_draft")
-            .expect("Failed to get `functions.generate_draft`")
-        {
-            FunctionConfig::Chat(params) => {
-                match params.variants.get_mut("openai_promptA").unwrap() {
-                    VariantConfig::ChatCompletion(params) => {
-                        params.weight = -1.0;
-                    }
-                }
-            }
-            _ => unreachable!(),
-        }
+        let mut config = get_sample_valid_config();
+        config["functions"]["generate_draft"]["variants"]["openai_promptA"]["weight"] =
+            toml::Value::Float(-1.0);
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, &base_path);
         assert_eq!(
-            config.validate().unwrap_err(),
+            result.unwrap_err(),
             Error::Config {
                 message: "Invalid Config: `functions.generate_draft.variants.openai_promptA.weight`: must be non-negative"
                     .to_string()
@@ -711,20 +840,14 @@ mod tests {
     /// Ensure that the config validation fails when a variant has a model that does not exist in the models section
     #[test]
     fn test_config_validate_variant_model_not_in_models() {
-        let mut config = Config::try_from(get_sample_valid_config()).unwrap();
-
-        match config.functions.get_mut("generate_draft") {
-            Some(FunctionConfig::Chat(params)) => match params.variants.get_mut("openai_promptA") {
-                Some(VariantConfig::ChatCompletion(params)) => {
-                    params.model = "non_existent_model".to_string();
-                }
-                _ => unreachable!(),
-            },
-            _ => unreachable!(),
-        }
+        let mut config = get_sample_valid_config();
+        config["functions"]["generate_draft"]["variants"]["openai_promptA"]["model"] =
+            "non_existent_model".into();
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, &base_path);
 
         assert_eq!(
-            config.validate().unwrap_err(),
+            result.unwrap_err(),
             Error::Config {
                 message: "Invalid Config: `functions.generate_draft.variants.openai_promptA`: `model` must be a valid model name".to_string()
             }
@@ -734,17 +857,18 @@ mod tests {
     /// Ensure that the config validation fails when a variant has a model that does not exist in the models section
     #[test]
     fn test_config_validate_variant_nonexistent_tool() {
-        let mut config = Config::try_from(get_sample_valid_config()).unwrap();
-
-        match config.functions.get_mut("generate_draft") {
-            Some(FunctionConfig::Chat(params)) => {
-                params.tools = Some(vec!["non_existent_tool".to_string()]);
-            }
-            _ => unreachable!(),
-        }
+        let mut config = get_sample_valid_config();
+        config["functions"]["generate_draft"]
+            .as_table_mut()
+            .unwrap()
+            .insert("tools".to_string(), toml::Value::Array(vec![]));
+        config["functions"]["generate_draft"]["tools"] =
+            toml::Value::Array(vec!["non_existent_tool".into()]);
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, &base_path);
 
         assert_eq!(
-            config.validate().unwrap_err(),
+            result.unwrap_err(),
             Error::Config {
                 message: "Invalid Config: `functions.generate_draft.tools`: tool `non_existent_tool` is not present in the config".to_string()
             }
@@ -754,85 +878,41 @@ mod tests {
     /// Ensure that get_templates returns the correct templates
     #[test]
     fn test_get_all_templates() {
-        let mut config = Config::try_from(get_sample_valid_config()).unwrap();
-
-        // Create the ChatCompletionConfig
-        let chat_completion_config = ChatCompletionConfig {
-            weight: 1.0,
-            model: "gpt-3.5-turbo".to_string(),
-            system_template: Some(PathBuf::from("path/to/system_template.jinja")),
-            user_template: Some(PathBuf::from("path/to/user_template.jinja")),
-            assistant_template: Some(PathBuf::from("path/to/assistant_template.jinja")),
-        };
-
-        // Create the VariantConfig
-        let variant = VariantConfig::ChatCompletion(chat_completion_config);
-
-        // Create the variants HashMap
-        let mut variants = HashMap::new();
-        variants.insert("test_variant".to_string(), variant);
-
-        // Create the FunctionConfigChat
-        let function_config_chat = FunctionConfigChat {
-            variants,
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
-            tools: None,
-        };
-
-        // Create the new function
-        let new_function = FunctionConfig::Chat(function_config_chat);
-
-        config
-            .functions
-            .insert("test_function".to_string(), new_function);
+        let config_table = get_sample_valid_config();
+        let config =
+            Config::load_from_toml(config_table, &PathBuf::new()).expect("Failed to load config");
 
         // Get all templates
         let templates = config.get_templates(PathBuf::from("/base/path"));
 
         // Check if all expected templates are present
         assert_eq!(
-            templates.get("../config/functions/generate_draft/promptA/system.jinja"),
+            templates.get("../config/functions/generate_draft/promptA/system_template.minijinja"),
             Some(&PathBuf::from(
-                "/base/path/../config/functions/generate_draft/promptA/system.jinja"
+                "/base/path/../config/functions/generate_draft/promptA/system_template.minijinja"
             ))
         );
         assert_eq!(
-            templates.get("../config/functions/generate_draft/promptA/system.jinja"),
+            templates.get("../config/functions/generate_draft/promptA/system_template.minijinja"),
             Some(&PathBuf::from(
-                "/base/path/../config/functions/generate_draft/promptA/system.jinja"
+                "/base/path/../config/functions/generate_draft/promptA/system_template.minijinja"
             ))
         );
         assert_eq!(
-            templates.get("../config/functions/extract_data/promptA/system.jinja"),
+            templates.get("../config/functions/extract_data/promptA/system_template.minijinja"),
             Some(&PathBuf::from(
-                "/base/path/../config/functions/extract_data/promptA/system.jinja"
+                "/base/path/../config/functions/extract_data/promptA/system_template.minijinja"
             ))
         );
         assert_eq!(
-            templates.get("../config/functions/extract_data/promptB/system.jinja"),
+            templates.get("../config/functions/extract_data/promptB/system_template.minijinja"),
             Some(&PathBuf::from(
-                "/base/path/../config/functions/extract_data/promptB/system.jinja"
-            ))
-        );
-        assert_eq!(
-            templates.get("path/to/system_template.jinja"),
-            Some(&PathBuf::from("/base/path/path/to/system_template.jinja"))
-        );
-        assert_eq!(
-            templates.get("path/to/user_template.jinja"),
-            Some(&PathBuf::from("/base/path/path/to/user_template.jinja"))
-        );
-        assert_eq!(
-            templates.get("path/to/assistant_template.jinja"),
-            Some(&PathBuf::from(
-                "/base/path/path/to/assistant_template.jinja"
+                "/base/path/../config/functions/extract_data/promptB/system_template.minijinja"
             ))
         );
 
         // Check the total number of templates
-        assert_eq!(templates.len(), 7);
+        assert_eq!(templates.len(), 4);
     }
 
     /// Get a sample valid config for testing
@@ -881,13 +961,13 @@ mod tests {
         type = "chat_completion"
         weight = 0.9
         model = "gpt-3.5-turbo"
-        system_template = "../config/functions/generate_draft/promptA/system.jinja"
+        system_template = "../config/functions/generate_draft/promptA/system_template.minijinja"
 
         [functions.generate_draft.variants.openai_promptB]
         type = "chat_completion"
         weight = 0.1
         model = "gpt-3.5-turbo"
-        system_template = "../config/functions/generate_draft/promptB/system.jinja"
+        system_template = "../config/functions/generate_draft/promptB/system_template.minijinja"
 
         [functions.extract_data]
         type = "json"
@@ -898,13 +978,13 @@ mod tests {
         type = "chat_completion"
         weight = 0.9
         model = "gpt-3.5-turbo"
-        system_template = "../config/functions/extract_data/promptA/system.jinja"
+        system_template = "../config/functions/extract_data/promptA/system_template.minijinja"
 
         [functions.extract_data.variants.openai_promptB]
         type = "chat_completion"
         weight = 0.1
         model = "gpt-3.5-turbo"
-        system_template = "../config/functions/extract_data/promptB/system.jinja"
+        system_template = "../config/functions/extract_data/promptB/system_template.minijinja"
 
         [functions.weather_helper]
         type = "chat"
@@ -948,12 +1028,10 @@ mod tests {
         let base_path = config_pathbuf
             .parent()
             .expect("Failed to get parent directory of config file");
-        let config_table = Config::read_toml_config(config_path.as_str())
+        let config_table = UninitializedConfig::read_toml_config(&config_path)
             .expect("Failed to read tensorzero.example.toml");
-        let mut config = Config::try_from(config_table).expect("Failed to parse config");
-        config
-            .load_schemas(base_path)
-            .expect("Failed to load functions");
-        config.validate().expect("Failed to validate config");
+
+        Config::load_from_toml(config_table, &base_path.to_path_buf())
+            .expect("Failed to load config");
     }
 }

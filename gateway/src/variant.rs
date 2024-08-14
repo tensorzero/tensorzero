@@ -167,12 +167,7 @@ impl Variant for ChatCompletionConfig {
             .as_ref()
             .map(|system| self.prepare_system_message(system))
             .transpose()?;
-        let output_schema_value = match output_schema {
-            // We want this block to throw an error if somehow the jsonschema is missing
-            // but return None if the output schema is not provided.
-            Some(s) => Some(s.value()?),
-            None => None,
-        };
+        let output_schema_value = output_schema.map(|s| s.value);
         let tool_choice = ToolChoice::None;
         let request = ModelInferenceRequest {
             messages,
@@ -188,8 +183,8 @@ impl Variant for ChatCompletionConfig {
             function_type: FunctionType::Chat,
             output_schema: output_schema_value,
         };
-        let model_config = models.get(&self.model).ok_or(Error::ModelNotFound {
-            model: self.model.clone(),
+        let model_config = models.get(&self.model).ok_or(Error::UnknownModel {
+            name: self.model.clone(),
         })?;
         let model_inference_response = model_config.infer(&request, client).await?;
 
@@ -225,12 +220,7 @@ impl Variant for ChatCompletionConfig {
             .as_ref()
             .map(|system| self.prepare_system_message(system))
             .transpose()?;
-        let output_schema_value = match output_schema {
-            // As above, we want this block to throw an error if somehow the jsonschema is missing
-            // but return None if the output schema is not provided
-            Some(s) => Some(s.value()?),
-            None => None,
-        };
+        let output_schema_value = output_schema.map(|s| s.value);
         let request = ModelInferenceRequest {
             messages,
             system,
@@ -244,8 +234,8 @@ impl Variant for ChatCompletionConfig {
             function_type: FunctionType::Chat,
             output_schema: output_schema_value,
         };
-        let model_config = models.get(&self.model).ok_or(Error::ModelNotFound {
-            model: self.model.clone(),
+        let model_config = models.get(&self.model).ok_or(Error::UnknownModel {
+            name: self.model.clone(),
         })?;
         model_config.infer_stream(&request, client).await
     }
@@ -522,7 +512,7 @@ mod tests {
             .infer(&input, &models, None, &client)
             .await
             .unwrap_err();
-        assert!(matches!(result, Error::ModelNotFound { .. }), "{}", result);
+        assert!(matches!(result, Error::UnknownModel { .. }), "{}", result);
         // Test case 3: Model inference fails because of model issues
 
         let chat_completion_config = ChatCompletionConfig {
