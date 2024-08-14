@@ -163,8 +163,6 @@ struct AzureRequest<'a> {
     tools: Option<Vec<OpenAITool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<OpenAIToolChoice<'a>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    parallel_tool_calls: Option<bool>,
 }
 
 impl<'a> AzureRequest<'a> {
@@ -177,7 +175,7 @@ impl<'a> AzureRequest<'a> {
         // };
         let response_format = AzureResponseFormat::Text;
         let messages = prepare_openai_messages(request);
-        let (tools, tool_choice) = prepare_openai_tools(request);
+        let (tools, tool_choice, _) = prepare_openai_tools(request);
         AzureRequest {
             messages,
             model,
@@ -187,7 +185,6 @@ impl<'a> AzureRequest<'a> {
             response_format,
             tools,
             tool_choice,
-            parallel_tool_calls: request.parallel_tool_calls,
         }
     }
 }
@@ -195,30 +192,15 @@ impl<'a> AzureRequest<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
-    use crate::inference::{
-        providers::openai::OpenAIToolChoiceString,
-        types::{FunctionType, JSONMode, RequestMessage, Role, Tool, ToolChoice},
+    use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
+    use crate::inference::providers::openai::{
+        OpenAIToolType, SpecificToolChoice, SpecificToolFunction,
     };
+    use crate::inference::types::{FunctionType, JSONMode, RequestMessage, Role};
 
     #[test]
     fn test_azure_request_new() {
-        let tool = Tool::Function {
-            name: "get_weather".to_string(),
-            description: Some("Get the current weather".to_string()),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "location": {
-                        "type": "string",
-                        "description": "The city and state, e.g. San Francisco, CA"
-                    }
-                },
-                "required": ["location"]
-            }),
-        };
-
         let request_with_tools = ModelInferenceRequest {
             messages: vec![RequestMessage {
                 role: Role::User,
@@ -229,9 +211,7 @@ mod tests {
             max_tokens: None,
             stream: false,
             json_mode: JSONMode::On,
-            tools_available: Some(vec![tool]),
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: Some(true),
+            tool_config: Some(&WEATHER_TOOL_CONFIG),
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -249,11 +229,19 @@ mod tests {
         //     AzureResponseFormat::JsonObject
         // );
         assert!(azure_request.tools.is_some());
-        assert_eq!(azure_request.tools.as_ref().unwrap().len(), 1);
+        let tools = azure_request.tools.as_ref().unwrap();
+        assert_eq!(tools.len(), 1);
+
+        assert_eq!(tools[0].function.name, WEATHER_TOOL.name);
+        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters.value);
         assert_eq!(
             azure_request.tool_choice,
-            Some(OpenAIToolChoice::String(OpenAIToolChoiceString::Auto))
+            Some(OpenAIToolChoice::Specific(SpecificToolChoice {
+                r#type: OpenAIToolType::Function,
+                function: SpecificToolFunction {
+                    name: &WEATHER_TOOL.name,
+                }
+            }))
         );
-        assert_eq!(azure_request.parallel_tool_calls, Some(true));
     }
 }

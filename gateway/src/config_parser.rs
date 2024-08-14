@@ -8,7 +8,7 @@ use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::initialize_templates;
 use crate::model::ModelConfig;
-use crate::tool::ToolConfig;
+use crate::tool::{ToolChoice, ToolConfig};
 use crate::variant::VariantConfig;
 
 static CONFIG: OnceLock<Config> = OnceLock::new();
@@ -106,7 +106,7 @@ impl Config {
         let tools = config
             .tools
             .into_iter()
-            .map(|(name, config)| config.load(base_path).map(|c| (name, c)))
+            .map(|(name, config)| config.load(base_path, name.clone()).map(|c| (name, c)))
             .collect::<Result<HashMap<String, ToolConfig>, Error>>()?;
         let config = Config {
             gateway: config.gateway,
@@ -432,6 +432,10 @@ struct UninitializedFunctionConfigChat {
     assistant_schema: Option<PathBuf>,
     #[serde(default)]
     tools: Vec<String>, // tool names
+    #[serde(default)]
+    tool_choice: ToolChoice,
+    #[serde(default)]
+    parallel_tool_calls: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -466,6 +470,8 @@ impl UninitializedFunctionConfig {
                     user_schema,
                     assistant_schema,
                     tools: params.tools,
+                    tool_choice: params.tool_choice,
+                    parallel_tool_calls: params.parallel_tool_calls,
                 }))
             }
             UninitializedFunctionConfig::Json(params) => {
@@ -502,9 +508,10 @@ pub struct UninitializedToolConfig {
 }
 
 impl UninitializedToolConfig {
-    pub fn load<P: AsRef<Path>>(self, base_path: P) -> Result<ToolConfig, Error> {
+    pub fn load<P: AsRef<Path>>(self, base_path: P, name: String) -> Result<ToolConfig, Error> {
         let parameters = JSONSchemaFromPath::new(self.parameters, base_path.as_ref())?;
         Ok(ToolConfig {
+            name,
             description: self.description,
             parameters,
         })
@@ -655,7 +662,6 @@ mod tests {
         config.insert("enable_agi".into(), true.into());
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, &base_path);
-        println!("{:?}", result);
         assert!(result
             .unwrap_err()
             .to_string()

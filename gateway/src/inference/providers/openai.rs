@@ -15,8 +15,9 @@ use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, InferenceResponseStream, JSONMode, Latency,
     ModelInferenceRequest, ModelInferenceResponse, ModelInferenceResponseChunk, RequestMessage,
-    Role, Text, TextChunk, Tool, ToolCall, ToolCallChunk, ToolChoice, Usage,
+    Role, Text, TextChunk, Usage,
 };
+use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 const OPENAI_DEFAULT_BASE_URL: &str = "https://api.openai.com/v1/";
 
@@ -264,20 +265,29 @@ pub(super) fn prepare_openai_messages<'a>(
 /// Otherwise convert the tool choice and tools to OpenAI format
 pub(super) fn prepare_openai_tools<'a>(
     request: &'a ModelInferenceRequest,
-) -> (Option<Vec<OpenAITool<'a>>>, Option<OpenAIToolChoice<'a>>) {
-    if let Some(tools) = &request.tools_available {
-        if tools.is_empty() {
-            return (None, None);
+) -> (
+    Option<Vec<OpenAITool<'a>>>,
+    Option<OpenAIToolChoice<'a>>,
+    Option<bool>,
+) {
+    match request.tool_config {
+        None => (None, None, None),
+        Some(tool_config) => {
+            if tool_config.tools_available.is_empty() {
+                return (None, None, None);
+            }
+            let tools = Some(
+                tool_config
+                    .tools_available
+                    .iter()
+                    .map(|tool| (*tool).into())
+                    .collect(),
+            );
+            let tool_choice = Some(tool_config.tool_choice.into());
+            let parallel_tool_calls = Some(tool_config.parallel_tool_calls);
+            (tools, tool_choice, parallel_tool_calls)
         }
     }
-    let tools = request
-        .tools_available
-        .as_ref()
-        .map(|t| t.iter().map(OpenAITool::from).collect());
-    // If `tools` is None, tool_choice will be as well
-    let tool_choice: Option<OpenAIToolChoice<'a>> =
-        tools.as_ref().map(|_| (&request.tool_choice).into());
-    (tools, tool_choice)
 }
 
 fn tensorzero_to_openai_system_message(system: Option<&str>) -> Option<OpenAIRequestMessage<'_>> {
@@ -362,38 +372,32 @@ enum OpenAIResponseFormat {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
-enum OpenAIToolType {
+pub(super) enum OpenAIToolType {
     Function,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-struct OpenAIFunction<'a> {
-    name: &'a str,
+pub(super) struct OpenAIFunction<'a> {
+    pub(super) name: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
-    description: Option<&'a str>,
-    parameters: &'a Value,
+    pub(super) description: Option<&'a str>,
+    pub parameters: &'a Value,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
 pub(super) struct OpenAITool<'a> {
-    r#type: OpenAIToolType,
-    function: OpenAIFunction<'a>,
+    pub(super) r#type: OpenAIToolType,
+    pub(super) function: OpenAIFunction<'a>,
 }
 
-impl<'a> From<&'a Tool> for OpenAITool<'a> {
-    fn from(tool: &'a Tool) -> Self {
-        match tool {
-            Tool::Function {
-                description,
-                name,
-                parameters,
-            } => OpenAITool {
-                r#type: OpenAIToolType::Function,
-                function: OpenAIFunction {
-                    name,
-                    description: description.as_deref(),
-                    parameters,
-                },
+impl<'a> From<&'a ToolConfig> for OpenAITool<'a> {
+    fn from(tool: &'a ToolConfig) -> Self {
+        OpenAITool {
+            r#type: OpenAIToolType::Function,
+            function: OpenAIFunction {
+                name: &tool.name,
+                description: Some(&tool.description),
+                parameters: tool.parameters.value,
             },
         }
     }
@@ -416,13 +420,13 @@ pub(super) enum OpenAIToolChoiceString {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(super) struct SpecificToolChoice<'a> {
-    r#type: OpenAIToolType,
-    function: SpecificToolFunction<'a>,
+    pub(super) r#type: OpenAIToolType,
+    pub(super) function: SpecificToolFunction<'a>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct SpecificToolFunction<'a> {
-    name: &'a str,
+pub(super) struct SpecificToolFunction<'a> {
+    pub(super) name: &'a str,
 }
 
 impl<'a> Default for OpenAIToolChoice<'a> {
@@ -495,7 +499,7 @@ impl<'a> OpenAIRequest<'a> {
         };
         let messages = prepare_openai_messages(request);
 
-        let (tools, tool_choice) = prepare_openai_tools(request);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
         OpenAIRequest {
             messages,
             model,
@@ -506,7 +510,7 @@ impl<'a> OpenAIRequest<'a> {
             response_format,
             tools,
             tool_choice,
-            parallel_tool_calls: request.parallel_tool_calls,
+            parallel_tool_calls,
         }
     }
 }
@@ -713,9 +717,14 @@ fn openai_to_tensorzero_chunk(
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
 
-    use crate::inference::types::{FunctionType, Tool};
+    use crate::{
+        inference::{
+            providers::common::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG},
+            types::FunctionType,
+        },
+        tool::ToolCallConfig,
+    };
 
     use super::*;
 
@@ -819,13 +828,11 @@ mod tests {
                 },
             ],
             system: None,
+            tool_config: None,
             temperature: Some(0.7),
             max_tokens: Some(100),
             stream: true,
             json_mode: JSONMode::Off,
-            tools_available: None,
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -843,21 +850,6 @@ mod tests {
         assert!(openai_request.parallel_tool_calls.is_none());
 
         // Test request with tools and JSON mode
-        let tool = Tool::Function {
-            name: "get_weather".to_string(),
-            description: Some("Get the current weather".to_string()),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "location": {
-                        "type": "string",
-                        "description": "The city and state, e.g. San Francisco, CA"
-                    }
-                },
-                "required": ["location"]
-            }),
-        };
-
         let request_with_tools = ModelInferenceRequest {
             messages: vec![RequestMessage {
                 role: Role::User,
@@ -868,9 +860,7 @@ mod tests {
             max_tokens: None,
             stream: false,
             json_mode: JSONMode::On,
-            tools_available: Some(vec![tool]),
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: Some(true),
+            tool_config: Some(&WEATHER_TOOL_CONFIG),
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -887,12 +877,18 @@ mod tests {
             OpenAIResponseFormat::JsonObject
         );
         assert!(openai_request.tools.is_some());
-        assert_eq!(openai_request.tools.as_ref().unwrap().len(), 1);
+        let tools = openai_request.tools.as_ref().unwrap();
+        assert_eq!(tools[0].function.name, WEATHER_TOOL.name);
+        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters.value);
         assert_eq!(
             openai_request.tool_choice,
-            Some(OpenAIToolChoice::String(OpenAIToolChoiceString::Auto))
+            Some(OpenAIToolChoice::Specific(SpecificToolChoice {
+                r#type: OpenAIToolType::Function,
+                function: SpecificToolFunction {
+                    name: &WEATHER_TOOL.name,
+                }
+            }))
         );
-        assert_eq!(openai_request.parallel_tool_calls, Some(true));
     }
 
     #[test]
@@ -1038,22 +1034,6 @@ mod tests {
 
     #[test]
     fn test_prepare_openai_tools() {
-        let parameters = json!({
-            "type": "object",
-            "properties": {
-                "location": {
-                    "type": "string",
-                    "description": "The city and state, e.g. San Francisco, CA"
-                }
-            },
-            "required": ["location"]
-        });
-
-        let tool = Tool::Function {
-            name: "get_weather".to_string(),
-            description: Some("Get the current weather".to_string()),
-            parameters: parameters.clone(),
-        };
         let request_with_tools = ModelInferenceRequest {
             messages: vec![RequestMessage {
                 role: Role::User,
@@ -1064,22 +1044,29 @@ mod tests {
             max_tokens: None,
             stream: false,
             json_mode: JSONMode::On,
-            tools_available: Some(vec![tool]),
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: Some(true),
+            tool_config: Some(&MULTI_TOOL_CONFIG),
             function_type: FunctionType::Chat,
             output_schema: None,
         };
-        let (tools, tool_choice) = prepare_openai_tools(&request_with_tools);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(&request_with_tools);
         let tools = tools.unwrap();
-        assert_eq!(tools.len(), 1);
-        assert_eq!(tools[0].function.name, "get_weather");
-        assert_eq!(tools[0].function.parameters, &parameters);
+        assert_eq!(tools.len(), 2);
+        assert_eq!(tools[0].function.name, WEATHER_TOOL.name);
+        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters.value);
+        assert_eq!(tools[1].function.name, QUERY_TOOL.name);
+        assert_eq!(tools[1].function.parameters, QUERY_TOOL.parameters.value);
         let tool_choice = tool_choice.unwrap();
         assert_eq!(
             tool_choice,
-            OpenAIToolChoice::String(OpenAIToolChoiceString::Auto)
+            OpenAIToolChoice::String(OpenAIToolChoiceString::Required)
         );
+        let parallel_tool_calls = parallel_tool_calls.unwrap();
+        assert!(parallel_tool_calls);
+        let tool_config = ToolCallConfig {
+            tools_available: vec![],
+            tool_choice: &ToolChoice::Required,
+            parallel_tool_calls: true,
+        };
 
         // Test no tools but a tool choice and make sure tool choice output is None
         let request_without_tools = ModelInferenceRequest {
@@ -1092,36 +1079,15 @@ mod tests {
             max_tokens: None,
             stream: false,
             json_mode: JSONMode::On,
-            tools_available: Some(vec![]),
-            tool_choice: ToolChoice::Required,
-            parallel_tool_calls: Some(true),
+            tool_config: Some(&tool_config),
             function_type: FunctionType::Chat,
             output_schema: None,
         };
-        let (tools, tool_choice) = prepare_openai_tools(&request_without_tools);
+        let (tools, tool_choice, parallel_tool_calls) =
+            prepare_openai_tools(&request_without_tools);
         assert!(tools.is_none());
         assert!(tool_choice.is_none());
-
-        // Test tools_available=None but a tool choice and make sure tool choice output is None
-        let request_without_tools = ModelInferenceRequest {
-            messages: vec![RequestMessage {
-                role: Role::User,
-                content: vec!["What's the weather?".to_string().into()],
-            }],
-            system: None,
-            temperature: None,
-            max_tokens: None,
-            stream: false,
-            json_mode: JSONMode::On,
-            tools_available: None,
-            tool_choice: ToolChoice::Required,
-            parallel_tool_calls: Some(true),
-            function_type: FunctionType::Chat,
-            output_schema: None,
-        };
-        let (tools, tool_choice) = prepare_openai_tools(&request_without_tools);
-        assert!(tools.is_none());
-        assert!(tool_choice.is_none());
+        assert!(parallel_tool_calls.is_none());
     }
 
     #[test]

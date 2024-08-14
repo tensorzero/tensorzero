@@ -1,6 +1,6 @@
 use derive_builder::Builder;
 use futures::Stream;
-use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use std::{
     collections::HashMap,
@@ -10,7 +10,9 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::{error::Error, jsonschema_util::JSONSchemaFromPath};
+use crate::error::Error;
+use crate::function::FunctionConfig;
+use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolResult};
 
 /// Data flow in TensorZero
 ///
@@ -26,11 +28,20 @@ pub struct Input {
 
 /// InputMessage and Role are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct InputMessage {
     pub role: Role,
-    pub content: serde_json::Value,
+    pub content: Vec<InputMessageContent>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum InputMessageContent {
+    Text { value: Value },
+    ToolCall(ToolCall),
+    ToolResult(ToolResult),
+    // We may extend this in the future to include other types of content
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
@@ -49,49 +60,6 @@ pub enum Role {
 /// which should contain all information needed by a ModelProvider to perform the
 /// inference that is called for.
 
-/// The Tool type is used to represent a tool that is available to the model.
-#[derive(Clone, Debug, PartialEq)]
-pub enum Tool {
-    Function {
-        description: Option<String>,
-        name: String,
-        parameters: Value,
-    },
-}
-
-/// A ToolCall is a request by a model to call a Tool
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ToolCall {
-    pub name: String,
-    pub arguments: String,
-    pub id: String,
-}
-
-/// A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ToolResult {
-    pub name: String,
-    pub result: String,
-    pub id: String,
-}
-
-/// Most inference providers allow the user to force a tool to be used
-/// and even specify which tool to be used.
-///
-/// This enum is used to denote this tool choice.
-#[derive(Clone, Debug, PartialEq, Default, Serialize)]
-pub enum ToolChoice {
-    None,
-    #[default]
-    Auto,
-    Required,
-    Tool(String), // Forces the LLM to call a particular tool, the String is the name of the Tool
-    Implicit, // It is occasionally helpful to make an "implicit" tool call to enforce that a JSON schema is followed
-              // In this case, the tool call is not exposed to the client, but the output is still validated against the schema
-              // Implicit means that the tool will always be called "respond" and that we should convert it back to chat-style output
-              // before response.
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Text {
     pub text: String,
@@ -99,11 +67,18 @@ pub struct Text {
 
 /// Core representation of the types of content that could go in or out of a model
 #[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlock {
     Text(Text),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ContentBlockOutput {
+    Text(Text),
+    ToolCall(ToolCallOutput),
 }
 
 /// A RequestMessage is a message sent to a model
@@ -117,6 +92,7 @@ pub struct RequestMessage {
 pub enum FunctionType {
     #[default]
     Chat,
+    Json,
 }
 
 #[derive(Clone, Default, Debug, PartialEq)]
@@ -133,14 +109,12 @@ pub enum JSONMode {
 /// and to convert it back to the appropriate response format.
 /// An example of the latter is that we might have prepared a request with Tools available
 /// but the client actually just wants a chat response.
-#[derive(Builder, Clone, Debug, Default, PartialEq)]
+#[derive(Builder, Clone, Debug, Default)]
 #[builder(setter(into, strip_option), default)]
 pub struct ModelInferenceRequest<'a> {
     pub messages: Vec<RequestMessage>,
     pub system: Option<String>,
-    pub tools_available: Option<Vec<Tool>>,
-    pub tool_choice: ToolChoice,
-    pub parallel_tool_calls: Option<bool>,
+    pub tool_config: Option<&'a ToolCallConfig>,
     pub temperature: Option<f32>,
     pub max_tokens: Option<u32>,
     pub stream: bool,
@@ -189,19 +163,19 @@ pub enum Latency {
 /// In the non-streaming case, this InferenceResponse is serialized into the TensorZero response format.
 /// See below for streaming case.
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum InferenceResponse {
     Chat(ChatInferenceResponse),
 }
 
 // Determines the return type of Inference API for Chat-type functions (which is all of them right now)
 /// See InferenceResponseWithOutputSchema below for details
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ChatInferenceResponse {
     inference_id: Uuid,
     created: u64,
-    pub parsed_output: Option<Value>,
-    pub content_blocks: Vec<ContentBlock>,
+    pub output: Vec<ContentBlockOutput>,
     pub usage: Usage,
     pub model_inference_responses: Vec<ModelInferenceResponse>,
 }
@@ -220,7 +194,7 @@ pub struct ModelInferenceResponseChunk {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlockChunk {
     Text(TextChunk),
     ToolCall(ToolCallChunk),
@@ -230,13 +204,6 @@ pub enum ContentBlockChunk {
 pub struct TextChunk {
     pub id: String,
     pub text: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ToolCallChunk {
-    pub id: String,
-    pub name: String,
-    pub arguments: String,
 }
 
 // This determines what gets serialized in streaming Chat functions
@@ -265,8 +232,8 @@ pub struct Inference {
     pub variant_name: String,
     pub episode_id: Uuid,
     pub input: String,
-    pub parsed_output: Option<Value>,
-    pub content_blocks: String,
+    pub output: String,
+    pub dynamic_tool_config: String,
     pub processing_time_ms: u32,
 }
 
@@ -281,6 +248,64 @@ pub struct ModelInference {
     pub output_tokens: u32,
     pub response_time_ms: u32,
     pub ttft_ms: Option<u32>,
+}
+
+#[cfg(test)]
+impl From<String> for InputMessageContent {
+    fn from(text: String) -> Self {
+        InputMessageContent::Text {
+            value: Value::String(text),
+        }
+    }
+}
+
+#[cfg(test)]
+impl From<String> for ContentBlockOutput {
+    fn from(text: String) -> Self {
+        ContentBlockOutput::Text(Text { text })
+    }
+}
+
+impl From<Value> for InputMessageContent {
+    fn from(value: Value) -> Self {
+        InputMessageContent::Text { value }
+    }
+}
+
+impl<'de> Deserialize<'de> for InputMessage {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct Helper {
+            role: Role,
+            content: ContentHelper,
+        }
+
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum ContentHelper {
+            Single(String),
+            Multiple(Vec<InputMessageContent>),
+        }
+
+        let helper = Helper::deserialize(deserializer)?;
+
+        let content = match helper.content {
+            ContentHelper::Single(text) => {
+                vec![InputMessageContent::Text {
+                    value: Value::String(text),
+                }]
+            }
+            ContentHelper::Multiple(content) => content,
+        };
+
+        Ok(InputMessage {
+            role: helper.role,
+            content,
+        })
+    }
 }
 
 impl fmt::Display for Role {
@@ -345,91 +370,58 @@ impl ChatInferenceResponse {
         raw_content: Vec<ContentBlock>,
         usage: Usage,
         model_inference_responses: Vec<ModelInferenceResponse>,
-        output_schema: Option<&JSONSchemaFromPath>,
-        tool_choice: ToolChoice,
+        tool_config: Option<&ToolCallConfig>,
     ) -> Self {
         #[allow(clippy::expect_used)]
         let created = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards")
             .as_secs();
-        let parsed_output = match output_schema {
-            // We write None for parsed_output if parsing fails
-            Some(schema) => Self::parse_output(&raw_content, schema, tool_choice).ok(),
-            // We also write None if there is no output schema
-            None => None,
-        };
+        let output = Self::parse_output(raw_content, tool_config);
         Self {
             inference_id,
             created,
-            parsed_output,
-            content_blocks: raw_content,
+            output,
             usage,
             model_inference_responses,
         }
     }
 
     fn parse_output(
-        content: &[ContentBlock],
-        output_schema: &JSONSchemaFromPath,
-        tool_choice: ToolChoice,
-    ) -> Result<Value, Error> {
+        content: Vec<ContentBlock>,
+        tool_config: Option<&ToolCallConfig>,
+    ) -> Vec<ContentBlockOutput> {
         if content.is_empty() {
-            return Err(Error::OutputParsing {
+            Error::OutputParsing {
                 raw_output: "".to_string(),
                 message: "Output parsing failed due to empty content".to_string(),
-            });
-        }
-        match tool_choice {
-            ToolChoice::Implicit => {
-                // TODO(#30): handle tool calls and fully think this through
-                for content in content.iter().rev() {
-                    let arguments = match content {
-                        ContentBlock::ToolCall(tool_call) => &tool_call.arguments,
-                        _ => continue,
-                    };
-                    let parsed_arguments =
-                        serde_json::from_str(arguments).map_err(|e| Error::OutputParsing {
-                            raw_output: arguments.to_string(),
-                            message: e.to_string(),
-                        })?;
-                    output_schema.validate(&parsed_arguments).map_err(|e| {
-                        Error::OutputValidation {
-                            source: Box::new(e),
-                        }
-                    })?;
-                    return Ok(parsed_arguments);
-                }
-                Err(Error::OutputParsing {
-                    raw_output: "".to_string(),
-                    message: "Output parsing failed due to no tool calls".to_string(),
-                })
             }
-            _ => {
-                // Grab the last text content block, parse it, and return
-                for content in content.iter().rev() {
-                    let text = match content {
-                        ContentBlock::Text(Text { text }) => text,
-                        _ => continue,
-                    };
-                    let parsed_text =
-                        serde_json::from_str(text).map_err(|e| Error::OutputParsing {
-                            raw_output: text.to_string(),
-                            message: e.to_string(),
-                        })?;
-                    output_schema
-                        .validate(&parsed_text)
-                        .map_err(|e| Error::OutputValidation {
-                            source: Box::new(e),
-                        })?;
-                    return Ok(parsed_text);
+            .log();
+            return vec![];
+        }
+        let mut output = Vec::new();
+        for content in content.into_iter() {
+            match content {
+                ContentBlock::Text(text) => {
+                    output.push(ContentBlockOutput::Text(text));
                 }
-                Err(Error::OutputParsing {
-                    raw_output: "".to_string(),
-                    message: "Output parsing failed due to no text content".to_string(),
-                })
+                ContentBlock::ToolCall(tool_call) => {
+                    // Parse the tool call arguments
+                    let tool = tool_config.and_then(|t| t.get_tool(&tool_call.name));
+                    let tool_call_output = ToolCallOutput::new(tool_call, tool);
+                    output.push(ContentBlockOutput::ToolCall(tool_call_output));
+                }
+                ContentBlock::ToolResult(tool_result) => {
+                    Error::OutputParsing {
+                        raw_output: serde_json::to_string(&tool_result).unwrap_or_default(),
+                        message: "Tool results are not supported in output for Chat functions"
+                            .to_string(),
+                    }
+                    .log();
+                }
             }
         }
+        output
     }
 
     pub fn get_serialized_model_inferences(&self, input: &str) -> Vec<serde_json::Value> {
@@ -444,47 +436,6 @@ impl ChatInferenceResponse {
     }
 }
 
-/// Helper type for output serialization of non-streaming responses.
-/// This is required since we want to only return the `parsed_output` field
-/// if there is an output schema for the Function being called.
-pub struct InferenceResponseWithOutputSchema<'a> {
-    pub inference_response: InferenceResponse,
-    pub output_schema: Option<&'a JSONSchemaFromPath>,
-}
-
-/// Custom serializer is required since we want to only return the `parsed_output` field
-/// if there is an output schema for the Function being called (null-valued if output parsing fails).
-impl<'a> Serialize for InferenceResponseWithOutputSchema<'a> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match &self.inference_response {
-            InferenceResponse::Chat(chat_response) => {
-                // Count the number of fields we'll be serializing
-                let mut field_count = 5; // type, inference_id, created, content_blocks, usage
-                if self.output_schema.is_some() {
-                    field_count += 1; // We'll include parsed_output
-                }
-
-                let mut state = serializer.serialize_struct("InferenceResponse", field_count)?;
-
-                state.serialize_field("type", "chat")?;
-                state.serialize_field("inference_id", &chat_response.inference_id)?;
-                state.serialize_field("created", &chat_response.created)?;
-                state.serialize_field("content_blocks", &chat_response.content_blocks)?;
-                state.serialize_field("usage", &chat_response.usage)?;
-
-                if self.output_schema.is_some() {
-                    state.serialize_field("parsed_output", &chat_response.parsed_output)?;
-                }
-
-                state.end()
-            }
-        }
-    }
-}
-
 impl Inference {
     pub fn new(
         inference_response: InferenceResponse,
@@ -492,6 +443,7 @@ impl Inference {
         episode_id: Uuid,
         function_name: String,
         variant_name: String,
+        dynamic_tool_config: String,
         processing_time: Duration,
     ) -> Self {
         let processing_time_ms = processing_time.as_millis() as u32;
@@ -502,9 +454,8 @@ impl Inference {
                 variant_name,
                 episode_id,
                 input,
-                content_blocks: serde_json::to_string(&chat_response.content_blocks)
-                    .unwrap_or_default(),
-                parsed_output: chat_response.parsed_output,
+                dynamic_tool_config,
+                output: serde_json::to_string(&chat_response.output).unwrap_or_default(),
                 processing_time_ms,
             },
         }
@@ -552,8 +503,8 @@ impl From<ModelInferenceResponseChunk> for ChatInferenceResponseChunk {
 
 pub fn collect_chunks(
     value: Vec<ModelInferenceResponseChunk>,
-    output_schema: Option<&JSONSchemaFromPath>,
-    tool_choice: ToolChoice,
+    _function: &FunctionConfig,
+    tool_config: Option<&ToolCallConfig>,
 ) -> Result<InferenceResponse, Error> {
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
 
@@ -653,8 +604,7 @@ pub fn collect_chunks(
         content_blocks,
         usage,
         vec![model_response],
-        output_schema,
-        tool_choice,
+        tool_config,
     )))
 }
 
@@ -675,6 +625,10 @@ pub type InferenceResponseStream =
 
 #[cfg(test)]
 mod tests {
+    use crate::function::FunctionConfigChat;
+    use crate::inference::providers::common::WEATHER_TOOL_CONFIG;
+    use crate::tool::ToolChoice;
+
     use super::*;
 
     #[test]
@@ -701,125 +655,231 @@ mod tests {
             usage.clone(),
             model_inference_responses,
             None,
-            ToolChoice::None,
         );
-        assert_eq!(chat_inference_response.parsed_output, None);
-        assert_eq!(chat_inference_response.content_blocks, content);
+        let output_content = ["Hello, world!".to_string().into()];
+        assert_eq!(chat_inference_response.output, output_content);
         assert_eq!(chat_inference_response.usage, usage);
 
-        // Case 2: a JSON string that passes validation
+        // Case 2: A tool call that fails argument validation
         let inference_id = Uuid::now_v7();
-        let created = current_timestamp();
-        let json_content = r#"{"name": "John", "age": 30}"#.to_string();
-        let content = vec![json_content.clone().into()];
-        let usage = Usage {
-            prompt_tokens: 15,
-            completion_tokens: 25,
-        };
-
-        let latency = Latency::NonStreaming {
-            response_time: Duration::from_millis(400),
-        };
+        let content = vec![ContentBlock::ToolCall(ToolCall {
+            name: "get_weather".to_string(),
+            arguments: r#"{"where": "the moon"}"#.to_string(),
+            id: "0".to_string(),
+        })];
         let model_inference_responses = vec![ModelInferenceResponse::new(
             content.clone(),
             "".to_string(),
             usage.clone(),
-            latency.clone(),
-        )];
-
-        let schema = serde_json::json!({
-            "type": "object",
-            "properties": {
-                "name": {"type": "string"},
-                "age": {"type": "integer"}
+            Latency::NonStreaming {
+                response_time: Duration::default(),
             },
-            "required": ["name", "age"]
-        });
-        let output_schema = JSONSchemaFromPath::from_value(&schema);
-
+        )];
         let chat_inference_response = ChatInferenceResponse::new(
             inference_id,
-            content.clone(),
+            content,
             usage.clone(),
             model_inference_responses,
-            Some(&output_schema),
-            ToolChoice::None,
+            Some(&WEATHER_TOOL_CONFIG),
         );
+        assert_eq!(chat_inference_response.output.len(), 1);
+        let tool_call_block = chat_inference_response.output.first().unwrap();
+        match tool_call_block {
+            ContentBlockOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.name, "get_weather");
+                assert_eq!(tool_call.arguments, r#"{"where": "the moon"}"#);
+                assert_eq!(tool_call.id, "0");
+                assert_eq!(tool_call.parsed_name, Some("get_weather".to_string()));
+                assert_eq!(tool_call.parsed_arguments, None);
+            }
+            _ => unreachable!(),
+        }
 
-        assert_eq!(chat_inference_response.inference_id, inference_id);
-        // Content will be the parsed Value if the JSON passes validation
-        assert_eq!(chat_inference_response.content_blocks, content);
-        assert_eq!(
-            chat_inference_response.parsed_output,
-            Some(serde_json::from_str(&json_content).unwrap())
+        // Case 3: A tool call that fails name validation
+        let inference_id = Uuid::now_v7();
+        let content = vec![ContentBlock::ToolCall(ToolCall {
+            name: "bad name".to_string(),
+            arguments: r#"{"where": "the moon"}"#.to_string(),
+            id: "0".to_string(),
+        })];
+        let model_inference_responses = vec![ModelInferenceResponse::new(
+            content.clone(),
+            "".to_string(),
+            usage.clone(),
+            Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+        )];
+        let chat_inference_response = ChatInferenceResponse::new(
+            inference_id,
+            content,
+            usage.clone(),
+            model_inference_responses,
+            Some(&WEATHER_TOOL_CONFIG),
         );
-        assert_eq!(chat_inference_response.usage, usage);
+        assert_eq!(chat_inference_response.output.len(), 1);
+        let tool_call_block = chat_inference_response.output.first().unwrap();
+        match tool_call_block {
+            ContentBlockOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.name, "bad name");
+                assert_eq!(tool_call.arguments, r#"{"where": "the moon"}"#);
+                assert_eq!(tool_call.id, "0");
+                assert_eq!(tool_call.parsed_name, None);
+                assert_eq!(tool_call.parsed_arguments, None);
+            }
+            _ => unreachable!(),
+        }
+
+        // Case 4: A tool call that passes validation
+        let inference_id = Uuid::now_v7();
+        let content = vec![ContentBlock::ToolCall(ToolCall {
+            name: "get_weather".to_string(),
+            arguments: r#"{"location": "the moon", "units": "celsius"}"#.to_string(),
+            id: "0".to_string(),
+        })];
+        let model_inference_responses = vec![ModelInferenceResponse::new(
+            content.clone(),
+            "".to_string(),
+            usage.clone(),
+            Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+        )];
+        let chat_inference_response = ChatInferenceResponse::new(
+            inference_id,
+            content,
+            usage.clone(),
+            model_inference_responses,
+            Some(&WEATHER_TOOL_CONFIG),
+        );
+        assert_eq!(chat_inference_response.output.len(), 1);
+        let tool_call_block = chat_inference_response.output.first().unwrap();
+        match tool_call_block {
+            ContentBlockOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.name, "get_weather");
+                assert_eq!(
+                    tool_call.arguments,
+                    r#"{"location": "the moon", "units": "celsius"}"#
+                );
+                assert_eq!(tool_call.id, "0");
+                assert_eq!(tool_call.parsed_name, Some("get_weather".to_string()));
+                assert_eq!(
+                    tool_call.parsed_arguments,
+                    Some(
+                        serde_json::from_str(r#"{"location": "the moon", "units": "celsius"}"#)
+                            .unwrap()
+                    )
+                );
+            }
+            _ => unreachable!(),
+        }
+
+        // Case 2: a JSON string that passes validation
+        // let inference_id = Uuid::now_v7();
+        // let created = current_timestamp();
+        // let json_content = r#"{"name": "John", "age": 30}"#.to_string();
+        // let content = vec![json_content.clone().into()];
+        // let usage = Usage {
+        //     prompt_tokens: 15,
+        //     completion_tokens: 25,
+        // };
+
+        // let latency = Latency::NonStreaming {
+        //     response_time: Duration::from_millis(400),
+        // };
+        // let model_inference_responses = vec![ModelInferenceResponse::new(
+        //     content.clone(),
+        //     "".to_string(),
+        //     usage.clone(),
+        //     latency.clone(),
+        // )];
+
+        // let chat_inference_response = ChatInferenceResponse::new(
+        //     inference_id,
+        //     content.clone(),
+        //     usage.clone(),
+        //     model_inference_responses,
+        //     Some(&output_schema),
+        // );
+
+        // assert_eq!(chat_inference_response.inference_id, inference_id);
+        // Content will be the parsed Value if the JSON passes validation
+        // assert_eq!(chat_inference_response.content_blocks, content);
+        // assert_eq!(
+        //     chat_inference_response.parsed_output,
+        //     Some(serde_json::from_str(&json_content).unwrap())
+        // );
+        // assert_eq!(chat_inference_response.usage, usage);
 
         // TODO (#87): assert that the appropriate errors were logged in the next two test cases
         // Case 3: a JSON string that fails validation
-        let invalid_json = r#"{"name": "John", "age": "thirty"}"#.to_string();
-        let invalid_json_content = vec![invalid_json.into()];
-        let model_inference_responses = vec![ModelInferenceResponse::new(
-            invalid_json_content.clone(),
-            "".to_string(),
-            usage.clone(),
-            Latency::NonStreaming {
-                response_time: Duration::from_millis(300),
-            },
-        )];
+        // let invalid_json = r#"{"name": "John", "age": "thirty"}"#.to_string();
+        // let invalid_json_content = vec![invalid_json.into()];
+        // let model_inference_responses = vec![ModelInferenceResponse::new(
+        //     invalid_json_content.clone(),
+        //     "".to_string(),
+        //     usage.clone(),
+        //     Latency::NonStreaming {
+        //         response_time: Duration::from_millis(300),
+        //     },
+        // )];
 
-        let chat_inference_response = ChatInferenceResponse::new(
-            inference_id,
-            invalid_json_content.clone(),
-            usage.clone(),
-            model_inference_responses,
-            Some(&output_schema),
-            ToolChoice::None,
-        );
+        // let chat_inference_response = ChatInferenceResponse::new(
+        //     inference_id,
+        //     invalid_json_content.clone(),
+        //     usage.clone(),
+        //     model_inference_responses,
+        //     Some(&output_schema),
+        // );
 
-        assert_eq!(chat_inference_response.inference_id, inference_id);
+        // assert_eq!(chat_inference_response.inference_id, inference_id);
         // Content will be None if the validation fails
-        assert_eq!(chat_inference_response.content_blocks, invalid_json_content);
-        assert_eq!(chat_inference_response.parsed_output, None);
-        assert_eq!(chat_inference_response.usage, usage);
+        // assert_eq!(chat_inference_response.content_blocks, invalid_json_content);
+        // assert_eq!(chat_inference_response.parsed_output, None);
+        // assert_eq!(chat_inference_response.usage, usage);
 
         // Case 4: a malformed JSON
-        let malformed_json = r#"{"name": "John", "age": 30,"#.to_string();
-        let model_inference_responses = vec![ModelInferenceResponse::new(
-            vec![malformed_json.clone().into()],
-            "".to_string(),
-            usage.clone(),
-            Latency::NonStreaming {
-                response_time: Duration::from_millis(310),
-            },
-        )];
+        // let malformed_json = r#"{"name": "John", "age": 30,"#.to_string();
+        // let model_inference_responses = vec![ModelInferenceResponse::new(
+        //     vec![malformed_json.clone().into()],
+        //     "".to_string(),
+        //     usage.clone(),
+        //     Latency::NonStreaming {
+        //         response_time: Duration::from_millis(310),
+        //     },
+        // )];
 
-        let chat_inference_response = ChatInferenceResponse::new(
-            inference_id,
-            vec![malformed_json.clone().into()],
-            usage.clone(),
-            model_inference_responses,
-            Some(&output_schema),
-            ToolChoice::None,
-        );
+        // let chat_inference_response = ChatInferenceResponse::new(
+        //     inference_id,
+        //     vec![malformed_json.clone().into()],
+        //     usage.clone(),
+        //     model_inference_responses,
+        //     Some(&output_schema),
+        // );
 
-        assert_eq!(chat_inference_response.inference_id, inference_id);
-        assert_eq!(chat_inference_response.created, created);
+        // assert_eq!(chat_inference_response.inference_id, inference_id);
+        // assert_eq!(chat_inference_response.created, created);
         // Content will be None if the JSON is malformed
-        assert_eq!(
-            chat_inference_response.content_blocks,
-            vec![malformed_json.clone().into()]
-        );
-        assert_eq!(chat_inference_response.parsed_output, None);
-        assert_eq!(chat_inference_response.usage, usage);
+        // assert_eq!(
+        //     chat_inference_response.content_blocks,
+        //     vec![malformed_json.clone().into()]
+        // );
+        // assert_eq!(chat_inference_response.parsed_output, None);
+        // assert_eq!(chat_inference_response.usage, usage);
     }
 
     #[test]
     fn test_collect_chunks() {
         // Test case 1: empty chunks (should error)
+        let tool_config = ToolCallConfig {
+            tools_available: vec![],
+            tool_choice: &ToolChoice::Auto,
+            parallel_tool_calls: false,
+        };
+        let tool_config = Box::leak(Box::new(tool_config));
         let chunks = vec![];
-        let output_schema = None;
-        let result = collect_chunks(chunks, output_schema, ToolChoice::None);
+        let function = FunctionConfig::Chat(FunctionConfigChat::default());
+        let result = collect_chunks(chunks, &function, Some(tool_config));
         assert_eq!(
             result.unwrap_err(),
             Error::TypeConversion {
@@ -861,15 +921,14 @@ mod tests {
                 latency: Duration::from_millis(250),
             },
         ];
-        let response = collect_chunks(chunks, None, ToolChoice::None).unwrap();
+        let response = collect_chunks(chunks, &function, Some(tool_config)).unwrap();
         let InferenceResponse::Chat(chat_response) = response;
         assert_eq!(chat_response.inference_id, inference_id);
         assert_eq!(chat_response.created, created);
         assert_eq!(
-            chat_response.content_blocks,
+            chat_response.output,
             vec!["Hello, world!".to_string().into()]
         );
-        assert_eq!(chat_response.parsed_output, None);
         assert_eq!(
             chat_response.usage,
             Usage {
@@ -879,132 +938,124 @@ mod tests {
         );
 
         // Test Case 3: a JSON string that passes validation and also include usage in each chunk
-        let inference_id = Uuid::now_v7();
-        let schema = JSONSchemaFromPath::from_value(&serde_json::json!({
-            "type": "object",
-            "properties": {
-                "name": {"type": "string"},
-                "age": {"type": "number"}
-            },
-            "required": ["name", "age"]
-        }));
-        let usage1 = Usage {
-            prompt_tokens: 10,
-            completion_tokens: 5,
-        };
-        let usage2 = Usage {
-            prompt_tokens: 5,
-            completion_tokens: 10,
-        };
-        let chunks = vec![
-            ModelInferenceResponseChunk {
-                inference_id,
-                content: vec![ContentBlockChunk::Text(TextChunk {
-                    text: "{\"name\":".to_string(),
-                    id: "0".to_string(),
-                })],
-                created,
-                usage: Some(usage1.clone()),
-                raw_response: "{\"name\":".to_string(),
-                latency: Duration::from_millis(150),
-            },
-            ModelInferenceResponseChunk {
-                inference_id,
-                content: vec![ContentBlockChunk::Text(TextChunk {
-                    text: "\"John\",\"age\":30}".to_string(),
-                    id: "0".to_string(),
-                })],
-                created,
-                usage: Some(usage2.clone()),
-                raw_response: "\"John\",\"age\":30}".to_string(),
-                latency: Duration::from_millis(250),
-            },
-        ];
-        let response = collect_chunks(chunks, Some(&schema), ToolChoice::None).unwrap();
-        let InferenceResponse::Chat(chat_response) = response;
-        assert_eq!(chat_response.inference_id, inference_id);
-        assert_eq!(
-            chat_response.parsed_output,
-            Some(serde_json::json!({"name": "John", "age": 30}))
-        );
-        assert_eq!(
-            chat_response.content_blocks,
-            vec!["{\"name\":\"John\",\"age\":30}".to_string().into()]
-        );
-        assert_eq!(
-            chat_response.usage,
-            Usage {
-                prompt_tokens: 15,
-                completion_tokens: 15,
-            }
-        );
+        // let inference_id = Uuid::now_v7();
+        // let schema = JSONSchemaFromPath::from_value(&serde_json::json!({
+        //     "type": "object",
+        //     "properties": {
+        //         "name": {"type": "string"},
+        //         "age": {"type": "number"}
+        //     },
+        //     "required": ["name", "age"]
+        // }));
+        // let usage1 = Usage {
+        //     prompt_tokens: 10,
+        //     completion_tokens: 5,
+        // };
+        // let usage2 = Usage {
+        //     prompt_tokens: 5,
+        //     completion_tokens: 10,
+        // };
+        // let chunks = vec![
+        //     ModelInferenceResponseChunk {
+        //         inference_id,
+        //         content: vec![ContentBlockChunk::Text(TextChunk {
+        //             text: "{\"name\":".to_string(),
+        //             id: "0".to_string(),
+        //         })],
+        //         created,
+        //         usage: Some(usage1.clone()),
+        //         raw_response: "{\"name\":".to_string(),
+        //         latency: Duration::from_millis(150),
+        //     },
+        //     ModelInferenceResponseChunk {
+        //         inference_id,
+        //         content: vec![ContentBlockChunk::Text(TextChunk {
+        //             text: "\"John\",\"age\":30}".to_string(),
+        //             id: "0".to_string(),
+        //         })],
+        //         created,
+        //         usage: Some(usage2.clone()),
+        //         raw_response: "\"John\",\"age\":30}".to_string(),
+        //         latency: Duration::from_millis(250),
+        //     },
+        // ];
+        // let response = collect_chunks(chunks, Some(&schema)).unwrap();
+        // let InferenceResponse::Chat(chat_response) = response;
+        // assert_eq!(chat_response.inference_id, inference_id);
+        // assert_eq!(
+        //     chat_response.parsed_output,
+        //     Some(serde_json::json!({"name": "John", "age": 30}))
+        // );
+        // assert_eq!(
+        //     chat_response.content_blocks,
+        //     vec!["{\"name\":\"John\",\"age\":30}".to_string().into()]
+        // );
+        // assert_eq!(
+        //     chat_response.usage,
+        //     Usage {
+        //         prompt_tokens: 15,
+        //         completion_tokens: 15,
+        //     }
+        // );
 
         // Test Case 4: a JSON string that fails validation and usage only in last chunk
-        let inference_id = Uuid::now_v7();
-        let created = current_timestamp();
-        let schema = JSONSchemaFromPath::from_value(&serde_json::json!({
-            "type": "object",
-            "properties": {
-                "name": {"type": "string"},
-                "age": {"type": "number"}
-            },
-            "required": ["name", "age"]
-        }));
-        let usage = Usage {
-            prompt_tokens: 10,
-            completion_tokens: 5,
-        };
-        let chunks = vec![
-            ModelInferenceResponseChunk {
-                inference_id,
-                content: vec![ContentBlockChunk::Text(TextChunk {
-                    text: "{\"name\":".to_string(),
-                    id: "0".to_string(),
-                })],
-                created,
-                usage: Some(usage.clone()),
-                raw_response: "{\"name\":".to_string(),
-                latency: Duration::from_millis(100),
-            },
-            ModelInferenceResponseChunk {
-                inference_id,
-                content: vec![ContentBlockChunk::Text(TextChunk {
-                    text: "\"John\"}".to_string(),
-                    id: "0".to_string(),
-                })],
-                created,
-                usage: None,
-                raw_response: "\"John\"}".to_string(),
-                latency: Duration::from_millis(200),
-            },
-        ];
-        let result = collect_chunks(chunks, Some(&schema), ToolChoice::None);
-        assert!(result.is_ok());
-        if let Ok(InferenceResponse::Chat(chat_response)) = result {
-            assert_eq!(chat_response.inference_id, inference_id);
-            assert_eq!(chat_response.created, created);
-            // Content is None when we fail validation
-            assert_eq!(chat_response.parsed_output, None);
-            assert_eq!(
-                chat_response.content_blocks,
-                vec!["{\"name\":\"John\"}".to_string().into()]
-            );
-            assert_eq!(chat_response.usage, usage);
-        } else {
-            unreachable!("Expected Ok(InferenceResponse::Chat), got {:?}", result);
-        }
+        // let inference_id = Uuid::now_v7();
+        // let created = current_timestamp();
+        // let schema = JSONSchemaFromPath::from_value(&serde_json::json!({
+        //     "type": "object",
+        //     "properties": {
+        //         "name": {"type": "string"},
+        //         "age": {"type": "number"}
+        //     },
+        //     "required": ["name", "age"]
+        // }));
+        // let usage = Usage {
+        //     prompt_tokens: 10,
+        //     completion_tokens: 5,
+        // };
+        // let chunks = vec![
+        //     ModelInferenceResponseChunk {
+        //         inference_id,
+        //         content: vec![ContentBlockChunk::Text(TextChunk {
+        //             text: "{\"name\":".to_string(),
+        //             id: "0".to_string(),
+        //         })],
+        //         created,
+        //         usage: Some(usage.clone()),
+        //         raw_response: "{\"name\":".to_string(),
+        //         latency: Duration::from_millis(100),
+        //     },
+        //     ModelInferenceResponseChunk {
+        //         inference_id,
+        //         content: vec![ContentBlockChunk::Text(TextChunk {
+        //             text: "\"John\"}".to_string(),
+        //             id: "0".to_string(),
+        //         })],
+        //         created,
+        //         usage: None,
+        //         raw_response: "\"John\"}".to_string(),
+        //         latency: Duration::from_millis(200),
+        //     },
+        // ];
+        // let result = collect_chunks(chunks, Some(&schema));
+        // assert!(result.is_ok());
+        // if let Ok(InferenceResponse::Chat(chat_response)) = result {
+        //     assert_eq!(chat_response.inference_id, inference_id);
+        //     assert_eq!(chat_response.created, created);
+        //     // Content is None when we fail validation
+        //     assert_eq!(chat_response.parsed_output, None);
+        //     assert_eq!(
+        //         chat_response.content_blocks,
+        //         vec!["{\"name\":\"John\"}".to_string().into()]
+        //     );
+        //     assert_eq!(chat_response.usage, usage);
+        // } else {
+        //     unreachable!("Expected Ok(InferenceResponse::Chat), got {:?}", result);
+        // }
 
         // Test case 5: chunks with some None content
         let inference_id = Uuid::now_v7();
         let created = current_timestamp();
-        let schema = JSONSchemaFromPath::from_value(&serde_json::json!({
-            "type": "object",
-            "properties": {
-                "name": {"type": "string"},
-                "age": {"type": "number"}
-            },
-            "required": ["name", "age"]
-        }));
         let usage = Usage {
             prompt_tokens: 15,
             completion_tokens: 10,
@@ -1041,17 +1092,13 @@ mod tests {
                 latency: Duration::from_millis(300),
             },
         ];
-        let result = collect_chunks(chunks, Some(&schema), ToolChoice::None);
+        let result = collect_chunks(chunks, &function, Some(tool_config));
         assert!(result.is_ok());
         if let Ok(InferenceResponse::Chat(chat_response)) = result {
             assert_eq!(chat_response.inference_id, inference_id);
             assert_eq!(chat_response.created, created);
             assert_eq!(
-                chat_response.parsed_output,
-                Some(serde_json::json!({"name": "John", "age": 30}))
-            );
-            assert_eq!(
-                chat_response.content_blocks,
+                chat_response.output,
                 vec!["{\"name\":\"John\",\"age\":30}".to_string().into()]
             );
             assert_eq!(chat_response.usage, usage);

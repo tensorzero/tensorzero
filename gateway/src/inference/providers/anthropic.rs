@@ -13,9 +13,9 @@ use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{ContentBlock, ContentBlockChunk, Latency, Role, Text};
 use crate::inference::types::{
     InferenceResponseStream, ModelInferenceRequest, ModelInferenceResponse,
-    ModelInferenceResponseChunk, RequestMessage, TextChunk, Tool, ToolCall, ToolCallChunk,
-    ToolChoice, Usage,
+    ModelInferenceResponseChunk, RequestMessage, TextChunk, Usage,
 };
+use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 const ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
@@ -220,21 +220,13 @@ struct AnthropicTool<'a> {
     input_schema: &'a Value,
 }
 
-impl<'a> TryFrom<&'a Tool> for AnthropicTool<'a> {
-    type Error = Error;
-
-    fn try_from(value: &'a Tool) -> Result<Self, Self::Error> {
+impl<'a> From<&'a ToolConfig> for AnthropicTool<'a> {
+    fn from(value: &'a ToolConfig) -> Self {
         // In case we add more tool types in the future, the compiler will complain here.
-        match value {
-            Tool::Function {
-                name,
-                description,
-                parameters,
-            } => Ok(AnthropicTool {
-                name,
-                description: description.as_deref(),
-                input_schema: parameters,
-            }),
+        AnthropicTool {
+            name: &value.name,
+            description: Some(&value.description),
+            input_schema: value.parameters.value,
         }
     }
 }
@@ -330,18 +322,16 @@ impl<'a> AnthropicRequestBody<'a> {
             .map(AnthropicMessage::from)
             .collect();
         let messages = prepare_messages(request_messages)?;
-        let tool_choice: Option<AnthropicToolChoice> =
-            AnthropicToolChoice::try_from(&request.tool_choice).ok();
         let tools = request
-            .tools_available
+            .tool_config
+            .map(|c| &c.tools_available)
+            .map(|tools| tools.iter().map(|tool| (*tool).into()).collect::<Vec<_>>());
+        // `tool_choice` should only be set if tools are set and non-empty
+        let tool_choice: Option<AnthropicToolChoice> = tools
             .as_ref()
-            .map(|tools| {
-                tools
-                    .iter()
-                    .map(AnthropicTool::try_from)
-                    .collect::<Result<Vec<_>, _>>()
-            })
-            .transpose()?;
+            .filter(|t| !t.is_empty())
+            .and(request.tool_config)
+            .and_then(|c| c.tool_choice.try_into().ok());
         Ok(AnthropicRequestBody {
             model: model_name,
             messages,
@@ -659,7 +649,7 @@ fn anthropic_to_tensorzero_stream_message(
                     message_latency,
                 )))
             }
-            AnthropicMessageBlock::ToolUse { id, name, input } => {
+            AnthropicMessageBlock::ToolUse { id, name, .. } => {
                 // This is a new tool call, update the ID for future chunks
                 *current_tool_id = Some(id.clone());
                 *current_tool_name = Some(name.clone());
@@ -668,11 +658,8 @@ fn anthropic_to_tensorzero_stream_message(
                     vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                         id,
                         name,
-                        arguments: serde_json::to_string(&input).map_err(|e| {
-                            Error::AnthropicServer {
-                                message: format!("Error parsing input for tool call: {e}"),
-                            }
-                        })?,
+                        // As far as I can tell this is always {} so we ignore
+                        arguments: "".to_string(),
                     })],
                     None,
                     raw_message,
@@ -736,7 +723,10 @@ mod tests {
 
     use serde_json::json;
 
-    use crate::inference::types::{FunctionType, JSONMode, Tool, ToolResult};
+    use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
+    use crate::inference::types::{FunctionType, JSONMode};
+    use crate::jsonschema_util::JSONSchemaFromPath;
+    use crate::tool::{ToolConfig, ToolResult};
 
     #[test]
     fn test_try_from_tool_choice() {
@@ -780,20 +770,27 @@ mod tests {
     }
 
     #[test]
-    fn test_try_from_tool() {
-        let tool = Tool::Function {
+    fn test_from_tool() {
+        let parameters = json!({
+            "type": "object",
+            "properties": {
+                "location": {"type": "string"},
+                "unit": {"type": "string"}
+            },
+            "required": ["location", "unit"]
+        });
+        let tool = ToolConfig {
             name: "test".to_string(),
-            description: Some("test".to_string()),
-            parameters: Value::Null,
+            description: "test".to_string(),
+            parameters: JSONSchemaFromPath::from_value(&parameters),
         };
-        let anthropic_tool = AnthropicTool::try_from(&tool);
-        assert!(anthropic_tool.is_ok());
+        let anthropic_tool: AnthropicTool = (&tool).into();
         assert_eq!(
-            anthropic_tool.unwrap(),
+            anthropic_tool,
             AnthropicTool {
                 name: "test",
                 description: Some("test"),
-                input_schema: &Value::Null,
+                input_schema: &parameters,
             }
         );
     }
@@ -894,9 +891,7 @@ mod tests {
         let inference_request = ModelInferenceRequest {
             messages: vec![],
             system: None,
-            tools_available: None,
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
+            tool_config: None,
             temperature: None,
             max_tokens: None,
             stream: false,
@@ -927,9 +922,7 @@ mod tests {
         let inference_request = ModelInferenceRequest {
             messages: messages.clone(),
             system: Some("test_system".to_string()),
-            tools_available: None,
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
+            tool_config: None,
             temperature: None,
             max_tokens: None,
             stream: false,
@@ -976,9 +969,7 @@ mod tests {
         let inference_request = ModelInferenceRequest {
             messages: messages.clone(),
             system: Some("test_system".to_string()),
-            tools_available: None,
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
+            tool_config: None,
             temperature: Some(0.5),
             max_tokens: Some(100),
             stream: true,
@@ -1031,17 +1022,11 @@ mod tests {
                 })],
             },
         ];
-        let tool = Tool::Function {
-            description: Some("test_description".to_string()),
-            name: "test_name".to_string(),
-            parameters: json!({"type": "string"}),
-        };
+
         let inference_request = ModelInferenceRequest {
             messages: messages.clone(),
             system: Some("test_system".to_string()),
-            tools_available: Some(vec![tool.clone()]),
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
+            tool_config: Some(&WEATHER_TOOL_CONFIG),
             temperature: Some(0.5),
             max_tokens: Some(100),
             stream: true,
@@ -1065,11 +1050,13 @@ mod tests {
                 stream: Some(true),
                 system: Some("test_system"),
                 temperature: Some(0.5),
-                tool_choice: Some(AnthropicToolChoice::Auto),
+                tool_choice: Some(AnthropicToolChoice::Tool {
+                    name: "get_weather",
+                }),
                 tools: Some(vec![AnthropicTool {
-                    name: "test_name",
-                    description: Some("test_description"),
-                    input_schema: &json!({"type": "string"}),
+                    name: &WEATHER_TOOL.name,
+                    description: Some(&WEATHER_TOOL.description),
+                    input_schema: WEATHER_TOOL.parameters.value,
                 }]),
             }
         );
@@ -1588,7 +1575,7 @@ mod tests {
             content_block: AnthropicMessageBlock::ToolUse {
                 id: "tool1".to_string(),
                 name: "calculator".to_string(),
-                input: json!({"operation": "add"}),
+                input: json!({}),
             },
             index: 1,
         };
@@ -1606,7 +1593,7 @@ mod tests {
             ContentBlockChunk::ToolCall(tool_call) => {
                 assert_eq!(tool_call.id, "tool1".to_string());
                 assert_eq!(tool_call.name, "calculator".to_string());
-                assert_eq!(tool_call.arguments, r#"{"operation":"add"}"#.to_string());
+                assert_eq!(tool_call.arguments, "".to_string());
             }
             _ => unreachable!(),
         }

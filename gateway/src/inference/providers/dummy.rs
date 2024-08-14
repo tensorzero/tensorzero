@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use lazy_static::lazy_static;
+use serde_json::{json, Value};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
@@ -8,8 +10,9 @@ use super::provider_trait::InferenceProvider;
 use crate::error::Error;
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, InferenceResponseStream, Latency, ModelInferenceRequest,
-    ModelInferenceResponse, ModelInferenceResponseChunk, Text, Usage,
+    ModelInferenceResponse, ModelInferenceResponseChunk, Usage,
 };
+use crate::tool::{ToolCall, ToolCallChunk};
 
 #[derive(Clone, Debug)]
 pub struct DummyProvider {
@@ -31,6 +34,13 @@ pub static DUMMY_INFER_RESPONSE_RAW: &str = r#"{
     }
   ]
 }"#;
+
+lazy_static! {
+    pub static ref DUMMY_TOOL_RESPONSE: Value = json!({"location": "Brooklyn", "units": "celsius"});
+    // This is the same as DUMMY_TOOL_RESPONSE, but with the units capitalized
+    // Since that field is an enum, this should fail validation
+    pub static ref DUMMY_BAD_TOOL_RESPONSE: Value = json!({"location": "Brooklyn", "units": "Celsius"});
+}
 pub static DUMMY_JSON_RESPONSE_RAW: &str = r#"{"answer":"Hello"}"#;
 pub static DUMMY_INFER_USAGE: Usage = Usage {
     prompt_tokens: 10,
@@ -54,6 +64,13 @@ pub static DUMMY_STREAMING_RESPONSE: [&str; 16] = [
     " cheese",
     " pizza.",
 ];
+pub static DUMMY_STREAMING_TOOL_RESPONSE: [&str; 5] = [
+    r#"{"location""#,
+    r#":"Brooklyn""#,
+    r#","units""#,
+    r#":"celsius"#,
+    r#""}"#,
+];
 
 impl InferenceProvider for DummyProvider {
     async fn infer<'a>(
@@ -72,13 +89,29 @@ impl InferenceProvider for DummyProvider {
             .duration_since(std::time::UNIX_EPOCH)
             .expect("Time went backwards")
             .as_secs();
-        let message = match self.model_name.as_str() {
-            "json" => r#"{"answer":"Hello"}"#.to_string(),
-            _ => DUMMY_INFER_RESPONSE_CONTENT.to_string(),
+        let content = match self.model_name.as_str() {
+            "tool" => vec![ContentBlock::ToolCall(ToolCall {
+                name: "get_weather".to_string(),
+                #[allow(clippy::unwrap_used)]
+                arguments: serde_json::to_string(&*DUMMY_TOOL_RESPONSE).unwrap(),
+                id: "0".to_string(),
+            })],
+            "bad_tool" => vec![ContentBlock::ToolCall(ToolCall {
+                name: "get_weather".to_string(),
+                #[allow(clippy::unwrap_used)]
+                arguments: serde_json::to_string(&*DUMMY_BAD_TOOL_RESPONSE).unwrap(),
+                id: "0".to_string(),
+            })],
+            "json" => vec![r#"{"answer":"Hello"}"#.to_string().into()],
+            _ => vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()],
         };
-        let content = vec![ContentBlock::Text(Text { text: message })];
         let raw = match self.model_name.as_str() {
+            #[allow(clippy::unwrap_used)]
+            "tool" => serde_json::to_string(&*DUMMY_TOOL_RESPONSE).unwrap(),
+            #[allow(clippy::unwrap_used)]
             "json" => DUMMY_JSON_RESPONSE_RAW.to_string(),
+            #[allow(clippy::unwrap_used)]
+            "bad_tool" => serde_json::to_string(&*DUMMY_BAD_TOOL_RESPONSE).unwrap(),
             _ => DUMMY_INFER_RESPONSE_RAW.to_string(),
         };
         let usage = DUMMY_INFER_USAGE.clone();
@@ -112,19 +145,29 @@ impl InferenceProvider for DummyProvider {
             .expect("Time went backwards")
             .as_secs();
 
-        let content_chunks = DUMMY_STREAMING_RESPONSE.to_vec();
+        let (content_chunks, is_tool_call) = if self.model_name == "tool" {
+            (DUMMY_STREAMING_TOOL_RESPONSE.to_vec(), true)
+        } else {
+            (DUMMY_STREAMING_RESPONSE.to_vec(), false)
+        };
 
         let total_tokens = content_chunks.len() as u32;
 
         let initial_chunk = ModelInferenceResponseChunk {
             inference_id: id,
             created,
-            content: vec![ContentBlockChunk::Text(
-                crate::inference::types::TextChunk {
+            content: vec![if is_tool_call {
+                ContentBlockChunk::ToolCall(ToolCallChunk {
+                    id: "0".to_string(),
+                    name: "get_weather".to_string(),
+                    arguments: content_chunks[0].to_string(),
+                })
+            } else {
+                ContentBlockChunk::Text(crate::inference::types::TextChunk {
                     text: content_chunks[0].to_string(),
                     id: "0".to_string(),
-                },
-            )],
+                })
+            }],
             usage: None,
             raw_response: "".to_string(),
             latency: Duration::from_millis(100),
@@ -135,12 +178,18 @@ impl InferenceProvider for DummyProvider {
                 Ok(ModelInferenceResponseChunk {
                     inference_id: id,
                     created,
-                    content: vec![ContentBlockChunk::Text(
-                        crate::inference::types::TextChunk {
+                    content: vec![if is_tool_call {
+                        ContentBlockChunk::ToolCall(ToolCallChunk {
+                            id: "0".to_string(),
+                            name: "get_weather".to_string(),
+                            arguments: chunk.to_string(),
+                        })
+                    } else {
+                        ContentBlockChunk::Text(crate::inference::types::TextChunk {
                             text: chunk.to_string(),
                             id: "0".to_string(),
-                        },
-                    )],
+                        })
+                    }],
                     usage: None,
                     raw_response: "".to_string(),
                     latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),

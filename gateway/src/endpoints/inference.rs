@@ -14,12 +14,14 @@ use uuid::Uuid;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::get_config;
 use crate::error::{Error, ResultExt};
-use crate::function::{sample_variant, FunctionConfig};
+use crate::function::sample_variant;
+use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
     collect_chunks, Inference, InferenceResponse, InferenceResponseChunk, InferenceResponseStream,
-    InferenceResponseWithOutputSchema, Input, ModelInferenceResponseChunk, ToolChoice,
+    Input, ModelInferenceResponseChunk,
 };
+use crate::tool::{DynamicToolConfig, ToolCallConfig};
 use crate::uuid_util::validate_episode_id;
 use crate::variant::Variant;
 
@@ -45,6 +47,15 @@ pub struct Params {
     variant_name: Option<String>,
     // if true, the inference will not be stored
     dryrun: Option<bool>,
+    // TODO (#126): properly implement dynamic tool calling
+    // If provided, the inference will only use the specified tools (a subset of the function's tools)
+    // allowed_tools: Option<Vec<String>>,
+    // If provided, the inference will use the specified tools in addition to the function's tools
+    // additional_tools: Option<Vec<Tool>>,
+    // If provided, the inference will use the specified tool choice
+    // tool_choice: Option<ToolChoice>,
+    // If true, the inference will use parallel tool calls
+    // parallel_tool_calls: Option<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -69,8 +80,27 @@ pub async fn inference_handler(
     // To be used for the Inference table processing_time measurements
     let start_time = Instant::now();
     // Get the function config or return an error if it doesn't exist
-    let function = get_config().get_function(&params.function_name)?;
-
+    let config = get_config();
+    let function = config.get_function(&params.function_name)?;
+    // TODO (#126): implement dynamic tool calling
+    // Collect the dynamic tool config
+    // let dynamic_tool_config = DynamicToolConfig {
+    //     allowed_tools: params.allowed_tools.as_ref(),
+    //     additional_tools: params.additional_tools.as_ref(),
+    //     tool_choice: params.tool_choice.as_ref(),
+    //     parallel_tool_calls: params.parallel_tool_calls,
+    // };
+    let dynamic_tool_config = DynamicToolConfig {
+        allowed_tools: None,
+        additional_tools: None,
+        tool_choice: None,
+        parallel_tool_calls: None,
+    };
+    let dynamic_tool_config_string =
+        serde_json::to_string(&dynamic_tool_config).map_err(|e| Error::Serialization {
+            message: e.to_string(),
+        })?;
+    let tool_config = function.prepare_tool_config(&config.tools)?;
     // Clone the function variants so we can modify the collection as we sample them
     let mut variants = function.variants().clone();
 
@@ -127,8 +157,9 @@ pub async fn inference_handler(
             let response = variant
                 .infer_stream(
                     &params.input,
-                    &get_config().models,
-                    function.output_schema(),
+                    &config.models,
+                    function,
+                    tool_config.as_ref(),
                     &http_client,
                 )
                 .await;
@@ -158,6 +189,8 @@ pub async fn inference_handler(
                 chunk,
                 stream,
                 clickhouse_connection_info,
+                tool_config,
+                dynamic_tool_config_string,
             );
 
             return Ok(Sse::new(stream)
@@ -167,8 +200,9 @@ pub async fn inference_handler(
             let response = variant
                 .infer(
                     &params.input,
-                    &get_config().models,
-                    function.output_schema(),
+                    &config.models,
+                    function,
+                    tool_config.as_ref(),
                     &http_client,
                 )
                 .await;
@@ -183,29 +217,26 @@ pub async fn inference_handler(
 
             if !dryrun {
                 // Spawn a thread for a trailing write to ClickHouse so that it doesn't block the response
+                let write_metadata = InferenceWriteMetadata {
+                    function_name: params.function_name,
+                    variant_name,
+                    episode_id,
+                    dynamic_tool_config: dynamic_tool_config_string,
+                    processing_time: start_time.elapsed(),
+                };
                 tokio::spawn(async move {
                     write_inference(
                         &clickhouse_connection_info,
-                        params.function_name,
-                        variant_name,
                         params.input,
                         response_to_write,
-                        episode_id,
-                        start_time.elapsed(),
+                        write_metadata,
                     )
                     .await;
                 });
             }
-            let response_with_output_schema = InferenceResponseWithOutputSchema {
-                inference_response: response,
-                output_schema: function.output_schema(),
-            };
-            let response_value =
-                serde_json::to_value(response_with_output_schema).map_err(|e| {
-                    Error::Inference {
-                        message: format!("Failed to convert response to JSON: {}", e),
-                    }
-                })?;
+            let response_value = serde_json::to_value(response).map_err(|e| Error::Inference {
+                message: format!("Failed to convert response to JSON: {}", e),
+            })?;
             return Ok(Json(response_value).into_response());
         }
     }
@@ -221,8 +252,11 @@ fn create_stream(
     first_chunk: ModelInferenceResponseChunk,
     mut stream: InferenceResponseStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
-) -> impl Stream<Item = Result<Event, Error>> {
+    tool_config: Option<ToolCallConfig>,
+    dynamic_tool_config_string: String,
+) -> impl Stream<Item = Result<Event, Error>> + Send {
     async_stream::stream! {
+
         let mut buffer = vec![first_chunk.clone()];
 
         // Send the first chunk
@@ -255,20 +289,24 @@ fn create_stream(
 
         if !metadata.dryrun {
             let inference_response: Result<InferenceResponse, Error> =
-                // TODO (#30): probably get this from FunctionConfig
-                collect_chunks(buffer, function.output_schema(), ToolChoice::None);
+                collect_chunks(buffer, function, tool_config.as_ref());
+
             let inference_response = inference_response.ok_or_log();
 
             if let Some(inference_response) = inference_response {
+                let write_metadata = InferenceWriteMetadata {
+                    function_name: metadata.function_name,
+                    variant_name: metadata.variant_name,
+                    episode_id: metadata.episode_id,
+                    dynamic_tool_config: dynamic_tool_config_string,
+                    processing_time: metadata.start_time.elapsed(),
+                };
                 tokio::spawn(async move {
                     write_inference(
                         &clickhouse_connection_info,
-                        metadata.function_name,
-                        metadata.variant_name,
                         metadata.input,
                         inference_response,
-                        metadata.episode_id,
-                        metadata.start_time.elapsed(),
+                        write_metadata,
                     )
                     .await;
                 });
@@ -301,14 +339,19 @@ fn prepare_event(
         })
 }
 
-async fn write_inference(
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
+struct InferenceWriteMetadata {
     function_name: String,
     variant_name: String,
+    episode_id: Uuid,
+    dynamic_tool_config: String,
+    processing_time: Duration,
+}
+
+async fn write_inference(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
     input: Input,
     response: InferenceResponse,
-    episode_id: Uuid,
-    processing_time: Duration,
+    metadata: InferenceWriteMetadata,
 ) {
     match response {
         InferenceResponse::Chat(response) => {
@@ -334,10 +377,11 @@ async fn write_inference(
             let inference = Inference::new(
                 InferenceResponse::Chat(response),
                 serialized_input,
-                episode_id,
-                function_name,
-                variant_name,
-                processing_time,
+                metadata.episode_id,
+                metadata.function_name,
+                metadata.variant_name,
+                metadata.dynamic_tool_config,
+                metadata.processing_time,
             );
             clickhouse_connection_info
                 .write(&inference, "Inference")
@@ -354,10 +398,8 @@ mod tests {
     use std::{collections::HashMap, time::Duration};
     use uuid::Uuid;
 
-    use crate::{
-        function::FunctionConfigChat,
-        inference::types::{ContentBlockChunk, ModelInferenceResponseChunk, TextChunk},
-    };
+    use crate::function::FunctionConfigChat;
+    use crate::inference::types::{ContentBlockChunk, ModelInferenceResponseChunk, TextChunk};
 
     #[tokio::test]
     async fn test_prepare_event() {
@@ -379,6 +421,7 @@ mod tests {
             user_schema: None,
             assistant_schema: None,
             tools: vec![],
+            ..Default::default()
         });
         let inference_metadata = InferenceMetadata {
             function_name: "test_function".to_string(),

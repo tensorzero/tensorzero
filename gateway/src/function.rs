@@ -1,10 +1,12 @@
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::error::Error;
-use crate::inference::types::{Input, Role};
+use crate::inference::types::{Input, InputMessageContent, Role};
 use crate::jsonschema_util::JSONSchemaFromPath;
+use crate::tool::{ToolCallConfig, ToolChoice, ToolConfig};
 use crate::variant::VariantConfig;
 
 #[derive(Debug)]
@@ -13,30 +15,15 @@ pub enum FunctionConfig {
     Json(FunctionConfigJson),
 }
 
-impl FunctionConfig {
-    pub fn variants(&self) -> &HashMap<String, VariantConfig> {
-        match self {
-            FunctionConfig::Chat(params) => &params.variants,
-            FunctionConfig::Json(params) => &params.variants,
-        }
-    }
-
-    // TODO (viraj): rip this in the next PR
-    pub fn output_schema(&self) -> Option<&JSONSchemaFromPath> {
-        match self {
-            FunctionConfig::Chat(_) => None,
-            FunctionConfig::Json(params) => Some(&params.output_schema),
-        }
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct FunctionConfigChat {
     pub variants: HashMap<String, VariantConfig>, // variant name => variant config
     pub system_schema: Option<JSONSchemaFromPath>,
     pub user_schema: Option<JSONSchemaFromPath>,
     pub assistant_schema: Option<JSONSchemaFromPath>,
     pub tools: Vec<String>, // tool names
+    pub tool_choice: ToolChoice,
+    pub parallel_tool_calls: bool,
 }
 
 #[derive(Debug)]
@@ -45,7 +32,15 @@ pub struct FunctionConfigJson {
     pub system_schema: Option<JSONSchemaFromPath>,
     pub user_schema: Option<JSONSchemaFromPath>,
     pub assistant_schema: Option<JSONSchemaFromPath>,
-    pub output_schema: JSONSchemaFromPath,
+    pub output_schema: JSONSchemaFromPath, // schema is mandatory for JSON functions
+}
+impl FunctionConfig {
+    pub fn variants(&self) -> &HashMap<String, VariantConfig> {
+        match self {
+            FunctionConfig::Chat(params) => &params.variants,
+            FunctionConfig::Json(params) => &params.variants,
+        }
+    }
 }
 
 impl FunctionConfig {
@@ -53,70 +48,144 @@ impl FunctionConfig {
     /// The validation is done based on the function's type:
     /// - For a chat function, the input is validated against the system, user, and assistant schemas.
     /// - For a JSON function, the input is validated against the system, user, and assistant schemas.
+    ///
+    /// We do not validate ContentBlocks that are not text (tool calls and tool responses).
+    ///  TODO (#30):
+    ///   We should also enforce that no dynamic tool calling information should be passed to JSON functions
+    ///   as they can't call tools.
     pub fn validate_input(&self, input: &Input) -> Result<(), Error> {
         match &self {
             FunctionConfig::Chat(params) => {
-                FunctionConfig::validate_chat_like_input(
-                    &params.system_schema,
-                    &params.user_schema,
-                    &params.assistant_schema,
+                validate_all_text_input(
+                    params.system_schema.as_ref(),
+                    params.user_schema.as_ref(),
+                    params.assistant_schema.as_ref(),
                     input,
                 )?;
             }
             FunctionConfig::Json(params) => {
-                FunctionConfig::validate_chat_like_input(
-                    &params.system_schema,
-                    &params.user_schema,
-                    &params.assistant_schema,
+                validate_all_text_input(
+                    params.system_schema.as_ref(),
+                    params.user_schema.as_ref(),
+                    params.assistant_schema.as_ref(),
                     input,
                 )?;
             }
         }
-
         Ok(())
     }
 
-    /// Validate an input that is a chat-like function (i.e. chat or tool).
-    /// The validation is done based on the input's role and the function's schemas.
-    fn validate_chat_like_input(
-        system_schema: &Option<JSONSchemaFromPath>,
-        user_schema: &Option<JSONSchemaFromPath>,
-        assistant_schema: &Option<JSONSchemaFromPath>,
-        input: &Input,
-    ) -> Result<(), Error> {
-        match (input.system.as_ref(), system_schema) {
-            (Some(system), Some(ref system_schema)) => system_schema.validate(system),
-            (None, None) => Ok(()),
-            (Some(system), None) => {
-                if system.is_string() {
-                    Ok(())
-                } else {
-                    Err(Error::InvalidMessage { message: "`input.system` has non-string content but there is no schema given for `system`.".to_string() })
+    pub fn prepare_tool_config(
+        &'static self,
+        // TODO (#126): implement dynamic tool calling
+        // dynamic_tool_config: &'a DynamicToolConfig,
+        static_tools: &'static HashMap<String, ToolConfig>,
+    ) -> Result<Option<ToolCallConfig>, Error> {
+        match self {
+            FunctionConfig::Chat(params) => Ok(Some(ToolCallConfig::new(
+                &params.tools,
+                &params.tool_choice,
+                params.parallel_tool_calls,
+                static_tools,
+                // TODO (#126): implement dynamic tool calling
+                // dynamic_tool_config,
+            )?)),
+            FunctionConfig::Json(_) => {
+                // if dynamic_tool_config.allowed_tools.is_some() {
+                //     return Err(Error::InvalidRequest {
+                //         message: "Cannot pass `allowed_tools` to a JSON function.".to_string(),
+                //     });
+                // }
+                // if dynamic_tool_config.additional_tools.is_some() {
+                //     return Err(Error::InvalidRequest {
+                //         message: "Cannot pass `additional_tools` to a JSON function.".to_string(),
+                //     });
+                // }
+                // if dynamic_tool_config.tool_choice.is_some() {
+                //     return Err(Error::InvalidRequest {
+                //         message: "Cannot pass `tool_choice` to a JSON function".to_string(),
+                //     });
+                // }
+                Ok(None)
+            }
+        }
+    }
+}
+
+/// Validate all input messages that contain text.
+/// The validation is done based on the input's role and the function's schemas.
+/// We first validate the system message (if it exists)
+/// Next we validate all messages containing text blocks.
+/// If there are multiple text blocks in a message we reject.
+fn validate_all_text_input(
+    system_schema: Option<&JSONSchemaFromPath>,
+    user_schema: Option<&JSONSchemaFromPath>,
+    assistant_schema: Option<&JSONSchemaFromPath>,
+    input: &Input,
+) -> Result<(), Error> {
+    match (input.system.as_ref(), system_schema) {
+        // If there is any system message passed we validate it
+        (Some(system), _) => validate_single_message(system, system_schema, None),
+        // If there is no system message and no schema we accept
+        (None, None) => Ok(()),
+        // If no system message is passed and we have a schema we fail
+        (None, Some(_)) => Err(Error::InvalidMessage {
+            message: "`input.system` is empty but a system template is present.".to_string(),
+        }),
+    }?;
+    for (index, message) in input.messages.iter().enumerate() {
+        let mut content: Option<&Value> = None;
+        for block in message.content.iter() {
+            if let InputMessageContent::Text { value } = block {
+                // Throw an error if we have multiple text blocks in a message
+                if content.is_some() {
+                    return Err(Error::InvalidMessage {
+                        message: format!(
+                            "Message at index {index} has multiple text content blocks"
+                        ),
+                    });
+                }
+                content = Some(value);
+            }
+        }
+        if let Some(content) = content {
+            match &message.role {
+                Role::Assistant => validate_single_message(
+                    content,
+                    assistant_schema,
+                    Some((index, &message.role)),
+                )?,
+                Role::User => {
+                    validate_single_message(content, user_schema, Some((index, &message.role)))?
                 }
             }
-            (None, Some(_)) => Err(Error::InvalidMessage {
-                message: "`input.system` is empty but a system template is present.".to_string(),
-            }),
-        }?;
-        for (index, message) in input.messages.iter().enumerate() {
-            match (&message.role, &user_schema, &assistant_schema) {
-                (Role::User, Some(ref user_schema), _) => user_schema.validate(&message.content),
-                (Role::Assistant, _, Some(ref assistant_schema)) => {
-                    assistant_schema.validate(&message.content)
-                }
-                _ => {
-                    if !message.content.is_string() {
-                        return Err(Error::InvalidMessage {
-                            message: format!("Message at index {} has non-string content but there is no schema given for role {}.", index, message.role),
-                        });
-                    } else {
-                        Ok(())
-                    }
-                }
-            }?;
         }
+    }
+    Ok(())
+}
 
-        Ok(())
+/// Validates a single message according to the following rules:
+/// If there is no schema, the message `content` must be a string
+/// Otherwise, the message must contain JSON content that matches the schema
+fn validate_single_message(
+    content: &Value,
+    schema: Option<&JSONSchemaFromPath>,
+    index_role: Option<(usize, &Role)>,
+) -> Result<(), Error> {
+    match schema {
+        Some(schema) => schema.validate(content),
+        None => {
+            if content.is_string() {
+                Ok(())
+            } else {
+                Err(match index_role {
+                    Some(index_role) => Error::InvalidMessage {
+                        message: format!("Message at index {} has non-string content but there is no schema given for role {}.", index_role.0, index_role.1),
+                    },
+                    None => Error::InvalidMessage {message:"Message has non-string content but there is no schema given for role system.".to_string()},
+                })
+            }
+        }
     }
 }
 
@@ -204,7 +273,8 @@ fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use crate::{inference::types::InputMessage, variant::ChatCompletionConfig};
+    use crate::inference::types::InputMessage;
+    use crate::variant::ChatCompletionConfig;
 
     use super::*;
     use serde_json::json;
@@ -238,17 +308,18 @@ mod tests {
             user_schema: None,
             assistant_schema: None,
             tools: vec![],
+            ..Default::default()
         };
         let function_config = FunctionConfig::Chat(chat_config);
 
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec!["assistant content".to_string().into()],
             },
         ];
 
@@ -262,11 +333,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!({ "name": "user name" }),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!({ "name": "assistant name" }),
+                content: vec![json!({ "name": "assistant name" }).into()],
             },
         ];
         let input = Input {
@@ -278,7 +349,34 @@ mod tests {
         assert_eq!(
             validation_result.unwrap_err(),
             Error::InvalidMessage {
-                message: "Message at index 0 has non-string content but there is no schema given for role user.".to_string()
+                message: "Message at index 1 has non-string content but there is no schema given for role assistant.".to_string()
+            }
+        );
+
+        // Test case for multiple text content blocks in one message
+        let messages = vec![
+            InputMessage {
+                role: Role::User,
+                content: vec![
+                    "first user content".to_string().into(),
+                    "second user content".to_string().into(),
+                ],
+            },
+            InputMessage {
+                role: Role::Assistant,
+                content: vec!["assistant content".to_string().into()],
+            },
+        ];
+        let input = Input {
+            system: Some(json!("system content")),
+            messages,
+        };
+
+        let validation_result = function_config.validate_input(&input);
+        assert_eq!(
+            validation_result.unwrap_err(),
+            Error::InvalidMessage {
+                message: "Message at index 0 has multiple text content blocks".to_string()
             }
         );
     }
@@ -293,17 +391,18 @@ mod tests {
             user_schema: None,
             assistant_schema: None,
             tools: vec![],
+            ..Default::default()
         };
         let function_config = FunctionConfig::Chat(chat_config);
 
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec!["assistant content".to_string().into()],
             },
         ];
         let input = Input {
@@ -324,11 +423,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec!["assistant content".to_string().into()],
             },
         ];
         let input = Input {
@@ -349,17 +448,18 @@ mod tests {
             user_schema: Some(user_schema),
             assistant_schema: None,
             tools: vec![],
+            ..Default::default()
         };
         let function_config = FunctionConfig::Chat(chat_config);
 
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec!["assistant content".to_string().into()],
             },
         ];
         let input = Input {
@@ -379,11 +479,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!({ "name": "user name" }),
+                content: vec![json!({ "name": "user name" }).into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec!["assistant content".to_string().into()],
             },
         ];
         let input = Input {
@@ -404,17 +504,18 @@ mod tests {
             user_schema: None,
             assistant_schema: Some(assistant_schema),
             tools: vec![],
+            ..Default::default()
         };
         let function_config = FunctionConfig::Chat(chat_config);
 
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec!["assistant content".to_string().into()],
             },
         ];
         let input = Input {
@@ -434,11 +535,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!({ "name": "assistant name" }),
+                content: vec![json!({ "name": "assistant name" }).into()],
             },
         ];
         let input = Input {
@@ -461,17 +562,18 @@ mod tests {
             user_schema: Some(user_schema),
             assistant_schema: Some(assistant_schema),
             tools: vec![],
+            ..Default::default()
         };
         let function_config = FunctionConfig::Chat(chat_config);
 
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec!["assistant content".to_string().into()],
             },
         ];
 
@@ -493,11 +595,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!({ "name": "user name" }),
+                content: vec![json!({ "name": "user name" }).into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!({ "name": "assistant name" }),
+                content: vec![json!({ "name": "assistant name" }).into()],
             },
         ];
 
@@ -523,11 +625,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec!["assistant content".to_string().into()],
             },
         ];
 
@@ -541,11 +643,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!({ "name": "user name" }),
+                content: vec![json!({ "name": "user name" }).into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!({ "name": "assistant name" }),
+                content: vec![json!({ "name": "assistant name" }).into()],
             },
         ];
 
@@ -579,11 +681,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec![json!("assistant content").to_string().into()],
             },
         ];
 
@@ -605,11 +707,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec![json!("assistant content").to_string().into()],
             },
         ];
 
@@ -637,11 +739,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec![json!("assistant content").to_string().into()],
             },
         ];
 
@@ -663,11 +765,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!({ "name": "user name" }),
+                content: vec![json!({ "name": "user name" }).into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec!["assistant content".to_string().into()],
             },
         ];
         let input = Input {
@@ -694,11 +796,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec!["assistant content".to_string().into()],
             },
         ];
         let input = Input {
@@ -719,11 +821,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!({ "name": "assistant name" }),
+                content: vec![json!({ "name": "assistant name" }).into()],
             },
         ];
         let input = Input {
@@ -752,11 +854,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!("user content"),
+                content: vec!["user content".to_string().into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!("assistant content"),
+                content: vec![json!("assistant content").to_string().into()],
             },
         ];
         let input = Input {
@@ -777,11 +879,11 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: json!({ "name": "user name" }),
+                content: vec![json!({ "name": "user name" }).into()],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: json!({ "name": "assistant name" }),
+                content: vec![json!({ "name": "assistant name" }).into()],
             },
         ];
 
