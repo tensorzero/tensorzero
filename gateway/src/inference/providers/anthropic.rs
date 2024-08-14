@@ -594,7 +594,6 @@ fn anthropic_to_tensorzero_stream_message(
     let raw_message = serde_json::to_string(&message).map_err(|e| Error::AnthropicServer {
         message: format!("Error parsing response from Anthropic: {e}"),
     })?;
-    println!("Raw message: {raw_message}");
     match message {
         AnthropicStreamMessage::ContentBlockDelta { delta, index } => match delta {
             AnthropicMessageBlock::TextDelta { text } => {
@@ -687,7 +686,6 @@ fn anthropic_to_tensorzero_stream_message(
         }
         AnthropicStreamMessage::MessageStart { message } => {
             if let Some(usage_info) = message.get("usage") {
-                println!("{}", usage_info);
                 let usage = parse_usage_info(usage_info);
                 Ok(Some(ModelInferenceResponseChunk::new(
                     inference_id,

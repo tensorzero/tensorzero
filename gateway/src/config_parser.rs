@@ -663,7 +663,6 @@ mod tests {
         config.insert("enable_agi".into(), true.into());
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, &base_path);
-        println!("{:?}", result);
         assert!(result
             .unwrap_err()
             .to_string()
