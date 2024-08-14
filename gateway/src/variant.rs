@@ -268,6 +268,7 @@ mod tests {
     use crate::inference::providers::common::WEATHER_TOOL_CONFIG;
     use crate::inference::providers::dummy::DummyProvider;
     use crate::inference::types::{ContentBlockOutput, Usage};
+    use crate::jsonschema_util::JSONSchemaFromPath;
     use crate::minijinja_util::tests::idempotent_initialize_test_templates;
     use crate::model::ProviderConfig;
     use crate::tool::ToolChoice;
@@ -488,18 +489,17 @@ mod tests {
         let error_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "error".to_string(),
         });
-        // let json_provider_config = ProviderConfig::Dummy(DummyProvider {
-        //     model_name: "json".to_string(),
-        // });
+        let json_provider_config = ProviderConfig::Dummy(DummyProvider {
+            model_name: "json".to_string(),
+        });
         let text_model_config = ModelConfig {
             routing: vec!["good".to_string()],
             providers: HashMap::from([("good".to_string(), good_provider_config)]),
         };
-        // Snooze this for now
-        // let json_model_config = ModelConfig {
-        //     routing: vec!["json".to_string()],
-        //     providers: HashMap::from([("json".to_string(), json_provider_config)]),
-        // };
+        let json_model_config = ModelConfig {
+            routing: vec!["json".to_string()],
+            providers: HashMap::from([("json".to_string(), json_provider_config)]),
+        };
         let tool_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "tool".to_string(),
         });
@@ -662,39 +662,31 @@ mod tests {
             }
         }
 
-        // TODO: handle schemas separately
         // Test case 5: JSON output was supposed to happen but it did not
-        // let output_schema = serde_json::json!({
-        //     "type": "object",
-        //     "properties": {
-        //         "answer": {
-        //             "type": "string"
-        //         }
-        //     },
-        //     "required": ["answer"],
-        //     "additionalProperties": false
-        // });
-        // let output_schema = JSONSchemaFromPath::from_value(&output_schema);
-        // let result = chat_completion_config
-        //     .infer(
-        //         &input,
-        //         &models,
-        //         &function_config,
-        //         Some(&output_schema),
-        //         &client,
-        //     )
-        //     .await
-        //     .unwrap();
-        // assert!(matches!(result, InferenceResponse::Chat(_)));
-        // match result {
-        //     InferenceResponse::Chat(chat_response) => {
-        //         assert_eq!(
-        //             chat_response.content_blocks,
-        //             vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()]
-        //         );
-        //         assert_eq!(chat_response.parsed_output, None,);
-        //     }
-        // }
+        let output_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "answer": {
+                    "type": "string"
+                }
+            },
+            "required": ["answer"],
+            "additionalProperties": false
+        });
+        let output_schema = JSONSchemaFromPath::from_value(&output_schema);
+        let result = chat_completion_config
+            .infer(&input, &models, &function_config, None, &client)
+            .await
+            .unwrap();
+        match result {
+            InferenceResponse::Chat(chat_response) => {
+                assert_eq!(
+                    chat_response.output
+                    vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()]
+                );
+                assert_eq!(chat_response.parsed_output, None,);
+            }
+        }
 
         // Test case 6: JSON output was supposed to happen and it did
         // let models = HashMap::from([("json".to_string(), json_model_config.clone())]);
