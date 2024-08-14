@@ -87,7 +87,7 @@ lazy_static! {
     static ref TOOL_CHOICE: ToolChoice = ToolChoice::Tool("get_weather".to_string());
     static ref TOOL_CONFIG: ToolCallConfig = ToolCallConfig {
         tools_available: vec![&*WEATHER_TOOL],
-        tool_choice: &*TOOL_CHOICE,
+        tool_choice: &TOOL_CHOICE,
         parallel_tool_calls: false,
     };
 }

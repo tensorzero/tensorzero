@@ -486,7 +486,7 @@ async fn test_tool_call_streaming() {
         }
         if i + 1 < chunks.len() {
             let content = chunk_json.get("content").unwrap().as_array().unwrap();
-            if content.len() < 1 {
+            if content.is_empty() {
                 continue;
             }
             let content_block = content.first().unwrap();

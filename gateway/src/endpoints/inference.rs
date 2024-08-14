@@ -216,16 +216,19 @@ pub async fn inference_handler(
 
             if !dryrun {
                 // Spawn a thread for a trailing write to ClickHouse so that it doesn't block the response
+                let write_metadata = InferenceWriteMetadata {
+                    function_name: params.function_name,
+                    variant_name,
+                    episode_id,
+                    dynamic_tool_config: dynamic_tool_config_string,
+                    processing_time: start_time.elapsed(),
+                };
                 tokio::spawn(async move {
                     write_inference(
                         &clickhouse_connection_info,
-                        params.function_name,
-                        variant_name,
                         params.input,
                         response_to_write,
-                        episode_id,
-                        start_time.elapsed(),
-                        dynamic_tool_config_string,
+                        write_metadata,
                     )
                     .await;
                 });
@@ -291,17 +294,19 @@ fn create_stream(
             let inference_response = inference_response.ok_or_log();
 
             if let Some(inference_response) = inference_response {
-
+                let write_metadata = InferenceWriteMetadata {
+                    function_name: metadata.function_name,
+                    variant_name: metadata.variant_name,
+                    episode_id: metadata.episode_id,
+                    dynamic_tool_config: dynamic_tool_config_string,
+                    processing_time: metadata.start_time.elapsed(),
+                };
                 tokio::spawn(async move {
                     write_inference(
                         &clickhouse_connection_info,
-                        metadata.function_name,
-                        metadata.variant_name,
                         metadata.input,
                         inference_response,
-                        metadata.episode_id,
-                        metadata.start_time.elapsed(),
-                        dynamic_tool_config_string,
+                        write_metadata,
                     )
                     .await;
                 });
@@ -334,15 +339,19 @@ fn prepare_event(
         })
 }
 
-async fn write_inference(
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
+struct InferenceWriteMetadata {
     function_name: String,
     variant_name: String,
+    episode_id: Uuid,
+    dynamic_tool_config: String,
+    processing_time: Duration,
+}
+
+async fn write_inference(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
     input: Input,
     response: InferenceResponse,
-    episode_id: Uuid,
-    processing_time: Duration,
-    dynamic_tool_config: String,
+    metadata: InferenceWriteMetadata,
 ) {
     match response {
         InferenceResponse::Chat(response) => {
@@ -368,11 +377,11 @@ async fn write_inference(
             let inference = Inference::new(
                 InferenceResponse::Chat(response),
                 serialized_input,
-                episode_id,
-                function_name,
-                variant_name,
-                dynamic_tool_config,
-                processing_time,
+                metadata.episode_id,
+                metadata.function_name,
+                metadata.variant_name,
+                metadata.dynamic_tool_config,
+                metadata.processing_time,
             );
             clickhouse_connection_info
                 .write(&inference, "Inference")
