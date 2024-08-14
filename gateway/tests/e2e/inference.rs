@@ -486,6 +486,7 @@ async fn e2e_test_tool_call_malformed() {
                 }
             ]},
         "stream": false,
+        "variant_name": "bad_tool"
     });
     let response = Client::new()
         .post(get_gateway_endpoint("/inference"))

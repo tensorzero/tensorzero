@@ -322,7 +322,7 @@ system_template = "config/functions/weather_helper/prompt/system_template.miniji
 
 [functions.weather_helper.variants.bad_tool]
 type = "chat_completion"
-weight = 1
+weight = 0
 model = "bad_tool"
 system_template = "config/functions/weather_helper/prompt/system_template.minijinja"
 

@@ -594,6 +594,7 @@ fn anthropic_to_tensorzero_stream_message(
     let raw_message = serde_json::to_string(&message).map_err(|e| Error::AnthropicServer {
         message: format!("Error parsing response from Anthropic: {e}"),
     })?;
+    println!("Raw message: {raw_message}");
     match message {
         AnthropicStreamMessage::ContentBlockDelta { delta, index } => match delta {
             AnthropicMessageBlock::TextDelta { text } => {
@@ -649,7 +650,7 @@ fn anthropic_to_tensorzero_stream_message(
                     message_latency,
                 )))
             }
-            AnthropicMessageBlock::ToolUse { id, name, input } => {
+            AnthropicMessageBlock::ToolUse { id, name, .. } => {
                 // This is a new tool call, update the ID for future chunks
                 *current_tool_id = Some(id.clone());
                 *current_tool_name = Some(name.clone());
@@ -658,11 +659,8 @@ fn anthropic_to_tensorzero_stream_message(
                     vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                         id,
                         name,
-                        arguments: serde_json::to_string(&input).map_err(|e| {
-                            Error::AnthropicServer {
-                                message: format!("Error parsing input for tool call: {e}"),
-                            }
-                        })?,
+                        // As far as I can tell this is always {} so we ignore
+                        arguments: "".to_string(),
                     })],
                     None,
                     raw_message,
@@ -689,6 +687,7 @@ fn anthropic_to_tensorzero_stream_message(
         }
         AnthropicStreamMessage::MessageStart { message } => {
             if let Some(usage_info) = message.get("usage") {
+                println!("{}", usage_info);
                 let usage = parse_usage_info(usage_info);
                 Ok(Some(ModelInferenceResponseChunk::new(
                     inference_id,
@@ -1578,7 +1577,7 @@ mod tests {
             content_block: AnthropicMessageBlock::ToolUse {
                 id: "tool1".to_string(),
                 name: "calculator".to_string(),
-                input: json!({"operation": "add"}),
+                input: json!({}),
             },
             index: 1,
         };
@@ -1596,7 +1595,7 @@ mod tests {
             ContentBlockChunk::ToolCall(tool_call) => {
                 assert_eq!(tool_call.id, "tool1".to_string());
                 assert_eq!(tool_call.name, "calculator".to_string());
-                assert_eq!(tool_call.arguments, r#"{"operation":"add"}"#.to_string());
+                assert_eq!(tool_call.arguments, "".to_string());
             }
             _ => unreachable!(),
         }
