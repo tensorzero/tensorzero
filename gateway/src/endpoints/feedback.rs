@@ -277,7 +277,7 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
-    use crate::config_parser::{Config, MetricConfig, MetricConfigOptimize};
+    use crate::config_parser::{Config, GatewayConfig, MetricConfig, MetricConfigOptimize};
 
     #[tokio::test]
     async fn test_get_feedback_metadata() {
@@ -292,7 +292,7 @@ mod tests {
             },
         );
         let config = Config {
-            gateway: None,
+            gateway: GatewayConfig::default(),
             clickhouse: None,
             models: HashMap::new(),
             metrics,
@@ -407,7 +407,7 @@ mod tests {
         let mut metrics = HashMap::new();
         metrics.insert("test_metric".to_string(), metric_config);
         let config = Config {
-            gateway: None,
+            gateway: GatewayConfig::default(),
             clickhouse: None,
             models: HashMap::new(),
             metrics,

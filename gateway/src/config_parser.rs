@@ -20,7 +20,7 @@ pub fn get_config() -> &'static Config {
 
 #[derive(Debug)]
 pub struct Config {
-    pub gateway: Option<ApiConfig>,
+    pub gateway: GatewayConfig,
     pub clickhouse: Option<ClickHouseConfig>,
     pub models: HashMap<String, ModelConfig>, // model name => model config
     pub functions: HashMap<String, FunctionConfig>, // function name => function config
@@ -28,10 +28,12 @@ pub struct Config {
     pub tools: HashMap<String, ToolConfig>,   // tool name => tool config
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ApiConfig {
+pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
+    #[serde(default)]
+    pub disable_observability: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -98,18 +100,23 @@ impl Config {
 
     fn load_from_toml(table: toml::Table, base_path: &PathBuf) -> Result<Config, Error> {
         let config = UninitializedConfig::try_from(table)?;
+
+        let gateway = config.gateway.unwrap_or_default();
+
         let functions = config
             .functions
             .into_iter()
             .map(|(name, config)| config.load(base_path).map(|c| (name, c)))
             .collect::<Result<HashMap<String, FunctionConfig>, Error>>()?;
+
         let tools = config
             .tools
             .into_iter()
             .map(|(name, config)| config.load(base_path).map(|c| (name, c)))
             .collect::<Result<HashMap<String, ToolConfig>, Error>>()?;
+
         let config = Config {
-            gateway: config.gateway,
+            gateway,
             clickhouse: config.clickhouse,
             models: config.models,
             functions,
@@ -117,6 +124,7 @@ impl Config {
             tools,
         };
         config.validate()?;
+
         Ok(config)
     }
 
@@ -363,7 +371,7 @@ impl Config {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedConfig {
-    pub gateway: Option<ApiConfig>,
+    pub gateway: Option<GatewayConfig>,
     pub clickhouse: Option<ClickHouseConfig>,
     pub models: HashMap<String, ModelConfig>, // model name => model config
     pub functions: HashMap<String, UninitializedFunctionConfig>, // function name => function config
@@ -540,19 +548,14 @@ mod tests {
         // Test with a valid bind address
         let parsed_config = Config::load_from_toml(config.clone(), &base_path).unwrap();
         assert_eq!(
-            parsed_config
-                .gateway
-                .unwrap()
-                .bind_address
-                .unwrap()
-                .to_string(),
+            parsed_config.gateway.bind_address.unwrap().to_string(),
             "0.0.0.0:3000"
         );
 
         // Test with missing gateway section
         config.remove("gateway");
         let parsed_config = Config::load_from_toml(config.clone(), &base_path).unwrap();
-        assert!(parsed_config.gateway.is_none());
+        assert!(parsed_config.gateway.bind_address.is_none());
 
         // Test with missing bind_address
         config.insert(
@@ -560,7 +563,7 @@ mod tests {
             toml::Value::Table(toml::Table::new()),
         );
         let parsed_config = Config::load_from_toml(config.clone(), &base_path).unwrap();
-        assert!(parsed_config.gateway.unwrap().bind_address.is_none());
+        assert!(parsed_config.gateway.bind_address.is_none());
 
         // Test with invalid bind address
         config["gateway"].as_table_mut().unwrap().insert(

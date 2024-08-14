@@ -24,9 +24,11 @@ async fn main() {
         gateway_util::AppStateData::new().expect_pretty("Failed to initialize AppState");
 
     // Run ClickHouse migrations (if any)
-    clickhouse_migration_manager::run(&app_state.clickhouse_connection_info)
-        .await
-        .expect_pretty("Failed to run ClickHouse migrations");
+    if !config.gateway.disable_observability {
+        clickhouse_migration_manager::run(&app_state.clickhouse_connection_info)
+            .await
+            .expect_pretty("Failed to run ClickHouse migrations");
+    }
 
     let router = Router::new()
         .route("/inference", post(endpoints::inference::inference_handler))
@@ -42,8 +44,7 @@ async fn main() {
     // Bind to the socket address specified in the config, or default to 0.0.0.0:3000
     let bind_address = config
         .gateway
-        .as_ref()
-        .and_then(|gateway_config| gateway_config.bind_address)
+        .bind_address
         .unwrap_or_else(|| SocketAddr::from(([0, 0, 0, 0], 3000)));
 
     let listener = tokio::net::TcpListener::bind(bind_address)

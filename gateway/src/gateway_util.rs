@@ -17,18 +17,23 @@ pub type AppState = axum::extract::State<AppStateData>;
 
 impl AppStateData {
     pub fn new() -> Result<Self, Error> {
-        let clickhouse_url = std::env::var("CLICKHOUSE_URL").map_err(|_| Error::AppState {
-            message: "Missing environment variable CLICKHOUSE_URL".to_string(),
-        })?;
+        let config = get_config();
 
-        let database = get_config()
-            .clickhouse
-            .as_ref()
-            .map(|ch| ch.database.clone())
-            .unwrap_or("tensorzero".to_string());
+        let clickhouse_connection_info = if config.gateway.disable_observability {
+            ClickHouseConnectionInfo::new_disabled()
+        } else {
+            let clickhouse_url = std::env::var("CLICKHOUSE_URL").map_err(|_| Error::AppState {
+                message: "Missing environment variable CLICKHOUSE_URL".to_string(),
+            })?;
 
-        let clickhouse_connection_info =
-            ClickHouseConnectionInfo::new(&clickhouse_url, &database, false, None)?;
+            let database = get_config()
+                .clickhouse
+                .as_ref()
+                .map(|ch| ch.database.clone())
+                .unwrap_or("tensorzero".to_string());
+
+            ClickHouseConnectionInfo::new(&clickhouse_url, &database)?
+        };
 
         let http_client = Client::new();
 
