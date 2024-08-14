@@ -13,10 +13,18 @@
   cargo run --profile performance --bin mock-inference-provider
   ```
 
-- Launch the gateway:
+- Launch the gateway.
 
-  ```
-  cargo run --profile performance --bin gateway gateway/tests/load/tensorzero-without-observability.toml
-  ```
+  - With observability:
+
+    ```
+    cargo run --profile performance --bin gateway gateway/tests/load/tensorzero.toml
+    ```
+
+  - Without observability:
+
+    ```
+    cargo run --profile performance --bin gateway gateway/tests/load/tensorzero-without-observability.toml
+    ```
 
 - Then, you can run a load test with `sh path/to/test/run.sh`.
