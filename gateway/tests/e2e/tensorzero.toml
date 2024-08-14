@@ -262,18 +262,21 @@ system_template = "config/functions/basic_test/prompt/system_template.minijinja"
 [functions.variant_failover]
 type = "chat"
 system_schema = "config/functions/basic_test/system_schema.json"
+user_schema = "config/functions/variant_failover/user_schema.json"
 
 [functions.variant_failover.variants.good]
 type = "chat_completion"
 weight = 0.5
 model = "test"
 system_template = "config/functions/basic_test/prompt/system_template.minijinja"
+user_template = "config/functions/variant_failover/prompt/user_template.minijinja"
 
 [functions.variant_failover.variants.error]
 type = "chat_completion"
 weight = 0.5
 model = "error"
 system_template = "config/functions/basic_test/prompt/system_template.minijinja"
+user_template = "config/functions/variant_failover/prompt/user_template.minijinja"
 
 [functions.prometheus_test1]
 type = "chat"

@@ -1,12 +1,51 @@
+use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::error::Error;
-use crate::inference::types::{FunctionConfig, Input, InputMessageContent, Role, VariantConfig};
+use crate::inference::types::{Input, InputMessageContent, Role};
 use crate::jsonschema_util::JSONSchemaFromPath;
-use crate::tool::{ToolCallConfig, ToolConfig};
+use crate::tool::{ToolCallConfig, ToolChoice, ToolConfig};
+use crate::variant::VariantConfig;
+
+#[derive(Debug)]
+pub enum FunctionConfig {
+    Chat(FunctionConfigChat),
+    Json(FunctionConfigJson),
+}
+
+#[derive(Debug, Default)]
+pub struct FunctionConfigChat {
+    pub variants: HashMap<String, VariantConfig>, // variant name => variant config
+    pub system_schema: Option<JSONSchemaFromPath>,
+    pub user_schema: Option<JSONSchemaFromPath>,
+    pub assistant_schema: Option<JSONSchemaFromPath>,
+    pub tools: Vec<String>, // tool names
+    pub tool_choice: ToolChoice,
+    pub parallel_tool_calls: bool,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum JsonEnforcement {
+    #[default]
+    Default,
+    Strict,
+    ImplicitTool,
+    Off,
+}
+
+#[derive(Debug)]
+pub struct FunctionConfigJson {
+    pub variants: HashMap<String, VariantConfig>, // variant name => variant config
+    pub system_schema: Option<JSONSchemaFromPath>,
+    pub user_schema: Option<JSONSchemaFromPath>,
+    pub assistant_schema: Option<JSONSchemaFromPath>,
+    pub output_schema: JSONSchemaFromPath, // schema is mandatory for JSON functions
+    pub json_mode: JsonEnforcement,
+}
 
 impl FunctionConfig {
     pub fn variants(&self) -> &HashMap<String, VariantConfig> {
@@ -247,9 +286,8 @@ fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use crate::inference::types::{
-        ChatCompletionConfig, FunctionConfigChat, FunctionConfigJson, InputMessage, JsonEnforcement,
-    };
+    use crate::inference::types::InputMessage;
+    use crate::variant::ChatCompletionConfig;
 
     use super::*;
     use serde_json::json;

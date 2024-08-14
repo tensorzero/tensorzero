@@ -1,22 +1,39 @@
 use reqwest::Client;
+use serde::Deserialize;
 use serde_json::Value;
 use std::{collections::HashMap, path::PathBuf};
 use uuid::Uuid;
 
 use crate::error::Error;
+use crate::function::FunctionConfig;
 use crate::inference::types::{
-    ChatInferenceResponse, ContentBlock, FunctionConfig, FunctionType, Input, InputMessageContent,
-    JSONMode, ModelInferenceRequest, ModelInferenceResponseChunk, RequestMessage, Role,
+    ChatInferenceResponse, ContentBlock, FunctionType, Input, InputMessageContent, JSONMode,
+    ModelInferenceRequest, ModelInferenceResponseChunk, RequestMessage, Role,
 };
 use crate::minijinja_util::template_message;
 use crate::tool::ToolCallConfig;
 use crate::{
-    inference::types::{
-        ChatCompletionConfig, InferenceResponse, InferenceResponseStream, InputMessage,
-        VariantConfig,
-    },
+    inference::types::{InferenceResponse, InferenceResponseStream, InputMessage},
     model::ModelConfig,
 };
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
+pub enum VariantConfig {
+    ChatCompletion(ChatCompletionConfig),
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChatCompletionConfig {
+    pub weight: f64,
+    pub model: String, // TODO (#85): validate that this model exists in the model config
+    pub system_template: Option<PathBuf>,
+    pub user_template: Option<PathBuf>,
+    pub assistant_template: Option<PathBuf>,
+}
 
 pub trait Variant {
     async fn infer(
@@ -274,9 +291,10 @@ mod tests {
     use futures::StreamExt;
     use serde_json::{json, Value};
 
+    use crate::function::FunctionConfigChat;
     use crate::inference::providers::common::WEATHER_TOOL_CONFIG;
     use crate::inference::providers::dummy::DummyProvider;
-    use crate::inference::types::{ContentBlockOutput, FunctionConfigChat, Usage};
+    use crate::inference::types::{ContentBlockOutput, Usage};
     use crate::minijinja_util::tests::idempotent_initialize_test_templates;
     use crate::model::ProviderConfig;
     use crate::tool::ToolChoice;

@@ -15,10 +15,11 @@ use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::get_config;
 use crate::error::{Error, ResultExt};
 use crate::function::sample_variant;
+use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
-    collect_chunks, FunctionConfig, Inference, InferenceResponse, InferenceResponseChunk,
-    InferenceResponseStream, Input, ModelInferenceResponseChunk,
+    collect_chunks, Inference, InferenceResponse, InferenceResponseChunk, InferenceResponseStream,
+    Input, ModelInferenceResponseChunk,
 };
 use crate::tool::{DynamicToolConfig, ToolCallConfig};
 use crate::uuid_util::validate_episode_id;
@@ -397,9 +398,8 @@ mod tests {
     use std::{collections::HashMap, time::Duration};
     use uuid::Uuid;
 
-    use crate::inference::types::{
-        ContentBlockChunk, FunctionConfigChat, ModelInferenceResponseChunk, TextChunk,
-    };
+    use crate::function::FunctionConfigChat;
+    use crate::inference::types::{ContentBlockChunk, ModelInferenceResponseChunk, TextChunk};
 
     #[tokio::test]
     async fn test_prepare_event() {
