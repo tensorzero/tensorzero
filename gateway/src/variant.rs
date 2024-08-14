@@ -194,10 +194,6 @@ impl Variant for ChatCompletionConfig {
                 function_type: FunctionType::Json,
                 output_schema: None,
             }, // TODO (#30): do JSON mode properly
-
-               // We want this block to throw an error if somehow the jsonschema is missing
-               // but return None if the output schema is not provided.
-               // FunctionConfig::Json(json_function) => Some(json_function.output_schema.value()?),
         };
         let model_config = models.get(&self.model).ok_or(Error::UnknownModel {
             name: self.model.clone(),
@@ -278,8 +274,9 @@ mod tests {
     use futures::StreamExt;
     use serde_json::{json, Value};
 
+    use crate::inference::providers::common::WEATHER_TOOL_CONFIG;
     use crate::inference::providers::dummy::DummyProvider;
-    use crate::inference::types::{FunctionConfigChat, Usage};
+    use crate::inference::types::{ContentBlockOutput, FunctionConfigChat, Usage};
     use crate::minijinja_util::tests::idempotent_initialize_test_templates;
     use crate::model::ProviderConfig;
     use crate::tool::ToolChoice;
@@ -512,6 +509,13 @@ mod tests {
         //     routing: vec!["json".to_string()],
         //     providers: HashMap::from([("json".to_string(), json_provider_config)]),
         // };
+        let tool_provider_config = ProviderConfig::Dummy(DummyProvider {
+            model_name: "tool".to_string(),
+        });
+        let tool_model_config = ModelConfig {
+            routing: vec!["tool".to_string()],
+            providers: HashMap::from([("tool".to_string(), tool_provider_config)]),
+        };
         let error_model_config = ModelConfig {
             routing: vec!["error".to_string()],
             providers: HashMap::from([("error".to_string(), error_provider_config)]),
@@ -609,6 +613,63 @@ mod tests {
                 );
             }
         }
+
+        // Test case 5: tool call
+        let chat_completion_config = ChatCompletionConfig {
+            model: "tool".to_string(),
+            weight: 1.0,
+            system_template: None,
+            user_template: None,
+            assistant_template: None,
+        };
+        let input = Input {
+            system: None,
+            messages: vec![InputMessage {
+                role: Role::User,
+                content: vec!["What is the weather in Brooklyn?".to_string().into()],
+            }],
+        };
+        let models = HashMap::from([("tool".to_string(), tool_model_config.clone())]);
+        let result = chat_completion_config
+            .infer(
+                &input,
+                &models,
+                &function_config,
+                Some(&WEATHER_TOOL_CONFIG),
+                &client,
+            )
+            .await
+            .unwrap();
+        assert!(matches!(result, InferenceResponse::Chat(_)));
+        match result {
+            InferenceResponse::Chat(chat_response) => {
+                assert_eq!(chat_response.output.len(), 1);
+                let tool_call = &chat_response.output[0];
+                match tool_call {
+                    ContentBlockOutput::ToolCall(tool_call) => {
+                        assert_eq!(tool_call.name, "get_weather");
+                        assert_eq!(
+                            tool_call.arguments,
+                            r#"{"location":"Brooklyn","units":"celsius"}"#
+                        );
+                        assert_eq!(tool_call.parsed_name, Some("get_weather".to_string()));
+                        assert_eq!(
+                            tool_call.parsed_arguments,
+                            Some(json!({"location": "Brooklyn", "units": "celsius"}))
+                        );
+                    }
+                    _ => unreachable!("Expected tool call"),
+                }
+                assert_eq!(
+                    chat_response.usage,
+                    Usage {
+                        prompt_tokens: 10,
+                        completion_tokens: 10,
+                    }
+                );
+            }
+        }
+
         // TODO: handle schemas separately
         // Test case 5: JSON output was supposed to happen but it did not
         // let output_schema = serde_json::json!({
