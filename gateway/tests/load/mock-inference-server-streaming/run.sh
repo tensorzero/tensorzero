@@ -6,4 +6,5 @@ echo 'POST http://localhost:3030/openai/chat/completions' \
     -body=$SCRIPT_DIR/body.json \
     -duration=10s \
     -rate=1000 \
+    -timeout=1s \
 | vegeta report

@@ -6,7 +6,7 @@
   ```
   docker compose -f gateway/tests/load/docker-compose.yml up -d --build --force-recreate --remove-orphans
   ```
-  
+
 - Launch the mock inference provider:
 
   ```
