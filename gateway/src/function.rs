@@ -248,7 +248,7 @@ fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
 #[cfg(test)]
 mod tests {
     use crate::inference::types::{
-        ChatCompletionConfig, FunctionConfigChat, FunctionConfigJson, InputMessage,
+        ChatCompletionConfig, FunctionConfigChat, FunctionConfigJson, InputMessage, JsonEnforcement,
     };
 
     use super::*;
@@ -594,6 +594,7 @@ mod tests {
             user_schema: None,
             assistant_schema: None,
             output_schema: JSONSchemaFromPath::from_value(&json!({})),
+            json_mode: JsonEnforcement::Default,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -650,6 +651,7 @@ mod tests {
             user_schema: None,
             assistant_schema: None,
             output_schema: JSONSchemaFromPath::from_value(&json!({})),
+            json_mode: JsonEnforcement::Default,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -708,6 +710,7 @@ mod tests {
             user_schema: Some(user_schema),
             assistant_schema: None,
             output_schema: JSONSchemaFromPath::from_value(&json!({})),
+            json_mode: JsonEnforcement::Default,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -765,6 +768,7 @@ mod tests {
             user_schema: None,
             assistant_schema: Some(assistant_schema),
             output_schema: JSONSchemaFromPath::from_value(&json!({})),
+            json_mode: JsonEnforcement::Default,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -823,6 +827,7 @@ mod tests {
             user_schema: Some(user_schema),
             assistant_schema: Some(assistant_schema),
             output_schema: JSONSchemaFromPath::from_value(&json!({})),
+            json_mode: JsonEnforcement::Default,
         };
         let function_config = FunctionConfig::Json(tool_config);
 

@@ -632,6 +632,16 @@ pub enum FunctionConfig {
     Json(FunctionConfigJson),
 }
 
+#[derive(Debug, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum JsonEnforcement {
+    #[default]
+    Default,
+    Strict,
+    ImplicitTool,
+    Off,
+}
+
 #[derive(Debug, Default)]
 pub struct FunctionConfigChat {
     pub variants: HashMap<String, VariantConfig>, // variant name => variant config
@@ -650,6 +660,7 @@ pub struct FunctionConfigJson {
     pub user_schema: Option<JSONSchemaFromPath>,
     pub assistant_schema: Option<JSONSchemaFromPath>,
     pub output_schema: JSONSchemaFromPath, // schema is mandatory for JSON functions
+    pub json_mode: JsonEnforcement,
 }
 
 /// Types that go with `variant.rs`
