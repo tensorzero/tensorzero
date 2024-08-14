@@ -149,7 +149,7 @@ enum TogetherResponseFormat<'a> {
 /// We are not handling logprobs, top_logprobs, n, prompt_truncate_len
 /// presence_penalty, frequency_penalty, seed, service_tier, stop, user,
 /// or context_length_exceeded_behavior
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 struct TogetherRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     model: &'a str,

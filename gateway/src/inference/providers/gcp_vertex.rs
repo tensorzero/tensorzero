@@ -341,7 +341,7 @@ impl<'a> From<&'a RequestMessage> for GCPVertexGeminiContent<'a> {
 struct GCPVertexGeminiFunctionDeclaration<'a> {
     name: &'a str,
     description: Option<&'a str>,
-    parameters: Option<&'a Value>, // Should be a JSONSchema as a Value
+    parameters: Option<Value>, // Should be a JSONSchema as a Value
 }
 
 // TODO (#19): implement [Retrieval](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/Tool#Retrieval)
@@ -354,12 +354,19 @@ enum GCPVertexGeminiTool<'a> {
 }
 
 impl<'a> From<&'a ToolConfig> for GCPVertexGeminiFunctionDeclaration<'a> {
-    fn from(tool: &'a ToolConfig) -> Self {
-        GCPVertexGeminiFunctionDeclaration {
-            name: &tool.name,
-            description: Some(&tool.description),
-            parameters: Some(tool.parameters.value),
-        }
+    fn from(_tool: &'a ToolConfig) -> Self {
+        unimplemented!();
+        // let mut parameters = tool.parameters.value.clone();
+        // if let Some(obj) = parameters.as_object_mut() {
+        //     obj.remove("additionalProperties");
+        //     obj.remove("$schema");
+        // }
+
+        // GCPVertexGeminiFunctionDeclaration {
+        //     name: &tool.name,
+        //     description: Some(&tool.description),
+        //     parameters: Some(parameters),
+        // }
     }
 }
 
@@ -736,11 +743,8 @@ fn handle_gcp_vertex_gemini_error(
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
-
     use super::*;
     use crate::inference::types::{FunctionType, JSONMode};
-    use crate::jsonschema_util::JSONSchemaFromPath;
     use crate::tool::{ToolCallConfig, ToolResult};
 
     #[test]
@@ -824,53 +828,54 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_from_vec_tool() {
-        let parameters = [
-            serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "location": {"type": "string"},
-                    "unit": {"type": "string"}
-                },
-                "required": ["location", "unit"]
-            }),
-            serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "timezone": {"type": "string"}
-                },
-                "required": ["timezone"]
-            }),
-        ];
-        let tool_config1 = ToolConfig {
-            name: "get_weather".to_string(),
-            parameters: JSONSchemaFromPath::from_value(&parameters[0]),
-            description: "Get the weather for a given location".to_string(),
-        };
-        let tool_config2 = ToolConfig {
-            name: "get_time".to_string(),
-            parameters: JSONSchemaFromPath::from_value(&parameters[1]),
-            description: "Get the current time for a given timezone".to_string(),
-        };
-        let tools = vec![&tool_config1, &tool_config2];
-        let tool = GCPVertexGeminiTool::from(&tools);
-        assert_eq!(
-            tool,
-            GCPVertexGeminiTool::FunctionDeclarations(vec![
-                GCPVertexGeminiFunctionDeclaration {
-                    name: "get_weather",
-                    description: Some("Get the weather for a given location"),
-                    parameters: Some(&parameters[0]),
-                },
-                GCPVertexGeminiFunctionDeclaration {
-                    name: "get_time",
-                    description: Some("Get the current time for a given timezone"),
-                    parameters: Some(&parameters[1]),
-                }
-            ])
-        );
-    }
+    // TODO(#19): Figure out how GCP wants tool calls
+    // #[test]
+    // fn test_from_vec_tool() {
+    //     let parameters = [
+    //         serde_json::json!({
+    //             "type": "object",
+    //             "properties": {
+    //                 "location": {"type": "string"},
+    //                 "unit": {"type": "string"}
+    //             },
+    //             "required": ["location", "unit"]
+    //         }),
+    //         serde_json::json!({
+    //             "type": "object",
+    //             "properties": {
+    //                 "timezone": {"type": "string"}
+    //             },
+    //             "required": ["timezone"]
+    //         }),
+    //     ];
+    //     let tool_config1 = ToolConfig {
+    //         name: "get_weather".to_string(),
+    //         parameters: JSONSchemaFromPath::from_value(&parameters[0]),
+    //         description: "Get the weather for a given location".to_string(),
+    //     };
+    //     let tool_config2 = ToolConfig {
+    //         name: "get_time".to_string(),
+    //         parameters: JSONSchemaFromPath::from_value(&parameters[1]),
+    //         description: "Get the current time for a given timezone".to_string(),
+    //     };
+    //     let tools = vec![&tool_config1, &tool_config2];
+    //     let tool = GCPVertexGeminiTool::from(&tools);
+    //     assert_eq!(
+    //         tool,
+    //         GCPVertexGeminiTool::FunctionDeclarations(vec![
+    //             GCPVertexGeminiFunctionDeclaration {
+    //                 name: "get_weather",
+    //                 description: Some("Get the weather for a given location"),
+    //                 parameters: Some(parameters[0].clone()),
+    //             },
+    //             GCPVertexGeminiFunctionDeclaration {
+    //                 name: "get_time",
+    //                 description: Some("Get the current time for a given timezone"),
+    //                 parameters: Some(parameters[1].clone()),
+    //             }
+    //         ])
+    //     );
+    // }
 
     #[test]
     fn test_from_tool_choice() {
@@ -1235,82 +1240,83 @@ mod tests {
         assert_eq!(model_inference_response.latency, latency);
     }
 
-    #[test]
-    fn test_prepare_tools() {
-        let parameters = json!({
-            "type": "object",
-            "properties": {
-                "location": {
-                    "type": "string",
-                    "description": "The city and state, e.g. San Francisco, CA"
-                }
-            },
-            "required": ["location"]
-        });
+    // TODO(#19): Figure out how GCP wants tool calls
+    // #[test]
+    // fn test_prepare_tools() {
+    //     let parameters = json!({
+    //         "type": "object",
+    //         "properties": {
+    //             "location": {
+    //                 "type": "string",
+    //                 "description": "The city and state, e.g. San Francisco, CA"
+    //             }
+    //         },
+    //         "required": ["location"]
+    //     });
 
-        let tool_config = ToolConfig {
-            name: "get_weather".to_string(),
-            parameters: JSONSchemaFromPath::from_value(&parameters),
-            description: "Get the current weather".to_string(),
-        };
-        let tool_config = Box::leak(Box::new(tool_config));
-        let tool_config = ToolCallConfig {
-            tools_available: vec![tool_config],
-            tool_choice: &ToolChoice::Auto,
-            parallel_tool_calls: true,
-        };
-        let request_with_tools = ModelInferenceRequest {
-            messages: vec![RequestMessage {
-                role: Role::User,
-                content: vec!["What's the weather?".to_string().into()],
-            }],
-            system: None,
-            temperature: None,
-            max_tokens: None,
-            stream: false,
-            json_mode: JSONMode::On,
-            tool_config: Some(&tool_config),
-            function_type: FunctionType::Chat,
-            output_schema: None,
-        };
-        let (tools, tool_choice) = prepare_tools(&request_with_tools);
-        let tools = tools.unwrap();
-        assert_eq!(tools.len(), 1);
-        match &tools[0] {
-            GCPVertexGeminiTool::FunctionDeclarations(functions) => {
-                assert_eq!(functions[0].name, "get_weather");
-                assert_eq!(functions[0].description, Some("Get the current weather"));
-                assert_eq!(functions[0].parameters, Some(&parameters));
-            }
-        }
-        let tool_choice = tool_choice.unwrap();
-        assert_eq!(
-            tool_choice.function_calling_config.mode,
-            GCPVertexGeminiFunctionCallingMode::Auto
-        );
-        let tool_config = ToolCallConfig {
-            tools_available: vec![],
-            tool_choice: &ToolChoice::Required,
-            parallel_tool_calls: true,
-        };
+    //     let tool_config = ToolConfig {
+    //         name: "get_weather".to_string(),
+    //         parameters: JSONSchemaFromPath::from_value(&parameters),
+    //         description: "Get the current weather".to_string(),
+    //     };
+    //     let tool_config = Box::leak(Box::new(tool_config));
+    //     let tool_config = ToolCallConfig {
+    //         tools_available: vec![tool_config],
+    //         tool_choice: &ToolChoice::Auto,
+    //         parallel_tool_calls: true,
+    //     };
+    //     let request_with_tools = ModelInferenceRequest {
+    //         messages: vec![RequestMessage {
+    //             role: Role::User,
+    //             content: vec!["What's the weather?".to_string().into()],
+    //         }],
+    //         system: None,
+    //         temperature: None,
+    //         max_tokens: None,
+    //         stream: false,
+    //         json_mode: JSONMode::On,
+    //         tool_config: Some(&tool_config),
+    //         function_type: FunctionType::Chat,
+    //         output_schema: None,
+    //     };
+    //     let (tools, tool_choice) = prepare_tools(&request_with_tools);
+    //     let tools = tools.unwrap();
+    //     assert_eq!(tools.len(), 1);
+    //     match &tools[0] {
+    //         GCPVertexGeminiTool::FunctionDeclarations(functions) => {
+    //             assert_eq!(functions[0].name, "get_weather");
+    //             assert_eq!(functions[0].description, Some("Get the current weather"));
+    //             assert_eq!(functions[0].parameters, Some(parameters));
+    //         }
+    //     }
+    //     let tool_choice = tool_choice.unwrap();
+    //     assert_eq!(
+    //         tool_choice.function_calling_config.mode,
+    //         GCPVertexGeminiFunctionCallingMode::Auto
+    //     );
+    //     let tool_config = ToolCallConfig {
+    //         tools_available: vec![],
+    //         tool_choice: &ToolChoice::Required,
+    //         parallel_tool_calls: true,
+    //     };
 
-        // Test no tools but a tool choice and make sure tool choice output is None
-        let request_without_tools = ModelInferenceRequest {
-            messages: vec![RequestMessage {
-                role: Role::User,
-                content: vec!["What's the weather?".to_string().into()],
-            }],
-            system: None,
-            temperature: None,
-            max_tokens: None,
-            stream: false,
-            json_mode: JSONMode::On,
-            tool_config: Some(&tool_config),
-            function_type: FunctionType::Chat,
-            output_schema: None,
-        };
-        let (tools, tool_choice) = prepare_tools(&request_without_tools);
-        assert!(tools.is_none());
-        assert!(tool_choice.is_none());
-    }
+    //     // Test no tools but a tool choice and make sure tool choice output is None
+    //     let request_without_tools = ModelInferenceRequest {
+    //         messages: vec![RequestMessage {
+    //             role: Role::User,
+    //             content: vec!["What's the weather?".to_string().into()],
+    //         }],
+    //         system: None,
+    //         temperature: None,
+    //         max_tokens: None,
+    //         stream: false,
+    //         json_mode: JSONMode::On,
+    //         tool_config: Some(&tool_config),
+    //         function_type: FunctionType::Chat,
+    //         output_schema: None,
+    //     };
+    //     let (tools, tool_choice) = prepare_tools(&request_without_tools);
+    //     assert!(tools.is_none());
+    //     assert!(tool_choice.is_none());
+    // }
 }
