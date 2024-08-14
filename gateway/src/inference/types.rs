@@ -10,9 +10,9 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::function::FunctionConfig;
+use crate::error::Error;
+use crate::function::{FunctionConfig, JsonEnforcement};
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolResult};
-use crate::{error::Error, function::JsonEnforcement};
 
 /// Data flow in TensorZero
 ///
