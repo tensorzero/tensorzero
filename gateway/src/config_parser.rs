@@ -4,13 +4,12 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use crate::error::Error;
-use crate::inference::types::{
-    FunctionConfig, FunctionConfigChat, FunctionConfigJson, VariantConfig,
-};
+use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::initialize_templates;
 use crate::model::ModelConfig;
 use crate::tool::{ToolChoice, ToolConfig};
+use crate::variant::VariantConfig;
 
 static CONFIG: OnceLock<Config> = OnceLock::new();
 

@@ -5,16 +5,15 @@ use serde_json::Value;
 use std::{
     collections::HashMap,
     fmt,
-    path::PathBuf,
     pin::Pin,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use uuid::Uuid;
 
-use crate::tool::{
-    ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolChoice, ToolResult,
-};
-use crate::{error::Error, jsonschema_util::JSONSchemaFromPath};
+use crate::error::Error;
+use crate::function::FunctionConfig;
+use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolResult};
+
 /// Data flow in TensorZero
 ///
 /// The flow of an inference request through TensorZero can be viewed as a series of transformations between types.
@@ -624,57 +623,11 @@ impl From<ToolCallChunk> for ToolCall {
 pub type InferenceResponseStream =
     Pin<Box<dyn Stream<Item = Result<ModelInferenceResponseChunk, Error>> + Send>>;
 
-/// Types that go with `function.rs`
-/// See that file for impls
-#[derive(Debug)]
-pub enum FunctionConfig {
-    Chat(FunctionConfigChat),
-    Json(FunctionConfigJson),
-}
-
-#[derive(Debug, Default)]
-pub struct FunctionConfigChat {
-    pub variants: HashMap<String, VariantConfig>, // variant name => variant config
-    pub system_schema: Option<JSONSchemaFromPath>,
-    pub user_schema: Option<JSONSchemaFromPath>,
-    pub assistant_schema: Option<JSONSchemaFromPath>,
-    pub tools: Vec<String>, // tool names
-    pub tool_choice: ToolChoice,
-    pub parallel_tool_calls: bool,
-}
-
-#[derive(Debug)]
-pub struct FunctionConfigJson {
-    pub variants: HashMap<String, VariantConfig>, // variant name => variant config
-    pub system_schema: Option<JSONSchemaFromPath>,
-    pub user_schema: Option<JSONSchemaFromPath>,
-    pub assistant_schema: Option<JSONSchemaFromPath>,
-    pub output_schema: JSONSchemaFromPath, // schema is mandatory for JSON functions
-}
-
-/// Types that go with `variant.rs`
-/// See that file for impls
-#[derive(Clone, Debug, Deserialize)]
-#[serde(tag = "type")]
-#[serde(rename_all = "snake_case")]
-#[serde(deny_unknown_fields)]
-pub enum VariantConfig {
-    ChatCompletion(ChatCompletionConfig),
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ChatCompletionConfig {
-    pub weight: f64,
-    pub model: String, // TODO (#85): validate that this model exists in the model config
-    pub system_template: Option<PathBuf>,
-    pub user_template: Option<PathBuf>,
-    pub assistant_template: Option<PathBuf>,
-}
-
 #[cfg(test)]
 mod tests {
+    use crate::function::FunctionConfigChat;
     use crate::inference::providers::common::WEATHER_TOOL_CONFIG;
+    use crate::tool::ToolChoice;
 
     use super::*;
 
