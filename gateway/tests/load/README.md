@@ -16,7 +16,7 @@
 - Launch the gateway:
 
   ```
-  cargo run --release --bin gateway gateway/tests/load/tensorzero.toml
+  cargo run --release --bin gateway gateway/tests/load/tensorzero-without-observability.toml
   ```
 
 - Then, you can run a load test with `sh path/to/test/run.sh`.

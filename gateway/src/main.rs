@@ -1,5 +1,6 @@
 use axum::routing::{get, post};
 use axum::Router;
+use mimalloc::MiMalloc;
 use std::fmt::Display;
 use std::net::SocketAddr;
 use std::time::Duration;
@@ -10,6 +11,9 @@ use gateway::config_parser::get_config;
 use gateway::endpoints;
 use gateway::gateway_util;
 use gateway::observability;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 #[tokio::main]
 async fn main() {

@@ -6,8 +6,12 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use futures_core::Stream;
+use mimalloc::MiMalloc;
 use serde_json::json;
 use std::net::SocketAddr;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 /// Get the socket address for the mock inference provider from the CLI arguments.
 /// Defaults to 0.0.0.0:3030 if no address is provided.
