@@ -288,7 +288,6 @@ fn create_stream(
 
         if !metadata.dryrun {
             let inference_response: Result<InferenceResponse, Error> =
-                // TODO (#30): probably get this from FunctionConfig
                 collect_chunks(buffer, function, tool_config.as_ref());
 
             let inference_response = inference_response.ok_or_log();
