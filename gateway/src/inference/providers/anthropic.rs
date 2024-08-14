@@ -326,7 +326,7 @@ impl<'a> AnthropicRequestBody<'a> {
             .tool_config
             .map(|c| &c.tools_available)
             .map(|tools| tools.iter().map(|tool| (*tool).into()).collect::<Vec<_>>());
-        // tool_choice should only be set if tools are set and non-empty
+        // `tool_choice` should only be set if tools are set and non-empty
         let tool_choice: Option<AnthropicToolChoice> = tools
             .as_ref()
             .filter(|t| !t.is_empty())
@@ -726,9 +726,10 @@ mod tests {
 
     use serde_json::json;
 
+    use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::types::{FunctionType, JSONMode};
     use crate::jsonschema_util::JSONSchemaFromPath;
-    use crate::tool::{ToolCallConfig, ToolConfig, ToolResult};
+    use crate::tool::{ToolConfig, ToolResult};
 
     #[test]
     fn test_try_from_tool_choice() {
@@ -772,7 +773,7 @@ mod tests {
     }
 
     #[test]
-    fn test_try_from_tool() {
+    fn test_from_tool() {
         let parameters = json!({
             "type": "object",
             "properties": {
@@ -1024,32 +1025,11 @@ mod tests {
                 })],
             },
         ];
-        let parameters = json!({
-          "$schema": "http://json-schema.org/draft-07/schema#",
-          "type": "object",
-          "properties": {
-            "answer": {
-              "type": "string"
-            }
-          },
-          "required": ["answer"],
-          "additionalProperties": false
-        });
-        let tool_config = ToolConfig {
-            name: "test_name".to_string(),
-            description: "test_description".to_string(),
-            parameters: JSONSchemaFromPath::from_value(&parameters),
-        };
-        let tool_config = Box::leak(Box::new(tool_config));
-        let tool_config = ToolCallConfig {
-            tools_available: vec![tool_config],
-            tool_choice: &ToolChoice::Auto,
-            parallel_tool_calls: false,
-        };
+
         let inference_request = ModelInferenceRequest {
             messages: messages.clone(),
             system: Some("test_system".to_string()),
-            tool_config: Some(&tool_config),
+            tool_config: Some(&WEATHER_TOOL_CONFIG),
             temperature: Some(0.5),
             max_tokens: Some(100),
             stream: true,
@@ -1073,11 +1053,13 @@ mod tests {
                 stream: Some(true),
                 system: Some("test_system"),
                 temperature: Some(0.5),
-                tool_choice: Some(AnthropicToolChoice::Auto),
+                tool_choice: Some(AnthropicToolChoice::Tool {
+                    name: "get_weather",
+                }),
                 tools: Some(vec![AnthropicTool {
-                    name: "test_name",
-                    description: Some("test_description"),
-                    input_schema: &parameters,
+                    name: &WEATHER_TOOL.name,
+                    description: Some(&WEATHER_TOOL.description),
+                    input_schema: WEATHER_TOOL.parameters.value,
                 }]),
             }
         );

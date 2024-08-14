@@ -200,42 +200,13 @@ impl<'a> FireworksRequest<'a> {
 mod tests {
     use super::*;
 
-    use serde_json::json;
-
-    use crate::jsonschema_util::JSONSchemaFromPath;
-    use crate::tool::{ToolChoice, ToolConfig};
-    use crate::{
-        inference::{
-            providers::openai::OpenAIToolChoiceString,
-            types::{FunctionType, RequestMessage, Role},
-        },
-        tool::ToolCallConfig,
-    };
+    use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
+    use crate::inference::providers::openai::OpenAIToolType;
+    use crate::inference::providers::openai::{SpecificToolChoice, SpecificToolFunction};
+    use crate::inference::types::{FunctionType, RequestMessage, Role};
 
     #[test]
     fn test_fireworks_request_new() {
-        let parameters = json!({
-            "type": "object",
-            "properties": {
-                "location": {
-                    "type": "string",
-                    "description": "The city and state, e.g. San Francisco, CA"
-                }
-            },
-            "required": ["location"]
-        });
-        let tool_config = ToolConfig {
-            description: "Get the current weather".to_string(),
-            parameters: JSONSchemaFromPath::from_value(&parameters),
-            name: "get_weather".to_string(),
-        };
-        let tool_config = Box::leak(Box::new(tool_config));
-        let tool_config = ToolCallConfig {
-            tools_available: vec![tool_config],
-            tool_choice: &ToolChoice::Auto,
-            parallel_tool_calls: true,
-        };
-
         let request_with_tools = ModelInferenceRequest {
             messages: vec![RequestMessage {
                 role: Role::User,
@@ -246,7 +217,7 @@ mod tests {
             max_tokens: None,
             stream: false,
             json_mode: JSONMode::On,
-            tool_config: Some(&tool_config),
+            tool_config: Some(&WEATHER_TOOL_CONFIG),
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -269,10 +240,18 @@ mod tests {
             })
         );
         assert!(fireworks_request.tools.is_some());
-        assert_eq!(fireworks_request.tools.as_ref().unwrap().len(), 1);
+        let tools = fireworks_request.tools.as_ref().unwrap();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].function.name, WEATHER_TOOL.name);
+        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters.value);
         assert_eq!(
             fireworks_request.tool_choice,
-            Some(OpenAIToolChoice::String(OpenAIToolChoiceString::Auto))
+            Some(OpenAIToolChoice::Specific(SpecificToolChoice {
+                r#type: OpenAIToolType::Function,
+                function: SpecificToolFunction {
+                    name: &WEATHER_TOOL.name,
+                }
+            }))
         );
     }
 }

@@ -372,22 +372,22 @@ enum OpenAIResponseFormat {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
-enum OpenAIToolType {
+pub(super) enum OpenAIToolType {
     Function,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-struct OpenAIFunction<'a> {
-    name: &'a str,
+pub(super) struct OpenAIFunction<'a> {
+    pub(super) name: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
-    description: Option<&'a str>,
-    parameters: &'a Value,
+    pub(super) description: Option<&'a str>,
+    pub parameters: &'a Value,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
 pub(super) struct OpenAITool<'a> {
-    r#type: OpenAIToolType,
-    function: OpenAIFunction<'a>,
+    pub(super) r#type: OpenAIToolType,
+    pub(super) function: OpenAIFunction<'a>,
 }
 
 impl<'a> From<&'a ToolConfig> for OpenAITool<'a> {
@@ -420,13 +420,13 @@ pub(super) enum OpenAIToolChoiceString {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(super) struct SpecificToolChoice<'a> {
-    r#type: OpenAIToolType,
-    function: SpecificToolFunction<'a>,
+    pub(super) r#type: OpenAIToolType,
+    pub(super) function: SpecificToolFunction<'a>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct SpecificToolFunction<'a> {
-    name: &'a str,
+pub(super) struct SpecificToolFunction<'a> {
+    pub(super) name: &'a str,
 }
 
 impl<'a> Default for OpenAIToolChoice<'a> {
@@ -717,12 +717,13 @@ fn openai_to_tensorzero_chunk(
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
 
     use crate::{
-        inference::types::FunctionType,
-        jsonschema_util::JSONSchemaFromPath,
-        tool::{ToolCallConfig, ToolConfig},
+        inference::{
+            providers::common::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG},
+            types::FunctionType,
+        },
+        tool::ToolCallConfig,
     };
 
     use super::*;
@@ -849,28 +850,6 @@ mod tests {
         assert!(openai_request.parallel_tool_calls.is_none());
 
         // Test request with tools and JSON mode
-        let parameters = json!({
-            "type": "object",
-            "properties": {
-                "location": {
-                    "type": "string",
-                    "description": "The city and state, e.g. San Francisco, CA"
-                }
-            },
-            "required": ["location"]
-        });
-        let tool_config = ToolConfig {
-            description: "Get the current weather".to_string(),
-            parameters: JSONSchemaFromPath::from_value(&parameters),
-            name: "get_weather".to_string(),
-        };
-        let tool_config = Box::leak(Box::new(tool_config));
-        let tool_config = ToolCallConfig {
-            tools_available: vec![tool_config],
-            tool_choice: &ToolChoice::Auto,
-            parallel_tool_calls: true,
-        };
-
         let request_with_tools = ModelInferenceRequest {
             messages: vec![RequestMessage {
                 role: Role::User,
@@ -881,7 +860,7 @@ mod tests {
             max_tokens: None,
             stream: false,
             json_mode: JSONMode::On,
-            tool_config: Some(&tool_config),
+            tool_config: Some(&WEATHER_TOOL_CONFIG),
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -898,12 +877,18 @@ mod tests {
             OpenAIResponseFormat::JsonObject
         );
         assert!(openai_request.tools.is_some());
-        assert_eq!(openai_request.tools.as_ref().unwrap().len(), 1);
+        let tools = openai_request.tools.as_ref().unwrap();
+        assert_eq!(tools[0].function.name, WEATHER_TOOL.name);
+        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters.value);
         assert_eq!(
             openai_request.tool_choice,
-            Some(OpenAIToolChoice::String(OpenAIToolChoiceString::Auto))
+            Some(OpenAIToolChoice::Specific(SpecificToolChoice {
+                r#type: OpenAIToolType::Function,
+                function: SpecificToolFunction {
+                    name: &WEATHER_TOOL.name,
+                }
+            }))
         );
-        assert_eq!(openai_request.parallel_tool_calls, Some(true));
     }
 
     #[test]
@@ -1049,27 +1034,6 @@ mod tests {
 
     #[test]
     fn test_prepare_openai_tools() {
-        let parameters = json!({
-            "type": "object",
-            "properties": {
-                "location": {
-                    "type": "string",
-                    "description": "The city and state, e.g. San Francisco, CA"
-                }
-            },
-            "required": ["location"]
-        });
-        let tool_config = ToolConfig {
-            description: "Get the current weather".to_string(),
-            parameters: JSONSchemaFromPath::from_value(&parameters),
-            name: "get_weather".to_string(),
-        };
-        let tool_config = Box::leak(Box::new(tool_config));
-        let tool_config = ToolCallConfig {
-            tools_available: vec![tool_config],
-            tool_choice: &ToolChoice::Auto,
-            parallel_tool_calls: true,
-        };
         let request_with_tools = ModelInferenceRequest {
             messages: vec![RequestMessage {
                 role: Role::User,
@@ -1080,19 +1044,21 @@ mod tests {
             max_tokens: None,
             stream: false,
             json_mode: JSONMode::On,
-            tool_config: Some(&tool_config),
+            tool_config: Some(&MULTI_TOOL_CONFIG),
             function_type: FunctionType::Chat,
             output_schema: None,
         };
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(&request_with_tools);
         let tools = tools.unwrap();
-        assert_eq!(tools.len(), 1);
-        assert_eq!(tools[0].function.name, "get_weather");
-        assert_eq!(tools[0].function.parameters, &parameters);
+        assert_eq!(tools.len(), 2);
+        assert_eq!(tools[0].function.name, WEATHER_TOOL.name);
+        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters.value);
+        assert_eq!(tools[1].function.name, QUERY_TOOL.name);
+        assert_eq!(tools[1].function.parameters, QUERY_TOOL.parameters.value);
         let tool_choice = tool_choice.unwrap();
         assert_eq!(
             tool_choice,
-            OpenAIToolChoice::String(OpenAIToolChoiceString::Auto)
+            OpenAIToolChoice::String(OpenAIToolChoiceString::Required)
         );
         let parallel_tool_calls = parallel_tool_calls.unwrap();
         assert!(parallel_tool_calls);

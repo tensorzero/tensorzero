@@ -81,7 +81,6 @@ pub enum ContentBlockOutput {
     Text(Text),
     ToolCall(ToolCallOutput),
 }
-//TODO(viraj): make an output content block that has a tool call with extra fields "parsed_name" and "parsed_output"
 
 /// A RequestMessage is a message sent to a model
 #[derive(Clone, Debug, PartialEq)]
@@ -505,7 +504,7 @@ impl From<ModelInferenceResponseChunk> for ChatInferenceResponseChunk {
 
 pub fn collect_chunks(
     value: Vec<ModelInferenceResponseChunk>,
-    _output_schema: Option<&JSONSchemaFromPath>,
+    _function: &FunctionConfig,
     tool_config: Option<&ToolCallConfig>,
 ) -> Result<InferenceResponse, Error> {
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
@@ -675,6 +674,8 @@ pub struct ChatCompletionConfig {
 
 #[cfg(test)]
 mod tests {
+    use crate::inference::providers::common::WEATHER_TOOL_CONFIG;
+
     use super::*;
 
     #[test]
@@ -706,7 +707,119 @@ mod tests {
         assert_eq!(chat_inference_response.output, output_content);
         assert_eq!(chat_inference_response.usage, usage);
 
-        // TODO (viraj): add tests for tool call output parsing
+        // Case 2: A tool call that fails argument validation
+        let inference_id = Uuid::now_v7();
+        let content = vec![ContentBlock::ToolCall(ToolCall {
+            name: "get_weather".to_string(),
+            arguments: r#"{"where": "the moon"}"#.to_string(),
+            id: "0".to_string(),
+        })];
+        let model_inference_responses = vec![ModelInferenceResponse::new(
+            content.clone(),
+            "".to_string(),
+            usage.clone(),
+            Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+        )];
+        let chat_inference_response = ChatInferenceResponse::new(
+            inference_id,
+            content,
+            usage.clone(),
+            model_inference_responses,
+            Some(&WEATHER_TOOL_CONFIG),
+        );
+        assert_eq!(chat_inference_response.output.len(), 1);
+        let tool_call_block = chat_inference_response.output.first().unwrap();
+        match tool_call_block {
+            ContentBlockOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.name, "get_weather");
+                assert_eq!(tool_call.arguments, r#"{"where": "the moon"}"#);
+                assert_eq!(tool_call.id, "0");
+                assert_eq!(tool_call.parsed_name, Some("get_weather".to_string()));
+                assert_eq!(tool_call.parsed_arguments, None);
+            }
+            _ => unreachable!(),
+        }
+
+        // Case 3: A tool call that fails name validation
+        let inference_id = Uuid::now_v7();
+        let content = vec![ContentBlock::ToolCall(ToolCall {
+            name: "bad name".to_string(),
+            arguments: r#"{"where": "the moon"}"#.to_string(),
+            id: "0".to_string(),
+        })];
+        let model_inference_responses = vec![ModelInferenceResponse::new(
+            content.clone(),
+            "".to_string(),
+            usage.clone(),
+            Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+        )];
+        let chat_inference_response = ChatInferenceResponse::new(
+            inference_id,
+            content,
+            usage.clone(),
+            model_inference_responses,
+            Some(&WEATHER_TOOL_CONFIG),
+        );
+        assert_eq!(chat_inference_response.output.len(), 1);
+        let tool_call_block = chat_inference_response.output.first().unwrap();
+        match tool_call_block {
+            ContentBlockOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.name, "bad name");
+                assert_eq!(tool_call.arguments, r#"{"where": "the moon"}"#);
+                assert_eq!(tool_call.id, "0");
+                assert_eq!(tool_call.parsed_name, None);
+                assert_eq!(tool_call.parsed_arguments, None);
+            }
+            _ => unreachable!(),
+        }
+
+        // Case 4: A tool call that passes validation
+        let inference_id = Uuid::now_v7();
+        let content = vec![ContentBlock::ToolCall(ToolCall {
+            name: "get_weather".to_string(),
+            arguments: r#"{"location": "the moon", "units": "celsius"}"#.to_string(),
+            id: "0".to_string(),
+        })];
+        let model_inference_responses = vec![ModelInferenceResponse::new(
+            content.clone(),
+            "".to_string(),
+            usage.clone(),
+            Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+        )];
+        let chat_inference_response = ChatInferenceResponse::new(
+            inference_id,
+            content,
+            usage.clone(),
+            model_inference_responses,
+            Some(&WEATHER_TOOL_CONFIG),
+        );
+        assert_eq!(chat_inference_response.output.len(), 1);
+        let tool_call_block = chat_inference_response.output.first().unwrap();
+        match tool_call_block {
+            ContentBlockOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.name, "get_weather");
+                assert_eq!(
+                    tool_call.arguments,
+                    r#"{"location": "the moon", "units": "celsius"}"#
+                );
+                assert_eq!(tool_call.id, "0");
+                assert_eq!(tool_call.parsed_name, Some("get_weather".to_string()));
+                assert_eq!(
+                    tool_call.parsed_arguments,
+                    Some(
+                        serde_json::from_str(r#"{"location": "the moon", "units": "celsius"}"#)
+                            .unwrap()
+                    )
+                );
+            }
+            _ => unreachable!(),
+        }
 
         // Case 2: a JSON string that passes validation
         // let inference_id = Uuid::now_v7();
@@ -812,8 +925,8 @@ mod tests {
         };
         let tool_config = Box::leak(Box::new(tool_config));
         let chunks = vec![];
-        let output_schema = None;
-        let result = collect_chunks(chunks, output_schema, Some(tool_config));
+        let function = FunctionConfig::Chat(FunctionConfigChat::default());
+        let result = collect_chunks(chunks, &function, Some(tool_config));
         assert_eq!(
             result.unwrap_err(),
             Error::TypeConversion {
@@ -855,7 +968,7 @@ mod tests {
                 latency: Duration::from_millis(250),
             },
         ];
-        let response = collect_chunks(chunks, None, Some(tool_config)).unwrap();
+        let response = collect_chunks(chunks, &function, Some(tool_config)).unwrap();
         let InferenceResponse::Chat(chat_response) = response;
         assert_eq!(chat_response.inference_id, inference_id);
         assert_eq!(chat_response.created, created);
@@ -990,14 +1103,6 @@ mod tests {
         // Test case 5: chunks with some None content
         let inference_id = Uuid::now_v7();
         let created = current_timestamp();
-        let schema = JSONSchemaFromPath::from_value(&serde_json::json!({
-            "type": "object",
-            "properties": {
-                "name": {"type": "string"},
-                "age": {"type": "number"}
-            },
-            "required": ["name", "age"]
-        }));
         let usage = Usage {
             prompt_tokens: 15,
             completion_tokens: 10,
@@ -1034,7 +1139,7 @@ mod tests {
                 latency: Duration::from_millis(300),
             },
         ];
-        let result = collect_chunks(chunks, Some(&schema), Some(tool_config));
+        let result = collect_chunks(chunks, &function, Some(tool_config));
         assert!(result.is_ok());
         if let Ok(InferenceResponse::Chat(chat_response)) = result {
             assert_eq!(chat_response.inference_id, inference_id);

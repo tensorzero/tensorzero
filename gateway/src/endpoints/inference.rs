@@ -46,7 +46,7 @@ pub struct Params {
     variant_name: Option<String>,
     // if true, the inference will not be stored
     dryrun: Option<bool>,
-    // TODO (make an issue): properly implement dynamic tool calling
+    // TODO (#126): properly implement dynamic tool calling
     // If provided, the inference will only use the specified tools (a subset of the function's tools)
     // allowed_tools: Option<Vec<String>>,
     // If provided, the inference will use the specified tools in addition to the function's tools
@@ -81,6 +81,7 @@ pub async fn inference_handler(
     // Get the function config or return an error if it doesn't exist
     let config = get_config();
     let function = config.get_function(&params.function_name)?;
+    // TODO (#126): implement dynamic tool calling
     // Collect the dynamic tool config
     // let dynamic_tool_config = DynamicToolConfig {
     //     allowed_tools: params.allowed_tools.as_ref(),
@@ -285,7 +286,7 @@ fn create_stream(
         if !metadata.dryrun {
             let inference_response: Result<InferenceResponse, Error> =
                 // TODO (#30): probably get this from FunctionConfig
-                collect_chunks(buffer, function.output_schema(), tool_config.as_ref());
+                collect_chunks(buffer, function, tool_config.as_ref());
 
             let inference_response = inference_response.ok_or_log();
 

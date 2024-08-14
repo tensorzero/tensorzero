@@ -15,14 +15,6 @@ impl FunctionConfig {
             FunctionConfig::Json(params) => &params.variants,
         }
     }
-
-    // TODO (viraj): rip this
-    pub fn output_schema(&self) -> Option<&JSONSchemaFromPath> {
-        match self {
-            FunctionConfig::Chat(_) => None,
-            FunctionConfig::Json(params) => Some(&params.output_schema),
-        }
-    }
 }
 
 impl FunctionConfig {
@@ -30,7 +22,10 @@ impl FunctionConfig {
     /// The validation is done based on the function's type:
     /// - For a chat function, the input is validated against the system, user, and assistant schemas.
     /// - For a JSON function, the input is validated against the system, user, and assistant schemas.
-    ///   We also enforce that no dynamic tool calling information should be passed to JSON functions
+    ///
+    /// We do not validate ContentBlocks that are not text (tool calls and tool responses).
+    ///  TODO (#30):
+    ///   We should also enforce that no dynamic tool calling information should be passed to JSON functions
     ///   as they can't call tools.
     pub fn validate_input(&self, input: &Input) -> Result<(), Error> {
         match &self {
@@ -56,6 +51,7 @@ impl FunctionConfig {
 
     pub fn prepare_tool_config(
         &'static self,
+        // TODO (#126): implement dynamic tool calling
         // dynamic_tool_config: &'a DynamicToolConfig,
         static_tools: &'static HashMap<String, ToolConfig>,
     ) -> Result<Option<ToolCallConfig>, Error> {
@@ -65,6 +61,7 @@ impl FunctionConfig {
                 &params.tool_choice,
                 params.parallel_tool_calls,
                 static_tools,
+                // TODO (#126): implement dynamic tool calling
                 // dynamic_tool_config,
             )?)),
             FunctionConfig::Json(_) => {
@@ -328,6 +325,33 @@ mod tests {
             validation_result.unwrap_err(),
             Error::InvalidMessage {
                 message: "Message at index 1 has non-string content but there is no schema given for role assistant.".to_string()
+            }
+        );
+
+        // Test case for multiple text content blocks in one message
+        let messages = vec![
+            InputMessage {
+                role: Role::User,
+                content: vec![
+                    "first user content".to_string().into(),
+                    "second user content".to_string().into(),
+                ],
+            },
+            InputMessage {
+                role: Role::Assistant,
+                content: vec!["assistant content".to_string().into()],
+            },
+        ];
+        let input = Input {
+            system: Some(json!("system content")),
+            messages,
+        };
+
+        let validation_result = function_config.validate_input(&input);
+        assert_eq!(
+            validation_result.unwrap_err(),
+            Error::InvalidMessage {
+                message: "Message at index 0 has multiple text content blocks".to_string()
             }
         );
     }

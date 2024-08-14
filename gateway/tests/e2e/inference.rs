@@ -391,7 +391,6 @@ async fn e2e_test_tool_call() {
     );
     assert_eq!(input, correct_input);
     // Check that content blocks are correct
-    println!("result: {:?}", result);
     let content_blocks = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
     assert_eq!(content_blocks.len(), 1);
@@ -417,7 +416,19 @@ async fn e2e_test_tool_call() {
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "variant");
-
+    // Check the dynamic_tool_config
+    let dynamic_tool_config = result.get("dynamic_tool_config").unwrap().as_str().unwrap();
+    let dynamic_tool_config: Value = serde_json::from_str(dynamic_tool_config).unwrap();
+    assert!(dynamic_tool_config.get("allowed_tools").unwrap().is_null());
+    assert!(dynamic_tool_config
+        .get("additional_tools")
+        .unwrap()
+        .is_null());
+    assert!(dynamic_tool_config.get("tool_choice").unwrap().is_null());
+    assert!(dynamic_tool_config
+        .get("parallel_tool_calls")
+        .unwrap()
+        .is_null());
     // Check the ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
         .await

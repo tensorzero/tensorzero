@@ -30,7 +30,7 @@ impl ToolCallConfig {
         static_tools: &'static HashMap<String, ToolConfig>,
         // _dynamic_tool_config: &'a DynamicToolConfig,
     ) -> Result<Self, Error> {
-        // TODO (add issue): support dynamic tool calling properly
+        // TODO (#126): support dynamic tool calling properly
         // let allowed_tool_names = match dynamic_tool_config.allowed_tools {
         //     Some(allowed_tools) => allowed_tools,
         //     None => function_tools,
@@ -72,7 +72,7 @@ impl ToolCallConfig {
     }
 }
 
-// TODO(viraj): store this in ClickHouse
+/// Anticipates #126
 #[derive(Debug, PartialEq, Serialize)]
 pub struct DynamicToolConfig<'a> {
     pub allowed_tools: Option<&'a Vec<String>>,
