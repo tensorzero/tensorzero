@@ -212,12 +212,12 @@ impl Config {
                         }
 
                         // Check that tools that are specified are present
-                        for tool in &function.tools {
+                        for tool in function.tools.iter() {
                             self.get_tool(tool).map_err(|_| {
-                                    Error::Config {
-                                        message: format!("Invalid Config: `functions.{function_name}.tools`: tool `{tool}` is not present in the config"),
-                                    }
-                                })?;
+                                Error::Config {
+                                    message: format!("Invalid Config: `functions.{function_name}.tools`: tool `{tool}` is not present in the config"),
+                                }
+                            })?;
                         }
                     }
                     FunctionConfig::Json(function) => {
@@ -680,7 +680,6 @@ mod tests {
             .insert("enable_agi".into(), true.into());
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, &base_path);
-        println!("{:?}", result);
         assert!(result
             .unwrap_err()
             .to_string()
