@@ -150,6 +150,49 @@ impl ChatCompletionConfig {
                 .to_string(),
         })
     }
+
+    fn prepare_request<'a>(
+        &self,
+        input: &Input,
+        function: &FunctionConfig,
+        tool_config: Option<&'a ToolCallConfig>,
+        stream: bool,
+    ) -> Result<ModelInferenceRequest<'a>, Error> {
+        let messages = input
+            .messages
+            .iter()
+            .map(|message| self.prepare_request_message(message))
+            .collect::<Result<Vec<_>, _>>()?;
+        let system = input
+            .system
+            .as_ref()
+            .map(|system| self.prepare_system_message(system))
+            .transpose()?;
+        Ok(match function {
+            FunctionConfig::Chat(_) => ModelInferenceRequest {
+                messages,
+                system,
+                tool_config,
+                temperature: None,
+                max_tokens: None,
+                stream,
+                json_mode: JSONMode::Off,
+                function_type: FunctionType::Chat,
+                output_schema: None,
+            },
+            FunctionConfig::Json(function_config) => ModelInferenceRequest {
+                messages,
+                system,
+                tool_config,
+                temperature: None,
+                max_tokens: None,
+                stream,
+                json_mode: (&function_config.json_mode).into(),
+                function_type: FunctionType::Json,
+                output_schema: None,
+            },
+        })
+    }
 }
 
 impl Variant for ChatCompletionConfig {
@@ -161,40 +204,7 @@ impl Variant for ChatCompletionConfig {
         tool_config: Option<&ToolCallConfig>,
         client: &Client,
     ) -> Result<InferenceResponse, Error> {
-        let messages = input
-            .messages
-            .iter()
-            .map(|message| self.prepare_request_message(message))
-            .collect::<Result<Vec<_>, _>>()?;
-        let system = input
-            .system
-            .as_ref()
-            .map(|system| self.prepare_system_message(system))
-            .transpose()?;
-        let request = match function {
-            FunctionConfig::Chat(_) => ModelInferenceRequest {
-                messages,
-                system,
-                tool_config,
-                temperature: None,
-                max_tokens: None,
-                stream: false,
-                json_mode: JSONMode::Off,
-                function_type: FunctionType::Chat,
-                output_schema: None,
-            },
-            FunctionConfig::Json(_) => ModelInferenceRequest {
-                messages,
-                system,
-                tool_config: None,
-                temperature: None,
-                max_tokens: None,
-                stream: false,
-                json_mode: JSONMode::Off,
-                function_type: FunctionType::Json,
-                output_schema: None,
-            }, // TODO (#30): do JSON mode properly
-        };
+        let request = self.prepare_request(input, function, tool_config, false)?;
         let model_config = models.get(&self.model).ok_or(Error::UnknownModel {
             name: self.model.clone(),
         })?;
@@ -222,44 +232,7 @@ impl Variant for ChatCompletionConfig {
         tool_config: Option<&ToolCallConfig>,
         client: &Client,
     ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
-        let messages = input
-            .messages
-            .iter()
-            .map(|message| self.prepare_request_message(message))
-            .collect::<Result<Vec<_>, _>>()?;
-        let system = input
-            .system
-            .as_ref()
-            .map(|system| self.prepare_system_message(system))
-            .transpose()?;
-        let request = match function {
-            FunctionConfig::Chat(_) => ModelInferenceRequest {
-                messages,
-                system,
-                tool_config,
-                temperature: None,
-                max_tokens: None,
-                stream: true,
-                json_mode: JSONMode::Off,
-                function_type: FunctionType::Chat,
-                output_schema: None,
-            },
-            FunctionConfig::Json(_) => ModelInferenceRequest {
-                messages,
-                system,
-                tool_config: None,
-                temperature: None,
-                max_tokens: None,
-                stream: true,
-                json_mode: JSONMode::Off,
-                function_type: FunctionType::Json,
-                output_schema: None,
-            }, // TODO (#30): do JSON mode properly
-
-               // We want this block to throw an error if somehow the jsonschema is missing
-               // but return None if the output schema is not provided.
-               // FunctionConfig::Json(json_function) => Some(json_function.output_schema.value()?),
-        };
+        let request = self.prepare_request(input, function, tool_config, true)?;
         let model_config = models.get(&self.model).ok_or(Error::UnknownModel {
             name: self.model.clone(),
         })?;
@@ -533,6 +506,7 @@ mod tests {
             .infer(&input, &HashMap::new(), &function_config, None, &client)
             .await
             .unwrap_err();
+        println!("{}", result);
         match result {
             Error::MiniJinjaTemplateRender { message, .. } => {
                 // template_name is a test filename

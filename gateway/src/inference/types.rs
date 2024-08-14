@@ -642,6 +642,17 @@ pub enum JsonEnforcement {
     Off,
 }
 
+impl From<&JsonEnforcement> for JSONMode {
+    fn from(json_enforcement: &JsonEnforcement) -> Self {
+        match json_enforcement {
+            JsonEnforcement::Default => JSONMode::On,
+            JsonEnforcement::Strict => JSONMode::Strict,
+            JsonEnforcement::ImplicitTool => JSONMode::Off,
+            JsonEnforcement::Off => JSONMode::Off,
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct FunctionConfigChat {
     pub variants: HashMap<String, VariantConfig>, // variant name => variant config
