@@ -66,10 +66,10 @@ pub static DUMMY_STREAMING_RESPONSE: [&str; 16] = [
 ];
 pub static DUMMY_STREAMING_TOOL_RESPONSE: [&str; 5] = [
     r#"{"location""#,
-    r#":"Brooklyn"#,
+    r#":"Brooklyn""#,
     r#","units""#,
-    r#":"Celsius"#,
-    r#"}"#,
+    r#":"celsius"#,
+    r#""}"#,
 ];
 
 impl InferenceProvider for DummyProvider {

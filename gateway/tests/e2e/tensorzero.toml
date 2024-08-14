@@ -151,6 +151,13 @@ routing = ["tool"]
 type = "dummy"
 model_name = "tool"
 
+[models.bad_tool]
+routing = ["bad_tool"]
+
+[models.bad_tool.providers.bad_tool]
+type = "dummy"
+model_name = "bad_tool"
+
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
@@ -313,6 +320,12 @@ weight = 1
 model = "tool"
 system_template = "config/functions/weather_helper/prompt/system_template.minijinja"
 
+[functions.weather_helper.variants.bad_tool]
+type = "chat_completion"
+weight = 1
+model = "bad_tool"
+system_template = "config/functions/weather_helper/prompt/system_template.minijinja"
+
 [functions.weather_helper.variants.anthropic]
 type = "chat_completion"
 weight = 0
@@ -347,7 +360,7 @@ system_template = "config/functions/weather_helper/prompt/system_template.miniji
 type = "chat_completion"
 weight = 0
 model = "mixtral-8x7b-instruct-v0.1"
-system_template = "config/functions/weather_helper/prompt/together_template.minijinja"
+system_template = "config/functions/weather_helper/prompt/system_template.minijinja"
 
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
