@@ -1,3 +1,4 @@
+use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -26,6 +27,16 @@ pub struct FunctionConfigChat {
     pub parallel_tool_calls: bool,
 }
 
+#[derive(Debug, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum JsonEnforcement {
+    #[default]
+    Default,
+    Strict,
+    ImplicitTool,
+    Off,
+}
+
 #[derive(Debug)]
 pub struct FunctionConfigJson {
     pub variants: HashMap<String, VariantConfig>, // variant name => variant config
@@ -33,7 +44,9 @@ pub struct FunctionConfigJson {
     pub user_schema: Option<JSONSchemaFromPath>,
     pub assistant_schema: Option<JSONSchemaFromPath>,
     pub output_schema: JSONSchemaFromPath, // schema is mandatory for JSON functions
+    pub json_mode: JsonEnforcement,
 }
+
 impl FunctionConfig {
     pub fn variants(&self) -> &HashMap<String, VariantConfig> {
         match self {
@@ -619,6 +632,7 @@ mod tests {
             user_schema: None,
             assistant_schema: None,
             output_schema: JSONSchemaFromPath::from_value(&json!({})),
+            json_mode: JsonEnforcement::Default,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -675,6 +689,7 @@ mod tests {
             user_schema: None,
             assistant_schema: None,
             output_schema: JSONSchemaFromPath::from_value(&json!({})),
+            json_mode: JsonEnforcement::Default,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -733,6 +748,7 @@ mod tests {
             user_schema: Some(user_schema),
             assistant_schema: None,
             output_schema: JSONSchemaFromPath::from_value(&json!({})),
+            json_mode: JsonEnforcement::Default,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -790,6 +806,7 @@ mod tests {
             user_schema: None,
             assistant_schema: Some(assistant_schema),
             output_schema: JSONSchemaFromPath::from_value(&json!({})),
+            json_mode: JsonEnforcement::Default,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -848,6 +865,7 @@ mod tests {
             user_schema: Some(user_schema),
             assistant_schema: Some(assistant_schema),
             output_schema: JSONSchemaFromPath::from_value(&json!({})),
+            json_mode: JsonEnforcement::Default,
         };
         let function_config = FunctionConfig::Json(tool_config);
 

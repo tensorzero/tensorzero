@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use crate::error::Error;
-use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
+use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson, JsonEnforcement};
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::initialize_templates;
 use crate::model::ModelConfig;
@@ -446,6 +446,8 @@ struct UninitializedFunctionConfigJson {
     user_schema: Option<PathBuf>,
     assistant_schema: Option<PathBuf>,
     output_schema: PathBuf, // schema is mandatory for JSON functions
+    #[serde(default)]
+    json_mode: JsonEnforcement,
 }
 
 impl UninitializedFunctionConfig {
@@ -495,6 +497,7 @@ impl UninitializedFunctionConfig {
                     user_schema,
                     assistant_schema,
                     output_schema,
+                    json_mode: params.json_mode,
                 }))
             }
         }
@@ -729,6 +732,25 @@ mod tests {
         assert!(result.unwrap_err().to_string().contains(
             "Failed to parse config:\nmissing field `output_schema`\nin `functions.extract_data`\n"
         ));
+    }
+
+    /// Check that we can parse a JSON function with non-default JSON enforcement
+    #[test]
+    fn test_config_from_toml_table_json_function_non_default_json_enforcement() {
+        let mut config = get_sample_valid_config();
+        config["functions"]["extract_data"]
+            .as_table_mut()
+            .expect("Failed to get `functions.generate_draft` section")
+            .insert("json_mode".into(), "strict".into());
+        let base_path = PathBuf::new();
+        let config = Config::load_from_toml(config, &base_path).unwrap();
+        let function_config = config.functions.get("extract_data").unwrap();
+        match function_config {
+            FunctionConfig::Json(json_config) => {
+                assert_eq!(json_config.json_mode, JsonEnforcement::Strict);
+            }
+            _ => unreachable!("Expected a JSON function"),
+        }
     }
 
     /// Ensure that the config parsing fails when there are extra variables for variants
