@@ -1,3 +1,4 @@
+use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -5,8 +6,8 @@ use uuid::Uuid;
 
 use crate::error::{Error, ResultExt};
 use crate::inference::types::{
-    ChatInferenceResponse, ContentBlock, InferenceResponse, Input, InputMessageContent,
-    JsonInferenceResponse, ModelInferenceResponse, Role, Usage,
+    ChatInferenceResult, ContentBlock, InferenceResult, Input, InputMessageContent,
+    JsonInferenceResult, ModelInferenceResponse, Role, Usage,
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::tool::{ToolCallConfig, ToolChoice, ToolConfig};
@@ -27,6 +28,16 @@ pub struct FunctionConfigChat {
     pub tools: Vec<String>, // tool names
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: bool,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum JsonEnforcement {
+    #[default]
+    Default,
+    Strict,
+    ImplicitTool,
+    Off,
 }
 
 #[derive(Debug)]
@@ -122,9 +133,9 @@ impl FunctionConfig {
         usage: Usage,
         model_inference_responses: Vec<ModelInferenceResponse>,
         tool_config: Option<&ToolCallConfig>,
-    ) -> Result<InferenceResponse, Error> {
+    ) -> Result<InferenceResult, Error> {
         match self {
-            FunctionConfig::Chat(..) => Ok(InferenceResponse::Chat(ChatInferenceResponse::new(
+            FunctionConfig::Chat(..) => Ok(InferenceResult::Chat(ChatInferenceResult::new(
                 inference_id,
                 content_blocks,
                 usage,
@@ -167,7 +178,7 @@ impl FunctionConfig {
                         }
                     }
                 });
-                Ok(InferenceResponse::Json(JsonInferenceResponse::new(
+                Ok(InferenceResult::Json(JsonInferenceResult::new(
                     inference_id,
                     raw,
                     parsed_output,
@@ -1147,12 +1158,12 @@ mod tests {
             "Failed to parse output from JSON function response"
         ));
         match response {
-            InferenceResponse::Json(response) => {
-                assert_eq!(response.inference_id, inference_id);
-                assert!(response.output.parsed.is_none());
-                assert_eq!(response.output.raw, "Hello, world!");
-                assert_eq!(response.usage, usage);
-                assert_eq!(response.model_inference_responses, vec![model_response]);
+            InferenceResult::Json(result) => {
+                assert_eq!(result.inference_id, inference_id);
+                assert!(result.output.parsed.is_none());
+                assert_eq!(result.output.raw, "Hello, world!");
+                assert_eq!(result.usage, usage);
+                assert_eq!(result.model_inference_responses, vec![model_response]);
             }
             _ => unreachable!(),
         }
@@ -1183,15 +1194,15 @@ mod tests {
             )
             .unwrap();
         match response {
-            InferenceResponse::Json(response) => {
-                assert_eq!(response.inference_id, inference_id);
+            InferenceResult::Json(result) => {
+                assert_eq!(result.inference_id, inference_id);
                 assert_eq!(
-                    response.output.parsed.unwrap(),
+                    result.output.parsed.unwrap(),
                     json!({"name": "Jerry", "age": 30}),
                 );
-                assert_eq!(response.output.raw, r#"{"name": "Jerry", "age": 30}"#);
-                assert_eq!(response.usage, usage);
-                assert_eq!(response.model_inference_responses, vec![model_response]);
+                assert_eq!(result.output.raw, r#"{"name": "Jerry", "age": 30}"#);
+                assert_eq!(result.usage, usage);
+                assert_eq!(result.model_inference_responses, vec![model_response]);
             }
             _ => unreachable!(),
         }
@@ -1222,12 +1233,12 @@ mod tests {
             )
             .unwrap();
         match response {
-            InferenceResponse::Json(response) => {
-                assert_eq!(response.inference_id, inference_id);
-                assert!(response.output.parsed.is_none());
-                assert_eq!(response.output.raw, r#"{"name": "Jerry", "age": "thirty"}"#);
-                assert_eq!(response.usage, usage);
-                assert_eq!(response.model_inference_responses, vec![model_response]);
+            InferenceResult::Json(result) => {
+                assert_eq!(result.inference_id, inference_id);
+                assert!(result.output.parsed.is_none());
+                assert_eq!(result.output.raw, r#"{"name": "Jerry", "age": "thirty"}"#);
+                assert_eq!(result.usage, usage);
+                assert_eq!(result.model_inference_responses, vec![model_response]);
             }
             _ => unreachable!(),
         }
@@ -1263,12 +1274,12 @@ mod tests {
             .unwrap();
         assert!(logs_contain("JSON Schema validation failed"));
         match response {
-            InferenceResponse::Json(response) => {
-                assert_eq!(response.inference_id, inference_id);
-                assert!(response.output.parsed.is_none());
-                assert_eq!(response.output.raw, "tool_call_arguments");
-                assert_eq!(response.usage, usage);
-                assert_eq!(response.model_inference_responses, vec![model_response]);
+            InferenceResult::Json(result) => {
+                assert_eq!(result.inference_id, inference_id);
+                assert!(result.output.parsed.is_none());
+                assert_eq!(result.output.raw, "tool_call_arguments");
+                assert_eq!(result.usage, usage);
+                assert_eq!(result.model_inference_responses, vec![model_response]);
             }
             _ => unreachable!(),
         }
@@ -1303,15 +1314,15 @@ mod tests {
             )
             .unwrap();
         match response {
-            InferenceResponse::Json(response) => {
-                assert_eq!(response.inference_id, inference_id);
+            InferenceResult::Json(result) => {
+                assert_eq!(result.inference_id, inference_id);
                 assert_eq!(
-                    response.output.parsed.unwrap(),
+                    result.output.parsed.unwrap(),
                     json!({"name": "Jerry", "age": 30}),
                 );
-                assert_eq!(response.output.raw, r#"{"name": "Jerry", "age": 30}"#);
-                assert_eq!(response.usage, usage);
-                assert_eq!(response.model_inference_responses, vec![model_response]);
+                assert_eq!(result.output.raw, r#"{"name": "Jerry", "age": 30}"#);
+                assert_eq!(result.usage, usage);
+                assert_eq!(result.model_inference_responses, vec![model_response]);
             }
             _ => unreachable!(),
         }

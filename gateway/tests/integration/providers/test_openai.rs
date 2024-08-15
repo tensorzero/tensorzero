@@ -152,7 +152,6 @@ async fn test_json_request_strict() {
         api_key: Some(api_key),
     });
     let result = provider.infer(&inference_request, &client).await;
-    println!("Result: {:?}", result);
     assert!(result.is_ok());
     let result = result.unwrap();
     assert!(result.content.len() == 1);

@@ -29,8 +29,7 @@ async fn e2e_test_comment_feedback() {
 
     // Check ClickHouse
     let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, Some(true))
-            .unwrap();
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests").unwrap();
     let result = select_feedback_clickhouse(&clickhouse, "CommentFeedback", feedback_id)
         .await
         .unwrap();
@@ -63,8 +62,7 @@ async fn e2e_test_comment_feedback() {
 
     // Check ClickHouse
     let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, Some(true))
-            .unwrap();
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests").unwrap();
     let result = select_feedback_clickhouse(&clickhouse, "CommentFeedback", feedback_id)
         .await
         .unwrap();
@@ -101,8 +99,7 @@ async fn e2e_test_demonstration_feedback() {
 
     // Check ClickHouse
     let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, Some(true))
-            .unwrap();
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests").unwrap();
     let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
         .await
         .unwrap();
@@ -154,8 +151,7 @@ async fn e2e_test_float_feedback() {
 
     // Check ClickHouse
     let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, Some(true))
-            .unwrap();
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests").unwrap();
     let result = select_feedback_clickhouse(&clickhouse, "FloatMetricFeedback", feedback_id)
         .await
         .unwrap();
@@ -252,8 +248,7 @@ async fn e2e_test_boolean_feedback() {
 
     // Check ClickHouse
     let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, Some(true))
-            .unwrap();
+        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests").unwrap();
     let result = select_feedback_clickhouse(&clickhouse, "BooleanMetricFeedback", feedback_id)
         .await
         .unwrap();

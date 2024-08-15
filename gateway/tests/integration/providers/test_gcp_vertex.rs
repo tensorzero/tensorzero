@@ -64,7 +64,6 @@ async fn test_json_request_flash() {
     let inference_request = create_json_inference_request();
 
     let result = provider.infer(&inference_request, &client).await;
-    println!("{:?}", result);
     assert!(result.is_ok());
     let result = result.unwrap();
     assert!(result.content.len() == 1);

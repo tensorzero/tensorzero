@@ -14,8 +14,8 @@ use tokio::time::Instant;
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
-    ContentBlock, InferenceResponseStream, Latency, ModelInferenceRequest, ModelInferenceResponse,
-    ModelInferenceResponseChunk, RequestMessage, Role, Text, Usage,
+    ContentBlock, Latency, ModelInferenceRequest, ModelInferenceResponse,
+    ModelInferenceResponseChunk, ModelInferenceResponseStream, RequestMessage, Role, Text, Usage,
 };
 
 lazy_static! {
@@ -129,7 +129,7 @@ impl InferenceProvider for AWSBedrockProvider {
         &'a self,
         _request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
-    ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
+    ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error> {
         todo!() // TODO (#30): implement streaming inference
     }
 }

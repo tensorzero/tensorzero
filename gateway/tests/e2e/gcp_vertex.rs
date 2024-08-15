@@ -57,14 +57,9 @@ async fn test_inference_basic() {
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
-    // Check that created is here
-    response_json.get("created").unwrap();
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-    // Check that type is "chat"
-    let r#type = response_json.get("type").unwrap().as_str().unwrap();
-    assert_eq!(r#type, "chat");
 
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -463,18 +458,19 @@ async fn test_json_request_pro() {
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
     let output = response_json.get("output").unwrap().as_object().unwrap();
-    println!("{:?}", output);
     let parsed = output.get("parsed").unwrap().as_object().unwrap();
     parsed.get("answer").unwrap().as_str().unwrap();
     output.get("raw").unwrap().as_str().unwrap();
-    // Check that created is here
-    response_json.get("created").unwrap();
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-    // Check that type is "json"
-    let r#type = response_json.get("type").unwrap().as_str().unwrap();
-    assert_eq!(r#type, "json");
+    // Check that episode_id is here
+    let response_episode_id = response_json.get("episode_id").unwrap().as_str().unwrap();
+    let response_episode_id = Uuid::parse_str(response_episode_id).unwrap();
+    assert_eq!(response_episode_id, episode_id);
+    // Check that variant_name is here
+    let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, "gcp-vertex-gemini-pro");
 
     // Check that usage is correct
     let usage = response_json.get("usage").unwrap();
@@ -581,18 +577,19 @@ async fn test_json_request_flash() {
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
     let output = response_json.get("output").unwrap().as_object().unwrap();
-    println!("{:?}", output);
     let parsed = output.get("parsed").unwrap().as_object().unwrap();
     parsed.get("answer").unwrap().as_str().unwrap();
     output.get("raw").unwrap().as_str().unwrap();
-    // Check that created is here
-    response_json.get("created").unwrap();
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-    // Check that type is "json"
-    let r#type = response_json.get("type").unwrap().as_str().unwrap();
-    assert_eq!(r#type, "json");
+    // Check that episode_id is here
+    let response_episode_id = response_json.get("episode_id").unwrap().as_str().unwrap();
+    let response_episode_id = Uuid::parse_str(response_episode_id).unwrap();
+    assert_eq!(response_episode_id, episode_id);
+    // Check that variant_name is here
+    let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, "gcp-vertex-gemini-flash");
 
     // Check that usage is correct
     let usage = response_json.get("usage").unwrap();

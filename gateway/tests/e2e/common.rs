@@ -17,7 +17,7 @@ pub fn get_gateway_endpoint(endpoint: &str) -> Url {
 }
 
 pub async fn get_clickhouse() -> ClickHouseConnectionInfo {
-    ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests", false, None).unwrap()
+    ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests").unwrap()
 }
 
 async fn clickhouse_flush_async_insert(clickhouse: &ClickHouseConnectionInfo) {

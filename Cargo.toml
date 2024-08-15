@@ -14,3 +14,10 @@ unsafe_code = "forbid"
 expect_used = "deny"
 panic = "deny"
 unwrap_used = "deny"
+
+
+[profile.performance]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
+incremental = false

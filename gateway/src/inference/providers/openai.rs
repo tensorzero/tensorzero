@@ -13,9 +13,9 @@ use uuid::Uuid;
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, InferenceResponseStream, JSONMode, Latency,
-    ModelInferenceRequest, ModelInferenceResponse, ModelInferenceResponseChunk, RequestMessage,
-    Role, Text, TextChunk, Usage,
+    ContentBlock, ContentBlockChunk, JSONMode, Latency, ModelInferenceRequest,
+    ModelInferenceResponse, ModelInferenceResponseChunk, ModelInferenceResponseStream,
+    RequestMessage, Role, Text, TextChunk, Usage,
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
@@ -79,7 +79,7 @@ impl InferenceProvider for OpenAIProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-    ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
+    ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error> {
         let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
             provider_name: "OpenAI".to_string(),
         })?;
@@ -176,8 +176,6 @@ pub(super) fn handle_openai_error(
     response_code: StatusCode,
     response_body: &str,
 ) -> Result<ModelInferenceResponse, Error> {
-    println!("Response code: {}", response_code);
-    println!("Response body: {}", response_body);
     match response_code {
         StatusCode::BAD_REQUEST
         | StatusCode::UNAUTHORIZED

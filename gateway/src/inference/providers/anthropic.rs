@@ -12,8 +12,8 @@ use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{ContentBlock, ContentBlockChunk, Latency, Role, Text};
 use crate::inference::types::{
-    InferenceResponseStream, ModelInferenceRequest, ModelInferenceResponse,
-    ModelInferenceResponseChunk, RequestMessage, TextChunk, Usage,
+    ModelInferenceRequest, ModelInferenceResponse, ModelInferenceResponseChunk,
+    ModelInferenceResponseStream, RequestMessage, TextChunk, Usage,
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
@@ -78,7 +78,7 @@ impl InferenceProvider for AnthropicProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-    ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
+    ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error> {
         let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
             provider_name: "Anthropic".to_string(),
         })?;
@@ -110,7 +110,7 @@ impl InferenceProvider for AnthropicProvider {
 
 /// Maps events from Anthropic into the TensorZero format
 /// Modified from the example [here](https://github.com/64bit/async-openai/blob/5c9c817b095e3bacb2b6c9804864cdf8b15c795e/async-openai/src/client.rs#L433)
-/// At a high level, this function is handling low-level EventSource details and mapping the objects returned by Anthropic into our `InferenceResponseChunk` type
+/// At a high level, this function is handling low-level EventSource details and mapping the objects returned by Anthropic into our `InferenceResultChunk` type
 
 fn stream_anthropic(
     mut event_source: EventSource,

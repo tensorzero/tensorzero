@@ -26,12 +26,13 @@ jsonwebtoken = "9.3.0"
 lazy_static = { version = "1.5.0" }
 metrics = "0.23.0"
 metrics-exporter-prometheus = {version = "0.15.3" , features = ["http-listener"], default-features = false}
+mimalloc = "0.1.43"
 minijinja = {version = "2.1.0", features =["loader"]}
 reqwest = { version = "0.12.5", features=["json", "rustls-tls"], default-features=false }
 reqwest-eventsource = "0.6.0"
 secrecy = "0.8.0"
 serde = { version = "1.0.204", features = ["derive"] }
-serde_json = "1.0.120"
+serde_json = { version = "1.0.120", features = ["preserve_order"] }
 serde_path_to_error = "0.1.16"
 sha2 = "0.10.8"
 signal = "0.7.0"

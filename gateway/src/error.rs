@@ -323,7 +323,7 @@ impl std::fmt::Display for Error {
                         .iter()
                         .map(|e| e.to_string())
                         .collect::<Vec<_>>()
-                        .join(", ")
+                        .join("\n")
                 )
             }
             Error::ApiKeyMissing { provider_name } => {

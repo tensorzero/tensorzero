@@ -10,6 +10,7 @@ use crate::error::Error;
 
 #[derive(Debug, Clone)]
 pub enum ClickHouseConnectionInfo {
+    Disabled,
     Mock {
         mock_data: Arc<RwLock<HashMap<String, Vec<serde_json::Value>>>>,
         healthy: bool,
@@ -22,19 +23,7 @@ pub enum ClickHouseConnectionInfo {
 }
 
 impl ClickHouseConnectionInfo {
-    pub fn new(
-        base_url: &str,
-        database: &str,
-        mock: bool,
-        healthy: Option<bool>,
-    ) -> Result<Self, Error> {
-        if mock {
-            return Ok(Self::Mock {
-                mock_data: Arc::new(RwLock::new(HashMap::new())),
-                healthy: healthy.unwrap_or(true),
-            });
-        }
-
+    pub fn new(base_url: &str, database: &str) -> Result<Self, Error> {
         // Add a query string for the database using the URL crate
         let base_url = Url::parse(base_url).map_err(|e| Error::Config {
             message: format!("Invalid ClickHouse base URL: {}", e),
@@ -47,15 +36,28 @@ impl ClickHouseConnectionInfo {
         })
     }
 
+    pub fn new_mock(healthy: bool) -> Self {
+        Self::Mock {
+            mock_data: Arc::new(RwLock::new(HashMap::new())),
+            healthy,
+        }
+    }
+
+    pub fn new_disabled() -> Self {
+        Self::Disabled
+    }
+
     pub fn database(&self) -> &str {
         match self {
+            Self::Disabled => "",
             Self::Mock { .. } => unreachable!(),
             Self::Production { database, .. } => database,
         }
     }
 
-    pub fn get_url(&self) -> String {
+    fn get_url(&self) -> String {
         match self {
+            Self::Disabled => "".to_string(),
             Self::Mock { .. } => unreachable!(),
             Self::Production {
                 base_url, database, ..
@@ -73,6 +75,7 @@ impl ClickHouseConnectionInfo {
         table: &str,
     ) -> Result<(), Error> {
         match self {
+            Self::Disabled => Ok(()),
             Self::Mock { mock_data, .. } => {
                 write_mock(row, table, &mut mock_data.write().await).await
             }
@@ -87,6 +90,7 @@ impl ClickHouseConnectionInfo {
     #[cfg(test)]
     pub async fn read(&self, table: &str, column: &str, value: &str) -> Option<serde_json::Value> {
         match self {
+            Self::Disabled => None,
             Self::Mock { mock_data, .. } => {
                 let mock_data = mock_data.read().await;
                 let table = mock_data.get(table).unwrap();
@@ -105,6 +109,7 @@ impl ClickHouseConnectionInfo {
 
     pub async fn health(&self) -> Result<(), Box<dyn std::error::Error>> {
         match self {
+            Self::Disabled => Ok(()),
             Self::Mock { healthy, .. } => {
                 if *healthy {
                     Ok(())
@@ -123,6 +128,7 @@ impl ClickHouseConnectionInfo {
 
     pub async fn run_query(&self, query: String) -> Result<String, Error> {
         match self {
+            Self::Disabled => Ok("".to_string()),
             Self::Mock { .. } => unimplemented!(),
             Self::Production { client, .. } => {
                 let response = client
@@ -152,6 +158,7 @@ impl ClickHouseConnectionInfo {
 
     pub async fn create_database(&self) -> Result<(), Error> {
         match self {
+            Self::Disabled => Ok(()),
             Self::Mock { .. } => unimplemented!(),
             Self::Production {
                 base_url,

@@ -38,6 +38,7 @@ async fn e2e_test_inference_basic() {
         .send()
         .await
         .unwrap();
+
     // Check Response is OK, then fields in order
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
@@ -48,16 +49,13 @@ async fn e2e_test_inference_basic() {
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
     assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
-    // Check that created is here
-    response_json.get("created").unwrap();
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
     // Check that parsed_output is not here
     assert!(response_json.get("parsed_output").is_none());
-    // Check that type is "chat"
-    let r#type = response_json.get("type").unwrap().as_str().unwrap();
-    assert_eq!(r#type, "chat");
+    // Check that model_inference_responses is not here
+    assert!(response_json.get("model_inference_responses").is_none());
 
     // Check that usage is correct
     let usage = response_json.get("usage").unwrap();
@@ -66,6 +64,12 @@ async fn e2e_test_inference_basic() {
     let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
     assert_eq!(prompt_tokens, 10);
     assert_eq!(completion_tokens, 10);
+
+    // Check that the episode_id is correct
+    let response_episode_id = response_json.get("episode_id").unwrap().as_str().unwrap();
+    let response_episode_id = Uuid::parse_str(response_episode_id).unwrap();
+    assert_eq!(response_episode_id, episode_id);
+
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
@@ -202,8 +206,6 @@ async fn e2e_test_inference_model_fallback() {
     // Check Response is OK, then fields in order
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
-    // Check that created is here
-    response_json.get("created").unwrap();
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
@@ -215,9 +217,6 @@ async fn e2e_test_inference_model_fallback() {
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
     assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
-    // Check that type is "chat"
-    let r#type = response_json.get("type").unwrap().as_str().unwrap();
-    assert_eq!(r#type, "chat");
 
     // Check that usage is correct
     let usage = response_json.get("usage").unwrap();
@@ -333,8 +332,6 @@ async fn e2e_test_tool_call() {
     let response_json = response.json::<Value>().await.unwrap();
     // No output schema so parsed content should not be in response
     assert!(response_json.get("parsed_content").is_none());
-    // Check that created is here
-    response_json.get("created").unwrap();
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
@@ -500,8 +497,6 @@ async fn e2e_test_tool_call_malformed() {
     let response_json = response.json::<Value>().await.unwrap();
     // No output schema so parsed content should not be in response
     assert!(response_json.get("parsed_content").is_none());
-    // Check that created is here
-    response_json.get("created").unwrap();
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
@@ -931,14 +926,9 @@ async fn e2e_test_variant_failover() {
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
     assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
-    // Check that created is here
-    response_json.get("created").unwrap();
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-    // Check that type is "chat"
-    let r#type = response_json.get("type").unwrap().as_str().unwrap();
-    assert_eq!(r#type, "chat");
 
     // Check that usage is correct
     let usage = response_json.get("usage").unwrap();
