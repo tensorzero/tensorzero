@@ -19,7 +19,7 @@ use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
     collect_chunks, ContentBlockChunk, ContentBlockOutput, Inference, InferenceResult,
-    InferenceResultChunk, InferenceResultStream, Input, ModelInferenceResponseChunk, Usage,
+    InferenceResultChunk, Input, ModelInferenceResponseChunk, ModelInferenceResponseStream, Usage,
 };
 use crate::tool::{DynamicToolConfig, ToolCallConfig};
 use crate::uuid_util::validate_episode_id;
@@ -259,7 +259,7 @@ fn create_stream(
     function: &'static FunctionConfig,
     metadata: InferenceMetadata,
     first_chunk: ModelInferenceResponseChunk,
-    mut stream: InferenceResultStream,
+    mut stream: ModelInferenceResponseStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     tool_config: Option<ToolCallConfig>,
     dynamic_tool_config_string: String,

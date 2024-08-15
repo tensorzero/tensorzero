@@ -9,8 +9,8 @@ use tokio::time::Instant;
 use crate::{
     error::Error,
     inference::types::{
-        InferenceResultStream, JSONMode, Latency, ModelInferenceRequest, ModelInferenceResponse,
-        ModelInferenceResponseChunk,
+        JSONMode, Latency, ModelInferenceRequest, ModelInferenceResponse,
+        ModelInferenceResponseChunk, ModelInferenceResponseStream,
     },
 };
 
@@ -85,7 +85,7 @@ impl InferenceProvider for TogetherProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-    ) -> Result<(ModelInferenceResponseChunk, InferenceResultStream), Error> {
+    ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error> {
         let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
             provider_name: "Together".to_string(),
         })?;

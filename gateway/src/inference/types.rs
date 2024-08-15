@@ -620,7 +620,7 @@ impl From<ToolCallChunk> for ToolCall {
     }
 }
 
-pub type InferenceResultStream =
+pub type ModelInferenceResponseStream =
     Pin<Box<dyn Stream<Item = Result<ModelInferenceResponseChunk, Error>> + Send>>;
 
 #[cfg(test)]

@@ -13,7 +13,7 @@ use crate::inference::types::{
 use crate::minijinja_util::template_message;
 use crate::tool::ToolCallConfig;
 use crate::{
-    inference::types::{InferenceResult, InferenceResultStream, InputMessage},
+    inference::types::{InferenceResult, InputMessage, ModelInferenceResponseStream},
     model::ModelConfig,
 };
 
@@ -52,7 +52,7 @@ pub trait Variant {
         function: &FunctionConfig,
         tool_config: Option<&ToolCallConfig>,
         client: &Client,
-    ) -> Result<(ModelInferenceResponseChunk, InferenceResultStream), Error>;
+    ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error>;
 }
 
 impl VariantConfig {
@@ -105,7 +105,7 @@ impl Variant for VariantConfig {
         function: &FunctionConfig,
         tool_config: Option<&ToolCallConfig>,
         client: &Client,
-    ) -> Result<(ModelInferenceResponseChunk, InferenceResultStream), Error> {
+    ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error> {
         match self {
             VariantConfig::ChatCompletion(params) => {
                 params
@@ -238,7 +238,7 @@ impl Variant for ChatCompletionConfig {
         function: &FunctionConfig,
         tool_config: Option<&ToolCallConfig>,
         client: &Client,
-    ) -> Result<(ModelInferenceResponseChunk, InferenceResultStream), Error> {
+    ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error> {
         let messages = input
             .messages
             .iter()
