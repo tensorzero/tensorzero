@@ -103,22 +103,18 @@ impl<'c> Config<'c> {
 
         let gateway = config.gateway.unwrap_or_default();
 
-        let templates = TemplateConfig::new(base_path);
+        let templates = TemplateConfig::new();
 
         let functions = config
             .functions
             .into_iter()
-            .map(|(name, config)| config.load(&templates.base_path).map(|c| (name, c)))
+            .map(|(name, config)| config.load(&base_path).map(|c| (name, c)))
             .collect::<Result<HashMap<String, FunctionConfig>, Error>>()?;
 
         let tools = config
             .tools
             .into_iter()
-            .map(|(name, config)| {
-                config
-                    .load(&templates.base_path, name.clone())
-                    .map(|c| (name, c))
-            })
+            .map(|(name, config)| config.load(&base_path, name.clone()).map(|c| (name, c)))
             .collect::<Result<HashMap<String, ToolConfig>, Error>>()?;
 
         let mut config = Config {
@@ -132,7 +128,7 @@ impl<'c> Config<'c> {
         };
 
         // Initialize the templates
-        let template_paths = config.get_templates(&config.templates.base_path);
+        let template_paths = config.get_templates(&base_path);
         config.templates.initialize(template_paths)?;
 
         // Validate the config

@@ -7,16 +7,14 @@ use crate::error::Error;
 
 #[derive(Debug)]
 pub struct TemplateConfig<'c> {
-    pub base_path: PathBuf,
     env: minijinja::Environment<'c>,
 }
 
 impl<'c> TemplateConfig<'c> {
-    pub fn new(base_path: PathBuf) -> Self {
-        Self {
-            env: Environment::new(),
-            base_path,
-        }
+    pub fn new() -> Self {
+        let mut env = Environment::new();
+        env.set_undefined_behavior(UndefinedBehavior::Strict);
+        Self { env }
     }
 
     /// Initializes the TemplateConfig with the given templates, given as a map from template names
@@ -84,6 +82,12 @@ impl<'c> TemplateConfig<'c> {
     }
 }
 
+impl<'c> Default for TemplateConfig<'c> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
@@ -132,7 +136,7 @@ pub(crate) mod tests {
     #[test]
     fn test_template_nonexistent_file() {
         let nonexistent_path = PathBuf::from("nonexistent_file.txt");
-        let mut template_config = TemplateConfig::new(nonexistent_path.clone());
+        let mut template_config = TemplateConfig::new();
         let template_paths =
             HashMap::from([("nonexistent_file".to_string(), nonexistent_path.clone())]);
         let result = template_config.initialize(template_paths);
@@ -151,7 +155,7 @@ pub(crate) mod tests {
         let malformed_template = "{{ unclosed_bracket";
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{}", malformed_template).expect("Failed to write to temp file");
-        let mut template_config = TemplateConfig::new(temp_file.path().to_path_buf());
+        let mut template_config = TemplateConfig::new();
         let template_paths = HashMap::from([(
             "malformed_template".to_string(),
             temp_file.path().to_path_buf(),
@@ -190,7 +194,7 @@ pub(crate) mod tests {
         templates.insert("assistant".to_string(), temp_file4.path().to_path_buf());
 
         // Initialize templates
-        let mut template_config = TemplateConfig::new(PathBuf::from("."));
+        let mut template_config = TemplateConfig::new();
         let _ = template_config.initialize(templates.clone());
         template_config
     }

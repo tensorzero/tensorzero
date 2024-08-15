@@ -276,7 +276,6 @@ async fn write_boolean(
 mod tests {
     use super::*;
     use std::collections::HashMap;
-    use std::path::PathBuf;
 
     use crate::config_parser::{Config, GatewayConfig, MetricConfig, MetricConfigOptimize};
     use crate::minijinja_util::TemplateConfig;
@@ -300,7 +299,7 @@ mod tests {
             metrics,
             functions: HashMap::new(),
             tools: HashMap::new(),
-            templates: TemplateConfig::new(PathBuf::new()),
+            templates: TemplateConfig::new(),
         };
         let inference_id = Uuid::now_v7();
         let metadata =
@@ -416,7 +415,7 @@ mod tests {
             metrics,
             functions: HashMap::new(),
             tools: HashMap::new(),
-            templates: TemplateConfig::new(PathBuf::new()),
+            templates: TemplateConfig::new(),
         };
         let episode_id = Uuid::now_v7();
         let metadata =
