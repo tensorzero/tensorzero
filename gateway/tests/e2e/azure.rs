@@ -655,8 +655,7 @@ async fn test_json_request() {
     let output = response_json.get("output").unwrap().as_object().unwrap();
     println!("{:?}", output);
     let parsed = output.get("parsed").unwrap().as_object().unwrap();
-    let answer = parsed.get("answer").unwrap().as_str().unwrap();
-    assert_eq!(answer, "Austin");
+    parsed.get("answer").unwrap().as_str().unwrap();
     output.get("raw").unwrap().as_str().unwrap();
     // Check that created is here
     response_json.get("created").unwrap();
@@ -672,8 +671,8 @@ async fn test_json_request() {
     let usage = usage.as_object().unwrap();
     let prompt_tokens = usage.get("prompt_tokens").unwrap().as_u64().unwrap();
     let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
-    assert_eq!(prompt_tokens, 10);
-    assert_eq!(completion_tokens, 10);
+    assert!(prompt_tokens > 10);
+    assert!(completion_tokens > 5);
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
@@ -701,8 +700,7 @@ async fn test_json_request() {
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Value = serde_json::from_str(output).unwrap();
     let parsed = output.get("parsed").unwrap().as_object().unwrap();
-    let answer = parsed.get("answer").unwrap().as_str().unwrap();
-    assert_eq!(answer, "Hello");
+    parsed.get("answer").unwrap().as_str().unwrap();
     output.get("raw").unwrap().as_str().unwrap();
     // Check content blocks
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
@@ -710,7 +708,7 @@ async fn test_json_request() {
     assert_eq!(retrieved_episode_id, episode_id);
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, "test");
+    assert_eq!(variant_name, "azure");
 
     // Check the ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -731,13 +729,12 @@ async fn test_json_request() {
     let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
-    let content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(content, "{\"answer\":\"Hello\"}");
+    content_block.get("text").unwrap().as_str().unwrap();
 
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
-    assert_eq!(input_tokens, 10);
+    assert!(input_tokens > 10);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
-    assert_eq!(output_tokens, 10);
+    assert!(output_tokens > 5);
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
     assert!(result.get("ttft_ms").unwrap().is_null());

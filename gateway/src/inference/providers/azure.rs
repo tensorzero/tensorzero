@@ -14,7 +14,7 @@ use crate::inference::types::{
 use super::openai::{
     handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseWithLatency, OpenAITool, OpenAIToolChoice,
-    OpenAIToolChoiceString,
+    OpenAIToolChoiceString, SpecificToolChoice,
 };
 use super::provider_trait::InferenceProvider;
 
@@ -145,11 +145,11 @@ enum AzureResponseFormat {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(untagged)]
 enum AzureToolChoice<'a> {
     None,
     Auto,
-    Specific { r#type: &'a str },
+    Specific(SpecificToolChoice<'a>),
 }
 
 impl<'a> From<OpenAIToolChoice<'a>> for AzureToolChoice<'a> {
@@ -162,10 +162,7 @@ impl<'a> From<OpenAIToolChoice<'a>> for AzureToolChoice<'a> {
                     OpenAIToolChoiceString::Required => AzureToolChoice::Auto, // Azure doesn't support required
                 }
             }
-
-            OpenAIToolChoice::Specific(tool_choice) => AzureToolChoice::Specific {
-                r#type: tool_choice.function.name,
-            },
+            OpenAIToolChoice::Specific(tool_choice) => AzureToolChoice::Specific(tool_choice),
         }
     }
 }
@@ -220,6 +217,7 @@ mod tests {
     use super::*;
 
     use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
+    use crate::inference::providers::openai::{OpenAIToolType, SpecificToolFunction};
     use crate::inference::types::{FunctionType, JSONMode, RequestMessage, Role};
 
     #[test]
@@ -259,9 +257,12 @@ mod tests {
         assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters.value);
         assert_eq!(
             azure_request.tool_choice,
-            Some(AzureToolChoice::Specific {
-                r#type: &WEATHER_TOOL.name,
-            })
+            Some(AzureToolChoice::Specific(SpecificToolChoice {
+                r#type: OpenAIToolType::Function,
+                function: SpecificToolFunction {
+                    name: &WEATHER_TOOL.name,
+                }
+            }))
         );
     }
 }
