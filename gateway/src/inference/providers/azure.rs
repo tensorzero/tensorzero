@@ -191,12 +191,10 @@ struct AzureRequest<'a> {
 
 impl<'a> AzureRequest<'a> {
     pub fn new(model: &'a str, request: &'a ModelInferenceRequest) -> AzureRequest<'a> {
-        // TODO (#99): Currently Azure seems to be getting mad about JSON mode, let's figure this out later
         let response_format = match request.json_mode {
             JSONMode::On | JSONMode::Strict => AzureResponseFormat::JsonObject,
             JSONMode::Off => AzureResponseFormat::Text,
         };
-        // let response_format = AzureResponseFormat::Text;
         let messages = prepare_openai_messages(request);
         let (tools, tool_choice, _) = prepare_openai_tools(request);
         AzureRequest {
@@ -267,4 +265,39 @@ mod tests {
     }
 
     // TODO (viraj): write a test for JSON mode conversions
+    #[test]
+    fn test_azure_json_mode_from() {
+        // Required is converted to Auto
+        let json_mode = OpenAIToolChoice::String(OpenAIToolChoiceString::Required);
+        let azure_json_mode = AzureToolChoice::from(json_mode);
+        assert_eq!(azure_json_mode, AzureToolChoice::Auto);
+
+        // Specific tool choice is converted to Specific
+        let specific_tool_choice = OpenAIToolChoice::Specific(SpecificToolChoice {
+            r#type: OpenAIToolType::Function,
+            function: SpecificToolFunction {
+                name: "test_function",
+            },
+        });
+        let azure_specific_tool_choice = AzureToolChoice::from(specific_tool_choice);
+        assert_eq!(
+            azure_specific_tool_choice,
+            AzureToolChoice::Specific(SpecificToolChoice {
+                r#type: OpenAIToolType::Function,
+                function: SpecificToolFunction {
+                    name: "test_function",
+                }
+            })
+        );
+
+        // None is converted to None
+        let none_tool_choice = OpenAIToolChoice::String(OpenAIToolChoiceString::None);
+        let azure_none_tool_choice = AzureToolChoice::from(none_tool_choice);
+        assert_eq!(azure_none_tool_choice, AzureToolChoice::None);
+
+        // Auto is converted to Auto
+        let auto_tool_choice = OpenAIToolChoice::String(OpenAIToolChoiceString::Auto);
+        let azure_auto_tool_choice = AzureToolChoice::from(auto_tool_choice);
+        assert_eq!(azure_auto_tool_choice, AzureToolChoice::Auto);
+    }
 }
