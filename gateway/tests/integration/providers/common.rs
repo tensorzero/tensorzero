@@ -66,7 +66,7 @@ pub fn create_json_inference_request<'a>() -> ModelInferenceRequest<'a> {
         max_tokens,
         stream: false,
         json_mode: JSONMode::On,
-        function_type: FunctionType::Chat,
+        function_type: FunctionType::Json,
         output_schema: Some(Box::leak(Box::new(output_schema))),
     }
 }

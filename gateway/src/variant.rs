@@ -215,6 +215,7 @@ impl ChatCompletionConfig {
             },
             FunctionConfig::Json(_json_config) => {
                 if self.json_mode == JsonEnforcement::ImplicitTool {
+                    // TODO(#134): implement implicit tool calling
                     unimplemented!("Implicit tool calling is not implemented yet");
                 }
                 ModelInferenceRequest {

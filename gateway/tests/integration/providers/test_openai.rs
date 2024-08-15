@@ -8,7 +8,7 @@ use futures::StreamExt;
 use gateway::{
     inference::{
         providers::{openai::OpenAIProvider, provider_trait::InferenceProvider},
-        types::{ContentBlock, Text},
+        types::{ContentBlock, JSONMode, Text},
     },
     model::ProviderConfig,
 };
@@ -119,6 +119,40 @@ async fn test_json_request() {
         api_key: Some(api_key),
     });
     let result = provider.infer(&inference_request, &client).await;
+    assert!(result.is_ok());
+    let result = result.unwrap();
+    assert!(result.content.len() == 1);
+    let content = result.content.first().unwrap();
+    match content {
+        ContentBlock::Text(Text { text }) => {
+            // parse the result text and see if it matches the output schema
+            let result_json: serde_json::Value = serde_json::from_str(text)
+                .map_err(|_| format!(r#"Failed to parse JSON: "{text}""#))
+                .unwrap();
+            assert!(result_json.get("honest_answer").is_some());
+            assert!(result_json.get("mischevious_answer").is_some());
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[tokio::test]
+async fn test_json_request_strict() {
+    // Load API key from environment variable
+    let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY must be set");
+    let api_key = SecretString::new(api_key);
+    let model_name = "gpt-4o-mini";
+    let client = reqwest::Client::new();
+    let mut inference_request = create_json_inference_request();
+    inference_request.json_mode = JSONMode::Strict;
+
+    let provider = ProviderConfig::OpenAI(OpenAIProvider {
+        model_name: model_name.to_string(),
+        api_base: None,
+        api_key: Some(api_key),
+    });
+    let result = provider.infer(&inference_request, &client).await;
+    println!("Result: {:?}", result);
     assert!(result.is_ok());
     let result = result.unwrap();
     assert!(result.content.len() == 1);

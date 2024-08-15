@@ -1030,7 +1030,7 @@ mod tests {
             _ => unreachable!("Expected Json inference response"),
         }
 
-        // TODO(issue to be created): do tool call chunking for implicit tool calling
+        // TODO(#134): do tool call chunking for implicit tool calling
 
         // Test case 5: chunks with some None content
         let inference_id = Uuid::now_v7();
