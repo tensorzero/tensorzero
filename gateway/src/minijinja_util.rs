@@ -2,70 +2,89 @@ use minijinja::{Environment, UndefinedBehavior};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use tokio::sync::OnceCell;
 
 use crate::error::Error;
 
-static MINIJINJA_ENV: OnceCell<Environment> = OnceCell::const_new();
-
-/// Initializes the MINIJINJA_ENV with the given templates, given as a map from template names
-/// to template paths.
-/// This should be called once at startup.
-pub fn initialize_templates(template_paths: HashMap<String, PathBuf>) -> Result<(), Error> {
-    let mut env = Environment::new();
-    env.set_undefined_behavior(UndefinedBehavior::Strict);
-
-    for (template_name, path) in template_paths {
-        let template_content =
-            std::fs::read_to_string(&path).map_err(|e| Error::MiniJinjaTemplate {
-                template_name: path.display().to_string(),
-                message: format!("Failed to read template file: {}", e),
-            })?;
-
-        env.add_template_owned(template_name, template_content)
-            .map_err(|e| Error::MiniJinjaTemplate {
-                template_name: path.display().to_string(),
-                message: format!("Failed to add template: {}", e),
-            })?;
-    }
-
-    MINIJINJA_ENV
-        .set(env)
-        .map_err(|_| Error::MiniJinjaEnvironment {
-            message: "Jinja environment already initialized".to_string(),
-        })?;
-
-    Ok(())
+#[derive(Debug)]
+pub struct TemplateConfig<'c> {
+    env: minijinja::Environment<'c>,
 }
 
-#[allow(dead_code)]
-// Templates a message with a MiniJinja template.
-pub fn template_message(template_name: &str, context: &Value) -> Result<String, Error> {
-    let env = MINIJINJA_ENV.get().ok_or(Error::MiniJinjaEnvironment {
-        message: "Jinja environment not initialized".to_string(),
-    })?;
+impl<'c> TemplateConfig<'c> {
+    pub fn new() -> Self {
+        let mut env = Environment::new();
+        env.set_undefined_behavior(UndefinedBehavior::Strict);
+        Self { env }
+    }
 
-    let template =
-        env.get_template(template_name)
-            .map_err(|_| Error::MiniJinjaTemplateMissing {
-                template_name: template_name.to_string(),
-            })?;
-    let maybe_message = template.render(context);
-    match maybe_message {
-        Ok(message) => Ok(message),
-        Err(err) => {
-            let mut message = err.to_string();
-            let mut err = &err as &dyn std::error::Error;
-            while let Some(next_err) = err.source() {
-                message.push_str("\nCaused by: ");
-                message.push_str(&next_err.to_string());
-                err = next_err;
-            }
-            Err(Error::MiniJinjaTemplateRender {
-                template_name: template_name.to_string(),
-                message,
-            })
+    /// Initializes the TemplateConfig with the given templates, given as a map from template names
+    /// to template paths.
+    pub fn initialize(&mut self, template_paths: HashMap<String, PathBuf>) -> Result<(), Error> {
+        self.env.set_undefined_behavior(UndefinedBehavior::Strict);
+
+        for (template_name, path) in template_paths {
+            let template_content =
+                std::fs::read_to_string(&path).map_err(|e| Error::MiniJinjaTemplate {
+                    template_name: path.display().to_string(),
+                    message: format!("Failed to read template file: {}", e),
+                })?;
+
+            self.env
+                .add_template_owned(template_name, template_content)
+                .map_err(|e| Error::MiniJinjaTemplate {
+                    template_name: path.display().to_string(),
+                    message: format!("Failed to add template: {}", e),
+                })?;
         }
+
+        Ok(())
+    }
+
+    // Templates a message with a MiniJinja template.
+    pub fn template_message(&self, template_name: &str, context: &Value) -> Result<String, Error> {
+        let template =
+            self.env
+                .get_template(template_name)
+                .map_err(|_| Error::MiniJinjaTemplateMissing {
+                    template_name: template_name.to_string(),
+                })?;
+        let maybe_message = template.render(context);
+        match maybe_message {
+            Ok(message) => Ok(message),
+            Err(err) => {
+                let mut message = err.to_string();
+                let mut err = &err as &dyn std::error::Error;
+                while let Some(next_err) = err.source() {
+                    message.push_str("\nCaused by: ");
+                    message.push_str(&next_err.to_string());
+                    err = next_err;
+                }
+                Err(Error::MiniJinjaTemplateRender {
+                    template_name: template_name.to_string(),
+                    message,
+                })
+            }
+        }
+    }
+
+    // Checks if a template needs any variables (i.e. needs a schema)
+    pub fn template_needs_variables(&self, template_name: &str) -> Result<bool, Error> {
+        let template =
+            self.env
+                .get_template(template_name)
+                .map_err(|_| Error::MiniJinjaTemplateMissing {
+                    template_name: template_name.to_string(),
+                })?;
+
+        let template_needs_variables = !template.undeclared_variables(true).is_empty();
+
+        Ok(template_needs_variables)
+    }
+}
+
+impl<'c> Default for TemplateConfig<'c> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -77,11 +96,11 @@ pub(crate) mod tests {
 
     #[test]
     fn test_template_good() {
-        idempotent_initialize_test_templates();
+        let templates = get_test_template_config();
         let template_name = "greeting";
 
         let context = serde_json::json!({"name": "world"});
-        let result = template_message(template_name, &context);
+        let result = templates.template_message(template_name, &context);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "hello, world!");
 
@@ -93,7 +112,7 @@ pub(crate) mod tests {
             "name": "Alice",
             "age": 30
         });
-        let result = template_message(template_name, &context);
+        let result = templates.template_message(template_name, &context);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "Hello, Alice! You are 30 years old.");
 
@@ -101,7 +120,7 @@ pub(crate) mod tests {
         let context = serde_json::json!({
             "name": "Bob"
         });
-        let result = template_message(template_name, &context);
+        let result = templates.template_message(template_name, &context);
         assert!(result.is_err());
 
         // Test with incorrect input type
@@ -109,7 +128,7 @@ pub(crate) mod tests {
             "name": "Charlie",
             "age": "thirty"
         });
-        let result = template_message(template_name, &context);
+        let result = templates.template_message(template_name, &context);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "Hello, Charlie! You are thirty years old.");
     }
@@ -117,10 +136,10 @@ pub(crate) mod tests {
     #[test]
     fn test_template_nonexistent_file() {
         let nonexistent_path = PathBuf::from("nonexistent_file.txt");
-        let result = initialize_templates(HashMap::from([(
-            "nonexistent_file".to_string(),
-            nonexistent_path.clone(),
-        )]));
+        let mut template_config = TemplateConfig::new();
+        let template_paths =
+            HashMap::from([("nonexistent_file".to_string(), nonexistent_path.clone())]);
+        let result = template_config.initialize(template_paths);
         assert_eq!(
             result.unwrap_err(),
             Error::MiniJinjaTemplate {
@@ -136,25 +155,19 @@ pub(crate) mod tests {
         let malformed_template = "{{ unclosed_bracket";
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{}", malformed_template).expect("Failed to write to temp file");
-        let result = initialize_templates(HashMap::from([(
+        let mut template_config = TemplateConfig::new();
+        let template_paths = HashMap::from([(
             "malformed_template".to_string(),
             temp_file.path().to_path_buf(),
-        )]));
+        )]);
+        let result = template_config.initialize(template_paths);
         assert!(result
             .unwrap_err()
             .to_string()
             .contains("Failed to add template"));
     }
-    // At test time, we want to initialize the templates once, and then use them in all tests.
-    // All tests that use templats should call this function to ensure that test templates are initialized.
-    // If you need a new template for a unit test add it here.
-    pub fn idempotent_initialize_test_templates() {
-        if MINIJINJA_ENV.get().is_some() {
-            // Don't need to do anything if it's already done.
-            // We can attempt to write to the environment and if it errors some other test got there first
-            // but wrote the same data.
-            return;
-        }
+
+    pub fn get_test_template_config<'a>() -> TemplateConfig<'a> {
         let mut templates = HashMap::new();
 
         // Template 1
@@ -181,7 +194,9 @@ pub(crate) mod tests {
         templates.insert("assistant".to_string(), temp_file4.path().to_path_buf());
 
         // Initialize templates
-        let _ = initialize_templates(templates.clone());
+        let mut template_config = TemplateConfig::new();
+        let _ = template_config.initialize(templates.clone());
+        template_config
     }
 
     fn create_temp_file(content: &str) -> NamedTempFile {

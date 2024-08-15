@@ -160,6 +160,7 @@ pub async fn inference_handler(
                     &config.models,
                     function,
                     tool_config.as_ref(),
+                    &config.templates,
                     &http_client,
                 )
                 .await;
@@ -203,6 +204,7 @@ pub async fn inference_handler(
                     &config.models,
                     function,
                     tool_config.as_ref(),
+                    &config.templates,
                     &http_client,
                 )
                 .await;
