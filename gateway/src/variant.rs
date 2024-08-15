@@ -849,9 +849,7 @@ mod tests {
             weight: 1.0,
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
-            assistant_template: None,
-            json_mode: JsonEnforcement::Default,
-            temperature: None,
+            ..Default::default()
         };
         let models = HashMap::from([("error".to_string(), error_model_config.clone())]);
         let result = chat_completion_config
@@ -873,9 +871,7 @@ mod tests {
             weight: 1.0,
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
-            assistant_template: None,
-            json_mode: JsonEnforcement::Default,
-            temperature: None,
+            ..Default::default()
         };
         let models = HashMap::from([("good".to_string(), text_model_config.clone())]);
         let (first_chunk, mut stream) = chat_completion_config

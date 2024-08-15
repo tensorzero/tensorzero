@@ -351,10 +351,10 @@ fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    use crate::inference::types::InputMessage;
     use crate::inference::types::Latency;
     use crate::tool::ToolCall;
     use crate::variant::ChatCompletionConfig;
-    use crate::{inference::types::InputMessage, variant::JsonEnforcement};
 
     use super::*;
     use serde_json::json;
@@ -993,10 +993,7 @@ mod tests {
                         VariantConfig::ChatCompletion(ChatCompletionConfig {
                             weight,
                             model: "model-name".to_string(),
-                            system_template: None,
-                            user_template: None,
-                            assistant_template: None,
-                            json_mode: JsonEnforcement::Default,
+                            ..Default::default()
                         }),
                     )
                 })
