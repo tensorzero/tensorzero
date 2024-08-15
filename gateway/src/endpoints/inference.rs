@@ -331,23 +331,18 @@ fn prepare_event(
     metadata: &InferenceMetadata,
     chunk: ModelInferenceResponseChunk,
 ) -> Result<Event, Error> {
-    let chunk_json = match function {
-        FunctionConfig::Chat(_) => {
-            let result_chunk = InferenceResultChunk::Chat(chunk.into());
-            let response_chunk = InferenceResponseChunk::new(
-                result_chunk,
-                metadata.episode_id,
-                metadata.variant_name.clone(),
-            );
-            serde_json::to_value(response_chunk).map_err(|e| Error::Inference {
-                message: format!("Failed to convert chunk to JSON: {}", e),
-            })?
-        }
-        FunctionConfig::Json(_) => {
-            unimplemented!()
-        }
+    let result_chunk = match function {
+        FunctionConfig::Chat(_) => InferenceResultChunk::Chat(chunk.into()),
+        FunctionConfig::Json(_) => InferenceResultChunk::Json(chunk.into()),
     };
-
+    let response_chunk = InferenceResponseChunk::new(
+        result_chunk,
+        metadata.episode_id,
+        metadata.variant_name.clone(),
+    );
+    let chunk_json = serde_json::to_value(response_chunk).map_err(|e| Error::Inference {
+        message: format!("Failed to convert chunk to JSON: {}", e),
+    })?;
     Event::default()
         .json_data(chunk_json)
         .map_err(|e| Error::Inference {
@@ -452,6 +447,7 @@ impl InferenceResponse {
 #[serde(untagged)]
 enum InferenceResponseChunk {
     Chat(ChatInferenceResponseChunk),
+    Json(JsonInferenceResponseChunk),
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -460,6 +456,15 @@ struct ChatInferenceResponseChunk {
     episode_id: Uuid,
     variant_name: String,
     content: Vec<ContentBlockChunk>,
+    usage: Option<Usage>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct JsonInferenceResponseChunk {
+    inference_id: Uuid,
+    episode_id: Uuid,
+    variant_name: String,
+    raw: String,
     usage: Option<Usage>,
 }
 
@@ -475,6 +480,15 @@ impl InferenceResponseChunk {
                     usage: result.usage,
                 })
             }
+            InferenceResultChunk::Json(result) => {
+                InferenceResponseChunk::Json(JsonInferenceResponseChunk {
+                    inference_id: result.inference_id,
+                    episode_id,
+                    variant_name,
+                    raw: result.raw,
+                    usage: result.usage,
+                })
+            }
         }
     }
 }
@@ -483,15 +497,17 @@ impl InferenceResponseChunk {
 mod tests {
     use super::*;
 
+    use serde_json::json;
     use std::{collections::HashMap, time::Duration};
     use uuid::Uuid;
 
-    use crate::function::FunctionConfigChat;
+    use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::types::{ContentBlockChunk, ModelInferenceResponseChunk, TextChunk};
+    use crate::jsonschema_util::JSONSchemaFromPath;
 
     #[tokio::test]
     async fn test_prepare_event() {
-        // Test case 1: Valid ModelInferenceResponseChunk
+        // Test case 1: Valid Chat ModelInferenceResponseChunk
         let chunk = ModelInferenceResponseChunk {
             inference_id: Uuid::now_v7(),
             content: vec![ContentBlockChunk::Text(TextChunk {
@@ -528,5 +544,40 @@ mod tests {
         // TODO (#86): You could get the values of the private members using unsafe Rust.
         // For now, we won't and will rely on integration testing here.
         // This test doesn't do much so consider deleting or doing more.
+
+        // Test case 2: Valid JSON ModelInferenceResponseChunk
+        let chunk = ModelInferenceResponseChunk {
+            inference_id: Uuid::now_v7(),
+            content: vec![ContentBlockChunk::Text(TextChunk {
+                text: "Test content".to_string(),
+                id: "0".to_string(),
+            })],
+            created: 0,
+            usage: None,
+            raw_response: "".to_string(),
+            latency: Duration::from_millis(100),
+        };
+        let output_schema = json!({});
+        let function = FunctionConfig::Json(FunctionConfigJson {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            output_schema: JSONSchemaFromPath::from_value(&output_schema),
+        });
+        let inference_metadata = InferenceMetadata {
+            function_name: "test_function".to_string(),
+            variant_name: "test_variant".to_string(),
+            episode_id: Uuid::now_v7(),
+            input: Input {
+                messages: vec![],
+                system: None,
+            },
+            dryrun: false,
+            start_time: Instant::now(),
+        };
+
+        let result = prepare_event(&function, &inference_metadata, chunk);
+        assert!(result.is_ok());
     }
 }

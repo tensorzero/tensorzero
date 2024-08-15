@@ -224,7 +224,6 @@ pub struct TextChunk {
     pub text: String,
 }
 
-// This determines what gets serialized in streaming Chat functions
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ChatInferenceResultChunk {
     pub inference_id: Uuid,
@@ -234,9 +233,18 @@ pub struct ChatInferenceResultChunk {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct JsonInferenceResultChunk {
+    pub inference_id: Uuid,
+    pub raw: String,
+    pub created: u64,
+    pub usage: Option<Usage>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "type")]
 pub enum InferenceResultChunk {
     Chat(ChatInferenceResultChunk),
+    Json(JsonInferenceResultChunk),
 }
 
 /// Alongside the response, we also store information about what happened during the request.
@@ -552,6 +560,32 @@ impl From<ModelInferenceResponseChunk> for ChatInferenceResultChunk {
         Self {
             inference_id: chunk.inference_id,
             content: chunk.content,
+            created: chunk.created,
+            usage: chunk.usage,
+        }
+    }
+}
+
+/// We use best-effort to reconstruct the raw response for JSON functions
+/// They might either return a ToolCallChunk or a TextChunk
+/// We take the string from either of these (in reverse order if there are multiple blocks)
+/// and use that as the raw response.
+impl From<ModelInferenceResponseChunk> for JsonInferenceResultChunk {
+    fn from(chunk: ModelInferenceResponseChunk) -> Self {
+        let mut raw = String::new();
+        for content in chunk.content.into_iter().rev() {
+            match content {
+                ContentBlockChunk::Text(text) => {
+                    raw.push_str(&text.text);
+                }
+                ContentBlockChunk::ToolCall(tool_call) => {
+                    raw.push_str(&tool_call.arguments);
+                }
+            }
+        }
+        Self {
+            inference_id: chunk.inference_id,
+            raw,
             created: chunk.created,
             usage: chunk.usage,
         }
