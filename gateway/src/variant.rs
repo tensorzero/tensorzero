@@ -25,7 +25,7 @@ pub enum VariantConfig {
     ChatCompletion(ChatCompletionConfig),
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ChatCompletionConfig {
     pub weight: f64,
@@ -33,6 +33,9 @@ pub struct ChatCompletionConfig {
     pub system_template: Option<PathBuf>,
     pub user_template: Option<PathBuf>,
     pub assistant_template: Option<PathBuf>,
+    pub temperature: Option<f32>,
+    pub max_tokens: Option<u32>,
+    pub seed: Option<u32>,
     #[serde(default)]
     pub json_mode: JsonEnforcement, // Only for JSON functions, not for chat functions
 }
@@ -328,6 +331,9 @@ mod tests {
             user_template: None,
             assistant_template: None,
             json_mode: JsonEnforcement::Default,
+            temperature: None,
+            max_tokens: None,
+            seed: None,
         };
 
         // Test case 1: Regular user message
@@ -390,6 +396,7 @@ mod tests {
             user_template: Some(user_template_name.into()),
             assistant_template: Some(assistant_template_name.into()),
             json_mode: JsonEnforcement::Default,
+            ..Default::default()
         };
 
         // Test case 4: Assistant message with template
@@ -470,10 +477,7 @@ mod tests {
         let chat_completion_config = ChatCompletionConfig {
             model: "dummy".to_string(),
             weight: 1.0,
-            system_template: None,
-            user_template: None,
-            assistant_template: None,
-            json_mode: JsonEnforcement::Default,
+            ..Default::default()
         };
         let input_message = Value::String("You are a helpful assistant.".to_string());
         let result = chat_completion_config.prepare_system_message(&templates, &input_message);
@@ -488,9 +492,7 @@ mod tests {
             model: "dummy".to_string(),
             weight: 1.0,
             system_template: Some(system_template_name.into()),
-            user_template: None,
-            assistant_template: None,
-            json_mode: JsonEnforcement::Default,
+            ..Default::default()
         };
 
         let input_message = serde_json::json!({"assistant_name": "ChatGPT"});
@@ -514,8 +516,7 @@ mod tests {
             weight: 1.0,
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
-            assistant_template: None,
-            json_mode: JsonEnforcement::Default,
+            ..Default::default()
         };
         let function_config = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
@@ -604,8 +605,7 @@ mod tests {
             weight: 1.0,
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
-            assistant_template: None,
-            json_mode: JsonEnforcement::Default,
+            ..Default::default()
         };
         let models = HashMap::from([("error".to_string(), error_model_config.clone())]);
         let result = chat_completion_config
@@ -627,8 +627,7 @@ mod tests {
             weight: 1.0,
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
-            assistant_template: None,
-            json_mode: JsonEnforcement::Default,
+            ..Default::default()
         };
         let models = HashMap::from([("good".to_string(), text_model_config.clone())]);
         let result = chat_completion_config
@@ -662,10 +661,7 @@ mod tests {
         let chat_completion_config = ChatCompletionConfig {
             model: "tool".to_string(),
             weight: 1.0,
-            system_template: None,
-            user_template: None,
-            assistant_template: None,
-            json_mode: JsonEnforcement::Default,
+            ..Default::default()
         };
         let input = Input {
             system: None,
@@ -780,8 +776,7 @@ mod tests {
             weight: 1.0,
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
-            assistant_template: None,
-            json_mode: JsonEnforcement::Default,
+            ..Default::default()
         };
         let result = chat_completion_config
             .infer(
@@ -856,6 +851,7 @@ mod tests {
             user_template: Some(user_template_name.into()),
             assistant_template: None,
             json_mode: JsonEnforcement::Default,
+            temperature: None,
         };
         let models = HashMap::from([("error".to_string(), error_model_config.clone())]);
         let result = chat_completion_config
@@ -879,6 +875,7 @@ mod tests {
             user_template: Some(user_template_name.into()),
             assistant_template: None,
             json_mode: JsonEnforcement::Default,
+            temperature: None,
         };
         let models = HashMap::from([("good".to_string(), text_model_config.clone())]);
         let (first_chunk, mut stream) = chat_completion_config
