@@ -107,7 +107,7 @@ fn test_infer_stream() {
     });
 }
 
-// TODO (#81): add tests for streaming and tool calls
+// TODO (#81): add tests for tool calls and JSON mode
 // #[tokio::test]
 // async fn test_infer_with_tool_calls() {
 // }
