@@ -23,14 +23,14 @@ routing = ["openai"]
 type = "openai"
 model_name = "gpt-4o-mini-2024-07-18"
 
-[models."gpt-35-turbo"]
+[models."gpt-4o-mini-azure"]
 routing = ["azure"]
 
-[models."gpt-35-turbo".providers.azure]
+[models."gpt-4o-mini-azure".providers.azure]
 type = "azure"
-model_name = "gpt-35-turbo"
-api_base = "https://t0-azure-oai.openai.azure.com"
-deployment_id = "gpt-35-turbo"
+model_name = "gpt-4o-mini"
+api_base = "https://t0-azure-openai-east.openai.azure.com"
+deployment_id = "gpt4o-mini-20240718"
 
 [models.claude-3-haiku-20240307]
 routing = ["anthropic", "aws-bedrock"]
@@ -81,6 +81,15 @@ routing = ["gcp_vertex_gemini"]
 [models."gemini-1.5-flash-001".providers.gcp_vertex_gemini]
 type = "gcp_vertex_gemini"
 model_id = "gemini-1.5-flash-001"
+location = "us-central1"
+project_id = "tensorzero-public"
+
+[models."gemini-1.5-pro-001"]
+routing = ["gcp_vertex_gemini"]
+
+[models."gemini-1.5-pro-001".providers.gcp_vertex_gemini]
+type = "gcp_vertex_gemini"
+model_id = "gemini-1.5-pro-001"
 location = "us-central1"
 project_id = "tensorzero-public"
 
@@ -200,7 +209,7 @@ system_template = "config/functions/basic_test/prompt/system_template.minijinja"
 [functions.basic_test.variants.azure]
 type = "chat_completion"
 weight = 0
-model = "gpt-35-turbo"
+model = "gpt-4o-mini-azure"
 system_template = "config/functions/basic_test/prompt/system_template.minijinja"
 
 [functions.basic_test.variants.fireworks]
@@ -257,6 +266,51 @@ output_schema = "config/functions/basic_test/output_schema.json"
 type = "chat_completion"
 weight = 1
 model = "json"
+system_template = "config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.json_succeed.variants.azure]
+type = "chat_completion"
+weight = 0
+model = "gpt-4o-mini-azure"
+system_template = "config/functions/basic_test/prompt/system_template.minijinja"
+json_mode = "default"
+
+[functions.json_succeed.variants.fireworks]
+type = "chat_completion"
+weight = 0
+model = "llama3.1-8b-instruct-fireworks"
+system_template = "config/functions/basic_test/prompt/system_template.minijinja"
+# json_mode = "default" by default
+
+[functions.json_succeed.variants.gcp-vertex-gemini-flash]
+type = "chat_completion"
+weight = 0
+model = "gemini-1.5-flash-001"
+system_template = "config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.json_succeed.variants.gcp-vertex-gemini-pro]
+type = "chat_completion"
+weight = 0
+model = "gemini-1.5-pro-001"
+system_template = "config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.json_succeed.variants.openai]
+type = "chat_completion"
+weight = 0
+model = "gpt-4o-mini-2024-07-18"
+system_template = "config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.json_succeed.variants.openai_strict]
+type = "chat_completion"
+weight = 0
+model = "gpt-4o-mini-2024-07-18"
+system_template = "config/functions/basic_test/prompt/system_template.minijinja"
+json_mode = "strict"
+
+[functions.json_succeed.variants.together]
+type = "chat_completion"
+weight = 0
+model = "llama3.1-8b-instruct-together"
 system_template = "config/functions/basic_test/prompt/system_template.minijinja"
 
 [functions.variant_failover]
@@ -338,7 +392,7 @@ system_template = "config/functions/weather_helper/prompt/system_template.miniji
 [functions.weather_helper.variants.azure]
 type = "chat_completion"
 weight = 0
-model = "gpt-35-turbo"
+model = "gpt-4o-mini-azure"
 system_template = "config/functions/weather_helper/prompt/system_template.minijinja"
 
 [functions.weather_helper.variants.fireworks]

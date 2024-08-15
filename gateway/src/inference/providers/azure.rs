@@ -7,13 +7,14 @@ use tokio::time::Instant;
 
 use crate::error::Error;
 use crate::inference::types::{
-    InferenceResponseStream, Latency, ModelInferenceRequest, ModelInferenceResponse,
+    InferenceResponseStream, JSONMode, Latency, ModelInferenceRequest, ModelInferenceResponse,
     ModelInferenceResponseChunk,
 };
 
 use super::openai::{
     handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseWithLatency, OpenAITool, OpenAIToolChoice,
+    OpenAIToolChoiceString,
 };
 use super::provider_trait::InferenceProvider;
 
@@ -127,7 +128,7 @@ fn map_openai_to_azure_error(e: Error) -> Error {
 }
 
 fn get_azure_chat_url(api_base: &str, deployment_id: &str) -> String {
-    let api_version = "2024-02-01";
+    let api_version = "2024-06-01";
     format!(
         "{api_base}/openai/deployments/{deployment_id}/chat/completions?api-version={api_version}"
     )
@@ -141,6 +142,32 @@ enum AzureResponseFormat {
     JsonObject,
     #[default]
     Text,
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum AzureToolChoice<'a> {
+    None,
+    Auto,
+    Specific { r#type: &'a str },
+}
+
+impl<'a> From<OpenAIToolChoice<'a>> for AzureToolChoice<'a> {
+    fn from(tool_choice: OpenAIToolChoice<'a>) -> Self {
+        match tool_choice {
+            OpenAIToolChoice::String(tool_choice) => {
+                match tool_choice {
+                    OpenAIToolChoiceString::None => AzureToolChoice::None,
+                    OpenAIToolChoiceString::Auto => AzureToolChoice::Auto,
+                    OpenAIToolChoiceString::Required => AzureToolChoice::Auto, // Azure doesn't support required
+                }
+            }
+
+            OpenAIToolChoice::Specific(tool_choice) => AzureToolChoice::Specific {
+                r#type: tool_choice.function.name,
+            },
+        }
+    }
 }
 
 /// This struct defines the supported parameters for the Azure OpenAI inference API
@@ -162,18 +189,17 @@ struct AzureRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenAITool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_choice: Option<OpenAIToolChoice<'a>>,
+    tool_choice: Option<AzureToolChoice<'a>>,
 }
 
 impl<'a> AzureRequest<'a> {
     pub fn new(model: &'a str, request: &'a ModelInferenceRequest) -> AzureRequest<'a> {
         // TODO (#99): Currently Azure seems to be getting mad about JSON mode, let's figure this out later
-        // let response_format = match request.json_mode {
-        // JSONMode::On | JSONMode::Strict => AzureResponseFormat::JsonObject,
-        // JSONMode::Off => AzureResponseFormat::Text,
-        // _ => AzureResponseFormat::Text,
-        // };
-        let response_format = AzureResponseFormat::Text;
+        let response_format = match request.json_mode {
+            JSONMode::On | JSONMode::Strict => AzureResponseFormat::JsonObject,
+            JSONMode::Off => AzureResponseFormat::Text,
+        };
+        // let response_format = AzureResponseFormat::Text;
         let messages = prepare_openai_messages(request);
         let (tools, tool_choice, _) = prepare_openai_tools(request);
         AzureRequest {
@@ -184,7 +210,7 @@ impl<'a> AzureRequest<'a> {
             stream: request.stream,
             response_format,
             tools,
-            tool_choice,
+            tool_choice: tool_choice.map(AzureToolChoice::from),
         }
     }
 }
@@ -194,9 +220,6 @@ mod tests {
     use super::*;
 
     use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
-    use crate::inference::providers::openai::{
-        OpenAIToolType, SpecificToolChoice, SpecificToolFunction,
-    };
     use crate::inference::types::{FunctionType, JSONMode, RequestMessage, Role};
 
     #[test]
@@ -236,12 +259,9 @@ mod tests {
         assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters.value);
         assert_eq!(
             azure_request.tool_choice,
-            Some(OpenAIToolChoice::Specific(SpecificToolChoice {
-                r#type: OpenAIToolType::Function,
-                function: SpecificToolFunction {
-                    name: &WEATHER_TOOL.name,
-                }
-            }))
+            Some(AzureToolChoice::Specific {
+                r#type: &WEATHER_TOOL.name,
+            })
         );
     }
 }

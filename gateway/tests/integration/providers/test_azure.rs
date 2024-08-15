@@ -20,7 +20,7 @@ async fn test_infer() {
     let deployment_id = env::var("AZURE_OPENAI_DEPLOYMENT_ID")
         .expect("Environment variable AZURE_OPENAI_DEPLOYMENT_ID must be set");
     let api_key = SecretString::new(api_key);
-    let model_name = "gpt-35-turbo";
+    let model_name = "gpt-4o-mini";
     let client = reqwest::Client::new();
     let inference_request = create_simple_inference_request();
     let provider = ProviderConfig::Azure(AzureProvider {
@@ -89,7 +89,7 @@ async fn test_infer_stream() {
     let deployment_id = env::var("AZURE_OPENAI_DEPLOYMENT_ID")
         .expect("Environment variable AZURE_OPENAI_DEPLOYMENT_ID must be set");
     let api_key = SecretString::new(api_key);
-    let model_name = "gpt-35-turbo";
+    let model_name = "gpt-4o-mini";
     let client = reqwest::Client::new();
     let inference_request = create_streaming_inference_request();
 
@@ -125,7 +125,7 @@ async fn test_json_request() {
     let deployment_id = env::var("AZURE_OPENAI_DEPLOYMENT_ID")
         .expect("Environment variable AZURE_OPENAI_DEPLOYMENT_ID must be set");
     let api_key = SecretString::new(api_key);
-    let model_name = "gpt-35-turbo";
+    let model_name = "gpt-4o-mini";
     let client = reqwest::Client::new();
     let inference_request = create_json_inference_request();
 
