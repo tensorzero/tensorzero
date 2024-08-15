@@ -1,11 +1,13 @@
-use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use crate::error::Error;
-use crate::inference::types::{Input, InputMessageContent, Role};
+use crate::error::{Error, ResultExt};
+use crate::inference::types::{
+    ChatInferenceResponse, ContentBlock, InferenceResponse, Input, InputMessageContent,
+    JsonInferenceResponse, ModelInferenceResponse, Role, Usage,
+};
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::tool::{ToolCallConfig, ToolChoice, ToolConfig};
 use crate::variant::VariantConfig;
@@ -27,16 +29,6 @@ pub struct FunctionConfigChat {
     pub parallel_tool_calls: bool,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum JsonEnforcement {
-    #[default]
-    Default,
-    Strict,
-    ImplicitTool,
-    Off,
-}
-
 #[derive(Debug)]
 pub struct FunctionConfigJson {
     pub variants: HashMap<String, VariantConfig>, // variant name => variant config
@@ -44,7 +36,6 @@ pub struct FunctionConfigJson {
     pub user_schema: Option<JSONSchemaFromPath>,
     pub assistant_schema: Option<JSONSchemaFromPath>,
     pub output_schema: JSONSchemaFromPath, // schema is mandatory for JSON functions
-    pub json_mode: JsonEnforcement,
 }
 
 impl FunctionConfig {
@@ -120,6 +111,69 @@ impl FunctionConfig {
                 //     });
                 // }
                 Ok(None)
+            }
+        }
+    }
+
+    pub fn prepare_response(
+        &self,
+        inference_id: Uuid,
+        content_blocks: Vec<ContentBlock>,
+        usage: Usage,
+        model_inference_responses: Vec<ModelInferenceResponse>,
+        tool_config: Option<&ToolCallConfig>,
+    ) -> Result<InferenceResponse, Error> {
+        match self {
+            FunctionConfig::Chat(..) => Ok(InferenceResponse::Chat(ChatInferenceResponse::new(
+                inference_id,
+                content_blocks,
+                usage,
+                model_inference_responses,
+                tool_config,
+            ))),
+            FunctionConfig::Json(params) => {
+                // Parse the content blocks into a JSON object
+                // We assume here that the last content block is the JSON object, regardless of the type
+                // (this is because we could have used an implicit tool call and there is no other reason for a tool call in a JSON function).
+                let raw = content_blocks
+                    .into_iter()
+                    .rev()
+                    .find_map(|content_block| match content_block {
+                        ContentBlock::Text(text) => Some(text.text),
+                        ContentBlock::ToolCall(tool_call) => Some(tool_call.arguments),
+                        _ => None,
+                    })
+                    .ok_or(Error::Inference {
+                        message: "No valid content blocks found in JSON function response"
+                            .to_string(),
+                    })?;
+                let parsed_output = serde_json::from_str::<Value>(&raw)
+                    .map_err(|e| Error::OutputParsing {
+                        message: format!(
+                            "Failed to parse output from JSON function response {}",
+                            e
+                        ),
+                        raw_output: raw.clone(),
+                    })
+                    .ok_or_log();
+
+                // If the parsed output fails validation, we log the error and set `parsed_output` to None
+                let parsed_output = parsed_output.and_then(|parsed_output| {
+                    match params.output_schema.validate(&parsed_output) {
+                        Ok(_) => Some(parsed_output),
+                        Err(e) => {
+                            e.log();
+                            None
+                        }
+                    }
+                });
+                Ok(InferenceResponse::Json(JsonInferenceResponse::new(
+                    inference_id,
+                    raw,
+                    parsed_output,
+                    usage,
+                    model_inference_responses,
+                )))
             }
         }
     }
@@ -286,8 +340,8 @@ fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use crate::inference::types::InputMessage;
     use crate::variant::ChatCompletionConfig;
+    use crate::{inference::types::InputMessage, variant::JsonEnforcement};
 
     use super::*;
     use serde_json::json;
@@ -632,7 +686,6 @@ mod tests {
             user_schema: None,
             assistant_schema: None,
             output_schema: JSONSchemaFromPath::from_value(&json!({})),
-            json_mode: JsonEnforcement::Default,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -689,7 +742,6 @@ mod tests {
             user_schema: None,
             assistant_schema: None,
             output_schema: JSONSchemaFromPath::from_value(&json!({})),
-            json_mode: JsonEnforcement::Default,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -748,7 +800,6 @@ mod tests {
             user_schema: Some(user_schema),
             assistant_schema: None,
             output_schema: JSONSchemaFromPath::from_value(&json!({})),
-            json_mode: JsonEnforcement::Default,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -806,7 +857,6 @@ mod tests {
             user_schema: None,
             assistant_schema: Some(assistant_schema),
             output_schema: JSONSchemaFromPath::from_value(&json!({})),
-            json_mode: JsonEnforcement::Default,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -865,7 +915,6 @@ mod tests {
             user_schema: Some(user_schema),
             assistant_schema: Some(assistant_schema),
             output_schema: JSONSchemaFromPath::from_value(&json!({})),
-            json_mode: JsonEnforcement::Default,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -932,6 +981,7 @@ mod tests {
                             system_template: None,
                             user_template: None,
                             assistant_template: None,
+                            json_mode: JsonEnforcement::Default,
                         }),
                     )
                 })

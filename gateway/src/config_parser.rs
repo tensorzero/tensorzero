@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use crate::error::Error;
-use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson, JsonEnforcement};
+use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::initialize_templates;
 use crate::model::ModelConfig;
@@ -446,8 +446,6 @@ struct UninitializedFunctionConfigJson {
     user_schema: Option<PathBuf>,
     assistant_schema: Option<PathBuf>,
     output_schema: PathBuf, // schema is mandatory for JSON functions
-    #[serde(default)]
-    json_mode: JsonEnforcement,
 }
 
 impl UninitializedFunctionConfig {
@@ -497,7 +495,6 @@ impl UninitializedFunctionConfig {
                     user_schema,
                     assistant_schema,
                     output_schema,
-                    json_mode: params.json_mode,
                 }))
             }
         }
@@ -524,6 +521,8 @@ impl UninitializedToolConfig {
 #[cfg(test)]
 mod tests {
 
+    use crate::variant::JsonEnforcement;
+
     use super::*;
 
     /// Ensure that the sample valid config can be parsed without panicking
@@ -538,7 +537,31 @@ mod tests {
         config
             .remove("metrics")
             .expect("Failed to remove `[metrics]` section");
-        Config::load_from_toml(config, &base_path).expect("Failed to load config");
+        let config = Config::load_from_toml(config, &base_path).expect("Failed to load config");
+
+        let prompt_a_json_mode = match config
+            .functions
+            .get("extract_data")
+            .unwrap()
+            .variants()
+            .get("openai_promptA")
+            .unwrap()
+        {
+            VariantConfig::ChatCompletion(chat_config) => &chat_config.json_mode,
+        };
+        assert_eq!(prompt_a_json_mode, &JsonEnforcement::ImplicitTool);
+
+        let prompt_b_json_mode = match config
+            .functions
+            .get("extract_data")
+            .unwrap()
+            .variants()
+            .get("openai_promptB")
+            .unwrap()
+        {
+            VariantConfig::ChatCompletion(chat_config) => &chat_config.json_mode,
+        };
+        assert_eq!(prompt_b_json_mode, &JsonEnforcement::Default);
     }
 
     /// Ensure that the config parsing correctly handles the `gateway.bind_address` field
@@ -732,25 +755,6 @@ mod tests {
         assert!(result.unwrap_err().to_string().contains(
             "Failed to parse config:\nmissing field `output_schema`\nin `functions.extract_data`\n"
         ));
-    }
-
-    /// Check that we can parse a JSON function with non-default JSON enforcement
-    #[test]
-    fn test_config_from_toml_table_json_function_non_default_json_enforcement() {
-        let mut config = get_sample_valid_config();
-        config["functions"]["extract_data"]
-            .as_table_mut()
-            .expect("Failed to get `functions.generate_draft` section")
-            .insert("json_mode".into(), "strict".into());
-        let base_path = PathBuf::new();
-        let config = Config::load_from_toml(config, &base_path).unwrap();
-        let function_config = config.functions.get("extract_data").unwrap();
-        match function_config {
-            FunctionConfig::Json(json_config) => {
-                assert_eq!(json_config.json_mode, JsonEnforcement::Strict);
-            }
-            _ => unreachable!("Expected a JSON function"),
-        }
     }
 
     /// Ensure that the config parsing fails when there are extra variables for variants
@@ -1007,6 +1011,7 @@ mod tests {
         weight = 0.9
         model = "gpt-3.5-turbo"
         system_template = "../config/functions/extract_data/promptA/system_template.minijinja"
+        json_mode = "implicit_tool"
 
         [functions.extract_data.variants.openai_promptB]
         type = "chat_completion"

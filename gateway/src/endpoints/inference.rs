@@ -353,42 +353,35 @@ async fn write_inference(
     response: InferenceResponse,
     metadata: InferenceWriteMetadata,
 ) {
-    match response {
-        InferenceResponse::Chat(response) => {
-            let serialized_input =
-                match serde_json::to_string(&input).map_err(|e| Error::Serialization {
-                    message: e.to_string(),
-                }) {
-                    Ok(serialized_input) => serialized_input,
-                    Err(_) => return,
-                };
-
-            // Write the model responses to the ModelInference table
-            let model_responses: Vec<serde_json::Value> =
-                response.get_serialized_model_inferences(&serialized_input);
-            for response in model_responses {
-                clickhouse_connection_info
-                    .write(&response, "ModelInference")
-                    .await
-                    .ok_or_log();
-            }
-
-            // Write the inference to the Inference table
-            let inference = Inference::new(
-                InferenceResponse::Chat(response),
-                serialized_input,
-                metadata.episode_id,
-                metadata.function_name,
-                metadata.variant_name,
-                metadata.dynamic_tool_config,
-                metadata.processing_time,
-            );
-            clickhouse_connection_info
-                .write(&inference, "Inference")
-                .await
-                .ok_or_log();
-        }
+    let serialized_input = match serde_json::to_string(&input).map_err(|e| Error::Serialization {
+        message: e.to_string(),
+    }) {
+        Ok(serialized_input) => serialized_input,
+        Err(_) => return,
+    };
+    let model_responses: Vec<serde_json::Value> =
+        response.get_serialized_model_inferences(&serialized_input);
+    // Write the model responses to the ModelInference table
+    for response in model_responses {
+        clickhouse_connection_info
+            .write(&response, "ModelInference")
+            .await
+            .ok_or_log();
     }
+    // Write the inference to the Inference table
+    let inference = Inference::new(
+        response,
+        serialized_input,
+        metadata.episode_id,
+        metadata.function_name,
+        metadata.variant_name,
+        metadata.dynamic_tool_config,
+        metadata.processing_time,
+    );
+    clickhouse_connection_info
+        .write(&inference, "Inference")
+        .await
+        .ok_or_log();
 }
 
 #[cfg(test)]

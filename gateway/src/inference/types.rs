@@ -10,9 +10,9 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::error::Error;
-use crate::function::{FunctionConfig, JsonEnforcement};
+use crate::function::FunctionConfig;
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolResult};
+use crate::{error::Error, variant::JsonEnforcement};
 
 /// Data flow in TensorZero
 ///
@@ -163,21 +163,37 @@ pub enum Latency {
 /// In the non-streaming case, this InferenceResponse is serialized into the TensorZero response format.
 /// See below for streaming case.
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InferenceResponse {
     Chat(ChatInferenceResponse),
+    Json(JsonInferenceResponse),
 }
 
-// Determines the return type of Inference API for Chat-type functions (which is all of them right now)
-/// See InferenceResponseWithOutputSchema below for details
-#[derive(Debug, Clone, Serialize)]
+// Determines the return type of Inference API for Chat-type functions
+#[derive(Clone, Debug, Serialize)]
 pub struct ChatInferenceResponse {
     inference_id: Uuid,
     created: u64,
     pub output: Vec<ContentBlockOutput>,
     pub usage: Usage,
     pub model_inference_responses: Vec<ModelInferenceResponse>,
+}
+
+// Determines the return type of Inference API for Json-type functions
+#[derive(Clone, Debug, Serialize)]
+pub struct JsonInferenceResponse {
+    inference_id: Uuid,
+    created: u64,
+    pub output: JsonInferenceOutput,
+    pub usage: Usage,
+    pub model_inference_responses: Vec<ModelInferenceResponse>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct JsonInferenceOutput {
+    pub raw: String,
+    pub parsed: Option<Value>,
 }
 
 /// In the streaming case we convert ModelInferenceResponseChunks into serialized InferenceResponseChunks to the client.
@@ -364,6 +380,46 @@ impl ModelInferenceResponse {
     }
 }
 
+impl InferenceResponse {
+    pub fn get_serialized_model_inferences(&self, input: &str) -> Vec<serde_json::Value> {
+        let model_inference_responses = match self {
+            InferenceResponse::Chat(chat_response) => &chat_response.model_inference_responses,
+            InferenceResponse::Json(json_response) => &json_response.model_inference_responses,
+        };
+        let inference_id = match self {
+            InferenceResponse::Chat(chat_response) => chat_response.inference_id,
+            InferenceResponse::Json(json_response) => json_response.inference_id,
+        };
+        model_inference_responses
+            .iter()
+            .map(|r| {
+                let model_inference =
+                    ModelInference::new(r.clone(), input.to_string(), inference_id);
+                serde_json::to_value(model_inference).unwrap_or_default()
+            })
+            .collect()
+    }
+}
+
+impl JsonInferenceResponse {
+    pub fn new(
+        inference_id: Uuid,
+        raw: String,
+        parsed: Option<Value>,
+        usage: Usage,
+        model_inference_responses: Vec<ModelInferenceResponse>,
+    ) -> Self {
+        let output = JsonInferenceOutput { raw, parsed };
+        Self {
+            inference_id,
+            created: current_timestamp(),
+            output,
+            usage,
+            model_inference_responses,
+        }
+    }
+}
+
 impl ChatInferenceResponse {
     pub fn new(
         inference_id: Uuid,
@@ -423,17 +479,6 @@ impl ChatInferenceResponse {
         }
         output
     }
-
-    pub fn get_serialized_model_inferences(&self, input: &str) -> Vec<serde_json::Value> {
-        self.model_inference_responses
-            .iter()
-            .map(|r| {
-                let model_inference =
-                    ModelInference::new(r.clone(), input.to_string(), self.inference_id);
-                serde_json::to_value(model_inference).unwrap_or_default()
-            })
-            .collect()
-    }
 }
 
 impl Inference {
@@ -456,6 +501,16 @@ impl Inference {
                 input,
                 dynamic_tool_config,
                 output: serde_json::to_string(&chat_response.output).unwrap_or_default(),
+                processing_time_ms,
+            },
+            InferenceResponse::Json(json_response) => Self {
+                id: json_response.inference_id,
+                function_name,
+                variant_name,
+                episode_id,
+                input,
+                dynamic_tool_config,
+                output: serde_json::to_string(&json_response.output).unwrap_or_default(),
                 processing_time_ms,
             },
         }
@@ -503,7 +558,7 @@ impl From<ModelInferenceResponseChunk> for ChatInferenceResponseChunk {
 
 pub fn collect_chunks(
     value: Vec<ModelInferenceResponseChunk>,
-    _function: &FunctionConfig,
+    function: &FunctionConfig,
     tool_config: Option<&ToolCallConfig>,
 ) -> Result<InferenceResponse, Error> {
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
@@ -599,13 +654,13 @@ pub fn collect_chunks(
         usage.clone(),
         latency.clone(),
     );
-    Ok(InferenceResponse::Chat(ChatInferenceResponse::new(
+    function.prepare_response(
         inference_id,
         content_blocks,
         usage,
         vec![model_response],
         tool_config,
-    )))
+    )
 }
 
 impl From<ToolCallChunk> for ToolCall {
@@ -933,7 +988,10 @@ mod tests {
             },
         ];
         let response = collect_chunks(chunks, &function, Some(tool_config)).unwrap();
-        let InferenceResponse::Chat(chat_response) = response;
+        let chat_response = match response {
+            InferenceResponse::Chat(chat_response) => chat_response,
+            _ => unreachable!("Expected Chat inference response"),
+        };
         assert_eq!(chat_response.inference_id, inference_id);
         assert_eq!(chat_response.created, created);
         assert_eq!(
