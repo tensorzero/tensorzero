@@ -8,7 +8,7 @@ Use a business-like tone and be concise.
 
 ## Recipient
 
-{{ recipient }}
+{{ recipient_name }}
 
 ## Email Purpose
 

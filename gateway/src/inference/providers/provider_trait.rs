@@ -1,5 +1,5 @@
 use crate::error::Error;
-use crate::inference::types::InferenceResponseStream;
+use crate::inference::types::InferenceResultStream;
 use crate::inference::types::ModelInferenceRequest;
 use crate::inference::types::ModelInferenceResponse;
 use crate::inference::types::ModelInferenceResponseChunk;
@@ -17,7 +17,7 @@ pub trait InferenceProvider {
         &'a self,
         request: &'a ModelInferenceRequest,
         client: &'a Client,
-    ) -> impl Future<Output = Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error>>
+    ) -> impl Future<Output = Result<(ModelInferenceResponseChunk, InferenceResultStream), Error>>
            + Send
            + 'a;
 }

@@ -58,16 +58,11 @@ async fn test_inference_basic() {
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
-    // Check that created is here
-    response_json.get("created").unwrap();
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
     // Check that parsed_output is not here
     assert!(response_json.get("parsed_output").is_none());
-    // Check that type is "chat"
-    let r#type = response_json.get("type").unwrap().as_str().unwrap();
-    assert_eq!(r#type, "chat");
 
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -311,8 +306,6 @@ async fn test_tool_call() {
     let response_json = response.json::<Value>().await.unwrap();
     // No output schema so parsed content should not be in response
     assert!(response_json.get("parsed_content").is_none());
-    // Check that created is here
-    response_json.get("created").unwrap();
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();

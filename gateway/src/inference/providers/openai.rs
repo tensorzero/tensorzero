@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, InferenceResponseStream, JSONMode, Latency,
+    ContentBlock, ContentBlockChunk, InferenceResultStream, JSONMode, Latency,
     ModelInferenceRequest, ModelInferenceResponse, ModelInferenceResponseChunk, RequestMessage,
     Role, Text, TextChunk, Usage,
 };
@@ -79,7 +79,7 @@ impl InferenceProvider for OpenAIProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-    ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
+    ) -> Result<(ModelInferenceResponseChunk, InferenceResultStream), Error> {
         let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
             provider_name: "OpenAI".to_string(),
         })?;
