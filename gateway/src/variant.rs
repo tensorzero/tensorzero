@@ -10,7 +10,7 @@ use crate::inference::types::{
     ChatInferenceResponse, ContentBlock, FunctionType, Input, InputMessageContent, JSONMode,
     ModelInferenceRequest, ModelInferenceResponseChunk, RequestMessage, Role,
 };
-use crate::minijinja_util::template_message;
+use crate::minijinja_util::TemplateConfig;
 use crate::tool::ToolCallConfig;
 use crate::{
     inference::types::{InferenceResponse, InferenceResponseStream, InputMessage},
@@ -29,7 +29,7 @@ pub enum VariantConfig {
 #[serde(deny_unknown_fields)]
 pub struct ChatCompletionConfig {
     pub weight: f64,
-    pub model: String, // TODO (#85): validate that this model exists in the model config
+    pub model: String,
     pub system_template: Option<PathBuf>,
     pub user_template: Option<PathBuf>,
     pub assistant_template: Option<PathBuf>,
@@ -42,6 +42,7 @@ pub trait Variant {
         models: &HashMap<String, ModelConfig>,
         function: &FunctionConfig,
         tool_config: Option<&ToolCallConfig>,
+        templates: &TemplateConfig,
         client: &Client,
     ) -> Result<InferenceResponse, Error>;
 
@@ -51,6 +52,7 @@ pub trait Variant {
         models: &HashMap<String, ModelConfig>,
         function: &FunctionConfig,
         tool_config: Option<&ToolCallConfig>,
+        templates: &TemplateConfig,
         client: &Client,
     ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error>;
 }
@@ -87,12 +89,13 @@ impl Variant for VariantConfig {
         models: &HashMap<String, ModelConfig>,
         function: &FunctionConfig,
         tool_config: Option<&ToolCallConfig>,
+        templates: &TemplateConfig<'_>,
         client: &Client,
     ) -> Result<InferenceResponse, Error> {
         match self {
             VariantConfig::ChatCompletion(params) => {
                 params
-                    .infer(input, models, function, tool_config, client)
+                    .infer(input, models, function, tool_config, templates, client)
                     .await
             }
         }
@@ -104,12 +107,13 @@ impl Variant for VariantConfig {
         models: &HashMap<String, ModelConfig>,
         function: &FunctionConfig,
         tool_config: Option<&ToolCallConfig>,
+        templates: &TemplateConfig<'_>,
         client: &Client,
     ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
         match self {
             VariantConfig::ChatCompletion(params) => {
                 params
-                    .infer_stream(input, models, function, tool_config, client)
+                    .infer_stream(input, models, function, tool_config, templates, client)
                     .await
             }
         }
@@ -117,7 +121,11 @@ impl Variant for VariantConfig {
 }
 
 impl ChatCompletionConfig {
-    fn prepare_request_message(&self, message: &InputMessage) -> Result<RequestMessage, Error> {
+    fn prepare_request_message(
+        &self,
+        templates: &TemplateConfig,
+        message: &InputMessage,
+    ) -> Result<RequestMessage, Error> {
         let template_path = match message.role {
             Role::User => self.user_template.as_ref(),
             Role::Assistant => self.assistant_template.as_ref(),
@@ -127,7 +135,7 @@ impl ChatCompletionConfig {
             match block {
                 InputMessageContent::Text { value: text } => {
                     let text_content= match template_path {
-                        Some(template_path) => template_message(
+                        Some(template_path) => templates.template_message(
                             template_path.to_str().ok_or(Error::InvalidTemplatePath)?,
                             text,
                         )?,
@@ -151,9 +159,13 @@ impl ChatCompletionConfig {
         })
     }
 
-    fn prepare_system_message(&self, system: &Value) -> Result<String, Error> {
+    fn prepare_system_message(
+        &self,
+        templates: &TemplateConfig,
+        system: &Value,
+    ) -> Result<String, Error> {
         Ok(match &self.system_template {
-            Some(template_path) => template_message(
+            Some(template_path) => templates.template_message(
                 template_path.to_str().ok_or(Error::InvalidTemplatePath)?,
                 system,
             )?,
@@ -176,17 +188,18 @@ impl Variant for ChatCompletionConfig {
         models: &HashMap<String, ModelConfig>,
         function: &FunctionConfig,
         tool_config: Option<&ToolCallConfig>,
+        templates: &TemplateConfig<'_>,
         client: &Client,
     ) -> Result<InferenceResponse, Error> {
         let messages = input
             .messages
             .iter()
-            .map(|message| self.prepare_request_message(message))
+            .map(|message| self.prepare_request_message(templates, message))
             .collect::<Result<Vec<_>, _>>()?;
         let system = input
             .system
             .as_ref()
-            .map(|system| self.prepare_system_message(system))
+            .map(|system| self.prepare_system_message(templates, system))
             .transpose()?;
         let request = match function {
             FunctionConfig::Chat(_) => ModelInferenceRequest {
@@ -237,17 +250,18 @@ impl Variant for ChatCompletionConfig {
         models: &HashMap<String, ModelConfig>,
         function: &FunctionConfig,
         tool_config: Option<&ToolCallConfig>,
+        templates: &TemplateConfig<'_>,
         client: &Client,
     ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
         let messages = input
             .messages
             .iter()
-            .map(|message| self.prepare_request_message(message))
+            .map(|message| self.prepare_request_message(templates, message))
             .collect::<Result<Vec<_>, _>>()?;
         let system = input
             .system
             .as_ref()
-            .map(|system| self.prepare_system_message(system))
+            .map(|system| self.prepare_system_message(templates, system))
             .transpose()?;
         let request = match function {
             FunctionConfig::Chat(_) => ModelInferenceRequest {
@@ -295,7 +309,7 @@ mod tests {
     use crate::inference::providers::common::WEATHER_TOOL_CONFIG;
     use crate::inference::providers::dummy::DummyProvider;
     use crate::inference::types::{ContentBlockOutput, Usage};
-    use crate::minijinja_util::tests::idempotent_initialize_test_templates;
+    use crate::minijinja_util::tests::get_test_template_config;
     use crate::model::ProviderConfig;
     use crate::tool::ToolChoice;
     use crate::{
@@ -308,6 +322,7 @@ mod tests {
 
     #[test]
     fn test_prepare_request_message() {
+        let templates = get_test_template_config();
         // Part 1: test without templates
         let chat_completion_config = ChatCompletionConfig {
             model: "dummy".to_string(),
@@ -322,7 +337,7 @@ mod tests {
             role: Role::User,
             content: vec!["Hello, how are you?".to_string().into()],
         };
-        let result = chat_completion_config.prepare_request_message(&input_message);
+        let result = chat_completion_config.prepare_request_message(&templates, &input_message);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
         match prepared_message {
@@ -340,7 +355,7 @@ mod tests {
             role: Role::Assistant,
             content: vec!["I'm doing well, thank you!".to_string().into()],
         };
-        let result = chat_completion_config.prepare_request_message(&input_message);
+        let result = chat_completion_config.prepare_request_message(&templates, &input_message);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
         match prepared_message {
@@ -361,12 +376,11 @@ mod tests {
             content: vec![json!({"invalid": "json"}).into()],
         };
         let result = chat_completion_config
-            .prepare_request_message(&input_message)
+            .prepare_request_message(&templates, &input_message)
             .unwrap_err();
         assert_eq!(result, Error::InvalidMessage { message: "Request message content {\"invalid\":\"json\"} is not a string but there is no variant template for Role user".to_string()});
 
         // Part 2: test with templates
-        idempotent_initialize_test_templates();
         let system_template_name = "system";
         let user_template_name = "greeting_with_age";
         let assistant_template_name = "assistant";
@@ -384,7 +398,7 @@ mod tests {
             role: Role::Assistant,
             content: vec![json!({"reason": "it's against my ethical guidelines"}).into()],
         };
-        let result = chat_completion_config.prepare_request_message(&input_message);
+        let result = chat_completion_config.prepare_request_message(&templates, &input_message);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
         match prepared_message {
@@ -405,7 +419,7 @@ mod tests {
             role: Role::User,
             content: vec![json!({"name": "John", "age": 30}).into()],
         };
-        let result = chat_completion_config.prepare_request_message(&input_message);
+        let result = chat_completion_config.prepare_request_message(&templates, &input_message);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
         match prepared_message {
@@ -426,7 +440,7 @@ mod tests {
             role: Role::User,
             content: vec![json!({"name": "Alice"}).into()], // Missing "age" field
         };
-        let result = chat_completion_config.prepare_request_message(&input_message);
+        let result = chat_completion_config.prepare_request_message(&templates, &input_message);
         assert!(result.is_err());
         match result {
             Err(Error::MiniJinjaTemplateRender { message, .. }) => {
@@ -439,7 +453,7 @@ mod tests {
             role: Role::User,
             content: vec!["This is a plain string".to_string().into()],
         };
-        let result = chat_completion_config.prepare_request_message(&input_message);
+        let result = chat_completion_config.prepare_request_message(&templates, &input_message);
         assert!(result.is_err());
         match result {
             Err(Error::MiniJinjaTemplateRender { message, .. }) => {
@@ -451,6 +465,8 @@ mod tests {
 
     #[test]
     fn test_prepare_system_message() {
+        let templates = get_test_template_config();
+
         // Test without templates
         let chat_completion_config = ChatCompletionConfig {
             model: "dummy".to_string(),
@@ -460,13 +476,12 @@ mod tests {
             assistant_template: None,
         };
         let input_message = Value::String("You are a helpful assistant.".to_string());
-        let result = chat_completion_config.prepare_system_message(&input_message);
+        let result = chat_completion_config.prepare_system_message(&templates, &input_message);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
         assert_eq!(prepared_message, "You are a helpful assistant.".to_string());
 
         // Test with templates
-        idempotent_initialize_test_templates();
         let system_template_name = "system";
 
         let chat_completion_config = ChatCompletionConfig {
@@ -478,7 +493,7 @@ mod tests {
         };
 
         let input_message = serde_json::json!({"assistant_name": "ChatGPT"});
-        let result = chat_completion_config.prepare_system_message(&input_message);
+        let result = chat_completion_config.prepare_system_message(&templates, &input_message);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
         assert_eq!(
@@ -490,7 +505,7 @@ mod tests {
     #[tokio::test]
     async fn test_infer_chat_completion() {
         let client = Client::new();
-        idempotent_initialize_test_templates();
+        let templates = get_test_template_config();
         let system_template_name = "system";
         let user_template_name = "greeting_with_age";
         let chat_completion_config = ChatCompletionConfig {
@@ -548,7 +563,14 @@ mod tests {
             messages,
         };
         let result = chat_completion_config
-            .infer(&input, &HashMap::new(), &function_config, None, &client)
+            .infer(
+                &input,
+                &HashMap::new(),
+                &function_config,
+                None,
+                &templates,
+                &client,
+            )
             .await
             .unwrap_err();
         match result {
@@ -570,7 +592,7 @@ mod tests {
         };
         let models = HashMap::from([("invalid_model".to_string(), text_model_config.clone())]);
         let result = chat_completion_config
-            .infer(&input, &models, &function_config, None, &client)
+            .infer(&input, &models, &function_config, None, &templates, &client)
             .await
             .unwrap_err();
         assert!(matches!(result, Error::UnknownModel { .. }), "{}", result);
@@ -585,7 +607,7 @@ mod tests {
         };
         let models = HashMap::from([("error".to_string(), error_model_config.clone())]);
         let result = chat_completion_config
-            .infer(&input, &models, &function_config, None, &client)
+            .infer(&input, &models, &function_config, None, &templates, &client)
             .await
             .unwrap_err();
         assert_eq!(
@@ -607,7 +629,7 @@ mod tests {
         };
         let models = HashMap::from([("good".to_string(), text_model_config.clone())]);
         let result = chat_completion_config
-            .infer(&input, &models, &function_config, None, &client)
+            .infer(&input, &models, &function_config, None, &templates, &client)
             .await
             .unwrap();
         assert!(matches!(result, InferenceResponse::Chat(_)));
@@ -654,6 +676,7 @@ mod tests {
                 &models,
                 &function_config,
                 Some(&WEATHER_TOOL_CONFIG),
+                &templates,
                 &client,
             )
             .await
@@ -753,7 +776,7 @@ mod tests {
     #[tokio::test]
     async fn test_infer_chat_completion_stream() {
         let client = Client::new();
-        idempotent_initialize_test_templates();
+        let templates = get_test_template_config();
         let function_config = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
             system_schema: None,
@@ -797,7 +820,7 @@ mod tests {
         };
         let models = HashMap::from([("error".to_string(), error_model_config.clone())]);
         let result = chat_completion_config
-            .infer_stream(&input, &models, &function_config, None, &client)
+            .infer_stream(&input, &models, &function_config, None, &templates, &client)
             .await;
         match result {
             Err(Error::ModelProvidersExhausted {
@@ -819,7 +842,7 @@ mod tests {
         };
         let models = HashMap::from([("good".to_string(), text_model_config.clone())]);
         let (first_chunk, mut stream) = chat_completion_config
-            .infer_stream(&input, &models, &function_config, None, &client)
+            .infer_stream(&input, &models, &function_config, None, &templates, &client)
             .await
             .unwrap();
         assert_eq!(
