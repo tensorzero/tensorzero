@@ -637,7 +637,6 @@ async fn test_json_request() {
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
     let output = response_json.get("output").unwrap().as_object().unwrap();
-    println!("{:?}", output);
     let parsed = output.get("parsed").unwrap().as_object().unwrap();
     parsed.get("answer").unwrap().as_str().unwrap();
     output.get("raw").unwrap().as_str().unwrap();
@@ -757,7 +756,6 @@ async fn test_strict_json_request() {
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
     let output = response_json.get("output").unwrap().as_object().unwrap();
-    println!("{:?}", output);
     let parsed = output.get("parsed").unwrap().as_object().unwrap();
     parsed.get("answer").unwrap().as_str().unwrap();
     output.get("raw").unwrap().as_str().unwrap();
