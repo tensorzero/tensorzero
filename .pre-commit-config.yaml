@@ -13,6 +13,7 @@ repos:
       - id: check-yaml
       - id: detect-private-key
       - id: end-of-file-fixer
+        exclude: \.minijinja$
       - id: trailing-whitespace
 
   - repo: local
