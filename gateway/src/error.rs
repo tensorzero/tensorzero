@@ -406,7 +406,7 @@ impl std::fmt::Display for Error {
                 )?;
                 write!(
                     f,
-                    "Data: {}",
+                    "\nData: {}",
                     serde_json::to_string(data).map_err(|_| std::fmt::Error)?
                 )?;
                 write!(
