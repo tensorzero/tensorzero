@@ -71,6 +71,12 @@ pub fn create_json_inference_request<'a>() -> ModelInferenceRequest<'a> {
     }
 }
 
+pub fn create_streaming_json_inference_request<'a>() -> ModelInferenceRequest<'a> {
+    let mut request = create_json_inference_request();
+    request.stream = true;
+    request
+}
+
 lazy_static! {
     static ref WEATHER_TOOL: ToolConfig = ToolConfig {
         name: "get_weather".to_string(),

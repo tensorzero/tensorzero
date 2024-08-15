@@ -265,4 +265,6 @@ mod tests {
             }))
         );
     }
+
+    // TODO (viraj): write a test for JSON mode conversions
 }
