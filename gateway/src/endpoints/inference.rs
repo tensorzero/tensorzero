@@ -5,7 +5,7 @@ use axum::response::{IntoResponse, Response};
 use axum::{debug_handler, Json};
 use futures::stream::Stream;
 use metrics::counter;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tokio::time::Instant;
 use tokio_stream::StreamExt;
@@ -18,8 +18,8 @@ use crate::function::sample_variant;
 use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
-    collect_chunks, Inference, InferenceResponse, InferenceResponseChunk, InferenceResponseStream,
-    Input, ModelInferenceResponseChunk,
+    collect_chunks, ContentBlockChunk, ContentBlockOutput, Inference, InferenceResult,
+    InferenceResultChunk, Input, ModelInferenceResponseChunk, ModelInferenceResponseStream, Usage,
 };
 use crate::tool::{DynamicToolConfig, ToolCallConfig};
 use crate::uuid_util::validate_episode_id;
@@ -154,7 +154,7 @@ pub async fn inference_handler(
         let (variant_name, variant) =
             sample_variant(&mut variants, &params.function_name, &episode_id)?;
         if stream {
-            let response = variant
+            let result = variant
                 .infer_stream(
                     &params.input,
                     &config.models,
@@ -166,7 +166,7 @@ pub async fn inference_handler(
                 .await;
 
             // Make sure the response worked (incl. first chunk) prior to launching the thread and starting to return chunks
-            let (chunk, stream) = match response {
+            let (chunk, stream) = match result {
                 Ok((chunk, stream)) => (chunk, stream),
                 Err(e) => {
                     variant_errors.push(e);
@@ -198,7 +198,7 @@ pub async fn inference_handler(
                 .keep_alive(axum::response::sse::KeepAlive::new())
                 .into_response());
         } else {
-            let response = variant
+            let result = variant
                 .infer(
                     &params.input,
                     &config.models,
@@ -208,40 +208,49 @@ pub async fn inference_handler(
                     &http_client,
                 )
                 .await;
-            let response = match response {
-                Ok(response) => response,
+
+            let result = match result {
+                Ok(result) => result,
                 Err(e) => {
                     variant_errors.push(e);
                     continue;
                 }
             };
-            let response_to_write = response.clone();
 
             if !dryrun {
                 // Spawn a thread for a trailing write to ClickHouse so that it doesn't block the response
                 let write_metadata = InferenceWriteMetadata {
                     function_name: params.function_name,
-                    variant_name,
+                    variant_name: variant_name.clone(),
                     episode_id,
                     dynamic_tool_config: dynamic_tool_config_string,
                     processing_time: start_time.elapsed(),
                 };
+
+                let result_to_write = result.clone();
+
                 tokio::spawn(async move {
                     write_inference(
                         &clickhouse_connection_info,
                         params.input,
-                        response_to_write,
+                        result_to_write,
                         write_metadata,
                     )
                     .await;
                 });
             }
-            let response_value = serde_json::to_value(response).map_err(|e| Error::Inference {
-                message: format!("Failed to convert response to JSON: {}", e),
-            })?;
-            return Ok(Json(response_value).into_response());
+
+            let response = InferenceResponse::new(result, episode_id, variant_name);
+
+            let response_serialized =
+                serde_json::to_value(response).map_err(|e| Error::Inference {
+                    message: format!("Failed to convert response to JSON: {}", e),
+                })?;
+
+            return Ok(Json(response_serialized).into_response());
         }
     }
+
     // Eventually, if we get here, it means we tried every variant and none of them worked
     Err(Error::AllVariantsFailed {
         errors: variant_errors,
@@ -252,13 +261,12 @@ fn create_stream(
     function: &'static FunctionConfig,
     metadata: InferenceMetadata,
     first_chunk: ModelInferenceResponseChunk,
-    mut stream: InferenceResponseStream,
+    mut stream: ModelInferenceResponseStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     tool_config: Option<ToolCallConfig>,
     dynamic_tool_config_string: String,
 ) -> impl Stream<Item = Result<Event, Error>> + Send {
     async_stream::stream! {
-
         let mut buffer = vec![first_chunk.clone()];
 
         // Send the first chunk
@@ -290,7 +298,7 @@ fn create_stream(
         // https://github.com/tokio-rs/axum/discussions/1060
 
         if !metadata.dryrun {
-            let inference_response: Result<InferenceResponse, Error> =
+            let inference_response: Result<InferenceResult, Error> =
                 collect_chunks(buffer, function, tool_config.as_ref());
 
             let inference_response = inference_response.ok_or_log();
@@ -322,10 +330,15 @@ fn prepare_event(
     metadata: &InferenceMetadata,
     chunk: ModelInferenceResponseChunk,
 ) -> Result<Event, Error> {
-    let mut chunk_json = match function {
+    let chunk_json = match function {
         FunctionConfig::Chat(_) => {
-            let chunk = InferenceResponseChunk::Chat(chunk.into());
-            serde_json::to_value(chunk).map_err(|e| Error::Inference {
+            let result_chunk = InferenceResultChunk::Chat(chunk.into());
+            let response_chunk = InferenceResponseChunk::new(
+                result_chunk,
+                metadata.episode_id,
+                metadata.variant_name.clone(),
+            );
+            serde_json::to_value(response_chunk).map_err(|e| Error::Inference {
                 message: format!("Failed to convert chunk to JSON: {}", e),
             })?
         }
@@ -333,7 +346,7 @@ fn prepare_event(
             unimplemented!()
         }
     };
-    chunk_json["variant_name"] = metadata.variant_name.to_string().into();
+
     Event::default()
         .json_data(chunk_json)
         .map_err(|e| Error::Inference {
@@ -352,11 +365,11 @@ struct InferenceWriteMetadata {
 async fn write_inference(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     input: Input,
-    response: InferenceResponse,
+    result: InferenceResult,
     metadata: InferenceWriteMetadata,
 ) {
-    match response {
-        InferenceResponse::Chat(response) => {
+    match result {
+        InferenceResult::Chat(response) => {
             let serialized_input =
                 match serde_json::to_string(&input).map_err(|e| Error::Serialization {
                     message: e.to_string(),
@@ -377,7 +390,7 @@ async fn write_inference(
 
             // Write the inference to the Inference table
             let inference = Inference::new(
-                InferenceResponse::Chat(response),
+                InferenceResult::Chat(response),
                 serialized_input,
                 metadata.episode_id,
                 metadata.function_name,
@@ -389,6 +402,68 @@ async fn write_inference(
                 .write(&inference, "Inference")
                 .await
                 .ok_or_log();
+        }
+    }
+}
+
+/// InferenceResponse and InferenceResultChunk determine what gets serialized and sent to the client
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(untagged, rename_all = "snake_case")]
+enum InferenceResponse {
+    Chat(ChatInferenceResponse),
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ChatInferenceResponse {
+    inference_id: Uuid,
+    episode_id: Uuid,
+    variant_name: String,
+    output: Vec<ContentBlockOutput>,
+    usage: Usage,
+}
+
+impl InferenceResponse {
+    fn new(inference_result: InferenceResult, episode_id: Uuid, variant_name: String) -> Self {
+        match inference_result {
+            InferenceResult::Chat(result) => InferenceResponse::Chat(ChatInferenceResponse {
+                inference_id: result.inference_id,
+                episode_id,
+                variant_name,
+                output: result.output,
+                usage: result.usage,
+            }),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(untagged)]
+enum InferenceResponseChunk {
+    Chat(ChatInferenceResponseChunk),
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ChatInferenceResponseChunk {
+    inference_id: Uuid,
+    episode_id: Uuid,
+    variant_name: String,
+    content: Vec<ContentBlockChunk>,
+    usage: Option<Usage>,
+}
+
+impl InferenceResponseChunk {
+    fn new(inference_result: InferenceResultChunk, episode_id: Uuid, variant_name: String) -> Self {
+        match inference_result {
+            InferenceResultChunk::Chat(result) => {
+                InferenceResponseChunk::Chat(ChatInferenceResponseChunk {
+                    inference_id: result.inference_id,
+                    episode_id,
+                    variant_name,
+                    content: result.content,
+                    usage: result.usage,
+                })
+            }
         }
     }
 }

@@ -19,8 +19,8 @@ use crate::{
             together::TogetherProvider,
         },
         types::{
-            InferenceResponseStream, ModelInferenceRequest, ModelInferenceResponse,
-            ModelInferenceResponseChunk,
+            ModelInferenceRequest, ModelInferenceResponse, ModelInferenceResponseChunk,
+            ModelInferenceResponseStream,
         },
     },
 };
@@ -65,7 +65,7 @@ impl ModelConfig {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         client: &'a Client,
-    ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
+    ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error> {
         let mut provider_errors: Vec<Error> = Vec::new();
         for provider_name in &self.routing {
             let provider_config =
@@ -251,7 +251,7 @@ impl InferenceProvider for ProviderConfig {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         client: &'a Client,
-    ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
+    ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error> {
         match self {
             ProviderConfig::Anthropic(provider) => provider.infer_stream(request, client).await,
             ProviderConfig::AWSBedrock(provider) => provider.infer_stream(request, client).await,

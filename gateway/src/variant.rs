@@ -7,13 +7,13 @@ use uuid::Uuid;
 use crate::error::Error;
 use crate::function::FunctionConfig;
 use crate::inference::types::{
-    ChatInferenceResponse, ContentBlock, FunctionType, Input, InputMessageContent, JSONMode,
+    ChatInferenceResult, ContentBlock, FunctionType, Input, InputMessageContent, JSONMode,
     ModelInferenceRequest, ModelInferenceResponseChunk, RequestMessage, Role,
 };
 use crate::minijinja_util::TemplateConfig;
 use crate::tool::ToolCallConfig;
 use crate::{
-    inference::types::{InferenceResponse, InferenceResponseStream, InputMessage},
+    inference::types::{InferenceResult, InputMessage, ModelInferenceResponseStream},
     model::ModelConfig,
 };
 
@@ -44,7 +44,7 @@ pub trait Variant {
         tool_config: Option<&ToolCallConfig>,
         templates: &TemplateConfig,
         client: &Client,
-    ) -> Result<InferenceResponse, Error>;
+    ) -> Result<InferenceResult, Error>;
 
     async fn infer_stream(
         &self,
@@ -54,7 +54,7 @@ pub trait Variant {
         tool_config: Option<&ToolCallConfig>,
         templates: &TemplateConfig,
         client: &Client,
-    ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error>;
+    ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error>;
 }
 
 impl VariantConfig {
@@ -91,7 +91,7 @@ impl Variant for VariantConfig {
         tool_config: Option<&ToolCallConfig>,
         templates: &TemplateConfig<'_>,
         client: &Client,
-    ) -> Result<InferenceResponse, Error> {
+    ) -> Result<InferenceResult, Error> {
         match self {
             VariantConfig::ChatCompletion(params) => {
                 params
@@ -109,7 +109,7 @@ impl Variant for VariantConfig {
         tool_config: Option<&ToolCallConfig>,
         templates: &TemplateConfig<'_>,
         client: &Client,
-    ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
+    ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error> {
         match self {
             VariantConfig::ChatCompletion(params) => {
                 params
@@ -190,7 +190,7 @@ impl Variant for ChatCompletionConfig {
         tool_config: Option<&ToolCallConfig>,
         templates: &TemplateConfig<'_>,
         client: &Client,
-    ) -> Result<InferenceResponse, Error> {
+    ) -> Result<InferenceResult, Error> {
         let messages = input
             .messages
             .iter()
@@ -235,7 +235,7 @@ impl Variant for ChatCompletionConfig {
         let raw_content = model_inference_response.content.clone();
         let usage = model_inference_response.usage.clone();
         let model_inference_responses = vec![model_inference_response];
-        Ok(InferenceResponse::Chat(ChatInferenceResponse::new(
+        Ok(InferenceResult::Chat(ChatInferenceResult::new(
             inference_id,
             raw_content,
             usage,
@@ -252,7 +252,7 @@ impl Variant for ChatCompletionConfig {
         tool_config: Option<&ToolCallConfig>,
         templates: &TemplateConfig<'_>,
         client: &Client,
-    ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
+    ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error> {
         let messages = input
             .messages
             .iter()
@@ -632,9 +632,9 @@ mod tests {
             .infer(&input, &models, &function_config, None, &templates, &client)
             .await
             .unwrap();
-        assert!(matches!(result, InferenceResponse::Chat(_)));
+        assert!(matches!(result, InferenceResult::Chat(_)));
         match result {
-            InferenceResponse::Chat(chat_response) => {
+            InferenceResult::Chat(chat_response) => {
                 assert_eq!(
                     chat_response.output,
                     vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()]
@@ -681,9 +681,9 @@ mod tests {
             )
             .await
             .unwrap();
-        assert!(matches!(result, InferenceResponse::Chat(_)));
+        assert!(matches!(result, InferenceResult::Chat(_)));
         match result {
-            InferenceResponse::Chat(chat_response) => {
+            InferenceResult::Chat(chat_response) => {
                 assert_eq!(chat_response.output.len(), 1);
                 let tool_call = &chat_response.output[0];
                 match tool_call {
@@ -734,9 +734,9 @@ mod tests {
         //     )
         //     .await
         //     .unwrap();
-        // assert!(matches!(result, InferenceResponse::Chat(_)));
+        // assert!(matches!(result, InferenceResult::Chat(_)));
         // match result {
-        //     InferenceResponse::Chat(chat_response) => {
+        //     InferenceResult::Chat(chat_response) => {
         //         assert_eq!(
         //             chat_response.content_blocks,
         //             vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()]
@@ -758,9 +758,9 @@ mod tests {
         //     .infer(&input, &models, Some(&output_schema), &client)
         //     .await
         //     .unwrap();
-        // assert!(matches!(result, InferenceResponse::Chat(_)));
+        // assert!(matches!(result, InferenceResult::Chat(_)));
         // match result {
-        //     InferenceResponse::Chat(chat_response) => {
+        //     InferenceResult::Chat(chat_response) => {
         //         assert_eq!(
         //             chat_response.parsed_output,
         //             Some(json!({"answer": "Hello"}))

@@ -159,29 +159,29 @@ pub enum Latency {
 }
 
 /// As a Variant might make use of multiple model inferences, we then combine
-/// one or more ModelInferenceResponses into a single InferenceResponse (but we keep the original ModelInferenceResponses around).
-/// In the non-streaming case, this InferenceResponse is serialized into the TensorZero response format.
+/// one or more ModelInferenceResponses into a single InferenceResult (but we keep the original ModelInferenceResponses around).
+/// In the non-streaming case, this InferenceResult is converted into an InferenceResponse and sent to the client.
 /// See below for streaming case.
 
+/// This type contains the result of running a variant of a function
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum InferenceResponse {
-    Chat(ChatInferenceResponse),
+pub enum InferenceResult {
+    Chat(ChatInferenceResult),
 }
 
-// Determines the return type of Inference API for Chat-type functions (which is all of them right now)
-/// See InferenceResponseWithOutputSchema below for details
 #[derive(Debug, Clone, Serialize)]
-pub struct ChatInferenceResponse {
-    inference_id: Uuid,
+pub struct ChatInferenceResult {
+    pub inference_id: Uuid,
     created: u64,
     pub output: Vec<ContentBlockOutput>,
     pub usage: Usage,
     pub model_inference_responses: Vec<ModelInferenceResponse>,
 }
 
-/// In the streaming case we convert ModelInferenceResponseChunks into serialized InferenceResponseChunks to the client.
-/// We then collect all the InferenceResponseChunks into an InferenceResponse for validation and storage after the fact.
+/// In the streaming case we convert ModelInferenceResponseChunks into a InferenceResultChunk, which is then
+/// converted into an InferenceResponseChunk and sent to the client.
+/// We then collect all the InferenceResultChunks into an InferenceResult for validation and storage after the fact.
 
 #[derive(Debug, Clone)]
 pub struct ModelInferenceResponseChunk {
@@ -208,7 +208,7 @@ pub struct TextChunk {
 
 // This determines what gets serialized in streaming Chat functions
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ChatInferenceResponseChunk {
+pub struct ChatInferenceResultChunk {
     pub inference_id: Uuid,
     pub content: Vec<ContentBlockChunk>,
     pub created: u64,
@@ -217,12 +217,12 @@ pub struct ChatInferenceResponseChunk {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "type")]
-pub enum InferenceResponseChunk {
-    Chat(ChatInferenceResponseChunk),
+pub enum InferenceResultChunk {
+    Chat(ChatInferenceResultChunk),
 }
 
 /// Alongside the response, we also store information about what happened during the request.
-/// For this we convert the InferenceResponse into an Inference and ModelInferences,
+/// For this we convert the InferenceResult into an Inference and ModelInferences,
 /// which are written to ClickHouse tables of the same name asynchronously.
 
 #[derive(Serialize, Debug)]
@@ -364,7 +364,7 @@ impl ModelInferenceResponse {
     }
 }
 
-impl ChatInferenceResponse {
+impl ChatInferenceResult {
     pub fn new(
         inference_id: Uuid,
         raw_content: Vec<ContentBlock>,
@@ -438,7 +438,7 @@ impl ChatInferenceResponse {
 
 impl Inference {
     pub fn new(
-        inference_response: InferenceResponse,
+        inference_response: InferenceResult,
         input: String,
         episode_id: Uuid,
         function_name: String,
@@ -448,7 +448,7 @@ impl Inference {
     ) -> Self {
         let processing_time_ms = processing_time.as_millis() as u32;
         match inference_response {
-            InferenceResponse::Chat(chat_response) => Self {
+            InferenceResult::Chat(chat_response) => Self {
                 id: chat_response.inference_id,
                 function_name,
                 variant_name,
@@ -490,7 +490,7 @@ impl ModelInferenceResponseChunk {
     }
 }
 
-impl From<ModelInferenceResponseChunk> for ChatInferenceResponseChunk {
+impl From<ModelInferenceResponseChunk> for ChatInferenceResultChunk {
     fn from(chunk: ModelInferenceResponseChunk) -> Self {
         Self {
             inference_id: chunk.inference_id,
@@ -505,13 +505,13 @@ pub fn collect_chunks(
     value: Vec<ModelInferenceResponseChunk>,
     _function: &FunctionConfig,
     tool_config: Option<&ToolCallConfig>,
-) -> Result<InferenceResponse, Error> {
+) -> Result<InferenceResult, Error> {
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
 
     let inference_id = value
         .first()
         .ok_or(Error::TypeConversion {
-            message: "Attempted to create an InferenceResponse from an empty response chunk vector"
+            message: "Attempted to create an InferenceResult from an empty response chunk vector"
                 .to_string(),
         })?
         .inference_id;
@@ -527,7 +527,7 @@ pub fn collect_chunks(
     let response_time = value
         .last()
         .ok_or(Error::TypeConversion {
-            message: "Attempted to create an InferenceResponse from an empty response chunk vector"
+            message: "Attempted to create an InferenceResult from an empty response chunk vector"
                 .to_string(),
         })?
         .latency;
@@ -599,7 +599,7 @@ pub fn collect_chunks(
         usage.clone(),
         latency.clone(),
     );
-    Ok(InferenceResponse::Chat(ChatInferenceResponse::new(
+    Ok(InferenceResult::Chat(ChatInferenceResult::new(
         inference_id,
         content_blocks,
         usage,
@@ -620,7 +620,7 @@ impl From<ToolCallChunk> for ToolCall {
     }
 }
 
-pub type InferenceResponseStream =
+pub type ModelInferenceResponseStream =
     Pin<Box<dyn Stream<Item = Result<ModelInferenceResponseChunk, Error>> + Send>>;
 
 #[cfg(test)]
@@ -649,7 +649,7 @@ mod tests {
                 response_time: Duration::default(),
             },
         )];
-        let chat_inference_response = ChatInferenceResponse::new(
+        let chat_inference_response = ChatInferenceResult::new(
             inference_id,
             content.clone(),
             usage.clone(),
@@ -675,7 +675,7 @@ mod tests {
                 response_time: Duration::default(),
             },
         )];
-        let chat_inference_response = ChatInferenceResponse::new(
+        let chat_inference_response = ChatInferenceResult::new(
             inference_id,
             content,
             usage.clone(),
@@ -710,7 +710,7 @@ mod tests {
                 response_time: Duration::default(),
             },
         )];
-        let chat_inference_response = ChatInferenceResponse::new(
+        let chat_inference_response = ChatInferenceResult::new(
             inference_id,
             content,
             usage.clone(),
@@ -745,7 +745,7 @@ mod tests {
                 response_time: Duration::default(),
             },
         )];
-        let chat_inference_response = ChatInferenceResponse::new(
+        let chat_inference_response = ChatInferenceResult::new(
             inference_id,
             content,
             usage.clone(),
@@ -794,7 +794,7 @@ mod tests {
         //     latency.clone(),
         // )];
 
-        // let chat_inference_response = ChatInferenceResponse::new(
+        // let chat_inference_response = ChatInferenceResult::new(
         //     inference_id,
         //     content.clone(),
         //     usage.clone(),
@@ -824,7 +824,7 @@ mod tests {
         //     },
         // )];
 
-        // let chat_inference_response = ChatInferenceResponse::new(
+        // let chat_inference_response = ChatInferenceResult::new(
         //     inference_id,
         //     invalid_json_content.clone(),
         //     usage.clone(),
@@ -849,7 +849,7 @@ mod tests {
         //     },
         // )];
 
-        // let chat_inference_response = ChatInferenceResponse::new(
+        // let chat_inference_response = ChatInferenceResult::new(
         //     inference_id,
         //     vec![malformed_json.clone().into()],
         //     usage.clone(),
@@ -884,7 +884,7 @@ mod tests {
             result.unwrap_err(),
             Error::TypeConversion {
                 message:
-                    "Attempted to create an InferenceResponse from an empty response chunk vector"
+                    "Attempted to create an InferenceResult from an empty response chunk vector"
                         .to_string(),
             }
         );
@@ -922,7 +922,7 @@ mod tests {
             },
         ];
         let response = collect_chunks(chunks, &function, Some(tool_config)).unwrap();
-        let InferenceResponse::Chat(chat_response) = response;
+        let InferenceResult::Chat(chat_response) = response;
         assert_eq!(chat_response.inference_id, inference_id);
         assert_eq!(chat_response.created, created);
         assert_eq!(
@@ -980,7 +980,7 @@ mod tests {
         //     },
         // ];
         // let response = collect_chunks(chunks, Some(&schema)).unwrap();
-        // let InferenceResponse::Chat(chat_response) = response;
+        // let InferenceResult::Chat(chat_response) = response;
         // assert_eq!(chat_response.inference_id, inference_id);
         // assert_eq!(
         //     chat_response.parsed_output,
@@ -1039,7 +1039,7 @@ mod tests {
         // ];
         // let result = collect_chunks(chunks, Some(&schema));
         // assert!(result.is_ok());
-        // if let Ok(InferenceResponse::Chat(chat_response)) = result {
+        // if let Ok(InferenceResult::Chat(chat_response)) = result {
         //     assert_eq!(chat_response.inference_id, inference_id);
         //     assert_eq!(chat_response.created, created);
         //     // Content is None when we fail validation
@@ -1050,7 +1050,7 @@ mod tests {
         //     );
         //     assert_eq!(chat_response.usage, usage);
         // } else {
-        //     unreachable!("Expected Ok(InferenceResponse::Chat), got {:?}", result);
+        //     unreachable!("Expected Ok(InferenceResult::Chat), got {:?}", result);
         // }
 
         // Test case 5: chunks with some None content
@@ -1094,7 +1094,7 @@ mod tests {
         ];
         let result = collect_chunks(chunks, &function, Some(tool_config));
         assert!(result.is_ok());
-        if let Ok(InferenceResponse::Chat(chat_response)) = result {
+        if let Ok(InferenceResult::Chat(chat_response)) = result {
             assert_eq!(chat_response.inference_id, inference_id);
             assert_eq!(chat_response.created, created);
             assert_eq!(
@@ -1103,7 +1103,7 @@ mod tests {
             );
             assert_eq!(chat_response.usage, usage);
         } else {
-            unreachable!("Expected Ok(InferenceResponse::Chat), got {:?}", result);
+            unreachable!("Expected Ok(InferenceResult::Chat), got {:?}", result);
         }
     }
 }

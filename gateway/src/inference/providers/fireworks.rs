@@ -8,8 +8,8 @@ use tokio::time::Instant;
 use crate::{
     error::Error,
     inference::types::{
-        InferenceResponseStream, JSONMode, Latency, ModelInferenceRequest, ModelInferenceResponse,
-        ModelInferenceResponseChunk,
+        JSONMode, Latency, ModelInferenceRequest, ModelInferenceResponse,
+        ModelInferenceResponseChunk, ModelInferenceResponseStream,
     },
 };
 
@@ -87,7 +87,7 @@ impl InferenceProvider for FireworksProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-    ) -> Result<(ModelInferenceResponseChunk, InferenceResponseStream), Error> {
+    ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error> {
         let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
             provider_name: "Fireworks".to_string(),
         })?;
