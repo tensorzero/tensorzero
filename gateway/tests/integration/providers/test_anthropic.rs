@@ -51,7 +51,6 @@ async fn test_infer_stream() {
     let (chunk, mut stream) = result.unwrap();
     let mut collected_chunks = vec![chunk];
     while let Some(chunk) = stream.next().await {
-        assert!(chunk.is_ok());
         collected_chunks.push(chunk.unwrap());
     }
     assert!(!collected_chunks.is_empty());
