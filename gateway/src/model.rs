@@ -204,6 +204,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                     streaming_request_url,
                     audience,
                     credentials,
+                    model_id,
                 })
             }
             ProviderConfigHelper::OpenAI {

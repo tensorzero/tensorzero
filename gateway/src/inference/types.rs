@@ -10,9 +10,9 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::error::Error;
 use crate::function::FunctionConfig;
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolResult};
+use crate::{error::Error, variant::JsonEnforcement};
 
 /// Data flow in TensorZero
 ///
@@ -164,10 +164,11 @@ pub enum Latency {
 /// See below for streaming case.
 
 /// This type contains the result of running a variant of a function
-#[derive(Debug, Clone, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InferenceResult {
     Chat(ChatInferenceResult),
+    Json(JsonInferenceResult),
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -177,6 +178,21 @@ pub struct ChatInferenceResult {
     pub output: Vec<ContentBlockOutput>,
     pub usage: Usage,
     pub model_inference_responses: Vec<ModelInferenceResponse>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct JsonInferenceResult {
+    pub inference_id: Uuid,
+    created: u64,
+    pub output: JsonInferenceOutput,
+    pub usage: Usage,
+    pub model_inference_responses: Vec<ModelInferenceResponse>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct JsonInferenceOutput {
+    pub raw: String,
+    pub parsed: Option<Value>,
 }
 
 /// In the streaming case we convert ModelInferenceResponseChunks into a InferenceResultChunk, which is then
@@ -206,7 +222,6 @@ pub struct TextChunk {
     pub text: String,
 }
 
-// This determines what gets serialized in streaming Chat functions
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ChatInferenceResultChunk {
     pub inference_id: Uuid,
@@ -216,9 +231,18 @@ pub struct ChatInferenceResultChunk {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct JsonInferenceResultChunk {
+    pub inference_id: Uuid,
+    pub raw: String,
+    pub created: u64,
+    pub usage: Option<Usage>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "type")]
 pub enum InferenceResultChunk {
     Chat(ChatInferenceResultChunk),
+    Json(JsonInferenceResultChunk),
 }
 
 /// Alongside the response, we also store information about what happened during the request.
@@ -364,6 +388,46 @@ impl ModelInferenceResponse {
     }
 }
 
+impl InferenceResult {
+    pub fn get_serialized_model_inferences(&self, input: &str) -> Vec<serde_json::Value> {
+        let model_inference_responses = match self {
+            InferenceResult::Chat(chat_result) => &chat_result.model_inference_responses,
+            InferenceResult::Json(json_result) => &json_result.model_inference_responses,
+        };
+        let inference_id = match self {
+            InferenceResult::Chat(chat_result) => chat_result.inference_id,
+            InferenceResult::Json(json_result) => json_result.inference_id,
+        };
+        model_inference_responses
+            .iter()
+            .map(|r| {
+                let model_inference =
+                    ModelInference::new(r.clone(), input.to_string(), inference_id);
+                serde_json::to_value(model_inference).unwrap_or_default()
+            })
+            .collect()
+    }
+}
+
+impl JsonInferenceResult {
+    pub fn new(
+        inference_id: Uuid,
+        raw: String,
+        parsed: Option<Value>,
+        usage: Usage,
+        model_inference_responses: Vec<ModelInferenceResponse>,
+    ) -> Self {
+        let output = JsonInferenceOutput { raw, parsed };
+        Self {
+            inference_id,
+            created: current_timestamp(),
+            output,
+            usage,
+            model_inference_responses,
+        }
+    }
+}
+
 impl ChatInferenceResult {
     pub fn new(
         inference_id: Uuid,
@@ -423,17 +487,6 @@ impl ChatInferenceResult {
         }
         output
     }
-
-    pub fn get_serialized_model_inferences(&self, input: &str) -> Vec<serde_json::Value> {
-        self.model_inference_responses
-            .iter()
-            .map(|r| {
-                let model_inference =
-                    ModelInference::new(r.clone(), input.to_string(), self.inference_id);
-                serde_json::to_value(model_inference).unwrap_or_default()
-            })
-            .collect()
-    }
 }
 
 impl Inference {
@@ -456,6 +509,16 @@ impl Inference {
                 input,
                 dynamic_tool_config,
                 output: serde_json::to_string(&chat_response.output).unwrap_or_default(),
+                processing_time_ms,
+            },
+            InferenceResult::Json(json_result) => Self {
+                id: json_result.inference_id,
+                function_name,
+                variant_name,
+                episode_id,
+                input,
+                dynamic_tool_config,
+                output: serde_json::to_string(&json_result.output).unwrap_or_default(),
                 processing_time_ms,
             },
         }
@@ -501,9 +564,30 @@ impl From<ModelInferenceResponseChunk> for ChatInferenceResultChunk {
     }
 }
 
+/// We use best-effort to reconstruct the raw response for JSON functions
+/// They might either return a ToolCallChunk or a TextChunk
+/// We take the string from either of these (from the last block if there are multiple)
+/// and use that as the raw response.
+impl From<ModelInferenceResponseChunk> for JsonInferenceResultChunk {
+    fn from(mut chunk: ModelInferenceResponseChunk) -> Self {
+        let raw = match chunk.content.pop() {
+            Some(ContentBlockChunk::ToolCall(tool_call)) => tool_call.arguments.to_owned(),
+            Some(ContentBlockChunk::Text(text)) => text.text.to_owned(),
+            None => String::new(),
+        };
+
+        Self {
+            inference_id: chunk.inference_id,
+            raw,
+            created: chunk.created,
+            usage: chunk.usage,
+        }
+    }
+}
+
 pub fn collect_chunks(
     value: Vec<ModelInferenceResponseChunk>,
-    _function: &FunctionConfig,
+    function: &FunctionConfig,
     tool_config: Option<&ToolCallConfig>,
 ) -> Result<InferenceResult, Error> {
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
@@ -599,13 +683,13 @@ pub fn collect_chunks(
         usage.clone(),
         latency.clone(),
     );
-    Ok(InferenceResult::Chat(ChatInferenceResult::new(
+    function.prepare_response(
         inference_id,
         content_blocks,
         usage,
         vec![model_response],
         tool_config,
-    )))
+    )
 }
 
 impl From<ToolCallChunk> for ToolCall {
@@ -623,10 +707,22 @@ impl From<ToolCallChunk> for ToolCall {
 pub type ModelInferenceResponseStream =
     Pin<Box<dyn Stream<Item = Result<ModelInferenceResponseChunk, Error>> + Send>>;
 
+impl From<&JsonEnforcement> for JSONMode {
+    fn from(json_enforcement: &JsonEnforcement) -> Self {
+        match json_enforcement {
+            JsonEnforcement::Default => JSONMode::On,
+            JsonEnforcement::Strict => JSONMode::Strict,
+            JsonEnforcement::ImplicitTool => JSONMode::Off,
+            JsonEnforcement::Off => JSONMode::Off,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::function::FunctionConfigChat;
+    use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::providers::common::WEATHER_TOOL_CONFIG;
+    use crate::jsonschema_util::JSONSchemaFromPath;
     use crate::tool::ToolChoice;
 
     use super::*;
@@ -773,99 +869,6 @@ mod tests {
             }
             _ => unreachable!(),
         }
-
-        // Case 2: a JSON string that passes validation
-        // let inference_id = Uuid::now_v7();
-        // let created = current_timestamp();
-        // let json_content = r#"{"name": "John", "age": 30}"#.to_string();
-        // let content = vec![json_content.clone().into()];
-        // let usage = Usage {
-        //     prompt_tokens: 15,
-        //     completion_tokens: 25,
-        // };
-
-        // let latency = Latency::NonStreaming {
-        //     response_time: Duration::from_millis(400),
-        // };
-        // let model_inference_responses = vec![ModelInferenceResponse::new(
-        //     content.clone(),
-        //     "".to_string(),
-        //     usage.clone(),
-        //     latency.clone(),
-        // )];
-
-        // let chat_inference_response = ChatInferenceResult::new(
-        //     inference_id,
-        //     content.clone(),
-        //     usage.clone(),
-        //     model_inference_responses,
-        //     Some(&output_schema),
-        // );
-
-        // assert_eq!(chat_inference_response.inference_id, inference_id);
-        // Content will be the parsed Value if the JSON passes validation
-        // assert_eq!(chat_inference_response.content_blocks, content);
-        // assert_eq!(
-        //     chat_inference_response.parsed_output,
-        //     Some(serde_json::from_str(&json_content).unwrap())
-        // );
-        // assert_eq!(chat_inference_response.usage, usage);
-
-        // TODO (#87): assert that the appropriate errors were logged in the next two test cases
-        // Case 3: a JSON string that fails validation
-        // let invalid_json = r#"{"name": "John", "age": "thirty"}"#.to_string();
-        // let invalid_json_content = vec![invalid_json.into()];
-        // let model_inference_responses = vec![ModelInferenceResponse::new(
-        //     invalid_json_content.clone(),
-        //     "".to_string(),
-        //     usage.clone(),
-        //     Latency::NonStreaming {
-        //         response_time: Duration::from_millis(300),
-        //     },
-        // )];
-
-        // let chat_inference_response = ChatInferenceResult::new(
-        //     inference_id,
-        //     invalid_json_content.clone(),
-        //     usage.clone(),
-        //     model_inference_responses,
-        //     Some(&output_schema),
-        // );
-
-        // assert_eq!(chat_inference_response.inference_id, inference_id);
-        // Content will be None if the validation fails
-        // assert_eq!(chat_inference_response.content_blocks, invalid_json_content);
-        // assert_eq!(chat_inference_response.parsed_output, None);
-        // assert_eq!(chat_inference_response.usage, usage);
-
-        // Case 4: a malformed JSON
-        // let malformed_json = r#"{"name": "John", "age": 30,"#.to_string();
-        // let model_inference_responses = vec![ModelInferenceResponse::new(
-        //     vec![malformed_json.clone().into()],
-        //     "".to_string(),
-        //     usage.clone(),
-        //     Latency::NonStreaming {
-        //         response_time: Duration::from_millis(310),
-        //     },
-        // )];
-
-        // let chat_inference_response = ChatInferenceResult::new(
-        //     inference_id,
-        //     vec![malformed_json.clone().into()],
-        //     usage.clone(),
-        //     model_inference_responses,
-        //     Some(&output_schema),
-        // );
-
-        // assert_eq!(chat_inference_response.inference_id, inference_id);
-        // assert_eq!(chat_inference_response.created, created);
-        // Content will be None if the JSON is malformed
-        // assert_eq!(
-        //     chat_inference_response.content_blocks,
-        //     vec![malformed_json.clone().into()]
-        // );
-        // assert_eq!(chat_inference_response.parsed_output, None);
-        // assert_eq!(chat_inference_response.usage, usage);
     }
 
     #[test]
@@ -921,16 +924,16 @@ mod tests {
                 latency: Duration::from_millis(250),
             },
         ];
-        let response = collect_chunks(chunks, &function, Some(tool_config)).unwrap();
-        let InferenceResult::Chat(chat_response) = response;
-        assert_eq!(chat_response.inference_id, inference_id);
-        assert_eq!(chat_response.created, created);
+        let result = collect_chunks(chunks, &function, Some(tool_config)).unwrap();
+        let chat_result = match result {
+            InferenceResult::Chat(chat_result) => chat_result,
+            _ => unreachable!("Expected Chat inference response"),
+        };
+        assert_eq!(chat_result.inference_id, inference_id);
+        assert_eq!(chat_result.created, created);
+        assert_eq!(chat_result.output, vec!["Hello, world!".to_string().into()]);
         assert_eq!(
-            chat_response.output,
-            vec!["Hello, world!".to_string().into()]
-        );
-        assert_eq!(
-            chat_response.usage,
+            chat_result.usage,
             Usage {
                 prompt_tokens: 2,
                 completion_tokens: 4,
@@ -938,120 +941,120 @@ mod tests {
         );
 
         // Test Case 3: a JSON string that passes validation and also include usage in each chunk
-        // let inference_id = Uuid::now_v7();
-        // let schema = JSONSchemaFromPath::from_value(&serde_json::json!({
-        //     "type": "object",
-        //     "properties": {
-        //         "name": {"type": "string"},
-        //         "age": {"type": "number"}
-        //     },
-        //     "required": ["name", "age"]
-        // }));
-        // let usage1 = Usage {
-        //     prompt_tokens: 10,
-        //     completion_tokens: 5,
-        // };
-        // let usage2 = Usage {
-        //     prompt_tokens: 5,
-        //     completion_tokens: 10,
-        // };
-        // let chunks = vec![
-        //     ModelInferenceResponseChunk {
-        //         inference_id,
-        //         content: vec![ContentBlockChunk::Text(TextChunk {
-        //             text: "{\"name\":".to_string(),
-        //             id: "0".to_string(),
-        //         })],
-        //         created,
-        //         usage: Some(usage1.clone()),
-        //         raw_response: "{\"name\":".to_string(),
-        //         latency: Duration::from_millis(150),
-        //     },
-        //     ModelInferenceResponseChunk {
-        //         inference_id,
-        //         content: vec![ContentBlockChunk::Text(TextChunk {
-        //             text: "\"John\",\"age\":30}".to_string(),
-        //             id: "0".to_string(),
-        //         })],
-        //         created,
-        //         usage: Some(usage2.clone()),
-        //         raw_response: "\"John\",\"age\":30}".to_string(),
-        //         latency: Duration::from_millis(250),
-        //     },
-        // ];
-        // let response = collect_chunks(chunks, Some(&schema)).unwrap();
-        // let InferenceResult::Chat(chat_response) = response;
-        // assert_eq!(chat_response.inference_id, inference_id);
-        // assert_eq!(
-        //     chat_response.parsed_output,
-        //     Some(serde_json::json!({"name": "John", "age": 30}))
-        // );
-        // assert_eq!(
-        //     chat_response.content_blocks,
-        //     vec!["{\"name\":\"John\",\"age\":30}".to_string().into()]
-        // );
-        // assert_eq!(
-        //     chat_response.usage,
-        //     Usage {
-        //         prompt_tokens: 15,
-        //         completion_tokens: 15,
-        //     }
-        // );
+        let inference_id = Uuid::now_v7();
+        let output_schema = JSONSchemaFromPath::from_value(&serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "age": {"type": "number"}
+            },
+            "required": ["name", "age"]
+        }));
+        let function_config = FunctionConfig::Json(FunctionConfigJson {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            output_schema,
+        });
+        let usage1 = Usage {
+            prompt_tokens: 10,
+            completion_tokens: 5,
+        };
+        let usage2 = Usage {
+            prompt_tokens: 5,
+            completion_tokens: 10,
+        };
+        let chunks = vec![
+            ModelInferenceResponseChunk {
+                inference_id,
+                content: vec![ContentBlockChunk::Text(TextChunk {
+                    text: "{\"name\":".to_string(),
+                    id: "0".to_string(),
+                })],
+                created,
+                usage: Some(usage1.clone()),
+                raw_response: "{\"name\":".to_string(),
+                latency: Duration::from_millis(150),
+            },
+            ModelInferenceResponseChunk {
+                inference_id,
+                content: vec![ContentBlockChunk::Text(TextChunk {
+                    text: "\"John\",\"age\":30}".to_string(),
+                    id: "0".to_string(),
+                })],
+                created,
+                usage: Some(usage2.clone()),
+                raw_response: "\"John\",\"age\":30}".to_string(),
+                latency: Duration::from_millis(250),
+            },
+        ];
+        let response = collect_chunks(chunks, &function_config, None).unwrap();
+        match response {
+            InferenceResult::Json(json_result) => {
+                assert_eq!(json_result.inference_id, inference_id);
+                assert_eq!(
+                    json_result.output.parsed,
+                    Some(serde_json::json!({"name": "John", "age": 30}))
+                );
+                assert_eq!(
+                    json_result.output.raw,
+                    "{\"name\":\"John\",\"age\":30}".to_string()
+                );
+                assert_eq!(
+                    json_result.usage,
+                    Usage {
+                        prompt_tokens: 15,
+                        completion_tokens: 15,
+                    }
+                );
+            }
+            _ => unreachable!("Expected Json inference response"),
+        }
 
         // Test Case 4: a JSON string that fails validation and usage only in last chunk
-        // let inference_id = Uuid::now_v7();
-        // let created = current_timestamp();
-        // let schema = JSONSchemaFromPath::from_value(&serde_json::json!({
-        //     "type": "object",
-        //     "properties": {
-        //         "name": {"type": "string"},
-        //         "age": {"type": "number"}
-        //     },
-        //     "required": ["name", "age"]
-        // }));
-        // let usage = Usage {
-        //     prompt_tokens: 10,
-        //     completion_tokens: 5,
-        // };
-        // let chunks = vec![
-        //     ModelInferenceResponseChunk {
-        //         inference_id,
-        //         content: vec![ContentBlockChunk::Text(TextChunk {
-        //             text: "{\"name\":".to_string(),
-        //             id: "0".to_string(),
-        //         })],
-        //         created,
-        //         usage: Some(usage.clone()),
-        //         raw_response: "{\"name\":".to_string(),
-        //         latency: Duration::from_millis(100),
-        //     },
-        //     ModelInferenceResponseChunk {
-        //         inference_id,
-        //         content: vec![ContentBlockChunk::Text(TextChunk {
-        //             text: "\"John\"}".to_string(),
-        //             id: "0".to_string(),
-        //         })],
-        //         created,
-        //         usage: None,
-        //         raw_response: "\"John\"}".to_string(),
-        //         latency: Duration::from_millis(200),
-        //     },
-        // ];
-        // let result = collect_chunks(chunks, Some(&schema));
-        // assert!(result.is_ok());
-        // if let Ok(InferenceResult::Chat(chat_response)) = result {
-        //     assert_eq!(chat_response.inference_id, inference_id);
-        //     assert_eq!(chat_response.created, created);
-        //     // Content is None when we fail validation
-        //     assert_eq!(chat_response.parsed_output, None);
-        //     assert_eq!(
-        //         chat_response.content_blocks,
-        //         vec!["{\"name\":\"John\"}".to_string().into()]
-        //     );
-        //     assert_eq!(chat_response.usage, usage);
-        // } else {
-        //     unreachable!("Expected Ok(InferenceResult::Chat), got {:?}", result);
-        // }
+        let inference_id = Uuid::now_v7();
+        let created = current_timestamp();
+        let usage = Usage {
+            prompt_tokens: 10,
+            completion_tokens: 5,
+        };
+        let chunks = vec![
+            ModelInferenceResponseChunk {
+                inference_id,
+                content: vec![ContentBlockChunk::Text(TextChunk {
+                    text: "{\"name\":".to_string(),
+                    id: "0".to_string(),
+                })],
+                created,
+                usage: Some(usage.clone()),
+                raw_response: "{\"name\":".to_string(),
+                latency: Duration::from_millis(100),
+            },
+            ModelInferenceResponseChunk {
+                inference_id,
+                content: vec![ContentBlockChunk::Text(TextChunk {
+                    text: "\"John\"}".to_string(),
+                    id: "0".to_string(),
+                })],
+                created,
+                usage: None,
+                raw_response: "\"John\"}".to_string(),
+                latency: Duration::from_millis(200),
+            },
+        ];
+        let result = collect_chunks(chunks, &function_config, None);
+        assert!(result.is_ok());
+        match result {
+            Ok(InferenceResult::Json(json_result)) => {
+                assert_eq!(json_result.inference_id, inference_id);
+                assert_eq!(json_result.created, created);
+                assert_eq!(json_result.usage, usage);
+                assert_eq!(json_result.output.parsed, None);
+                assert_eq!(json_result.output.raw, "{\"name\":\"John\"}".to_string());
+            }
+            _ => unreachable!("Expected Json inference response"),
+        }
 
         // Test case 5: chunks with some None content
         let inference_id = Uuid::now_v7();

@@ -11,7 +11,9 @@ use uuid::Uuid;
 
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
-use crate::inference::types::{ContentBlock, ContentBlockChunk, Latency, Role, Text, TextChunk};
+use crate::inference::types::{
+    ContentBlock, ContentBlockChunk, JSONMode, Latency, Role, Text, TextChunk,
+};
 use crate::inference::types::{
     ModelInferenceRequest, ModelInferenceResponse, ModelInferenceResponseChunk,
     ModelInferenceResponseStream, RequestMessage, Usage,
@@ -27,6 +29,7 @@ pub struct GCPVertexGeminiProvider {
     pub streaming_request_url: String,
     pub audience: String,
     pub credentials: Option<GCPCredentials>,
+    pub model_id: String,
 }
 
 /// Auth
@@ -149,7 +152,8 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         let credentials = self.credentials.as_ref().ok_or(Error::ApiKeyMissing {
             provider_name: "GCP Vertex Gemini".to_string(),
         })?;
-        let request_body: GCPVertexGeminiRequest = request.try_into()?;
+        let request_body: GCPVertexGeminiRequest =
+            GCPVertexGeminiRequest::new(request, &self.model_id)?;
         let token = credentials.get_jwt_token(&self.audience)?;
         let start_time = Instant::now();
         let res = http_client
@@ -190,7 +194,8 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         let credentials = self.credentials.as_ref().ok_or(Error::ApiKeyMissing {
             provider_name: "GCP Vertex Gemini".to_string(),
         })?;
-        let request_body: GCPVertexGeminiRequest = request.try_into()?;
+        let request_body: GCPVertexGeminiRequest =
+            GCPVertexGeminiRequest::new(request, &self.model_id)?;
         let token = credentials.get_jwt_token(&self.audience)?;
         let start_time = Instant::now();
         let event_source = http_client
@@ -475,9 +480,8 @@ struct GCPVertexGeminiRequest<'a> {
     // TODO (#19): [Safety Settings](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/SafetySetting)
 }
 
-impl<'a> TryFrom<&'a ModelInferenceRequest<'a>> for GCPVertexGeminiRequest<'a> {
-    type Error = Error;
-    fn try_from(request: &'a ModelInferenceRequest<'a>) -> Result<Self, Self::Error> {
+impl<'a> GCPVertexGeminiRequest<'a> {
+    pub fn new(request: &'a ModelInferenceRequest<'a>, model_name: &str) -> Result<Self, Error> {
         if request.messages.is_empty() {
             return Err(Error::InvalidRequest {
                 message: "GCP Vertex Gemini requires at least one message".to_string(),
@@ -496,12 +500,26 @@ impl<'a> TryFrom<&'a ModelInferenceRequest<'a>> for GCPVertexGeminiRequest<'a> {
             .map(GCPVertexGeminiContent::from)
             .collect();
         let (tools, tool_config) = prepare_tools(request);
-        let (response_mime_type, response_schema) = match request.output_schema {
-            Some(output_schema) => (
-                Some(GCPVertexGeminiResponseMimeType::ApplicationJson),
-                Some(output_schema),
-            ),
-            None => (None, None),
+        let (response_mime_type, response_schema) = match request.json_mode {
+            JSONMode::On | JSONMode::Strict => match request.output_schema {
+                Some(output_schema) => {
+                    // According to these [docs](https://ai.google.dev/gemini-api/docs/json-mode?lang=web),
+                    // JSON mode is only supported for Gemini Pro models not Flash.
+                    let strict_json_models = ["gemini-1.5-pro-001"];
+                    let response_schema = if strict_json_models.contains(&model_name) {
+                        Some(output_schema)
+                    } else {
+                        None
+                    };
+
+                    (
+                        Some(GCPVertexGeminiResponseMimeType::ApplicationJson),
+                        response_schema,
+                    )
+                }
+                None => (Some(GCPVertexGeminiResponseMimeType::ApplicationJson), None),
+            },
+            JSONMode::Off => (None, None),
         };
         let generation_config = Some(GCPVertexGeminiGenerationConfig {
             stop_sequences: None,
@@ -959,7 +977,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
         };
-        let result = GCPVertexGeminiRequest::try_from(&inference_request);
+        let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro");
         let error = result.unwrap_err();
         assert_eq!(
             error,
@@ -990,7 +1008,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
         };
-        let result = GCPVertexGeminiRequest::try_from(&inference_request);
+        let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro");
         let request = result.unwrap();
         assert_eq!(request.contents.len(), 2);
         assert_eq!(request.contents[0].role, GCPVertexGeminiRole::User);
@@ -1022,6 +1040,7 @@ mod tests {
                 content: vec!["test_assistant".to_string().into()],
             },
         ];
+        let output_schema = serde_json::json!({});
         let inference_request = ModelInferenceRequest {
             messages: messages.clone(),
             system: Some("test_system".to_string()),
@@ -1031,9 +1050,10 @@ mod tests {
             stream: true,
             json_mode: JSONMode::On,
             function_type: FunctionType::Chat,
-            output_schema: None,
+            output_schema: Some(&output_schema),
         };
-        let result = GCPVertexGeminiRequest::try_from(&inference_request);
+        // JSON schema should be supported for Gemini Pro models
+        let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-1.5-pro-001");
         let request = result.unwrap();
         assert_eq!(request.contents.len(), 3);
         assert_eq!(request.contents[0].role, GCPVertexGeminiRole::User);
@@ -1067,6 +1087,78 @@ mod tests {
                 .unwrap()
                 .max_output_tokens,
             Some(100)
+        );
+        assert_eq!(
+            request
+                .generation_config
+                .as_ref()
+                .unwrap()
+                .response_mime_type,
+            Some(GCPVertexGeminiResponseMimeType::ApplicationJson)
+        );
+        assert_eq!(
+            request.generation_config.as_ref().unwrap().response_schema,
+            Some(&output_schema)
+        );
+
+        let inference_request = ModelInferenceRequest {
+            messages: messages.clone(),
+            system: Some("test_system".to_string()),
+            tool_config: Some(&tool_config),
+            temperature: Some(0.5),
+            max_tokens: Some(100),
+            stream: true,
+            json_mode: JSONMode::On,
+            function_type: FunctionType::Chat,
+            output_schema: Some(&output_schema),
+        };
+        // JSON mode should be supported for Gemini Flash models but without a schema
+        let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-flash");
+        let request = result.unwrap();
+        assert_eq!(request.contents.len(), 3);
+        assert_eq!(request.contents[0].role, GCPVertexGeminiRole::User);
+        assert_eq!(request.contents[1].role, GCPVertexGeminiRole::User);
+        assert_eq!(request.contents[2].role, GCPVertexGeminiRole::Model);
+        assert_eq!(request.contents[0].parts.len(), 1);
+        assert_eq!(request.contents[1].parts.len(), 1);
+        assert_eq!(request.contents[2].parts.len(), 1);
+        assert_eq!(
+            request.contents[0].parts[0],
+            GCPVertexGeminiContentPart::Text { text: "test_user" }
+        );
+        assert_eq!(
+            request.contents[1].parts[0],
+            GCPVertexGeminiContentPart::Text { text: "test_user2" }
+        );
+        assert_eq!(
+            request.contents[2].parts[0],
+            GCPVertexGeminiContentPart::Text {
+                text: "test_assistant"
+            }
+        );
+        assert_eq!(
+            request.generation_config.as_ref().unwrap().temperature,
+            Some(0.5)
+        );
+        assert_eq!(
+            request
+                .generation_config
+                .as_ref()
+                .unwrap()
+                .max_output_tokens,
+            Some(100)
+        );
+        assert_eq!(
+            request
+                .generation_config
+                .as_ref()
+                .unwrap()
+                .response_mime_type,
+            Some(GCPVertexGeminiResponseMimeType::ApplicationJson)
+        );
+        assert_eq!(
+            request.generation_config.as_ref().unwrap().response_schema,
+            None
         );
     }
 

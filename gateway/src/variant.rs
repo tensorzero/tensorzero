@@ -7,8 +7,8 @@ use uuid::Uuid;
 use crate::error::Error;
 use crate::function::FunctionConfig;
 use crate::inference::types::{
-    ChatInferenceResult, ContentBlock, FunctionType, Input, InputMessageContent, JSONMode,
-    ModelInferenceRequest, ModelInferenceResponseChunk, RequestMessage, Role,
+    ContentBlock, FunctionType, Input, InputMessageContent, JSONMode, ModelInferenceRequest,
+    ModelInferenceResponseChunk, RequestMessage, Role,
 };
 use crate::minijinja_util::TemplateConfig;
 use crate::tool::ToolCallConfig;
@@ -33,6 +33,22 @@ pub struct ChatCompletionConfig {
     pub system_template: Option<PathBuf>,
     pub user_template: Option<PathBuf>,
     pub assistant_template: Option<PathBuf>,
+    #[serde(default)]
+    pub json_mode: JsonEnforcement, // Only for JSON functions, not for chat functions
+}
+
+/// This type is used to determine how to enforce JSON mode for a given variant.
+/// Variants represent JSON mode in a slightly more abstract sense than ModelInferenceRequests, as
+/// we support coercing tool calls into JSON mode.
+/// This is represented as a tool config in the
+#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum JsonEnforcement {
+    #[default]
+    Default,
+    Strict,
+    ImplicitTool,
+    Off,
 }
 
 pub trait Variant {
@@ -179,6 +195,56 @@ impl ChatCompletionConfig {
                 .to_string(),
         })
     }
+
+    fn prepare_request<'a>(
+        &self,
+        input: &Input,
+        function: &FunctionConfig,
+        templates: &TemplateConfig,
+        tool_config: Option<&'a ToolCallConfig>,
+        stream: bool,
+    ) -> Result<ModelInferenceRequest<'a>, Error> {
+        let messages = input
+            .messages
+            .iter()
+            .map(|message| self.prepare_request_message(templates, message))
+            .collect::<Result<Vec<_>, _>>()?;
+        let system = input
+            .system
+            .as_ref()
+            .map(|system| self.prepare_system_message(templates, system))
+            .transpose()?;
+        Ok(match function {
+            FunctionConfig::Chat(_) => ModelInferenceRequest {
+                messages,
+                system,
+                tool_config,
+                temperature: None,
+                max_tokens: None,
+                stream,
+                json_mode: JSONMode::Off,
+                function_type: FunctionType::Chat,
+                output_schema: None,
+            },
+            FunctionConfig::Json(_json_config) => {
+                if self.json_mode == JsonEnforcement::ImplicitTool {
+                    // TODO(#134): implement implicit tool calling
+                    unimplemented!("Implicit tool calling is not implemented yet");
+                }
+                ModelInferenceRequest {
+                    messages,
+                    system,
+                    tool_config,
+                    temperature: None,
+                    max_tokens: None,
+                    stream,
+                    json_mode: (&self.json_mode).into(),
+                    function_type: FunctionType::Json,
+                    output_schema: None,
+                }
+            }
+        })
+    }
 }
 
 impl Variant for ChatCompletionConfig {
@@ -191,40 +257,7 @@ impl Variant for ChatCompletionConfig {
         templates: &TemplateConfig<'_>,
         client: &Client,
     ) -> Result<InferenceResult, Error> {
-        let messages = input
-            .messages
-            .iter()
-            .map(|message| self.prepare_request_message(templates, message))
-            .collect::<Result<Vec<_>, _>>()?;
-        let system = input
-            .system
-            .as_ref()
-            .map(|system| self.prepare_system_message(templates, system))
-            .transpose()?;
-        let request = match function {
-            FunctionConfig::Chat(_) => ModelInferenceRequest {
-                messages,
-                system,
-                tool_config,
-                temperature: None,
-                max_tokens: None,
-                stream: false,
-                json_mode: JSONMode::Off,
-                function_type: FunctionType::Chat,
-                output_schema: None,
-            },
-            FunctionConfig::Json(_) => ModelInferenceRequest {
-                messages,
-                system,
-                tool_config: None,
-                temperature: None,
-                max_tokens: None,
-                stream: false,
-                json_mode: JSONMode::Off,
-                function_type: FunctionType::Json,
-                output_schema: None,
-            }, // TODO (#30): do JSON mode properly
-        };
+        let request = self.prepare_request(input, function, templates, tool_config, false)?;
         let model_config = models.get(&self.model).ok_or(Error::UnknownModel {
             name: self.model.clone(),
         })?;
@@ -235,13 +268,13 @@ impl Variant for ChatCompletionConfig {
         let raw_content = model_inference_response.content.clone();
         let usage = model_inference_response.usage.clone();
         let model_inference_responses = vec![model_inference_response];
-        Ok(InferenceResult::Chat(ChatInferenceResult::new(
+        function.prepare_response(
             inference_id,
             raw_content,
             usage,
             model_inference_responses,
             tool_config,
-        )))
+        )
     }
 
     async fn infer_stream(
@@ -253,44 +286,7 @@ impl Variant for ChatCompletionConfig {
         templates: &TemplateConfig<'_>,
         client: &Client,
     ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error> {
-        let messages = input
-            .messages
-            .iter()
-            .map(|message| self.prepare_request_message(templates, message))
-            .collect::<Result<Vec<_>, _>>()?;
-        let system = input
-            .system
-            .as_ref()
-            .map(|system| self.prepare_system_message(templates, system))
-            .transpose()?;
-        let request = match function {
-            FunctionConfig::Chat(_) => ModelInferenceRequest {
-                messages,
-                system,
-                tool_config,
-                temperature: None,
-                max_tokens: None,
-                stream: true,
-                json_mode: JSONMode::Off,
-                function_type: FunctionType::Chat,
-                output_schema: None,
-            },
-            FunctionConfig::Json(_) => ModelInferenceRequest {
-                messages,
-                system,
-                tool_config: None,
-                temperature: None,
-                max_tokens: None,
-                stream: true,
-                json_mode: JSONMode::Off,
-                function_type: FunctionType::Json,
-                output_schema: None,
-            }, // TODO (#30): do JSON mode properly
-
-               // We want this block to throw an error if somehow the jsonschema is missing
-               // but return None if the output schema is not provided.
-               // FunctionConfig::Json(json_function) => Some(json_function.output_schema.value()?),
-        };
+        let request = self.prepare_request(input, function, templates, tool_config, true)?;
         let model_config = models.get(&self.model).ok_or(Error::UnknownModel {
             name: self.model.clone(),
         })?;
@@ -305,10 +301,11 @@ mod tests {
     use futures::StreamExt;
     use serde_json::{json, Value};
 
-    use crate::function::FunctionConfigChat;
+    use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::providers::common::WEATHER_TOOL_CONFIG;
-    use crate::inference::providers::dummy::DummyProvider;
+    use crate::inference::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
     use crate::inference::types::{ContentBlockOutput, Usage};
+    use crate::jsonschema_util::JSONSchemaFromPath;
     use crate::minijinja_util::tests::get_test_template_config;
     use crate::model::ProviderConfig;
     use crate::tool::ToolChoice;
@@ -330,6 +327,7 @@ mod tests {
             system_template: None,
             user_template: None,
             assistant_template: None,
+            json_mode: JsonEnforcement::Default,
         };
 
         // Test case 1: Regular user message
@@ -391,6 +389,7 @@ mod tests {
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
             assistant_template: Some(assistant_template_name.into()),
+            json_mode: JsonEnforcement::Default,
         };
 
         // Test case 4: Assistant message with template
@@ -474,6 +473,7 @@ mod tests {
             system_template: None,
             user_template: None,
             assistant_template: None,
+            json_mode: JsonEnforcement::Default,
         };
         let input_message = Value::String("You are a helpful assistant.".to_string());
         let result = chat_completion_config.prepare_system_message(&templates, &input_message);
@@ -490,6 +490,7 @@ mod tests {
             system_template: Some(system_template_name.into()),
             user_template: None,
             assistant_template: None,
+            json_mode: JsonEnforcement::Default,
         };
 
         let input_message = serde_json::json!({"assistant_name": "ChatGPT"});
@@ -514,6 +515,7 @@ mod tests {
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
             assistant_template: None,
+            json_mode: JsonEnforcement::Default,
         };
         let function_config = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
@@ -530,18 +532,17 @@ mod tests {
         let error_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "error".to_string(),
         });
-        // let json_provider_config = ProviderConfig::Dummy(DummyProvider {
-        //     model_name: "json".to_string(),
-        // });
+        let json_provider_config = ProviderConfig::Dummy(DummyProvider {
+            model_name: "json".to_string(),
+        });
         let text_model_config = ModelConfig {
             routing: vec!["good".to_string()],
             providers: HashMap::from([("good".to_string(), good_provider_config)]),
         };
-        // Snooze this for now
-        // let json_model_config = ModelConfig {
-        //     routing: vec!["json".to_string()],
-        //     providers: HashMap::from([("json".to_string(), json_provider_config)]),
-        // };
+        let json_model_config = ModelConfig {
+            routing: vec!["json".to_string()],
+            providers: HashMap::from([("json".to_string(), json_provider_config)]),
+        };
         let tool_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "tool".to_string(),
         });
@@ -604,6 +605,7 @@ mod tests {
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
             assistant_template: None,
+            json_mode: JsonEnforcement::Default,
         };
         let models = HashMap::from([("error".to_string(), error_model_config.clone())]);
         let result = chat_completion_config
@@ -626,6 +628,7 @@ mod tests {
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
             assistant_template: None,
+            json_mode: JsonEnforcement::Default,
         };
         let models = HashMap::from([("good".to_string(), text_model_config.clone())]);
         let result = chat_completion_config
@@ -652,6 +655,7 @@ mod tests {
                     vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()]
                 );
             }
+            _ => unreachable!("Expected Chat inference response"),
         }
 
         // Test case 5: tool call
@@ -661,6 +665,7 @@ mod tests {
             system_template: None,
             user_template: None,
             assistant_template: None,
+            json_mode: JsonEnforcement::Default,
         };
         let input = Input {
             system: None,
@@ -709,68 +714,101 @@ mod tests {
                     }
                 );
             }
+            _ => unreachable!("Expected Chat inference response"),
         }
 
-        // TODO: handle schemas separately
         // Test case 5: JSON output was supposed to happen but it did not
-        // let output_schema = serde_json::json!({
-        //     "type": "object",
-        //     "properties": {
-        //         "answer": {
-        //             "type": "string"
-        //         }
-        //     },
-        //     "required": ["answer"],
-        //     "additionalProperties": false
-        // });
-        // let output_schema = JSONSchemaFromPath::from_value(&output_schema);
-        // let result = chat_completion_config
-        //     .infer(
-        //         &input,
-        //         &models,
-        //         &function_config,
-        //         Some(&output_schema),
-        //         &client,
-        //     )
-        //     .await
-        //     .unwrap();
-        // assert!(matches!(result, InferenceResult::Chat(_)));
-        // match result {
-        //     InferenceResult::Chat(chat_response) => {
-        //         assert_eq!(
-        //             chat_response.content_blocks,
-        //             vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()]
-        //         );
-        //         assert_eq!(chat_response.parsed_output, None,);
-        //     }
-        // }
-
+        let output_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "answer": {
+                    "type": "string"
+                }
+            },
+            "required": ["answer"],
+            "additionalProperties": false
+        });
+        let output_schema = JSONSchemaFromPath::from_value(&output_schema);
+        let json_function_config = FunctionConfig::Json(FunctionConfigJson {
+            variants: HashMap::new(),
+            assistant_schema: None,
+            system_schema: None,
+            user_schema: None,
+            output_schema,
+        });
+        let result = chat_completion_config
+            .infer(
+                &input,
+                &models,
+                &json_function_config,
+                None,
+                &templates,
+                &client,
+            )
+            .await
+            .unwrap();
+        match result {
+            InferenceResult::Json(json_result) => {
+                assert!(json_result.output.parsed.is_none());
+                assert_eq!(
+                    json_result.output.raw,
+                    r#"{"location":"Brooklyn","units":"celsius"}"#.to_string()
+                );
+                assert_eq!(
+                    json_result.usage,
+                    Usage {
+                        prompt_tokens: 10,
+                        completion_tokens: 10,
+                    }
+                );
+                assert_eq!(json_result.model_inference_responses.len(), 1);
+            }
+            _ => unreachable!("Expected Json inference response"),
+        }
+        let messages = vec![InputMessage {
+            role: Role::User,
+            content: vec![json!({"name": "Luke", "age": 20}).into()],
+        }];
+        let input = Input {
+            system: Some(json!({"assistant_name": "R2-D2"})),
+            messages,
+        };
         // Test case 6: JSON output was supposed to happen and it did
-        // let models = HashMap::from([("json".to_string(), json_model_config.clone())]);
-        // let chat_completion_config = ChatCompletionConfig {
-        //     model: "json".to_string(),
-        //     weight: 1.0,
-        //     system_template: Some(system_template_name.into()),
-        //     user_template: Some(user_template_name.into()),
-        //     assistant_template: None,
-        // };
-        // let result = chat_completion_config
-        //     .infer(&input, &models, Some(&output_schema), &client)
-        //     .await
-        //     .unwrap();
-        // assert!(matches!(result, InferenceResult::Chat(_)));
-        // match result {
-        //     InferenceResult::Chat(chat_response) => {
-        //         assert_eq!(
-        //             chat_response.parsed_output,
-        //             Some(json!({"answer": "Hello"}))
-        //         );
-        //         assert_eq!(
-        //             chat_response.content_blocks,
-        //             vec![DUMMY_JSON_RESPONSE_RAW.to_string().into()]
-        //         );
-        //     }
-        // }
+        let models = HashMap::from([("json".to_string(), json_model_config.clone())]);
+        let chat_completion_config = ChatCompletionConfig {
+            model: "json".to_string(),
+            weight: 1.0,
+            system_template: Some(system_template_name.into()),
+            user_template: Some(user_template_name.into()),
+            assistant_template: None,
+            json_mode: JsonEnforcement::Default,
+        };
+        let result = chat_completion_config
+            .infer(
+                &input,
+                &models,
+                &json_function_config,
+                None,
+                &templates,
+                &client,
+            )
+            .await
+            .unwrap();
+        match result {
+            InferenceResult::Json(json_result) => {
+                assert_eq!(json_result.output.parsed, Some(json!({"answer": "Hello"})));
+                assert_eq!(json_result.output.raw, DUMMY_JSON_RESPONSE_RAW.to_string());
+                assert_eq!(
+                    json_result.usage,
+                    Usage {
+                        prompt_tokens: 10,
+                        completion_tokens: 10,
+                    }
+                );
+                assert_eq!(json_result.model_inference_responses.len(), 1);
+            }
+            _ => unreachable!("Expected Json inference response"),
+        }
     }
 
     #[tokio::test]
@@ -817,6 +855,7 @@ mod tests {
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
             assistant_template: None,
+            json_mode: JsonEnforcement::Default,
         };
         let models = HashMap::from([("error".to_string(), error_model_config.clone())]);
         let result = chat_completion_config
@@ -839,6 +878,7 @@ mod tests {
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
             assistant_template: None,
+            json_mode: JsonEnforcement::Default,
         };
         let models = HashMap::from([("good".to_string(), text_model_config.clone())]);
         let (first_chunk, mut stream) = chat_completion_config

@@ -4,7 +4,7 @@ use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
@@ -177,12 +177,13 @@ pub(super) fn handle_openai_error(
     response_body: &str,
 ) -> Result<ModelInferenceResponse, Error> {
     match response_code {
-        StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN | StatusCode::TOO_MANY_REQUESTS => {
-            Err(Error::OpenAIClient {
-                message: response_body.to_string(),
-                status_code: response_code,
-            })
-        }
+        StatusCode::BAD_REQUEST
+        | StatusCode::UNAUTHORIZED
+        | StatusCode::FORBIDDEN
+        | StatusCode::TOO_MANY_REQUESTS => Err(Error::OpenAIClient {
+            message: response_body.to_string(),
+            status_code: response_code,
+        }),
         _ => Err(Error::OpenAIServer {
             message: response_body.to_string(),
         }),
@@ -368,6 +369,25 @@ enum OpenAIResponseFormat {
     JsonObject,
     #[default]
     Text,
+    JsonSchema {
+        json_schema: Value,
+    },
+}
+
+impl OpenAIResponseFormat {
+    fn new(json_mode: &JSONMode, output_schema: Option<&Value>) -> Self {
+        match json_mode {
+            JSONMode::On => OpenAIResponseFormat::JsonObject,
+            JSONMode::Off => OpenAIResponseFormat::Text,
+            JSONMode::Strict => match output_schema {
+                Some(schema) => {
+                    let json_schema = json!({"name": "response", "schema": schema.clone()});
+                    OpenAIResponseFormat::JsonSchema { json_schema }
+                }
+                None => OpenAIResponseFormat::JsonObject,
+            },
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -486,11 +506,7 @@ struct OpenAIRequest<'a> {
 
 impl<'a> OpenAIRequest<'a> {
     pub fn new(model: &'a str, request: &'a ModelInferenceRequest) -> OpenAIRequest<'a> {
-        let response_format = match request.json_mode {
-            // TODO(#68): Implement structured output here
-            JSONMode::On | JSONMode::Strict => OpenAIResponseFormat::JsonObject,
-            JSONMode::Off => OpenAIResponseFormat::Text,
-        };
+        let response_format = OpenAIResponseFormat::new(&request.json_mode, request.output_schema);
         let stream_options = match request.stream {
             true => Some(StreamOptions {
                 include_usage: true,
@@ -718,6 +734,8 @@ fn openai_to_tensorzero_chunk(
 #[cfg(test)]
 mod tests {
 
+    use serde_json::json;
+
     use crate::{
         inference::{
             providers::common::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG},
@@ -888,6 +906,67 @@ mod tests {
                     name: &WEATHER_TOOL.name,
                 }
             }))
+        );
+
+        // Test request with strict JSON mode with no output schema
+        let request_with_tools = ModelInferenceRequest {
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            max_tokens: None,
+            stream: false,
+            json_mode: JSONMode::Strict,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+
+        let openai_request = OpenAIRequest::new("gpt-4", &request_with_tools);
+
+        assert_eq!(openai_request.model, "gpt-4");
+        assert_eq!(openai_request.messages.len(), 1);
+        assert_eq!(openai_request.temperature, None);
+        assert_eq!(openai_request.max_tokens, None);
+        assert!(!openai_request.stream);
+        // Resolves to normal JSON mode since no schema is provided (this shouldn't really happen in practice)
+        assert_eq!(
+            openai_request.response_format,
+            OpenAIResponseFormat::JsonObject
+        );
+
+        // Test request with strict JSON mode with an output schema
+        let output_schema = json!({});
+        let request_with_tools = ModelInferenceRequest {
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            max_tokens: None,
+            stream: false,
+            json_mode: JSONMode::Strict,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: Some(&output_schema),
+        };
+
+        let openai_request = OpenAIRequest::new("gpt-4", &request_with_tools);
+
+        assert_eq!(openai_request.model, "gpt-4");
+        assert_eq!(openai_request.messages.len(), 1);
+        assert_eq!(openai_request.temperature, None);
+        assert_eq!(openai_request.max_tokens, None);
+        assert!(!openai_request.stream);
+        let expected_schema = serde_json::json!({"name": "response", "schema": {}});
+        assert_eq!(
+            openai_request.response_format,
+            OpenAIResponseFormat::JsonSchema {
+                json_schema: expected_schema,
+            }
         );
     }
 
@@ -1343,5 +1422,42 @@ mod tests {
                 completion_tokens: 20,
             })
         );
+    }
+
+    #[test]
+    fn test_new_openai_response_format() {
+        // Test JSON mode On
+        let json_mode = JSONMode::On;
+        let output_schema = None;
+        let format = OpenAIResponseFormat::new(&json_mode, output_schema);
+        assert_eq!(format, OpenAIResponseFormat::JsonObject);
+
+        // Test JSON mode Off
+        let json_mode = JSONMode::Off;
+        let format = OpenAIResponseFormat::new(&json_mode, output_schema);
+        assert_eq!(format, OpenAIResponseFormat::Text);
+
+        // Test JSON mode Strict with no schema
+        let json_mode = JSONMode::Strict;
+        let format = OpenAIResponseFormat::new(&json_mode, output_schema);
+        assert_eq!(format, OpenAIResponseFormat::JsonObject);
+
+        // Test JSON mode Strict with schema
+        let json_mode = JSONMode::Strict;
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "foo": {"type": "string"}
+            }
+        });
+        let output_schema = Some(&schema);
+        let format = OpenAIResponseFormat::new(&json_mode, output_schema);
+        match format {
+            OpenAIResponseFormat::JsonSchema { json_schema } => {
+                assert_eq!(json_schema["schema"], schema);
+                assert_eq!(json_schema["name"], "response");
+            }
+            _ => unreachable!("Expected JsonSchema format"),
+        }
     }
 }
