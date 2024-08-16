@@ -37,17 +37,20 @@ pub struct Params {
     episode_id: Option<Uuid>,
     // the input for the inference
     input: Input,
-    // the maximum number of tokens to generate (if not provided, the default value will be used)
-    #[allow(unused)] // TODO (#55): remove
-    max_tokens: Option<u32>,
     // default False
     stream: Option<bool>,
     // if the client would like to pin a specific variant to be used
     // NOTE: YOU SHOULD TYPICALLY LET THE API SELECT A VARIANT FOR YOU (I.E. IGNORE THIS FIELD).
-    //       ONLY PIN A VARIANT FOR SPECIAL USE CASES (E.G. DEBUGGING).
+    //       ONLY PIN A VARIANT FOR SPECIAL USE CASES (E.G. TESTING / DEBUGGING VARIANTS).
     variant_name: Option<String>,
     // if true, the inference will not be stored
     dryrun: Option<bool>,
+    // the temperature to use for the inference
+    //temperature: Option<f32>,
+    // the maximum number of tokens to generate (if not provided, the default value will be used)
+    // max_tokens: Option<u32>,
+    // the seed to use for the inference
+    // seed: Option<u32>,
     // TODO (#126): properly implement dynamic tool calling
     // If provided, the inference will only use the specified tools (a subset of the function's tools)
     // allowed_tools: Option<Vec<String>>,
@@ -69,6 +72,12 @@ struct InferenceMetadata {
     pub start_time: Instant,
 }
 
+// struct InferenceParams {
+//     temperature: Option<f32>,
+//     max_tokens: Option<u32>,
+//     seed: Option<u32>,
+// }
+
 /// A handler for the inference endpoint
 #[debug_handler(state = AppStateData)]
 pub async fn inference_handler(
@@ -83,6 +92,11 @@ pub async fn inference_handler(
     // Get the function config or return an error if it doesn't exist
     let config = get_config();
     let function = config.get_function(&params.function_name)?;
+    // let inference_params = InferenceParams {
+    //     temperature: params.temperature,
+    //     max_tokens: params.max_tokens,
+    //     seed: params.seed,
+    // };
     // TODO (#126): implement dynamic tool calling
     // Collect the dynamic tool config
     // let dynamic_tool_config = DynamicToolConfig {
@@ -102,11 +116,11 @@ pub async fn inference_handler(
             message: e.to_string(),
         })?;
     let tool_config = function.prepare_tool_config(&config.tools)?;
-    // Clone the function variants so we can modify the collection as we sample them
-    let mut variants = function.variants().clone();
+    // Collect the function variant names as a Vec<&str>
+    let mut variant_names: Vec<&str> = function.variants().keys().map(AsRef::as_ref).collect();
 
     // If the function has no variants, return an error
-    if variants.is_empty() {
+    if variant_names.is_empty() {
         return Err(Error::InvalidFunctionVariants {
             message: format!("Function `{}` has no variants", params.function_name),
         });
@@ -117,10 +131,10 @@ pub async fn inference_handler(
 
     // If a variant is pinned, only that variant should be attempted
     if let Some(ref variant_name) = params.variant_name {
-        variants.retain(|k, _| k == variant_name);
+        variant_names.retain(|k| k == variant_name);
 
         // If the pinned variant doesn't exist, return an error
-        if variants.is_empty() {
+        if variant_names.is_empty() {
             return Err(Error::UnknownVariant {
                 name: variant_name.to_string(),
             });
@@ -151,9 +165,13 @@ pub async fn inference_handler(
     let mut variant_errors = vec![];
 
     // Keep sampling variants until one succeeds
-    while !variants.is_empty() {
-        let (variant_name, variant) =
-            sample_variant(&mut variants, &params.function_name, &episode_id)?;
+    while !variant_names.is_empty() {
+        let (variant_name, variant) = sample_variant(
+            &mut variant_names,
+            function.variants(),
+            &params.function_name,
+            &episode_id,
+        )?;
         if stream {
             let result = variant
                 .infer_stream(
@@ -178,7 +196,7 @@ pub async fn inference_handler(
             // Create InferenceMetadata for a streaming inference
             let inference_metadata = InferenceMetadata {
                 function_name: params.function_name.clone(),
-                variant_name,
+                variant_name: variant_name.to_string(),
                 episode_id,
                 input: params.input.clone(),
                 dryrun,
@@ -222,7 +240,7 @@ pub async fn inference_handler(
                 // Spawn a thread for a trailing write to ClickHouse so that it doesn't block the response
                 let write_metadata = InferenceWriteMetadata {
                     function_name: params.function_name,
-                    variant_name: variant_name.clone(),
+                    variant_name: variant_name.to_string(),
                     episode_id,
                     dynamic_tool_config: dynamic_tool_config_string,
                     processing_time: start_time.elapsed(),
@@ -241,7 +259,7 @@ pub async fn inference_handler(
                 });
             }
 
-            let response = InferenceResponse::new(result, episode_id, variant_name);
+            let response = InferenceResponse::new(result, episode_id, variant_name.to_string());
 
             let response_serialized =
                 serde_json::to_value(response).map_err(|e| Error::Inference {
