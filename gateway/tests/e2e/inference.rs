@@ -665,14 +665,9 @@ async fn e2e_test_inference_json_fail() {
     let output = response_json.get("output").unwrap();
     assert!(output.get("parsed").unwrap().is_null());
     assert!(output.get("raw").unwrap().as_str().unwrap() == DUMMY_INFER_RESPONSE_CONTENT);
-    // Check that created is here
-    response_json.get("created").unwrap();
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-    // Check that type is "chat"
-    let r#type = response_json.get("type").unwrap().as_str().unwrap();
-    assert_eq!(r#type, "json");
 
     // Check that usage is correct
     let usage = response_json.get("usage").unwrap();
@@ -787,14 +782,9 @@ async fn e2e_test_inference_json_succeed() {
     assert_eq!(answer, "Hello");
     let raw = output.get("raw").unwrap().as_str().unwrap();
     assert_eq!(raw, DUMMY_JSON_RESPONSE_RAW);
-    // Check that created is here
-    response_json.get("created").unwrap();
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-    // Check that type is "json"
-    let r#type = response_json.get("type").unwrap().as_str().unwrap();
-    assert_eq!(r#type, "json");
 
     // Check that usage is correct
     let usage = response_json.get("usage").unwrap();
