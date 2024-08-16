@@ -24,7 +24,7 @@ use crate::inference::types::{
 };
 use crate::tool::{DynamicToolConfig, ToolCallConfig};
 use crate::uuid_util::validate_episode_id;
-use crate::variant::Variant;
+use crate::variant::{InferenceConfig, Variant};
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Deserialize)]
@@ -46,11 +46,11 @@ pub struct Params {
     // if true, the inference will not be stored
     dryrun: Option<bool>,
     // the temperature to use for the inference
-    //temperature: Option<f32>,
+    temperature: Option<f32>,
     // the maximum number of tokens to generate (if not provided, the default value will be used)
-    // max_tokens: Option<u32>,
+    max_tokens: Option<u32>,
     // the seed to use for the inference
-    // seed: Option<u32>,
+    seed: Option<u32>,
     // TODO (#126): properly implement dynamic tool calling
     // If provided, the inference will only use the specified tools (a subset of the function's tools)
     // allowed_tools: Option<Vec<String>>,
@@ -62,7 +62,7 @@ pub struct Params {
     // parallel_tool_calls: Option<bool>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 struct InferenceMetadata {
     pub function_name: String,
     pub variant_name: String,
@@ -72,11 +72,12 @@ struct InferenceMetadata {
     pub start_time: Instant,
 }
 
-// struct InferenceParams {
-//     temperature: Option<f32>,
-//     max_tokens: Option<u32>,
-//     seed: Option<u32>,
-// }
+#[derive(Clone, Debug, Default)]
+pub struct InferenceParams {
+    pub temperature: Option<f32>,
+    pub max_tokens: Option<u32>,
+    pub seed: Option<u32>,
+}
 
 /// A handler for the inference endpoint
 #[debug_handler(state = AppStateData)]
@@ -92,11 +93,11 @@ pub async fn inference_handler(
     // Get the function config or return an error if it doesn't exist
     let config = get_config();
     let function = config.get_function(&params.function_name)?;
-    // let inference_params = InferenceParams {
-    //     temperature: params.temperature,
-    //     max_tokens: params.max_tokens,
-    //     seed: params.seed,
-    // };
+    let inference_params = InferenceParams {
+        temperature: params.temperature,
+        max_tokens: params.max_tokens,
+        seed: params.seed,
+    };
     // TODO (#126): implement dynamic tool calling
     // Collect the dynamic tool config
     // let dynamic_tool_config = DynamicToolConfig {
@@ -163,7 +164,12 @@ pub async fn inference_handler(
 
     // Keep track of which variants failed
     let mut variant_errors = vec![];
-
+    let inference_config = InferenceConfig {
+        models: &config.models,
+        function,
+        templates: &config.templates,
+        tool_config: tool_config.as_ref(),
+    };
     // Keep sampling variants until one succeeds
     while !variant_names.is_empty() {
         let (variant_name, variant) = sample_variant(
@@ -172,15 +178,16 @@ pub async fn inference_handler(
             &params.function_name,
             &episode_id,
         )?;
+        // Will be edited by the variant as part of making the request so we must clone here
+        let mut variant_inference_params = inference_params.clone();
+
         if stream {
             let result = variant
                 .infer_stream(
                     &params.input,
-                    &config.models,
-                    function,
-                    tool_config.as_ref(),
-                    &config.templates,
+                    &inference_config,
                     &http_client,
+                    &mut variant_inference_params,
                 )
                 .await;
 
@@ -220,11 +227,9 @@ pub async fn inference_handler(
             let result = variant
                 .infer(
                     &params.input,
-                    &config.models,
-                    function,
-                    tool_config.as_ref(),
-                    &config.templates,
+                    &inference_config,
                     &http_client,
+                    &mut variant_inference_params,
                 )
                 .await;
 
@@ -507,6 +512,25 @@ impl InferenceResponseChunk {
                     usage: result.usage,
                 })
             }
+        }
+    }
+}
+
+impl InferenceParams {
+    pub fn include_variant_params(
+        &mut self,
+        temperature: Option<f32>,
+        max_tokens: Option<u32>,
+        seed: Option<u32>,
+    ) {
+        if self.temperature.is_none() {
+            self.temperature = temperature;
+        }
+        if self.max_tokens.is_none() {
+            self.max_tokens = max_tokens;
+        }
+        if self.seed.is_none() {
+            self.seed = seed;
         }
     }
 }

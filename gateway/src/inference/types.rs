@@ -117,6 +117,7 @@ pub struct ModelInferenceRequest<'a> {
     pub tool_config: Option<&'a ToolCallConfig>,
     pub temperature: Option<f32>,
     pub max_tokens: Option<u32>,
+    pub seed: Option<u32>,
     pub stream: bool,
     pub json_mode: JSONMode,
     pub function_type: FunctionType,

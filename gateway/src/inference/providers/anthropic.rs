@@ -332,6 +332,7 @@ impl<'a> AnthropicRequestBody<'a> {
             .filter(|t| !t.is_empty())
             .and(request.tool_config)
             .and_then(|c| c.tool_choice.try_into().ok());
+        // NOTE: Anthropic does not support seed
         Ok(AnthropicRequestBody {
             model: model_name,
             messages,
@@ -894,6 +895,7 @@ mod tests {
             tool_config: None,
             temperature: None,
             max_tokens: None,
+            seed: None,
             stream: false,
             json_mode: JSONMode::Off,
             function_type: FunctionType::Chat,
@@ -925,6 +927,7 @@ mod tests {
             tool_config: None,
             temperature: None,
             max_tokens: None,
+            seed: None,
             stream: false,
             json_mode: JSONMode::Off,
             function_type: FunctionType::Chat,
@@ -972,6 +975,7 @@ mod tests {
             tool_config: None,
             temperature: Some(0.5),
             max_tokens: Some(100),
+            seed: None,
             stream: true,
             json_mode: JSONMode::On,
             function_type: FunctionType::Chat,
@@ -1029,6 +1033,7 @@ mod tests {
             tool_config: Some(&WEATHER_TOOL_CONFIG),
             temperature: Some(0.5),
             max_tokens: Some(100),
+            seed: None,
             stream: true,
             json_mode: JSONMode::On,
             function_type: FunctionType::Chat,

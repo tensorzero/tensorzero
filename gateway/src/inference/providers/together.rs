@@ -157,6 +157,8 @@ struct TogetherRequest<'a> {
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    seed: Option<u32>,
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     response_format: Option<TogetherResponseFormat<'a>>,
@@ -183,6 +185,7 @@ impl<'a> TogetherRequest<'a> {
             model,
             temperature: request.temperature,
             max_tokens: request.max_tokens,
+            seed: request.seed,
             stream: request.stream,
             response_format,
             tools,
@@ -210,8 +213,9 @@ mod tests {
                 content: vec!["What's the weather?".to_string().into()],
             }],
             system: None,
-            temperature: None,
-            max_tokens: None,
+            temperature: Some(0.5),
+            max_tokens: Some(100),
+            seed: Some(69),
             stream: false,
             json_mode: JSONMode::Off,
             tool_config: Some(&WEATHER_TOOL_CONFIG),
@@ -224,8 +228,9 @@ mod tests {
 
         assert_eq!(together_request.model, "togethercomputer/llama-v3-8b");
         assert_eq!(together_request.messages.len(), 1);
-        assert_eq!(together_request.temperature, None);
-        assert_eq!(together_request.max_tokens, None);
+        assert_eq!(together_request.temperature, Some(0.5));
+        assert_eq!(together_request.max_tokens, Some(100));
+        assert_eq!(together_request.seed, Some(69));
         assert!(!together_request.stream);
         let tools = together_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);

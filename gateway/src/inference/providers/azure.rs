@@ -181,6 +181,8 @@ struct AzureRequest<'a> {
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    seed: Option<u32>,
     stream: bool,
     response_format: AzureResponseFormat,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -204,6 +206,7 @@ impl<'a> AzureRequest<'a> {
             max_tokens: request.max_tokens,
             stream: request.stream,
             response_format,
+            seed: request.seed,
             tools,
             tool_choice: tool_choice.map(AzureToolChoice::from),
         }
@@ -226,9 +229,10 @@ mod tests {
                 content: vec!["What's the weather?".to_string().into()],
             }],
             system: None,
-            temperature: None,
-            max_tokens: None,
+            temperature: Some(0.5),
+            max_tokens: Some(100),
             stream: false,
+            seed: Some(69),
             json_mode: JSONMode::On,
             tool_config: Some(&WEATHER_TOOL_CONFIG),
             function_type: FunctionType::Chat,
@@ -239,14 +243,14 @@ mod tests {
 
         assert_eq!(azure_request.model, "togethercomputer/llama-v3-8b");
         assert_eq!(azure_request.messages.len(), 1);
-        assert_eq!(azure_request.temperature, None);
-        assert_eq!(azure_request.max_tokens, None);
+        assert_eq!(azure_request.temperature, Some(0.5));
+        assert_eq!(azure_request.max_tokens, Some(100));
         assert!(!azure_request.stream);
-        // TODO (#99): Currently Azure seems to be getting mad about JSON mode, let's figure this out later
-        // assert_eq!(
-        //     azure_request.response_format,
-        //     AzureResponseFormat::JsonObject
-        // );
+        assert_eq!(azure_request.seed, Some(69));
+        assert_eq!(
+            azure_request.response_format,
+            AzureResponseFormat::JsonObject
+        );
         assert!(azure_request.tools.is_some());
         let tools = azure_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
