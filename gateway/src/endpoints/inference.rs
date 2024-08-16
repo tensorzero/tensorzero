@@ -41,7 +41,7 @@ pub struct Params {
     stream: Option<bool>,
     // Inference-time overrides for chat completion variants (use with caution)
     #[serde(default)]
-    chat_completion: ChatInferenceParams,
+    params: InferenceParams,
     // if the client would like to pin a specific variant to be used
     // NOTE: YOU SHOULD TYPICALLY LET THE API SELECT A VARIANT FOR YOU (I.E. IGNORE THIS FIELD).
     //       ONLY PIN A VARIANT FOR SPECIAL USE CASES (E.G. TESTING / DEBUGGING VARIANTS).
@@ -77,7 +77,7 @@ pub struct ChatInferenceParams {
     pub seed: Option<u32>,
 }
 
-#[derive(Clone, Debug, Default, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct InferenceParams {
     pub chat_completion: ChatInferenceParams,
 }
@@ -96,9 +96,6 @@ pub async fn inference_handler(
     // Get the function config or return an error if it doesn't exist
     let config = get_config();
     let function = config.get_function(&params.function_name)?;
-    let inference_params = InferenceParams {
-        chat_completion: params.chat_completion,
-    };
     // TODO (#126): implement dynamic tool calling
     // Collect the dynamic tool config
     // let dynamic_tool_config = DynamicToolConfig {
@@ -180,7 +177,7 @@ pub async fn inference_handler(
             &episode_id,
         )?;
         // Will be edited by the variant as part of making the request so we must clone here
-        let mut variant_inference_params = inference_params.clone();
+        let mut variant_inference_params = params.params.clone();
 
         if stream {
             let result = variant

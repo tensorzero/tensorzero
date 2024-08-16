@@ -1065,11 +1065,12 @@ async fn e2e_test_streaming() {
                 }
             ]},
         "stream": true,
-        "chat_completion": {
-            "temperature": 2.0,
+        "params": {
+            "chat_completion": {
+                "temperature": 2.0,
             "max_tokens": 200,
             "seed": 420
-        }
+        }}
     });
 
     let mut event_source = Client::new()
