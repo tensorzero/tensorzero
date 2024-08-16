@@ -1,22 +1,29 @@
 use aws_config::meta::region::RegionProviderChain;
 use aws_sdk_bedrockruntime::operation::converse::ConverseOutput;
+use aws_sdk_bedrockruntime::operation::converse_stream::ConverseStreamOutput;
 use aws_sdk_bedrockruntime::types::{
-    ContentBlock as BedrockContentBlock, ConversationRole, ConverseOutput as ConverseOutputType,
+    ContentBlock as BedrockContentBlock, ContentBlockDelta, ContentBlockStart, ConversationRole,
+    ConverseOutput as ConverseOutputType, ConverseStreamOutput as ConverseStreamOutputType,
     InferenceConfiguration, Message, SystemContentBlock,
 };
 use aws_smithy_types::error::display::DisplayErrorContext;
 use aws_types::region::Region;
 use dashmap::{DashMap, Entry as DashMapEntry};
+use futures::{Stream, StreamExt};
 use lazy_static::lazy_static;
 use reqwest::StatusCode;
+use std::time::Duration;
 use tokio::time::Instant;
+use uuid::Uuid;
 
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
-    ContentBlock, Latency, ModelInferenceRequest, ModelInferenceResponse,
-    ModelInferenceResponseChunk, ModelInferenceResponseStream, RequestMessage, Role, Text, Usage,
+    ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest, ModelInferenceResponse,
+    ModelInferenceResponseChunk, ModelInferenceResponseStream, RequestMessage, Role, Text,
+    TextChunk, Usage,
 };
+use crate::tool::ToolCallChunk;
 
 lazy_static! {
      /// NOTE: The AWS client is thread-safe but not safe across Tokio runtimes. By default, `tokio::test`
@@ -128,10 +135,210 @@ impl InferenceProvider for AWSBedrockProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        _request: &'a ModelInferenceRequest<'a>,
+        request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
     ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error> {
-        todo!() // TODO (#30): implement streaming inference
+        let aws_bedrock_client = get_aws_bedrock_client(self.region.clone()).await?;
+
+        // TODO (#55): add support for guardrails and additional fields
+
+        let messages: Vec<Message> = request
+            .messages
+            .iter()
+            .map(Message::try_from)
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let mut inference_config = InferenceConfiguration::builder();
+        // TODO (#55): add support for top_p, stop_sequences, etc.
+        if let Some(max_tokens) = request.max_tokens {
+            inference_config = inference_config.max_tokens(max_tokens as i32);
+        }
+        if let Some(temperature) = request.temperature {
+            inference_config = inference_config.temperature(temperature);
+        }
+
+        let mut bedrock_request = aws_bedrock_client
+            .converse_stream()
+            .model_id(&self.model_id)
+            .set_messages(Some(messages))
+            .inference_config(inference_config.build());
+
+        if let Some(system) = &request.system {
+            let system_block = SystemContentBlock::Text(system.clone());
+            bedrock_request = bedrock_request.system(system_block);
+        }
+
+        // TODO (#18, #30): .tool_config(...)
+
+        let start_time = Instant::now();
+        let stream = bedrock_request
+            .send()
+            .await
+            .map_err(|e| Error::AWSBedrockServer {
+                message: format!(
+                    "Error sending request to AWS Bedrock: {}",
+                    DisplayErrorContext(&e)
+                ),
+            })?;
+
+        let mut stream = Box::pin(stream_bedrock(stream, start_time));
+        let chunk = match stream.next().await {
+            Some(Ok(chunk)) => chunk,
+            Some(Err(e)) => return Err(e),
+            None => {
+                return Err(Error::AWSBedrockServer {
+                    message: "Stream ended before first chunk".to_string(),
+                })
+            }
+        };
+
+        Ok((chunk, stream))
+    }
+}
+
+fn stream_bedrock(
+    mut stream: ConverseStreamOutput,
+    start_time: Instant,
+) -> impl Stream<Item = Result<ModelInferenceResponseChunk, Error>> {
+    async_stream::stream! {
+        let inference_id = Uuid::now_v7();
+        let mut current_tool_id : Option<String> = None;
+        let mut current_tool_name: Option<String> = None;
+
+        loop {
+            let ev = stream.stream.recv().await;
+
+            match ev {
+                Err(e) => {
+                    yield Err(Error::AWSBedrockServer {
+                        message: e.to_string(),
+                    });
+                }
+                Ok(ev) => match ev {
+                    None => break,
+                    Some(output) => {
+                        // NOTE: AWS Bedrock returns usage (ConverseStreamMetadataEvent) AFTER MessageStop.
+
+                        // Convert the event to a tensorzero stream message
+                        let stream_message = bedrock_to_tensorzero_stream_message(output, inference_id, start_time.elapsed(), &mut current_tool_id, &mut current_tool_name);
+
+                        match stream_message {
+                            Ok(None) => {},
+                            Ok(Some(stream_message)) => yield Ok(stream_message),
+                            Err(e) => yield Err(e),
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn bedrock_to_tensorzero_stream_message(
+    output: ConverseStreamOutputType,
+    inference_id: Uuid,
+    message_latency: Duration,
+    current_tool_id: &mut Option<String>,
+    current_tool_name: &mut Option<String>,
+) -> Result<Option<ModelInferenceResponseChunk>, Error> {
+    match output {
+        ConverseStreamOutputType::ContentBlockDelta(message) => {
+            let raw_message = serialize_aws_bedrock_struct(&message)?;
+
+            match message.delta {
+                Some(delta) => match delta {
+                    ContentBlockDelta::Text(text) => Ok(Some(ModelInferenceResponseChunk::new(
+                        inference_id,
+                        vec![ContentBlockChunk::Text(TextChunk {
+                            text,
+                            id: message.content_block_index.to_string(),
+                        })],
+                        None,
+                        raw_message,
+                        message_latency,
+                    ))),
+                    ContentBlockDelta::ToolUse(tool_use) => {
+                        Ok(Some(ModelInferenceResponseChunk::new(
+                            inference_id,
+                            // Take the current tool name and ID and use them to create a ToolCallChunk
+                            // This is necessary because the ToolCallChunk must always contain the tool name and ID
+                            // even though AWS Bedrock only sends the tool ID and name in the ToolUse chunk and not InputJSONDelta
+                            vec![ContentBlockChunk::ToolCall(ToolCallChunk {
+                                name: current_tool_name.clone().ok_or(Error::AWSBedrockServer {
+                                    message: "Got InputJsonDelta chunk from AWS Bedrock without current tool name being set by a ToolUse".to_string(),
+                                })?,
+                                id: current_tool_id.clone().ok_or(Error::AWSBedrockServer {
+                                    message: "Got InputJsonDelta chunk from AWS Bedrock without current tool id being set by a ToolUse".to_string(),
+                                })?,
+                                arguments: tool_use.input,
+                            })],
+                            None,
+                            raw_message,
+                            message_latency,
+                        )))
+                    }
+                    _ => Err(Error::AWSBedrockServer {
+                        message: "Unsupported content block delta type for AWS Bedrock".to_string(),
+                    }),
+                },
+                None => Ok(None),
+            }
+        }
+        ConverseStreamOutputType::ContentBlockStart(message) => {
+            let raw_message = serialize_aws_bedrock_struct(&message)?;
+
+            match message.start {
+                None => Ok(None),
+                Some(ContentBlockStart::ToolUse(tool_use)) => {
+                    // This is a new tool call, update the ID for future chunks
+                    *current_tool_id = Some(tool_use.tool_use_id.clone());
+                    *current_tool_name = Some(tool_use.name.clone());
+                    Ok(Some(ModelInferenceResponseChunk::new(
+                        inference_id,
+                        vec![ContentBlockChunk::ToolCall(ToolCallChunk {
+                            id: tool_use.tool_use_id,
+                            name: tool_use.name,
+                            arguments: "".to_string(),
+                        })],
+                        None,
+                        raw_message,
+                        message_latency,
+                    )))
+                }
+                _ => Err(Error::AWSBedrockServer {
+                    message: "Unsupported content block start type for AWS Bedrock".to_string(),
+                }),
+            }
+        }
+        ConverseStreamOutputType::ContentBlockStop(_) => Ok(None),
+        ConverseStreamOutputType::MessageStart(_) => Ok(None),
+        ConverseStreamOutputType::MessageStop(_) => Ok(None),
+        ConverseStreamOutputType::Metadata(message) => {
+            let raw_message = serialize_aws_bedrock_struct(&message)?;
+
+            // Note: There are other types of metadata (e.g. traces) but for now we're only interested in usage
+
+            match message.usage {
+                None => Ok(None),
+                Some(usage) => {
+                    let usage = Some(Usage {
+                        prompt_tokens: usage.input_tokens as u32,
+                        completion_tokens: usage.output_tokens as u32,
+                    });
+
+                    Ok(Some(ModelInferenceResponseChunk::new(
+                        inference_id,
+                        vec![],
+                        usage,
+                        raw_message,
+                        message_latency,
+                    )))
+                }
+            }
+        }
+        _ => Err(Error::AWSBedrockServer {
+            message: "Unknown event type from AWS Bedrock".to_string(),
+        }),
     }
 }
 
@@ -203,15 +410,7 @@ impl TryFrom<ConverseOutputWithLatency> for ModelInferenceResponse {
     fn try_from(value: ConverseOutputWithLatency) -> Result<Self, Self::Error> {
         let ConverseOutputWithLatency { output, latency } = value;
 
-        // NOTE: AWS SDK doesn't implement Serialize :(
-        // Therefore, we construct this unusual JSON object to store the raw output
-        //
-        // This feature request has been pending since 2022:
-        // https://github.com/awslabs/aws-sdk-rust/issues/645
-        let raw = serde_json::to_string(&serde_json::json!({"debug": format!("{:?}", output)}))
-            .map_err(|e| Error::AWSBedrockServer {
-                message: format!("Error parsing response from AWS Bedrock: {e}"),
-            })?;
+        let raw = serialize_aws_bedrock_struct(&output)?;
 
         let message = match output.output {
             Some(ConverseOutputType::Message(message)) => Some(message),
@@ -241,6 +440,21 @@ impl TryFrom<ConverseOutputWithLatency> for ModelInferenceResponse {
 
         Ok(ModelInferenceResponse::new(content, raw, usage, latency))
     }
+}
+
+/// Serialize a struct to a JSON string.
+///
+/// This is necessary because the AWS SDK doesn't implement Serialize.
+/// Therefore, we construct this unusual JSON object to store the raw output
+///
+/// This feature request has been pending since 2022:
+/// https://github.com/awslabs/aws-sdk-rust/issues/645
+fn serialize_aws_bedrock_struct<T: std::fmt::Debug>(output: &T) -> Result<String, Error> {
+    serde_json::to_string(&serde_json::json!({"debug": format!("{:?}", output)})).map_err(|e| {
+        Error::AWSBedrockServer {
+            message: format!("Error parsing response from AWS Bedrock: {e}"),
+        }
+    })
 }
 
 #[cfg(test)]

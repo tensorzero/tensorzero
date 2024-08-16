@@ -551,7 +551,6 @@ enum AnthropicMessageBlock {
 }
 
 #[derive(Deserialize, Debug, Serialize)]
-#[allow(dead_code)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum AnthropicStreamMessage {
     ContentBlockDelta {
