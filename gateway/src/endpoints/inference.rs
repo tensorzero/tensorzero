@@ -396,7 +396,10 @@ async fn write_inference(
         message: e.to_string(),
     }) {
         Ok(serialized_input) => serialized_input,
-        Err(_) => return,
+        Err(e) => {
+            e.log();
+            return;
+        }
     };
     let model_responses: Vec<serde_json::Value> =
         result.get_serialized_model_inferences(&serialized_input);

@@ -173,7 +173,6 @@ pub enum InferenceResult {
     Json(JsonInferenceResult),
 }
 
-// Determines the return type of Inference API for Chat-type functions
 #[derive(Debug, Clone, Serialize)]
 pub struct ChatInferenceResult {
     pub inference_id: Uuid,
@@ -183,7 +182,6 @@ pub struct ChatInferenceResult {
     pub model_inference_responses: Vec<ModelInferenceResponse>,
 }
 
-// Determines the return type of Inference API for Json-type functions
 #[derive(Clone, Debug, Serialize)]
 pub struct JsonInferenceResult {
     pub inference_id: Uuid,
@@ -571,21 +569,16 @@ impl From<ModelInferenceResponseChunk> for ChatInferenceResultChunk {
 
 /// We use best-effort to reconstruct the raw response for JSON functions
 /// They might either return a ToolCallChunk or a TextChunk
-/// We take the string from either of these (in reverse order if there are multiple blocks)
+/// We take the string from either of these (from the last block if there are multiple)
 /// and use that as the raw response.
 impl From<ModelInferenceResponseChunk> for JsonInferenceResultChunk {
-    fn from(chunk: ModelInferenceResponseChunk) -> Self {
-        let mut raw = String::new();
-        for content in chunk.content.into_iter().rev() {
-            match content {
-                ContentBlockChunk::Text(text) => {
-                    raw.push_str(&text.text);
-                }
-                ContentBlockChunk::ToolCall(tool_call) => {
-                    raw.push_str(&tool_call.arguments);
-                }
-            }
-        }
+    fn from(mut chunk: ModelInferenceResponseChunk) -> Self {
+        let raw = match chunk.content.pop() {
+            Some(ContentBlockChunk::ToolCall(tool_call)) => tool_call.arguments.to_owned(),
+            Some(ContentBlockChunk::Text(text)) => text.text.to_owned(),
+            None => String::new(),
+        };
+
         Self {
             inference_id: chunk.inference_id,
             raw,

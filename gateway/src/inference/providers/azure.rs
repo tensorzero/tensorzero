@@ -268,7 +268,6 @@ mod tests {
         );
     }
 
-    // TODO (viraj): write a test for JSON mode conversions
     #[test]
     fn test_azure_json_mode_from() {
         // Required is converted to Auto

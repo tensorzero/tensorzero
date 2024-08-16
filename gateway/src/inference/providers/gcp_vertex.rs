@@ -506,7 +506,8 @@ impl<'a> GCPVertexGeminiRequest<'a> {
                 Some(output_schema) => {
                     // According to these [docs](https://ai.google.dev/gemini-api/docs/json-mode?lang=web),
                     // JSON mode is only supported for Gemini Pro models not Flash.
-                    let response_schema = if model_name.contains("pro") {
+                    let strict_json_models = ["gemini-1.5-pro-001"];
+                    let response_schema = if strict_json_models.contains(&model_name) {
                         Some(output_schema)
                     } else {
                         None
@@ -1057,7 +1058,7 @@ mod tests {
             output_schema: Some(&output_schema),
         };
         // JSON schema should be supported for Gemini Pro models
-        let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro");
+        let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-1.5-pro-001");
         let request = result.unwrap();
         assert_eq!(request.contents.len(), 3);
         assert_eq!(request.contents[0].role, GCPVertexGeminiRole::User);
