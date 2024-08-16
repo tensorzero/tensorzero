@@ -181,6 +181,9 @@ type = "chat_completion"
 weight = 1
 model = "test"
 system_template = "config/functions/basic_test/prompt/system_template.minijinja"
+temperature = 1.0
+max_tokens = 100
+seed = 69
 
 [functions.basic_test.variants.anthropic]
 type = "chat_completion"

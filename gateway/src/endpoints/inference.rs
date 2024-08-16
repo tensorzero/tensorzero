@@ -209,7 +209,7 @@ pub async fn inference_handler(
                 input: params.input.clone(),
                 dryrun,
                 start_time,
-                inference_params,
+                inference_params: variant_inference_params,
             };
 
             let stream = create_stream(
@@ -250,7 +250,7 @@ pub async fn inference_handler(
                     variant_name: variant_name.to_string(),
                     episode_id,
                     dynamic_tool_config: dynamic_tool_config_string,
-                    inference_params,
+                    inference_params: variant_inference_params,
                     processing_time: start_time.elapsed(),
                 };
 
