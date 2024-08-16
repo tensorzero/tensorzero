@@ -152,8 +152,9 @@ enum FireworksResponseFormat<'a> {
 /// See the [Fireworks API documentation](https://docs.fireworks.ai/api-reference/post-chatcompletions)
 /// for more details.
 /// We are not handling logprobs, top_logprobs, n, prompt_truncate_len
-/// presence_penalty, frequency_penalty, seed, service_tier, stop, user,
-/// or context_length_exceeded_behavior
+/// presence_penalty, frequency_penalty, service_tier, stop, user,
+/// or context_length_exceeded_behavior.
+/// NOTE: Fireworks does not support seed.
 #[derive(Serialize)]
 struct FireworksRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
@@ -162,8 +163,6 @@ struct FireworksRequest<'a> {
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    seed: Option<u32>,
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     response_format: Option<FireworksResponseFormat<'a>>,
@@ -190,7 +189,6 @@ impl<'a> FireworksRequest<'a> {
             model,
             temperature: request.temperature,
             max_tokens: request.max_tokens,
-            seed: request.seed,
             stream: request.stream,
             response_format,
             tools,
@@ -236,7 +234,6 @@ mod tests {
         assert_eq!(fireworks_request.messages.len(), 1);
         assert_eq!(fireworks_request.temperature, Some(0.5));
         assert_eq!(fireworks_request.max_tokens, Some(100));
-        assert_eq!(fireworks_request.seed, Some(69));
         assert!(!fireworks_request.stream);
         assert_eq!(
             fireworks_request.response_format,
