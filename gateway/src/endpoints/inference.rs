@@ -39,18 +39,15 @@ pub struct Params {
     input: Input,
     // default False
     stream: Option<bool>,
+    // Inference-time overrides for chat completion variants (use with caution)
+    #[serde(default)]
+    chat_completion: ChatInferenceParams,
     // if the client would like to pin a specific variant to be used
     // NOTE: YOU SHOULD TYPICALLY LET THE API SELECT A VARIANT FOR YOU (I.E. IGNORE THIS FIELD).
     //       ONLY PIN A VARIANT FOR SPECIAL USE CASES (E.G. TESTING / DEBUGGING VARIANTS).
     variant_name: Option<String>,
     // if true, the inference will not be stored
     dryrun: Option<bool>,
-    // the temperature to use for the inference
-    temperature: Option<f32>,
-    // the maximum number of tokens to generate (if not provided, the default value will be used)
-    max_tokens: Option<u32>,
-    // the seed to use for the inference
-    seed: Option<u32>,
     // TODO (#126): properly implement dynamic tool calling
     // If provided, the inference will only use the specified tools (a subset of the function's tools)
     // allowed_tools: Option<Vec<String>>,
@@ -70,13 +67,19 @@ struct InferenceMetadata {
     pub input: Input,
     pub dryrun: bool,
     pub start_time: Instant,
+    pub inference_params: InferenceParams,
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct InferenceParams {
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct ChatInferenceParams {
     pub temperature: Option<f32>,
     pub max_tokens: Option<u32>,
     pub seed: Option<u32>,
+}
+
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct InferenceParams {
+    pub chat_completion: ChatInferenceParams,
 }
 
 /// A handler for the inference endpoint
@@ -94,9 +97,7 @@ pub async fn inference_handler(
     let config = get_config();
     let function = config.get_function(&params.function_name)?;
     let inference_params = InferenceParams {
-        temperature: params.temperature,
-        max_tokens: params.max_tokens,
-        seed: params.seed,
+        chat_completion: params.chat_completion,
     };
     // TODO (#126): implement dynamic tool calling
     // Collect the dynamic tool config
@@ -208,6 +209,7 @@ pub async fn inference_handler(
                 input: params.input.clone(),
                 dryrun,
                 start_time,
+                inference_params,
             };
 
             let stream = create_stream(
@@ -248,6 +250,7 @@ pub async fn inference_handler(
                     variant_name: variant_name.to_string(),
                     episode_id,
                     dynamic_tool_config: dynamic_tool_config_string,
+                    inference_params,
                     processing_time: start_time.elapsed(),
                 };
 
@@ -333,6 +336,7 @@ fn create_stream(
                     variant_name: metadata.variant_name,
                     episode_id: metadata.episode_id,
                     dynamic_tool_config: dynamic_tool_config_string,
+                    inference_params: metadata.inference_params,
                     processing_time: metadata.start_time.elapsed(),
                 };
                 tokio::spawn(async move {
@@ -373,12 +377,13 @@ fn prepare_event(
         })
 }
 
-struct InferenceWriteMetadata {
-    function_name: String,
-    variant_name: String,
-    episode_id: Uuid,
-    dynamic_tool_config: String,
-    processing_time: Duration,
+pub struct InferenceWriteMetadata {
+    pub function_name: String,
+    pub variant_name: String,
+    pub episode_id: Uuid,
+    pub dynamic_tool_config: String,
+    pub inference_params: InferenceParams,
+    pub processing_time: Duration,
 }
 
 async fn write_inference(
@@ -402,16 +407,10 @@ async fn write_inference(
             .await
             .ok_or_log();
     }
+    // TODO (viraj): add inference_params to the Inference table
+    // related: how might inference-time params affect variants with multiple model inferences?
     // Write the inference to the Inference table
-    let inference = Inference::new(
-        result,
-        serialized_input,
-        metadata.episode_id,
-        metadata.function_name,
-        metadata.variant_name,
-        metadata.dynamic_tool_config,
-        metadata.processing_time,
-    );
+    let inference = Inference::new(result, serialized_input, metadata);
     clickhouse_connection_info
         .write(&inference, "Inference")
         .await
@@ -516,7 +515,7 @@ impl InferenceResponseChunk {
     }
 }
 
-impl InferenceParams {
+impl ChatInferenceParams {
     pub fn include_variant_params(
         &mut self,
         temperature: Option<f32>,
@@ -578,6 +577,7 @@ mod tests {
                 system: None,
             },
             dryrun: false,
+            inference_params: InferenceParams::default(),
             start_time: Instant::now(),
         };
 
@@ -616,6 +616,7 @@ mod tests {
                 system: None,
             },
             dryrun: false,
+            inference_params: InferenceParams::default(),
             start_time: Instant::now(),
         };
 

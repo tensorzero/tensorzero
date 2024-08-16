@@ -292,8 +292,9 @@ pub fn sample_variant<'a>(
             });
         }
         // Perform uniform sampling if total weight is non-positive
-        let random_index =
-            (get_uniform_value(function_name, episode_id) * variants.len() as f64).floor() as usize;
+        let random_index = (get_uniform_value(function_name, episode_id)
+            * variant_names.len() as f64)
+            .floor() as usize;
         // Reorders this list (in place) by swapping the element at index with the last element.
         // This should not matter and is more efficient than `remove`
         let sampled_variant_name = if random_index < variant_names.len() {

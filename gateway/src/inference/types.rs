@@ -10,6 +10,7 @@ use std::{
 };
 use uuid::Uuid;
 
+use crate::endpoints::inference::InferenceWriteMetadata;
 use crate::function::FunctionConfig;
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolResult};
 use crate::{error::Error, variant::JsonEnforcement};
@@ -261,6 +262,7 @@ pub struct Inference {
     pub input: String,
     pub output: String,
     pub dynamic_tool_config: String,
+    pub inference_params: String,
     pub processing_time_ms: u32,
 }
 
@@ -496,31 +498,31 @@ impl Inference {
     pub fn new(
         inference_response: InferenceResult,
         input: String,
-        episode_id: Uuid,
-        function_name: String,
-        variant_name: String,
-        dynamic_tool_config: String,
-        processing_time: Duration,
+        metadata: InferenceWriteMetadata,
     ) -> Self {
-        let processing_time_ms = processing_time.as_millis() as u32;
+        let processing_time_ms = metadata.processing_time.as_millis() as u32;
         match inference_response {
             InferenceResult::Chat(chat_response) => Self {
                 id: chat_response.inference_id,
-                function_name,
-                variant_name,
-                episode_id,
+                function_name: metadata.function_name,
+                variant_name: metadata.variant_name,
+                episode_id: metadata.episode_id,
                 input,
-                dynamic_tool_config,
+                dynamic_tool_config: metadata.dynamic_tool_config,
+                inference_params: serde_json::to_string(&metadata.inference_params)
+                    .unwrap_or_default(),
                 output: serde_json::to_string(&chat_response.output).unwrap_or_default(),
                 processing_time_ms,
             },
             InferenceResult::Json(json_result) => Self {
                 id: json_result.inference_id,
-                function_name,
-                variant_name,
-                episode_id,
+                function_name: metadata.function_name,
+                variant_name: metadata.variant_name,
+                episode_id: metadata.episode_id,
                 input,
-                dynamic_tool_config,
+                dynamic_tool_config: metadata.dynamic_tool_config,
+                inference_params: serde_json::to_string(&metadata.inference_params)
+                    .unwrap_or_default(),
                 output: serde_json::to_string(&json_result.output).unwrap_or_default(),
                 processing_time_ms,
             },

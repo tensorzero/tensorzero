@@ -143,6 +143,7 @@ impl<'a> Migration for Migration0000<'a> {
                 input String,
                 output String,
                 dynamic_tool_config String,
+                inference_params String,
                 processing_time_ms UInt32,
             ) ENGINE = MergeTree()
             ORDER BY (function_name, variant_name, episode_id);

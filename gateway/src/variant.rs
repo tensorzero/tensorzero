@@ -220,15 +220,19 @@ impl ChatCompletionConfig {
             .map(|system| self.prepare_system_message(templates, system))
             .transpose()?;
         // NOTE: line below mutates the inference_params
-        inference_params.include_variant_params(self.temperature, self.max_tokens, self.seed);
+        inference_params.chat_completion.include_variant_params(
+            self.temperature,
+            self.max_tokens,
+            self.seed,
+        );
         Ok(match function {
             FunctionConfig::Chat(_) => ModelInferenceRequest {
                 messages,
                 system,
                 tool_config,
-                temperature: inference_params.temperature,
-                max_tokens: inference_params.max_tokens,
-                seed: inference_params.seed,
+                temperature: inference_params.chat_completion.temperature,
+                max_tokens: inference_params.chat_completion.max_tokens,
+                seed: inference_params.chat_completion.seed,
                 stream,
                 json_mode: JSONMode::Off,
                 function_type: FunctionType::Chat,
@@ -243,9 +247,9 @@ impl ChatCompletionConfig {
                     messages,
                     system,
                     tool_config,
-                    temperature: inference_params.temperature,
-                    max_tokens: inference_params.max_tokens,
-                    seed: inference_params.seed,
+                    temperature: inference_params.chat_completion.temperature,
+                    max_tokens: inference_params.chat_completion.max_tokens,
+                    seed: inference_params.chat_completion.seed,
                     stream,
                     json_mode: (&self.json_mode).into(),
                     function_type: FunctionType::Json,
@@ -326,6 +330,7 @@ mod tests {
     use futures::StreamExt;
     use serde_json::{json, Value};
 
+    use crate::endpoints::inference::ChatInferenceParams;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::providers::common::WEATHER_TOOL_CONFIG;
     use crate::inference::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
@@ -1012,14 +1017,16 @@ mod tests {
         assert_eq!(model_request.temperature, Some(0.5));
         assert_eq!(model_request.max_tokens, Some(100));
         assert_eq!(model_request.seed, Some(69));
-        assert_eq!(inference_params.temperature, Some(0.5));
-        assert_eq!(inference_params.max_tokens, Some(100));
-        assert_eq!(inference_params.seed, Some(69));
+        assert_eq!(inference_params.chat_completion.temperature, Some(0.5));
+        assert_eq!(inference_params.chat_completion.max_tokens, Some(100));
+        assert_eq!(inference_params.chat_completion.seed, Some(69));
 
         let mut inference_params = InferenceParams {
-            temperature: Some(1.),
-            max_tokens: Some(200),
-            seed: Some(420),
+            chat_completion: ChatInferenceParams {
+                temperature: Some(1.),
+                max_tokens: Some(200),
+                seed: Some(420),
+            },
         };
         let model_request = chat_completion_config
             .prepare_request(
@@ -1034,14 +1041,16 @@ mod tests {
         assert_eq!(model_request.temperature, Some(1.));
         assert_eq!(model_request.max_tokens, Some(200));
         assert_eq!(model_request.seed, Some(420));
-        assert_eq!(inference_params.temperature, Some(1.));
-        assert_eq!(inference_params.max_tokens, Some(200));
-        assert_eq!(inference_params.seed, Some(420));
+        assert_eq!(inference_params.chat_completion.temperature, Some(1.));
+        assert_eq!(inference_params.chat_completion.max_tokens, Some(200));
+        assert_eq!(inference_params.chat_completion.seed, Some(420));
         // We will vary temperature, max_tokens, and seed
         let chat_completion_config = ChatCompletionConfig::default();
         let mut inference_params = InferenceParams {
-            temperature: Some(0.9),
-            ..Default::default()
+            chat_completion: ChatInferenceParams {
+                temperature: Some(0.9),
+                ..Default::default()
+            },
         };
         let model_request = chat_completion_config
             .prepare_request(
@@ -1056,8 +1065,8 @@ mod tests {
         assert_eq!(model_request.temperature, Some(0.9));
         assert_eq!(model_request.max_tokens, None);
         assert_eq!(model_request.seed, None);
-        assert_eq!(inference_params.temperature, Some(0.9));
-        assert_eq!(inference_params.max_tokens, None);
-        assert_eq!(inference_params.seed, None);
+        assert_eq!(inference_params.chat_completion.temperature, Some(0.9));
+        assert_eq!(inference_params.chat_completion.max_tokens, None);
+        assert_eq!(inference_params.chat_completion.seed, None);
     }
 }
