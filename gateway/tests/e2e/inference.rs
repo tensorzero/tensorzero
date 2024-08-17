@@ -560,7 +560,6 @@ async fn e2e_test_tool_call_malformed() {
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
-    println!("result: {}", serde_json::to_string_pretty(&result).unwrap());
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
