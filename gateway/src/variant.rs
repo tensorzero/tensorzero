@@ -59,7 +59,7 @@ pub enum JsonEnforcement {
 pub struct InferenceConfig<'a> {
     pub models: &'a HashMap<String, ModelConfig>,
     pub function: &'a FunctionConfig,
-    pub tool_config: Option<&'a ToolCallConfig>,
+    pub tool_config: Option<&'a mut ToolCallConfig>,
     pub templates: &'a TemplateConfig<'a>,
 }
 
@@ -67,7 +67,7 @@ pub trait Variant {
     async fn infer(
         &self,
         input: &Input,
-        inference_config: &InferenceConfig,
+        inference_config: &mut InferenceConfig,
         client: &Client,
         inference_params: &mut InferenceParams,
     ) -> Result<InferenceResult, Error>;
@@ -110,7 +110,7 @@ impl Variant for VariantConfig {
     async fn infer(
         &self,
         input: &Input,
-        inference_config: &InferenceConfig<'_>,
+        inference_config: &mut InferenceConfig<'_>,
         client: &Client,
         inference_params: &mut InferenceParams,
     ) -> Result<InferenceResult, Error> {
@@ -266,7 +266,7 @@ impl Variant for ChatCompletionConfig {
     async fn infer(
         &self,
         input: &Input,
-        inference_config: &InferenceConfig<'_>,
+        inference_config: &mut InferenceConfig<'_>,
         client: &Client,
         inference_params: &mut InferenceParams,
     ) -> Result<InferenceResult, Error> {
@@ -274,7 +274,7 @@ impl Variant for ChatCompletionConfig {
             input,
             inference_config.function,
             inference_config.templates,
-            inference_config.tool_config,
+            inference_config.tool_config.as_deref(),
             false,
             inference_params,
         )?;
@@ -291,13 +291,16 @@ impl Variant for ChatCompletionConfig {
         let raw_content = model_inference_response.content.clone();
         let usage = model_inference_response.usage.clone();
         let model_inference_responses = vec![model_inference_response];
-        inference_config.function.prepare_response(
-            inference_id,
-            raw_content,
-            usage,
-            model_inference_responses,
-            inference_config.tool_config,
-        )
+        inference_config
+            .function
+            .prepare_response(
+                inference_id,
+                raw_content,
+                usage,
+                model_inference_responses,
+                inference_config.tool_config.as_deref_mut(),
+            )
+            .await
     }
 
     async fn infer_stream(
@@ -311,7 +314,7 @@ impl Variant for ChatCompletionConfig {
             input,
             inference_config.function,
             inference_config.templates,
-            inference_config.tool_config,
+            inference_config.tool_config.as_deref(),
             true,
             inference_params,
         )?;
@@ -334,7 +337,7 @@ mod tests {
 
     use crate::endpoints::inference::ChatInferenceParams;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
-    use crate::inference::providers::common::WEATHER_TOOL_CONFIG;
+    use crate::inference::providers::common::get_weather_tool_config;
     use crate::inference::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
     use crate::inference::types::{ContentBlockOutput, Usage};
     use crate::jsonschema_util::JSONSchemaFromPath;
@@ -594,14 +597,19 @@ mod tests {
             messages,
         };
         let mut inference_params = InferenceParams::default();
-        let inference_config = InferenceConfig {
+        let mut inference_config = InferenceConfig {
             models: &HashMap::new(),
             function: &function_config,
             templates: &templates,
             tool_config: None,
         };
         let result = chat_completion_config
-            .infer(&input, &inference_config, &client, &mut inference_params)
+            .infer(
+                &input,
+                &mut inference_config,
+                &client,
+                &mut inference_params,
+            )
             .await
             .unwrap_err();
         match result {
@@ -623,14 +631,19 @@ mod tests {
             messages,
         };
         let models = HashMap::from([("invalid_model".to_string(), text_model_config.clone())]);
-        let inference_config = InferenceConfig {
+        let mut inference_config = InferenceConfig {
             models: &models,
             function: &function_config,
             templates: &templates,
             tool_config: None,
         };
         let result = chat_completion_config
-            .infer(&input, &inference_config, &client, &mut inference_params)
+            .infer(
+                &input,
+                &mut inference_config,
+                &client,
+                &mut inference_params,
+            )
             .await
             .unwrap_err();
         assert!(matches!(result, Error::UnknownModel { .. }), "{}", result);
@@ -645,14 +658,19 @@ mod tests {
         };
         let mut inference_params = InferenceParams::default();
         let models = HashMap::from([("error".to_string(), error_model_config.clone())]);
-        let inference_config = InferenceConfig {
+        let mut inference_config = InferenceConfig {
             models: &models,
             function: &function_config,
             templates: &templates,
             tool_config: None,
         };
         let result = chat_completion_config
-            .infer(&input, &inference_config, &client, &mut inference_params)
+            .infer(
+                &input,
+                &mut inference_config,
+                &client,
+                &mut inference_params,
+            )
             .await
             .unwrap_err();
         assert_eq!(
@@ -674,14 +692,19 @@ mod tests {
             ..Default::default()
         };
         let models = HashMap::from([("good".to_string(), text_model_config.clone())]);
-        let inference_config = InferenceConfig {
+        let mut inference_config = InferenceConfig {
             models: &models,
             function: &function_config,
             templates: &templates,
             tool_config: None,
         };
         let result = chat_completion_config
-            .infer(&input, &inference_config, &client, &mut inference_params)
+            .infer(
+                &input,
+                &mut inference_config,
+                &client,
+                &mut inference_params,
+            )
             .await
             .unwrap();
         assert!(matches!(result, InferenceResult::Chat(_)));
@@ -722,14 +745,20 @@ mod tests {
             }],
         };
         let models = HashMap::from([("tool".to_string(), tool_model_config.clone())]);
-        let inference_config = InferenceConfig {
+        let mut weather_tool_config = get_weather_tool_config();
+        let mut inference_config = InferenceConfig {
             models: &models,
             function: &function_config,
             templates: &templates,
-            tool_config: Some(&WEATHER_TOOL_CONFIG),
+            tool_config: Some(&mut weather_tool_config),
         };
         let result = chat_completion_config
-            .infer(&input, &inference_config, &client, &mut inference_params)
+            .infer(
+                &input,
+                &mut inference_config,
+                &client,
+                &mut inference_params,
+            )
             .await
             .unwrap();
         assert!(matches!(result, InferenceResult::Chat(_)));
@@ -782,7 +811,7 @@ mod tests {
             user_schema: None,
             output_schema,
         });
-        let inference_config = InferenceConfig {
+        let mut inference_config = InferenceConfig {
             models: &models,
             function: &json_function_config,
             templates: &templates,
@@ -790,7 +819,12 @@ mod tests {
         };
         let mut inference_params = InferenceParams::default();
         let result = chat_completion_config
-            .infer(&input, &inference_config, &client, &mut inference_params)
+            .infer(
+                &input,
+                &mut inference_config,
+                &client,
+                &mut inference_params,
+            )
             .await
             .unwrap();
         match result {
@@ -822,7 +856,7 @@ mod tests {
         // Test case 6: JSON output was supposed to happen and it did
         let mut inference_params = InferenceParams::default();
         let models = HashMap::from([("json".to_string(), json_model_config.clone())]);
-        let inference_config = InferenceConfig {
+        let mut inference_config = InferenceConfig {
             models: &models,
             function: &json_function_config,
             templates: &templates,
@@ -836,7 +870,12 @@ mod tests {
             ..Default::default()
         };
         let result = chat_completion_config
-            .infer(&input, &inference_config, &client, &mut inference_params)
+            .infer(
+                &input,
+                &mut inference_config,
+                &client,
+                &mut inference_params,
+            )
             .await
             .unwrap();
         match result {

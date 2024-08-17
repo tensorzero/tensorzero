@@ -10,7 +10,7 @@ use crate::inference::types::{
     JsonInferenceResult, ModelInferenceResponse, Role, Usage,
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
-use crate::tool::{ToolCallConfig, ToolChoice, ToolConfig};
+use crate::tool::{DynamicToolParams, OwnedToolConfig, ToolCallConfig, ToolChoice};
 use crate::variant::VariantConfig;
 
 #[derive(Debug)]
@@ -92,9 +92,8 @@ impl FunctionConfig {
 
     pub fn prepare_tool_config(
         &'static self,
-        // TODO (#126): implement dynamic tool calling
-        // dynamic_tool_config: &'a DynamicToolConfig,
-        static_tools: &'static HashMap<String, ToolConfig>,
+        dynamic_tool_params: DynamicToolParams,
+        static_tools: &'static HashMap<String, OwnedToolConfig>,
     ) -> Result<Option<ToolCallConfig>, Error> {
         match self {
             FunctionConfig::Chat(params) => Ok(Some(ToolCallConfig::new(
@@ -102,46 +101,53 @@ impl FunctionConfig {
                 &params.tool_choice,
                 params.parallel_tool_calls,
                 static_tools,
-                // TODO (#126): implement dynamic tool calling
-                // dynamic_tool_config,
+                dynamic_tool_params,
             )?)),
             FunctionConfig::Json(_) => {
-                // if dynamic_tool_config.allowed_tools.is_some() {
-                //     return Err(Error::InvalidRequest {
-                //         message: "Cannot pass `allowed_tools` to a JSON function.".to_string(),
-                //     });
-                // }
-                // if dynamic_tool_config.additional_tools.is_some() {
-                //     return Err(Error::InvalidRequest {
-                //         message: "Cannot pass `additional_tools` to a JSON function.".to_string(),
-                //     });
-                // }
-                // if dynamic_tool_config.tool_choice.is_some() {
-                //     return Err(Error::InvalidRequest {
-                //         message: "Cannot pass `tool_choice` to a JSON function".to_string(),
-                //     });
-                // }
+                if dynamic_tool_params.allowed_tools.is_some() {
+                    return Err(Error::InvalidRequest {
+                        message: "Cannot pass `allowed_tools` to a JSON function.".to_string(),
+                    });
+                }
+                if dynamic_tool_params.additional_tools.is_some() {
+                    return Err(Error::InvalidRequest {
+                        message: "Cannot pass `additional_tools` to a JSON function.".to_string(),
+                    });
+                }
+                if dynamic_tool_params.tool_choice.is_some() {
+                    return Err(Error::InvalidRequest {
+                        message: "Cannot pass `tool_choice` to a JSON function".to_string(),
+                    });
+                }
+                if dynamic_tool_params.parallel_tool_calls.is_some() {
+                    return Err(Error::InvalidRequest {
+                        message: "Cannot pass `parallel_tool_calls` to a JSON function".to_string(),
+                    });
+                }
                 Ok(None)
             }
         }
     }
 
-    pub fn prepare_response(
+    pub async fn prepare_response(
         &self,
         inference_id: Uuid,
         content_blocks: Vec<ContentBlock>,
         usage: Usage,
         model_inference_responses: Vec<ModelInferenceResponse>,
-        tool_config: Option<&ToolCallConfig>,
+        tool_config: Option<&mut ToolCallConfig>,
     ) -> Result<InferenceResult, Error> {
         match self {
-            FunctionConfig::Chat(..) => Ok(InferenceResult::Chat(ChatInferenceResult::new(
-                inference_id,
-                content_blocks,
-                usage,
-                model_inference_responses,
-                tool_config,
-            ))),
+            FunctionConfig::Chat(..) => Ok(InferenceResult::Chat(
+                ChatInferenceResult::new(
+                    inference_id,
+                    content_blocks,
+                    usage,
+                    model_inference_responses,
+                    tool_config,
+                )
+                .await,
+            )),
             FunctionConfig::Json(params) => {
                 // Parse the content blocks into a JSON object
                 // We assume here that the last content block that's text or a tool call is the JSON object.
@@ -1127,9 +1133,9 @@ mod tests {
         assert!((0.0..1.0).contains(&value4));
     }
 
-    #[test]
+    #[tokio::test]
     #[traced_test]
-    fn test_prepare_response_json() {
+    async fn test_prepare_response_json() {
         // The Chat stuff is tested in types::test_create_chat_inference_response
         // Here we focus on the JSON stuff
         let output_schema = JSONSchemaFromPath::from_value(&json!({
@@ -1179,6 +1185,7 @@ mod tests {
                 vec![model_response.clone()],
                 None,
             )
+            .await
             .unwrap();
         assert!(logs_contain(
             "Failed to parse output from JSON function response"
@@ -1218,6 +1225,7 @@ mod tests {
                 vec![model_response.clone()],
                 None,
             )
+            .await
             .unwrap();
         match response {
             InferenceResult::Json(result) => {
@@ -1257,6 +1265,7 @@ mod tests {
                 vec![model_response.clone()],
                 None,
             )
+            .await
             .unwrap();
         match response {
             InferenceResult::Json(result) => {
@@ -1297,6 +1306,7 @@ mod tests {
                 vec![model_response.clone()],
                 None,
             )
+            .await
             .unwrap();
         assert!(logs_contain("JSON Schema validation failed"));
         match response {
@@ -1338,6 +1348,7 @@ mod tests {
                 vec![model_response.clone()],
                 None,
             )
+            .await
             .unwrap();
         match response {
             InferenceResult::Json(result) => {
@@ -1376,6 +1387,7 @@ mod tests {
                 vec![model_response.clone()],
                 None,
             )
+            .await
             .unwrap_err();
         assert_eq!(
             error,

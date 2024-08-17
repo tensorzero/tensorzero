@@ -142,7 +142,7 @@ impl<'a> Migration for Migration0000<'a> {
                 episode_id UUID,
                 input String,
                 output String,
-                dynamic_tool_config String,
+                dynamic_tool_params String,
                 inference_params String,
                 processing_time_ms UInt32,
             ) ENGINE = MergeTree()

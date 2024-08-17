@@ -224,9 +224,9 @@ impl<'a> From<&'a ToolConfig> for AnthropicTool<'a> {
     fn from(value: &'a ToolConfig) -> Self {
         // In case we add more tool types in the future, the compiler will complain here.
         AnthropicTool {
-            name: &value.name,
-            description: Some(&value.description),
-            input_schema: value.parameters.value,
+            name: value.name(),
+            description: Some(value.description()),
+            input_schema: value.parameters(),
         }
     }
 }
@@ -325,13 +325,13 @@ impl<'a> AnthropicRequestBody<'a> {
         let tools = request
             .tool_config
             .map(|c| &c.tools_available)
-            .map(|tools| tools.iter().map(|tool| (*tool).into()).collect::<Vec<_>>());
+            .map(|tools| tools.iter().map(|tool| tool.into()).collect::<Vec<_>>());
         // `tool_choice` should only be set if tools are set and non-empty
         let tool_choice: Option<AnthropicToolChoice> = tools
             .as_ref()
             .filter(|t| !t.is_empty())
             .and(request.tool_config)
-            .and_then(|c| c.tool_choice.try_into().ok());
+            .and_then(|c| (&c.tool_choice).try_into().ok());
         // NOTE: Anthropic does not support seed
         Ok(AnthropicRequestBody {
             model: model_name,
@@ -725,8 +725,8 @@ mod tests {
 
     use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::types::{FunctionType, JSONMode};
-    use crate::jsonschema_util::JSONSchemaFromPath;
-    use crate::tool::{ToolConfig, ToolResult};
+    use crate::jsonschema_util::DynamicJSONSchema;
+    use crate::tool::{DynamicToolConfig, ToolConfig, ToolResult};
 
     #[test]
     fn test_try_from_tool_choice() {
@@ -769,8 +769,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_from_tool() {
+    #[tokio::test]
+    async fn test_from_tool() {
         let parameters = json!({
             "type": "object",
             "properties": {
@@ -779,11 +779,11 @@ mod tests {
             },
             "required": ["location", "unit"]
         });
-        let tool = ToolConfig {
+        let tool = ToolConfig::Dynamic(DynamicToolConfig {
             name: "test".to_string(),
             description: "test".to_string(),
-            parameters: JSONSchemaFromPath::from_value(&parameters),
-        };
+            parameters: DynamicJSONSchema::new(parameters.clone()),
+        });
         let anthropic_tool: AnthropicTool = (&tool).into();
         assert_eq!(
             anthropic_tool,
@@ -1058,9 +1058,9 @@ mod tests {
                     name: "get_weather",
                 }),
                 tools: Some(vec![AnthropicTool {
-                    name: &WEATHER_TOOL.name,
-                    description: Some(&WEATHER_TOOL.description),
-                    input_schema: WEATHER_TOOL.parameters.value,
+                    name: WEATHER_TOOL.name(),
+                    description: Some(WEATHER_TOOL.description()),
+                    input_schema: WEATHER_TOOL.parameters(),
                 }]),
             }
         );

@@ -259,7 +259,7 @@ pub struct Inference {
     pub episode_id: Uuid,
     pub input: String,
     pub output: String,
-    pub dynamic_tool_config: String,
+    pub dynamic_tool_params: String,
     pub inference_params: String,
     pub processing_time_ms: u32,
 }
@@ -432,19 +432,19 @@ impl JsonInferenceResult {
 }
 
 impl ChatInferenceResult {
-    pub fn new(
+    pub async fn new(
         inference_id: Uuid,
         raw_content: Vec<ContentBlock>,
         usage: Usage,
         model_inference_responses: Vec<ModelInferenceResponse>,
-        tool_config: Option<&ToolCallConfig>,
+        tool_config: Option<&mut ToolCallConfig>,
     ) -> Self {
         #[allow(clippy::expect_used)]
         let created = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards")
             .as_secs();
-        let output = Self::parse_output(raw_content, tool_config);
+        let output = Self::parse_output(raw_content, tool_config).await;
         Self {
             inference_id,
             created,
@@ -454,9 +454,9 @@ impl ChatInferenceResult {
         }
     }
 
-    fn parse_output(
+    async fn parse_output(
         content: Vec<ContentBlock>,
-        tool_config: Option<&ToolCallConfig>,
+        mut tool_config: Option<&mut ToolCallConfig>,
     ) -> Vec<ContentBlockOutput> {
         if content.is_empty() {
             Error::OutputParsing {
@@ -474,8 +474,8 @@ impl ChatInferenceResult {
                 }
                 ContentBlock::ToolCall(tool_call) => {
                     // Parse the tool call arguments
-                    let tool = tool_config.and_then(|t| t.get_tool(&tool_call.name));
-                    let tool_call_output = ToolCallOutput::new(tool_call, tool);
+                    let tool_call_output =
+                        ToolCallOutput::new(tool_call, tool_config.as_deref_mut()).await;
                     output.push(ContentBlockOutput::ToolCall(tool_call_output));
                 }
                 ContentBlock::ToolResult(tool_result) => {
@@ -506,7 +506,7 @@ impl Inference {
                 variant_name: metadata.variant_name,
                 episode_id: metadata.episode_id,
                 input,
-                dynamic_tool_config: metadata.dynamic_tool_config,
+                dynamic_tool_params: metadata.dynamic_tool_params,
                 inference_params: serde_json::to_string(&metadata.inference_params)
                     .unwrap_or_default(),
                 output: serde_json::to_string(&chat_response.output).unwrap_or_default(),
@@ -518,7 +518,7 @@ impl Inference {
                 variant_name: metadata.variant_name,
                 episode_id: metadata.episode_id,
                 input,
-                dynamic_tool_config: metadata.dynamic_tool_config,
+                dynamic_tool_params: metadata.dynamic_tool_params,
                 inference_params: serde_json::to_string(&metadata.inference_params)
                     .unwrap_or_default(),
                 output: serde_json::to_string(&json_result.output).unwrap_or_default(),
@@ -588,10 +588,10 @@ impl From<ModelInferenceResponseChunk> for JsonInferenceResultChunk {
     }
 }
 
-pub fn collect_chunks(
+pub async fn collect_chunks(
     value: Vec<ModelInferenceResponseChunk>,
     function: &FunctionConfig,
-    tool_config: Option<&ToolCallConfig>,
+    tool_config: Option<&mut ToolCallConfig>,
 ) -> Result<InferenceResult, Error> {
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
 
@@ -686,13 +686,15 @@ pub fn collect_chunks(
         usage.clone(),
         latency.clone(),
     );
-    function.prepare_response(
-        inference_id,
-        content_blocks,
-        usage,
-        vec![model_response],
-        tool_config,
-    )
+    function
+        .prepare_response(
+            inference_id,
+            content_blocks,
+            usage,
+            vec![model_response],
+            tool_config,
+        )
+        .await
 }
 
 impl From<ToolCallChunk> for ToolCall {
@@ -724,14 +726,14 @@ impl From<&JsonEnforcement> for JSONMode {
 #[cfg(test)]
 mod tests {
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
-    use crate::inference::providers::common::WEATHER_TOOL_CONFIG;
+    use crate::inference::providers::common::get_weather_tool_config;
     use crate::jsonschema_util::JSONSchemaFromPath;
     use crate::tool::ToolChoice;
 
     use super::*;
 
-    #[test]
-    fn test_create_chat_inference_response() {
+    #[tokio::test]
+    async fn test_create_chat_inference_response() {
         // TODO (#30): handle the tool call case here. For now, we will always set those values to None.
         // Case 1: No output schema
         let inference_id = Uuid::now_v7();
@@ -754,7 +756,8 @@ mod tests {
             usage.clone(),
             model_inference_responses,
             None,
-        );
+        )
+        .await;
         let output_content = ["Hello, world!".to_string().into()];
         assert_eq!(chat_inference_response.output, output_content);
         assert_eq!(chat_inference_response.usage, usage);
@@ -774,13 +777,15 @@ mod tests {
                 response_time: Duration::default(),
             },
         )];
+        let mut weather_tool_config = get_weather_tool_config();
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
             content,
             usage.clone(),
             model_inference_responses,
-            Some(&WEATHER_TOOL_CONFIG),
-        );
+            Some(&mut weather_tool_config),
+        )
+        .await;
         assert_eq!(chat_inference_response.output.len(), 1);
         let tool_call_block = chat_inference_response.output.first().unwrap();
         match tool_call_block {
@@ -814,8 +819,9 @@ mod tests {
             content,
             usage.clone(),
             model_inference_responses,
-            Some(&WEATHER_TOOL_CONFIG),
-        );
+            Some(&mut weather_tool_config),
+        )
+        .await;
         assert_eq!(chat_inference_response.output.len(), 1);
         let tool_call_block = chat_inference_response.output.first().unwrap();
         match tool_call_block {
@@ -849,8 +855,9 @@ mod tests {
             content,
             usage.clone(),
             model_inference_responses,
-            Some(&WEATHER_TOOL_CONFIG),
-        );
+            Some(&mut weather_tool_config),
+        )
+        .await;
         assert_eq!(chat_inference_response.output.len(), 1);
         let tool_call_block = chat_inference_response.output.first().unwrap();
         match tool_call_block {
@@ -874,18 +881,18 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_collect_chunks() {
+    #[tokio::test]
+    async fn test_collect_chunks() {
         // Test case 1: empty chunks (should error)
         let tool_config = ToolCallConfig {
             tools_available: vec![],
-            tool_choice: &ToolChoice::Auto,
+            tool_choice: ToolChoice::Auto,
             parallel_tool_calls: false,
         };
         let tool_config = Box::leak(Box::new(tool_config));
         let chunks = vec![];
         let function = FunctionConfig::Chat(FunctionConfigChat::default());
-        let result = collect_chunks(chunks, &function, Some(tool_config));
+        let result = collect_chunks(chunks, &function, Some(tool_config)).await;
         assert_eq!(
             result.unwrap_err(),
             Error::TypeConversion {
@@ -927,7 +934,9 @@ mod tests {
                 latency: Duration::from_millis(250),
             },
         ];
-        let result = collect_chunks(chunks, &function, Some(tool_config)).unwrap();
+        let result = collect_chunks(chunks, &function, Some(tool_config))
+            .await
+            .unwrap();
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
             _ => unreachable!("Expected Chat inference response"),
@@ -992,7 +1001,9 @@ mod tests {
                 latency: Duration::from_millis(250),
             },
         ];
-        let response = collect_chunks(chunks, &function_config, None).unwrap();
+        let response = collect_chunks(chunks, &function_config, None)
+            .await
+            .unwrap();
         match response {
             InferenceResult::Json(json_result) => {
                 assert_eq!(json_result.inference_id, inference_id);
@@ -1046,7 +1057,7 @@ mod tests {
                 latency: Duration::from_millis(200),
             },
         ];
-        let result = collect_chunks(chunks, &function_config, None);
+        let result = collect_chunks(chunks, &function_config, None).await;
         assert!(result.is_ok());
         match result {
             Ok(InferenceResult::Json(json_result)) => {
@@ -1098,8 +1109,7 @@ mod tests {
                 latency: Duration::from_millis(300),
             },
         ];
-        let result = collect_chunks(chunks, &function, Some(tool_config));
-        assert!(result.is_ok());
+        let result = collect_chunks(chunks, &function, Some(tool_config)).await;
         if let Ok(InferenceResult::Chat(chat_response)) = result {
             assert_eq!(chat_response.inference_id, inference_id);
             assert_eq!(chat_response.created, created);

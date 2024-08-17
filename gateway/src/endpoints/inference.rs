@@ -22,7 +22,7 @@ use crate::inference::types::{
     InferenceResultChunk, Input, JsonInferenceOutput, ModelInferenceResponseChunk,
     ModelInferenceResponseStream, Usage,
 };
-use crate::tool::{DynamicToolConfig, ToolCallConfig};
+use crate::tool::{DynamicToolParams, Tool, ToolCallConfig, ToolChoice};
 use crate::uuid_util::validate_episode_id;
 use crate::variant::{InferenceConfig, Variant};
 
@@ -48,15 +48,14 @@ pub struct Params {
     variant_name: Option<String>,
     // if true, the inference will not be stored
     dryrun: Option<bool>,
-    // TODO (#126): properly implement dynamic tool calling
     // If provided, the inference will only use the specified tools (a subset of the function's tools)
-    // allowed_tools: Option<Vec<String>>,
+    allowed_tools: Option<Vec<String>>,
     // If provided, the inference will use the specified tools in addition to the function's tools
-    // additional_tools: Option<Vec<Tool>>,
+    additional_tools: Option<Vec<Tool>>,
     // If provided, the inference will use the specified tool choice
-    // tool_choice: Option<ToolChoice>,
+    tool_choice: Option<ToolChoice>,
     // If true, the inference will use parallel tool calls
-    // parallel_tool_calls: Option<bool>,
+    parallel_tool_calls: Option<bool>,
 }
 
 #[derive(Clone, Debug)]
@@ -96,25 +95,18 @@ pub async fn inference_handler(
     // Get the function config or return an error if it doesn't exist
     let config = get_config();
     let function = config.get_function(&params.function_name)?;
-    // TODO (#126): implement dynamic tool calling
     // Collect the dynamic tool config
-    // let dynamic_tool_config = DynamicToolConfig {
-    //     allowed_tools: params.allowed_tools.as_ref(),
-    //     additional_tools: params.additional_tools.as_ref(),
-    //     tool_choice: params.tool_choice.as_ref(),
-    //     parallel_tool_calls: params.parallel_tool_calls,
-    // };
-    let dynamic_tool_config = DynamicToolConfig {
-        allowed_tools: None,
-        additional_tools: None,
-        tool_choice: None,
-        parallel_tool_calls: None,
+    let dynamic_tool_params = DynamicToolParams {
+        allowed_tools: params.allowed_tools,
+        additional_tools: params.additional_tools,
+        tool_choice: params.tool_choice,
+        parallel_tool_calls: params.parallel_tool_calls,
     };
-    let dynamic_tool_config_string =
-        serde_json::to_string(&dynamic_tool_config).map_err(|e| Error::Serialization {
+    let dynamic_tool_params_string =
+        serde_json::to_string(&dynamic_tool_params).map_err(|e| Error::Serialization {
             message: e.to_string(),
         })?;
-    let tool_config = function.prepare_tool_config(&config.tools)?;
+    let mut tool_config = function.prepare_tool_config(dynamic_tool_params, &config.tools)?;
     // Collect the function variant names as a Vec<&str>
     let mut variant_names: Vec<&str> = function.variants().keys().map(AsRef::as_ref).collect();
 
@@ -162,11 +154,11 @@ pub async fn inference_handler(
 
     // Keep track of which variants failed
     let mut variant_errors = vec![];
-    let inference_config = InferenceConfig {
+    let mut inference_config = InferenceConfig {
         models: &config.models,
         function,
         templates: &config.templates,
-        tool_config: tool_config.as_ref(),
+        tool_config: tool_config.as_mut(),
     };
     // Keep sampling variants until one succeeds
     while !variant_names.is_empty() {
@@ -216,7 +208,7 @@ pub async fn inference_handler(
                 stream,
                 clickhouse_connection_info,
                 tool_config,
-                dynamic_tool_config_string,
+                dynamic_tool_params_string,
             );
 
             return Ok(Sse::new(stream)
@@ -226,7 +218,7 @@ pub async fn inference_handler(
             let result = variant
                 .infer(
                     &params.input,
-                    &inference_config,
+                    &mut inference_config,
                     &http_client,
                     &mut variant_inference_params,
                 )
@@ -246,7 +238,7 @@ pub async fn inference_handler(
                     function_name: params.function_name,
                     variant_name: variant_name.to_string(),
                     episode_id,
-                    dynamic_tool_config: dynamic_tool_config_string,
+                    dynamic_tool_params: dynamic_tool_params_string,
                     inference_params: variant_inference_params,
                     processing_time: start_time.elapsed(),
                 };
@@ -287,8 +279,8 @@ fn create_stream(
     first_chunk: ModelInferenceResponseChunk,
     mut stream: ModelInferenceResponseStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
-    tool_config: Option<ToolCallConfig>,
-    dynamic_tool_config_string: String,
+    mut tool_config: Option<ToolCallConfig>,
+    dynamic_tool_params_string: String,
 ) -> impl Stream<Item = Result<Event, Error>> + Send {
     async_stream::stream! {
         let mut buffer = vec![first_chunk.clone()];
@@ -323,7 +315,7 @@ fn create_stream(
 
         if !metadata.dryrun {
             let inference_response: Result<InferenceResult, Error> =
-                collect_chunks(buffer, function, tool_config.as_ref());
+                collect_chunks(buffer, function, tool_config.as_mut()).await;
 
             let inference_response = inference_response.ok_or_log();
 
@@ -332,7 +324,7 @@ fn create_stream(
                     function_name: metadata.function_name,
                     variant_name: metadata.variant_name,
                     episode_id: metadata.episode_id,
-                    dynamic_tool_config: dynamic_tool_config_string,
+                    dynamic_tool_params: dynamic_tool_params_string,
                     inference_params: metadata.inference_params,
                     processing_time: metadata.start_time.elapsed(),
                 };
@@ -378,7 +370,7 @@ pub struct InferenceWriteMetadata {
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
-    pub dynamic_tool_config: String,
+    pub dynamic_tool_params: String,
     pub inference_params: InferenceParams,
     pub processing_time: Duration,
 }

@@ -1,7 +1,10 @@
 use jsonschema::JSONSchema;
 use serde::Serialize;
+use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
+use tokio::sync::OnceCell;
+use tokio::task::JoinHandle;
 
 use crate::error::Error;
 
@@ -63,6 +66,71 @@ impl JSONSchemaFromPath {
                 data: instance.clone(),
                 schema: self.value.clone(),
             })
+    }
+}
+
+#[derive(Debug)]
+pub struct DynamicJSONSchema {
+    pub value: Value,
+    compiled_schema: OnceCell<JSONSchema>,
+    compilation_task: JoinHandle<Result<JSONSchema, Error>>,
+}
+
+impl PartialEq for DynamicJSONSchema {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
+
+impl DynamicJSONSchema {
+    pub fn new(schema: Value) -> Self {
+        let schema_clone = schema.clone();
+        let compilation_task = tokio::task::spawn_blocking(move || {
+            JSONSchema::compile(&schema_clone).map_err(|e| Error::JsonSchema {
+                message: e.to_string(),
+            })
+        });
+        Self {
+            value: schema,
+            compiled_schema: OnceCell::new(),
+            compilation_task,
+        }
+    }
+
+    async fn get_or_init_compiled_schema(&mut self) -> Result<&JSONSchema, Error> {
+        self.compiled_schema
+            .get_or_try_init(|| async {
+                (&mut self.compilation_task)
+                    .await
+                    .map_err(|e| Error::JsonSchema {
+                        message: format!("Task join error: {}", e),
+                    })?
+            })
+            .await
+    }
+
+    pub async fn validate(&mut self, instance: &Value) -> Result<(), Error> {
+        // This will block until the schema is compiled
+        // We don't take the result here because we want the mutable borrow to end
+        self.get_or_init_compiled_schema().await?;
+
+        let compiled_schema = match self.compiled_schema.get() {
+            Some(compiled_schema) => compiled_schema,
+            None => {
+                return Err(Error::JsonSchema {
+                    message: "Schema compilation failed".to_string(),
+                })
+            }
+        };
+
+        compiled_schema.validate(instance).map_err(|e| {
+            let messages = e.into_iter().map(|error| error.to_string()).collect();
+            Error::JsonSchemaValidation {
+                messages,
+                data: instance.clone(),
+                schema: self.value.clone(),
+            }
+        })
     }
 }
 
@@ -152,5 +220,21 @@ mod tests {
             result.unwrap_err().to_string(),
             "Failed to read JSON Schema `nonexistent_file.json`: No such file or directory (os error 2)".to_string()
         )
+    }
+
+    #[tokio::test]
+    async fn test_dynamic_schema() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            }
+        });
+
+        let mut dynamic_schema = DynamicJSONSchema::new(schema);
+        let instance = serde_json::json!({
+            "name": "John Doe",
+        });
+        assert!(dynamic_schema.validate(&instance).await.is_ok());
     }
 }
