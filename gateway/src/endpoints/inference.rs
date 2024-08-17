@@ -407,8 +407,6 @@ async fn write_inference(
             .await
             .ok_or_log();
     }
-    // TODO (viraj): add inference_params to the Inference table
-    // related: how might inference-time params affect variants with multiple model inferences?
     // Write the inference to the Inference table
     let inference = Inference::new(result, serialized_input, metadata);
     clickhouse_connection_info
