@@ -136,7 +136,7 @@ pub fn create_streaming_inference_request<'a>() -> ModelInferenceRequest<'a> {
     ModelInferenceRequest {
         messages,
         system,
-        tool_config: Some(&*TOOL_CONFIG),
+        tool_config: None,
         temperature: Some(1.),
         max_tokens,
         seed,

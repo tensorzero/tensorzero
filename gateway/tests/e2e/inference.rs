@@ -440,16 +440,16 @@ async fn e2e_test_tool_call() {
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "variant");
-    // Check the dynamic_tool_config
-    let dynamic_tool_config = result.get("dynamic_tool_config").unwrap().as_str().unwrap();
-    let dynamic_tool_config: Value = serde_json::from_str(dynamic_tool_config).unwrap();
-    assert!(dynamic_tool_config.get("allowed_tools").unwrap().is_null());
-    assert!(dynamic_tool_config
+    // Check the dynamic_tool_params
+    let dynamic_tool_params = result.get("dynamic_tool_params").unwrap().as_str().unwrap();
+    let dynamic_tool_params: Value = serde_json::from_str(dynamic_tool_params).unwrap();
+    assert!(dynamic_tool_params.get("allowed_tools").unwrap().is_null());
+    assert!(dynamic_tool_params
         .get("additional_tools")
         .unwrap()
         .is_null());
-    assert!(dynamic_tool_config.get("tool_choice").unwrap().is_null());
-    assert!(dynamic_tool_config
+    assert!(dynamic_tool_params.get("tool_choice").unwrap().is_null());
+    assert!(dynamic_tool_params
         .get("parallel_tool_calls")
         .unwrap()
         .is_null());
@@ -560,6 +560,7 @@ async fn e2e_test_tool_call_malformed() {
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
+    println!("result: {}", serde_json::to_string_pretty(&result).unwrap());
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -605,16 +606,16 @@ async fn e2e_test_tool_call_malformed() {
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "bad_tool");
-    // Check the dynamic_tool_config
-    let dynamic_tool_config = result.get("dynamic_tool_config").unwrap().as_str().unwrap();
-    let dynamic_tool_config: Value = serde_json::from_str(dynamic_tool_config).unwrap();
-    assert!(dynamic_tool_config.get("allowed_tools").unwrap().is_null());
-    assert!(dynamic_tool_config
+    // Check the dynamic_tool_params
+    let dynamic_tool_params = result.get("dynamic_tool_params").unwrap().as_str().unwrap();
+    let dynamic_tool_params: Value = serde_json::from_str(dynamic_tool_params).unwrap();
+    assert!(dynamic_tool_params.get("allowed_tools").unwrap().is_null());
+    assert!(dynamic_tool_params
         .get("additional_tools")
         .unwrap()
         .is_null());
-    assert!(dynamic_tool_config.get("tool_choice").unwrap().is_null());
-    assert!(dynamic_tool_config
+    assert!(dynamic_tool_params.get("tool_choice").unwrap().is_null());
+    assert!(dynamic_tool_params
         .get("parallel_tool_calls")
         .unwrap()
         .is_null());
@@ -1408,16 +1409,16 @@ async fn e2e_test_tool_call_streaming() {
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "variant");
-    // Check the dynamic_tool_config
-    let dynamic_tool_config = result.get("dynamic_tool_config").unwrap().as_str().unwrap();
-    let dynamic_tool_config: Value = serde_json::from_str(dynamic_tool_config).unwrap();
-    assert!(dynamic_tool_config.get("allowed_tools").unwrap().is_null());
-    assert!(dynamic_tool_config
+    // Check the dynamic_tool_params
+    let dynamic_tool_params = result.get("dynamic_tool_params").unwrap().as_str().unwrap();
+    let dynamic_tool_params: Value = serde_json::from_str(dynamic_tool_params).unwrap();
+    assert!(dynamic_tool_params.get("allowed_tools").unwrap().is_null());
+    assert!(dynamic_tool_params
         .get("additional_tools")
         .unwrap()
         .is_null());
-    assert!(dynamic_tool_config.get("tool_choice").unwrap().is_null());
-    assert!(dynamic_tool_config
+    assert!(dynamic_tool_params.get("tool_choice").unwrap().is_null());
+    assert!(dynamic_tool_params
         .get("parallel_tool_calls")
         .unwrap()
         .is_null());

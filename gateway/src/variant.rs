@@ -220,13 +220,11 @@ impl ChatCompletionConfig {
             .map(|system| self.prepare_system_message(templates, system))
             .transpose()?;
         // NOTE: line below mutates the inference_params
-        println!("inference_params: {:?}", inference_params);
         inference_params.chat_completion.include_variant_params(
             self.temperature,
             self.max_tokens,
             self.seed,
         );
-        println!("inference_params after: {:?}", inference_params);
         Ok(match function {
             FunctionConfig::Chat(_) => ModelInferenceRequest {
                 messages,

@@ -557,16 +557,16 @@ async fn test_tool_call_streaming() {
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "openai");
-    // Check the dynamic_tool_config
-    let dynamic_tool_config = result.get("dynamic_tool_config").unwrap().as_str().unwrap();
-    let dynamic_tool_config: Value = serde_json::from_str(dynamic_tool_config).unwrap();
-    assert!(dynamic_tool_config.get("allowed_tools").unwrap().is_null());
-    assert!(dynamic_tool_config
+    // Check the dynamic_tool_params
+    let dynamic_tool_params = result.get("dynamic_tool_params").unwrap().as_str().unwrap();
+    let dynamic_tool_params: Value = serde_json::from_str(dynamic_tool_params).unwrap();
+    assert!(dynamic_tool_params.get("allowed_tools").unwrap().is_null());
+    assert!(dynamic_tool_params
         .get("additional_tools")
         .unwrap()
         .is_null());
-    assert!(dynamic_tool_config.get("tool_choice").unwrap().is_null());
-    assert!(dynamic_tool_config
+    assert!(dynamic_tool_params.get("tool_choice").unwrap().is_null());
+    assert!(dynamic_tool_params
         .get("parallel_tool_calls")
         .unwrap()
         .is_null());
