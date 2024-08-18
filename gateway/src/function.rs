@@ -47,6 +47,7 @@ pub struct FunctionConfigJson {
     pub user_schema: Option<JSONSchemaFromPath>,
     pub assistant_schema: Option<JSONSchemaFromPath>,
     pub output_schema: JSONSchemaFromPath, // schema is mandatory for JSON functions
+    pub implicit_tool_call_config: ToolCallConfig,
 }
 
 impl FunctionConfig {
@@ -719,12 +720,15 @@ mod tests {
 
     #[test]
     fn test_validate_input_json_no_schema() {
+        let output_schema = json!({});
+        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
             output_schema: JSONSchemaFromPath::from_value(&json!({})),
+            implicit_tool_call_config,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -775,12 +779,15 @@ mod tests {
     fn test_validate_input_json_system_schema() {
         let system_schema = create_test_schema();
         let system_value = system_schema.value.clone();
+        let output_schema = json!({});
+        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: Some(system_schema),
             user_schema: None,
             assistant_schema: None,
-            output_schema: JSONSchemaFromPath::from_value(&json!({})),
+            output_schema: JSONSchemaFromPath::from_value(&output_schema),
+            implicit_tool_call_config,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -833,12 +840,15 @@ mod tests {
     fn test_validate_input_json_user_schema() {
         let user_schema = create_test_schema();
         let user_value = user_schema.value.clone();
+        let output_schema = json!({});
+        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: Some(user_schema),
             assistant_schema: None,
-            output_schema: JSONSchemaFromPath::from_value(&json!({})),
+            output_schema: JSONSchemaFromPath::from_value(&output_schema),
+            implicit_tool_call_config,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -890,12 +900,15 @@ mod tests {
     fn test_validate_input_json_assistant_schema() {
         let assistant_schema = create_test_schema();
         let assistant_value = assistant_schema.value.clone();
+        let output_schema = json!({});
+        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: None,
             assistant_schema: Some(assistant_schema),
-            output_schema: JSONSchemaFromPath::from_value(&json!({})),
+            output_schema: JSONSchemaFromPath::from_value(&output_schema),
+            implicit_tool_call_config,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -948,12 +961,15 @@ mod tests {
         let user_schema = create_test_schema();
         let assistant_schema = create_test_schema();
         let system_value = system_schema.value.clone();
+        let output_schema = json!({});
+        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: Some(system_schema),
             user_schema: Some(user_schema),
             assistant_schema: Some(assistant_schema),
-            output_schema: JSONSchemaFromPath::from_value(&json!({})),
+            output_schema: JSONSchemaFromPath::from_value(&output_schema),
+            implicit_tool_call_config,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1138,7 +1154,7 @@ mod tests {
     async fn test_prepare_response_json() {
         // The Chat stuff is tested in types::test_create_chat_inference_response
         // Here we focus on the JSON stuff
-        let output_schema = JSONSchemaFromPath::from_value(&json!({
+        let output_schema = json!({
           "$schema": "http://json-schema.org/draft-07/schema#",
           "type": "object",
           "properties": {
@@ -1152,13 +1168,16 @@ mod tests {
           },
           "required": ["name", "age"],
           "additionalProperties": false
-        }));
+        });
+        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
+        let output_schema = JSONSchemaFromPath::from_value(&output_schema);
         let function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
             output_schema,
+            implicit_tool_call_config,
         });
 
         // Test with a non-JSON content block

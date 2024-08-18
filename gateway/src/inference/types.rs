@@ -954,19 +954,22 @@ mod tests {
 
         // Test Case 3: a JSON string that passes validation and also include usage in each chunk
         let inference_id = Uuid::now_v7();
-        let output_schema = JSONSchemaFromPath::from_value(&serde_json::json!({
+        let output_schema = serde_json::json!({
             "type": "object",
             "properties": {
                 "name": {"type": "string"},
                 "age": {"type": "number"}
             },
             "required": ["name", "age"]
-        }));
+        });
+        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
+        let output_schema = JSONSchemaFromPath::from_value(&output_schema);
         let function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
+            implicit_tool_call_config,
             output_schema,
         });
         let usage1 = Usage {

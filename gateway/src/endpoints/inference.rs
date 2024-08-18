@@ -590,11 +590,13 @@ mod tests {
             latency: Duration::from_millis(100),
         };
         let output_schema = json!({});
+        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let function = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
+            implicit_tool_call_config,
             output_schema: JSONSchemaFromPath::from_value(&output_schema),
         });
         let inference_metadata = InferenceMetadata {
