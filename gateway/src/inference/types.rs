@@ -10,11 +10,10 @@ use std::{
 };
 use uuid::Uuid;
 
+use crate::endpoints::inference::InferenceDatabaseInsertMetadata;
 use crate::function::FunctionConfig;
+use crate::tool::ToolCallConfigDatabaseInsert;
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolResult};
-use crate::{
-    endpoints::inference::InferenceDatabaseInsertMetadata, tool::ToolCallConfigDatabaseInsert,
-};
 use crate::{error::Error, variant::JsonEnforcement};
 
 /// Data flow in TensorZero
