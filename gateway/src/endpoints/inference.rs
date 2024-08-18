@@ -18,8 +18,8 @@ use crate::function::sample_variant;
 use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
-    collect_chunks, ContentBlockChunk, ContentBlockOutput, Inference, InferenceResult,
-    InferenceResultChunk, Input, JsonInferenceOutput, ModelInferenceResponseChunk,
+    collect_chunks, ContentBlockChunk, ContentBlockOutput, InferenceDatabaseInsert,
+    InferenceResult, InferenceResultChunk, Input, JsonInferenceOutput, ModelInferenceResponseChunk,
     ModelInferenceResponseStream, Usage,
 };
 use crate::tool::{DynamicToolParams, Tool, ToolCallConfig, ToolChoice};
@@ -39,7 +39,7 @@ pub struct Params {
     input: Input,
     // default False
     stream: Option<bool>,
-    // Inference-time overrides for chat completion variants (use with caution)
+    // Inference-time overrides for variant types (use with caution)
     #[serde(default)]
     params: InferenceParams,
     // if the client would like to pin a specific variant to be used
@@ -69,18 +69,6 @@ struct InferenceMetadata {
     pub inference_params: InferenceParams,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-pub struct ChatInferenceParams {
-    pub temperature: Option<f32>,
-    pub max_tokens: Option<u32>,
-    pub seed: Option<u32>,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-pub struct InferenceParams {
-    pub chat_completion: ChatInferenceParams,
-}
-
 /// A handler for the inference endpoint
 #[debug_handler(state = AppStateData)]
 pub async fn inference_handler(
@@ -102,16 +90,16 @@ pub async fn inference_handler(
         tool_choice: params.tool_choice,
         parallel_tool_calls: params.parallel_tool_calls,
     };
-    let dynamic_tool_params_string =
-        serde_json::to_string(&dynamic_tool_params).map_err(|e| Error::Serialization {
-            message: e.to_string(),
-        })?;
+    // This is only mutable because dynamic tool params compile schemas concurrently with the inference.
+    // The result of this compilation eventually is written to the struct, so we need mutability here.
+    // See `DynamicToolConfig` and `DynamicJSONSchema` for more details.
     let mut tool_config = function.prepare_tool_config(dynamic_tool_params, &config.tools)?;
     // Collect the function variant names as a Vec<&str>
-    let mut variant_names: Vec<&str> = function.variants().keys().map(AsRef::as_ref).collect();
+    let mut candidate_variant_names: Vec<&str> =
+        function.variants().keys().map(AsRef::as_ref).collect();
 
     // If the function has no variants, return an error
-    if variant_names.is_empty() {
+    if candidate_variant_names.is_empty() {
         return Err(Error::InvalidFunctionVariants {
             message: format!("Function `{}` has no variants", params.function_name),
         });
@@ -122,10 +110,10 @@ pub async fn inference_handler(
 
     // If a variant is pinned, only that variant should be attempted
     if let Some(ref variant_name) = params.variant_name {
-        variant_names.retain(|k| k == variant_name);
+        candidate_variant_names.retain(|k| k == variant_name);
 
         // If the pinned variant doesn't exist, return an error
-        if variant_names.is_empty() {
+        if candidate_variant_names.is_empty() {
             return Err(Error::UnknownVariant {
                 name: variant_name.to_string(),
             });
@@ -161,9 +149,9 @@ pub async fn inference_handler(
         tool_config: tool_config.as_mut(),
     };
     // Keep sampling variants until one succeeds
-    while !variant_names.is_empty() {
+    while !candidate_variant_names.is_empty() {
         let (variant_name, variant) = sample_variant(
-            &mut variant_names,
+            &mut candidate_variant_names,
             function.variants(),
             &params.function_name,
             &episode_id,
@@ -208,7 +196,6 @@ pub async fn inference_handler(
                 stream,
                 clickhouse_connection_info,
                 tool_config,
-                dynamic_tool_params_string,
             );
 
             return Ok(Sse::new(stream)
@@ -234,11 +221,11 @@ pub async fn inference_handler(
 
             if !dryrun {
                 // Spawn a thread for a trailing write to ClickHouse so that it doesn't block the response
-                let write_metadata = InferenceWriteMetadata {
+                let write_metadata = InferenceDatabaseInsertMetadata {
                     function_name: params.function_name,
                     variant_name: variant_name.to_string(),
                     episode_id,
-                    dynamic_tool_params: dynamic_tool_params_string,
+                    tool_params: tool_config,
                     inference_params: variant_inference_params,
                     processing_time: start_time.elapsed(),
                 };
@@ -280,7 +267,6 @@ fn create_stream(
     mut stream: ModelInferenceResponseStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     mut tool_config: Option<ToolCallConfig>,
-    dynamic_tool_params_string: String,
 ) -> impl Stream<Item = Result<Event, Error>> + Send {
     async_stream::stream! {
         let mut buffer = vec![first_chunk.clone()];
@@ -320,11 +306,11 @@ fn create_stream(
             let inference_response = inference_response.ok_or_log();
 
             if let Some(inference_response) = inference_response {
-                let write_metadata = InferenceWriteMetadata {
+                let write_metadata = InferenceDatabaseInsertMetadata {
                     function_name: metadata.function_name,
                     variant_name: metadata.variant_name,
                     episode_id: metadata.episode_id,
-                    dynamic_tool_params: dynamic_tool_params_string,
+                    tool_params: tool_config,
                     inference_params: metadata.inference_params,
                     processing_time: metadata.start_time.elapsed(),
                 };
@@ -366,11 +352,11 @@ fn prepare_event(
         })
 }
 
-pub struct InferenceWriteMetadata {
+pub struct InferenceDatabaseInsertMetadata {
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
-    pub dynamic_tool_params: String,
+    pub tool_params: Option<ToolCallConfig>,
     pub inference_params: InferenceParams,
     pub processing_time: Duration,
 }
@@ -379,7 +365,7 @@ async fn write_inference(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     input: Input,
     result: InferenceResult,
-    metadata: InferenceWriteMetadata,
+    metadata: InferenceDatabaseInsertMetadata,
 ) {
     let serialized_input = match serde_json::to_string(&input).map_err(|e| Error::Serialization {
         message: e.to_string(),
@@ -400,7 +386,7 @@ async fn write_inference(
             .ok_or_log();
     }
     // Write the inference to the Inference table
-    let inference = Inference::new(result, serialized_input, metadata);
+    let inference = InferenceDatabaseInsert::new(result, serialized_input, metadata);
     clickhouse_connection_info
         .write(&inference, "Inference")
         .await
@@ -505,8 +491,22 @@ impl InferenceResponseChunk {
     }
 }
 
-impl ChatInferenceParams {
-    pub fn include_variant_params(
+/// InferenceParams is the top-level struct for inference parameters.
+/// We backfill these from the configs given in the variants used and ultimately write them to the database.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct InferenceParams {
+    pub chat_completion: ChatCompletionInferenceParams,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct ChatCompletionInferenceParams {
+    pub temperature: Option<f32>,
+    pub max_tokens: Option<u32>,
+    pub seed: Option<u32>,
+}
+
+impl ChatCompletionInferenceParams {
+    pub fn backfill_with_variant_params(
         &mut self,
         temperature: Option<f32>,
         max_tokens: Option<u32>,

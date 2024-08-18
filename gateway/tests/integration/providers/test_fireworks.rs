@@ -150,7 +150,7 @@ async fn test_streaming_json_request() {
         collected_chunks.push(chunk.unwrap());
     }
     assert!(!collected_chunks.is_empty());
-    // Fourth as an arbitrary middle chunk, the first and last may contain only metadata
-    assert!(collected_chunks[4].content.len() == 1);
+    // Third as an arbitrary middle chunk, the first and last may contain only metadata
+    assert!(collected_chunks[3].content.len() == 1);
     assert!(collected_chunks.last().unwrap().usage.is_some());
 }

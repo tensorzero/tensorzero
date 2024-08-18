@@ -10,9 +10,11 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::endpoints::inference::InferenceWriteMetadata;
 use crate::function::FunctionConfig;
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolResult};
+use crate::{
+    endpoints::inference::InferenceDatabaseInsertMetadata, tool::ToolCallConfigDatabaseInsert,
+};
 use crate::{error::Error, variant::JsonEnforcement};
 
 /// Data flow in TensorZero
@@ -252,20 +254,20 @@ pub enum InferenceResultChunk {
 /// which are written to ClickHouse tables of the same name asynchronously.
 
 #[derive(Serialize, Debug)]
-pub struct Inference {
+pub struct InferenceDatabaseInsert {
     pub id: Uuid,
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
     pub input: String,
     pub output: String,
-    pub dynamic_tool_params: String,
+    pub tool_params: String,
     pub inference_params: String,
     pub processing_time_ms: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ModelInference {
+pub struct ModelInferenceDatabaseInsert {
     pub id: Uuid,
     pub inference_id: Uuid,
     pub input: String,
@@ -350,7 +352,7 @@ impl From<String> for ContentBlock {
     }
 }
 
-impl ModelInference {
+impl ModelInferenceDatabaseInsert {
     pub fn new(response: ModelInferenceResponse, input: String, inference_id: Uuid) -> Self {
         // TODO (#30): deal with tools
         let (latency_ms, ttft_ms) = match response.latency {
@@ -405,7 +407,7 @@ impl InferenceResult {
             .iter()
             .map(|r| {
                 let model_inference =
-                    ModelInference::new(r.clone(), input.to_string(), inference_id);
+                    ModelInferenceDatabaseInsert::new(r.clone(), input.to_string(), inference_id);
                 serde_json::to_value(model_inference).unwrap_or_default()
             })
             .collect()
@@ -492,13 +494,20 @@ impl ChatInferenceResult {
     }
 }
 
-impl Inference {
+impl InferenceDatabaseInsert {
     pub fn new(
         inference_response: InferenceResult,
         input: String,
-        metadata: InferenceWriteMetadata,
+        metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
         let processing_time_ms = metadata.processing_time.as_millis() as u32;
+        let tool_params = match metadata.tool_params {
+            Some(tool_params) => {
+                let tool_params: ToolCallConfigDatabaseInsert = tool_params.into();
+                serde_json::to_string(&tool_params).unwrap_or_default()
+            }
+            None => String::new(),
+        };
         match inference_response {
             InferenceResult::Chat(chat_response) => Self {
                 id: chat_response.inference_id,
@@ -506,7 +515,7 @@ impl Inference {
                 variant_name: metadata.variant_name,
                 episode_id: metadata.episode_id,
                 input,
-                dynamic_tool_params: metadata.dynamic_tool_params,
+                tool_params,
                 inference_params: serde_json::to_string(&metadata.inference_params)
                     .unwrap_or_default(),
                 output: serde_json::to_string(&chat_response.output).unwrap_or_default(),
@@ -518,7 +527,7 @@ impl Inference {
                 variant_name: metadata.variant_name,
                 episode_id: metadata.episode_id,
                 input,
-                dynamic_tool_params: metadata.dynamic_tool_params,
+                tool_params,
                 inference_params: serde_json::to_string(&metadata.inference_params)
                     .unwrap_or_default(),
                 output: serde_json::to_string(&json_result.output).unwrap_or_default(),

@@ -56,6 +56,15 @@ pub struct ToolCallConfig {
     pub parallel_tool_calls: bool,
 }
 
+/// ToolCallConfigDatabaseInsert is a lightweight version of ToolCallConfig that can be serialized and cloned.
+/// It is used to insert the ToolCallConfig into the database.
+#[derive(Debug, PartialEq, Serialize)]
+pub struct ToolCallConfigDatabaseInsert {
+    pub tools_available: Vec<Tool>,
+    pub tool_choice: ToolChoice,
+    pub parallel_tool_calls: bool,
+}
+
 impl ToolCallConfig {
     pub fn new(
         function_tools: &'static [String],
@@ -243,6 +252,30 @@ impl ToolConfig {
         match self {
             ToolConfig::Static(config) => &config.name,
             ToolConfig::Dynamic(config) => &config.name,
+        }
+    }
+}
+
+impl From<ToolCallConfig> for ToolCallConfigDatabaseInsert {
+    fn from(tool_call_config: ToolCallConfig) -> Self {
+        Self {
+            tools_available: tool_call_config
+                .tools_available
+                .into_iter()
+                .map(|tool| tool.into())
+                .collect(),
+            tool_choice: tool_call_config.tool_choice,
+            parallel_tool_calls: tool_call_config.parallel_tool_calls,
+        }
+    }
+}
+
+impl From<ToolConfig> for Tool {
+    fn from(tool_config: ToolConfig) -> Self {
+        Self {
+            description: tool_config.description().to_string(),
+            parameters: tool_config.parameters().clone(),
+            name: tool_config.name().to_string(),
         }
     }
 }
