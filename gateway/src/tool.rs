@@ -40,7 +40,7 @@ pub struct OwnedToolConfig {
     pub name: String,
 }
 
-/// Contains the configuration information for a tool defind at runtime
+/// Contains the configuration information for a tool defined at runtime
 #[derive(Debug, PartialEq)]
 pub struct DynamicToolConfig {
     pub description: String,
