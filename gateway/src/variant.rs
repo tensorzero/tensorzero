@@ -220,11 +220,9 @@ impl ChatCompletionConfig {
             .map(|system| self.prepare_system_message(templates, system))
             .transpose()?;
         // NOTE: line below mutates the inference_params
-        inference_params.chat_completion.include_variant_params(
-            self.temperature,
-            self.max_tokens,
-            self.seed,
-        );
+        inference_params
+            .chat_completion
+            .backfill_with_variant_params(self.temperature, self.max_tokens, self.seed);
         Ok(match function {
             FunctionConfig::Chat(_) => ModelInferenceRequest {
                 messages,
@@ -330,7 +328,7 @@ mod tests {
     use futures::StreamExt;
     use serde_json::{json, Value};
 
-    use crate::endpoints::inference::ChatInferenceParams;
+    use crate::endpoints::inference::ChatCompletionInferenceParams;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::providers::common::WEATHER_TOOL_CONFIG;
     use crate::inference::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
@@ -1022,7 +1020,7 @@ mod tests {
         assert_eq!(inference_params.chat_completion.seed, Some(69));
 
         let mut inference_params = InferenceParams {
-            chat_completion: ChatInferenceParams {
+            chat_completion: ChatCompletionInferenceParams {
                 temperature: Some(1.),
                 max_tokens: Some(200),
                 seed: Some(420),
@@ -1047,7 +1045,7 @@ mod tests {
         // We will vary temperature, max_tokens, and seed
         let chat_completion_config = ChatCompletionConfig::default();
         let mut inference_params = InferenceParams {
-            chat_completion: ChatInferenceParams {
+            chat_completion: ChatCompletionInferenceParams {
                 temperature: Some(0.9),
                 ..Default::default()
             },

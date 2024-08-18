@@ -10,7 +10,7 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::endpoints::inference::InferenceWriteMetadata;
+use crate::endpoints::inference::InferenceDatabaseInsertMetadata;
 use crate::function::FunctionConfig;
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolResult};
 use crate::{error::Error, variant::JsonEnforcement};
@@ -252,7 +252,7 @@ pub enum InferenceResultChunk {
 /// which are written to ClickHouse tables of the same name asynchronously.
 
 #[derive(Serialize, Debug)]
-pub struct Inference {
+pub struct InferenceDatabaseInsert {
     pub id: Uuid,
     pub function_name: String,
     pub variant_name: String,
@@ -265,7 +265,7 @@ pub struct Inference {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ModelInference {
+pub struct ModelInferenceDatabaseInsert {
     pub id: Uuid,
     pub inference_id: Uuid,
     pub input: String,
@@ -350,7 +350,7 @@ impl From<String> for ContentBlock {
     }
 }
 
-impl ModelInference {
+impl ModelInferenceDatabaseInsert {
     pub fn new(response: ModelInferenceResponse, input: String, inference_id: Uuid) -> Self {
         // TODO (#30): deal with tools
         let (latency_ms, ttft_ms) = match response.latency {
@@ -405,7 +405,7 @@ impl InferenceResult {
             .iter()
             .map(|r| {
                 let model_inference =
-                    ModelInference::new(r.clone(), input.to_string(), inference_id);
+                    ModelInferenceDatabaseInsert::new(r.clone(), input.to_string(), inference_id);
                 serde_json::to_value(model_inference).unwrap_or_default()
             })
             .collect()
@@ -492,11 +492,11 @@ impl ChatInferenceResult {
     }
 }
 
-impl Inference {
+impl InferenceDatabaseInsert {
     pub fn new(
         inference_response: InferenceResult,
         input: String,
-        metadata: InferenceWriteMetadata,
+        metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
         let processing_time_ms = metadata.processing_time.as_millis() as u32;
         match inference_response {
