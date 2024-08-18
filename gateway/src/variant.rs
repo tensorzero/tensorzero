@@ -55,7 +55,8 @@ pub enum JsonEnforcement {
     Off,
 }
 
-/// For stuff that is taken from config rather than being passed in as a parameter.
+/// Maps to the subset of Config that applies to the current inference request.
+/// It doesn't take into account inference-time overrides (e.g. dynamic tools).
 pub struct InferenceConfig<'a> {
     pub models: &'a HashMap<String, ModelConfig>,
     pub function: &'a FunctionConfig,
