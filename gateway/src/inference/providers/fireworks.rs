@@ -152,8 +152,9 @@ enum FireworksResponseFormat<'a> {
 /// See the [Fireworks API documentation](https://docs.fireworks.ai/api-reference/post-chatcompletions)
 /// for more details.
 /// We are not handling logprobs, top_logprobs, n, prompt_truncate_len
-/// presence_penalty, frequency_penalty, seed, service_tier, stop, user,
-/// or context_length_exceeded_behavior
+/// presence_penalty, frequency_penalty, service_tier, stop, user,
+/// or context_length_exceeded_behavior.
+/// NOTE: Fireworks does not support seed.
 #[derive(Serialize)]
 struct FireworksRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
@@ -213,8 +214,9 @@ mod tests {
                 content: vec!["What's the weather?".to_string().into()],
             }],
             system: None,
-            temperature: None,
-            max_tokens: None,
+            temperature: Some(0.5),
+            max_tokens: Some(100),
+            seed: Some(69),
             stream: false,
             json_mode: JSONMode::On,
             tool_config: Some(&WEATHER_TOOL_CONFIG),
@@ -230,8 +232,8 @@ mod tests {
             "accounts/fireworks/models/llama-v3-8b"
         );
         assert_eq!(fireworks_request.messages.len(), 1);
-        assert_eq!(fireworks_request.temperature, None);
-        assert_eq!(fireworks_request.max_tokens, None);
+        assert_eq!(fireworks_request.temperature, Some(0.5));
+        assert_eq!(fireworks_request.max_tokens, Some(100));
         assert!(!fireworks_request.stream);
         assert_eq!(
             fireworks_request.response_format,

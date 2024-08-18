@@ -100,6 +100,7 @@ impl InferenceProvider for AWSBedrockProvider {
         if let Some(temperature) = request.temperature {
             inference_config = inference_config.temperature(temperature);
         }
+        // Note: AWS Bedrock does not support seed
 
         let mut bedrock_request = aws_bedrock_client
             .converse()

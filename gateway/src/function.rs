@@ -268,14 +268,16 @@ fn validate_single_message(
 }
 
 /// Sample a variant from the function based on variant weights (uniform random selection)
-pub fn sample_variant(
-    variants: &mut HashMap<String, VariantConfig>,
+pub fn sample_variant<'a>(
+    candidate_variant_names: &mut Vec<&'a str>,
+    variants: &'a HashMap<String, VariantConfig>,
     function_name: &str,
     episode_id: &Uuid,
-) -> Result<(String, VariantConfig), Error> {
-    // Compute the total weight of all variants
-    let total_weight = variants
-        .values()
+) -> Result<(&'a str, &'a VariantConfig), Error> {
+    // Compute the total weight of variants present in variant_names
+    let total_weight = candidate_variant_names
+        .iter()
+        .filter_map(|name| variants.get(*name))
         .map(|variant| variant.weight())
         .sum::<f64>();
 
@@ -284,24 +286,39 @@ pub fn sample_variant(
     //       but there's a chance we pin a weight-zero variant in the config.
     //       This check also ensures that we catch any regressions we might introduce in the future.
     if total_weight <= 0. {
-        // Perform uniform sampling if total weight is non-positive
-        let random_index =
-            (get_uniform_value(function_name, episode_id) * variants.len() as f64).floor() as usize;
-        let sampled_variant_name = variants
-            .keys()
-            .nth(random_index)
-            .ok_or_else(|| Error::InvalidFunctionVariants {
+        if candidate_variant_names.is_empty() {
+            return Err(Error::InvalidFunctionVariants {
                 message: format!("Function `{function_name}` has no variants"),
-            })?
-            .clone();
-        return variants
-            .remove(&sampled_variant_name)
-            .map(|variant| (sampled_variant_name, variant))
-            .ok_or_else(|| Error::InvalidFunctionVariants {
+            });
+        }
+        // Perform uniform sampling if total weight is non-positive
+        let random_index = (get_uniform_value(function_name, episode_id)
+            * candidate_variant_names.len() as f64)
+            .floor() as usize;
+        // Reorders this list (in place) by swapping the element at index with the last element.
+        // This should not matter and is more efficient than `remove`
+        let sampled_variant_name = if random_index < candidate_variant_names.len() {
+            // could panic if random_index is out of bounds
+            candidate_variant_names.swap_remove(random_index)
+        } else {
+            return Err(Error::InvalidFunctionVariants {
                 message: format!(
-                    "Failed to remove sampled variant from function `{function_name}`"
+                    "Invalid index {} for function `{}` with {} variants",
+                    random_index,
+                    function_name,
+                    candidate_variant_names.len()
                 ),
             });
+        };
+        let variant =
+            variants
+                .get(sampled_variant_name)
+                .ok_or_else(|| Error::InvalidFunctionVariants {
+                    message: format!(
+                        "Function `{function_name}` has no variant `{sampled_variant_name}`"
+                    ),
+                })?;
+        return Ok((sampled_variant_name, variant));
     }
 
     // Sample a random threshold between 0 and the total weight
@@ -309,11 +326,17 @@ pub fn sample_variant(
 
     // Iterate over the variants to find the one that corresponds to the sampled threshold
     let mut cumulative_weight = 0.;
-    let mut sampled_variant_name = String::new();
-    for (variant_name, variant) in variants.iter() {
+    let mut sampled_variant_name = "";
+    for (i, variant_name) in candidate_variant_names.iter().enumerate() {
+        let variant =
+            variants
+                .get(*variant_name)
+                .ok_or_else(|| Error::InvalidFunctionVariants {
+                    message: format!("Function `{function_name}` has no variant `{variant_name}`"),
+                })?;
         cumulative_weight += variant.weight();
         if cumulative_weight > random_threshold {
-            sampled_variant_name.clone_from(variant_name);
+            sampled_variant_name = candidate_variant_names.swap_remove(i);
             break;
         }
     }
@@ -321,20 +344,15 @@ pub fn sample_variant(
     // If we didn't find a variant (which should only happen due to rare numerical precision issues),
     // use the last variant as a fallback
     if sampled_variant_name.is_empty() {
-        sampled_variant_name.clone_from(variants.keys().last().ok_or_else(|| {
-            Error::InvalidFunctionVariants {
-                message: format!("Function `{function_name}` has no variants"),
-            }
-        })?);
+        sampled_variant_name = candidate_variant_names.swap_remove(variants.len() - 1);
     }
 
-    // Remove and return the sampled variant
-    variants
-        .remove(&sampled_variant_name)
-        .map(|variant| (sampled_variant_name, variant))
-        .ok_or_else(|| Error::InvalidFunctionVariants {
-            message: format!("Failed to remove sampled variant from function `{function_name}`"),
-        })
+    let variant = variants
+        .get(sampled_variant_name)
+        .ok_or(Error::InvalidFunctionVariants {
+            message: format!("Function `{function_name}` has no variant `{sampled_variant_name}`"),
+        })?;
+    Ok((sampled_variant_name, variant))
 }
 
 /// Implements a uniform distribution over the interval [0, 1) using a hash function.
@@ -351,10 +369,10 @@ fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    use crate::inference::types::InputMessage;
     use crate::inference::types::Latency;
     use crate::tool::ToolCall;
     use crate::variant::ChatCompletionConfig;
-    use crate::{inference::types::InputMessage, variant::JsonEnforcement};
 
     use super::*;
     use serde_json::json;
@@ -993,10 +1011,7 @@ mod tests {
                         VariantConfig::ChatCompletion(ChatCompletionConfig {
                             weight,
                             model: "model-name".to_string(),
-                            system_template: None,
-                            user_template: None,
-                            assistant_template: None,
-                            json_mode: JsonEnforcement::Default,
+                            ..Default::default()
                         }),
                     )
                 })
@@ -1014,10 +1029,15 @@ mod tests {
             let mut counts: HashMap<String, usize> = HashMap::new();
 
             for _ in 0..sample_size {
-                let (variant_name, _) =
-                    sample_variant(&mut variants.clone(), "test_function", &Uuid::now_v7())
-                        .unwrap();
-                *counts.entry(variant_name.clone()).or_insert(0) += 1;
+                let mut variant_names = variants.keys().map(AsRef::as_ref).collect();
+                let (variant_name, _) = sample_variant(
+                    &mut variant_names,
+                    variants,
+                    "test_function",
+                    &Uuid::now_v7(),
+                )
+                .unwrap();
+                *counts.entry(variant_name.to_string()).or_insert(0) += 1;
             }
 
             for (variant_name, variant) in variants {
@@ -1056,9 +1076,15 @@ mod tests {
         let mut counts: HashMap<String, usize> = HashMap::new();
 
         for _ in 0..sample_size {
-            let (variant_name, _) =
-                sample_variant(&mut variants.clone(), "test_function", &Uuid::now_v7()).unwrap();
-            *counts.entry(variant_name).or_insert(0) += 1;
+            let mut variant_names = variants.keys().map(AsRef::as_ref).collect();
+            let (variant_name, _) = sample_variant(
+                &mut variant_names,
+                &variants,
+                "test_function",
+                &Uuid::now_v7(),
+            )
+            .unwrap();
+            *counts.entry(variant_name.to_string()).or_insert(0) += 1;
         }
 
         // Check if all variants are sampled approximately equally

@@ -29,7 +29,6 @@ async fn test_infer() {
         api_key: Some(api_key),
     });
     let result = provider.infer(&inference_request, &client).await;
-    assert!(result.is_ok());
     let result = result.unwrap();
     assert!(result.content.len() == 1);
     let content = result.content.first().unwrap();
@@ -57,7 +56,6 @@ async fn test_infer_with_tool_calls() {
     });
     let result = provider.infer(&inference_request, &client).await;
 
-    assert!(result.is_ok());
     let response = result.unwrap();
     assert!(response.content.len() == 1);
     let content = response.content.first().unwrap();

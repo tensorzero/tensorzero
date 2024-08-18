@@ -492,6 +492,8 @@ struct OpenAIRequest<'a> {
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    seed: Option<u32>,
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     stream_options: Option<StreamOptions>,
@@ -521,6 +523,7 @@ impl<'a> OpenAIRequest<'a> {
             model,
             temperature: request.temperature,
             max_tokens: request.max_tokens,
+            seed: request.seed,
             stream: request.stream,
             stream_options,
             response_format,
@@ -849,6 +852,7 @@ mod tests {
             tool_config: None,
             temperature: Some(0.7),
             max_tokens: Some(100),
+            seed: Some(69),
             stream: true,
             json_mode: JSONMode::Off,
             function_type: FunctionType::Chat,
@@ -861,6 +865,7 @@ mod tests {
         assert_eq!(openai_request.messages.len(), 2);
         assert_eq!(openai_request.temperature, Some(0.7));
         assert_eq!(openai_request.max_tokens, Some(100));
+        assert_eq!(openai_request.seed, Some(69));
         assert!(openai_request.stream);
         assert_eq!(openai_request.response_format, OpenAIResponseFormat::Text);
         assert!(openai_request.tools.is_none());
@@ -876,6 +881,7 @@ mod tests {
             system: None,
             temperature: None,
             max_tokens: None,
+            seed: None,
             stream: false,
             json_mode: JSONMode::On,
             tool_config: Some(&WEATHER_TOOL_CONFIG),
@@ -889,6 +895,7 @@ mod tests {
         assert_eq!(openai_request.messages.len(), 1);
         assert_eq!(openai_request.temperature, None);
         assert_eq!(openai_request.max_tokens, None);
+        assert_eq!(openai_request.seed, None);
         assert!(!openai_request.stream);
         assert_eq!(
             openai_request.response_format,
@@ -917,6 +924,7 @@ mod tests {
             system: None,
             temperature: None,
             max_tokens: None,
+            seed: None,
             stream: false,
             json_mode: JSONMode::Strict,
             tool_config: None,
@@ -931,6 +939,7 @@ mod tests {
         assert_eq!(openai_request.temperature, None);
         assert_eq!(openai_request.max_tokens, None);
         assert!(!openai_request.stream);
+        assert_eq!(openai_request.seed, None);
         // Resolves to normal JSON mode since no schema is provided (this shouldn't really happen in practice)
         assert_eq!(
             openai_request.response_format,
@@ -947,6 +956,7 @@ mod tests {
             system: None,
             temperature: None,
             max_tokens: None,
+            seed: None,
             stream: false,
             json_mode: JSONMode::Strict,
             tool_config: None,
@@ -960,6 +970,7 @@ mod tests {
         assert_eq!(openai_request.messages.len(), 1);
         assert_eq!(openai_request.temperature, None);
         assert_eq!(openai_request.max_tokens, None);
+        assert_eq!(openai_request.seed, None);
         assert!(!openai_request.stream);
         let expected_schema = serde_json::json!({"name": "response", "schema": {}});
         assert_eq!(
@@ -1121,6 +1132,7 @@ mod tests {
             system: None,
             temperature: None,
             max_tokens: None,
+            seed: None,
             stream: false,
             json_mode: JSONMode::On,
             tool_config: Some(&MULTI_TOOL_CONFIG),
@@ -1156,6 +1168,7 @@ mod tests {
             system: None,
             temperature: None,
             max_tokens: None,
+            seed: None,
             stream: false,
             json_mode: JSONMode::On,
             tool_config: Some(&tool_config),

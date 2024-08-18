@@ -10,6 +10,7 @@ use std::{
 };
 use uuid::Uuid;
 
+use crate::endpoints::inference::InferenceDatabaseInsertMetadata;
 use crate::function::FunctionConfig;
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolResult};
 use crate::{error::Error, variant::JsonEnforcement};
@@ -117,6 +118,7 @@ pub struct ModelInferenceRequest<'a> {
     pub tool_config: Option<&'a ToolCallConfig>,
     pub temperature: Option<f32>,
     pub max_tokens: Option<u32>,
+    pub seed: Option<u32>,
     pub stream: bool,
     pub json_mode: JSONMode,
     pub function_type: FunctionType,
@@ -250,7 +252,7 @@ pub enum InferenceResultChunk {
 /// which are written to ClickHouse tables of the same name asynchronously.
 
 #[derive(Serialize, Debug)]
-pub struct Inference {
+pub struct InferenceDatabaseInsert {
     pub id: Uuid,
     pub function_name: String,
     pub variant_name: String,
@@ -258,11 +260,12 @@ pub struct Inference {
     pub input: String,
     pub output: String,
     pub dynamic_tool_config: String,
+    pub inference_params: String,
     pub processing_time_ms: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ModelInference {
+pub struct ModelInferenceDatabaseInsert {
     pub id: Uuid,
     pub inference_id: Uuid,
     pub input: String,
@@ -347,7 +350,7 @@ impl From<String> for ContentBlock {
     }
 }
 
-impl ModelInference {
+impl ModelInferenceDatabaseInsert {
     pub fn new(response: ModelInferenceResponse, input: String, inference_id: Uuid) -> Self {
         // TODO (#30): deal with tools
         let (latency_ms, ttft_ms) = match response.latency {
@@ -402,7 +405,7 @@ impl InferenceResult {
             .iter()
             .map(|r| {
                 let model_inference =
-                    ModelInference::new(r.clone(), input.to_string(), inference_id);
+                    ModelInferenceDatabaseInsert::new(r.clone(), input.to_string(), inference_id);
                 serde_json::to_value(model_inference).unwrap_or_default()
             })
             .collect()
@@ -489,35 +492,35 @@ impl ChatInferenceResult {
     }
 }
 
-impl Inference {
+impl InferenceDatabaseInsert {
     pub fn new(
         inference_response: InferenceResult,
         input: String,
-        episode_id: Uuid,
-        function_name: String,
-        variant_name: String,
-        dynamic_tool_config: String,
-        processing_time: Duration,
+        metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
-        let processing_time_ms = processing_time.as_millis() as u32;
+        let processing_time_ms = metadata.processing_time.as_millis() as u32;
         match inference_response {
             InferenceResult::Chat(chat_response) => Self {
                 id: chat_response.inference_id,
-                function_name,
-                variant_name,
-                episode_id,
+                function_name: metadata.function_name,
+                variant_name: metadata.variant_name,
+                episode_id: metadata.episode_id,
                 input,
-                dynamic_tool_config,
+                dynamic_tool_config: metadata.dynamic_tool_config,
+                inference_params: serde_json::to_string(&metadata.inference_params)
+                    .unwrap_or_default(),
                 output: serde_json::to_string(&chat_response.output).unwrap_or_default(),
                 processing_time_ms,
             },
             InferenceResult::Json(json_result) => Self {
                 id: json_result.inference_id,
-                function_name,
-                variant_name,
-                episode_id,
+                function_name: metadata.function_name,
+                variant_name: metadata.variant_name,
+                episode_id: metadata.episode_id,
                 input,
-                dynamic_tool_config,
+                dynamic_tool_config: metadata.dynamic_tool_config,
+                inference_params: serde_json::to_string(&metadata.inference_params)
+                    .unwrap_or_default(),
                 output: serde_json::to_string(&json_result.output).unwrap_or_default(),
                 processing_time_ms,
             },

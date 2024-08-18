@@ -101,6 +101,32 @@ async fn e2e_test_inference_basic() {
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "test");
+    // Check the inference_params (set via config)
+    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
+    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    let chat_completion_inference_params = inference_params
+        .get("chat_completion")
+        .unwrap()
+        .as_object()
+        .unwrap();
+    let temperature = chat_completion_inference_params
+        .get("temperature")
+        .unwrap()
+        .as_f64()
+        .unwrap();
+    assert_eq!(temperature, 1.0);
+    let max_tokens = chat_completion_inference_params
+        .get("max_tokens")
+        .unwrap()
+        .as_u64()
+        .unwrap();
+    assert_eq!(max_tokens, 100);
+    let seed = chat_completion_inference_params
+        .get("seed")
+        .unwrap()
+        .as_u64()
+        .unwrap();
+    assert_eq!(seed, 69);
 
     // Check the ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -684,6 +710,7 @@ async fn e2e_test_inference_json_fail() {
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
+
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
@@ -971,6 +998,21 @@ async fn e2e_test_variant_failover() {
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "good");
 
+    // Check the inference_params (should be null since neither config or payload has chat_completion)
+    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
+    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    let chat_completion_inference_params = inference_params
+        .get("chat_completion")
+        .unwrap()
+        .as_object()
+        .unwrap();
+    let temperature = chat_completion_inference_params.get("temperature").unwrap();
+    assert!(temperature.is_null());
+    let max_tokens = chat_completion_inference_params.get("max_tokens").unwrap();
+    assert!(max_tokens.is_null());
+    let seed = chat_completion_inference_params.get("seed").unwrap();
+    assert!(seed.is_null());
+
     // Check the ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
         .await
@@ -1023,6 +1065,12 @@ async fn e2e_test_streaming() {
                 }
             ]},
         "stream": true,
+        "params": {
+            "chat_completion": {
+                "temperature": 2.0,
+            "max_tokens": 200,
+            "seed": 420
+        }}
     });
 
     let mut event_source = Client::new()
@@ -1113,6 +1161,32 @@ async fn e2e_test_streaming() {
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "test");
+    // Check the inference_params (set via payload)
+    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
+    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    let chat_completion_inference_params = inference_params
+        .get("chat_completion")
+        .unwrap()
+        .as_object()
+        .unwrap();
+    let temperature = chat_completion_inference_params
+        .get("temperature")
+        .unwrap()
+        .as_f64()
+        .unwrap();
+    assert_eq!(temperature, 2.0);
+    let max_tokens = chat_completion_inference_params
+        .get("max_tokens")
+        .unwrap()
+        .as_u64()
+        .unwrap();
+    assert_eq!(max_tokens, 200);
+    let seed = chat_completion_inference_params
+        .get("seed")
+        .unwrap()
+        .as_u64()
+        .unwrap();
+    assert_eq!(seed, 420);
 
     // Check the ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)

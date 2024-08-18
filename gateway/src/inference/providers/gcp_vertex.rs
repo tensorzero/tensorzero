@@ -465,6 +465,7 @@ struct GCPVertexGeminiGenerationConfig<'a> {
     stop_sequences: Option<Vec<&'a str>>,
     temperature: Option<f32>,
     max_output_tokens: Option<u32>,
+    seed: Option<u32>,
     response_mime_type: Option<GCPVertexGeminiResponseMimeType>,
     response_schema: Option<&'a Value>,
 }
@@ -525,6 +526,7 @@ impl<'a> GCPVertexGeminiRequest<'a> {
             stop_sequences: None,
             temperature: request.temperature,
             max_output_tokens: request.max_tokens,
+            seed: request.seed,
             response_mime_type,
             response_schema,
         });
@@ -972,6 +974,7 @@ mod tests {
             tool_config: Some(&tool_config),
             temperature: None,
             max_tokens: None,
+            seed: None,
             stream: false,
             json_mode: JSONMode::Off,
             function_type: FunctionType::Chat,
@@ -1003,6 +1006,7 @@ mod tests {
             tool_config: Some(&tool_config),
             temperature: None,
             max_tokens: None,
+            seed: None,
             stream: false,
             json_mode: JSONMode::Off,
             function_type: FunctionType::Chat,
@@ -1047,6 +1051,7 @@ mod tests {
             tool_config: Some(&tool_config),
             temperature: Some(0.5),
             max_tokens: Some(100),
+            seed: Some(69),
             stream: true,
             json_mode: JSONMode::On,
             function_type: FunctionType::Chat,
@@ -1088,6 +1093,7 @@ mod tests {
                 .max_output_tokens,
             Some(100)
         );
+        assert_eq!(request.generation_config.as_ref().unwrap().seed, Some(69));
         assert_eq!(
             request
                 .generation_config
@@ -1107,6 +1113,7 @@ mod tests {
             tool_config: Some(&tool_config),
             temperature: Some(0.5),
             max_tokens: Some(100),
+            seed: Some(69),
             stream: true,
             json_mode: JSONMode::On,
             function_type: FunctionType::Chat,
@@ -1148,6 +1155,7 @@ mod tests {
                 .max_output_tokens,
             Some(100)
         );
+        assert_eq!(request.generation_config.as_ref().unwrap().seed, Some(69));
         assert_eq!(
             request
                 .generation_config

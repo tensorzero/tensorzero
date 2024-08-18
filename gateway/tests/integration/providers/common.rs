@@ -14,12 +14,14 @@ pub fn create_simple_inference_request<'a>() -> ModelInferenceRequest<'a> {
     let system = Some("You are a helpful but mischevious assistant.".to_string());
     let max_tokens = Some(100);
     let temperature = Some(1.);
+    let seed = Some(69);
     ModelInferenceRequest {
         messages,
         system,
         tool_config: None,
         temperature,
         max_tokens,
+        seed,
         stream: false,
         json_mode: JSONMode::Off,
         function_type: FunctionType::Chat,
@@ -50,6 +52,7 @@ pub fn create_json_inference_request<'a>() -> ModelInferenceRequest<'a> {
     );
     let max_tokens = Some(400);
     let temperature = Some(1.);
+    let seed = Some(420);
     let output_schema = json!({
         "type": "object",
         "properties": {
@@ -64,6 +67,7 @@ pub fn create_json_inference_request<'a>() -> ModelInferenceRequest<'a> {
         tool_config: None,
         temperature,
         max_tokens,
+        seed,
         stream: false,
         json_mode: JSONMode::On,
         function_type: FunctionType::Json,
@@ -112,6 +116,7 @@ pub fn create_tool_inference_request() -> ModelInferenceRequest<'static> {
         tool_config: Some(&*TOOL_CONFIG),
         temperature: Some(0.7),
         max_tokens: Some(300),
+        seed: None,
         stream: false,
         json_mode: JSONMode::Off,
         function_type: FunctionType::Chat,
@@ -127,12 +132,14 @@ pub fn create_streaming_inference_request<'a>() -> ModelInferenceRequest<'a> {
     let system = Some("You are a helpful but mischevious assistant.".to_string());
     let max_tokens = Some(100);
     let temperature = Some(1.);
+    let seed = Some(69);
     ModelInferenceRequest {
         messages,
         system,
         tool_config: None,
         temperature,
         max_tokens,
+        seed,
         stream: true,
         json_mode: JSONMode::Off,
         function_type: FunctionType::Chat,

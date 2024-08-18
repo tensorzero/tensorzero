@@ -18,13 +18,13 @@ use crate::function::sample_variant;
 use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
-    collect_chunks, ContentBlockChunk, ContentBlockOutput, Inference, InferenceResult,
-    InferenceResultChunk, Input, JsonInferenceOutput, ModelInferenceResponseChunk,
+    collect_chunks, ContentBlockChunk, ContentBlockOutput, InferenceDatabaseInsert,
+    InferenceResult, InferenceResultChunk, Input, JsonInferenceOutput, ModelInferenceResponseChunk,
     ModelInferenceResponseStream, Usage,
 };
 use crate::tool::{DynamicToolConfig, ToolCallConfig};
 use crate::uuid_util::validate_episode_id;
-use crate::variant::Variant;
+use crate::variant::{InferenceConfig, Variant};
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Deserialize)]
@@ -37,14 +37,14 @@ pub struct Params {
     episode_id: Option<Uuid>,
     // the input for the inference
     input: Input,
-    // the maximum number of tokens to generate (if not provided, the default value will be used)
-    #[allow(unused)] // TODO (#55): remove
-    max_tokens: Option<u32>,
     // default False
     stream: Option<bool>,
+    // Inference-time overrides for variant types (use with caution)
+    #[serde(default)]
+    params: InferenceParams,
     // if the client would like to pin a specific variant to be used
     // NOTE: YOU SHOULD TYPICALLY LET THE API SELECT A VARIANT FOR YOU (I.E. IGNORE THIS FIELD).
-    //       ONLY PIN A VARIANT FOR SPECIAL USE CASES (E.G. DEBUGGING).
+    //       ONLY PIN A VARIANT FOR SPECIAL USE CASES (E.G. TESTING / DEBUGGING VARIANTS).
     variant_name: Option<String>,
     // if true, the inference will not be stored
     dryrun: Option<bool>,
@@ -59,7 +59,7 @@ pub struct Params {
     // parallel_tool_calls: Option<bool>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 struct InferenceMetadata {
     pub function_name: String,
     pub variant_name: String,
@@ -67,6 +67,7 @@ struct InferenceMetadata {
     pub input: Input,
     pub dryrun: bool,
     pub start_time: Instant,
+    pub inference_params: InferenceParams,
 }
 
 /// A handler for the inference endpoint
@@ -102,11 +103,12 @@ pub async fn inference_handler(
             message: e.to_string(),
         })?;
     let tool_config = function.prepare_tool_config(&config.tools)?;
-    // Clone the function variants so we can modify the collection as we sample them
-    let mut variants = function.variants().clone();
+    // Collect the function variant names as a Vec<&str>
+    let mut candidate_variant_names: Vec<&str> =
+        function.variants().keys().map(AsRef::as_ref).collect();
 
     // If the function has no variants, return an error
-    if variants.is_empty() {
+    if candidate_variant_names.is_empty() {
         return Err(Error::InvalidFunctionVariants {
             message: format!("Function `{}` has no variants", params.function_name),
         });
@@ -117,10 +119,10 @@ pub async fn inference_handler(
 
     // If a variant is pinned, only that variant should be attempted
     if let Some(ref variant_name) = params.variant_name {
-        variants.retain(|k, _| k == variant_name);
+        candidate_variant_names.retain(|k| k == variant_name);
 
         // If the pinned variant doesn't exist, return an error
-        if variants.is_empty() {
+        if candidate_variant_names.is_empty() {
             return Err(Error::UnknownVariant {
                 name: variant_name.to_string(),
             });
@@ -149,20 +151,30 @@ pub async fn inference_handler(
 
     // Keep track of which variants failed
     let mut variant_errors = vec![];
-
+    let inference_config = InferenceConfig {
+        models: &config.models,
+        function,
+        templates: &config.templates,
+        tool_config: tool_config.as_ref(),
+    };
     // Keep sampling variants until one succeeds
-    while !variants.is_empty() {
-        let (variant_name, variant) =
-            sample_variant(&mut variants, &params.function_name, &episode_id)?;
+    while !candidate_variant_names.is_empty() {
+        let (variant_name, variant) = sample_variant(
+            &mut candidate_variant_names,
+            function.variants(),
+            &params.function_name,
+            &episode_id,
+        )?;
+        // Will be edited by the variant as part of making the request so we must clone here
+        let mut variant_inference_params = params.params.clone();
+
         if stream {
             let result = variant
                 .infer_stream(
                     &params.input,
-                    &config.models,
-                    function,
-                    tool_config.as_ref(),
-                    &config.templates,
+                    &inference_config,
                     &http_client,
+                    &mut variant_inference_params,
                 )
                 .await;
 
@@ -178,11 +190,12 @@ pub async fn inference_handler(
             // Create InferenceMetadata for a streaming inference
             let inference_metadata = InferenceMetadata {
                 function_name: params.function_name.clone(),
-                variant_name,
+                variant_name: variant_name.to_string(),
                 episode_id,
                 input: params.input.clone(),
                 dryrun,
                 start_time,
+                inference_params: variant_inference_params,
             };
 
             let stream = create_stream(
@@ -202,11 +215,9 @@ pub async fn inference_handler(
             let result = variant
                 .infer(
                     &params.input,
-                    &config.models,
-                    function,
-                    tool_config.as_ref(),
-                    &config.templates,
+                    &inference_config,
                     &http_client,
+                    &mut variant_inference_params,
                 )
                 .await;
 
@@ -220,11 +231,12 @@ pub async fn inference_handler(
 
             if !dryrun {
                 // Spawn a thread for a trailing write to ClickHouse so that it doesn't block the response
-                let write_metadata = InferenceWriteMetadata {
+                let write_metadata = InferenceDatabaseInsertMetadata {
                     function_name: params.function_name,
-                    variant_name: variant_name.clone(),
+                    variant_name: variant_name.to_string(),
                     episode_id,
                     dynamic_tool_config: dynamic_tool_config_string,
+                    inference_params: variant_inference_params,
                     processing_time: start_time.elapsed(),
                 };
 
@@ -241,7 +253,7 @@ pub async fn inference_handler(
                 });
             }
 
-            let response = InferenceResponse::new(result, episode_id, variant_name);
+            let response = InferenceResponse::new(result, episode_id, variant_name.to_string());
 
             let response_serialized =
                 serde_json::to_value(response).map_err(|e| Error::Inference {
@@ -305,11 +317,12 @@ fn create_stream(
             let inference_response = inference_response.ok_or_log();
 
             if let Some(inference_response) = inference_response {
-                let write_metadata = InferenceWriteMetadata {
+                let write_metadata = InferenceDatabaseInsertMetadata {
                     function_name: metadata.function_name,
                     variant_name: metadata.variant_name,
                     episode_id: metadata.episode_id,
                     dynamic_tool_config: dynamic_tool_config_string,
+                    inference_params: metadata.inference_params,
                     processing_time: metadata.start_time.elapsed(),
                 };
                 tokio::spawn(async move {
@@ -350,19 +363,20 @@ fn prepare_event(
         })
 }
 
-struct InferenceWriteMetadata {
-    function_name: String,
-    variant_name: String,
-    episode_id: Uuid,
-    dynamic_tool_config: String,
-    processing_time: Duration,
+pub struct InferenceDatabaseInsertMetadata {
+    pub function_name: String,
+    pub variant_name: String,
+    pub episode_id: Uuid,
+    pub dynamic_tool_config: String,
+    pub inference_params: InferenceParams,
+    pub processing_time: Duration,
 }
 
 async fn write_inference(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     input: Input,
     result: InferenceResult,
-    metadata: InferenceWriteMetadata,
+    metadata: InferenceDatabaseInsertMetadata,
 ) {
     let serialized_input = match serde_json::to_string(&input).map_err(|e| Error::Serialization {
         message: e.to_string(),
@@ -383,15 +397,7 @@ async fn write_inference(
             .ok_or_log();
     }
     // Write the inference to the Inference table
-    let inference = Inference::new(
-        result,
-        serialized_input,
-        metadata.episode_id,
-        metadata.function_name,
-        metadata.variant_name,
-        metadata.dynamic_tool_config,
-        metadata.processing_time,
-    );
+    let inference = InferenceDatabaseInsert::new(result, serialized_input, metadata);
     clickhouse_connection_info
         .write(&inference, "Inference")
         .await
@@ -496,6 +502,39 @@ impl InferenceResponseChunk {
     }
 }
 
+/// InferenceParams is the top-level struct for inference parameters.
+/// We backfill these from the configs given in the variants used and ultimately write them to the database.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct InferenceParams {
+    pub chat_completion: ChatCompletionInferenceParams,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct ChatCompletionInferenceParams {
+    pub temperature: Option<f32>,
+    pub max_tokens: Option<u32>,
+    pub seed: Option<u32>,
+}
+
+impl ChatCompletionInferenceParams {
+    pub fn backfill_with_variant_params(
+        &mut self,
+        temperature: Option<f32>,
+        max_tokens: Option<u32>,
+        seed: Option<u32>,
+    ) {
+        if self.temperature.is_none() {
+            self.temperature = temperature;
+        }
+        if self.max_tokens.is_none() {
+            self.max_tokens = max_tokens;
+        }
+        if self.seed.is_none() {
+            self.seed = seed;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -539,6 +578,7 @@ mod tests {
                 system: None,
             },
             dryrun: false,
+            inference_params: InferenceParams::default(),
             start_time: Instant::now(),
         };
 
@@ -577,6 +617,7 @@ mod tests {
                 system: None,
             },
             dryrun: false,
+            inference_params: InferenceParams::default(),
             start_time: Instant::now(),
         };
 
