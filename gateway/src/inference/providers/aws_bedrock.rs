@@ -194,7 +194,29 @@ impl InferenceProvider for AWSBedrockProvider {
             bedrock_request = bedrock_request.system(system_block);
         }
 
-        // TODO (#18, #30): .tool_config(...)
+        if let Some(tool_config) = request.tool_config {
+            // TODO (DO NOT MERGE): remove this check soon
+            if !tool_config.tools_available.is_empty() {
+                let tools: Vec<Tool> = tool_config
+                    .tools_available
+                    .iter()
+                    .map(|t| Tool::try_from(*t))
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                let tool_choice: AWSBedrockToolChoice = tool_config.tool_choice.try_into()?;
+
+                let aws_bedrock_tool_config = ToolConfiguration::builder()
+                    .set_tools(Some(tools))
+                    .tool_choice(tool_choice)
+                    .build()
+                    .map_err(|e| Error::AWSBedrockClient {
+                        status_code: StatusCode::INTERNAL_SERVER_ERROR,
+                        message: format!("Error configuring AWS Bedrock tool config: {e}"),
+                    })?;
+
+                bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
+            }
+        }
 
         let start_time = Instant::now();
         let stream = bedrock_request

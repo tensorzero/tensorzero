@@ -192,3 +192,15 @@ pub fn create_streaming_inference_request<'a>() -> ModelInferenceRequest<'a> {
         output_schema: None,
     }
 }
+
+pub fn create_streaming_tool_inference_request() -> ModelInferenceRequest<'static> {
+    let mut request = create_tool_inference_request();
+    request.stream = true;
+    request
+}
+
+pub fn create_streaming_tool_result_inference_request() -> ModelInferenceRequest<'static> {
+    let mut request = create_tool_result_inference_request();
+    request.stream = true;
+    request
+}

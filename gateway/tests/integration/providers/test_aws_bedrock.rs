@@ -1,12 +1,13 @@
 use futures::StreamExt;
 use gateway::inference::providers::provider_trait::InferenceProvider;
-use gateway::inference::types::{ContentBlock, Text};
+use gateway::inference::types::{ContentBlock, ContentBlockChunk, Text};
 use gateway::{inference::providers::aws_bedrock::AWSBedrockProvider, model::ProviderConfig};
 use std::sync::OnceLock;
 use tokio::runtime::Runtime;
 
 use crate::providers::common::{
     create_simple_inference_request, create_streaming_inference_request,
+    create_streaming_tool_inference_request, create_streaming_tool_result_inference_request,
     create_tool_inference_request, create_tool_result_inference_request,
 };
 
@@ -158,5 +159,100 @@ fn test_infer_with_tool_result() {
             }
             _ => unreachable!(),
         }
+    });
+}
+
+#[test]
+fn test_infer_with_tool_calls_stream() {
+    get_test_runtime().block_on(async {
+        let model_id = "anthropic.claude-3-haiku-20240307-v1:0".to_string();
+        let provider = ProviderConfig::AWSBedrock(AWSBedrockProvider {
+            model_id,
+            region: None,
+        });
+        let client = reqwest::Client::new();
+        let inference_request = create_streaming_tool_inference_request();
+        let result = provider.infer_stream(&inference_request, &client).await;
+
+        let (chunk, mut stream) = result.unwrap();
+        let mut collected_chunks = vec![chunk];
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.unwrap();
+            collected_chunks.push(chunk);
+        }
+        assert!(!collected_chunks.is_empty());
+        // Fourth as an arbitrary middle chunk
+        assert!(collected_chunks[4].content.len() == 1);
+        assert!(collected_chunks.last().unwrap().usage.is_some());
+
+        // Check an arbitrary tool call chunk
+        match collected_chunks[4].content.first().unwrap() {
+            ContentBlockChunk::ToolCall(tool_call) => {
+                assert!(tool_call.name == "get_weather");
+            }
+            _ => unreachable!(),
+        }
+
+        // Collect all arguments and join the chunks' arguments
+        let arguments = collected_chunks
+            .iter()
+            .filter(|chunk| !chunk.content.is_empty())
+            .map(|chunk| chunk.content.first().unwrap())
+            .map(|content| match content {
+                ContentBlockChunk::ToolCall(tool_call) => tool_call.arguments.clone(),
+                _ => unreachable!(),
+            })
+            .collect::<Vec<String>>()
+            .join("");
+
+        let arguments: serde_json::Value = serde_json::from_str(&arguments).unwrap();
+        let arguments = arguments.as_object().unwrap();
+
+        assert!(arguments.len() == 2);
+        assert!(arguments.keys().any(|key| key == "location"));
+        assert!(arguments.keys().any(|key| key == "unit"));
+        assert!(arguments["location"] == "New York");
+        assert!(arguments["unit"] == "celsius" || arguments["unit"] == "fahrenheit");
+    });
+}
+
+#[test]
+fn test_infer_with_tool_result_stream() {
+    get_test_runtime().block_on(async {
+        let model_id = "anthropic.claude-3-haiku-20240307-v1:0".to_string();
+        let provider = ProviderConfig::AWSBedrock(AWSBedrockProvider {
+            model_id,
+            region: None,
+        });
+        let client = reqwest::Client::new();
+        let inference_request = create_streaming_tool_result_inference_request();
+        let result = provider.infer_stream(&inference_request, &client).await;
+
+        let (chunk, mut stream) = result.unwrap();
+        let mut collected_chunks = vec![chunk];
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.unwrap();
+            collected_chunks.push(chunk);
+        }
+
+        assert!(!collected_chunks.is_empty());
+        // Fourth as an arbitrary middle chunk
+        assert!(collected_chunks[4].content.len() == 1);
+        assert!(collected_chunks.last().unwrap().usage.is_some());
+
+        // Collect all chunks and retrieve the generation
+        let generation = collected_chunks
+            .iter()
+            .filter(|chunk| !chunk.content.is_empty())
+            .map(|chunk| chunk.content.first().unwrap())
+            .map(|content| match content {
+                ContentBlockChunk::Text(block) => block.text.clone(),
+                _ => unreachable!(),
+            })
+            .collect::<Vec<String>>()
+            .join("");
+
+        assert!(generation.contains("New York"));
+        assert!(generation.contains("70"));
     });
 }
