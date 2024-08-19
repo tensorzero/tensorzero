@@ -50,7 +50,7 @@ jobs:
           GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
-      - name: Cache Docker Mounts
+      - name: Cache Docker mounts
         uses: actions/cache@v3
         id: cache-docker-mounts
         with:
