@@ -124,13 +124,11 @@ impl ToolCallConfig {
         })
     }
 
-    pub fn get_tool(&mut self, name: &str) -> Option<&mut ToolConfig> {
-        self.tools_available
-            .iter_mut()
-            .find(|tool_cfg| match tool_cfg {
-                ToolConfig::Static(config) => config.name == name,
-                ToolConfig::Dynamic(config) => config.name == name,
-            })
+    pub fn get_tool(&self, name: &str) -> Option<&ToolConfig> {
+        self.tools_available.iter().find(|tool_cfg| match tool_cfg {
+            ToolConfig::Static(config) => config.name == name,
+            ToolConfig::Dynamic(config) => config.name == name,
+        })
     }
 }
 
@@ -171,13 +169,13 @@ impl ToolCallOutput {
     /// Validates that a ToolCall is compliant with the ToolCallConfig
     /// First, it finds the ToolConfig for the ToolCall
     /// Then, it validates the ToolCall arguments against the ToolConfig
-    pub async fn new(tool_call: ToolCall, tool_cfg: Option<&mut ToolCallConfig>) -> Self {
-        let mut tool = tool_cfg.and_then(|t| t.get_tool(&tool_call.name));
+    pub async fn new(tool_call: ToolCall, tool_cfg: Option<&ToolCallConfig>) -> Self {
+        let tool = tool_cfg.and_then(|t| t.get_tool(&tool_call.name));
         let parsed_name = match tool {
             Some(_) => Some(tool_call.name.clone()),
             None => None,
         };
-        let parsed_arguments = match &mut tool {
+        let parsed_arguments = match &tool {
             Some(tool) => {
                 if let Ok(arguments) = serde_json::from_str(&tool_call.arguments) {
                     if tool.validate_arguments(&arguments).await.is_ok() {
@@ -235,7 +233,7 @@ pub struct ToolCallChunk {
 }
 
 impl ToolConfig {
-    pub async fn validate_arguments(&mut self, arguments: &Value) -> Result<(), Error> {
+    pub async fn validate_arguments(&self, arguments: &Value) -> Result<(), Error> {
         match self {
             ToolConfig::Static(config) => config.parameters.validate(arguments),
             ToolConfig::Dynamic(config) => config.parameters.validate(arguments).await,

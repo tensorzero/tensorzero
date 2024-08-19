@@ -438,7 +438,7 @@ impl ChatInferenceResult {
         raw_content: Vec<ContentBlock>,
         usage: Usage,
         model_inference_responses: Vec<ModelInferenceResponse>,
-        tool_config: Option<&mut ToolCallConfig>,
+        tool_config: Option<&ToolCallConfig>,
     ) -> Self {
         #[allow(clippy::expect_used)]
         let created = SystemTime::now()
@@ -457,7 +457,7 @@ impl ChatInferenceResult {
 
     async fn parse_output(
         content: Vec<ContentBlock>,
-        mut tool_config: Option<&mut ToolCallConfig>,
+        tool_config: Option<&ToolCallConfig>,
     ) -> Vec<ContentBlockOutput> {
         if content.is_empty() {
             Error::OutputParsing {
@@ -475,8 +475,7 @@ impl ChatInferenceResult {
                 }
                 ContentBlock::ToolCall(tool_call) => {
                     // Parse the tool call arguments
-                    let tool_call_output =
-                        ToolCallOutput::new(tool_call, tool_config.as_deref_mut()).await;
+                    let tool_call_output = ToolCallOutput::new(tool_call, tool_config).await;
                     output.push(ContentBlockOutput::ToolCall(tool_call_output));
                 }
                 ContentBlock::ToolResult(tool_result) => {
@@ -633,7 +632,7 @@ impl From<ModelInferenceResponseChunk> for JsonInferenceResultChunk {
 pub async fn collect_chunks(
     value: Vec<ModelInferenceResponseChunk>,
     function: &FunctionConfig,
-    tool_config: Option<&mut ToolCallConfig>,
+    tool_config: Option<&ToolCallConfig>,
 ) -> Result<InferenceResult, Error> {
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
 
@@ -819,13 +818,13 @@ mod tests {
                 response_time: Duration::default(),
             },
         )];
-        let mut weather_tool_config = get_weather_tool_config();
+        let weather_tool_config = get_weather_tool_config();
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
             content,
             usage.clone(),
             model_inference_responses,
-            Some(&mut weather_tool_config),
+            Some(&weather_tool_config),
         )
         .await;
         assert_eq!(chat_inference_response.output.len(), 1);
@@ -861,7 +860,7 @@ mod tests {
             content,
             usage.clone(),
             model_inference_responses,
-            Some(&mut weather_tool_config),
+            Some(&weather_tool_config),
         )
         .await;
         assert_eq!(chat_inference_response.output.len(), 1);
@@ -897,7 +896,7 @@ mod tests {
             content,
             usage.clone(),
             model_inference_responses,
-            Some(&mut weather_tool_config),
+            Some(&weather_tool_config),
         )
         .await;
         assert_eq!(chat_inference_response.output.len(), 1);

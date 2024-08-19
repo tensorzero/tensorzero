@@ -90,8 +90,7 @@ pub async fn inference_handler(
     // This is only mutable because dynamic tool params compile schemas concurrently with the inference.
     // The result of this compilation eventually is written to the struct, so we need mutability here.
     // See `DynamicToolConfig` and `DynamicJSONSchema` for more details.
-    let mut tool_config =
-        function.prepare_tool_config(params.dynamic_tool_params, &config.tools)?;
+    let tool_config = function.prepare_tool_config(params.dynamic_tool_params, &config.tools)?;
     // Collect the function variant names as a Vec<&str>
     let mut candidate_variant_names: Vec<&str> =
         function.variants().keys().map(AsRef::as_ref).collect();
@@ -140,11 +139,11 @@ pub async fn inference_handler(
 
     // Keep track of which variants failed
     let mut variant_errors = vec![];
-    let mut inference_config = InferenceConfig {
+    let inference_config = InferenceConfig {
         models: &config.models,
         function,
         templates: &config.templates,
-        tool_config: tool_config.as_mut(),
+        tool_config: tool_config.as_ref(),
     };
     // Keep sampling variants until one succeeds
     while !candidate_variant_names.is_empty() {
@@ -203,7 +202,7 @@ pub async fn inference_handler(
             let result = variant
                 .infer(
                     &params.input,
-                    &mut inference_config,
+                    &inference_config,
                     &http_client,
                     &mut variant_inference_params,
                 )
@@ -264,7 +263,7 @@ fn create_stream(
     first_chunk: ModelInferenceResponseChunk,
     mut stream: ModelInferenceResponseStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
-    mut tool_config: Option<ToolCallConfig>,
+    tool_config: Option<ToolCallConfig>,
 ) -> impl Stream<Item = Result<Event, Error>> + Send {
     async_stream::stream! {
         let mut buffer = vec![first_chunk.clone()];
@@ -299,7 +298,7 @@ fn create_stream(
 
         if !metadata.dryrun {
             let inference_response: Result<InferenceResult, Error> =
-                collect_chunks(buffer, function, tool_config.as_mut()).await;
+                collect_chunks(buffer, function, tool_config.as_ref()).await;
 
             let inference_response = inference_response.ok_or_log();
 

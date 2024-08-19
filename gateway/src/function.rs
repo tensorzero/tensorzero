@@ -139,7 +139,7 @@ impl FunctionConfig {
         content_blocks: Vec<ContentBlock>,
         usage: Usage,
         model_inference_responses: Vec<ModelInferenceResponse>,
-        tool_config: Option<&mut ToolCallConfig>,
+        tool_config: Option<&ToolCallConfig>,
     ) -> Result<InferenceResult, Error> {
         match self {
             FunctionConfig::Chat(..) => Ok(InferenceResult::Chat(
