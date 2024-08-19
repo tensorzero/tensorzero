@@ -1,4 +1,4 @@
-#![cfg(feature = "e2e_tests")]
+#![cfg(test)]
 mod clickhouse_migration_manager;
 mod common;
 mod feedback;

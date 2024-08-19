@@ -1,7 +1,7 @@
 use reqwest::Client;
 use std::collections::HashMap;
 
-use crate::e2e::common::get_gateway_endpoint;
+use crate::common::get_gateway_endpoint;
 
 /// This file is used to test the Prometheus metrics endpoint of the gateway.
 ///

@@ -9,7 +9,7 @@ use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use crate::e2e::common::{
+use crate::common::{
     get_clickhouse, get_gateway_endpoint, select_inference_clickhouse,
     select_model_inferences_clickhouse,
 };
