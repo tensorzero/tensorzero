@@ -111,7 +111,7 @@ impl ToolCallConfig {
         ));
         let tool_choice = dynamic_tool_params
             .tool_choice
-            .unwrap_or(function_tool_choice.clone());
+            .unwrap_or_else(|| function_tool_choice.clone());
         // If the tool choice is a specific tool, make sure it's in the list of available tools
         if let ToolChoice::Tool(tool_name) = &tool_choice {
             if !tools_available.iter().any(|tool| match tool {
@@ -126,9 +126,9 @@ impl ToolCallConfig {
         let parallel_tool_calls = dynamic_tool_params
             .parallel_tool_calls
             .unwrap_or(function_parallel_tool_calls);
-        let tool_call_config_option = match tools_available.len() {
-            0 => None,
-            _ => Some(Self {
+        let tool_call_config_option = match tools_available.is_empty() {
+            true => None,
+            false => Some(Self {
                 tools_available,
                 tool_choice,
                 parallel_tool_calls,
