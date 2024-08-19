@@ -17,8 +17,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Install cargo-nextest
+        uses: baptiste0928/cargo-install@v1
+        with:
+          crate: cargo-nextest
+          args: --locked
 
       - name: Cache Cargo Home
         uses: actions/cache@v4
@@ -46,4 +49,4 @@ jobs:
 
       - name: Test (Rust)
         run: |
-          cargo test
+          cargo test-unit --profile ci

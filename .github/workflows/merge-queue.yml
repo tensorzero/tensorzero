@@ -36,6 +36,12 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Install cargo-nextest
+        uses: baptiste0928/cargo-install@v1
+        with:
+          crate: cargo-nextest
+          args: --locked
+
       - name: Cache Cargo Home
         uses: actions/cache@v4
         with:
@@ -58,4 +64,4 @@ jobs:
 
       - name: Run integration and E2E tests
         run: |
-          cargo test --features integration_tests,e2e_tests
+          cargo test-all --profile ci
