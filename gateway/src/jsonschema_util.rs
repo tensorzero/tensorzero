@@ -68,6 +68,14 @@ impl JSONSchemaFromPath {
     }
 }
 
+/// This is a JSONSchema that is compiled on the fly.
+/// This is useful for schemas that are not known at compile time, in particular, for dynamic tool definitions.
+/// In order to avoid blocking the inference, we compile the schema asynchronously as the inference runs.
+/// We use a tokio::sync::OnceCell to ensure that the schema is compiled only once, and an RwLock to manage
+/// interior mutability of the JoinHandle on the compilation task (I don't think this is strictly necessary but Rust will complain without it).
+///
+/// The public API of this struct should look very normal except validation is `async`
+/// There are just `new` and `validate` methods.
 #[derive(Debug)]
 pub struct DynamicJSONSchema {
     pub value: Value,
@@ -96,23 +104,6 @@ impl DynamicJSONSchema {
         }
     }
 
-    async fn get_or_init_compiled_schema(&self) -> Result<&JSONSchema, Error> {
-        self.compiled_schema
-            .get_or_try_init(|| async {
-                let mut task_guard = self.compilation_task.write().await;
-                if let Some(task) = task_guard.take() {
-                    task.await.map_err(|e| Error::JsonSchema {
-                        message: format!("Task join error in DynamicJSONSchema: {}", e),
-                    })?
-                } else {
-                    Err(Error::JsonSchema {
-                        message: "Schema compilation already completed.".to_string(),
-                    })
-                }
-            })
-            .await
-    }
-
     pub async fn validate(&self, instance: &Value) -> Result<(), Error> {
         // This will block until the schema is compiled
         // We don't take the result here because we want the mutable borrow to end
@@ -135,6 +126,23 @@ impl DynamicJSONSchema {
                 schema: self.value.clone(),
             }
         })
+    }
+
+    async fn get_or_init_compiled_schema(&self) -> Result<&JSONSchema, Error> {
+        self.compiled_schema
+            .get_or_try_init(|| async {
+                let mut task_guard = self.compilation_task.write().await;
+                if let Some(task) = task_guard.take() {
+                    task.await.map_err(|e| Error::JsonSchema {
+                        message: format!("Task join error in DynamicJSONSchema: {}", e),
+                    })?
+                } else {
+                    Err(Error::JsonSchema {
+                        message: "Schema compilation already completed.".to_string(),
+                    })
+                }
+            })
+            .await
     }
 }
 
