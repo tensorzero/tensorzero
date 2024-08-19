@@ -19,14 +19,15 @@ jobs:
 
       - name: Set up Cargo Cache
         uses: Swatinem/rust-cache@v2
-        with:
-          cache-all-crates: "true"
 
       - name: Install cargo-nextest
         uses: baptiste0928/cargo-install@v1
         with:
           crate: cargo-nextest
           args: --locked
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@cargo-deny
 
       - name: Build (Rust)
         run: cargo build --verbose
@@ -36,10 +37,8 @@ jobs:
           cargo fmt -- --check
           cargo clippy --all-targets --all-features -- -D warnings
 
-      - name: Cargo Deny (Rust)
-        run: |
-          cargo install cargo-deny --locked
-          cargo deny check bans
+      - name: Run cargo-deny
+        run: cargo deny check bans
 
       - name: Test (Rust)
         run: |
