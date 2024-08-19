@@ -2,9 +2,12 @@ use aws_config::meta::region::RegionProviderChain;
 use aws_sdk_bedrockruntime::operation::converse::ConverseOutput;
 use aws_sdk_bedrockruntime::operation::converse_stream::ConverseStreamOutput;
 use aws_sdk_bedrockruntime::types::{
-    ContentBlock as BedrockContentBlock, ContentBlockDelta, ContentBlockStart, ConversationRole,
-    ConverseOutput as ConverseOutputType, ConverseStreamOutput as ConverseStreamOutputType,
-    InferenceConfiguration, Message, SystemContentBlock,
+    AnyToolChoice, AutoToolChoice, ContentBlock as BedrockContentBlock, ContentBlockDelta,
+    ContentBlockStart, ConversationRole, ConverseOutput as ConverseOutputType,
+    ConverseStreamOutput as ConverseStreamOutputType, InferenceConfiguration, Message,
+    SpecificToolChoice, SystemContentBlock, Tool, ToolChoice as AWSBedrockToolChoice,
+    ToolConfiguration, ToolInputSchema, ToolResultBlock, ToolResultContentBlock, ToolSpecification,
+    ToolUseBlock,
 };
 use aws_smithy_types::error::display::DisplayErrorContext;
 use aws_types::region::Region;
@@ -23,7 +26,7 @@ use crate::inference::types::{
     ModelInferenceResponseChunk, ModelInferenceResponseStream, RequestMessage, Role, Text,
     TextChunk, Usage,
 };
-use crate::tool::ToolCallChunk;
+use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 lazy_static! {
      /// NOTE: The AWS client is thread-safe but not safe across Tokio runtimes. By default, `tokio::test`
@@ -100,6 +103,7 @@ impl InferenceProvider for AWSBedrockProvider {
         if let Some(temperature) = request.temperature {
             inference_config = inference_config.temperature(temperature);
         }
+
         // Note: AWS Bedrock does not support seed
 
         let mut bedrock_request = aws_bedrock_client
@@ -113,7 +117,29 @@ impl InferenceProvider for AWSBedrockProvider {
             bedrock_request = bedrock_request.system(system_block);
         }
 
-        // TODO (#18, #30): .tool_config(...)
+        if let Some(tool_config) = request.tool_config {
+            // TODO (DO NOT MERGE): remove this check soon
+            if !tool_config.tools_available.is_empty() {
+                let tools: Vec<Tool> = tool_config
+                    .tools_available
+                    .iter()
+                    .map(|t| Tool::try_from(*t))
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                let tool_choice: AWSBedrockToolChoice = tool_config.tool_choice.try_into()?;
+
+                let aws_bedrock_tool_config = ToolConfiguration::builder()
+                    .set_tools(Some(tools))
+                    .tool_choice(tool_choice)
+                    .build()
+                    .map_err(|e| Error::AWSBedrockClient {
+                        status_code: StatusCode::INTERNAL_SERVER_ERROR,
+                        message: format!("Error configuring AWS Bedrock tool config: {e}"),
+                    })?;
+
+                bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
+            }
+        }
 
         let start_time = Instant::now();
         let output = bedrock_request
@@ -357,9 +383,46 @@ impl TryFrom<&ContentBlock> for BedrockContentBlock {
     fn try_from(block: &ContentBlock) -> Result<Self, Self::Error> {
         match block {
             ContentBlock::Text(Text { text }) => Ok(BedrockContentBlock::Text(text.clone())),
-            _ => Err(Error::TypeConversion {
-                message: "Unsupported content block type for AWS Bedrock.".to_string(),
-            }), // TODO (#18, #30): handle tool use and tool call blocks
+            ContentBlock::ToolCall(tool_call) => {
+                // Convert the tool call arguments from String to JSON Value...
+                let input = serde_json::from_str(&tool_call.arguments).map_err(|e| {
+                    Error::AWSBedrockServer {
+                        message: format!("Error parsing tool call arguments as JSON Value: {e}"),
+                    }
+                })?;
+
+                // ...then convert the JSON Value to an AWS SDK Document
+                let input = serde_json::from_value(input).map_err(|e| Error::AWSBedrockServer {
+                    message: format!(
+                        "Error converting tool call arguments to AWS SDK Document: {e}"
+                    ),
+                })?;
+
+                let tool_use_block = ToolUseBlock::builder()
+                    .name(tool_call.name.clone())
+                    .input(input)
+                    .tool_use_id(tool_call.id.clone())
+                    .build()
+                    .map_err(|_| Error::AWSBedrockClient {
+                        status_code: StatusCode::BAD_REQUEST,
+                        message: "Error serializing tool call block".to_string(),
+                    })?;
+
+                Ok(BedrockContentBlock::ToolUse(tool_use_block))
+            }
+            ContentBlock::ToolResult(tool_result) => {
+                let tool_result_block = ToolResultBlock::builder()
+                    .tool_use_id(tool_result.id.clone())
+                    .content(ToolResultContentBlock::Text(tool_result.result.clone()))
+                    // NOTE: The AWS Bedrock SDK doesn't include `name` in the ToolResultBlock
+                    .build()
+                    .map_err(|_| Error::AWSBedrockClient {
+                        status_code: StatusCode::BAD_REQUEST,
+                        message: "Error serializing tool result block".to_string(),
+                    })?;
+
+                Ok(BedrockContentBlock::ToolResult(tool_result_block))
+            }
         }
     }
 }
@@ -370,9 +433,25 @@ impl TryFrom<BedrockContentBlock> for ContentBlock {
     fn try_from(block: BedrockContentBlock) -> Result<Self, Self::Error> {
         match block {
             BedrockContentBlock::Text(text) => Ok(text.into()),
+            BedrockContentBlock::ToolUse(tool_use) => {
+                let arguments = serde_json::to_string(&tool_use.input).map_err(|e| {
+                    Error::AWSBedrockServer {
+                        message: format!("Error parsing tool call arguments from AWS Bedrock: {e}"),
+                    }
+                })?;
+
+                Ok(ContentBlock::ToolCall(ToolCall {
+                    name: tool_use.name,
+                    arguments,
+                    id: tool_use.tool_use_id,
+                }))
+            }
             _ => Err(Error::TypeConversion {
-                message: "Unsupported content block type for AWS Bedrock.".to_string(),
-            }), // TODO (#18, #30): handle tool use and tool call blocks
+                message: format!(
+                    "Unsupported content block type for AWS Bedrock: {}",
+                    std::any::type_name_of_val(&block)
+                ),
+            }),
         }
     }
 }
@@ -455,6 +534,73 @@ fn serialize_aws_bedrock_struct<T: std::fmt::Debug>(output: &T) -> Result<String
             message: format!("Error parsing response from AWS Bedrock: {e}"),
         }
     })
+}
+
+impl TryFrom<&ToolConfig> for Tool {
+    type Error = Error;
+
+    fn try_from(tool_config: &ToolConfig) -> Result<Self, Error> {
+        let tool_input_schema = ToolInputSchema::Json(
+            serde_json::from_value(tool_config.parameters.value.clone()).map_err(|e| {
+                Error::AWSBedrockClient {
+                    status_code: StatusCode::INTERNAL_SERVER_ERROR,
+                    message: format!("Error parsing tool input schema: {e}"),
+                }
+            })?,
+        );
+
+        let tool_spec = ToolSpecification::builder()
+            .name(tool_config.name.clone())
+            .description(tool_config.description.clone())
+            .input_schema(tool_input_schema)
+            .build()
+            .map_err(|_| Error::AWSBedrockClient {
+                status_code: StatusCode::INTERNAL_SERVER_ERROR,
+                message: "Error configuring AWS Bedrock tool choice (this should never happen)"
+                    .to_string(),
+            })?;
+
+        Ok(Tool::ToolSpec(tool_spec))
+    }
+}
+
+impl TryFrom<&ToolChoice> for AWSBedrockToolChoice {
+    type Error = Error;
+
+    fn try_from(tool_choice: &ToolChoice) -> Result<Self, Error> {
+        match tool_choice {
+            ToolChoice::None => Err(Error::InvalidTool {
+                message: "Tool choice is None. AWS Bedrock does not support tool choice None."
+                    .to_string(),
+            }),
+            ToolChoice::Auto => Ok(AWSBedrockToolChoice::Auto(
+                AutoToolChoice::builder().build(),
+            )),
+            ToolChoice::Required => Ok(AWSBedrockToolChoice::Any(AnyToolChoice::builder().build())),
+            ToolChoice::Tool(tool_name) => Ok(AWSBedrockToolChoice::Tool(
+                SpecificToolChoice::builder()
+                    .name(tool_name)
+                    .build()
+                    .map_err(|_| Error::AWSBedrockClient {
+                        status_code: StatusCode::INTERNAL_SERVER_ERROR,
+                        message:
+                            "Error configuring AWS Bedrock tool choice (this should never happen)"
+                                .to_string(),
+                    })?,
+            )),
+            ToolChoice::Implicit => Ok(AWSBedrockToolChoice::Tool(
+                SpecificToolChoice::builder()
+                    .name("respond")
+                    .build()
+                    .map_err(|_| Error::AWSBedrockClient {
+                        status_code: StatusCode::INTERNAL_SERVER_ERROR,
+                        message:
+                            "Error configuring AWS Bedrock tool choice (this should never happen)"
+                                .to_string(),
+                    })?,
+            )),
+        }
+    }
 }
 
 #[cfg(test)]
