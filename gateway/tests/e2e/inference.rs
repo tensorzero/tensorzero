@@ -127,14 +127,12 @@ async fn e2e_test_inference_basic() {
         .as_u64()
         .unwrap();
     assert_eq!(seed, 69);
-    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
-    let tool_params: Value = serde_json::from_str(tool_params).unwrap();
-    let tools_available = tool_params
-        .get("tools_available")
+    assert!(result
+        .get("tool_params")
         .unwrap()
-        .as_array()
-        .unwrap();
-    assert!(tools_available.is_empty());
+        .as_str()
+        .unwrap()
+        .is_empty());
 
     // Check the ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)

@@ -72,7 +72,7 @@ impl ToolCallConfig {
         function_parallel_tool_calls: bool,
         static_tools: &'static HashMap<String, StaticToolConfig>,
         dynamic_tool_params: DynamicToolParams,
-    ) -> Result<Self, Error> {
+    ) -> Result<Option<Self>, Error> {
         // If `allowed_tools` is not provided, use the function's configured tools.
         // This means we allow all tools for the function.
         let allowed_tools = dynamic_tool_params
@@ -109,12 +109,15 @@ impl ToolCallConfig {
                 })
             },
         ));
-
         let tool_choice = dynamic_tool_params
             .tool_choice
             .unwrap_or(function_tool_choice.clone());
+        // If the tool choice is a specific tool, make sure it's in the list of available tools
         if let ToolChoice::Tool(tool_name) = &tool_choice {
-            if !allowed_tools.contains(&tool_name.clone()) {
+            if !tools_available.iter().any(|tool| match tool {
+                ToolConfig::Static(config) => config.name == *tool_name,
+                ToolConfig::Dynamic(config) => config.name == *tool_name,
+            }) {
                 return Err(Error::ToolNotFound {
                     name: tool_name.clone(),
                 });
@@ -123,12 +126,15 @@ impl ToolCallConfig {
         let parallel_tool_calls = dynamic_tool_params
             .parallel_tool_calls
             .unwrap_or(function_parallel_tool_calls);
-
-        Ok(Self {
-            tools_available,
-            tool_choice,
-            parallel_tool_calls,
-        })
+        let tool_call_config_option = match tools_available.len() {
+            0 => None,
+            _ => Some(Self {
+                tools_available,
+                tool_choice,
+                parallel_tool_calls,
+            }),
+        };
+        Ok(tool_call_config_option)
     }
 
     pub fn get_tool(&self, name: &str) -> Option<&ToolConfig> {
@@ -356,9 +362,7 @@ mod tests {
             DynamicToolParams::default(),
         )
         .unwrap();
-        assert!(tool_call_config.tools_available.is_empty());
-        assert_eq!(tool_call_config.tool_choice, ToolChoice::Auto);
-        assert!(tool_call_config.parallel_tool_calls);
+        assert!(tool_call_config.is_none());
 
         // All tools available, no dynamic tools, tools are configured in the config
         // This should return all tools because the function specifies all tools
@@ -369,6 +373,7 @@ mod tests {
             &TOOLS,
             DynamicToolParams::default(),
         )
+        .unwrap()
         .unwrap();
         assert_eq!(tool_call_config.tools_available.len(), 2);
         assert_eq!(tool_call_config.tool_choice, ToolChoice::Auto);
@@ -406,6 +411,7 @@ mod tests {
             &TOOLS,
             dynamic_tool_params,
         )
+        .unwrap()
         .unwrap();
         assert_eq!(tool_call_config.tools_available.len(), 2);
         assert_eq!(
@@ -452,13 +458,14 @@ mod tests {
             &TOOLS,
             dynamic_tool_params,
         )
+        .unwrap()
         .unwrap();
         assert_eq!(tool_call_config.tools_available.len(), 1);
         let first_tool = tool_call_config.tools_available.first().unwrap();
         assert_eq!(first_tool.name(), "establish_campground");
 
         // We pass a list of a single allowed tool and then configure a new tool
-        // This should remove all configured tools and add the new tool
+        // This should remove the other configured tools and add the new tool
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec!["get_weather".to_string()]),
             additional_tools: Some(vec![Tool {
@@ -476,6 +483,7 @@ mod tests {
             &TOOLS,
             dynamic_tool_params,
         )
+        .unwrap()
         .unwrap();
         assert_eq!(tool_call_config.tools_available.len(), 2);
         // The following code depends on an implementation detail for this ordering,
@@ -486,6 +494,38 @@ mod tests {
             "establish_campground"
         );
         assert!(!tool_call_config.parallel_tool_calls);
+
+        // We pass a list of no allowed tools and then configure a new tool
+        // This should remove all configured tools and add the new tool
+        let dynamic_tool_params = DynamicToolParams {
+            allowed_tools: Some(vec![]),
+            additional_tools: Some(vec![Tool {
+                name: "establish_campground".to_string(),
+                description: "Establish a campground".to_string(),
+                parameters: json!({}),
+            }]),
+            tool_choice: Some(ToolChoice::Tool("establish_campground".to_string())),
+            ..Default::default()
+        };
+        let tool_call_config = ToolCallConfig::new(
+            &ALL_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            true,
+            &TOOLS,
+            dynamic_tool_params,
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(tool_call_config.tools_available.len(), 1);
+        assert_eq!(
+            tool_call_config.tools_available[0].name(),
+            "establish_campground"
+        );
+        assert!(tool_call_config.parallel_tool_calls);
+        assert_eq!(
+            tool_call_config.tool_choice,
+            ToolChoice::Tool("establish_campground".to_string())
+        );
     }
 
     #[tokio::test]
@@ -502,6 +542,7 @@ mod tests {
             &TOOLS,
             DynamicToolParams::default(),
         )
+        .unwrap()
         .unwrap();
         // Tool call is valid, so we should get a valid ToolCallOutput
         let tool_call_output = ToolCallOutput::new(tool_call, Some(&tool_call_config)).await;
@@ -573,6 +614,7 @@ mod tests {
                 ..Default::default()
             },
         )
+        .unwrap()
         .unwrap();
         let tool_call = ToolCall {
             name: "establish_campground".to_string(),

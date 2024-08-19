@@ -100,13 +100,13 @@ impl FunctionConfig {
         static_tools: &'static HashMap<String, StaticToolConfig>,
     ) -> Result<Option<ToolCallConfig>, Error> {
         match self {
-            FunctionConfig::Chat(params) => Ok(Some(ToolCallConfig::new(
+            FunctionConfig::Chat(params) => Ok(ToolCallConfig::new(
                 &params.tools,
                 &params.tool_choice,
                 params.parallel_tool_calls,
                 static_tools,
                 dynamic_tool_params,
-            )?)),
+            )?),
             FunctionConfig::Json(_) => {
                 if dynamic_tool_params.allowed_tools.is_some() {
                     return Err(Error::InvalidRequest {
