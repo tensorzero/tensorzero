@@ -34,9 +34,8 @@ jobs:
           cargo fmt -- --check
           cargo clippy --all-targets --all-features -- -D warnings
 
-      - uses: EmbarkStudios/cargo-deny-action@v1
-        with:
-          command: check bans
+      - name: Cargo Deny (Rust)
+        run: cargo install --locked cargo-deny && cargo deny init && cargo deny check bans
 
       - name: Test (Rust)
         run: |
