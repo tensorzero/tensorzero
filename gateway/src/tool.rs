@@ -113,6 +113,13 @@ impl ToolCallConfig {
         let tool_choice = dynamic_tool_params
             .tool_choice
             .unwrap_or(function_tool_choice.clone());
+        if let ToolChoice::Tool(tool_name) = &tool_choice {
+            if !allowed_tools.contains(&tool_name.clone()) {
+                return Err(Error::ToolNotFound {
+                    name: tool_name.clone(),
+                });
+            }
+        }
         let parallel_tool_calls = dynamic_tool_params
             .parallel_tool_calls
             .unwrap_or(function_parallel_tool_calls);
@@ -139,6 +146,7 @@ impl ToolCallConfig {
 /// `additional_tools` are the tools that are provided at runtime, which we compile on the fly.
 /// `tool_choice` and `parallel_tool_calls` are optional and will override the function-level values.
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, derive(Default))]
 pub struct DynamicToolParams {
     pub allowed_tools: Option<Vec<String>>,
     pub additional_tools: Option<Vec<Tool>>,
@@ -287,3 +295,198 @@ impl From<ToolConfig> for Tool {
 }
 
 // TODO (Viraj): Add tests for ToolCallConfig::new and ToolCallOutput::new at minimum.
+
+mod tests {
+    use super::*;
+    use lazy_static::lazy_static;
+    use serde_json::json;
+
+    lazy_static! {
+        static ref TOOLS: HashMap<String, StaticToolConfig> = {
+            let mut map = HashMap::new();
+            map.insert(
+                "get_weather".to_string(),
+                StaticToolConfig {
+                    name: "get_weather".to_string(),
+                    description: "Get the current weather in a given location".to_string(),
+                    parameters: JSONSchemaFromPath::from_value(&json!({
+                    "type": "object",
+                    "properties": {
+                        "location": {"type": "string"},
+                        "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]}
+                    },
+                        "required": ["location"]
+                    })),
+                },
+            );
+            map.insert(
+                "query_articles".to_string(),
+                StaticToolConfig {
+                    name: "query_articles".to_string(),
+                    description: "Query articles from a database based on given criteria"
+                        .to_string(),
+                    parameters: JSONSchemaFromPath::from_value(&json!({
+                        "type": "object",
+                        "properties": {
+                            "keyword": {"type": "string"},
+                            "category": {"type": "string"},
+                            "limit": {"type": "integer", "minimum": 1, "maximum": 100}
+                        },
+                        "required": ["keyword"]
+                    })),
+                },
+            );
+            map
+        };
+        static ref EMPTY_TOOLS: HashMap<String, StaticToolConfig> = HashMap::new();
+        static ref EMPTY_FUNCTION_TOOLS: Vec<String> = vec![];
+        static ref ALL_FUNCTION_TOOLS: Vec<String> =
+            vec!["get_weather".to_string(), "query_articles".to_string()];
+        static ref AUTO_TOOL_CHOICE: ToolChoice = ToolChoice::Auto;
+        static ref WEATHER_TOOL_CHOICE: ToolChoice = ToolChoice::Tool("get_weather".to_string());
+    }
+
+    #[tokio::test]
+    async fn test_tool_call_config_new() {
+        // Empty tools in function, no dynamic tools, tools are configured in the config
+        // This should return no tools because the function does not specify any tools
+        let tool_call_config = ToolCallConfig::new(
+            &EMPTY_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            true,
+            &TOOLS,
+            DynamicToolParams::default(),
+        )
+        .unwrap();
+        assert!(tool_call_config.tools_available.is_empty());
+        assert_eq!(tool_call_config.tool_choice, ToolChoice::Auto);
+        assert!(tool_call_config.parallel_tool_calls);
+
+        // All tools available, no dynamic tools, tools are configured in the config
+        // This should return all tools because the function specifies all tools
+        let tool_call_config = ToolCallConfig::new(
+            &ALL_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            true,
+            &TOOLS,
+            DynamicToolParams::default(),
+        )
+        .unwrap();
+        assert_eq!(tool_call_config.tools_available.len(), 2);
+        assert_eq!(tool_call_config.tool_choice, ToolChoice::Auto);
+        assert!(tool_call_config.parallel_tool_calls);
+
+        // Empty tools in function and config but we specify an allowed tool (should fail)
+        let dynamic_tool_params = DynamicToolParams {
+            allowed_tools: Some(vec!["get_weather".to_string()]),
+            ..Default::default()
+        };
+        let err = ToolCallConfig::new(
+            &EMPTY_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            true,
+            &EMPTY_TOOLS,
+            dynamic_tool_params,
+        )
+        .unwrap_err();
+        assert_eq!(
+            err,
+            Error::ToolNotFound {
+                name: "get_weather".to_string()
+            }
+        );
+
+        // Dynamic tool config specifies a particular tool to call and it's in the function tools list
+        let dynamic_tool_params = DynamicToolParams {
+            tool_choice: Some(ToolChoice::Tool("get_weather".to_string())),
+            ..Default::default()
+        };
+        let tool_call_config = ToolCallConfig::new(
+            &ALL_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            true,
+            &TOOLS,
+            dynamic_tool_params,
+        )
+        .unwrap();
+        assert_eq!(tool_call_config.tools_available.len(), 2);
+        assert_eq!(
+            tool_call_config.tool_choice,
+            ToolChoice::Tool("get_weather".to_string())
+        );
+        assert!(tool_call_config.parallel_tool_calls);
+
+        // Dynamic tool config specifies a particular tool to call and it's not in the function tools list
+        let dynamic_tool_params = DynamicToolParams {
+            tool_choice: Some(ToolChoice::Tool("establish_campground".to_string())),
+            ..Default::default()
+        };
+        let err = ToolCallConfig::new(
+            &ALL_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            true,
+            &TOOLS,
+            dynamic_tool_params,
+        )
+        .unwrap_err();
+        assert_eq!(
+            err,
+            Error::ToolNotFound {
+                name: "establish_campground".to_string()
+            }
+        );
+
+        // We pass an empty list of allowed tools and then configure a new tool
+        // This should remove all configured tools and add the new tool
+        let dynamic_tool_params = DynamicToolParams {
+            allowed_tools: Some(vec![]),
+            additional_tools: Some(vec![Tool {
+                name: "establish_campground".to_string(),
+                description: "Establish a campground".to_string(),
+                parameters: json!({}),
+            }]),
+            ..Default::default()
+        };
+        let tool_call_config = ToolCallConfig::new(
+            &ALL_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            true,
+            &TOOLS,
+            dynamic_tool_params,
+        )
+        .unwrap();
+        assert_eq!(tool_call_config.tools_available.len(), 1);
+        let first_tool = tool_call_config.tools_available.first().unwrap();
+        assert_eq!(first_tool.name(), "establish_campground");
+
+        // We pass a list of a single allowed tool and then configure a new tool
+        // This should remove all configured tools and add the new tool
+        let dynamic_tool_params = DynamicToolParams {
+            allowed_tools: Some(vec!["get_weather".to_string()]),
+            additional_tools: Some(vec![Tool {
+                name: "establish_campground".to_string(),
+                description: "Establish a campground".to_string(),
+                parameters: json!({}),
+            }]),
+            parallel_tool_calls: Some(false),
+            ..Default::default()
+        };
+        let tool_call_config = ToolCallConfig::new(
+            &ALL_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            true,
+            &TOOLS,
+            dynamic_tool_params,
+        )
+        .unwrap();
+        assert_eq!(tool_call_config.tools_available.len(), 2);
+        // The following code depends on an implementation detail for this ordering,
+        // might break if we change the order
+        assert_eq!(tool_call_config.tools_available[0].name(), "get_weather");
+        assert_eq!(
+            tool_call_config.tools_available[1].name(),
+            "establish_campground"
+        );
+        assert!(!tool_call_config.parallel_tool_calls);
+    }
+}
