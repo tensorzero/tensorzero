@@ -40,8 +40,6 @@ jobs:
 
       - name: Set up Cargo Cache
         uses: Swatinem/rust-cache@v2
-        with:
-          cache-all-crates: true
 
       - name: Install cargo-nextest
         uses: baptiste0928/cargo-install@v1
@@ -53,6 +51,36 @@ jobs:
         env:
           GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
+
+      - name: Cache Docker Mounts
+        uses: actions/cache@v3
+        id: cache
+        with:
+          path: |
+            docker-gateway-usr-local-cargo-registry
+            docker-gateway-usr-local-cargo-git
+            docker-gateway-src-target
+          key: cache-${{ hashFiles('.github/workflows/test/Dockerfile') }}
+
+      - name: Inject cache into Docker
+        uses: reproducible-containers/buildkit-cache-dance@v3.1.0
+        with:
+          cache-map: |
+            {
+              "docker-gateway-usr-local-cargo-registry": {
+                "target": "/usr/local/cargo/registry",
+                "id": "tensorzero-gateway-release"
+              },
+              "docker-gateway-usr-local-cargo-git": {
+                "target": "/usr/local/cargo/git",
+                "id": "tensorzero-gateway-release"
+              },
+              "docker-gateway-src-target": {
+                "target": "/src/target",
+                "id": "tensorzero-gateway-release"
+              }
+            }
+          skip-extraction: ${{ steps.cache.outputs.cache-hit }}
 
       - name: Build Docker image
         uses: docker/build-push-action@v5
