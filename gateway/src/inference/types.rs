@@ -10,8 +10,9 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::endpoints::inference::InferenceWriteMetadata;
+use crate::endpoints::inference::InferenceDatabaseInsertMetadata;
 use crate::function::FunctionConfig;
+use crate::tool::ToolCallConfigDatabaseInsert;
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolResult};
 use crate::{error::Error, variant::JsonEnforcement};
 
@@ -252,20 +253,20 @@ pub enum InferenceResultChunk {
 /// which are written to ClickHouse tables of the same name asynchronously.
 
 #[derive(Serialize, Debug)]
-pub struct Inference {
+pub struct InferenceDatabaseInsert {
     pub id: Uuid,
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
     pub input: String,
     pub output: String,
-    pub dynamic_tool_params: String,
+    pub tool_params: String,
     pub inference_params: String,
     pub processing_time_ms: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ModelInference {
+pub struct ModelInferenceDatabaseInsert {
     pub id: Uuid,
     pub inference_id: Uuid,
     pub input: String,
@@ -350,7 +351,7 @@ impl From<String> for ContentBlock {
     }
 }
 
-impl ModelInference {
+impl ModelInferenceDatabaseInsert {
     pub fn new(response: ModelInferenceResponse, input: String, inference_id: Uuid) -> Self {
         // TODO (#30): deal with tools
         let (latency_ms, ttft_ms) = match response.latency {
@@ -405,7 +406,7 @@ impl InferenceResult {
             .iter()
             .map(|r| {
                 let model_inference =
-                    ModelInference::new(r.clone(), input.to_string(), inference_id);
+                    ModelInferenceDatabaseInsert::new(r.clone(), input.to_string(), inference_id);
                 serde_json::to_value(model_inference).unwrap_or_default()
             })
             .collect()
@@ -437,7 +438,7 @@ impl ChatInferenceResult {
         raw_content: Vec<ContentBlock>,
         usage: Usage,
         model_inference_responses: Vec<ModelInferenceResponse>,
-        tool_config: Option<&mut ToolCallConfig>,
+        tool_config: Option<&ToolCallConfig>,
     ) -> Self {
         #[allow(clippy::expect_used)]
         let created = SystemTime::now()
@@ -456,7 +457,7 @@ impl ChatInferenceResult {
 
     async fn parse_output(
         content: Vec<ContentBlock>,
-        mut tool_config: Option<&mut ToolCallConfig>,
+        tool_config: Option<&ToolCallConfig>,
     ) -> Vec<ContentBlockOutput> {
         if content.is_empty() {
             Error::OutputParsing {
@@ -474,8 +475,7 @@ impl ChatInferenceResult {
                 }
                 ContentBlock::ToolCall(tool_call) => {
                     // Parse the tool call arguments
-                    let tool_call_output =
-                        ToolCallOutput::new(tool_call, tool_config.as_deref_mut()).await;
+                    let tool_call_output = ToolCallOutput::new(tool_call, tool_config).await;
                     output.push(ContentBlockOutput::ToolCall(tool_call_output));
                 }
                 ContentBlock::ToolResult(tool_result) => {
@@ -492,38 +492,79 @@ impl ChatInferenceResult {
     }
 }
 
-impl Inference {
+impl InferenceDatabaseInsert {
     pub fn new(
         inference_response: InferenceResult,
         input: String,
-        metadata: InferenceWriteMetadata,
+        metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
         let processing_time_ms = metadata.processing_time.as_millis() as u32;
+        let tool_params = match metadata.tool_params {
+            Some(tool_params) => {
+                let tool_params: ToolCallConfigDatabaseInsert = tool_params.into();
+                serde_json::to_string(&tool_params)
+                    .map_err(|e| Error::Serialization {
+                        message: format!("Failed to serialize tool params: {}", e),
+                    })
+                    .unwrap_or_else(|e| {
+                        e.log();
+                        String::new()
+                    })
+            }
+            None => String::new(),
+        };
+        let inference_params = serde_json::to_string(&metadata.inference_params)
+            .map_err(|e| Error::Serialization {
+                message: format!("Failed to serialize inference params: {}", e),
+            })
+            .unwrap_or_else(|e| {
+                e.log();
+                String::new()
+            });
         match inference_response {
-            InferenceResult::Chat(chat_response) => Self {
-                id: chat_response.inference_id,
-                function_name: metadata.function_name,
-                variant_name: metadata.variant_name,
-                episode_id: metadata.episode_id,
-                input,
-                dynamic_tool_params: metadata.dynamic_tool_params,
-                inference_params: serde_json::to_string(&metadata.inference_params)
-                    .unwrap_or_default(),
-                output: serde_json::to_string(&chat_response.output).unwrap_or_default(),
-                processing_time_ms,
-            },
-            InferenceResult::Json(json_result) => Self {
-                id: json_result.inference_id,
-                function_name: metadata.function_name,
-                variant_name: metadata.variant_name,
-                episode_id: metadata.episode_id,
-                input,
-                dynamic_tool_params: metadata.dynamic_tool_params,
-                inference_params: serde_json::to_string(&metadata.inference_params)
-                    .unwrap_or_default(),
-                output: serde_json::to_string(&json_result.output).unwrap_or_default(),
-                processing_time_ms,
-            },
+            InferenceResult::Chat(chat_response) => {
+                let output = serde_json::to_string(&chat_response.output)
+                    .map_err(|e| Error::Serialization {
+                        message: format!("Failed to serialize output: {}", e),
+                    })
+                    .unwrap_or_else(|e| {
+                        e.log();
+                        String::new()
+                    });
+
+                Self {
+                    id: chat_response.inference_id,
+                    function_name: metadata.function_name,
+                    variant_name: metadata.variant_name,
+                    episode_id: metadata.episode_id,
+                    input,
+                    tool_params,
+                    inference_params,
+                    output,
+                    processing_time_ms,
+                }
+            }
+            InferenceResult::Json(json_result) => {
+                let output = serde_json::to_string(&json_result.output)
+                    .map_err(|e| Error::Serialization {
+                        message: format!("Failed to serialize output: {}", e),
+                    })
+                    .unwrap_or_else(|e| {
+                        e.log();
+                        String::new()
+                    });
+                Self {
+                    id: json_result.inference_id,
+                    function_name: metadata.function_name,
+                    variant_name: metadata.variant_name,
+                    episode_id: metadata.episode_id,
+                    input,
+                    tool_params,
+                    inference_params,
+                    output,
+                    processing_time_ms,
+                }
+            }
         }
     }
 }
@@ -591,7 +632,7 @@ impl From<ModelInferenceResponseChunk> for JsonInferenceResultChunk {
 pub async fn collect_chunks(
     value: Vec<ModelInferenceResponseChunk>,
     function: &FunctionConfig,
-    tool_config: Option<&mut ToolCallConfig>,
+    tool_config: Option<&ToolCallConfig>,
 ) -> Result<InferenceResult, Error> {
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
 
@@ -777,13 +818,13 @@ mod tests {
                 response_time: Duration::default(),
             },
         )];
-        let mut weather_tool_config = get_weather_tool_config();
+        let weather_tool_config = get_weather_tool_config();
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
             content,
             usage.clone(),
             model_inference_responses,
-            Some(&mut weather_tool_config),
+            Some(&weather_tool_config),
         )
         .await;
         assert_eq!(chat_inference_response.output.len(), 1);
@@ -819,7 +860,7 @@ mod tests {
             content,
             usage.clone(),
             model_inference_responses,
-            Some(&mut weather_tool_config),
+            Some(&weather_tool_config),
         )
         .await;
         assert_eq!(chat_inference_response.output.len(), 1);
@@ -855,7 +896,7 @@ mod tests {
             content,
             usage.clone(),
             model_inference_responses,
-            Some(&mut weather_tool_config),
+            Some(&weather_tool_config),
         )
         .await;
         assert_eq!(chat_inference_response.output.len(), 1);

@@ -42,9 +42,9 @@ repos:
         pass_filenames: false
         always_run: true
 
-      - id: cargo-test
-        name: cargo test
-        entry: cargo test
+      - id: cargo-test-unit
+        name: cargo test-unit
+        entry: cargo test-unit
         language: system
         types: [rust]
         pass_filenames: false

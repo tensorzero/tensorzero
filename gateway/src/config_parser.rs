@@ -9,7 +9,8 @@ use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelConfig;
 use crate::tool::{
-    ImplicitToolConfig, OwnedToolConfig, ToolCallConfig, ToolChoice, ToolConfig, IMPLICIT_TOOL_NAME,
+    ImplicitToolConfig, StaticToolConfig, ToolCallConfig, ToolChoice, ToolConfig,
+    IMPLICIT_TOOL_NAME,
 };
 use crate::variant::VariantConfig;
 
@@ -27,7 +28,7 @@ pub struct Config<'c> {
     pub models: HashMap<String, ModelConfig>, // model name => model config
     pub functions: HashMap<String, FunctionConfig>, // function name => function config
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
-    pub tools: HashMap<String, OwnedToolConfig>, // tool name => tool config
+    pub tools: HashMap<String, StaticToolConfig>, // tool name => tool config
     pub templates: TemplateConfig<'c>,
 }
 
@@ -117,7 +118,7 @@ impl<'c> Config<'c> {
             .tools
             .into_iter()
             .map(|(name, config)| config.load(&base_path, name.clone()).map(|c| (name, c)))
-            .collect::<Result<HashMap<String, OwnedToolConfig>, Error>>()?;
+            .collect::<Result<HashMap<String, StaticToolConfig>, Error>>()?;
 
         let mut config = Config {
             gateway,
@@ -369,7 +370,7 @@ impl<'c> Config<'c> {
     }
 
     /// Get a tool by name
-    pub fn get_tool<'a>(&'a self, tool_name: &str) -> Result<&'a OwnedToolConfig, Error> {
+    pub fn get_tool<'a>(&'a self, tool_name: &str) -> Result<&'a StaticToolConfig, Error> {
         self.tools.get(tool_name).ok_or_else(|| Error::UnknownTool {
             name: tool_name.to_string(),
         })
@@ -586,9 +587,9 @@ impl UninitializedToolConfig {
         self,
         base_path: P,
         name: String,
-    ) -> Result<OwnedToolConfig, Error> {
+    ) -> Result<StaticToolConfig, Error> {
         let parameters = JSONSchemaFromPath::new(self.parameters, base_path.as_ref())?;
-        Ok(OwnedToolConfig {
+        Ok(StaticToolConfig {
             name,
             description: self.description,
             parameters,

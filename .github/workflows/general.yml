@@ -17,20 +17,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Set up Cargo Cache
+        uses: Swatinem/rust-cache@v2
 
-      - name: Cache Cargo Home
-        uses: actions/cache@v4
+      - name: Install cargo-nextest
+        uses: baptiste0928/cargo-install@v1
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/git/
-            ~/.cargo/registry/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-          save-always: true
+          crate: cargo-nextest
+          args: --locked
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@cargo-deny
 
       - name: Build (Rust)
         run: cargo build --verbose
@@ -40,10 +37,9 @@ jobs:
           cargo fmt -- --check
           cargo clippy --all-targets --all-features -- -D warnings
 
-      - uses: EmbarkStudios/cargo-deny-action@v1
-        with:
-          command: check bans
+      - name: Run cargo-deny
+        run: cargo deny check bans
 
       - name: Test (Rust)
         run: |
-          cargo test
+          cargo test-unit --profile ci

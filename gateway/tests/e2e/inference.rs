@@ -9,7 +9,7 @@ use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use crate::e2e::common::{
+use crate::common::{
     get_clickhouse, get_gateway_endpoint, select_inference_clickhouse,
     select_model_inferences_clickhouse,
 };
@@ -127,6 +127,12 @@ async fn e2e_test_inference_basic() {
         .as_u64()
         .unwrap();
     assert_eq!(seed, 69);
+    assert!(result
+        .get("tool_params")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .is_empty());
 
     // Check the ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -440,19 +446,31 @@ async fn e2e_test_tool_call() {
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "variant");
-    // Check the dynamic_tool_params
-    let dynamic_tool_params = result.get("dynamic_tool_params").unwrap().as_str().unwrap();
-    let dynamic_tool_params: Value = serde_json::from_str(dynamic_tool_params).unwrap();
-    assert!(dynamic_tool_params.get("allowed_tools").unwrap().is_null());
-    assert!(dynamic_tool_params
-        .get("additional_tools")
+    // Check the tool_params
+    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
+    let tool_params: Value = serde_json::from_str(tool_params).unwrap();
+    let tools_available = tool_params
+        .get("tools_available")
         .unwrap()
-        .is_null());
-    assert!(dynamic_tool_params.get("tool_choice").unwrap().is_null());
-    assert!(dynamic_tool_params
+        .as_array()
+        .unwrap();
+    assert!(tools_available.len() == 1);
+    assert!(
+        tools_available
+            .first()
+            .unwrap()
+            .get("name")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            == "get_weather"
+    );
+    assert!(tool_params.get("tool_choice").unwrap().as_str().unwrap() == "required");
+    assert!(!tool_params
         .get("parallel_tool_calls")
         .unwrap()
-        .is_null());
+        .as_bool()
+        .unwrap());
     // Check the ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
         .await
@@ -605,19 +623,31 @@ async fn e2e_test_tool_call_malformed() {
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "bad_tool");
-    // Check the dynamic_tool_params
-    let dynamic_tool_params = result.get("dynamic_tool_params").unwrap().as_str().unwrap();
-    let dynamic_tool_params: Value = serde_json::from_str(dynamic_tool_params).unwrap();
-    assert!(dynamic_tool_params.get("allowed_tools").unwrap().is_null());
-    assert!(dynamic_tool_params
-        .get("additional_tools")
+    // Check the tool_params
+    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
+    let tool_params: Value = serde_json::from_str(tool_params).unwrap();
+    let tools_available = tool_params
+        .get("tools_available")
         .unwrap()
-        .is_null());
-    assert!(dynamic_tool_params.get("tool_choice").unwrap().is_null());
-    assert!(dynamic_tool_params
+        .as_array()
+        .unwrap();
+    assert!(tools_available.len() == 1);
+    assert!(
+        tools_available
+            .first()
+            .unwrap()
+            .get("name")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            == "get_weather"
+    );
+    assert!(tool_params.get("tool_choice").unwrap().as_str().unwrap() == "required");
+    assert!(!tool_params
         .get("parallel_tool_calls")
         .unwrap()
-        .is_null());
+        .as_bool()
+        .unwrap());
     // Check the ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
         .await
@@ -1408,19 +1438,31 @@ async fn e2e_test_tool_call_streaming() {
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "variant");
-    // Check the dynamic_tool_params
-    let dynamic_tool_params = result.get("dynamic_tool_params").unwrap().as_str().unwrap();
-    let dynamic_tool_params: Value = serde_json::from_str(dynamic_tool_params).unwrap();
-    assert!(dynamic_tool_params.get("allowed_tools").unwrap().is_null());
-    assert!(dynamic_tool_params
-        .get("additional_tools")
+    // Check the tool_params
+    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
+    let tool_params: Value = serde_json::from_str(tool_params).unwrap();
+    let tools_available = tool_params
+        .get("tools_available")
         .unwrap()
-        .is_null());
-    assert!(dynamic_tool_params.get("tool_choice").unwrap().is_null());
-    assert!(dynamic_tool_params
+        .as_array()
+        .unwrap();
+    assert!(tools_available.len() == 1);
+    assert!(
+        tools_available
+            .first()
+            .unwrap()
+            .get("name")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            == "get_weather"
+    );
+    assert!(tool_params.get("tool_choice").unwrap().as_str().unwrap() == "required");
+    assert!(!tool_params
         .get("parallel_tool_calls")
         .unwrap()
-        .is_null());
+        .as_bool()
+        .unwrap());
     // Check the ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
         .await

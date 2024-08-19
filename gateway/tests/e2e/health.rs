@@ -1,7 +1,7 @@
 use reqwest::{Client, StatusCode};
 use serde_json::Value;
 
-use crate::e2e::common::get_gateway_endpoint;
+use crate::common::get_gateway_endpoint;
 
 #[tokio::test]
 async fn test_health_handler() {

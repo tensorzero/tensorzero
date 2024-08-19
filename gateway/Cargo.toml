@@ -5,8 +5,22 @@ edition = "2021"
 
 
 [features]
-integration_tests = []
 e2e_tests = []
+
+
+[[test]]
+name = "integration"
+path = "tests/integration/tests.rs"
+
+
+[[test]]
+name = "e2e"
+path = "tests/e2e/tests.rs"
+required-features = ["e2e_tests"]
+
+
+[lints]
+workspace = true
 
 
 [dependencies]
@@ -48,7 +62,3 @@ uuid = { version = "1.10.0", features = ["serde", "v7"] }
 [dev-dependencies]
 tempfile = "3.10.1"
 tracing-test = { version = "0.2.5", features = ["no-env-filter"] }
-
-
-[lints]
-workspace = true

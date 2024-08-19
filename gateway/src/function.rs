@@ -10,7 +10,7 @@ use crate::inference::types::{
     JsonInferenceResult, ModelInferenceResponse, Role, Usage,
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
-use crate::tool::{DynamicToolParams, OwnedToolConfig, ToolCallConfig, ToolChoice};
+use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
 use crate::variant::VariantConfig;
 
 #[derive(Debug)]
@@ -91,19 +91,23 @@ impl FunctionConfig {
         Ok(())
     }
 
+    /// Prepare the tool config for the function.
+    /// For a Chat function, this will incorporate the tool information configured in the function as
+    /// well as the dynamic tool calling information passed in `dynamic_tool_params`.
+    /// JSON functions do not get tool_configs even if they end up using tools under the hood.
     pub fn prepare_tool_config(
         &'static self,
         dynamic_tool_params: DynamicToolParams,
-        static_tools: &'static HashMap<String, OwnedToolConfig>,
+        static_tools: &'static HashMap<String, StaticToolConfig>,
     ) -> Result<Option<ToolCallConfig>, Error> {
         match self {
-            FunctionConfig::Chat(params) => Ok(Some(ToolCallConfig::new(
+            FunctionConfig::Chat(params) => Ok(ToolCallConfig::new(
                 &params.tools,
                 &params.tool_choice,
                 params.parallel_tool_calls,
                 static_tools,
                 dynamic_tool_params,
-            )?)),
+            )?),
             FunctionConfig::Json(_) => {
                 if dynamic_tool_params.allowed_tools.is_some() {
                     return Err(Error::InvalidRequest {
@@ -136,7 +140,7 @@ impl FunctionConfig {
         content_blocks: Vec<ContentBlock>,
         usage: Usage,
         model_inference_responses: Vec<ModelInferenceResponse>,
-        tool_config: Option<&mut ToolCallConfig>,
+        tool_config: Option<&ToolCallConfig>,
     ) -> Result<InferenceResult, Error> {
         match self {
             FunctionConfig::Chat(..) => Ok(InferenceResult::Chat(
@@ -276,13 +280,13 @@ fn validate_single_message(
 
 /// Sample a variant from the function based on variant weights (uniform random selection)
 pub fn sample_variant<'a>(
-    variant_names: &mut Vec<&'a str>,
+    candidate_variant_names: &mut Vec<&'a str>,
     variants: &'a HashMap<String, VariantConfig>,
     function_name: &str,
     episode_id: &Uuid,
 ) -> Result<(&'a str, &'a VariantConfig), Error> {
     // Compute the total weight of variants present in variant_names
-    let total_weight = variant_names
+    let total_weight = candidate_variant_names
         .iter()
         .filter_map(|name| variants.get(*name))
         .map(|variant| variant.weight())
@@ -293,27 +297,27 @@ pub fn sample_variant<'a>(
     //       but there's a chance we pin a weight-zero variant in the config.
     //       This check also ensures that we catch any regressions we might introduce in the future.
     if total_weight <= 0. {
-        if variant_names.is_empty() {
+        if candidate_variant_names.is_empty() {
             return Err(Error::InvalidFunctionVariants {
                 message: format!("Function `{function_name}` has no variants"),
             });
         }
         // Perform uniform sampling if total weight is non-positive
         let random_index = (get_uniform_value(function_name, episode_id)
-            * variant_names.len() as f64)
+            * candidate_variant_names.len() as f64)
             .floor() as usize;
         // Reorders this list (in place) by swapping the element at index with the last element.
         // This should not matter and is more efficient than `remove`
-        let sampled_variant_name = if random_index < variant_names.len() {
+        let sampled_variant_name = if random_index < candidate_variant_names.len() {
             // could panic if random_index is out of bounds
-            variant_names.swap_remove(random_index)
+            candidate_variant_names.swap_remove(random_index)
         } else {
             return Err(Error::InvalidFunctionVariants {
                 message: format!(
                     "Invalid index {} for function `{}` with {} variants",
                     random_index,
                     function_name,
-                    variant_names.len()
+                    candidate_variant_names.len()
                 ),
             });
         };
@@ -334,7 +338,7 @@ pub fn sample_variant<'a>(
     // Iterate over the variants to find the one that corresponds to the sampled threshold
     let mut cumulative_weight = 0.;
     let mut sampled_variant_name = "";
-    for (i, variant_name) in variant_names.iter().enumerate() {
+    for (i, variant_name) in candidate_variant_names.iter().enumerate() {
         let variant =
             variants
                 .get(*variant_name)
@@ -343,7 +347,7 @@ pub fn sample_variant<'a>(
                 })?;
         cumulative_weight += variant.weight();
         if cumulative_weight > random_threshold {
-            sampled_variant_name = variant_names.swap_remove(i);
+            sampled_variant_name = candidate_variant_names.swap_remove(i);
             break;
         }
     }
@@ -351,7 +355,7 @@ pub fn sample_variant<'a>(
     // If we didn't find a variant (which should only happen due to rare numerical precision issues),
     // use the last variant as a fallback
     if sampled_variant_name.is_empty() {
-        sampled_variant_name = variant_names.swap_remove(variants.len() - 1);
+        sampled_variant_name = candidate_variant_names.swap_remove(variants.len() - 1);
     }
 
     let variant = variants
