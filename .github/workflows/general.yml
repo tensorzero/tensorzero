@@ -17,23 +17,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Cargo Cache
+        uses: Swatinem/rust-cache@v2
+
       - name: Install cargo-nextest
         uses: baptiste0928/cargo-install@v1
         with:
           crate: cargo-nextest
           args: --locked
-
-      - name: Cache Cargo Home
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/git/
-            ~/.cargo/registry/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-          save-always: true
 
       - name: Build (Rust)
         run: cargo build --verbose
