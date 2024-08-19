@@ -118,28 +118,24 @@ impl InferenceProvider for AWSBedrockProvider {
         }
 
         if let Some(tool_config) = request.tool_config {
-            // TODO (DO NOT MERGE): remove this check soon
-            if !tool_config.tools_available.is_empty() {
-                let tools: Vec<Tool> = tool_config
-                    .tools_available
-                    .iter()
-                    .map(Tool::try_from)
-                    .collect::<Result<Vec<_>, _>>()?;
+            let tools: Vec<Tool> = tool_config
+                .tools_available
+                .iter()
+                .map(Tool::try_from)
+                .collect::<Result<Vec<_>, _>>()?;
 
-                let tool_choice: AWSBedrockToolChoice =
-                    tool_config.tool_choice.clone().try_into()?;
+            let tool_choice: AWSBedrockToolChoice = tool_config.tool_choice.clone().try_into()?;
 
-                let aws_bedrock_tool_config = ToolConfiguration::builder()
-                    .set_tools(Some(tools))
-                    .tool_choice(tool_choice)
-                    .build()
-                    .map_err(|e| Error::AWSBedrockClient {
-                        status_code: StatusCode::INTERNAL_SERVER_ERROR,
-                        message: format!("Error configuring AWS Bedrock tool config: {e}"),
-                    })?;
+            let aws_bedrock_tool_config = ToolConfiguration::builder()
+                .set_tools(Some(tools))
+                .tool_choice(tool_choice)
+                .build()
+                .map_err(|e| Error::AWSBedrockClient {
+                    status_code: StatusCode::INTERNAL_SERVER_ERROR,
+                    message: format!("Error configuring AWS Bedrock tool config: {e}"),
+                })?;
 
-                bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
-            }
+            bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
         }
 
         let start_time = Instant::now();
@@ -196,28 +192,24 @@ impl InferenceProvider for AWSBedrockProvider {
         }
 
         if let Some(tool_config) = request.tool_config {
-            // TODO (DO NOT MERGE): remove this check soon
-            if !tool_config.tools_available.is_empty() {
-                let tools: Vec<Tool> = tool_config
-                    .tools_available
-                    .iter()
-                    .map(Tool::try_from)
-                    .collect::<Result<Vec<_>, _>>()?;
+            let tools: Vec<Tool> = tool_config
+                .tools_available
+                .iter()
+                .map(Tool::try_from)
+                .collect::<Result<Vec<_>, _>>()?;
 
-                let tool_choice: AWSBedrockToolChoice =
-                    tool_config.tool_choice.clone().try_into()?;
+            let tool_choice: AWSBedrockToolChoice = tool_config.tool_choice.clone().try_into()?;
 
-                let aws_bedrock_tool_config = ToolConfiguration::builder()
-                    .set_tools(Some(tools))
-                    .tool_choice(tool_choice)
-                    .build()
-                    .map_err(|e| Error::AWSBedrockClient {
-                        status_code: StatusCode::INTERNAL_SERVER_ERROR,
-                        message: format!("Error configuring AWS Bedrock tool config: {e}"),
-                    })?;
+            let aws_bedrock_tool_config = ToolConfiguration::builder()
+                .set_tools(Some(tools))
+                .tool_choice(tool_choice)
+                .build()
+                .map_err(|e| Error::AWSBedrockClient {
+                    status_code: StatusCode::INTERNAL_SERVER_ERROR,
+                    message: format!("Error configuring AWS Bedrock tool config: {e}"),
+                })?;
 
-                bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
-            }
+            bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
         }
 
         let start_time = Instant::now();
