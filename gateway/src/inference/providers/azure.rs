@@ -255,14 +255,14 @@ mod tests {
         let tools = azure_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
 
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name);
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters.value);
+        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
+        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
         assert_eq!(
             azure_request.tool_choice,
             Some(AzureToolChoice::Specific(SpecificToolChoice {
                 r#type: OpenAIToolType::Function,
                 function: SpecificToolFunction {
-                    name: &WEATHER_TOOL.name,
+                    name: WEATHER_TOOL.name(),
                 }
             }))
         );

@@ -298,7 +298,7 @@ mod tests {
         };
         let tool_config = ToolCallConfig {
             tools_available: vec![],
-            tool_choice: &ToolChoice::Auto,
+            tool_choice: ToolChoice::Auto,
             parallel_tool_calls: false,
         };
 

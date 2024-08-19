@@ -123,10 +123,11 @@ impl InferenceProvider for AWSBedrockProvider {
                 let tools: Vec<Tool> = tool_config
                     .tools_available
                     .iter()
-                    .map(|t| Tool::try_from(*t))
+                    .map(Tool::try_from)
                     .collect::<Result<Vec<_>, _>>()?;
 
-                let tool_choice: AWSBedrockToolChoice = tool_config.tool_choice.try_into()?;
+                let tool_choice: AWSBedrockToolChoice =
+                    tool_config.tool_choice.clone().try_into()?;
 
                 let aws_bedrock_tool_config = ToolConfiguration::builder()
                     .set_tools(Some(tools))
@@ -200,10 +201,11 @@ impl InferenceProvider for AWSBedrockProvider {
                 let tools: Vec<Tool> = tool_config
                     .tools_available
                     .iter()
-                    .map(|t| Tool::try_from(*t))
+                    .map(Tool::try_from)
                     .collect::<Result<Vec<_>, _>>()?;
 
-                let tool_choice: AWSBedrockToolChoice = tool_config.tool_choice.try_into()?;
+                let tool_choice: AWSBedrockToolChoice =
+                    tool_config.tool_choice.clone().try_into()?;
 
                 let aws_bedrock_tool_config = ToolConfiguration::builder()
                     .set_tools(Some(tools))
@@ -563,7 +565,7 @@ impl TryFrom<&ToolConfig> for Tool {
 
     fn try_from(tool_config: &ToolConfig) -> Result<Self, Error> {
         let tool_input_schema = ToolInputSchema::Json(
-            serde_json::from_value(tool_config.parameters.value.clone()).map_err(|e| {
+            serde_json::from_value(tool_config.parameters().clone()).map_err(|e| {
                 Error::AWSBedrockClient {
                     status_code: StatusCode::INTERNAL_SERVER_ERROR,
                     message: format!("Error parsing tool input schema: {e}"),
@@ -572,8 +574,8 @@ impl TryFrom<&ToolConfig> for Tool {
         );
 
         let tool_spec = ToolSpecification::builder()
-            .name(tool_config.name.clone())
-            .description(tool_config.description.clone())
+            .name(tool_config.name())
+            .description(tool_config.description())
             .input_schema(tool_input_schema)
             .build()
             .map_err(|_| Error::AWSBedrockClient {
@@ -586,10 +588,10 @@ impl TryFrom<&ToolConfig> for Tool {
     }
 }
 
-impl TryFrom<&ToolChoice> for AWSBedrockToolChoice {
+impl TryFrom<ToolChoice> for AWSBedrockToolChoice {
     type Error = Error;
 
-    fn try_from(tool_choice: &ToolChoice) -> Result<Self, Error> {
+    fn try_from(tool_choice: ToolChoice) -> Result<Self, Error> {
         match tool_choice {
             ToolChoice::None => Err(Error::InvalidTool {
                 message: "Tool choice is None. AWS Bedrock does not support tool choice None."

@@ -281,10 +281,10 @@ pub(super) fn prepare_openai_tools<'a>(
                 tool_config
                     .tools_available
                     .iter()
-                    .map(|tool| (*tool).into())
+                    .map(|tool| tool.into())
                     .collect(),
             );
-            let tool_choice = Some(tool_config.tool_choice.into());
+            let tool_choice = Some((&tool_config.tool_choice).into());
             let parallel_tool_calls = Some(tool_config.parallel_tool_calls);
             (tools, tool_choice, parallel_tool_calls)
         }
@@ -415,9 +415,9 @@ impl<'a> From<&'a ToolConfig> for OpenAITool<'a> {
         OpenAITool {
             r#type: OpenAIToolType::Function,
             function: OpenAIFunction {
-                name: &tool.name,
-                description: Some(&tool.description),
-                parameters: tool.parameters.value,
+                name: tool.name(),
+                description: Some(tool.description()),
+                parameters: tool.parameters(),
             },
         }
     }
@@ -903,14 +903,14 @@ mod tests {
         );
         assert!(openai_request.tools.is_some());
         let tools = openai_request.tools.as_ref().unwrap();
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name);
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters.value);
+        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
+        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
         assert_eq!(
             openai_request.tool_choice,
             Some(OpenAIToolChoice::Specific(SpecificToolChoice {
                 r#type: OpenAIToolType::Function,
                 function: SpecificToolFunction {
-                    name: &WEATHER_TOOL.name,
+                    name: WEATHER_TOOL.name(),
                 }
             }))
         );
@@ -1142,10 +1142,10 @@ mod tests {
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(&request_with_tools);
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 2);
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name);
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters.value);
-        assert_eq!(tools[1].function.name, QUERY_TOOL.name);
-        assert_eq!(tools[1].function.parameters, QUERY_TOOL.parameters.value);
+        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
+        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        assert_eq!(tools[1].function.name, QUERY_TOOL.name());
+        assert_eq!(tools[1].function.parameters, QUERY_TOOL.parameters());
         let tool_choice = tool_choice.unwrap();
         assert_eq!(
             tool_choice,
@@ -1155,7 +1155,7 @@ mod tests {
         assert!(parallel_tool_calls);
         let tool_config = ToolCallConfig {
             tools_available: vec![],
-            tool_choice: &ToolChoice::Required,
+            tool_choice: ToolChoice::Required,
             parallel_tool_calls: true,
         };
 

@@ -288,13 +288,16 @@ impl Variant for ChatCompletionConfig {
         let raw_content = model_inference_response.content.clone();
         let usage = model_inference_response.usage.clone();
         let model_inference_responses = vec![model_inference_response];
-        inference_config.function.prepare_response(
-            inference_id,
-            raw_content,
-            usage,
-            model_inference_responses,
-            inference_config.tool_config,
-        )
+        inference_config
+            .function
+            .prepare_response(
+                inference_id,
+                raw_content,
+                usage,
+                model_inference_responses,
+                inference_config.tool_config,
+            )
+            .await
     }
 
     async fn infer_stream(
@@ -331,7 +334,7 @@ mod tests {
 
     use crate::endpoints::inference::ChatCompletionInferenceParams;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
-    use crate::inference::providers::common::WEATHER_TOOL_CONFIG;
+    use crate::inference::providers::common::get_weather_tool_config;
     use crate::inference::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
     use crate::inference::types::{ContentBlockOutput, Usage};
     use crate::jsonschema_util::JSONSchemaFromPath;
@@ -719,11 +722,12 @@ mod tests {
             }],
         };
         let models = HashMap::from([("tool".to_string(), tool_model_config.clone())]);
+        let weather_tool_config = get_weather_tool_config();
         let inference_config = InferenceConfig {
             models: &models,
             function: &function_config,
             templates: &templates,
-            tool_config: Some(&WEATHER_TOOL_CONFIG),
+            tool_config: Some(&weather_tool_config),
         };
         let result = chat_completion_config
             .infer(&input, &inference_config, &client, &mut inference_params)

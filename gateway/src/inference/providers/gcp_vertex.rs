@@ -375,15 +375,15 @@ impl<'a> From<&'a ToolConfig> for GCPVertexGeminiFunctionDeclaration<'a> {
     }
 }
 
-impl<'a> From<&'a Vec<&'a ToolConfig>> for GCPVertexGeminiTool<'a> {
-    fn from(tools: &'a Vec<&'a ToolConfig>) -> Self {
+impl<'a> From<&'a Vec<ToolConfig>> for GCPVertexGeminiTool<'a> {
+    fn from(tools: &'a Vec<ToolConfig>) -> Self {
         // let mut function_declarations = Vec::new();
         // for tool in tools {
         //     function_declarations.push(tool.into());
         // }
         // GCPVertexGeminiTool::FunctionDeclarations(function_declarations)
         let function_declarations: Vec<GCPVertexGeminiFunctionDeclaration<'a>> =
-            tools.iter().map(|&tc| tc.into()).collect();
+            tools.iter().map(|tc| tc.into()).collect();
         GCPVertexGeminiTool::FunctionDeclarations(function_declarations)
     }
 }
@@ -555,7 +555,7 @@ fn prepare_tools<'a>(
                 return (None, None);
             }
             let tools = Some(vec![(&tool_config.tools_available).into()]);
-            let tool_config = Some(tool_config.tool_choice.into());
+            let tool_config = Some((&tool_config.tool_choice).into());
             (tools, tool_config)
         }
         None => (None, None),
@@ -965,7 +965,7 @@ mod tests {
         // Test Case 1: Empty message list
         let tool_config = ToolCallConfig {
             tools_available: vec![],
-            tool_choice: &ToolChoice::None,
+            tool_choice: ToolChoice::None,
             parallel_tool_calls: false,
         };
         let inference_request = ModelInferenceRequest {
