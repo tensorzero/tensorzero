@@ -29,10 +29,6 @@ services:
       target: gateway
       args:
         - CARGO_BUILD_FLAGS=--features=e2e_tests
-      cache_from:
-        - type=gha
-      cache_to:
-        - type=gha
     ports:
       - "3000:3000"
     command: ["gateway", "/app/tensorzero.toml"]

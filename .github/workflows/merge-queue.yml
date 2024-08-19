@@ -2,6 +2,8 @@ name: Merge Queue Checks
 
 on:
   merge_group:
+  pull_request:
+    branches: ["main"]
 
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }} # for integration/E2E tests
@@ -49,6 +51,17 @@ jobs:
         env:
           GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          target: gateway
+          build-args: |
+            CARGO_BUILD_FLAGS=--features=e2e_tests
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Launch containers for E2E tests
         run: docker compose -f gateway/tests/e2e/docker-compose.yml up -d --wait

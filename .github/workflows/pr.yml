@@ -6,10 +6,10 @@ on:
 
 jobs:
   # We don't want to run live-tests on PRs, so we use a dummy job to satisfy branch protection checks
-  live-tests:
+  live-tests-deletethis:
     runs-on: ubuntu-22.04-8core
 
-    timeout-minutes: 15
+    timeout-minutes: 5
 
     steps:
       - run: echo "This is a dummy job to satisfy branch protection checks"
