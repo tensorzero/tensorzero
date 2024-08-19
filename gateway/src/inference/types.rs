@@ -503,35 +503,69 @@ impl InferenceDatabaseInsert {
         let tool_params = match metadata.tool_params {
             Some(tool_params) => {
                 let tool_params: ToolCallConfigDatabaseInsert = tool_params.into();
-                serde_json::to_string(&tool_params).unwrap_or_default()
+                serde_json::to_string(&tool_params)
+                    .map_err(|e| Error::Serialization {
+                        message: format!("Failed to serialize tool params: {}", e),
+                    })
+                    .unwrap_or_else(|e| {
+                        e.log();
+                        String::new()
+                    })
             }
             None => String::new(),
         };
+        let inference_params = serde_json::to_string(&metadata.inference_params)
+            .map_err(|e| Error::Serialization {
+                message: format!("Failed to serialize inference params: {}", e),
+            })
+            .unwrap_or_else(|e| {
+                e.log();
+                String::new()
+            });
         match inference_response {
-            InferenceResult::Chat(chat_response) => Self {
-                id: chat_response.inference_id,
-                function_name: metadata.function_name,
-                variant_name: metadata.variant_name,
-                episode_id: metadata.episode_id,
-                input,
-                tool_params,
-                inference_params: serde_json::to_string(&metadata.inference_params)
-                    .unwrap_or_default(),
-                output: serde_json::to_string(&chat_response.output).unwrap_or_default(),
-                processing_time_ms,
-            },
-            InferenceResult::Json(json_result) => Self {
-                id: json_result.inference_id,
-                function_name: metadata.function_name,
-                variant_name: metadata.variant_name,
-                episode_id: metadata.episode_id,
-                input,
-                tool_params,
-                inference_params: serde_json::to_string(&metadata.inference_params)
-                    .unwrap_or_default(),
-                output: serde_json::to_string(&json_result.output).unwrap_or_default(),
-                processing_time_ms,
-            },
+            InferenceResult::Chat(chat_response) => {
+                let output = serde_json::to_string(&chat_response.output)
+                    .map_err(|e| Error::Serialization {
+                        message: format!("Failed to serialize output: {}", e),
+                    })
+                    .unwrap_or_else(|e| {
+                        e.log();
+                        String::new()
+                    });
+
+                Self {
+                    id: chat_response.inference_id,
+                    function_name: metadata.function_name,
+                    variant_name: metadata.variant_name,
+                    episode_id: metadata.episode_id,
+                    input,
+                    tool_params,
+                    inference_params,
+                    output,
+                    processing_time_ms,
+                }
+            }
+            InferenceResult::Json(json_result) => {
+                let output = serde_json::to_string(&json_result.output)
+                    .map_err(|e| Error::Serialization {
+                        message: format!("Failed to serialize output: {}", e),
+                    })
+                    .unwrap_or_else(|e| {
+                        e.log();
+                        String::new()
+                    });
+                Self {
+                    id: json_result.inference_id,
+                    function_name: metadata.function_name,
+                    variant_name: metadata.variant_name,
+                    episode_id: metadata.episode_id,
+                    input,
+                    tool_params,
+                    inference_params,
+                    output,
+                    processing_time_ms,
+                }
+            }
         }
     }
 }

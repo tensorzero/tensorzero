@@ -10,7 +10,7 @@ use crate::inference::types::{
     JsonInferenceResult, ModelInferenceResponse, Role, Usage,
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
-use crate::tool::{DynamicToolParams, OwnedToolConfig, ToolCallConfig, ToolChoice};
+use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
 use crate::variant::VariantConfig;
 
 #[derive(Debug)]
@@ -90,10 +90,14 @@ impl FunctionConfig {
         Ok(())
     }
 
+    /// Prepare the tool config for the function.
+    /// For a Chat function, this will incorporate the tool information configured in the function as
+    /// well as the dynamic tool calling information passed in `dynamic_tool_params`.
+    /// JSON functions do not get tool_configs even if they end up using tools under the hood.
     pub fn prepare_tool_config(
         &'static self,
         dynamic_tool_params: DynamicToolParams,
-        static_tools: &'static HashMap<String, OwnedToolConfig>,
+        static_tools: &'static HashMap<String, StaticToolConfig>,
     ) -> Result<Option<ToolCallConfig>, Error> {
         match self {
             FunctionConfig::Chat(params) => Ok(Some(ToolCallConfig::new(

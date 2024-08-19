@@ -27,13 +27,13 @@ pub struct Tool {
 
 #[derive(Debug, PartialEq)]
 pub enum ToolConfig {
-    Static(&'static OwnedToolConfig),
+    Static(&'static StaticToolConfig),
     Dynamic(DynamicToolConfig),
 }
 
 /// Contains the configuration information for a specific tool
 #[derive(Debug, PartialEq)]
-pub struct OwnedToolConfig {
+pub struct StaticToolConfig {
     pub description: String,
     pub parameters: JSONSchemaFromPath,
     pub name: String,
@@ -70,15 +70,18 @@ impl ToolCallConfig {
         function_tools: &'static [String],
         function_tool_choice: &'static ToolChoice,
         function_parallel_tool_calls: bool,
-        static_tools: &'static HashMap<String, OwnedToolConfig>,
+        static_tools: &'static HashMap<String, StaticToolConfig>,
         dynamic_tool_params: DynamicToolParams,
     ) -> Result<Self, Error> {
-        let tool_names = dynamic_tool_params
+        // If `allowed_tools` is not provided, use the function's configured tools.
+        // This means we allow all tools for the function.
+        let allowed_tools = dynamic_tool_params
             .allowed_tools
             .as_deref()
             .unwrap_or(function_tools);
 
-        let tools_available: Result<Vec<ToolConfig>, Error> = tool_names
+        // Get each tool from the static tool config.
+        let tools_available: Result<Vec<ToolConfig>, Error> = allowed_tools
             .iter()
             .map(|tool_name| {
                 static_tools
@@ -90,6 +93,7 @@ impl ToolCallConfig {
             })
             .collect();
 
+        // Throw an error if any tool was not found in the previous step.
         let mut tools_available = tools_available?;
 
         // Adds the additional tools to the list of available tools
@@ -106,10 +110,9 @@ impl ToolCallConfig {
             },
         ));
 
-        let tool_choice = match dynamic_tool_params.tool_choice {
-            Some(tool_choice) => tool_choice,
-            None => function_tool_choice.clone(),
-        };
+        let tool_choice = dynamic_tool_params
+            .tool_choice
+            .unwrap_or(function_tool_choice.clone());
         let parallel_tool_calls = dynamic_tool_params
             .parallel_tool_calls
             .unwrap_or(function_parallel_tool_calls);
@@ -131,8 +134,13 @@ impl ToolCallConfig {
     }
 }
 
-/// Anticipates #126
-#[derive(Debug, PartialEq, Serialize)]
+/// A struct to hold the dynamic tool parameters passed at inference time.
+/// These should override the function-level tool parameters.
+/// `allowed_tools` should be a subset of the configured tools for the function.
+/// if `allowed_tools` is not provided, all tools are allowed.
+/// `additional_tools` are the tools that are provided at runtime, which we compile on the fly.
+/// `tool_choice` and `parallel_tool_calls` are optional and will override the function-level values.
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 pub struct DynamicToolParams {
     pub allowed_tools: Option<Vec<String>>,
     pub additional_tools: Option<Vec<Tool>>,
@@ -279,3 +287,5 @@ impl From<ToolConfig> for Tool {
         }
     }
 }
+
+// TODO (Viraj): Add tests for ToolCallConfig::new and ToolCallOutput::new at minimum.

@@ -1,11 +1,11 @@
 use crate::jsonschema_util::JSONSchemaFromPath;
-use crate::tool::{OwnedToolConfig, ToolCallConfig, ToolChoice, ToolConfig};
+use crate::tool::{StaticToolConfig, ToolCallConfig, ToolChoice, ToolConfig};
 use lazy_static::lazy_static;
 use serde_json::json;
 
 lazy_static! {
     /// These are useful for tests which don't need mutable tools.
-    static ref WEATHER_TOOL_CONFIG_OWNED: OwnedToolConfig = OwnedToolConfig {
+    static ref WEATHER_TOOL_CONFIG_OWNED: StaticToolConfig = StaticToolConfig {
         name: "get_weather".to_string(),
         description: "Get the current weather in a given location".to_string(),
         parameters: JSONSchemaFromPath::from_value(&json!({
@@ -24,7 +24,7 @@ lazy_static! {
         tool_choice: ToolChoice::Tool("get_weather".to_string()),
         parallel_tool_calls: false,
     };
-    static ref QUERY_TOOL_CONFIG: OwnedToolConfig = OwnedToolConfig {
+    static ref QUERY_TOOL_CONFIG: StaticToolConfig = StaticToolConfig {
         name: "query_articles".to_string(),
         description: "Query articles from Wikipedia".to_string(),
         parameters: JSONSchemaFromPath::from_value(&json!({

@@ -22,7 +22,7 @@ use crate::inference::types::{
     InferenceResult, InferenceResultChunk, Input, JsonInferenceOutput, ModelInferenceResponseChunk,
     ModelInferenceResponseStream, Usage,
 };
-use crate::tool::{DynamicToolParams, Tool, ToolCallConfig, ToolChoice};
+use crate::tool::{DynamicToolParams, ToolCallConfig};
 use crate::uuid_util::validate_episode_id;
 use crate::variant::{InferenceConfig, Variant};
 
@@ -48,14 +48,18 @@ pub struct Params {
     variant_name: Option<String>,
     // if true, the inference will not be stored
     dryrun: Option<bool>,
+    // dynamic information about tool calling. Don't directly include `dynamic_tool_params` in `Params`.
+    #[serde(flatten)]
+    dynamic_tool_params: DynamicToolParams,
+    // `dynamic_tool_params` includes the following fields, passed at the top level of `Params`:
     // If provided, the inference will only use the specified tools (a subset of the function's tools)
-    allowed_tools: Option<Vec<String>>,
+    // allowed_tools: Option<Vec<String>>,
     // If provided, the inference will use the specified tools in addition to the function's tools
-    additional_tools: Option<Vec<Tool>>,
+    // additional_tools: Option<Vec<Tool>>,
     // If provided, the inference will use the specified tool choice
-    tool_choice: Option<ToolChoice>,
+    // tool_choice: Option<ToolChoice>,
     // If true, the inference will use parallel tool calls
-    parallel_tool_calls: Option<bool>,
+    // parallel_tool_calls: Option<bool>,
 }
 
 #[derive(Clone, Debug)]
@@ -83,17 +87,11 @@ pub async fn inference_handler(
     // Get the function config or return an error if it doesn't exist
     let config = get_config();
     let function = config.get_function(&params.function_name)?;
-    // Collect the dynamic tool config
-    let dynamic_tool_params = DynamicToolParams {
-        allowed_tools: params.allowed_tools,
-        additional_tools: params.additional_tools,
-        tool_choice: params.tool_choice,
-        parallel_tool_calls: params.parallel_tool_calls,
-    };
     // This is only mutable because dynamic tool params compile schemas concurrently with the inference.
     // The result of this compilation eventually is written to the struct, so we need mutability here.
     // See `DynamicToolConfig` and `DynamicJSONSchema` for more details.
-    let mut tool_config = function.prepare_tool_config(dynamic_tool_params, &config.tools)?;
+    let mut tool_config =
+        function.prepare_tool_config(params.dynamic_tool_params, &config.tools)?;
     // Collect the function variant names as a Vec<&str>
     let mut candidate_variant_names: Vec<&str> =
         function.variants().keys().map(AsRef::as_ref).collect();
