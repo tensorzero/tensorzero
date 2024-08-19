@@ -294,8 +294,6 @@ impl From<ToolConfig> for Tool {
     }
 }
 
-// TODO (Viraj): Add tests for ToolCallConfig::new and ToolCallOutput::new at minimum.
-
 mod tests {
     use super::*;
     use lazy_static::lazy_static;
@@ -488,5 +486,110 @@ mod tests {
             "establish_campground"
         );
         assert!(!tool_call_config.parallel_tool_calls);
+    }
+
+    #[tokio::test]
+    async fn test_tool_call_output_new() {
+        let tool_call = ToolCall {
+            name: "get_weather".to_string(),
+            arguments: "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}".to_string(),
+            id: "123".to_string(),
+        };
+        let tool_call_config = ToolCallConfig::new(
+            &ALL_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            true,
+            &TOOLS,
+            DynamicToolParams::default(),
+        )
+        .unwrap();
+        // Tool call is valid, so we should get a valid ToolCallOutput
+        let tool_call_output = ToolCallOutput::new(tool_call, Some(&tool_call_config)).await;
+        assert_eq!(tool_call_output.name, "get_weather");
+        assert_eq!(
+            tool_call_output.arguments,
+            "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}"
+        );
+        assert_eq!(tool_call_output.id, "123");
+        assert_eq!(
+            tool_call_output.parsed_name,
+            Some("get_weather".to_string())
+        );
+        assert_eq!(
+            tool_call_output.parsed_arguments,
+            Some(json!({
+                "location": "San Francisco",
+                "unit": "celsius"
+            }))
+        );
+
+        // Bad arguments, but valid name (parsed_name is set but parsed_arguments is not)
+        let tool_call = ToolCall {
+            name: "get_weather".to_string(),
+            arguments: "{\"location\": \"San Francisco\", \"unit\": \"kelvin\"}".to_string(),
+            id: "321".to_string(),
+        };
+        let tool_call_output = ToolCallOutput::new(tool_call, Some(&tool_call_config)).await;
+        assert_eq!(
+            tool_call_output.parsed_name,
+            Some("get_weather".to_string())
+        );
+        assert_eq!(tool_call_output.parsed_arguments, None);
+        assert_eq!(tool_call_output.id, "321");
+        assert_eq!(tool_call_output.name, "get_weather");
+        assert_eq!(
+            tool_call_output.arguments,
+            "{\"location\": \"San Francisco\", \"unit\": \"kelvin\"}"
+        );
+
+        // Bad name, good arguments (both not set since the name is invalid and we can't be sure what tool this goes to)
+        let tool_call = ToolCall {
+            name: "get_wether".to_string(),
+            arguments: "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}".to_string(),
+            id: "321".to_string(),
+        };
+        let tool_call_output = ToolCallOutput::new(tool_call, Some(&tool_call_config)).await;
+        assert_eq!(tool_call_output.parsed_name, None);
+        assert_eq!(tool_call_output.parsed_arguments, None);
+        assert_eq!(tool_call_output.id, "321");
+        assert_eq!(tool_call_output.name, "get_wether");
+        assert_eq!(
+            tool_call_output.arguments,
+            "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}"
+        );
+
+        // Make sure validation works with dynamic tools
+        let tool_call_config = ToolCallConfig::new(
+            &ALL_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            true,
+            &TOOLS,
+            DynamicToolParams {
+                additional_tools: Some(vec![Tool {
+                    name: "establish_campground".to_string(),
+                    description: "Establish a campground".to_string(),
+                    parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}, "required": ["location"]}),
+                }]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let tool_call = ToolCall {
+            name: "establish_campground".to_string(),
+            arguments: "{\"location\": \"Lucky Dog\"}".to_string(),
+            id: "321".to_string(),
+        };
+        let tool_call_output = ToolCallOutput::new(tool_call, Some(&tool_call_config)).await;
+        assert_eq!(tool_call_output.name, "establish_campground");
+        assert_eq!(tool_call_output.arguments, "{\"location\": \"Lucky Dog\"}");
+        assert_eq!(tool_call_output.id, "321");
+        assert_eq!(
+            tool_call_output.parsed_name,
+            Some("establish_campground".to_string())
+        );
+        assert_eq!(
+            tool_call_output.parsed_arguments,
+            Some(json!({"location": "Lucky Dog"}))
+        );
     }
 }
