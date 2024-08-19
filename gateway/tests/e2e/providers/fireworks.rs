@@ -557,19 +557,31 @@ async fn test_tool_call_streaming() {
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "fireworks");
-    // Check the dynamic_tool_config
-    let dynamic_tool_config = result.get("dynamic_tool_config").unwrap().as_str().unwrap();
-    let dynamic_tool_config: Value = serde_json::from_str(dynamic_tool_config).unwrap();
-    assert!(dynamic_tool_config.get("allowed_tools").unwrap().is_null());
-    assert!(dynamic_tool_config
-        .get("additional_tools")
+    // Check the tool_params
+    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
+    let tool_params: Value = serde_json::from_str(tool_params).unwrap();
+    let tools_available = tool_params
+        .get("tools_available")
         .unwrap()
-        .is_null());
-    assert!(dynamic_tool_config.get("tool_choice").unwrap().is_null());
-    assert!(dynamic_tool_config
+        .as_array()
+        .unwrap();
+    assert!(tools_available.len() == 1);
+    assert!(
+        tools_available
+            .first()
+            .unwrap()
+            .get("name")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            == "get_weather"
+    );
+    assert!(tool_params.get("tool_choice").unwrap().as_str().unwrap() == "required");
+    assert!(!tool_params
         .get("parallel_tool_calls")
         .unwrap()
-        .is_null());
+        .as_bool()
+        .unwrap());
     // Check the ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
         .await

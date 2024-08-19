@@ -1,7 +1,10 @@
 use jsonschema::JSONSchema;
 use serde::Serialize;
+use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
+use tokio::sync::{OnceCell, RwLock};
+use tokio::task::JoinHandle;
 
 use crate::error::Error;
 
@@ -41,7 +44,7 @@ impl JSONSchemaFromPath {
         Ok(Self { compiled, value })
     }
 
-    // NOTE: This function is used only for integration tests
+    // NOTE: This function is used only for tests
     pub fn from_value(value: &serde_json::Value) -> Self {
         let schema_boxed: &'static serde_json::Value = Box::leak(Box::new(value.clone()));
         #[allow(clippy::unwrap_used)]
@@ -63,6 +66,84 @@ impl JSONSchemaFromPath {
                 data: instance.clone(),
                 schema: self.value.clone(),
             })
+    }
+}
+
+/// This is a JSONSchema that is compiled on the fly.
+/// This is useful for schemas that are not known at compile time, in particular, for dynamic tool definitions.
+/// In order to avoid blocking the inference, we compile the schema asynchronously as the inference runs.
+/// We use a tokio::sync::OnceCell to ensure that the schema is compiled only once, and an RwLock to manage
+/// interior mutability of the JoinHandle on the compilation task (I don't think this is strictly necessary but Rust will complain without it).
+///
+/// The public API of this struct should look very normal except validation is `async`
+/// There are just `new` and `validate` methods.
+#[derive(Debug)]
+pub struct DynamicJSONSchema {
+    pub value: Value,
+    compiled_schema: OnceCell<JSONSchema>,
+    compilation_task: RwLock<Option<JoinHandle<Result<JSONSchema, Error>>>>,
+}
+
+impl PartialEq for DynamicJSONSchema {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
+
+impl DynamicJSONSchema {
+    pub fn new(schema: Value) -> Self {
+        let schema_clone = schema.clone();
+        let compilation_task = tokio::task::spawn_blocking(move || {
+            JSONSchema::compile(&schema_clone).map_err(|e| Error::JsonSchema {
+                message: e.to_string(),
+            })
+        });
+        Self {
+            value: schema,
+            compiled_schema: OnceCell::new(),
+            compilation_task: RwLock::new(Some(compilation_task)),
+        }
+    }
+
+    pub async fn validate(&self, instance: &Value) -> Result<(), Error> {
+        // This will block until the schema is compiled
+        // We don't take the result here because we want the mutable borrow to end
+        self.get_or_init_compiled_schema().await?;
+
+        let compiled_schema = match self.compiled_schema.get() {
+            Some(compiled_schema) => compiled_schema,
+            None => {
+                return Err(Error::JsonSchema {
+                    message: "Schema compilation failed".to_string(),
+                })
+            }
+        };
+
+        compiled_schema.validate(instance).map_err(|e| {
+            let messages = e.into_iter().map(|error| error.to_string()).collect();
+            Error::JsonSchemaValidation {
+                messages,
+                data: instance.clone(),
+                schema: self.value.clone(),
+            }
+        })
+    }
+
+    async fn get_or_init_compiled_schema(&self) -> Result<&JSONSchema, Error> {
+        self.compiled_schema
+            .get_or_try_init(|| async {
+                let mut task_guard = self.compilation_task.write().await;
+                if let Some(task) = task_guard.take() {
+                    task.await.map_err(|e| Error::JsonSchema {
+                        message: format!("Task join error in DynamicJSONSchema: {}", e),
+                    })?
+                } else {
+                    Err(Error::JsonSchema {
+                        message: "Schema compilation already completed.".to_string(),
+                    })
+                }
+            })
+            .await
     }
 }
 
@@ -152,5 +233,21 @@ mod tests {
             result.unwrap_err().to_string(),
             "Failed to read JSON Schema `nonexistent_file.json`: No such file or directory (os error 2)".to_string()
         )
+    }
+
+    #[tokio::test]
+    async fn test_dynamic_schema() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            }
+        });
+
+        let dynamic_schema = DynamicJSONSchema::new(schema);
+        let instance = serde_json::json!({
+            "name": "John Doe",
+        });
+        assert!(dynamic_schema.validate(&instance).await.is_ok());
     }
 }
