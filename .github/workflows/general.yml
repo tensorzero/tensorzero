@@ -20,7 +20,7 @@ jobs:
       - name: Set up Cargo Cache
         uses: Swatinem/rust-cache@v2
         with:
-          cache-all-crates: true
+          cache-all-crates: "true"
 
       - name: Install cargo-nextest
         uses: baptiste0928/cargo-install@v1
