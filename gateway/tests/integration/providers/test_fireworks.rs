@@ -1,19 +1,18 @@
+use futures::StreamExt;
+use secrecy::SecretString;
 use std::env;
 
-use crate::integration::providers::common::{
+use gateway::inference::providers::{
+    fireworks::FireworksProvider, provider_trait::InferenceProvider,
+};
+use gateway::inference::types::{ContentBlock, Text};
+use gateway::model::ProviderConfig;
+
+use crate::providers::common::{
     create_json_inference_request, create_simple_inference_request,
     create_streaming_inference_request, create_streaming_json_inference_request,
     create_tool_inference_request,
 };
-use futures::StreamExt;
-use gateway::{
-    inference::{
-        providers::{fireworks::FireworksProvider, provider_trait::InferenceProvider},
-        types::{ContentBlock, Text},
-    },
-    model::ProviderConfig,
-};
-use secrecy::SecretString;
 
 #[tokio::test]
 async fn test_infer() {
