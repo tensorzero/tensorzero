@@ -36,26 +36,64 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Cache Cargo Home
-        uses: actions/cache@v4
+      - name: Set up Cargo Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-nextest
+        uses: baptiste0928/cargo-install@v1
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/git/
-            ~/.cargo/registry/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-          save-always: true
+          crate: cargo-nextest
+          args: --locked
 
       - name: Write GCP JWT key to file
         env:
           GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
+      - name: Cache Docker mounts
+        uses: actions/cache@v3
+        id: cache-docker-mounts
+        with:
+          path: |
+            docker-gateway-usr-local-cargo-registry
+            docker-gateway-usr-local-cargo-git
+            docker-gateway-src-target
+          key: cache-${{ hashFiles('./Dockerfile') }}
+
+      - name: Inject cache into Docker
+        uses: reproducible-containers/buildkit-cache-dance@v3.1.0
+        with:
+          cache-map: |
+            {
+              "docker-gateway-usr-local-cargo-registry": {
+                "target": "/usr/local/cargo/registry",
+                "id": "tensorzero-gateway-release"
+              },
+              "docker-gateway-usr-local-cargo-git": {
+                "target": "/usr/local/cargo/git",
+                "id": "tensorzero-gateway-release"
+              },
+              "docker-gateway-src-target": {
+                "target": "/src/target",
+                "id": "tensorzero-gateway-release"
+              }
+            }
+          skip-extraction: ${{ steps.cache-docker-mounts.outputs.cache-hit }}
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          target: gateway
+          build-args: |
+            CARGO_BUILD_FLAGS=--features=e2e_tests
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       - name: Launch containers for E2E tests
         run: docker compose -f gateway/tests/e2e/docker-compose.yml up -d --wait
 
       - name: Run integration and E2E tests
         run: |
-          cargo test --features integration_tests,e2e_tests
+          cargo test-all --profile ci

@@ -1,13 +1,14 @@
-use crate::integration::providers::common::{
-    create_simple_inference_request, create_streaming_inference_request,
-    create_tool_inference_request, create_tool_result_inference_request,
-};
 use futures::StreamExt;
 use gateway::inference::providers::provider_trait::InferenceProvider;
 use gateway::inference::types::{ContentBlock, Text};
 use gateway::{inference::providers::aws_bedrock::AWSBedrockProvider, model::ProviderConfig};
 use std::sync::OnceLock;
 use tokio::runtime::Runtime;
+
+use crate::providers::common::{
+    create_simple_inference_request, create_streaming_inference_request,
+    create_tool_inference_request, create_tool_result_inference_request,
+};
 
 /// NOTE: The `lazy_static` AWS client is thread-safe but not safe across Tokio runtimes. By default,
 /// `tokio::test` spawns a new runtime for each test, causing intermittent issues with the AWS client.

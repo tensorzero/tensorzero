@@ -3,3 +3,10 @@ rustflags = [
     "-C", "target-cpu=native",
     "--cfg", "aws_sdk_unstable",  # needed for aws-smithy-types + serde-(de)serialize
 ]
+
+
+[alias]
+test-unit = "nextest run --lib --bins"
+test-integration = "nextest run --test integration"
+test-e2e = "nextest run --test e2e --features e2e_tests"
+test-all = "nextest run --features e2e_tests"

@@ -3,7 +3,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use crate::e2e::common::{get_gateway_endpoint, select_feedback_clickhouse};
+use crate::common::{get_gateway_endpoint, select_feedback_clickhouse};
 
 lazy_static::lazy_static! {
     static ref CLICKHOUSE_URL: String = std::env::var("CLICKHOUSE_URL").expect("CLICKHOUSE_URL must be set");

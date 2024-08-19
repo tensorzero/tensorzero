@@ -2,7 +2,7 @@ use gateway::clickhouse::ClickHouseConnectionInfo;
 use gateway::clickhouse_migration_manager;
 use tracing_test::traced_test;
 
-use crate::e2e::common::CLICKHOUSE_URL;
+use crate::common::CLICKHOUSE_URL;
 
 #[tokio::test]
 async fn test_clickhouse_migration_manager() {

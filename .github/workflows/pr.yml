@@ -9,7 +9,7 @@ jobs:
   live-tests:
     runs-on: ubuntu-22.04-8core
 
-    timeout-minutes: 15
+    timeout-minutes: 5
 
     steps:
       - run: echo "This is a dummy job to satisfy branch protection checks"

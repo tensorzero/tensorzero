@@ -1,13 +1,14 @@
-use crate::integration::providers::common::{
-    create_simple_inference_request, create_streaming_inference_request,
-    create_tool_inference_request,
-};
 use futures::StreamExt;
 use gateway::inference::providers::provider_trait::InferenceProvider;
 use gateway::inference::types::{ContentBlock, Text};
 use gateway::{inference::providers::anthropic::AnthropicProvider, model::ProviderConfig};
 use secrecy::SecretString;
 use std::env;
+
+use crate::providers::common::{
+    create_simple_inference_request, create_streaming_inference_request,
+    create_tool_inference_request,
+};
 
 #[tokio::test]
 async fn test_infer() {

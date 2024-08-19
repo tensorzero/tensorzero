@@ -1,19 +1,16 @@
+use futures::StreamExt;
+use secrecy::SecretString;
 use std::env;
 
-use crate::integration::providers::common::{
+use gateway::inference::providers::{openai::OpenAIProvider, provider_trait::InferenceProvider};
+use gateway::inference::types::{ContentBlock, JSONMode, Text};
+use gateway::model::ProviderConfig;
+
+use crate::providers::common::{
     create_json_inference_request, create_simple_inference_request,
     create_streaming_inference_request, create_streaming_json_inference_request,
     create_tool_inference_request,
 };
-use futures::StreamExt;
-use gateway::{
-    inference::{
-        providers::{openai::OpenAIProvider, provider_trait::InferenceProvider},
-        types::{ContentBlock, JSONMode, Text},
-    },
-    model::ProviderConfig,
-};
-use secrecy::SecretString;
 
 #[tokio::test]
 async fn test_infer() {

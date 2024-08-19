@@ -1,10 +1,11 @@
 use futures::StreamExt;
+use serde_json::{json, Value};
+
 use gateway::inference::providers::provider_trait::InferenceProvider;
 use gateway::inference::types::{ContentBlock, Text};
 use gateway::model::ProviderConfig;
-use serde_json::{json, Value};
 
-use crate::integration::providers::common::{
+use crate::providers::common::{
     create_json_inference_request, create_simple_inference_request,
     create_streaming_inference_request, create_streaming_json_inference_request,
 };
