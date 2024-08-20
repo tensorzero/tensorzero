@@ -29,6 +29,7 @@ pub struct Tool {
 pub enum ToolConfig {
     Static(&'static StaticToolConfig),
     Dynamic(DynamicToolConfig),
+    Implicit(ImplicitToolConfig),
 }
 
 /// Contains the configuration information for a specific tool
@@ -39,11 +40,19 @@ pub struct StaticToolConfig {
     pub name: String,
 }
 
+/// Contains the configuration information for a tool defined at runtime
 #[derive(Debug, PartialEq)]
 pub struct DynamicToolConfig {
     pub description: String,
     pub parameters: DynamicJSONSchema,
     pub name: String,
+}
+
+/// Contains the configuration information for a tool used in implicit tool calling for
+/// JSON schema enforcement
+#[derive(Debug, PartialEq)]
+pub struct ImplicitToolConfig {
+    pub parameters: JSONSchemaFromPath,
 }
 
 /// Contains all information required to tell an LLM what tools it can call
@@ -117,6 +126,7 @@ impl ToolCallConfig {
             if !tools_available.iter().any(|tool| match tool {
                 ToolConfig::Static(config) => config.name == *tool_name,
                 ToolConfig::Dynamic(config) => config.name == *tool_name,
+                ToolConfig::Implicit(_config) => false,
             }) {
                 return Err(Error::ToolNotFound {
                     name: tool_name.clone(),
@@ -141,6 +151,7 @@ impl ToolCallConfig {
         self.tools_available.iter().find(|tool_cfg| match tool_cfg {
             ToolConfig::Static(config) => config.name == name,
             ToolConfig::Dynamic(config) => config.name == name,
+            ToolConfig::Implicit(_config) => false,
         })
     }
 }
@@ -213,6 +224,19 @@ impl ToolCallOutput {
     }
 }
 
+impl ToolCallConfig {
+    #[cfg(test)]
+    pub fn implicit_from_value(value: &Value) -> Self {
+        let parameters = JSONSchemaFromPath::from_value(value);
+        let implicit_tool_config = ToolConfig::Implicit(ImplicitToolConfig { parameters });
+        Self {
+            tools_available: vec![implicit_tool_config],
+            tool_choice: ToolChoice::Tool(IMPLICIT_TOOL_NAME.to_string()),
+            parallel_tool_calls: false,
+        }
+    }
+}
+
 /// A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ToolResult {
@@ -246,11 +270,15 @@ pub struct ToolCallChunk {
     pub arguments: String,
 }
 
+pub const IMPLICIT_TOOL_NAME: &str = "respond";
+pub const IMPLICIT_TOOL_DESCRIPTION: &str = "Respond to the user using the output schema provided.";
+
 impl ToolConfig {
     pub async fn validate_arguments(&self, arguments: &Value) -> Result<(), Error> {
         match self {
             ToolConfig::Static(config) => config.parameters.validate(arguments),
             ToolConfig::Dynamic(config) => config.parameters.validate(arguments).await,
+            ToolConfig::Implicit(config) => config.parameters.validate(arguments),
         }
     }
 
@@ -258,6 +286,7 @@ impl ToolConfig {
         match self {
             ToolConfig::Static(config) => &config.description,
             ToolConfig::Dynamic(config) => &config.description,
+            ToolConfig::Implicit(_config) => IMPLICIT_TOOL_DESCRIPTION,
         }
     }
 
@@ -265,6 +294,7 @@ impl ToolConfig {
         match self {
             ToolConfig::Static(config) => config.parameters.value,
             ToolConfig::Dynamic(config) => &config.parameters.value,
+            ToolConfig::Implicit(config) => config.parameters.value,
         }
     }
 
@@ -272,6 +302,7 @@ impl ToolConfig {
         match self {
             ToolConfig::Static(config) => &config.name,
             ToolConfig::Dynamic(config) => &config.name,
+            ToolConfig::Implicit(_config) => IMPLICIT_TOOL_NAME,
         }
     }
 }
