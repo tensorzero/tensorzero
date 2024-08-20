@@ -4,7 +4,7 @@ use std::env;
 
 use crate::providers::common::TestableProviderConfig;
 
-crate::enforce_provider_tests!(AnthropicProvider);
+crate::generate_provider_tests!(AnthropicProvider);
 
 impl TestableProviderConfig for AnthropicProvider {
     async fn get_simple_inference_request_provider() -> Option<ProviderConfig> {
@@ -20,6 +20,14 @@ impl TestableProviderConfig for AnthropicProvider {
     }
 
     async fn get_tool_use_streaming_inference_request_provider() -> Option<ProviderConfig> {
+        Some(get_provider())
+    }
+
+    async fn get_json_mode_inference_request_provider() -> Option<ProviderConfig> {
+        Some(get_provider())
+    }
+
+    async fn get_json_mode_streaming_inference_request_provider() -> Option<ProviderConfig> {
         Some(get_provider())
     }
 }

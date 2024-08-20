@@ -18,7 +18,7 @@ use gateway::tool::{
 /// Enforce that every provider implements a common set of tests.
 ///
 /// To achieve that, each provider should implement the TestableProviderConfig trait and call the
-/// `enforce_provider_tests!` macro.
+/// `generate_provider_tests!` macro.
 ///
 /// If some test doesn't apply to a particular provider (e.g. provider doesn't support tool use),
 /// then the provider should return `None` from the corresponding method.
@@ -27,11 +27,15 @@ pub trait TestableProviderConfig {
     async fn get_streaming_inference_request_provider() -> Option<ProviderConfig>;
     async fn get_tool_use_inference_request_provider() -> Option<ProviderConfig>;
     async fn get_tool_use_streaming_inference_request_provider() -> Option<ProviderConfig>;
+    async fn get_json_mode_inference_request_provider() -> Option<ProviderConfig>;
+    async fn get_json_mode_streaming_inference_request_provider() -> Option<ProviderConfig>;
 }
 
 #[macro_export]
-macro_rules! enforce_provider_tests {
+macro_rules! generate_provider_tests {
     ($struct_name:ident) => {
+        use $crate::providers::common::test_json_mode_inference_request_with_provider;
+        use $crate::providers::common::test_json_mode_streaming_inference_request_with_provider;
         use $crate::providers::common::test_simple_inference_request_with_provider;
         use $crate::providers::common::test_streaming_inference_request_with_provider;
         use $crate::providers::common::test_tool_use_inference_request_with_provider;
@@ -66,6 +70,22 @@ macro_rules! enforce_provider_tests {
             let provider = $struct_name::get_tool_use_streaming_inference_request_provider().await;
             if let Some(provider) = provider {
                 test_tool_use_streaming_inference_request_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_json_mode_inference_request() {
+            let provider = $struct_name::get_json_mode_inference_request_provider().await;
+            if let Some(provider) = provider {
+                test_json_mode_inference_request_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_json_mode_streaming_inference_request() {
+            let provider = $struct_name::get_json_mode_streaming_inference_request_provider().await;
+            if let Some(provider) = provider {
+                test_json_mode_streaming_inference_request_with_provider(provider).await;
             }
         }
     };
@@ -196,7 +216,7 @@ pub async fn test_tool_use_inference_request_with_provider(provider: ProviderCon
     let result = provider.infer(&inference_request, &client).await.unwrap();
 
     // Check the result
-    assert!(result.content.len() == 1);
+    assert!(result.content.len() == 1, "{:#?}", result.content);
     let content = result.content.first().unwrap();
     match content {
         ContentBlock::ToolCall(tool_call) => {
@@ -287,25 +307,24 @@ pub async fn test_tool_use_streaming_inference_request_with_provider(provider: P
     }
 }
 
-pub fn create_json_inference_request<'a>() -> ModelInferenceRequest<'a> {
+pub fn create_json_mode_inference_request<'a>() -> ModelInferenceRequest<'a> {
     let messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["Is Santa Clause real? Be concise.".to_string().into()],
+        content: vec!["What is 4+4?".to_string().into()],
     }];
+
     let system = Some(
         r#"\
         # Instructions\n\
-        You are a helpful but mischevious assistant who returns in the JSON form {"honest_answer": "...", "mischevious_answer": "..."}.\n\
+        You are a helpful assistant who returns in the JSON form {"reasoning": "...", "answer": "..."}.\n\
         \n\
         # Examples\n\
         \n\
-        {"honest_answer": "Yes.", "mischevious_answer": "No way."}\n\
+        {"reasoning": "3 + 3 = 6", "answer": "6"}\n\
         \n\
-        {"honest_answer": "No.", "mischevious_answer": "Of course!"}\n\
+        {"reasoning": "Japan is in Asia. Tokyo is the capital of Japan. Therefore Tokyo is in Asia.", "answer": "Yes"}\n\
         \n\
-        {"honest_answer": "No idea.", "mischevious_answer": "Definitely."}\n\
-        \n\
-        {"honest_answer": "Frequently.", "mischevious_answer": "Never."}\n\
+        {"reasoning": "The square root of 9 is 3.", "answer": "3"}\n\
         "#.into(),
     );
     let max_tokens = Some(400);
@@ -314,11 +333,12 @@ pub fn create_json_inference_request<'a>() -> ModelInferenceRequest<'a> {
     let output_schema = json!({
         "type": "object",
         "properties": {
-            "honest_answer": {"type": "string"},
-            "mischevious_answer": {"type": "string"}
+            "reasoning": {"type": "string"},
+            "answer": {"type": "string"}
         },
-        "required": ["honest_answer", "mischevious_answer"]
+        "required": ["answer"]
     });
+
     ModelInferenceRequest {
         messages,
         system,
@@ -333,12 +353,92 @@ pub fn create_json_inference_request<'a>() -> ModelInferenceRequest<'a> {
     }
 }
 
-pub fn create_streaming_json_inference_request<'a>() -> ModelInferenceRequest<'a> {
-    let mut request = create_json_inference_request();
-    request.stream = true;
-    request
+pub async fn test_json_mode_inference_request_with_provider(provider: ProviderConfig) {
+    // Set up and make the inference request
+    let inference_request = create_json_mode_inference_request();
+    let client = reqwest::Client::new();
+    let result = provider.infer(&inference_request, &client).await.unwrap();
+
+    // Check the result
+    assert!(result.content.len() == 1);
+    let content = result.content.first().unwrap();
+
+    match content {
+        ContentBlock::Text(block) => {
+            let parsed_json: serde_json::Value = serde_json::from_str(&block.text).unwrap();
+            let parsed_json = parsed_json.as_object().unwrap();
+
+            assert!(parsed_json.len() == 1 || parsed_json.len() == 2);
+            assert!(parsed_json.get("answer").unwrap().as_str().unwrap() == "8");
+
+            // reasoning is optional
+            if parsed_json.len() == 2 {
+                assert!(parsed_json.keys().any(|key| key == "reasoning"));
+            }
+        }
+        _ => panic!("Unexpected content block: {:?}", content),
+    }
 }
 
+pub async fn test_json_mode_streaming_inference_request_with_provider(provider: ProviderConfig) {
+    // Set up and make the inference request
+    let mut inference_request = create_json_mode_inference_request();
+    inference_request.stream = true;
+    let client = reqwest::Client::new();
+
+    // Run the inference request
+    let result = provider
+        .infer_stream(&inference_request, &client)
+        .await
+        .unwrap();
+
+    // Collect the chunks
+    let (first_chunk, mut stream) = result;
+    let mut collected_chunks = vec![first_chunk];
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.unwrap();
+        assert!(chunk.content.len() <= 1);
+        collected_chunks.push(chunk);
+    }
+
+    // Parse the generation
+    let generation = collected_chunks
+        .iter()
+        .filter(|chunk| !chunk.content.is_empty())
+        .map(|chunk| chunk.content.first().unwrap())
+        .map(|content| match content {
+            ContentBlockChunk::Text(block) => block.text.clone(),
+            _ => panic!("Expected a text block"),
+        })
+        .collect::<Vec<String>>()
+        .join("");
+
+    // Ensure the generation is valid JSON
+    let parsed_json: serde_json::Value = serde_json::from_str(&generation).unwrap();
+    let parsed_json = parsed_json.as_object().unwrap();
+
+    assert!(parsed_json.len() == 1 || parsed_json.len() == 2);
+    assert!(parsed_json.get("answer").unwrap().as_str().unwrap() == "8");
+
+    // reasoning is optional
+    if parsed_json.len() == 2 {
+        assert!(parsed_json.keys().any(|key| key == "reasoning"));
+    }
+
+    // Check the usage
+    match provider {
+        // NOTE: Azure and Together do not return usage for streaming JSON Mode inference (to the best of our knowledge)
+        ProviderConfig::Azure(AzureProvider { .. })
+        | ProviderConfig::Together(TogetherProvider { .. }) => {
+            assert!(collected_chunks.last().unwrap().usage.is_none());
+        }
+        _ => {
+            assert!(collected_chunks.last().unwrap().usage.is_some());
+        }
+    }
+}
+
+// TODO: remove/refactor
 lazy_static! {
     static ref WEATHER_TOOL_CONFIG: StaticToolConfig = StaticToolConfig {
         name: "get_weather".to_string(),
@@ -399,12 +499,6 @@ pub fn create_tool_result_inference_request() -> ModelInferenceRequest<'static> 
         function_type: FunctionType::Chat,
         output_schema: None,
     }
-}
-
-pub fn create_streaming_tool_inference_request() -> ModelInferenceRequest<'static> {
-    let mut request = create_tool_use_inference_request();
-    request.stream = true;
-    request
 }
 
 pub fn create_streaming_tool_result_inference_request() -> ModelInferenceRequest<'static> {

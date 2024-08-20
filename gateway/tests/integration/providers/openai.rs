@@ -1,18 +1,13 @@
-use futures::StreamExt;
 use secrecy::SecretString;
 use std::env;
 
 use gateway::inference::providers::{openai::OpenAIProvider, provider_trait::InferenceProvider};
-use gateway::inference::types::{ContentBlock, ContentBlockChunk, JSONMode, Text};
+use gateway::inference::types::{ContentBlock, JSONMode};
 use gateway::model::ProviderConfig;
 
-use crate::providers::common::{
-    create_json_inference_request, create_streaming_json_inference_request,
-    create_streaming_tool_inference_request, create_tool_use_inference_request,
-    TestableProviderConfig,
-};
+use crate::providers::common::{create_json_mode_inference_request, TestableProviderConfig};
 
-crate::enforce_provider_tests!(OpenAIProvider);
+crate::generate_provider_tests!(OpenAIProvider);
 
 impl TestableProviderConfig for OpenAIProvider {
     async fn get_simple_inference_request_provider() -> Option<ProviderConfig> {
@@ -28,6 +23,14 @@ impl TestableProviderConfig for OpenAIProvider {
     }
 
     async fn get_tool_use_streaming_inference_request_provider() -> Option<ProviderConfig> {
+        Some(get_provider())
+    }
+
+    async fn get_json_mode_inference_request_provider() -> Option<ProviderConfig> {
+        Some(get_provider())
+    }
+
+    async fn get_json_mode_streaming_inference_request_provider() -> Option<ProviderConfig> {
         Some(get_provider())
     }
 }
@@ -47,165 +50,31 @@ fn get_provider() -> ProviderConfig {
 }
 
 #[tokio::test]
-async fn test_infer_with_tool_calls() {
-    // Load API key from environment variable
-    let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY must be set");
-    let api_key = SecretString::new(api_key);
-    let model_name = "gpt-4o-mini";
-    let client = reqwest::Client::new();
-
-    let inference_request = create_tool_use_inference_request();
-
-    let base_url = None;
-    let provider = ProviderConfig::OpenAI(OpenAIProvider {
-        model_name: model_name.to_string(),
-        api_base: base_url,
-        api_key: Some(api_key),
-    });
-    let result = provider.infer(&inference_request, &client).await;
-
-    assert!(result.is_ok());
-    let response = result.unwrap();
-    assert!(response.content.len() == 1);
-    let content = response.content.first().unwrap();
-    match content {
-        ContentBlock::ToolCall(tool_call) => {
-            assert!(tool_call.name == "get_weather");
-            let arguments: serde_json::Value = serde_json::from_str(&tool_call.arguments)
-                .expect("Failed to parse tool call arguments");
-            assert!(arguments.get("location").is_some());
-        }
-        _ => panic!("Expected a tool call content block"),
-    }
-}
-
-#[tokio::test]
-async fn test_infer_stream_with_tool_calls() {
-    // Load API key from environment variable
-    let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY must be set");
-    let api_key = SecretString::new(api_key);
-    let model_name = "gpt-4o-mini";
-    let client = reqwest::Client::new();
-
-    let inference_request = create_streaming_tool_inference_request();
-
-    let base_url = None;
-    let provider = ProviderConfig::OpenAI(OpenAIProvider {
-        model_name: model_name.to_string(),
-        api_base: base_url,
-        api_key: Some(api_key),
-    });
-
-    let result = provider.infer_stream(&inference_request, &client).await;
-    assert!(result.is_ok());
-    let (chunk, mut stream) = result.unwrap();
-    let mut collected_chunks = vec![chunk];
-    while let Some(chunk) = stream.next().await {
-        assert!(chunk.is_ok());
-        collected_chunks.push(chunk.unwrap());
-    }
-    assert!(!collected_chunks.is_empty());
-    // Fourth as an arbitrary middle chunk, the first and last may contain only metadata
-    assert!(collected_chunks[4].content.len() == 1);
-    assert!(collected_chunks.last().unwrap().usage.is_some());
-    let third_chunk = collected_chunks.get(3).unwrap();
-    match third_chunk.content.first().unwrap() {
-        ContentBlockChunk::ToolCall(tool_call) => {
-            assert!(tool_call.name == "get_weather");
-        }
-        _ => panic!("Expected a tool call"),
-    }
-}
-
-#[tokio::test]
-async fn test_json_request() {
-    // Load API key from environment variable
-    let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY must be set");
-    let api_key = SecretString::new(api_key);
-    let model_name = "gpt-4o-mini";
-    let client = reqwest::Client::new();
-    let inference_request = create_json_inference_request();
-
-    let provider = ProviderConfig::OpenAI(OpenAIProvider {
-        model_name: model_name.to_string(),
-        api_base: None,
-        api_key: Some(api_key),
-    });
-    let result = provider.infer(&inference_request, &client).await;
-    assert!(result.is_ok());
-    let result = result.unwrap();
-    assert!(result.content.len() == 1);
-    let content = result.content.first().unwrap();
-    match content {
-        ContentBlock::Text(Text { text }) => {
-            // parse the result text and see if it matches the output schema
-            let result_json: serde_json::Value = serde_json::from_str(text)
-                .map_err(|_| format!(r#"Failed to parse JSON: "{text}""#))
-                .unwrap();
-            assert!(result_json.get("honest_answer").is_some());
-            assert!(result_json.get("mischevious_answer").is_some());
-        }
-        _ => panic!("Expected a text content block"),
-    }
-}
-
-#[tokio::test]
-async fn test_json_request_strict() {
-    // Load API key from environment variable
-    let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY must be set");
-    let api_key = SecretString::new(api_key);
-    let model_name = "gpt-4o-mini";
-    let client = reqwest::Client::new();
-    let mut inference_request = create_json_inference_request();
+async fn test_json_mode_inference_request_with_provider_strict() {
+    // Set up and make the inference request
+    let provider = get_provider();
+    let mut inference_request = create_json_mode_inference_request();
     inference_request.json_mode = JSONMode::Strict;
+    let client = reqwest::Client::new();
+    let result = provider.infer(&inference_request, &client).await.unwrap();
 
-    let provider = ProviderConfig::OpenAI(OpenAIProvider {
-        model_name: model_name.to_string(),
-        api_base: None,
-        api_key: Some(api_key),
-    });
-    let result = provider.infer(&inference_request, &client).await;
-    assert!(result.is_ok());
-    let result = result.unwrap();
+    // Check the result
     assert!(result.content.len() == 1);
     let content = result.content.first().unwrap();
+
     match content {
-        ContentBlock::Text(Text { text }) => {
-            // parse the result text and see if it matches the output schema
-            let result_json: serde_json::Value = serde_json::from_str(text)
-                .map_err(|_| format!(r#"Failed to parse JSON: "{text}""#))
-                .unwrap();
-            assert!(result_json.get("honest_answer").is_some());
-            assert!(result_json.get("mischevious_answer").is_some());
+        ContentBlock::Text(block) => {
+            let parsed_json: serde_json::Value = serde_json::from_str(&block.text).unwrap();
+            let parsed_json = parsed_json.as_object().unwrap();
+
+            assert!(parsed_json.len() == 1 || parsed_json.len() == 2);
+            assert!(parsed_json.get("answer").unwrap().as_str().unwrap() == "8");
+
+            // reasoning is optional
+            if parsed_json.len() == 2 {
+                assert!(parsed_json.keys().any(|key| key == "reasoning"));
+            }
         }
-        _ => panic!("Expected a text content block"),
+        _ => panic!("Unexpected content block: {:?}", content),
     }
-}
-
-#[tokio::test]
-async fn test_streaming_json_request() {
-    // Load API key from environment variable
-    let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY must be set");
-    let api_key = SecretString::new(api_key);
-    let model_name = "gpt-4o-mini";
-    let client = reqwest::Client::new();
-    let inference_request = create_streaming_json_inference_request();
-
-    let provider = ProviderConfig::OpenAI(OpenAIProvider {
-        model_name: model_name.to_string(),
-        api_base: None,
-        api_key: Some(api_key),
-    });
-    let result = provider.infer_stream(&inference_request, &client).await;
-    assert!(result.is_ok());
-    let (chunk, mut stream) = result.unwrap();
-    let mut collected_chunks = vec![chunk];
-    while let Some(chunk) = stream.next().await {
-        assert!(chunk.is_ok());
-        collected_chunks.push(chunk.unwrap());
-    }
-    assert!(!collected_chunks.is_empty());
-    // Fourth as an arbitrary middle chunk, the first and last may contain only metadata
-    assert!(collected_chunks[4].content.len() == 1);
-    assert!(collected_chunks.last().unwrap().usage.is_some());
 }

@@ -9,7 +9,7 @@ use crate::providers::common::{
     TestableProviderConfig,
 };
 
-crate::enforce_provider_tests!(AWSBedrockProvider);
+crate::generate_provider_tests!(AWSBedrockProvider);
 
 impl TestableProviderConfig for AWSBedrockProvider {
     async fn get_simple_inference_request_provider() -> Option<ProviderConfig> {
@@ -25,6 +25,14 @@ impl TestableProviderConfig for AWSBedrockProvider {
     }
 
     async fn get_tool_use_streaming_inference_request_provider() -> Option<ProviderConfig> {
+        Some(get_provider().await)
+    }
+
+    async fn get_json_mode_inference_request_provider() -> Option<ProviderConfig> {
+        Some(get_provider().await)
+    }
+
+    async fn get_json_mode_streaming_inference_request_provider() -> Option<ProviderConfig> {
         Some(get_provider().await)
     }
 }
@@ -83,9 +91,6 @@ async fn test_infer_with_tool_result() {
         _ => panic!("Unexpected content block: {:?}", content),
     }
 }
-
-#[tokio::test]
-async fn test_infer_with_tool_calls_stream() {}
 
 #[tokio::test]
 async fn test_infer_with_tool_result_stream() {
