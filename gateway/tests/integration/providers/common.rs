@@ -150,7 +150,7 @@ pub async fn test_streaming_inference_request_with_provider(provider: ProviderCo
     }
 }
 
-fn create_tool_use_inference_request() -> ModelInferenceRequest<'static> {
+pub fn create_tool_use_inference_request() -> ModelInferenceRequest<'static> {
     let messages = vec![RequestMessage {
         role: Role::User,
         content: vec!["What's the weather like in New York currently?"
