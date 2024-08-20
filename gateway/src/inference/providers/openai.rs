@@ -21,7 +21,7 @@ use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 const OPENAI_DEFAULT_BASE_URL: &str = "https://api.openai.com/v1/";
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct OpenAIProvider {
     pub model_name: String,
     pub api_base: Option<String>,

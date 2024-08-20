@@ -22,7 +22,7 @@ use super::{
     provider_trait::InferenceProvider,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct FireworksProvider {
     pub model_name: String,
     pub api_key: Option<SecretString>,

@@ -23,7 +23,7 @@ use crate::tool::{ToolCall, ToolChoice, ToolConfig};
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct GCPVertexGeminiProvider {
     pub request_url: String,
     pub streaming_request_url: String,

@@ -4,21 +4,20 @@ use serde::de::DeserializeOwned;
 use tracing::instrument;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::config_parser::get_config;
+use crate::config_parser::Config;
 use crate::error::Error;
 
 /// State for the API
 #[derive(Clone)]
 pub struct AppStateData {
+    pub config: &'static Config<'static>,
     pub http_client: Client,
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
 }
 pub type AppState = axum::extract::State<AppStateData>;
 
 impl AppStateData {
-    pub fn new() -> Result<Self, Error> {
-        let config = get_config();
-
+    pub fn new(config: &'static Config<'static>) -> Result<Self, Error> {
         let clickhouse_connection_info = if config.gateway.disable_observability {
             ClickHouseConnectionInfo::new_disabled()
         } else {
@@ -26,7 +25,7 @@ impl AppStateData {
                 message: "Missing environment variable CLICKHOUSE_URL".to_string(),
             })?;
 
-            let database = get_config()
+            let database = config
                 .clickhouse
                 .as_ref()
                 .map(|ch| ch.database.clone())
@@ -38,6 +37,7 @@ impl AppStateData {
         let http_client = Client::new();
 
         Ok(Self {
+            config,
             http_client,
             clickhouse_connection_info,
         })

@@ -18,7 +18,7 @@ use crate::{
     model::ModelConfig,
 };
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
@@ -26,7 +26,7 @@ pub enum VariantConfig {
     ChatCompletion(ChatCompletionConfig),
 }
 
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ChatCompletionConfig {
     pub weight: f64,
@@ -45,7 +45,7 @@ pub struct ChatCompletionConfig {
 /// Variants represent JSON mode in a slightly more abstract sense than ModelInferenceRequests, as
 /// we support coercing tool calls into JSON mode.
 /// This is represented as a tool config in the
-#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+#[derive(Debug, Default, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum JsonEnforcement {
     #[default]
