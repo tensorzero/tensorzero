@@ -359,8 +359,10 @@ enum GCPVertexGeminiTool<'a> {
 }
 
 impl<'a> From<&'a ToolConfig> for GCPVertexGeminiFunctionDeclaration<'a> {
+    #[allow(clippy::todo)] // TODO (#160)
     fn from(_tool: &'a ToolConfig) -> Self {
-        unimplemented!();
+        todo!()
+
         // let mut parameters = tool.parameters.value.clone();
         // if let Some(obj) = parameters.as_object_mut() {
         //     obj.remove("additionalProperties");
@@ -593,8 +595,10 @@ impl From<GCPVertexGeminiResponseContentPart> for ContentBlockChunk {
                     id: "0".to_string(),
                 })
             }
+            #[allow(clippy::todo)] // TODO (#160)
             GCPVertexGeminiResponseContentPart::FunctionCall { .. } => {
-                unimplemented!()
+                todo!()
+
                 // TODO (#19, #30): figure out how GCP does bookkeeping for streaming tool calls and implement this here.
                 // ContentBlock::ToolCall(ToolCall {
                 //     name: function_call.name,
@@ -1250,7 +1254,7 @@ mod tests {
                 r#"{"location": "New York", "unit": "celsius"}"#
             );
         } else {
-            unreachable!()
+            panic!("Expected a text and tool call content block");
         }
 
         assert_eq!(
@@ -1324,7 +1328,7 @@ mod tests {
                 r#"{"cuisine": "Italian", "price_range": "moderate"}"#
             );
         } else {
-            unreachable!(
+            panic!(
                 "Content does not match expected structure: {:?}",
                 model_inference_response.content
             );

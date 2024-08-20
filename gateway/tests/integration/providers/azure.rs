@@ -87,7 +87,7 @@ async fn test_infer_with_tool_calls() {
                 .expect("Failed to parse tool call arguments");
             assert!(arguments.get("location").is_some());
         }
-        _ => unreachable!(),
+        _ => panic!("Expected a tool call content block"),
     }
 }
 
@@ -125,7 +125,7 @@ async fn test_json_request() {
             assert!(result_json.get("honest_answer").is_some());
             assert!(result_json.get("mischevious_answer").is_some());
         }
-        _ => unreachable!(),
+        _ => panic!("Expected a text content block"),
     }
 }
 

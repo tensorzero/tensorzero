@@ -1221,7 +1221,7 @@ mod tests {
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_responses, vec![model_response]);
             }
-            _ => unreachable!(),
+            _ => panic!("Expected a JSON inference result"),
         }
 
         // Test with a correct content block
@@ -1261,7 +1261,7 @@ mod tests {
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_responses, vec![model_response]);
             }
-            _ => unreachable!(),
+            _ => panic!("Expected a JSON inference result"),
         }
 
         // Test with an incorrect JSON content block
@@ -1298,7 +1298,7 @@ mod tests {
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_responses, vec![model_response]);
             }
-            _ => unreachable!(),
+            _ => panic!("Expected a JSON inference result"),
         }
 
         // Test with a tool content block with bad output
@@ -1340,7 +1340,7 @@ mod tests {
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_responses, vec![model_response]);
             }
-            _ => unreachable!(),
+            _ => panic!("Expected a JSON inference result"),
         }
 
         // Test with a tool content block with good output
@@ -1384,7 +1384,7 @@ mod tests {
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_responses, vec![model_response]);
             }
-            _ => unreachable!(),
+            _ => panic!("Expected a JSON inference result"),
         }
 
         // Test with no content blocks

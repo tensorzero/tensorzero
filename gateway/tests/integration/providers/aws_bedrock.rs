@@ -84,7 +84,7 @@ async fn test_infer_with_tool_calls() {
                 .expect("Failed to parse tool call arguments");
             assert!(arguments.get("location").is_some());
         }
-        _ => unreachable!(),
+        _ => panic!("Unexpected content block: {:?}", content),
     }
 }
 
@@ -105,7 +105,7 @@ async fn test_infer_with_tool_result() {
             assert!(text.contains("New York"));
             assert!(text.contains("70"));
         }
-        _ => unreachable!(),
+        _ => panic!("Unexpected content block: {:?}", content),
     }
 }
 
@@ -134,7 +134,7 @@ async fn test_infer_with_tool_calls_stream() {
         ContentBlockChunk::ToolCall(tool_call) => {
             assert!(tool_call.name == "get_weather");
         }
-        _ => unreachable!(),
+        _ => panic!("Unexpected content block"),
     }
 
     // Collect all arguments and join the chunks' arguments
@@ -144,7 +144,7 @@ async fn test_infer_with_tool_calls_stream() {
         .map(|chunk| chunk.content.first().unwrap())
         .map(|content| match content {
             ContentBlockChunk::ToolCall(tool_call) => tool_call.arguments.clone(),
-            _ => unreachable!(),
+            _ => panic!("Unexpected content block: {:?}", content),
         })
         .collect::<Vec<String>>()
         .join("");
@@ -187,7 +187,7 @@ async fn test_infer_with_tool_result_stream() {
         .map(|chunk| chunk.content.first().unwrap())
         .map(|content| match content {
             ContentBlockChunk::Text(block) => block.text.clone(),
-            _ => unreachable!(),
+            b => panic!("Unexpected content block: {:?}", b),
         })
         .collect::<Vec<String>>()
         .join("");
