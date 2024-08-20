@@ -783,6 +783,7 @@ mod tests {
             name: "test".to_string(),
             description: "test".to_string(),
             parameters: DynamicJSONSchema::new(parameters.clone()),
+            strict: false,
         });
         let anthropic_tool: AnthropicTool = (&tool).into();
         assert_eq!(
