@@ -1,59 +1,41 @@
 use futures::StreamExt;
+
 use gateway::inference::providers::provider_trait::InferenceProvider;
 use gateway::inference::types::{ContentBlock, ContentBlockChunk, Text};
 use gateway::{inference::providers::aws_bedrock::AWSBedrockProvider, model::ProviderConfig};
 
 use crate::providers::common::{
-    create_simple_inference_request, create_streaming_inference_request,
     create_streaming_tool_inference_request, create_streaming_tool_result_inference_request,
     create_tool_inference_request, create_tool_result_inference_request,
+    test_simple_inference_request_with_provider, test_streaming_inference_request_with_provider,
 };
 
-#[tokio::test]
-async fn test_infer() {
+/// Get a provider with the default model and API key
+async fn get_provider() -> ProviderConfig {
     let model_id = "anthropic.claude-3-haiku-20240307-v1:0".to_string();
-    let provider =
-        ProviderConfig::AWSBedrock(AWSBedrockProvider::new(model_id, None).await.unwrap());
-    let client = reqwest::Client::new();
-    let inference_request = create_simple_inference_request();
-    let result = provider.infer(&inference_request, &client).await;
-
-    let result = result.unwrap();
-    assert!(result.content.len() == 1);
-    let content = result.content.first().unwrap();
-    match content {
-        ContentBlock::Text(Text { text }) => {
-            assert!(!text.is_empty());
-        }
-        _ => panic!("Unexpected content block: {:?}", content),
-    }
+    ProviderConfig::AWSBedrock(AWSBedrockProvider::new(model_id, None).await.unwrap())
 }
 
 #[tokio::test]
-async fn test_infer_with_region() {
+async fn test_simple_inference_request() {
+    test_simple_inference_request_with_provider(get_provider().await).await;
+}
+
+#[tokio::test]
+async fn test_simple_inference_request_with_region() {
     let model_id = "anthropic.claude-3-haiku-20240307-v1:0".to_string();
     let provider = ProviderConfig::AWSBedrock(
         AWSBedrockProvider::new(model_id, Some(aws_types::region::Region::new("us-east-1")))
             .await
             .unwrap(),
     );
-    let client = reqwest::Client::new();
-    let inference_request = create_simple_inference_request();
-    let result = provider.infer(&inference_request, &client).await;
 
-    let result = result.unwrap();
-    assert!(result.content.len() == 1);
-    let content = result.content.first().unwrap();
-    match content {
-        ContentBlock::Text(Text { text }) => {
-            assert!(!text.is_empty());
-        }
-        _ => panic!("Unexpected content block: {:?}", content),
-    }
+    test_simple_inference_request_with_provider(provider).await;
 }
 
 #[tokio::test]
-async fn test_infer_with_broken_region() {
+#[should_panic]
+async fn test_simple_inference_request_with_broken_region() {
     let model_id = "anthropic.claude-3-haiku-20240307-v1:0".to_string();
     let provider = ProviderConfig::AWSBedrock(
         AWSBedrockProvider::new(
@@ -63,31 +45,13 @@ async fn test_infer_with_broken_region() {
         .await
         .unwrap(),
     );
-    let client = reqwest::Client::new();
-    let inference_request = create_simple_inference_request();
-    let result = provider.infer(&inference_request, &client).await;
-    assert!(result.is_err(), "{}", result.unwrap_err());
+
+    test_simple_inference_request_with_provider(provider).await;
 }
 
 #[tokio::test]
-async fn test_infer_stream() {
-    let model_id = "anthropic.claude-3-haiku-20240307-v1:0".to_string();
-    let provider =
-        ProviderConfig::AWSBedrock(AWSBedrockProvider::new(model_id, None).await.unwrap());
-    let client = reqwest::Client::new();
-    let inference_request = create_streaming_inference_request();
-
-    let result = provider.infer_stream(&inference_request, &client).await;
-
-    let (chunk, mut stream) = result.unwrap();
-    let mut collected_chunks = vec![chunk];
-    while let Some(chunk) = stream.next().await {
-        collected_chunks.push(chunk.unwrap());
-    }
-    assert!(!collected_chunks.is_empty());
-    // Fourth as an arbitrary middle chunk
-    assert!(collected_chunks[4].content.len() == 1);
-    assert!(collected_chunks.last().unwrap().usage.is_some());
+async fn test_streaming_inference_request() {
+    test_streaming_inference_request_with_provider(get_provider().await).await;
 }
 
 #[tokio::test]
