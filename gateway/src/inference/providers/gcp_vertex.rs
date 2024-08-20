@@ -1334,7 +1334,7 @@ mod tests {
                 r#"{"location":"New York","unit":"celsius"}"#
             );
         } else {
-            unreachable!()
+            panic!("Expected a text and tool call content block");
         }
 
         assert_eq!(
@@ -1405,7 +1405,7 @@ mod tests {
                 r#"{"cuisine":"Italian","price_range":"moderate"}"#
             );
         } else {
-            unreachable!(
+            panic!(
                 "Content does not match expected structure: {:?}",
                 model_inference_response.content
             );

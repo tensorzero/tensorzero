@@ -31,7 +31,7 @@ async fn test_infer() {
         ContentBlock::Text(Text { text }) => {
             assert!(!text.is_empty());
         }
-        _ => unreachable!(),
+        _ => panic!("Expected a text content block"),
     }
 }
 
@@ -86,6 +86,6 @@ async fn test_infer_with_tool_calls() {
                 .expect("Failed to parse tool call arguments");
             assert!(arguments.get("location").is_some());
         }
-        _ => unreachable!(),
+        _ => panic!("Expected a tool call content block"),
     }
 }

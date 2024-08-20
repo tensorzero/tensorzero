@@ -462,7 +462,7 @@ mod tests {
         for content in collected_content {
             match content {
                 ContentBlockChunk::Text(text) => collected_content_str.push_str(&text.text),
-                _ => unreachable!(),
+                _ => panic!("Expected a text content block"),
             }
         }
         assert_eq!(collected_content_str, DUMMY_STREAMING_RESPONSE.join(""));
@@ -476,7 +476,7 @@ mod tests {
         assert!(response.is_err());
         let error = match response {
             Err(error) => error,
-            Ok(_) => unreachable!("Expected error, got Ok(_)"),
+            Ok(_) => panic!("Expected error, got Ok(_)"),
         };
         assert_eq!(
             error,
@@ -550,7 +550,7 @@ mod tests {
         for content in collected_content {
             match content {
                 ContentBlockChunk::Text(text) => collected_content_str.push_str(&text.text),
-                _ => unreachable!(),
+                _ => panic!("Expected a text content block"),
             }
         }
         assert_eq!(collected_content_str, DUMMY_STREAMING_RESPONSE.join(""));
