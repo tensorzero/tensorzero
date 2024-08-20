@@ -23,7 +23,7 @@ use super::{
     provider_trait::InferenceProvider,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct TogetherProvider {
     pub model_name: String,
     pub api_key: Option<SecretString>,

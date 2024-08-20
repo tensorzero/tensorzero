@@ -20,7 +20,7 @@ use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 const ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct AnthropicProvider {
     pub model_name: String,
     pub api_key: Option<SecretString>,

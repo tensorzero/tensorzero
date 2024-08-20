@@ -18,7 +18,7 @@ use super::openai::{
 };
 use super::provider_trait::InferenceProvider;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct AzureProvider {
     pub model_name: String,
     pub api_base: String,
