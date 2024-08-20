@@ -223,7 +223,6 @@ async fn write_production(
         FORMAT JSONEachRow\n\
         {row_json}"
     );
-
     let response = client
         .post(url)
         .body(query.clone())
