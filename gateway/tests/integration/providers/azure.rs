@@ -9,8 +9,20 @@ use gateway::model::ProviderConfig;
 use crate::providers::common::{
     create_json_inference_request, create_streaming_json_inference_request,
     create_tool_inference_request, test_simple_inference_request_with_provider,
-    test_streaming_inference_request_with_provider,
+    test_streaming_inference_request_with_provider, TestableProviderConfig,
 };
+
+crate::enforce_provider_tests!(AzureProvider);
+
+impl TestableProviderConfig for AzureProvider {
+    async fn get_simple_inference_request_provider() -> Option<ProviderConfig> {
+        Some(get_provider())
+    }
+
+    async fn get_streaming_inference_request_provider() -> Option<ProviderConfig> {
+        Some(get_provider())
+    }
+}
 
 /// Get a generic provider for testing
 fn get_provider() -> ProviderConfig {
@@ -29,16 +41,6 @@ fn get_provider() -> ProviderConfig {
         api_key,
         deployment_id,
     })
-}
-
-#[tokio::test]
-async fn test_simple_inference_request() {
-    test_simple_inference_request_with_provider(get_provider()).await;
-}
-
-#[tokio::test]
-async fn test_streaming_inference_request() {
-    test_streaming_inference_request_with_provider(get_provider()).await;
 }
 
 #[tokio::test]
