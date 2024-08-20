@@ -602,7 +602,6 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     }
 }
 
-// TODO: remove/refactor
 lazy_static! {
     static ref WEATHER_TOOL_CONFIG: StaticToolConfig = StaticToolConfig {
         name: "get_weather".to_string(),
@@ -615,13 +614,6 @@ lazy_static! {
             },
             "required": ["location"]
         })),
-        strict: true, // TODO!
+        strict: false,
     };
-    static ref WEATHER_TOOL: ToolConfig = ToolConfig::Static(&WEATHER_TOOL_CONFIG);
-}
-
-pub fn create_streaming_tool_result_inference_request() -> ModelInferenceRequest<'static> {
-    let mut request = create_tool_result_inference_request();
-    request.stream = true;
-    request
 }
