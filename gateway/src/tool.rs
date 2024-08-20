@@ -23,6 +23,8 @@ pub struct Tool {
     pub description: String,
     pub parameters: Value,
     pub name: String,
+    #[serde(default)]
+    pub strict: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -38,6 +40,7 @@ pub struct StaticToolConfig {
     pub description: String,
     pub parameters: JSONSchemaFromPath,
     pub name: String,
+    pub strict: bool,
 }
 
 /// Contains the configuration information for a tool defined at runtime
@@ -46,6 +49,7 @@ pub struct DynamicToolConfig {
     pub description: String,
     pub parameters: DynamicJSONSchema,
     pub name: String,
+    pub strict: bool,
 }
 
 /// Contains the configuration information for a tool used in implicit tool calling for
@@ -114,6 +118,7 @@ impl ToolCallConfig {
                         description: tool.description,
                         parameters: DynamicJSONSchema::new(tool.parameters),
                         name: tool.name,
+                        strict: tool.strict,
                     })
                 })
             },
@@ -305,6 +310,14 @@ impl ToolConfig {
             ToolConfig::Implicit(_config) => IMPLICIT_TOOL_NAME,
         }
     }
+
+    pub fn strict(&self) -> bool {
+        match self {
+            ToolConfig::Static(config) => config.strict,
+            ToolConfig::Dynamic(config) => config.strict,
+            ToolConfig::Implicit(_config) => false,
+        }
+    }
 }
 
 impl From<ToolCallConfig> for ToolCallConfigDatabaseInsert {
@@ -327,6 +340,7 @@ impl From<ToolConfig> for Tool {
             description: tool_config.description().to_string(),
             parameters: tool_config.parameters().clone(),
             name: tool_config.name().to_string(),
+            strict: tool_config.strict(),
         }
     }
 }
@@ -352,6 +366,7 @@ mod tests {
                     },
                         "required": ["location"]
                     })),
+                    strict: true,
                 },
             );
             map.insert(
@@ -369,6 +384,7 @@ mod tests {
                         },
                         "required": ["keyword"]
                     })),
+                    strict: false,
                 },
             );
             map
@@ -409,6 +425,8 @@ mod tests {
         assert_eq!(tool_call_config.tools_available.len(), 2);
         assert_eq!(tool_call_config.tool_choice, ToolChoice::Auto);
         assert!(tool_call_config.parallel_tool_calls);
+        assert!(tool_call_config.tools_available[0].strict());
+        assert!(!tool_call_config.tools_available[1].strict());
 
         // Empty tools in function and config but we specify an allowed tool (should fail)
         let dynamic_tool_params = DynamicToolParams {
@@ -479,6 +497,7 @@ mod tests {
                 name: "establish_campground".to_string(),
                 description: "Establish a campground".to_string(),
                 parameters: json!({}),
+                strict: false,
             }]),
             ..Default::default()
         };
@@ -494,6 +513,7 @@ mod tests {
         assert_eq!(tool_call_config.tools_available.len(), 1);
         let first_tool = tool_call_config.tools_available.first().unwrap();
         assert_eq!(first_tool.name(), "establish_campground");
+        assert!(!first_tool.strict());
 
         // We pass a list of a single allowed tool and then configure a new tool
         // This should remove the other configured tools and add the new tool
@@ -503,6 +523,7 @@ mod tests {
                 name: "establish_campground".to_string(),
                 description: "Establish a campground".to_string(),
                 parameters: json!({}),
+                strict: false,
             }]),
             parallel_tool_calls: Some(false),
             ..Default::default()
@@ -534,6 +555,7 @@ mod tests {
                 name: "establish_campground".to_string(),
                 description: "Establish a campground".to_string(),
                 parameters: json!({}),
+                strict: false,
             }]),
             tool_choice: Some(ToolChoice::Tool("establish_campground".to_string())),
             ..Default::default()
@@ -557,6 +579,7 @@ mod tests {
             tool_call_config.tool_choice,
             ToolChoice::Tool("establish_campground".to_string())
         );
+        assert!(!tool_call_config.tools_available[0].strict());
     }
 
     #[tokio::test]
@@ -641,6 +664,7 @@ mod tests {
                     name: "establish_campground".to_string(),
                     description: "Establish a campground".to_string(),
                     parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}, "required": ["location"]}),
+                    strict: false,
                 }]),
                 ..Default::default()
             },

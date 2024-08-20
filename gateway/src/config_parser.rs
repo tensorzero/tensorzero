@@ -572,6 +572,8 @@ impl UninitializedFunctionConfig {
 pub struct UninitializedToolConfig {
     pub description: String,
     pub parameters: PathBuf,
+    #[serde(default)]
+    pub strict: bool,
 }
 
 impl UninitializedToolConfig {
@@ -585,6 +587,7 @@ impl UninitializedToolConfig {
             name,
             description: self.description,
             parameters,
+            strict: self.strict,
         })
     }
 }

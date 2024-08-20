@@ -15,7 +15,8 @@ lazy_static! {
                 "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]}
             },
             "required": ["location"]
-        }))
+        })),
+        strict: false,
     };
     pub static ref WEATHER_TOOL: ToolConfig = ToolConfig::Static(&WEATHER_TOOL_CONFIG_STATIC);
     pub static ref WEATHER_TOOL_CHOICE: ToolChoice = ToolChoice::Tool("get_weather".to_string());
@@ -34,7 +35,8 @@ lazy_static! {
                 "year": {"type": "integer"}
             },
             "required": ["query", "year"]
-        }))
+        })),
+        strict: true,
     };
     pub static ref QUERY_TOOL: ToolConfig = ToolConfig::Static(&QUERY_TOOL_CONFIG);
     pub static ref ANY_TOOL_CHOICE: ToolChoice = ToolChoice::Required;

@@ -1012,7 +1012,8 @@ async fn test_inference_dynamic_tools() {
                 "type": "string"
               }
             },
-            "required": ["location"]
+            "required": ["location"],
+            "strict": true
           }, "description": "Get the weather for a given location"}],
         "tool_choice": {"tool": "get_weather"}
 

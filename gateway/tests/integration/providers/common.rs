@@ -200,7 +200,8 @@ lazy_static! {
                 "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]}
             },
             "required": ["location"]
-        }))
+        })),
+        strict: true,
     };
     static ref WEATHER_TOOL: ToolConfig = ToolConfig::Static(&WEATHER_TOOL_CONFIG);
     static ref TOOL_CONFIG_SPECIFIC: ToolCallConfig = ToolCallConfig {
