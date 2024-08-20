@@ -18,6 +18,10 @@ impl TestableProviderConfig for AnthropicProvider {
     async fn get_tool_use_inference_request_provider() -> Option<ProviderConfig> {
         Some(get_provider())
     }
+
+    async fn get_tool_use_streaming_inference_request_provider() -> Option<ProviderConfig> {
+        Some(get_provider())
+    }
 }
 
 /// Get a generic provider for testing

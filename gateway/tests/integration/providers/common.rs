@@ -4,6 +4,7 @@ use serde_json::json;
 
 use gateway::inference::providers::azure::AzureProvider;
 use gateway::inference::providers::provider_trait::InferenceProvider;
+use gateway::inference::providers::together::TogetherProvider;
 use gateway::inference::types::{
     ContentBlock, ContentBlockChunk, FunctionType, JSONMode, ModelInferenceRequest, RequestMessage,
     Role,
@@ -25,6 +26,7 @@ pub trait TestableProviderConfig {
     async fn get_simple_inference_request_provider() -> Option<ProviderConfig>;
     async fn get_streaming_inference_request_provider() -> Option<ProviderConfig>;
     async fn get_tool_use_inference_request_provider() -> Option<ProviderConfig>;
+    async fn get_tool_use_streaming_inference_request_provider() -> Option<ProviderConfig>;
 }
 
 #[macro_export]
@@ -33,6 +35,7 @@ macro_rules! enforce_provider_tests {
         use $crate::providers::common::test_simple_inference_request_with_provider;
         use $crate::providers::common::test_streaming_inference_request_with_provider;
         use $crate::providers::common::test_tool_use_inference_request_with_provider;
+        use $crate::providers::common::test_tool_use_streaming_inference_request_with_provider;
 
         #[tokio::test]
         async fn test_simple_inference_request() {
@@ -55,6 +58,14 @@ macro_rules! enforce_provider_tests {
             let provider = $struct_name::get_tool_use_inference_request_provider().await;
             if let Some(provider) = provider {
                 test_tool_use_inference_request_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_tool_use_streaming_inference_request() {
+            let provider = $struct_name::get_tool_use_streaming_inference_request_provider().await;
+            if let Some(provider) = provider {
+                test_tool_use_streaming_inference_request_with_provider(provider).await;
             }
         }
     };
@@ -139,8 +150,7 @@ pub async fn test_streaming_inference_request_with_provider(provider: ProviderCo
 
     // Check the usage
     match provider {
-        // NOTE: Azure OpenAI service does not return streaming usage and to the best of our knowledge
-        // there's no way to get it to do so.
+        // NOTE: Azure does not return usage for streaming inference (to the best of our knowledge)
         ProviderConfig::Azure(AzureProvider { .. }) => {
             assert!(collected_chunks.last().unwrap().usage.is_none());
         }
@@ -194,9 +204,86 @@ pub async fn test_tool_use_inference_request_with_provider(provider: ProviderCon
 
             let arguments: serde_json::Value = serde_json::from_str(&tool_call.arguments)
                 .expect("Failed to parse tool call arguments");
-            assert!(arguments.get("location").is_some());
+            let arguments = arguments.as_object().unwrap();
+
+            assert!(arguments.len() == 1 || arguments.len() == 2);
+            assert!(arguments.keys().any(|key| key == "location"));
+            assert!(arguments["location"] == "New York");
+
+            // unit is optional
+            if arguments.len() == 2 {
+                assert!(arguments.keys().any(|key| key == "unit"));
+                assert!(arguments["unit"] == "celsius" || arguments["unit"] == "fahrenheit");
+            }
         }
         _ => panic!("Unexpected content block: {:?}", content),
+    }
+}
+
+pub async fn test_tool_use_streaming_inference_request_with_provider(provider: ProviderConfig) {
+    // Set up and make the inference request
+    let client = reqwest::Client::new();
+    let mut inference_request = create_tool_use_inference_request();
+    inference_request.stream = true;
+    let result = provider
+        .infer_stream(&inference_request, &client)
+        .await
+        .unwrap();
+
+    // Collect the chunks
+    let (chunk, mut stream) = result;
+    let mut collected_chunks = vec![chunk];
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.unwrap();
+        collected_chunks.push(chunk);
+    }
+
+    // Check tool name
+    for chunk in &collected_chunks {
+        match chunk.content.first() {
+            Some(ContentBlockChunk::ToolCall(tool_call)) => {
+                assert!(tool_call.name == "get_weather");
+            }
+            None => continue, // we might get empty chunks (e.g. the usage chunk)
+            _ => panic!("Unexpected content block"),
+        }
+    }
+
+    // Check tool arguments
+    let arguments = collected_chunks
+        .iter()
+        .filter(|chunk| !chunk.content.is_empty())
+        .map(|chunk| chunk.content.first().unwrap())
+        .map(|content| match content {
+            ContentBlockChunk::ToolCall(tool_call) => tool_call.arguments.clone(),
+            _ => panic!("Unexpected content block: {:?}", content),
+        })
+        .collect::<Vec<String>>()
+        .join("");
+
+    let arguments: serde_json::Value = serde_json::from_str(&arguments).unwrap();
+    let arguments = arguments.as_object().unwrap();
+
+    assert!(arguments.len() == 1 || arguments.len() == 2);
+    assert!(arguments.keys().any(|key| key == "location"));
+    assert!(arguments["location"] == "New York");
+
+    // unit is optional
+    if arguments.len() == 2 {
+        assert!(arguments.keys().any(|key| key == "unit"));
+        assert!(arguments["unit"] == "celsius" || arguments["unit"] == "fahrenheit");
+    }
+
+    // Check the usage
+    match provider {
+        // NOTE: Azure and Together do not return usage for streaming tool use (to the best of our knowledge)
+        ProviderConfig::Azure(AzureProvider { .. })
+        | ProviderConfig::Together(TogetherProvider { .. }) => {
+            assert!(collected_chunks.last().unwrap().usage.is_none());
+        }
+        _ => {
+            assert!(collected_chunks.last().unwrap().usage.is_some());
+        }
     }
 }
 

@@ -23,6 +23,10 @@ impl TestableProviderConfig for AWSBedrockProvider {
     async fn get_tool_use_inference_request_provider() -> Option<ProviderConfig> {
         Some(get_provider().await)
     }
+
+    async fn get_tool_use_streaming_inference_request_provider() -> Option<ProviderConfig> {
+        Some(get_provider().await)
+    }
 }
 
 /// Get a generic provider for testing

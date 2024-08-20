@@ -26,6 +26,10 @@ impl TestableProviderConfig for FireworksProvider {
     async fn get_tool_use_inference_request_provider() -> Option<ProviderConfig> {
         Some(get_provider_tool_use())
     }
+
+    async fn get_tool_use_streaming_inference_request_provider() -> Option<ProviderConfig> {
+        Some(get_provider_tool_use())
+    }
 }
 
 /// Get a generic provider for testing
