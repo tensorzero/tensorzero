@@ -11,6 +11,7 @@ use std::{
 use uuid::Uuid;
 
 use crate::endpoints::inference::InferenceDatabaseInsertMetadata;
+use crate::endpoints::inference::InferenceParams;
 use crate::function::FunctionConfig;
 use crate::tool::ToolCallConfigDatabaseInsert;
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolResult};
@@ -260,8 +261,8 @@ pub struct InferenceDatabaseInsert {
     pub episode_id: Uuid,
     pub input: String,
     pub output: String,
-    pub tool_params: String,
-    pub inference_params: String,
+    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    pub inference_params: InferenceParams,
     pub processing_time_ms: u32,
 }
 
@@ -499,28 +500,9 @@ impl InferenceDatabaseInsert {
         metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
         let processing_time_ms = metadata.processing_time.as_millis() as u32;
-        let tool_params = match metadata.tool_params {
-            Some(tool_params) => {
-                let tool_params: ToolCallConfigDatabaseInsert = tool_params.into();
-                serde_json::to_string(&tool_params)
-                    .map_err(|e| Error::Serialization {
-                        message: format!("Failed to serialize tool params: {}", e),
-                    })
-                    .unwrap_or_else(|e| {
-                        e.log();
-                        String::new()
-                    })
-            }
-            None => String::new(),
-        };
-        let inference_params = serde_json::to_string(&metadata.inference_params)
-            .map_err(|e| Error::Serialization {
-                message: format!("Failed to serialize inference params: {}", e),
-            })
-            .unwrap_or_else(|e| {
-                e.log();
-                String::new()
-            });
+
+        let tool_params = metadata.tool_params.map(ToolCallConfigDatabaseInsert::from);
+        let inference_params = metadata.inference_params;
         match inference_response {
             InferenceResult::Chat(chat_response) => {
                 let output = serde_json::to_string(&chat_response.output)
@@ -995,19 +977,22 @@ mod tests {
 
         // Test Case 3: a JSON string that passes validation and also include usage in each chunk
         let inference_id = Uuid::now_v7();
-        let output_schema = JSONSchemaFromPath::from_value(&serde_json::json!({
+        let output_schema = serde_json::json!({
             "type": "object",
             "properties": {
                 "name": {"type": "string"},
                 "age": {"type": "number"}
             },
             "required": ["name", "age"]
-        }));
+        });
+        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
+        let output_schema = JSONSchemaFromPath::from_value(&output_schema);
         let function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
+            implicit_tool_call_config,
             output_schema,
         });
         let usage1 = Usage {
@@ -1161,6 +1146,85 @@ mod tests {
             assert_eq!(chat_response.usage, usage);
         } else {
             panic!("Expected Ok(InferenceResult::Chat), got {:?}", result);
+        }
+
+        // Test Case 6: a JSON function with implicit tool call config
+        let inference_id = Uuid::now_v7();
+        let output_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "age": {"type": "number"}
+            },
+            "required": ["name", "age"]
+        });
+        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
+        let output_schema = JSONSchemaFromPath::from_value(&output_schema);
+        let function_config = FunctionConfig::Json(FunctionConfigJson {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            implicit_tool_call_config,
+            output_schema,
+        });
+        let usage1 = Usage {
+            prompt_tokens: 10,
+            completion_tokens: 5,
+        };
+        let usage2 = Usage {
+            prompt_tokens: 5,
+            completion_tokens: 10,
+        };
+        let chunks = vec![
+            ModelInferenceResponseChunk {
+                inference_id,
+                content: vec![ContentBlockChunk::ToolCall(ToolCallChunk {
+                    name: "respond".to_string(),
+                    arguments: "{\"name\":".to_string(),
+                    id: "0".to_string(),
+                })],
+                created,
+                usage: Some(usage1.clone()),
+                raw_response: "{\"name\":".to_string(),
+                latency: Duration::from_millis(150),
+            },
+            ModelInferenceResponseChunk {
+                inference_id,
+                content: vec![ContentBlockChunk::ToolCall(ToolCallChunk {
+                    name: "respond".to_string(),
+                    arguments: "\"John\",\"age\":30}".to_string(),
+                    id: "0".to_string(),
+                })],
+                created,
+                usage: Some(usage2.clone()),
+                raw_response: "\"John\",\"age\":30}".to_string(),
+                latency: Duration::from_millis(250),
+            },
+        ];
+        let response = collect_chunks(chunks, &function_config, None)
+            .await
+            .unwrap();
+        match response {
+            InferenceResult::Json(json_result) => {
+                assert_eq!(json_result.inference_id, inference_id);
+                assert_eq!(
+                    json_result.output.parsed,
+                    Some(serde_json::json!({"name": "John", "age": 30}))
+                );
+                assert_eq!(
+                    json_result.output.raw,
+                    "{\"name\":\"John\",\"age\":30}".to_string()
+                );
+                assert_eq!(
+                    json_result.usage,
+                    Usage {
+                        prompt_tokens: 15,
+                        completion_tokens: 15,
+                    }
+                );
+            }
+            _ => panic!("Expected Json inference response"),
         }
     }
 }

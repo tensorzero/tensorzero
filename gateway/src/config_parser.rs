@@ -8,7 +8,10 @@ use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelConfig;
-use crate::tool::{StaticToolConfig, ToolChoice};
+use crate::tool::{
+    ImplicitToolConfig, StaticToolConfig, ToolCallConfig, ToolChoice, ToolConfig,
+    IMPLICIT_TOOL_NAME,
+};
 use crate::variant::VariantConfig;
 
 static CONFIG: OnceLock<Config> = OnceLock::new();
@@ -549,13 +552,24 @@ impl UninitializedFunctionConfig {
                     .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
                     .transpose()?;
                 let output_schema =
+                    JSONSchemaFromPath::new(params.output_schema.clone(), base_path.as_ref())?;
+                let implicit_tool_output_schema =
                     JSONSchemaFromPath::new(params.output_schema, base_path.as_ref())?;
+                let implicit_tool = ToolConfig::Implicit(ImplicitToolConfig {
+                    parameters: implicit_tool_output_schema,
+                });
+                let implicit_tool_call_config = ToolCallConfig {
+                    tools_available: vec![implicit_tool],
+                    tool_choice: ToolChoice::Tool(IMPLICIT_TOOL_NAME.to_string()),
+                    parallel_tool_calls: false,
+                };
                 Ok(FunctionConfig::Json(FunctionConfigJson {
                     variants: params.variants,
                     system_schema,
                     user_schema,
                     assistant_schema,
                     output_schema,
+                    implicit_tool_call_config,
                 }))
             }
         }

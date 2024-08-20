@@ -271,6 +271,13 @@ weight = 1
 model = "json"
 system_template = "config/functions/json_succeed/prompt/system_template.minijinja"
 
+[functions.json_succeed.variants.anthropic]
+type = "chat_completion"
+weight = 0
+model = "claude-3-haiku-20240307-anthropic"
+system_template = "config/functions/json_succeed/prompt/system_template.minijinja"
+json_mode = "implicit_tool"
+
 [functions.json_succeed.variants.azure]
 type = "chat_completion"
 weight = 0
