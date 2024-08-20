@@ -16,8 +16,8 @@ use crate::{
 use super::{
     openai::{
         get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
-        stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseWithLatency, OpenAITool,
-        OpenAIToolChoice,
+        stream_openai, OpenAIFunction, OpenAIRequestMessage, OpenAIResponse,
+        OpenAIResponseWithLatency, OpenAITool, OpenAIToolChoice, OpenAIToolType,
     },
     provider_trait::InferenceProvider,
 };
@@ -167,7 +167,7 @@ struct FireworksRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     response_format: Option<FireworksResponseFormat<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<OpenAITool<'a>>>,
+    tools: Option<Vec<FireworksTool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<OpenAIToolChoice<'a>>,
 }
@@ -184,6 +184,8 @@ impl<'a> FireworksRequest<'a> {
         };
         let messages = prepare_openai_messages(request);
         let (tools, tool_choice, _) = prepare_openai_tools(request);
+        let tools = tools.map(|t| t.into_iter().map(|tool| tool.into()).collect());
+
         FireworksRequest {
             messages,
             model,
@@ -193,6 +195,21 @@ impl<'a> FireworksRequest<'a> {
             response_format,
             tools,
             tool_choice,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+struct FireworksTool<'a> {
+    r#type: OpenAIToolType,
+    function: OpenAIFunction<'a>,
+}
+
+impl<'a> From<OpenAITool<'a>> for FireworksTool<'a> {
+    fn from(tool: OpenAITool<'a>) -> Self {
+        FireworksTool {
+            r#type: tool.r#type,
+            function: tool.function,
         }
     }
 }
