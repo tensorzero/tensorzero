@@ -12,7 +12,9 @@ async fn get_providers() -> TestProviders {
     let provider = Box::leak(Box::new(get_provider()));
     let provider_tool_use = Box::leak(Box::new(get_provider_tool_use()));
 
-    // TODO (#80): Together's function calling format seems slightly different from OpenAI (breaking)
+    // TODOs (#80):
+    // - Together seems to have a different format for tool use responses compared to OpenAI (breaking)
+    // - Together's function calling for Llama 3.1 is different from Llama 3.0 (breaking) - we should test both
     TestProviders {
         simple_inference: vec![provider],
         streaming_inference: vec![provider],
@@ -39,7 +41,6 @@ fn get_provider() -> ProviderConfig {
 }
 
 // Get a generic provider for tool use
-// TODO (#80): Together has a different function calling format for Llama 3.
 fn get_provider_tool_use() -> ProviderConfig {
     // Get a generic provider for testing
     let api_key = env::var("TOGETHER_API_KEY").expect("TOGETHER_API_KEY must be set");
