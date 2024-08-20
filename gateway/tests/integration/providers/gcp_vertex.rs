@@ -1,6 +1,7 @@
 use futures::StreamExt;
 use serde_json::{json, Value};
 
+use gateway::inference::providers::gcp_vertex::GCPVertexGeminiProvider;
 use gateway::inference::providers::provider_trait::InferenceProvider;
 use gateway::inference::types::{ContentBlock, ContentBlockChunk, Text};
 use gateway::model::ProviderConfig;
@@ -9,7 +10,20 @@ use crate::providers::common::{
     create_json_inference_request, create_streaming_json_inference_request,
     create_streaming_tool_inference_request, create_tool_inference_request,
     test_simple_inference_request_with_provider, test_streaming_inference_request_with_provider,
+    TestableProviderConfig,
 };
+
+crate::enforce_provider_tests!(GCPVertexGeminiProvider);
+
+impl TestableProviderConfig for GCPVertexGeminiProvider {
+    async fn get_simple_inference_request_provider() -> Option<ProviderConfig> {
+        Some(get_provider())
+    }
+
+    async fn get_streaming_inference_request_provider() -> Option<ProviderConfig> {
+        Some(get_provider())
+    }
+}
 
 /// Get a generic provider for testing
 fn get_provider() -> ProviderConfig {
@@ -17,16 +31,6 @@ fn get_provider() -> ProviderConfig {
     let gcp_project_id = "tensorzero-public";
     provider_config_json["project_id"] = Value::String(gcp_project_id.to_string());
     serde_json::from_value(provider_config_json).unwrap()
-}
-
-#[tokio::test]
-async fn test_simple_inference_request() {
-    test_simple_inference_request_with_provider(get_provider()).await;
-}
-
-#[tokio::test]
-async fn test_streaming_inference_request() {
-    test_streaming_inference_request_with_provider(get_provider()).await;
 }
 
 // Gemini Flash does not support JSON mode using an output schema -- the model provider knows this automatically

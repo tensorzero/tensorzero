@@ -14,6 +14,39 @@ use gateway::tool::{
     StaticToolConfig, ToolCall, ToolCallConfig, ToolChoice, ToolConfig, ToolResult,
 };
 
+/// Enforce that every provider implements a common set of tests.
+///
+/// To achieve that, each provider should implement the TestableProviderConfig trait and call the
+/// `enforce_provider_tests!` macro.
+///
+/// If some test doesn't apply to a particular provider (e.g. provider doesn't support tool use),
+/// then the provider should return `None` from the corresponding method.
+pub trait TestableProviderConfig {
+    async fn get_simple_inference_request_provider() -> Option<ProviderConfig>;
+    async fn get_streaming_inference_request_provider() -> Option<ProviderConfig>;
+}
+
+#[macro_export]
+macro_rules! enforce_provider_tests {
+    ($struct_name:ident) => {
+        #[tokio::test]
+        async fn test_simple_inference_request() {
+            let provider = $struct_name::get_simple_inference_request_provider().await;
+            if let Some(provider) = provider {
+                test_simple_inference_request_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_streaming_inference_request() {
+            let provider = $struct_name::get_streaming_inference_request_provider().await;
+            if let Some(provider) = provider {
+                test_streaming_inference_request_with_provider(provider).await;
+            }
+        }
+    };
+}
+
 fn create_simple_inference_request<'a>() -> ModelInferenceRequest<'a> {
     let messages = vec![RequestMessage {
         role: Role::User,
@@ -167,7 +200,8 @@ lazy_static! {
                 "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]}
             },
             "required": ["location"]
-        }))
+        })),
+        strict: true,
     };
     static ref WEATHER_TOOL: ToolConfig = ToolConfig::Static(&WEATHER_TOOL_CONFIG);
     static ref TOOL_CONFIG_SPECIFIC: ToolCallConfig = ToolCallConfig {
