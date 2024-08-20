@@ -3,7 +3,7 @@ use secrecy::SecretString;
 use std::env;
 
 use gateway::inference::providers::{openai::OpenAIProvider, provider_trait::InferenceProvider};
-use gateway::inference::types::{ContentBlock, JSONMode, Text};
+use gateway::inference::types::{ContentBlock, ContentBlockChunk, JSONMode, Text};
 use gateway::model::ProviderConfig;
 
 use crate::providers::common::{
@@ -68,6 +68,45 @@ async fn test_infer_with_tool_calls() {
             let arguments: serde_json::Value = serde_json::from_str(&tool_call.arguments)
                 .expect("Failed to parse tool call arguments");
             assert!(arguments.get("location").is_some());
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[tokio::test]
+async fn test_infer_stream_with_tool_calls() {
+    // Load API key from environment variable
+    let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY must be set");
+    let api_key = SecretString::new(api_key);
+    let model_name = "gpt-4o-mini";
+    let client = reqwest::Client::new();
+
+    let mut inference_request = create_tool_inference_request();
+    inference_request.stream = true;
+
+    let base_url = None;
+    let provider = ProviderConfig::OpenAI(OpenAIProvider {
+        model_name: model_name.to_string(),
+        api_base: base_url,
+        api_key: Some(api_key),
+    });
+
+    let result = provider.infer_stream(&inference_request, &client).await;
+    assert!(result.is_ok());
+    let (chunk, mut stream) = result.unwrap();
+    let mut collected_chunks = vec![chunk];
+    while let Some(chunk) = stream.next().await {
+        assert!(chunk.is_ok());
+        collected_chunks.push(chunk.unwrap());
+    }
+    assert!(!collected_chunks.is_empty());
+    // Fourth as an arbitrary middle chunk, the first and last may contain only metadata
+    assert!(collected_chunks[4].content.len() == 1);
+    assert!(collected_chunks.last().unwrap().usage.is_some());
+    let third_chunk = collected_chunks.get(3).unwrap();
+    match third_chunk.content.first().unwrap() {
+        ContentBlockChunk::ToolCall(tool_call) => {
+            assert!(tool_call.name == "get_weather");
         }
         _ => unreachable!(),
     }

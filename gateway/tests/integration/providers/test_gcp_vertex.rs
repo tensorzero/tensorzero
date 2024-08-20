@@ -2,7 +2,7 @@ use futures::StreamExt;
 use serde_json::{json, Value};
 
 use gateway::inference::providers::provider_trait::InferenceProvider;
-use gateway::inference::types::{ContentBlock, Text};
+use gateway::inference::types::{ContentBlock, ContentBlockChunk, Text};
 use gateway::model::ProviderConfig;
 
 use crate::providers::common::{
@@ -166,6 +166,40 @@ async fn test_infer_with_tool_calls_flash() {
         _ => unreachable!(),
     }
 }
+
+#[tokio::test]
+async fn test_infer_stream_with_tool_calls() {
+    // Load API key from environment variable
+    let mut provider_config_json = json!({"type": "gcp_vertex_gemini", "model_id": "gemini-1.5-flash-001", "location": "us-central1"});
+    let gcp_project_id = "tensorzero-public";
+    provider_config_json["project_id"] = Value::String(gcp_project_id.to_string());
+    let provider: ProviderConfig = serde_json::from_value(provider_config_json).unwrap();
+    let client = reqwest::Client::new();
+
+    let mut inference_request = create_tool_inference_request();
+    inference_request.stream = true;
+
+    let result = provider.infer_stream(&inference_request, &client).await;
+    assert!(result.is_ok());
+    let (chunk, mut stream) = result.unwrap();
+    let mut collected_chunks = vec![chunk];
+    while let Some(chunk) = stream.next().await {
+        assert!(chunk.is_ok());
+        collected_chunks.push(chunk.unwrap());
+    }
+    assert!(!collected_chunks.is_empty());
+    // Fourth as an arbitrary middle chunk, the first and last may contain only metadata
+    assert!(collected_chunks[4].content.len() == 1);
+    assert!(collected_chunks.last().unwrap().usage.is_some());
+    let third_chunk = collected_chunks.get(3).unwrap();
+    match third_chunk.content.first().unwrap() {
+        ContentBlockChunk::ToolCall(tool_call) => {
+            assert!(tool_call.name == "get_weather");
+        }
+        _ => unreachable!(),
+    }
+}
+
 // Gemini Flash does not support JSON mode using an output schema -- the model provider knows this automatically
 // We test the Flash and Pro here so that we can test both code paths
 #[tokio::test]

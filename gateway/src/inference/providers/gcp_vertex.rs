@@ -18,7 +18,7 @@ use crate::inference::types::{
     ModelInferenceRequest, ModelInferenceResponse, ModelInferenceResponseChunk,
     ModelInferenceResponseStream, RequestMessage, Usage,
 };
-use crate::tool::{ToolCall, ToolChoice, ToolConfig};
+use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
@@ -239,6 +239,7 @@ fn stream_gcp_vertex_gemini(
                 Ok(event) => match event {
                     Event::Open => continue,
                     Event::Message(message) => {
+                        println!("Message: {:?}", message);
                         let data: Result<GCPVertexGeminiResponse, Error> = serde_json::from_str(&message.data).map_err(|e| Error::GCPVertexServer {
                             message: format!("Error parsing response: {e}"),
                         });
@@ -593,7 +594,7 @@ fn prepare_tools<'a>(
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct GCPVertexGeminiResponseFunctionCall {
     name: String,
     args: Value,
@@ -620,14 +621,19 @@ impl From<GCPVertexGeminiResponseContentPart> for ContentBlockChunk {
                     id: "0".to_string(),
                 })
             }
-            GCPVertexGeminiResponseContentPart::FunctionCall { .. } => {
-                unimplemented!()
+            GCPVertexGeminiResponseContentPart::FunctionCall(function_call) => {
+                println!("Function call: {:?}", function_call);
                 // TODO (#19, #30): figure out how GCP does bookkeeping for streaming tool calls and implement this here.
                 // ContentBlock::ToolCall(ToolCall {
                 //     name: function_call.name,
                 //     arguments: function_call.args,
                 //     id: Uuid::now_v7().to_string(),
                 // })
+                ContentBlockChunk::ToolCall(ToolCallChunk {
+                    name: function_call.name,
+                    arguments: serde_json::to_string(&function_call.args).unwrap(),
+                    id: "0".to_string(),
+                })
             }
         }
     }
