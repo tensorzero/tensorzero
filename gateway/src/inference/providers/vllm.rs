@@ -16,8 +16,8 @@ use crate::{
 use super::{
     openai::{
         get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
-        stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseWithLatency, OpenAITool,
-        OpenAIToolChoice,
+        stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseWithLatency,
+        StreamOptions,
     },
     provider_trait::InferenceProvider,
 };
@@ -31,7 +31,8 @@ pub struct VLLMProvider {
 
 /// Key differences between vLLM and OpenAI inference:
 /// - vLLM supports guided decoding
-/// - vLLM only supports a specific tool and nothing else
+/// - vLLM only supports a specific tool and nothing else (and the implementation varies among LLMs)
+///   Today, we can't support this so we are leaving it as an open issue.
 impl InferenceProvider for VLLMProvider {
     async fn infer<'a>(
         &'a self,
@@ -42,7 +43,7 @@ impl InferenceProvider for VLLMProvider {
             provider_name: "vLLM".to_string(),
         })?;
         let api_base = Some(self.api_base.as_str());
-        let request_body = VLLMRequest::new(&self.model_name, request);
+        let request_body = VLLMRequest::new(&self.model_name, request)?;
         let request_url = get_chat_url(api_base)?;
         let start_time = Instant::now();
         let res = http_client
@@ -90,7 +91,7 @@ impl InferenceProvider for VLLMProvider {
         let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
             provider_name: "vLLM".to_string(),
         })?;
-        let request_body = VLLMRequest::new(&self.model_name, request);
+        let request_body = VLLMRequest::new(&self.model_name, request)?;
         let api_base = Some(self.api_base.as_str());
         let request_url = get_chat_url(api_base)?;
         let start_time = Instant::now();
@@ -134,24 +135,26 @@ fn map_openai_to_vllm_error(e: Error) -> Error {
     }
 }
 
-// TODO(Viraj): figure out how to do this for vLLM
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-#[serde(tag = "type")]
-enum FireworksResponseFormat<'a> {
-    JsonObject {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        schema: Option<&'a Value>, // the desired JSON schema
-    },
-    #[default]
-    Text,
-}
+// #[derive(Debug, PartialEq, Serialize)]
+// struct VllmTool<'a> {
+//     r#type: OpenAIToolType,
+//     function: OpenAIFunction<'a>,
+// }
+
+// impl<'a> From<OpenAITool<'a>> for VllmTool<'a> {
+//     fn from(tool: OpenAITool<'a>) -> Self {
+//         VllmTool {
+//             r#type: tool.r#type,
+//             function: tool.function,
+//         }
+//     }
+// }
 
 /// This struct defines the supported parameters for the vLLM inference API
 /// See the [vLLM API documentation](https://docs.vllm.ai/en/stable/index.html)
 /// for more details.
 /// We are not handling many features of the API here.
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct VLLMRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     model: &'a str,
@@ -161,53 +164,137 @@ struct VLLMRequest<'a> {
     max_tokens: Option<u32>,
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    response_format: Option<FireworksResponseFormat<'a>>,
+    stream_options: Option<StreamOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<OpenAITool<'a>>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_choice: Option<OpenAIToolChoice<'a>>,
+    guided_json: Option<&'a Value>,
+    // #[serde(skip_serializing_if = "Option::is_none")]
+    // tools: Option<Vec<VllmTool<'a>>>,
+    // #[serde(skip_serializing_if = "Option::is_none")]
+    // tool_choice: Option<OpenAIToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     seed: Option<u32>,
 }
 
 impl<'a> VLLMRequest<'a> {
-    pub fn new(model: &'a str, request: &'a ModelInferenceRequest) -> VLLMRequest<'a> {
+    pub fn new(
+        model: &'a str,
+        request: &'a ModelInferenceRequest,
+    ) -> Result<VLLMRequest<'a>, Error> {
         // TODO(Viraj): handle this
         // NB: Fireworks will throw an error if you give FireworksResponseFormat::Text and then also include tools.
         // So we just don't include it as Text is the same as None anyway.
-        let response_format = match request.json_mode {
-            JSONMode::On | JSONMode::Strict => Some(FireworksResponseFormat::JsonObject {
-                schema: request.output_schema,
+        let guided_json = match (&request.json_mode, request.output_schema) {
+            (JSONMode::On | JSONMode::Strict, Some(schema)) => Some(schema),
+            _ => None,
+        };
+        let stream_options = match request.stream {
+            true => Some(StreamOptions {
+                include_usage: true,
             }),
-            JSONMode::Off => None,
+            false => None,
         };
         let messages = prepare_openai_messages(request);
-        let (tools, tool_choice, _) = prepare_openai_tools(request);
-        VLLMRequest {
+        let (tools, _, _) = prepare_openai_tools(request);
+        if tools.is_some() {
+            return Err(Error::VLLMServer {
+                message: "TensorZero does not support tool use with vLLM. Please use a different provider.".to_string(),
+            });
+        }
+        // let tool_choice = match &tools {
+        //     Some(tools) => {
+        //         if tools.len() > 1 {
+        //             tracing::warn!("vLLM does not support multiple tools in a single request. Using the first tool.");
+        //         }
+        //         Some(OpenAIToolChoice::Specific(SpecificToolChoice {
+        //             r#type: OpenAIToolType::Function,
+        //             function: SpecificToolFunction {
+        //                 name: tools[0].function.name,
+        //             },
+        //         }))
+        //     }
+        //     None => None,
+        // };
+        // let tools = tools.map(|t| t.into_iter().map(VllmTool::from).collect());
+        Ok(VLLMRequest {
             messages,
             model,
             temperature: request.temperature,
             max_tokens: request.max_tokens,
             stream: request.stream,
-            response_format,
-            tools,
-            tool_choice,
+            stream_options,
+            guided_json,
+            // tools,
+            // tool_choice,
             seed: request.seed,
-        }
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::*;
 
-    use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
-    use crate::inference::providers::openai::OpenAIToolType;
-    use crate::inference::providers::openai::{SpecificToolChoice, SpecificToolFunction};
-    use crate::inference::types::{FunctionType, RequestMessage, Role};
+    use crate::inference::{
+        providers::common::WEATHER_TOOL_CONFIG,
+        types::{FunctionType, RequestMessage, Role},
+    };
 
     #[test]
     fn test_vllm_request_new() {
+        let output_schema = json!({
+            "type": "object",
+            "properties": {
+                "temperature": {"type": "number"},
+                "location": {"type": "string"}
+            }
+        });
+        let request_with_tools = ModelInferenceRequest {
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: Some(0.5),
+            max_tokens: Some(100),
+            seed: Some(69),
+            stream: false,
+            json_mode: JSONMode::On,
+            tool_config: None, // Some(&WEATHER_TOOL_CONFIG),
+            function_type: FunctionType::Chat,
+            output_schema: Some(&output_schema),
+        };
+
+        let vllm_request = VLLMRequest::new("llama-v3-8b", &request_with_tools).unwrap();
+
+        assert_eq!(vllm_request.model, "llama-v3-8b");
+        assert_eq!(vllm_request.messages.len(), 1);
+        assert_eq!(vllm_request.temperature, Some(0.5));
+        assert_eq!(vllm_request.max_tokens, Some(100));
+        assert!(!vllm_request.stream);
+        assert_eq!(vllm_request.guided_json, Some(&output_schema));
+        // assert!(vllm_request.tools.is_some());
+        // let tools = vllm_request.tools.as_ref().unwrap();
+        // assert_eq!(tools.len(), 1);
+        // assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
+        // assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        // assert_eq!(
+        //     vllm_request.tool_choice,
+        //     Some(OpenAIToolChoice::Specific(SpecificToolChoice {
+        //         r#type: OpenAIToolType::Function,
+        //         function: SpecificToolFunction {
+        //             name: WEATHER_TOOL.name(),
+        //         }
+        //     }))
+        // );
+        let output_schema = json!({
+            "type": "object",
+            "properties": {
+                "temperature": {"type": "number"},
+                "location": {"type": "string"}
+            }
+        });
         let request_with_tools = ModelInferenceRequest {
             messages: vec![RequestMessage {
                 role: Role::User,
@@ -221,35 +308,12 @@ mod tests {
             json_mode: JSONMode::On,
             tool_config: Some(&WEATHER_TOOL_CONFIG),
             function_type: FunctionType::Chat,
-            output_schema: None,
+            output_schema: Some(&output_schema),
         };
 
-        let vllm_request = VLLMRequest::new("llama-v3-8b", &request_with_tools);
-
-        assert_eq!(vllm_request.model, "llama-v3-8b");
-        assert_eq!(vllm_request.messages.len(), 1);
-        assert_eq!(vllm_request.temperature, Some(0.5));
-        assert_eq!(vllm_request.max_tokens, Some(100));
-        assert!(!vllm_request.stream);
-        assert_eq!(
-            vllm_request.response_format,
-            Some(FireworksResponseFormat::JsonObject {
-                schema: request_with_tools.output_schema,
-            })
-        );
-        assert!(vllm_request.tools.is_some());
-        let tools = vllm_request.tools.as_ref().unwrap();
-        assert_eq!(tools.len(), 1);
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
-        assert_eq!(
-            vllm_request.tool_choice,
-            Some(OpenAIToolChoice::Specific(SpecificToolChoice {
-                r#type: OpenAIToolType::Function,
-                function: SpecificToolFunction {
-                    name: WEATHER_TOOL.name(),
-                }
-            }))
-        );
+        let err = VLLMRequest::new("llama-v3-8b", &request_with_tools).unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("TensorZero does not support tool use with vLLM"));
     }
 }
