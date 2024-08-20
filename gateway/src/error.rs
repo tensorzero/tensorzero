@@ -177,6 +177,13 @@ pub enum Error {
     UnknownMetric {
         name: String,
     },
+    VLLMClient {
+        message: String,
+        status_code: StatusCode,
+    },
+    VLLMServer {
+        message: String,
+    },
 }
 
 impl Error {
@@ -237,6 +244,8 @@ impl Error {
             Error::UnknownTool { .. } => tracing::Level::ERROR,
             Error::UnknownVariant { .. } => tracing::Level::WARN,
             Error::UnknownMetric { .. } => tracing::Level::WARN,
+            Error::VLLMClient { .. } => tracing::Level::WARN,
+            Error::VLLMServer { .. } => tracing::Level::ERROR,
         }
     }
 
@@ -297,6 +306,8 @@ impl Error {
             Error::UnknownTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::UnknownVariant { .. } => StatusCode::NOT_FOUND,
             Error::UnknownMetric { .. } => StatusCode::NOT_FOUND,
+            Error::VLLMClient { status_code, .. } => *status_code,
+            Error::VLLMServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
@@ -482,6 +493,10 @@ impl std::fmt::Display for Error {
             Error::UnknownTool { name } => write!(f, "Unknown tool: {}", name),
             Error::UnknownVariant { name } => write!(f, "Unknown variant: {}", name),
             Error::UnknownMetric { name } => write!(f, "Unknown metric: {}", name),
+            Error::VLLMClient { message, .. } => {
+                write!(f, "Error from vLLM client: {}", message)
+            }
+            Error::VLLMServer { message } => write!(f, "Error from vLLM servers: {}", message),
         }
     }
 }
