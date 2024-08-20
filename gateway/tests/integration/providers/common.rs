@@ -5,8 +5,8 @@ use serde_json::json;
 use gateway::inference::providers::azure::AzureProvider;
 use gateway::inference::providers::provider_trait::InferenceProvider;
 use gateway::inference::types::{
-    ContentBlock, ContentBlockChunk, FunctionType, JSONMode, ModelInferenceRequest,
-    ModelInferenceResponse, RequestMessage, Role,
+    ContentBlock, ContentBlockChunk, FunctionType, JSONMode, ModelInferenceRequest, RequestMessage,
+    Role,
 };
 use gateway::jsonschema_util::JSONSchemaFromPath;
 use gateway::model::ProviderConfig;
@@ -14,7 +14,7 @@ use gateway::tool::{
     StaticToolConfig, ToolCall, ToolCallConfig, ToolChoice, ToolConfig, ToolResult,
 };
 
-pub fn create_simple_inference_request<'a>() -> ModelInferenceRequest<'a> {
+fn create_simple_inference_request<'a>() -> ModelInferenceRequest<'a> {
     let messages = vec![RequestMessage {
         role: Role::User,
         content: vec!["What is the capital of Japan?".to_string().into()],
@@ -36,7 +36,15 @@ pub fn create_simple_inference_request<'a>() -> ModelInferenceRequest<'a> {
     }
 }
 
-pub fn evaluate_simple_inference_request(result: ModelInferenceResponse) {
+pub async fn test_simple_inference_request_with_provider(provider: ProviderConfig) {
+    // Set up the inference request
+    let inference_request = create_simple_inference_request();
+    let client = reqwest::Client::new();
+
+    // Run the inference request
+    let result = provider.infer(&inference_request, &client).await.unwrap();
+
+    // Evaluate the results
     assert!(result.content.len() == 1);
 
     let content = result.content.first().unwrap();
@@ -47,13 +55,6 @@ pub fn evaluate_simple_inference_request(result: ModelInferenceResponse) {
         }
         _ => panic!("Expected a text block"),
     }
-}
-
-pub async fn test_simple_inference_request_with_provider(provider: ProviderConfig) {
-    let inference_request = create_simple_inference_request();
-    let client = reqwest::Client::new();
-    let result = provider.infer(&inference_request, &client).await.unwrap();
-    evaluate_simple_inference_request(result);
 }
 
 pub async fn test_streaming_inference_request_with_provider(provider: ProviderConfig) {

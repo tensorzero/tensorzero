@@ -5,9 +5,8 @@ use gateway::inference::types::{ContentBlock, ContentBlockChunk, Text};
 use gateway::{inference::providers::aws_bedrock::AWSBedrockProvider, model::ProviderConfig};
 
 use crate::providers::common::{
-    create_simple_inference_request, create_streaming_tool_inference_request,
-    create_streaming_tool_result_inference_request, create_tool_inference_request,
-    create_tool_result_inference_request, evaluate_simple_inference_request,
+    create_streaming_tool_inference_request, create_streaming_tool_result_inference_request,
+    create_tool_inference_request, create_tool_result_inference_request,
     test_simple_inference_request_with_provider, test_streaming_inference_request_with_provider,
 };
 
@@ -22,24 +21,19 @@ async fn test_simple_inference_request() {
 
 #[tokio::test]
 async fn test_simple_inference_request_with_region() {
-    let inference_request = create_simple_inference_request();
-
     let model_id = "anthropic.claude-3-haiku-20240307-v1:0".to_string();
     let provider = ProviderConfig::AWSBedrock(
         AWSBedrockProvider::new(model_id, Some(aws_types::region::Region::new("us-east-1")))
             .await
             .unwrap(),
     );
-    let client = reqwest::Client::new();
-    let result = provider.infer(&inference_request, &client).await.unwrap();
 
-    evaluate_simple_inference_request(result);
+    test_simple_inference_request_with_provider(provider).await;
 }
 
 #[tokio::test]
+#[should_panic]
 async fn test_simple_inference_request_with_broken_region() {
-    let inference_request = create_simple_inference_request();
-
     let model_id = "anthropic.claude-3-haiku-20240307-v1:0".to_string();
     let provider = ProviderConfig::AWSBedrock(
         AWSBedrockProvider::new(
@@ -49,11 +43,8 @@ async fn test_simple_inference_request_with_broken_region() {
         .await
         .unwrap(),
     );
-    let client = reqwest::Client::new();
-    provider
-        .infer(&inference_request, &client)
-        .await
-        .unwrap_err();
+
+    test_simple_inference_request_with_provider(provider).await;
 }
 
 #[tokio::test]
