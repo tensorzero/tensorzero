@@ -4,33 +4,23 @@ use std::env;
 use gateway::inference::providers::fireworks::FireworksProvider;
 use gateway::model::ProviderConfig;
 
-use crate::providers::common::TestableProviderConfig;
+use crate::providers::common::TestProviders;
 
-crate::generate_provider_tests!(FireworksProvider);
+crate::generate_provider_tests!(get_providers);
 
-impl TestableProviderConfig for FireworksProvider {
-    async fn get_simple_inference_request_providers() -> Vec<ProviderConfig> {
-        vec![get_provider()]
-    }
+async fn get_providers() -> TestProviders {
+    let provider = Box::leak(Box::new(get_provider()));
+    let provider_tool_use = Box::leak(Box::new(get_provider_tool_use()));
 
-    async fn get_streaming_inference_request_providers() -> Vec<ProviderConfig> {
-        vec![get_provider()]
-    }
-
-    async fn get_tool_use_inference_request_providers() -> Vec<ProviderConfig> {
-        vec![get_provider_tool_use()]
-    }
-
-    async fn get_tool_use_streaming_inference_request_providers() -> Vec<ProviderConfig> {
-        vec![get_provider_tool_use()]
-    }
-
-    async fn get_json_mode_inference_request_providers() -> Vec<ProviderConfig> {
-        vec![get_provider()]
-    }
-
-    async fn get_json_mode_streaming_inference_request_providers() -> Vec<ProviderConfig> {
-        vec![get_provider()]
+    TestProviders {
+        simple_inference: vec![provider],
+        streaming_inference: vec![provider],
+        tool_use_inference: vec![provider_tool_use],
+        tool_use_streaming_inference: vec![provider_tool_use],
+        tool_result_inference: vec![provider_tool_use],
+        tool_result_streaming_inference: vec![provider_tool_use],
+        json_mode_inference: vec![provider],
+        json_mode_streaming_inference: vec![provider],
     }
 }
 

@@ -4,38 +4,12 @@ use std::env;
 use gateway::inference::providers::azure::AzureProvider;
 use gateway::model::ProviderConfig;
 
-use crate::providers::common::TestableProviderConfig;
+use crate::providers::common::TestProviders;
 
-crate::generate_provider_tests!(AzureProvider);
+crate::generate_provider_tests!(get_providers);
 
-impl TestableProviderConfig for AzureProvider {
-    async fn get_simple_inference_request_providers() -> Vec<ProviderConfig> {
-        vec![get_provider()]
-    }
-
-    async fn get_streaming_inference_request_providers() -> Vec<ProviderConfig> {
-        vec![get_provider()]
-    }
-
-    async fn get_tool_use_inference_request_providers() -> Vec<ProviderConfig> {
-        vec![get_provider()]
-    }
-
-    async fn get_tool_use_streaming_inference_request_providers() -> Vec<ProviderConfig> {
-        vec![get_provider()]
-    }
-
-    async fn get_json_mode_inference_request_providers() -> Vec<ProviderConfig> {
-        vec![get_provider()]
-    }
-
-    async fn get_json_mode_streaming_inference_request_providers() -> Vec<ProviderConfig> {
-        vec![get_provider()]
-    }
-}
-
-/// Get a generic provider for testing
-fn get_provider() -> ProviderConfig {
+async fn get_providers() -> TestProviders {
+    // Generic provider for testing
     let api_key = env::var("AZURE_OPENAI_API_KEY")
         .expect("Environment variable AZURE_OPENAI_API_KEY must be set");
     let api_base = env::var("AZURE_OPENAI_API_BASE")
@@ -45,10 +19,12 @@ fn get_provider() -> ProviderConfig {
     let api_key = Some(SecretString::new(api_key));
     let model_name = "gpt-4o-mini".to_string();
 
-    ProviderConfig::Azure(AzureProvider {
+    let provider = ProviderConfig::Azure(AzureProvider {
         model_name,
         api_base,
         api_key,
         deployment_id,
-    })
+    });
+
+    TestProviders::with_provider(provider)
 }

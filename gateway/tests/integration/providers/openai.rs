@@ -5,34 +5,14 @@ use gateway::inference::providers::{openai::OpenAIProvider, provider_trait::Infe
 use gateway::inference::types::{ContentBlock, JSONMode};
 use gateway::model::ProviderConfig;
 
-use crate::providers::common::{create_json_mode_inference_request, TestableProviderConfig};
+use crate::providers::common::create_json_mode_inference_request;
 
-crate::generate_provider_tests!(OpenAIProvider);
+use crate::providers::common::TestProviders;
 
-impl TestableProviderConfig for OpenAIProvider {
-    async fn get_simple_inference_request_providers() -> Vec<ProviderConfig> {
-        vec![get_provider()]
-    }
+crate::generate_provider_tests!(get_providers);
 
-    async fn get_streaming_inference_request_providers() -> Vec<ProviderConfig> {
-        vec![get_provider()]
-    }
-
-    async fn get_tool_use_inference_request_providers() -> Vec<ProviderConfig> {
-        vec![get_provider()]
-    }
-
-    async fn get_tool_use_streaming_inference_request_providers() -> Vec<ProviderConfig> {
-        vec![get_provider()]
-    }
-
-    async fn get_json_mode_inference_request_providers() -> Vec<ProviderConfig> {
-        vec![get_provider()]
-    }
-
-    async fn get_json_mode_streaming_inference_request_providers() -> Vec<ProviderConfig> {
-        vec![get_provider()]
-    }
+async fn get_providers() -> TestProviders {
+    TestProviders::with_provider(get_provider())
 }
 
 /// Get a generic provider for testing

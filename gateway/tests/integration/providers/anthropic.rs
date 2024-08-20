@@ -1,44 +1,21 @@
-use gateway::{inference::providers::anthropic::AnthropicProvider, model::ProviderConfig};
 use secrecy::SecretString;
 use std::env;
 
-use crate::providers::common::TestableProviderConfig;
+use gateway::{inference::providers::anthropic::AnthropicProvider, model::ProviderConfig};
 
-crate::generate_provider_tests!(AnthropicProvider);
+use crate::providers::common::TestProviders;
 
-impl TestableProviderConfig for AnthropicProvider {
-    async fn get_simple_inference_request_providers() -> Vec<ProviderConfig> {
-        vec![get_provider()]
-    }
+crate::generate_provider_tests!(get_providers);
 
-    async fn get_streaming_inference_request_providers() -> Vec<ProviderConfig> {
-        vec![get_provider()]
-    }
-
-    async fn get_tool_use_inference_request_providers() -> Vec<ProviderConfig> {
-        vec![get_provider()]
-    }
-
-    async fn get_tool_use_streaming_inference_request_providers() -> Vec<ProviderConfig> {
-        vec![get_provider()]
-    }
-
-    async fn get_json_mode_inference_request_providers() -> Vec<ProviderConfig> {
-        vec![get_provider()]
-    }
-
-    async fn get_json_mode_streaming_inference_request_providers() -> Vec<ProviderConfig> {
-        vec![get_provider()]
-    }
-}
-
-/// Get a generic provider for testing
-fn get_provider() -> ProviderConfig {
+async fn get_providers() -> TestProviders {
+    // Generic provider for testing
     let api_key = env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY must be set");
     let api_key = Some(SecretString::new(api_key));
 
-    ProviderConfig::Anthropic(AnthropicProvider {
+    let provider = ProviderConfig::Anthropic(AnthropicProvider {
         model_name: "claude-3-haiku-20240307".to_string(),
         api_key,
-    })
+    });
+
+    TestProviders::with_provider(provider)
 }

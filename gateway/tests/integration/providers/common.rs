@@ -17,33 +17,74 @@ use gateway::tool::{
 
 /// Enforce that every provider implements a common set of tests.
 ///
-/// To achieve that, each provider should implement the TestableProviderConfig trait and call the
-/// `generate_provider_tests!` macro.
+/// To achieve that, each provider should call the `generate_provider_tests!` macro. TODO TODO
 ///
 /// If some test doesn't apply to a particular provider (e.g. provider doesn't support tool use),
 /// then the provider should return `None` from the corresponding method.
-pub trait TestableProviderConfig {
-    async fn get_simple_inference_request_providers() -> Vec<ProviderConfig>;
-    async fn get_streaming_inference_request_providers() -> Vec<ProviderConfig>;
-    async fn get_tool_use_inference_request_providers() -> Vec<ProviderConfig>;
-    async fn get_tool_use_streaming_inference_request_providers() -> Vec<ProviderConfig>;
-    async fn get_json_mode_inference_request_providers() -> Vec<ProviderConfig>;
-    async fn get_json_mode_streaming_inference_request_providers() -> Vec<ProviderConfig>;
+pub struct TestProviders {
+    pub simple_inference: Vec<&'static ProviderConfig>,
+    pub streaming_inference: Vec<&'static ProviderConfig>,
+    pub tool_use_inference: Vec<&'static ProviderConfig>,
+    pub tool_use_streaming_inference: Vec<&'static ProviderConfig>,
+    pub tool_result_inference: Vec<&'static ProviderConfig>,
+    #[allow(dead_code)] // TODO
+    pub tool_result_streaming_inference: Vec<&'static ProviderConfig>,
+    pub json_mode_inference: Vec<&'static ProviderConfig>,
+    pub json_mode_streaming_inference: Vec<&'static ProviderConfig>,
+}
+
+impl TestProviders {
+    pub fn with_provider(provider: ProviderConfig) -> Self {
+        let provider = Box::leak(Box::new(provider));
+
+        Self {
+            simple_inference: vec![provider],
+            streaming_inference: vec![provider],
+            tool_use_inference: vec![provider],
+            tool_use_streaming_inference: vec![provider],
+            tool_result_inference: vec![provider],
+            tool_result_streaming_inference: vec![provider],
+            json_mode_inference: vec![provider],
+            json_mode_streaming_inference: vec![provider],
+        }
+    }
+
+    pub fn with_providers(providers: Vec<ProviderConfig>) -> Self {
+        let mut static_providers: Vec<&'static ProviderConfig> = vec![];
+
+        for provider in providers {
+            let static_provider = Box::leak(Box::new(provider));
+            static_providers.push(static_provider);
+        }
+
+        Self {
+            simple_inference: static_providers.clone(),
+            streaming_inference: static_providers.clone(),
+            tool_use_inference: static_providers.clone(),
+            tool_use_streaming_inference: static_providers.clone(),
+            tool_result_inference: static_providers.clone(),
+            tool_result_streaming_inference: static_providers.clone(),
+            json_mode_inference: static_providers.clone(),
+            json_mode_streaming_inference: static_providers,
+        }
+    }
 }
 
 #[macro_export]
 macro_rules! generate_provider_tests {
-    ($struct_name:ident) => {
+    ($func:ident) => {
         use $crate::providers::common::test_json_mode_inference_request_with_provider;
         use $crate::providers::common::test_json_mode_streaming_inference_request_with_provider;
         use $crate::providers::common::test_simple_inference_request_with_provider;
         use $crate::providers::common::test_streaming_inference_request_with_provider;
+        use $crate::providers::common::test_tool_result_inference_request_with_provider;
+        // use $crate::providers::common::test_tool_result_streaming_inference_request_with_provider;
         use $crate::providers::common::test_tool_use_inference_request_with_provider;
         use $crate::providers::common::test_tool_use_streaming_inference_request_with_provider;
 
         #[tokio::test]
         async fn test_simple_inference_request() {
-            let providers = $struct_name::get_simple_inference_request_providers().await;
+            let providers = $func().await.simple_inference;
             for provider in providers {
                 test_simple_inference_request_with_provider(provider).await;
             }
@@ -51,7 +92,7 @@ macro_rules! generate_provider_tests {
 
         #[tokio::test]
         async fn test_streaming_inference_request() {
-            let providers = $struct_name::get_streaming_inference_request_providers().await;
+            let providers = $func().await.streaming_inference;
             for provider in providers {
                 test_streaming_inference_request_with_provider(provider).await;
             }
@@ -59,7 +100,7 @@ macro_rules! generate_provider_tests {
 
         #[tokio::test]
         async fn test_tool_use_inference_request() {
-            let providers = $struct_name::get_tool_use_inference_request_providers().await;
+            let providers = $func().await.tool_use_inference;
             for provider in providers {
                 test_tool_use_inference_request_with_provider(provider).await;
             }
@@ -67,8 +108,7 @@ macro_rules! generate_provider_tests {
 
         #[tokio::test]
         async fn test_tool_use_streaming_inference_request() {
-            let providers =
-                $struct_name::get_tool_use_streaming_inference_request_providers().await;
+            let providers = $func().await.tool_use_streaming_inference;
             for provider in providers {
                 test_tool_use_streaming_inference_request_with_provider(provider).await;
             }
@@ -76,7 +116,7 @@ macro_rules! generate_provider_tests {
 
         #[tokio::test]
         async fn test_json_mode_inference_request() {
-            let providers = $struct_name::get_json_mode_inference_request_providers().await;
+            let providers = $func().await.json_mode_inference;
             for provider in providers {
                 test_json_mode_inference_request_with_provider(provider).await;
             }
@@ -84,12 +124,27 @@ macro_rules! generate_provider_tests {
 
         #[tokio::test]
         async fn test_json_mode_streaming_inference_request() {
-            let providers =
-                $struct_name::get_json_mode_streaming_inference_request_providers().await;
+            let providers = $func().await.json_mode_streaming_inference;
             for provider in providers {
                 test_json_mode_streaming_inference_request_with_provider(provider).await;
             }
         }
+
+        #[tokio::test]
+        async fn test_tool_result_inference_request() {
+            let providers = $func().await.tool_result_inference;
+            for provider in providers {
+                test_tool_result_inference_request_with_provider(provider).await;
+            }
+        }
+
+        // #[tokio::test]
+        // async fn test_tool_result_streaming_inference_request() {
+        //     let providers = $func().await.tool_result_streaming_inference;
+        //     for provider in providers {
+        //         test_tool_result_streaming_inference_request_with_provider(provider).await;
+        //     }
+        // }
     };
 }
 
@@ -115,7 +170,7 @@ fn create_simple_inference_request<'a>() -> ModelInferenceRequest<'a> {
     }
 }
 
-pub async fn test_simple_inference_request_with_provider(provider: ProviderConfig) {
+pub async fn test_simple_inference_request_with_provider(provider: &ProviderConfig) {
     // Set up the inference request
     let inference_request = create_simple_inference_request();
     let client = reqwest::Client::new();
@@ -136,7 +191,7 @@ pub async fn test_simple_inference_request_with_provider(provider: ProviderConfi
     }
 }
 
-pub async fn test_streaming_inference_request_with_provider(provider: ProviderConfig) {
+pub async fn test_streaming_inference_request_with_provider(provider: &ProviderConfig) {
     // Set up the inference request
     let mut inference_request = create_simple_inference_request();
     inference_request.stream = true;
@@ -211,7 +266,7 @@ pub fn create_tool_use_inference_request() -> ModelInferenceRequest<'static> {
     }
 }
 
-pub async fn test_tool_use_inference_request_with_provider(provider: ProviderConfig) {
+pub async fn test_tool_use_inference_request_with_provider(provider: &ProviderConfig) {
     // Set up and make the inference request
     let inference_request = create_tool_use_inference_request();
     let client = reqwest::Client::new();
@@ -242,7 +297,7 @@ pub async fn test_tool_use_inference_request_with_provider(provider: ProviderCon
     }
 }
 
-pub async fn test_tool_use_streaming_inference_request_with_provider(provider: ProviderConfig) {
+pub async fn test_tool_use_streaming_inference_request_with_provider(provider: &ProviderConfig) {
     // Set up and make the inference request
     let client = reqwest::Client::new();
     let mut inference_request = create_tool_use_inference_request();
@@ -309,6 +364,70 @@ pub async fn test_tool_use_streaming_inference_request_with_provider(provider: P
     }
 }
 
+fn create_tool_result_inference_request() -> ModelInferenceRequest<'static> {
+    let messages = vec![
+        RequestMessage {
+            role: Role::User,
+            content: vec!["What's the weather like in New York currently?"
+                .to_string()
+                .into()],
+        },
+        RequestMessage {
+            role: Role::Assistant,
+            content: vec![ContentBlock::ToolCall(ToolCall {
+                name: "get_weather".to_string(),
+                arguments: "{\"location\": \"New York\"}".to_string(),
+                id: "1".to_string(),
+            })],
+        },
+        RequestMessage {
+            role: Role::User,
+            content: vec![ContentBlock::ToolResult(ToolResult {
+                name: "get_weather".to_string(),
+                id: "1".to_string(),
+                result: "70".to_string(),
+            })],
+        },
+    ];
+
+    let tool_config = Box::leak(Box::new(ToolCallConfig {
+        tools_available: vec![ToolConfig::Static(&WEATHER_TOOL_CONFIG)],
+        tool_choice: ToolChoice::Auto,
+        parallel_tool_calls: false,
+    }));
+
+    ModelInferenceRequest {
+        messages,
+        system: None,
+        tool_config: Some(tool_config),
+        temperature: Some(0.7),
+        max_tokens: Some(100),
+        seed: None,
+        stream: false,
+        json_mode: JSONMode::Off,
+        function_type: FunctionType::Chat,
+        output_schema: None,
+    }
+}
+
+pub async fn test_tool_result_inference_request_with_provider(provider: &ProviderConfig) {
+    // Set up and make the inference request
+    let client = reqwest::Client::new();
+    let inference_request = create_tool_result_inference_request();
+    let result = provider.infer(&inference_request, &client).await.unwrap();
+
+    // Check the result
+    assert!(result.content.len() == 1);
+    let content = result.content.first().unwrap();
+    match content {
+        ContentBlock::Text(block) => {
+            assert!(block.text.contains("New York"), "{}", block.text);
+            assert!(block.text.contains("70"), "{}", block.text);
+        }
+        _ => panic!("Unexpected content block: {:?}", content),
+    }
+}
+
 pub fn create_json_mode_inference_request<'a>() -> ModelInferenceRequest<'a> {
     let messages = vec![RequestMessage {
         role: Role::User,
@@ -355,7 +474,7 @@ pub fn create_json_mode_inference_request<'a>() -> ModelInferenceRequest<'a> {
     }
 }
 
-pub async fn test_json_mode_inference_request_with_provider(provider: ProviderConfig) {
+pub async fn test_json_mode_inference_request_with_provider(provider: &ProviderConfig) {
     // Set up and make the inference request
     let inference_request = create_json_mode_inference_request();
     let client = reqwest::Client::new();
@@ -382,7 +501,7 @@ pub async fn test_json_mode_inference_request_with_provider(provider: ProviderCo
     }
 }
 
-pub async fn test_json_mode_streaming_inference_request_with_provider(provider: ProviderConfig) {
+pub async fn test_json_mode_streaming_inference_request_with_provider(provider: &ProviderConfig) {
     // Set up and make the inference request
     let mut inference_request = create_json_mode_inference_request();
     inference_request.stream = true;
@@ -453,54 +572,9 @@ lazy_static! {
             },
             "required": ["location"]
         })),
-        strict: true,
+        strict: true, // TODO!
     };
     static ref WEATHER_TOOL: ToolConfig = ToolConfig::Static(&WEATHER_TOOL_CONFIG);
-    static ref TOOL_CONFIG_AUTO: ToolCallConfig = ToolCallConfig {
-        tools_available: vec![ToolConfig::Static(&WEATHER_TOOL_CONFIG)],
-        tool_choice: ToolChoice::Auto,
-        parallel_tool_calls: false,
-    };
-}
-
-pub fn create_tool_result_inference_request() -> ModelInferenceRequest<'static> {
-    let messages = vec![
-        RequestMessage {
-            role: Role::User,
-            content: vec!["What's the weather like in New York currently?"
-                .to_string()
-                .into()],
-        },
-        RequestMessage {
-            role: Role::Assistant,
-            content: vec![ContentBlock::ToolCall(ToolCall {
-                name: "get_weather".to_string(),
-                arguments: "{\"location\": \"New York\"}".to_string(),
-                id: "1".to_string(),
-            })],
-        },
-        RequestMessage {
-            role: Role::User,
-            content: vec![ContentBlock::ToolResult(ToolResult {
-                name: "get_weather".to_string(),
-                id: "1".to_string(),
-                result: "70".to_string(),
-            })],
-        },
-    ];
-
-    ModelInferenceRequest {
-        messages,
-        system: None,
-        tool_config: Some(&*TOOL_CONFIG_AUTO),
-        temperature: Some(0.7),
-        max_tokens: Some(100),
-        seed: None,
-        stream: false,
-        json_mode: JSONMode::Off,
-        function_type: FunctionType::Chat,
-        output_schema: None,
-    }
 }
 
 pub fn create_streaming_tool_result_inference_request() -> ModelInferenceRequest<'static> {
