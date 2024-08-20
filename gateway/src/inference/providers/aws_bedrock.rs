@@ -13,7 +13,6 @@ use aws_smithy_types::error::display::DisplayErrorContext;
 use aws_types::region::Region;
 use futures::{Stream, StreamExt};
 use reqwest::StatusCode;
-use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::Instant;
 use uuid::Uuid;
@@ -27,10 +26,11 @@ use crate::inference::types::{
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-#[derive(Clone, Debug)]
+// NB: If you add `Clone` someday, you'll need to wrap client in Arc
+#[derive(Debug)]
 pub struct AWSBedrockProvider {
     pub model_id: String,
-    client: Arc<aws_sdk_bedrockruntime::Client>,
+    client: aws_sdk_bedrockruntime::Client,
 }
 
 impl AWSBedrockProvider {
@@ -52,7 +52,7 @@ impl AWSBedrockProvider {
         tracing::trace!("Creating new AWS Bedrock client for region: {region}",);
 
         let config = aws_config::from_env().region(region).load().await;
-        let client = Arc::new(aws_sdk_bedrockruntime::Client::new(&config));
+        let client = aws_sdk_bedrockruntime::Client::new(&config);
 
         Ok(Self { model_id, client })
     }

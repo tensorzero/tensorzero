@@ -622,7 +622,7 @@ mod tests {
             system: Some(json!({"assistant_name": "R2-D2"})),
             messages,
         };
-        let models = HashMap::from([("invalid_model".to_string(), text_model_config.clone())]);
+        let models = HashMap::from([("invalid_model".to_string(), text_model_config)]);
         let inference_config = InferenceConfig {
             models: &models,
             function: &function_config,
@@ -644,7 +644,7 @@ mod tests {
             ..Default::default()
         };
         let mut inference_params = InferenceParams::default();
-        let models = HashMap::from([("error".to_string(), error_model_config.clone())]);
+        let models = HashMap::from([("error".to_string(), error_model_config)]);
         let inference_config = InferenceConfig {
             models: &models,
             function: &function_config,
@@ -673,7 +673,14 @@ mod tests {
             user_template: Some(user_template_name.into()),
             ..Default::default()
         };
-        let models = HashMap::from([("good".to_string(), text_model_config.clone())]);
+        let good_provider_config = ProviderConfig::Dummy(DummyProvider {
+            model_name: "good".to_string(),
+        });
+        let text_model_config = ModelConfig {
+            routing: vec!["good".to_string()],
+            providers: HashMap::from([("good".to_string(), good_provider_config)]),
+        };
+        let models = HashMap::from([("good".to_string(), text_model_config)]);
         let inference_config = InferenceConfig {
             models: &models,
             function: &function_config,
@@ -721,7 +728,7 @@ mod tests {
                 content: vec!["What is the weather in Brooklyn?".to_string().into()],
             }],
         };
-        let models = HashMap::from([("tool".to_string(), tool_model_config.clone())]);
+        let models = HashMap::from([("tool".to_string(), tool_model_config)]);
         let weather_tool_config = get_weather_tool_config();
         let inference_config = InferenceConfig {
             models: &models,
@@ -822,7 +829,7 @@ mod tests {
         };
         // Test case 6: JSON output was supposed to happen and it did
         let mut inference_params = InferenceParams::default();
-        let models = HashMap::from([("json".to_string(), json_model_config.clone())]);
+        let models = HashMap::from([("json".to_string(), json_model_config)]);
         let inference_config = InferenceConfig {
             models: &models,
             function: &json_function_config,
@@ -903,7 +910,7 @@ mod tests {
             user_template: Some(user_template_name.into()),
             ..Default::default()
         };
-        let models = HashMap::from([("error".to_string(), error_model_config.clone())]);
+        let models = HashMap::from([("error".to_string(), error_model_config)]);
         let inference_config = InferenceConfig {
             models: &models,
             function: &function_config,
@@ -932,7 +939,7 @@ mod tests {
             user_template: Some(user_template_name.into()),
             ..Default::default()
         };
-        let models = HashMap::from([("good".to_string(), text_model_config.clone())]);
+        let models = HashMap::from([("good".to_string(), text_model_config)]);
         let inference_config = InferenceConfig {
             models: &models,
             function: &function_config,

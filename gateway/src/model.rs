@@ -26,7 +26,7 @@ use crate::{
 };
 use serde::Deserialize;
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModelConfig {
     pub routing: Vec<String>, // [provider name A, provider name B, ...]
@@ -89,7 +89,7 @@ impl ModelConfig {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum ProviderConfig {
     Anthropic(AnthropicProvider),
     AWSBedrock(AWSBedrockProvider),
@@ -307,7 +307,7 @@ mod tests {
         });
         let model_config = ModelConfig {
             routing: vec!["good".to_string()],
-            providers: HashMap::from([("good".to_string(), good_provider_config.clone())]),
+            providers: HashMap::from([("good".to_string(), good_provider_config)]),
         };
         let tool_config = ToolCallConfig {
             tools_available: vec![],
@@ -342,7 +342,7 @@ mod tests {
         // Try inferring the bad model
         let model_config = ModelConfig {
             routing: vec!["error".to_string()],
-            providers: HashMap::from([("error".to_string(), bad_provider_config.clone())]),
+            providers: HashMap::from([("error".to_string(), bad_provider_config)]),
         };
         let response = model_config
             .infer(&request, &Client::new())
@@ -431,7 +431,7 @@ mod tests {
         // Test good model
         let model_config = ModelConfig {
             routing: vec!["good".to_string()],
-            providers: HashMap::from([("good".to_string(), good_provider_config.clone())]),
+            providers: HashMap::from([("good".to_string(), good_provider_config)]),
         };
         let (initial_chunk, stream) = model_config
             .infer_stream(&request, &Client::new())
@@ -470,7 +470,7 @@ mod tests {
         // Test bad model
         let model_config = ModelConfig {
             routing: vec!["error".to_string()],
-            providers: HashMap::from([("error".to_string(), bad_provider_config.clone())]),
+            providers: HashMap::from([("error".to_string(), bad_provider_config)]),
         };
         let response = model_config.infer_stream(&request, &Client::new()).await;
         assert!(response.is_err());
