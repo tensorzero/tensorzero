@@ -1,24 +1,19 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
 
 use crate::error::Error;
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelConfig;
-use crate::tool::{StaticToolConfig, ToolChoice};
+use crate::tool::{
+    ImplicitToolConfig, StaticToolConfig, ToolCallConfig, ToolChoice, ToolConfig,
+    IMPLICIT_TOOL_NAME,
+};
 use crate::variant::VariantConfig;
 
-static CONFIG: OnceLock<Config> = OnceLock::new();
-
-pub fn get_config() -> &'static Config<'static> {
-    #[allow(clippy::expect_used)]
-    CONFIG.get_or_init(|| Config::load().expect("Failed to load configuration"))
-}
-
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Config<'c> {
     pub gateway: GatewayConfig,
     pub clickhouse: Option<ClickHouseConfig>,
@@ -29,7 +24,7 @@ pub struct Config<'c> {
     pub templates: TemplateConfig<'c>,
 }
 
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
@@ -37,13 +32,13 @@ pub struct GatewayConfig {
     pub disable_observability: bool,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ClickHouseConfig {
     pub database: String,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MetricConfig {
     pub r#type: MetricConfigType,
@@ -51,21 +46,21 @@ pub struct MetricConfig {
     pub level: MetricConfigLevel,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MetricConfigType {
     Boolean,
     Float,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MetricConfigOptimize {
     Min,
     Max,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MetricConfigLevel {
     Inference,
@@ -81,7 +76,7 @@ impl std::fmt::Display for MetricConfigLevel {
 }
 
 impl<'c> Config<'c> {
-    fn load() -> Result<Config<'c>, Error> {
+    pub fn load() -> Result<Config<'c>, Error> {
         let config_path = UninitializedConfig::get_config_path();
         let config_table = UninitializedConfig::read_toml_config(&config_path)?;
         let base_path = match PathBuf::from(&config_path).parent() {
@@ -549,20 +544,31 @@ impl UninitializedFunctionConfig {
                     .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
                     .transpose()?;
                 let output_schema =
+                    JSONSchemaFromPath::new(params.output_schema.clone(), base_path.as_ref())?;
+                let implicit_tool_output_schema =
                     JSONSchemaFromPath::new(params.output_schema, base_path.as_ref())?;
+                let implicit_tool = ToolConfig::Implicit(ImplicitToolConfig {
+                    parameters: implicit_tool_output_schema,
+                });
+                let implicit_tool_call_config = ToolCallConfig {
+                    tools_available: vec![implicit_tool],
+                    tool_choice: ToolChoice::Tool(IMPLICIT_TOOL_NAME.to_string()),
+                    parallel_tool_calls: false,
+                };
                 Ok(FunctionConfig::Json(FunctionConfigJson {
                     variants: params.variants,
                     system_schema,
                     user_schema,
                     assistant_schema,
                     output_schema,
+                    implicit_tool_call_config,
                 }))
             }
         }
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct UninitializedToolConfig {
     pub description: String,
     pub parameters: PathBuf,

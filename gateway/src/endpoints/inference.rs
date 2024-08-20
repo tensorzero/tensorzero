@@ -12,7 +12,6 @@ use tokio_stream::StreamExt;
 use uuid::Uuid;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::config_parser::get_config;
 use crate::error::{Error, ResultExt};
 use crate::function::sample_variant;
 use crate::function::FunctionConfig;
@@ -77,6 +76,7 @@ struct InferenceMetadata {
 #[debug_handler(state = AppStateData)]
 pub async fn inference_handler(
     State(AppStateData {
+        config,
         http_client,
         clickhouse_connection_info,
     }): AppState,
@@ -85,11 +85,7 @@ pub async fn inference_handler(
     // To be used for the Inference table processing_time measurements
     let start_time = Instant::now();
     // Get the function config or return an error if it doesn't exist
-    let config = get_config();
     let function = config.get_function(&params.function_name)?;
-    // This is only mutable because dynamic tool params compile schemas concurrently with the inference.
-    // The result of this compilation eventually is written to the struct, so we need mutability here.
-    // See `DynamicToolConfig` and `DynamicJSONSchema` for more details.
     let tool_config = function.prepare_tool_config(params.dynamic_tool_params, &config.tools)?;
     // Collect the function variant names as a Vec<&str>
     let mut candidate_variant_names: Vec<&str> =
@@ -349,6 +345,7 @@ fn prepare_event(
         })
 }
 
+#[derive(Debug)]
 pub struct InferenceDatabaseInsertMetadata {
     pub function_name: String,
     pub variant_name: String,
@@ -587,11 +584,13 @@ mod tests {
             latency: Duration::from_millis(100),
         };
         let output_schema = json!({});
+        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let function = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
+            implicit_tool_call_config,
             output_schema: JSONSchemaFromPath::from_value(&output_schema),
         });
         let inference_metadata = InferenceMetadata {

@@ -18,7 +18,7 @@ use crate::{
     model::ModelConfig,
 };
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
@@ -26,7 +26,7 @@ pub enum VariantConfig {
     ChatCompletion(ChatCompletionConfig),
 }
 
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ChatCompletionConfig {
     pub weight: f64,
@@ -45,7 +45,7 @@ pub struct ChatCompletionConfig {
 /// Variants represent JSON mode in a slightly more abstract sense than ModelInferenceRequests, as
 /// we support coercing tool calls into JSON mode.
 /// This is represented as a tool config in the
-#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+#[derive(Debug, Default, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum JsonEnforcement {
     #[default]
@@ -204,7 +204,7 @@ impl ChatCompletionConfig {
     fn prepare_request<'a>(
         &self,
         input: &Input,
-        function: &FunctionConfig,
+        function: &'a FunctionConfig,
         templates: &TemplateConfig,
         tool_config: Option<&'a ToolCallConfig>,
         stream: bool,
@@ -237,11 +237,11 @@ impl ChatCompletionConfig {
                 function_type: FunctionType::Chat,
                 output_schema: None,
             },
-            FunctionConfig::Json(_json_config) => {
-                if self.json_mode == JsonEnforcement::ImplicitTool {
-                    // TODO(#134): implement implicit tool calling
-                    unimplemented!("Implicit tool calling is not implemented yet");
-                }
+            FunctionConfig::Json(json_config) => {
+                let tool_config = match self.json_mode {
+                    JsonEnforcement::ImplicitTool => Some(&json_config.implicit_tool_call_config),
+                    _ => None,
+                };
                 ModelInferenceRequest {
                     messages,
                     system,
@@ -622,7 +622,7 @@ mod tests {
             system: Some(json!({"assistant_name": "R2-D2"})),
             messages,
         };
-        let models = HashMap::from([("invalid_model".to_string(), text_model_config.clone())]);
+        let models = HashMap::from([("invalid_model".to_string(), text_model_config)]);
         let inference_config = InferenceConfig {
             models: &models,
             function: &function_config,
@@ -644,7 +644,7 @@ mod tests {
             ..Default::default()
         };
         let mut inference_params = InferenceParams::default();
-        let models = HashMap::from([("error".to_string(), error_model_config.clone())]);
+        let models = HashMap::from([("error".to_string(), error_model_config)]);
         let inference_config = InferenceConfig {
             models: &models,
             function: &function_config,
@@ -673,7 +673,14 @@ mod tests {
             user_template: Some(user_template_name.into()),
             ..Default::default()
         };
-        let models = HashMap::from([("good".to_string(), text_model_config.clone())]);
+        let good_provider_config = ProviderConfig::Dummy(DummyProvider {
+            model_name: "good".to_string(),
+        });
+        let text_model_config = ModelConfig {
+            routing: vec!["good".to_string()],
+            providers: HashMap::from([("good".to_string(), good_provider_config)]),
+        };
+        let models = HashMap::from([("good".to_string(), text_model_config)]);
         let inference_config = InferenceConfig {
             models: &models,
             function: &function_config,
@@ -721,7 +728,7 @@ mod tests {
                 content: vec!["What is the weather in Brooklyn?".to_string().into()],
             }],
         };
-        let models = HashMap::from([("tool".to_string(), tool_model_config.clone())]);
+        let models = HashMap::from([("tool".to_string(), tool_model_config)]);
         let weather_tool_config = get_weather_tool_config();
         let inference_config = InferenceConfig {
             models: &models,
@@ -775,6 +782,7 @@ mod tests {
             "required": ["answer"],
             "additionalProperties": false
         });
+        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let output_schema = JSONSchemaFromPath::from_value(&output_schema);
         let json_function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
@@ -782,6 +790,7 @@ mod tests {
             system_schema: None,
             user_schema: None,
             output_schema,
+            implicit_tool_call_config,
         });
         let inference_config = InferenceConfig {
             models: &models,
@@ -822,7 +831,7 @@ mod tests {
         };
         // Test case 6: JSON output was supposed to happen and it did
         let mut inference_params = InferenceParams::default();
-        let models = HashMap::from([("json".to_string(), json_model_config.clone())]);
+        let models = HashMap::from([("json".to_string(), json_model_config)]);
         let inference_config = InferenceConfig {
             models: &models,
             function: &json_function_config,
@@ -903,7 +912,7 @@ mod tests {
             user_template: Some(user_template_name.into()),
             ..Default::default()
         };
-        let models = HashMap::from([("error".to_string(), error_model_config.clone())]);
+        let models = HashMap::from([("error".to_string(), error_model_config)]);
         let inference_config = InferenceConfig {
             models: &models,
             function: &function_config,
@@ -932,7 +941,7 @@ mod tests {
             user_template: Some(user_template_name.into()),
             ..Default::default()
         };
-        let models = HashMap::from([("good".to_string(), text_model_config.clone())]);
+        let models = HashMap::from([("good".to_string(), text_model_config)]);
         let inference_config = InferenceConfig {
             models: &models,
             function: &function_config,

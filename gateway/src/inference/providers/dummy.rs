@@ -14,7 +14,7 @@ use crate::inference::types::{
 };
 use crate::tool::{ToolCall, ToolCallChunk};
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct DummyProvider {
     pub model_name: String,
 }
