@@ -818,10 +818,8 @@ async fn test_tool_call_streaming() {
         .unwrap();
     let mut chunks = vec![];
     while let Some(event) = event_source.next().await {
-        println!("Event: {:?}", event.unwrap_err());
-        assert!(false);
-        return;
         let event = event.unwrap();
+        println!("{:?}", event);
         match event {
             Event::Open => continue,
             Event::Message(message) => {
