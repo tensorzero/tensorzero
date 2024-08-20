@@ -162,7 +162,20 @@ impl<'de> Deserialize<'de> for ProviderConfig {
             }
             ProviderConfigHelper::AWSBedrock { model_id, region } => {
                 let region = region.map(aws_types::region::Region::new);
-                ProviderConfig::AWSBedrock(AWSBedrockProvider { model_id, region })
+
+                // NB: We need to make an async call here to initialize the AWS Bedrock client.
+
+                let provider = tokio::task::block_in_place(move || {
+                    tokio::runtime::Handle::current()
+                        .block_on(async { AWSBedrockProvider::new(model_id, region).await })
+                        .map_err(|e| {
+                            serde::de::Error::custom(format!(
+                                "Failed to initialize AWS Bedrock provider: {e}"
+                            ))
+                        })
+                })?;
+
+                ProviderConfig::AWSBedrock(provider)
             }
             ProviderConfigHelper::Azure {
                 model_name,
