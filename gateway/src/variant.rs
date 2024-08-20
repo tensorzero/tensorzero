@@ -238,9 +238,10 @@ impl ChatCompletionConfig {
                 output_schema: None,
             },
             FunctionConfig::Json(_json_config) => {
+                #[allow(clippy::todo)] // TODO (#160)
                 if self.json_mode == JsonEnforcement::ImplicitTool {
                     // TODO(#134): implement implicit tool calling
-                    unimplemented!("Implicit tool calling is not implemented yet");
+                    todo!("Implicit tool calling is not implemented yet");
                 }
                 ModelInferenceRequest {
                     messages,
@@ -380,7 +381,7 @@ mod tests {
             } => {
                 assert_eq!(user_message, vec!["Hello, how are you?".to_string().into()]);
             }
-            _ => unreachable!("Expected User message"),
+            _ => panic!("Expected User message"),
         }
 
         // Test case 2: Assistant message
@@ -401,7 +402,7 @@ mod tests {
                     vec!["I'm doing well, thank you!".to_string().into()]
                 );
             }
-            _ => unreachable!("Expected Assistant message"),
+            _ => panic!("Expected Assistant message"),
         }
         // Test case 3: Invalid JSON input
         let input_message = InputMessage {
@@ -446,7 +447,7 @@ mod tests {
                     vec!["I'm sorry but I can't help you with that because of it's against my ethical guidelines".to_string().into()]
                 );
             }
-            _ => unreachable!("Expected Assistant message"),
+            _ => panic!("Expected Assistant message"),
         }
 
         // Test case 5: User message with template
@@ -467,7 +468,7 @@ mod tests {
                     vec!["Hello, John! You are 30 years old.".to_string().into()]
                 );
             }
-            _ => unreachable!("Expected User message"),
+            _ => panic!("Expected User message"),
         }
 
         // Test case 6: User message with bad input (missing required field)
@@ -481,7 +482,7 @@ mod tests {
             Err(Error::MiniJinjaTemplateRender { message, .. }) => {
                 assert!(message.contains("undefined value"));
             }
-            _ => unreachable!("Expected MiniJinjaTemplateRender error"),
+            _ => panic!("Expected MiniJinjaTemplateRender error"),
         }
         // Test case 7: User message with string content when template is provided
         let input_message = InputMessage {
@@ -494,7 +495,7 @@ mod tests {
             Err(Error::MiniJinjaTemplateRender { message, .. }) => {
                 assert!(message.contains("undefined value"), "{}", message);
             }
-            _ => unreachable!("Expected MiniJinjaTemplateRender error"),
+            _ => panic!("Expected MiniJinjaTemplateRender error"),
         }
     }
 
@@ -609,7 +610,7 @@ mod tests {
                 // template_name is a test filename
                 assert!(message.contains("undefined value"));
             }
-            _ => unreachable!("Expected MiniJinjaTemplateRender error"),
+            _ => panic!("Expected MiniJinjaTemplateRender error"),
         }
 
         // Test case 2: invalid model in request
@@ -704,7 +705,7 @@ mod tests {
                     vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()]
                 );
             }
-            _ => unreachable!("Expected Chat inference response"),
+            _ => panic!("Expected Chat inference response"),
         }
 
         // Test case 5: tool call
@@ -751,7 +752,7 @@ mod tests {
                             Some(json!({"location": "Brooklyn", "units": "celsius"}))
                         );
                     }
-                    _ => unreachable!("Expected tool call"),
+                    _ => panic!("Expected tool call"),
                 }
                 assert_eq!(
                     chat_response.usage,
@@ -761,7 +762,7 @@ mod tests {
                     }
                 );
             }
-            _ => unreachable!("Expected Chat inference response"),
+            _ => panic!("Expected Chat inference response"),
         }
 
         // Test case 5: JSON output was supposed to happen but it did not
@@ -810,7 +811,7 @@ mod tests {
                 );
                 assert_eq!(json_result.model_inference_responses.len(), 1);
             }
-            _ => unreachable!("Expected Json inference response"),
+            _ => panic!("Expected Json inference response"),
         }
         let messages = vec![InputMessage {
             role: Role::User,
@@ -853,7 +854,7 @@ mod tests {
                 );
                 assert_eq!(json_result.model_inference_responses.len(), 1);
             }
-            _ => unreachable!("Expected Json inference response"),
+            _ => panic!("Expected Json inference response"),
         }
     }
 
@@ -920,7 +921,7 @@ mod tests {
                 assert_eq!(provider_errors.len(), 1);
                 assert!(matches!(provider_errors[0], Error::InferenceClient { .. }));
             }
-            _ => unreachable!("Expected ModelProvidersExhausted error"),
+            _ => panic!("Expected ModelProvidersExhausted error"),
         }
 
         // Test case 2: Model inference succeeds

@@ -1514,7 +1514,7 @@ mod tests {
                 assert_eq!(text.text, "Hello".to_string());
                 assert_eq!(text.id, "0".to_string());
             }
-            _ => unreachable!(),
+            _ => panic!("Expected a text content block"),
         }
         assert_eq!(chunk.latency, latency);
 
@@ -1568,7 +1568,7 @@ mod tests {
                 assert_eq!(tool_call.name, "tool_name".to_string());
                 assert_eq!(tool_call.arguments, "aaaa: bbbbb".to_string());
             }
-            _ => unreachable!(),
+            _ => panic!("Expected a tool call content block"),
         }
         assert_eq!(chunk.latency, latency);
 
@@ -1599,7 +1599,7 @@ mod tests {
                 assert_eq!(tool_call.name, "calculator".to_string());
                 assert_eq!(tool_call.arguments, "".to_string());
             }
-            _ => unreachable!(),
+            _ => panic!("Expected a tool call content block"),
         }
         assert_eq!(chunk.latency, latency);
         assert_eq!(current_tool_id, Some("tool1".to_string()));
@@ -1629,7 +1629,7 @@ mod tests {
                 assert_eq!(text.text, "Hello".to_string());
                 assert_eq!(text.id, "2".to_string());
             }
-            _ => unreachable!(),
+            _ => panic!("Expected a text content block"),
         }
         assert_eq!(chunk.latency, latency);
 

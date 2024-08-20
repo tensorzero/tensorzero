@@ -39,7 +39,7 @@ fn test_infer() {
             ContentBlock::Text(Text { text }) => {
                 assert!(!text.is_empty());
             }
-            _ => unreachable!(),
+            _ => panic!("Expected a text content block"),
         }
     });
 }
@@ -63,7 +63,7 @@ fn test_infer_with_region() {
             ContentBlock::Text(Text { text }) => {
                 assert!(!text.is_empty());
             }
-            _ => unreachable!(),
+            _ => panic!("Expected a text content block"),
         }
     });
 }

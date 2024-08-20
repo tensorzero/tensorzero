@@ -1194,7 +1194,7 @@ mod tests {
             OpenAIRequestMessage::User(content) => {
                 assert_eq!(content.content, "Hello");
             }
-            _ => unreachable!(),
+            _ => panic!("Expected a user message"),
         }
 
         // Message with multiple blocks
@@ -1211,13 +1211,13 @@ mod tests {
             OpenAIRequestMessage::User(content) => {
                 assert_eq!(content.content, "Hello");
             }
-            _ => unreachable!(),
+            _ => panic!("Expected a user message"),
         }
         match &openai_messages[1] {
             OpenAIRequestMessage::User(content) => {
                 assert_eq!(content.content, "How are you?");
             }
-            _ => unreachable!(),
+            _ => panic!("Expected a user message"),
         }
 
         // Assistant message with one string and one tool block
@@ -1241,7 +1241,7 @@ mod tests {
                 assert_eq!(tool_calls[0].function.name, "test_function");
                 assert_eq!(tool_calls[0].function.arguments, "{}");
             }
-            _ => unreachable!(),
+            _ => panic!("Expected an assistant message"),
         }
 
         // User message with one string and one tool call block
@@ -1262,7 +1262,7 @@ mod tests {
             OpenAIRequestMessage::User(content) => {
                 assert_eq!(content.content, "Hello");
             }
-            _ => unreachable!(),
+            _ => panic!("Expected a user message"),
         }
         match &openai_messages[1] {
             OpenAIRequestMessage::Assistant(content) => {
@@ -1272,7 +1272,7 @@ mod tests {
                 assert_eq!(tool_calls[0].function.name, "test_function");
                 assert_eq!(tool_calls[0].function.arguments, "{}");
             }
-            _ => unreachable!(),
+            _ => panic!("Expected an assistant message"),
         }
     }
 
@@ -1470,7 +1470,7 @@ mod tests {
                 assert_eq!(json_schema["schema"], schema);
                 assert_eq!(json_schema["name"], "response");
             }
-            _ => unreachable!("Expected JsonSchema format"),
+            _ => panic!("Expected JsonSchema format"),
         }
     }
 }

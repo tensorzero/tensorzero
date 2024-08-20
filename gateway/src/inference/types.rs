@@ -837,7 +837,7 @@ mod tests {
                 assert_eq!(tool_call.parsed_name, Some("get_weather".to_string()));
                 assert_eq!(tool_call.parsed_arguments, None);
             }
-            _ => unreachable!(),
+            _ => panic!("Expected a tool call block"),
         }
 
         // Case 3: A tool call that fails name validation
@@ -873,7 +873,7 @@ mod tests {
                 assert_eq!(tool_call.parsed_name, None);
                 assert_eq!(tool_call.parsed_arguments, None);
             }
-            _ => unreachable!(),
+            _ => panic!("Expected a tool call block"),
         }
 
         // Case 4: A tool call that passes validation
@@ -918,7 +918,7 @@ mod tests {
                     )
                 );
             }
-            _ => unreachable!(),
+            _ => panic!("Expected a tool call block"),
         }
     }
 
@@ -980,7 +980,7 @@ mod tests {
             .unwrap();
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
-            _ => unreachable!("Expected Chat inference response"),
+            _ => panic!("Expected Chat inference response"),
         };
         assert_eq!(chat_result.inference_id, inference_id);
         assert_eq!(chat_result.created, created);
@@ -1064,7 +1064,7 @@ mod tests {
                     }
                 );
             }
-            _ => unreachable!("Expected Json inference response"),
+            _ => panic!("Expected Json inference response"),
         }
 
         // Test Case 4: a JSON string that fails validation and usage only in last chunk
@@ -1108,7 +1108,7 @@ mod tests {
                 assert_eq!(json_result.output.parsed, None);
                 assert_eq!(json_result.output.raw, "{\"name\":\"John\"}".to_string());
             }
-            _ => unreachable!("Expected Json inference response"),
+            _ => panic!("Expected Json inference response"),
         }
 
         // Test case 5: chunks with some None content
@@ -1160,7 +1160,7 @@ mod tests {
             );
             assert_eq!(chat_response.usage, usage);
         } else {
-            unreachable!("Expected Ok(InferenceResult::Chat), got {:?}", result);
+            panic!("Expected Ok(InferenceResult::Chat), got {:?}", result);
         }
     }
 }

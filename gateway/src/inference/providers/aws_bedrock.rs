@@ -435,6 +435,7 @@ impl TryFrom<ConverseOutputWithLatency> for ModelInferenceResponse {
                 prompt_tokens: usage.input_tokens as u32,
                 completion_tokens: usage.output_tokens as u32,
             },
+            #[allow(clippy::todo)] // TODO (#160)
             None => todo!(), // TODO (#18): this should be nullable
         };
 

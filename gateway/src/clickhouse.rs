@@ -50,7 +50,7 @@ impl ClickHouseConnectionInfo {
     pub fn database(&self) -> &str {
         match self {
             Self::Disabled => "",
-            Self::Mock { .. } => unreachable!(),
+            Self::Mock { .. } => "mock-database",
             Self::Production { database, .. } => database,
         }
     }
@@ -58,7 +58,7 @@ impl ClickHouseConnectionInfo {
     fn get_url(&self) -> String {
         match self {
             Self::Disabled => "".to_string(),
-            Self::Mock { .. } => unreachable!(),
+            Self::Mock { .. } => "".to_string(),
             Self::Production {
                 base_url, database, ..
             } => {
@@ -103,7 +103,9 @@ impl ClickHouseConnectionInfo {
                 }
                 None
             }
-            Self::Production { .. } => unreachable!(),
+            Self::Production { .. } => {
+                panic!("Production ClickHouse client can't be used for reading data in tests")
+            }
         }
     }
 
@@ -129,7 +131,7 @@ impl ClickHouseConnectionInfo {
     pub async fn run_query(&self, query: String) -> Result<String, Error> {
         match self {
             Self::Disabled => Ok("".to_string()),
-            Self::Mock { .. } => unimplemented!(),
+            Self::Mock { .. } => Ok("".to_string()),
             Self::Production { client, .. } => {
                 let response = client
                     .post(self.get_url())
@@ -159,7 +161,7 @@ impl ClickHouseConnectionInfo {
     pub async fn create_database(&self) -> Result<(), Error> {
         match self {
             Self::Disabled => Ok(()),
-            Self::Mock { .. } => unimplemented!(),
+            Self::Mock { .. } => Ok(()),
             Self::Production {
                 base_url,
                 database,
