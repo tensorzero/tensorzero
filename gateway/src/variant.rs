@@ -204,7 +204,7 @@ impl ChatCompletionConfig {
     fn prepare_request<'a>(
         &self,
         input: &Input,
-        function: &FunctionConfig,
+        function: &'a FunctionConfig,
         templates: &TemplateConfig,
         tool_config: Option<&'a ToolCallConfig>,
         stream: bool,
@@ -237,11 +237,11 @@ impl ChatCompletionConfig {
                 function_type: FunctionType::Chat,
                 output_schema: None,
             },
-            FunctionConfig::Json(_json_config) => {
-                if self.json_mode == JsonEnforcement::ImplicitTool {
-                    // TODO(#134): implement implicit tool calling
-                    unimplemented!("Implicit tool calling is not implemented yet");
-                }
+            FunctionConfig::Json(json_config) => {
+                let tool_config = match self.json_mode {
+                    JsonEnforcement::ImplicitTool => Some(&json_config.implicit_tool_call_config),
+                    _ => None,
+                };
                 ModelInferenceRequest {
                     messages,
                     system,
@@ -782,6 +782,7 @@ mod tests {
             "required": ["answer"],
             "additionalProperties": false
         });
+        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let output_schema = JSONSchemaFromPath::from_value(&output_schema);
         let json_function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
@@ -789,6 +790,7 @@ mod tests {
             system_schema: None,
             user_schema: None,
             output_schema,
+            implicit_tool_call_config,
         });
         let inference_config = InferenceConfig {
             models: &models,

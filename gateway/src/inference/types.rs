@@ -977,19 +977,22 @@ mod tests {
 
         // Test Case 3: a JSON string that passes validation and also include usage in each chunk
         let inference_id = Uuid::now_v7();
-        let output_schema = JSONSchemaFromPath::from_value(&serde_json::json!({
+        let output_schema = serde_json::json!({
             "type": "object",
             "properties": {
                 "name": {"type": "string"},
                 "age": {"type": "number"}
             },
             "required": ["name", "age"]
-        }));
+        });
+        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
+        let output_schema = JSONSchemaFromPath::from_value(&output_schema);
         let function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
+            implicit_tool_call_config,
             output_schema,
         });
         let usage1 = Usage {
@@ -1143,6 +1146,85 @@ mod tests {
             assert_eq!(chat_response.usage, usage);
         } else {
             unreachable!("Expected Ok(InferenceResult::Chat), got {:?}", result);
+        }
+
+        // Test Case 6: a JSON function with implicit tool call config
+        let inference_id = Uuid::now_v7();
+        let output_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "age": {"type": "number"}
+            },
+            "required": ["name", "age"]
+        });
+        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
+        let output_schema = JSONSchemaFromPath::from_value(&output_schema);
+        let function_config = FunctionConfig::Json(FunctionConfigJson {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            implicit_tool_call_config,
+            output_schema,
+        });
+        let usage1 = Usage {
+            prompt_tokens: 10,
+            completion_tokens: 5,
+        };
+        let usage2 = Usage {
+            prompt_tokens: 5,
+            completion_tokens: 10,
+        };
+        let chunks = vec![
+            ModelInferenceResponseChunk {
+                inference_id,
+                content: vec![ContentBlockChunk::ToolCall(ToolCallChunk {
+                    name: "respond".to_string(),
+                    arguments: "{\"name\":".to_string(),
+                    id: "0".to_string(),
+                })],
+                created,
+                usage: Some(usage1.clone()),
+                raw_response: "{\"name\":".to_string(),
+                latency: Duration::from_millis(150),
+            },
+            ModelInferenceResponseChunk {
+                inference_id,
+                content: vec![ContentBlockChunk::ToolCall(ToolCallChunk {
+                    name: "respond".to_string(),
+                    arguments: "\"John\",\"age\":30}".to_string(),
+                    id: "0".to_string(),
+                })],
+                created,
+                usage: Some(usage2.clone()),
+                raw_response: "\"John\",\"age\":30}".to_string(),
+                latency: Duration::from_millis(250),
+            },
+        ];
+        let response = collect_chunks(chunks, &function_config, None)
+            .await
+            .unwrap();
+        match response {
+            InferenceResult::Json(json_result) => {
+                assert_eq!(json_result.inference_id, inference_id);
+                assert_eq!(
+                    json_result.output.parsed,
+                    Some(serde_json::json!({"name": "John", "age": 30}))
+                );
+                assert_eq!(
+                    json_result.output.raw,
+                    "{\"name\":\"John\",\"age\":30}".to_string()
+                );
+                assert_eq!(
+                    json_result.usage,
+                    Usage {
+                        prompt_tokens: 15,
+                        completion_tokens: 15,
+                    }
+                );
+            }
+            _ => unreachable!("Expected Json inference response"),
         }
     }
 }
