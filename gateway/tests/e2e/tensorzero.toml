@@ -420,7 +420,7 @@ system_template = "config/functions/weather_helper/prompt/system_template.miniji
 [functions.weather_helper.variants.gcp-vertex]
 type = "chat_completion"
 weight = 0
-model = "gemini-1.5-flash-001"
+model = "gemini-1.5-pro-001"
 system_template = "config/functions/weather_helper/prompt/system_template.minijinja"
 
 [functions.weather_helper.variants.openai]
