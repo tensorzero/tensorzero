@@ -12,9 +12,8 @@ use crate::providers::common::{
     test_streaming_inference_request_with_provider,
 };
 
-#[tokio::test]
-async fn test_simple_inference_request() {
-    // Load API key from environment variable
+/// Get a generic provider for testing
+fn get_provider() -> ProviderConfig {
     let api_key = env::var("AZURE_OPENAI_API_KEY")
         .expect("Environment variable AZURE_OPENAI_API_KEY must be set");
     let api_base = env::var("AZURE_OPENAI_API_BASE")
@@ -23,35 +22,23 @@ async fn test_simple_inference_request() {
         .expect("Environment variable AZURE_OPENAI_DEPLOYMENT_ID must be set");
     let api_key = Some(SecretString::new(api_key));
     let model_name = "gpt-4o-mini".to_string();
-    let provider = ProviderConfig::Azure(AzureProvider {
+
+    ProviderConfig::Azure(AzureProvider {
         model_name,
         api_base,
         api_key,
         deployment_id,
-    });
+    })
+}
 
-    test_simple_inference_request_with_provider(provider).await;
+#[tokio::test]
+async fn test_simple_inference_request() {
+    test_simple_inference_request_with_provider(get_provider()).await;
 }
 
 #[tokio::test]
 async fn test_streaming_inference_request() {
-    // Load API key from environment variable
-    let api_key = env::var("AZURE_OPENAI_API_KEY")
-        .expect("Environment variable AZURE_OPENAI_API_KEY must be set");
-    let api_base = env::var("AZURE_OPENAI_API_BASE")
-        .expect("Environment variable AZURE_OPENAI_API_BASE must be set");
-    let deployment_id = env::var("AZURE_OPENAI_DEPLOYMENT_ID")
-        .expect("Environment variable AZURE_OPENAI_DEPLOYMENT_ID must be set");
-    let api_key = SecretString::new(api_key);
-    let model_name = "gpt-4o-mini";
-    let provider = ProviderConfig::Azure(AzureProvider {
-        model_name: model_name.to_string(),
-        api_base,
-        api_key: Some(api_key),
-        deployment_id,
-    });
-
-    test_streaming_inference_request_with_provider(provider).await;
+    test_streaming_inference_request_with_provider(get_provider()).await;
 }
 
 #[tokio::test]

@@ -10,24 +10,22 @@ use crate::providers::common::{
     test_simple_inference_request_with_provider, test_streaming_inference_request_with_provider,
 };
 
-#[tokio::test]
-async fn test_simple_inference_request() {
+/// Get a generic provider for testing
+fn get_provider() -> ProviderConfig {
     let mut provider_config_json = json!({"type": "gcp_vertex_gemini", "model_id": "gemini-1.5-flash-001", "location": "us-central1"});
     let gcp_project_id = "tensorzero-public";
     provider_config_json["project_id"] = Value::String(gcp_project_id.to_string());
-    let provider: ProviderConfig = serde_json::from_value(provider_config_json).unwrap();
+    serde_json::from_value(provider_config_json).unwrap()
+}
 
-    test_simple_inference_request_with_provider(provider).await;
+#[tokio::test]
+async fn test_simple_inference_request() {
+    test_simple_inference_request_with_provider(get_provider()).await;
 }
 
 #[tokio::test]
 async fn test_streaming_inference_request() {
-    let mut provider_config_json = json!({"type": "gcp_vertex_gemini", "model_id": "gemini-1.5-flash-001", "location": "us-central1"});
-    let gcp_project_id = "tensorzero-public";
-    provider_config_json["project_id"] = Value::String(gcp_project_id.to_string());
-    let provider: ProviderConfig = serde_json::from_value(provider_config_json).unwrap();
-
-    test_streaming_inference_request_with_provider(provider).await;
+    test_streaming_inference_request_with_provider(get_provider()).await;
 }
 
 // Gemini Flash does not support JSON mode using an output schema -- the model provider knows this automatically

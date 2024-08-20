@@ -14,32 +14,26 @@ use crate::providers::common::{
     test_streaming_inference_request_with_provider,
 };
 
+/// Get a generic provider for testing
+fn get_provider() -> ProviderConfig {
+    let api_key = env::var("TOGETHER_API_KEY").expect("TOGETHER_API_KEY must be set");
+    let api_key = Some(SecretString::new(api_key));
+    let model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo".to_string();
+
+    ProviderConfig::Together(TogetherProvider {
+        model_name,
+        api_key,
+    })
+}
+
 #[tokio::test]
 async fn test_simple_inference_request() {
-    // Load API key from environment variable
-    let api_key = env::var("TOGETHER_API_KEY").expect("TOGETHER_API_KEY must be set");
-    let api_key = SecretString::new(api_key);
-    let model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo";
-    let provider = ProviderConfig::Together(TogetherProvider {
-        model_name: model_name.to_string(),
-        api_key: Some(api_key),
-    });
-
-    test_simple_inference_request_with_provider(provider).await;
+    test_simple_inference_request_with_provider(get_provider()).await;
 }
 
 #[tokio::test]
 async fn test_streaming_inference_request() {
-    // Load API key from environment variable
-    let api_key = env::var("TOGETHER_API_KEY").expect("TOGETHER_API_KEY must be set");
-    let api_key = SecretString::new(api_key);
-    let model_name = "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo";
-    let provider = ProviderConfig::Together(TogetherProvider {
-        model_name: model_name.to_string(),
-        api_key: Some(api_key),
-    });
-
-    test_streaming_inference_request_with_provider(provider).await;
+    test_streaming_inference_request_with_provider(get_provider()).await;
 }
 
 #[tokio::test]

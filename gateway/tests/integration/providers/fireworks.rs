@@ -14,32 +14,26 @@ use crate::providers::common::{
     test_streaming_inference_request_with_provider,
 };
 
+/// Get a generic provider for testing
+fn get_provider() -> ProviderConfig {
+    let api_key = env::var("FIREWORKS_API_KEY").expect("FIREWORKS_API_KEY must be set");
+    let api_key = Some(SecretString::new(api_key));
+    let model_name = "accounts/fireworks/models/llama-v3-8b-instruct".to_string();
+
+    ProviderConfig::Fireworks(FireworksProvider {
+        model_name,
+        api_key,
+    })
+}
+
 #[tokio::test]
 async fn test_simple_inference_request() {
-    // Load API key from environment variable
-    let api_key = env::var("FIREWORKS_API_KEY").expect("FIREWORKS_API_KEY must be set");
-    let api_key = SecretString::new(api_key);
-    let model_name = "accounts/fireworks/models/llama-v3-8b-instruct";
-    let provider = ProviderConfig::Fireworks(FireworksProvider {
-        model_name: model_name.to_string(),
-        api_key: Some(api_key),
-    });
-
-    test_simple_inference_request_with_provider(provider).await;
+    test_simple_inference_request_with_provider(get_provider()).await;
 }
 
 #[tokio::test]
 async fn test_streaming_inference_request() {
-    // Load API key from environment variable
-    let api_key = env::var("FIREWORKS_API_KEY").expect("FIREWORKS_API_KEY must be set");
-    let api_key = SecretString::new(api_key);
-    let model_name = "accounts/fireworks/models/llama-v3-8b-instruct";
-    let provider = ProviderConfig::Fireworks(FireworksProvider {
-        model_name: model_name.to_string(),
-        api_key: Some(api_key),
-    });
-
-    test_streaming_inference_request_with_provider(provider).await;
+    test_streaming_inference_request_with_provider(get_provider()).await;
 }
 
 #[tokio::test]
