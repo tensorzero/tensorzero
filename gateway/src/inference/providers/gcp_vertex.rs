@@ -9,7 +9,7 @@ use serde_json::Value;
 use tokio::time::Instant;
 use uuid::Uuid;
 
-use crate::error::Error;
+use crate::error::{Error, ResultExt};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, JSONMode, Latency, Role, Text, TextChunk,
@@ -239,7 +239,6 @@ fn stream_gcp_vertex_gemini(
                 Ok(event) => match event {
                     Event::Open => continue,
                     Event::Message(message) => {
-                        println!("Message: {:?}", message);
                         let data: Result<GCPVertexGeminiResponse, Error> = serde_json::from_str(&message.data).map_err(|e| Error::GCPVertexServer {
                             message: format!("Error parsing response: {e}"),
                         });
@@ -614,24 +613,22 @@ enum GCPVertexGeminiResponseContentPart {
 impl From<GCPVertexGeminiResponseContentPart> for ContentBlockChunk {
     fn from(part: GCPVertexGeminiResponseContentPart) -> Self {
         match part {
-            GCPVertexGeminiResponseContentPart::Text(text) => {
-                ContentBlockChunk::Text(TextChunk {
-                    text,
-                    // TODO as below
-                    id: "0".to_string(),
-                })
-            }
+            GCPVertexGeminiResponseContentPart::Text(text) => ContentBlockChunk::Text(TextChunk {
+                text,
+                id: "0".to_string(),
+            }),
             GCPVertexGeminiResponseContentPart::FunctionCall(function_call) => {
-                println!("Function call: {:?}", function_call);
-                // TODO (#19, #30): figure out how GCP does bookkeeping for streaming tool calls and implement this here.
-                // ContentBlock::ToolCall(ToolCall {
-                //     name: function_call.name,
-                //     arguments: function_call.args,
-                //     id: Uuid::now_v7().to_string(),
-                // })
+                let arguments = serde_json::to_string(&function_call.args)
+                    .map_err(|e| Error::Serialization {
+                        message: format!(
+                            "Error serializing function call arguments returned from GCP: {e}"
+                        ),
+                    })
+                    .ok_or_log()
+                    .unwrap_or_default();
                 ContentBlockChunk::ToolCall(ToolCallChunk {
                     name: function_call.name,
-                    arguments: serde_json::to_string(&function_call.args).unwrap(),
+                    arguments,
                     id: "0".to_string(),
                 })
             }
@@ -772,7 +769,13 @@ impl TryFrom<GCPVertexGeminiStreamResponseWithMetadata> for ModelInferenceRespon
                 })
             }
         };
-        let content: Vec<ContentBlockChunk> = parts.into_iter().map(|part| part.into()).collect();
+        let mut content: Vec<ContentBlockChunk> =
+            parts.into_iter().map(|part| part.into()).collect();
+        // GCP occasionally spuriously returns empty text chunks. We filter these out.
+        content.retain(|chunk| match chunk {
+            ContentBlockChunk::Text(text) => !text.text.is_empty(),
+            _ => true,
+        });
         Ok(ModelInferenceResponseChunk::new(
             inference_id,
             content,

@@ -8,7 +8,7 @@ use gateway::model::ProviderConfig;
 use crate::providers::common::{
     create_json_inference_request, create_simple_inference_request,
     create_streaming_inference_request, create_streaming_json_inference_request,
-    create_tool_inference_request,
+    create_streaming_tool_inference_request, create_tool_inference_request,
 };
 
 #[tokio::test]
@@ -176,8 +176,7 @@ async fn test_infer_stream_with_tool_calls() {
     let provider: ProviderConfig = serde_json::from_value(provider_config_json).unwrap();
     let client = reqwest::Client::new();
 
-    let mut inference_request = create_tool_inference_request();
-    inference_request.stream = true;
+    let inference_request = create_streaming_tool_inference_request();
 
     let result = provider.infer_stream(&inference_request, &client).await;
     assert!(result.is_ok());
@@ -188,11 +187,11 @@ async fn test_infer_stream_with_tool_calls() {
         collected_chunks.push(chunk.unwrap());
     }
     assert!(!collected_chunks.is_empty());
-    // Fourth as an arbitrary middle chunk, the first and last may contain only metadata
-    assert!(collected_chunks[4].content.len() == 1);
+    // As far as I can tell GCP does not stream tool calls with more than 1 chunk
+    assert!(collected_chunks[0].content.len() == 1);
     assert!(collected_chunks.last().unwrap().usage.is_some());
-    let third_chunk = collected_chunks.get(3).unwrap();
-    match third_chunk.content.first().unwrap() {
+    let first_chunk = collected_chunks.first().unwrap();
+    match first_chunk.content.first().unwrap() {
         ContentBlockChunk::ToolCall(tool_call) => {
             assert!(tool_call.name == "get_weather");
         }

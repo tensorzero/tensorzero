@@ -9,7 +9,7 @@ use gateway::model::ProviderConfig;
 use crate::providers::common::{
     create_json_inference_request, create_simple_inference_request,
     create_streaming_inference_request, create_streaming_json_inference_request,
-    create_tool_inference_request,
+    create_streaming_tool_inference_request, create_tool_inference_request,
 };
 
 #[tokio::test]
@@ -81,8 +81,7 @@ async fn test_infer_stream_with_tool_calls() {
     let model_name = "gpt-4o-mini";
     let client = reqwest::Client::new();
 
-    let mut inference_request = create_tool_inference_request();
-    inference_request.stream = true;
+    let inference_request = create_streaming_tool_inference_request();
 
     let base_url = None;
     let provider = ProviderConfig::OpenAI(OpenAIProvider {

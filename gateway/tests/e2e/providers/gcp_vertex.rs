@@ -839,6 +839,10 @@ async fn test_tool_call_streaming() {
 
     for (i, chunk) in chunks.iter().enumerate() {
         let chunk_json: Value = serde_json::from_str(chunk).unwrap();
+        println!(
+            "chunk json pretty: {}",
+            serde_json::to_string_pretty(&chunk_json).unwrap()
+        );
         if let Some(usage) = chunk_json.get("usage").and_then(|u| u.as_object()) {
             prompt_tokens += usage.get("prompt_tokens").unwrap().as_u64().unwrap();
             completion_tokens += usage.get("completion_tokens").unwrap().as_u64().unwrap();
