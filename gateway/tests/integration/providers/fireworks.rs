@@ -9,28 +9,28 @@ use crate::providers::common::TestableProviderConfig;
 crate::generate_provider_tests!(FireworksProvider);
 
 impl TestableProviderConfig for FireworksProvider {
-    async fn get_simple_inference_request_provider() -> Option<ProviderConfig> {
-        Some(get_provider())
+    async fn get_simple_inference_request_providers() -> Vec<ProviderConfig> {
+        vec![get_provider()]
     }
 
-    async fn get_streaming_inference_request_provider() -> Option<ProviderConfig> {
-        Some(get_provider())
+    async fn get_streaming_inference_request_providers() -> Vec<ProviderConfig> {
+        vec![get_provider()]
     }
 
-    async fn get_tool_use_inference_request_provider() -> Option<ProviderConfig> {
-        Some(get_provider_tool_use())
+    async fn get_tool_use_inference_request_providers() -> Vec<ProviderConfig> {
+        vec![get_provider_tool_use()]
     }
 
-    async fn get_tool_use_streaming_inference_request_provider() -> Option<ProviderConfig> {
-        Some(get_provider_tool_use())
+    async fn get_tool_use_streaming_inference_request_providers() -> Vec<ProviderConfig> {
+        vec![get_provider_tool_use()]
     }
 
-    async fn get_json_mode_inference_request_provider() -> Option<ProviderConfig> {
-        Some(get_provider())
+    async fn get_json_mode_inference_request_providers() -> Vec<ProviderConfig> {
+        vec![get_provider()]
     }
 
-    async fn get_json_mode_streaming_inference_request_provider() -> Option<ProviderConfig> {
-        Some(get_provider())
+    async fn get_json_mode_streaming_inference_request_providers() -> Vec<ProviderConfig> {
+        vec![get_provider()]
     }
 }
 

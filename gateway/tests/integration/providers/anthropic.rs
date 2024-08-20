@@ -7,28 +7,28 @@ use crate::providers::common::TestableProviderConfig;
 crate::generate_provider_tests!(AnthropicProvider);
 
 impl TestableProviderConfig for AnthropicProvider {
-    async fn get_simple_inference_request_provider() -> Option<ProviderConfig> {
-        Some(get_provider())
+    async fn get_simple_inference_request_providers() -> Vec<ProviderConfig> {
+        vec![get_provider()]
     }
 
-    async fn get_streaming_inference_request_provider() -> Option<ProviderConfig> {
-        Some(get_provider())
+    async fn get_streaming_inference_request_providers() -> Vec<ProviderConfig> {
+        vec![get_provider()]
     }
 
-    async fn get_tool_use_inference_request_provider() -> Option<ProviderConfig> {
-        Some(get_provider())
+    async fn get_tool_use_inference_request_providers() -> Vec<ProviderConfig> {
+        vec![get_provider()]
     }
 
-    async fn get_tool_use_streaming_inference_request_provider() -> Option<ProviderConfig> {
-        Some(get_provider())
+    async fn get_tool_use_streaming_inference_request_providers() -> Vec<ProviderConfig> {
+        vec![get_provider()]
     }
 
-    async fn get_json_mode_inference_request_provider() -> Option<ProviderConfig> {
-        Some(get_provider())
+    async fn get_json_mode_inference_request_providers() -> Vec<ProviderConfig> {
+        vec![get_provider()]
     }
 
-    async fn get_json_mode_streaming_inference_request_provider() -> Option<ProviderConfig> {
-        Some(get_provider())
+    async fn get_json_mode_streaming_inference_request_providers() -> Vec<ProviderConfig> {
+        vec![get_provider()]
     }
 }
 

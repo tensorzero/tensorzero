@@ -12,28 +12,28 @@ use crate::providers::common::{
 crate::generate_provider_tests!(AWSBedrockProvider);
 
 impl TestableProviderConfig for AWSBedrockProvider {
-    async fn get_simple_inference_request_provider() -> Option<ProviderConfig> {
-        Some(get_provider().await)
+    async fn get_simple_inference_request_providers() -> Vec<ProviderConfig> {
+        vec![get_provider().await]
     }
 
-    async fn get_streaming_inference_request_provider() -> Option<ProviderConfig> {
-        Some(get_provider().await)
+    async fn get_streaming_inference_request_providers() -> Vec<ProviderConfig> {
+        vec![get_provider().await]
     }
 
-    async fn get_tool_use_inference_request_provider() -> Option<ProviderConfig> {
-        Some(get_provider().await)
+    async fn get_tool_use_inference_request_providers() -> Vec<ProviderConfig> {
+        vec![get_provider().await]
     }
 
-    async fn get_tool_use_streaming_inference_request_provider() -> Option<ProviderConfig> {
-        Some(get_provider().await)
+    async fn get_tool_use_streaming_inference_request_providers() -> Vec<ProviderConfig> {
+        vec![get_provider().await]
     }
 
-    async fn get_json_mode_inference_request_provider() -> Option<ProviderConfig> {
-        Some(get_provider().await)
+    async fn get_json_mode_inference_request_providers() -> Vec<ProviderConfig> {
+        vec![get_provider().await]
     }
 
-    async fn get_json_mode_streaming_inference_request_provider() -> Option<ProviderConfig> {
-        Some(get_provider().await)
+    async fn get_json_mode_streaming_inference_request_providers() -> Vec<ProviderConfig> {
+        vec![get_provider().await]
     }
 }
 

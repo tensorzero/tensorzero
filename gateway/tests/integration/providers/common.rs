@@ -23,12 +23,12 @@ use gateway::tool::{
 /// If some test doesn't apply to a particular provider (e.g. provider doesn't support tool use),
 /// then the provider should return `None` from the corresponding method.
 pub trait TestableProviderConfig {
-    async fn get_simple_inference_request_provider() -> Option<ProviderConfig>;
-    async fn get_streaming_inference_request_provider() -> Option<ProviderConfig>;
-    async fn get_tool_use_inference_request_provider() -> Option<ProviderConfig>;
-    async fn get_tool_use_streaming_inference_request_provider() -> Option<ProviderConfig>;
-    async fn get_json_mode_inference_request_provider() -> Option<ProviderConfig>;
-    async fn get_json_mode_streaming_inference_request_provider() -> Option<ProviderConfig>;
+    async fn get_simple_inference_request_providers() -> Vec<ProviderConfig>;
+    async fn get_streaming_inference_request_providers() -> Vec<ProviderConfig>;
+    async fn get_tool_use_inference_request_providers() -> Vec<ProviderConfig>;
+    async fn get_tool_use_streaming_inference_request_providers() -> Vec<ProviderConfig>;
+    async fn get_json_mode_inference_request_providers() -> Vec<ProviderConfig>;
+    async fn get_json_mode_streaming_inference_request_providers() -> Vec<ProviderConfig>;
 }
 
 #[macro_export]
@@ -43,48 +43,50 @@ macro_rules! generate_provider_tests {
 
         #[tokio::test]
         async fn test_simple_inference_request() {
-            let provider = $struct_name::get_simple_inference_request_provider().await;
-            if let Some(provider) = provider {
+            let providers = $struct_name::get_simple_inference_request_providers().await;
+            for provider in providers {
                 test_simple_inference_request_with_provider(provider).await;
             }
         }
 
         #[tokio::test]
         async fn test_streaming_inference_request() {
-            let provider = $struct_name::get_streaming_inference_request_provider().await;
-            if let Some(provider) = provider {
+            let providers = $struct_name::get_streaming_inference_request_providers().await;
+            for provider in providers {
                 test_streaming_inference_request_with_provider(provider).await;
             }
         }
 
         #[tokio::test]
         async fn test_tool_use_inference_request() {
-            let provider = $struct_name::get_tool_use_inference_request_provider().await;
-            if let Some(provider) = provider {
+            let providers = $struct_name::get_tool_use_inference_request_providers().await;
+            for provider in providers {
                 test_tool_use_inference_request_with_provider(provider).await;
             }
         }
 
         #[tokio::test]
         async fn test_tool_use_streaming_inference_request() {
-            let provider = $struct_name::get_tool_use_streaming_inference_request_provider().await;
-            if let Some(provider) = provider {
+            let providers =
+                $struct_name::get_tool_use_streaming_inference_request_providers().await;
+            for provider in providers {
                 test_tool_use_streaming_inference_request_with_provider(provider).await;
             }
         }
 
         #[tokio::test]
         async fn test_json_mode_inference_request() {
-            let provider = $struct_name::get_json_mode_inference_request_provider().await;
-            if let Some(provider) = provider {
+            let providers = $struct_name::get_json_mode_inference_request_providers().await;
+            for provider in providers {
                 test_json_mode_inference_request_with_provider(provider).await;
             }
         }
 
         #[tokio::test]
         async fn test_json_mode_streaming_inference_request() {
-            let provider = $struct_name::get_json_mode_streaming_inference_request_provider().await;
-            if let Some(provider) = provider {
+            let providers =
+                $struct_name::get_json_mode_streaming_inference_request_providers().await;
+            for provider in providers {
                 test_json_mode_streaming_inference_request_with_provider(provider).await;
             }
         }
