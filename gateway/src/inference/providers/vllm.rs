@@ -29,11 +29,9 @@ pub struct VLLMProvider {
     pub api_base: String,
 }
 
-/// Key differences between Fireworks and OpenAI inference:
-/// - Fireworks allows you to specify output format in JSON mode
-/// - Fireworks automatically returns usage in streaming inference, we don't have to ask for it
-/// - Fireworks allows you to auto-truncate requests that have too many tokens
-///   (there are 2 ways to do it, we have the default of auto-truncation to the max window size)
+/// Key differences between vLLM and OpenAI inference:
+/// - vLLM supports guided decoding
+/// - vLLM only supports a specific tool and nothing else
 impl InferenceProvider for VLLMProvider {
     async fn infer<'a>(
         &'a self,
@@ -76,7 +74,7 @@ impl InferenceProvider for VLLMProvider {
         } else {
             handle_openai_error(
                 res.status(),
-                &res.text().await.map_err(|e| Error::FireworksServer {
+                &res.text().await.map_err(|e| Error::VLLMServer {
                     message: format!("Error parsing error response: {e}"),
                 })?,
             )
@@ -174,6 +172,7 @@ struct VLLMRequest<'a> {
 
 impl<'a> VLLMRequest<'a> {
     pub fn new(model: &'a str, request: &'a ModelInferenceRequest) -> VLLMRequest<'a> {
+        // TODO(Viraj): handle this
         // NB: Fireworks will throw an error if you give FireworksResponseFormat::Text and then also include tools.
         // So we just don't include it as Text is the same as None anyway.
         let response_format = match request.json_mode {
@@ -225,26 +224,26 @@ mod tests {
             output_schema: None,
         };
 
-        let fireworks_request = VLLMRequest::new("llama-v3-8b", &request_with_tools);
+        let vllm_request = VLLMRequest::new("llama-v3-8b", &request_with_tools);
 
-        assert_eq!(fireworks_request.model, "llama-v3-8b");
-        assert_eq!(fireworks_request.messages.len(), 1);
-        assert_eq!(fireworks_request.temperature, Some(0.5));
-        assert_eq!(fireworks_request.max_tokens, Some(100));
-        assert!(!fireworks_request.stream);
+        assert_eq!(vllm_request.model, "llama-v3-8b");
+        assert_eq!(vllm_request.messages.len(), 1);
+        assert_eq!(vllm_request.temperature, Some(0.5));
+        assert_eq!(vllm_request.max_tokens, Some(100));
+        assert!(!vllm_request.stream);
         assert_eq!(
-            fireworks_request.response_format,
+            vllm_request.response_format,
             Some(FireworksResponseFormat::JsonObject {
                 schema: request_with_tools.output_schema,
             })
         );
-        assert!(fireworks_request.tools.is_some());
-        let tools = fireworks_request.tools.as_ref().unwrap();
+        assert!(vllm_request.tools.is_some());
+        let tools = vllm_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
         assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
         assert_eq!(
-            fireworks_request.tool_choice,
+            vllm_request.tool_choice,
             Some(OpenAIToolChoice::Specific(SpecificToolChoice {
                 r#type: OpenAIToolType::Function,
                 function: SpecificToolFunction {
