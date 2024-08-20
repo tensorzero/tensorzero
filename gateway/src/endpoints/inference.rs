@@ -349,6 +349,7 @@ fn prepare_event(
         })
 }
 
+#[derive(Debug)]
 pub struct InferenceDatabaseInsertMetadata {
     pub function_name: String,
     pub variant_name: String,

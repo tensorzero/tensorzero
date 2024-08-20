@@ -11,6 +11,7 @@ use std::{
 use uuid::Uuid;
 
 use crate::endpoints::inference::InferenceDatabaseInsertMetadata;
+use crate::endpoints::inference::InferenceParams;
 use crate::function::FunctionConfig;
 use crate::tool::ToolCallConfigDatabaseInsert;
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolResult};
@@ -260,8 +261,8 @@ pub struct InferenceDatabaseInsert {
     pub episode_id: Uuid,
     pub input: String,
     pub output: String,
-    pub tool_params: String,
-    pub inference_params: String,
+    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    pub inference_params: InferenceParams,
     pub processing_time_ms: u32,
 }
 
@@ -499,28 +500,9 @@ impl InferenceDatabaseInsert {
         metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
         let processing_time_ms = metadata.processing_time.as_millis() as u32;
-        let tool_params = match metadata.tool_params {
-            Some(tool_params) => {
-                let tool_params: ToolCallConfigDatabaseInsert = tool_params.into();
-                serde_json::to_string(&tool_params)
-                    .map_err(|e| Error::Serialization {
-                        message: format!("Failed to serialize tool params: {}", e),
-                    })
-                    .unwrap_or_else(|e| {
-                        e.log();
-                        String::new()
-                    })
-            }
-            None => String::new(),
-        };
-        let inference_params = serde_json::to_string(&metadata.inference_params)
-            .map_err(|e| Error::Serialization {
-                message: format!("Failed to serialize inference params: {}", e),
-            })
-            .unwrap_or_else(|e| {
-                e.log();
-                String::new()
-            });
+
+        let tool_params = metadata.tool_params.map(ToolCallConfigDatabaseInsert::from);
+        let inference_params = metadata.inference_params;
         match inference_response {
             InferenceResult::Chat(chat_response) => {
                 let output = serde_json::to_string(&chat_response.output)
