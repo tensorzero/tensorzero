@@ -7,9 +7,7 @@ use gateway::inference::types::{ContentBlock, Text};
 use gateway::model::ProviderConfig;
 
 use crate::providers::common::{
-    create_json_inference_request, create_streaming_json_inference_request,
-    test_simple_inference_request_with_provider, test_streaming_inference_request_with_provider,
-    TestableProviderConfig,
+    create_json_inference_request, create_streaming_json_inference_request, TestableProviderConfig,
 };
 
 crate::enforce_provider_tests!(GCPVertexGeminiProvider);
@@ -20,6 +18,10 @@ impl TestableProviderConfig for GCPVertexGeminiProvider {
     }
 
     async fn get_streaming_inference_request_provider() -> Option<ProviderConfig> {
+        Some(get_provider())
+    }
+
+    async fn get_tool_use_inference_request_provider() -> Option<ProviderConfig> {
         Some(get_provider())
     }
 }

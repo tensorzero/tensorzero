@@ -24,11 +24,16 @@ use gateway::tool::{
 pub trait TestableProviderConfig {
     async fn get_simple_inference_request_provider() -> Option<ProviderConfig>;
     async fn get_streaming_inference_request_provider() -> Option<ProviderConfig>;
+    async fn get_tool_use_inference_request_provider() -> Option<ProviderConfig>;
 }
 
 #[macro_export]
 macro_rules! enforce_provider_tests {
     ($struct_name:ident) => {
+        use $crate::providers::common::test_simple_inference_request_with_provider;
+        use $crate::providers::common::test_streaming_inference_request_with_provider;
+        use $crate::providers::common::test_tool_use_inference_request_with_provider;
+
         #[tokio::test]
         async fn test_simple_inference_request() {
             let provider = $struct_name::get_simple_inference_request_provider().await;
@@ -42,6 +47,14 @@ macro_rules! enforce_provider_tests {
             let provider = $struct_name::get_streaming_inference_request_provider().await;
             if let Some(provider) = provider {
                 test_streaming_inference_request_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_tool_use_inference_request() {
+            let provider = $struct_name::get_tool_use_inference_request_provider().await;
+            if let Some(provider) = provider {
+                test_tool_use_inference_request_with_provider(provider).await;
             }
         }
     };
@@ -137,6 +150,56 @@ pub async fn test_streaming_inference_request_with_provider(provider: ProviderCo
     }
 }
 
+fn create_tool_use_inference_request() -> ModelInferenceRequest<'static> {
+    let messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec!["What's the weather like in New York currently?"
+            .to_string()
+            .into()],
+    }];
+
+    // Fine to leak during test execution
+    let tool_config = Box::leak(Box::new(ToolCallConfig {
+        tools_available: vec![ToolConfig::Static(&WEATHER_TOOL_CONFIG)],
+        tool_choice: ToolChoice::Tool("get_weather".to_string()),
+        parallel_tool_calls: false,
+    }));
+
+    ModelInferenceRequest {
+        messages,
+        system: None,
+        tool_config: Some(tool_config),
+        temperature: Some(0.7),
+        max_tokens: Some(300),
+        seed: None,
+        stream: false,
+        json_mode: JSONMode::Off,
+        function_type: FunctionType::Chat,
+        output_schema: None,
+    }
+}
+
+pub async fn test_tool_use_inference_request_with_provider(provider: ProviderConfig) {
+    // Set up and make the inference request
+    let inference_request = create_tool_use_inference_request();
+    let client = reqwest::Client::new();
+    let result = provider.infer(&inference_request, &client).await.unwrap();
+
+    // Check the result
+    assert!(result.content.len() == 1);
+    let content = result.content.first().unwrap();
+    match content {
+        ContentBlock::ToolCall(tool_call) => {
+            assert!(tool_call.name == "get_weather");
+
+            let arguments: serde_json::Value = serde_json::from_str(&tool_call.arguments)
+                .expect("Failed to parse tool call arguments");
+            assert!(arguments.get("location").is_some());
+        }
+        _ => panic!("Unexpected content block: {:?}", content),
+    }
+}
+
 pub fn create_json_inference_request<'a>() -> ModelInferenceRequest<'a> {
     let messages = vec![RequestMessage {
         role: Role::User,
@@ -204,38 +267,11 @@ lazy_static! {
         strict: true,
     };
     static ref WEATHER_TOOL: ToolConfig = ToolConfig::Static(&WEATHER_TOOL_CONFIG);
-    static ref TOOL_CONFIG_SPECIFIC: ToolCallConfig = ToolCallConfig {
-        tools_available: vec![ToolConfig::Static(&WEATHER_TOOL_CONFIG)],
-        tool_choice: ToolChoice::Tool("get_weather".to_string()),
-        parallel_tool_calls: false,
-    };
     static ref TOOL_CONFIG_AUTO: ToolCallConfig = ToolCallConfig {
         tools_available: vec![ToolConfig::Static(&WEATHER_TOOL_CONFIG)],
         tool_choice: ToolChoice::Auto,
         parallel_tool_calls: false,
     };
-}
-
-pub fn create_tool_inference_request() -> ModelInferenceRequest<'static> {
-    let messages = vec![RequestMessage {
-        role: Role::User,
-        content: vec!["What's the weather like in New York currently?"
-            .to_string()
-            .into()],
-    }];
-
-    ModelInferenceRequest {
-        messages,
-        system: None,
-        tool_config: Some(&*TOOL_CONFIG_SPECIFIC),
-        temperature: Some(0.7),
-        max_tokens: Some(300),
-        seed: None,
-        stream: false,
-        json_mode: JSONMode::Off,
-        function_type: FunctionType::Chat,
-        output_schema: None,
-    }
 }
 
 pub fn create_tool_result_inference_request() -> ModelInferenceRequest<'static> {
@@ -279,7 +315,7 @@ pub fn create_tool_result_inference_request() -> ModelInferenceRequest<'static> 
 }
 
 pub fn create_streaming_tool_inference_request() -> ModelInferenceRequest<'static> {
-    let mut request = create_tool_inference_request();
+    let mut request = create_tool_use_inference_request();
     request.stream = true;
     request
 }

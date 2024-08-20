@@ -6,9 +6,7 @@ use gateway::{inference::providers::aws_bedrock::AWSBedrockProvider, model::Prov
 
 use crate::providers::common::{
     create_streaming_tool_inference_request, create_streaming_tool_result_inference_request,
-    create_tool_inference_request, create_tool_result_inference_request,
-    test_simple_inference_request_with_provider, test_streaming_inference_request_with_provider,
-    TestableProviderConfig,
+    create_tool_result_inference_request, TestableProviderConfig,
 };
 
 crate::enforce_provider_tests!(AWSBedrockProvider);
@@ -19,6 +17,10 @@ impl TestableProviderConfig for AWSBedrockProvider {
     }
 
     async fn get_streaming_inference_request_provider() -> Option<ProviderConfig> {
+        Some(get_provider().await)
+    }
+
+    async fn get_tool_use_inference_request_provider() -> Option<ProviderConfig> {
         Some(get_provider().await)
     }
 }
@@ -55,29 +57,6 @@ async fn test_simple_inference_request_with_broken_region() {
     );
 
     test_simple_inference_request_with_provider(provider).await;
-}
-
-#[tokio::test]
-async fn test_infer_with_tool_calls() {
-    let model_id = "anthropic.claude-3-haiku-20240307-v1:0".to_string();
-    let provider =
-        ProviderConfig::AWSBedrock(AWSBedrockProvider::new(model_id, None).await.unwrap());
-    let client = reqwest::Client::new();
-    let inference_request = create_tool_inference_request();
-    let result = provider.infer(&inference_request, &client).await;
-
-    let response = result.unwrap();
-    assert!(response.content.len() == 1);
-    let content = response.content.first().unwrap();
-    match content {
-        ContentBlock::ToolCall(tool_call) => {
-            assert!(tool_call.name == "get_weather");
-            let arguments: serde_json::Value = serde_json::from_str(&tool_call.arguments)
-                .expect("Failed to parse tool call arguments");
-            assert!(arguments.get("location").is_some());
-        }
-        _ => panic!("Unexpected content block: {:?}", content),
-    }
 }
 
 #[tokio::test]

@@ -9,9 +9,7 @@ use gateway::inference::types::{ContentBlock, Text};
 use gateway::model::ProviderConfig;
 
 use crate::providers::common::{
-    create_json_inference_request, create_streaming_json_inference_request,
-    create_tool_inference_request, test_simple_inference_request_with_provider,
-    test_streaming_inference_request_with_provider, TestableProviderConfig,
+    create_json_inference_request, create_streaming_json_inference_request, TestableProviderConfig,
 };
 
 crate::enforce_provider_tests!(FireworksProvider);
@@ -23,6 +21,10 @@ impl TestableProviderConfig for FireworksProvider {
 
     async fn get_streaming_inference_request_provider() -> Option<ProviderConfig> {
         Some(get_provider())
+    }
+
+    async fn get_tool_use_inference_request_provider() -> Option<ProviderConfig> {
+        Some(get_provider_tool_use())
     }
 }
 
@@ -38,34 +40,17 @@ fn get_provider() -> ProviderConfig {
     })
 }
 
-#[tokio::test]
-async fn test_infer_with_tool_calls() {
-    // Load API key from environment variable
+// Get a generic provider for tool use
+// NOTE: Fireworks doesn't support tool use with vanilla Llama 3 8b yet
+fn get_provider_tool_use() -> ProviderConfig {
     let api_key = env::var("FIREWORKS_API_KEY").expect("FIREWORKS_API_KEY must be set");
-    let api_key = SecretString::new(api_key);
-    let model_name = "accounts/fireworks/models/firefunction-v2";
-    let client = reqwest::Client::new();
+    let api_key = Some(SecretString::new(api_key));
+    let model_name = "accounts/fireworks/models/firefunction-v2".to_string();
 
-    let inference_request = create_tool_inference_request();
-
-    let provider = ProviderConfig::Fireworks(FireworksProvider {
-        model_name: model_name.to_string(),
-        api_key: Some(api_key),
-    });
-    let result = provider.infer(&inference_request, &client).await;
-
-    let response = result.unwrap();
-    assert!(response.content.len() == 1);
-    let content = response.content.first().unwrap();
-    match content {
-        ContentBlock::ToolCall(tool_call) => {
-            assert!(tool_call.name == "get_weather");
-            let arguments: serde_json::Value = serde_json::from_str(&tool_call.arguments)
-                .expect("Failed to parse tool call arguments");
-            assert!(arguments.get("location").is_some());
-        }
-        _ => panic!("Expected a tool call content block"),
-    }
+    ProviderConfig::Fireworks(FireworksProvider {
+        model_name,
+        api_key,
+    })
 }
 
 #[tokio::test]
