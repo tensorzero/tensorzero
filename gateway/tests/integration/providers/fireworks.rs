@@ -9,34 +9,31 @@ use gateway::inference::types::{ContentBlock, Text};
 use gateway::model::ProviderConfig;
 
 use crate::providers::common::{
-    create_json_inference_request, create_simple_inference_request,
-    create_streaming_inference_request, create_streaming_json_inference_request,
-    create_tool_inference_request,
+    create_json_inference_request, create_streaming_json_inference_request,
+    create_tool_inference_request, test_simple_inference_request_with_provider,
+    test_streaming_inference_request_with_provider,
 };
 
-#[tokio::test]
-async fn test_infer() {
-    // Load API key from environment variable
+/// Get a generic provider for testing
+fn get_provider() -> ProviderConfig {
     let api_key = env::var("FIREWORKS_API_KEY").expect("FIREWORKS_API_KEY must be set");
-    let api_key = SecretString::new(api_key);
-    let model_name = "accounts/fireworks/models/llama-v3-8b-instruct";
-    let client = reqwest::Client::new();
-    let inference_request = create_simple_inference_request();
+    let api_key = Some(SecretString::new(api_key));
+    let model_name = "accounts/fireworks/models/llama-v3-8b-instruct".to_string();
 
-    let provider = ProviderConfig::Fireworks(FireworksProvider {
-        model_name: model_name.to_string(),
-        api_key: Some(api_key),
-    });
-    let result = provider.infer(&inference_request, &client).await;
-    let result = result.unwrap();
-    assert!(result.content.len() == 1);
-    let content = result.content.first().unwrap();
-    match content {
-        ContentBlock::Text(Text { text }) => {
-            assert!(!text.is_empty());
-        }
-        _ => panic!("Expected a text content block"),
-    }
+    ProviderConfig::Fireworks(FireworksProvider {
+        model_name,
+        api_key,
+    })
+}
+
+#[tokio::test]
+async fn test_simple_inference_request() {
+    test_simple_inference_request_with_provider(get_provider()).await;
+}
+
+#[tokio::test]
+async fn test_streaming_inference_request() {
+    test_streaming_inference_request_with_provider(get_provider()).await;
 }
 
 #[tokio::test]
@@ -67,33 +64,6 @@ async fn test_infer_with_tool_calls() {
         }
         _ => panic!("Expected a tool call content block"),
     }
-}
-
-#[tokio::test]
-async fn test_infer_stream() {
-    // Load API key from environment variable
-    let api_key = env::var("FIREWORKS_API_KEY").expect("FIREWORKS_API_KEY must be set");
-    let api_key = SecretString::new(api_key);
-    let model_name = "accounts/fireworks/models/llama-v3-8b-instruct";
-    let client = reqwest::Client::new();
-    let inference_request = create_streaming_inference_request();
-
-    let provider = ProviderConfig::Fireworks(FireworksProvider {
-        model_name: model_name.to_string(),
-        api_key: Some(api_key),
-    });
-    let result = provider.infer_stream(&inference_request, &client).await;
-    assert!(result.is_ok());
-    let (chunk, mut stream) = result.unwrap();
-    let mut collected_chunks = vec![chunk];
-    while let Some(chunk) = stream.next().await {
-        assert!(chunk.is_ok());
-        collected_chunks.push(chunk.unwrap());
-    }
-    assert!(!collected_chunks.is_empty());
-    // Fourth as an arbitrary middle chunk, the first and last may contain only metadata
-    assert!(collected_chunks[4].content.len() == 1);
-    assert!(collected_chunks.last().unwrap().usage.is_some());
 }
 
 #[tokio::test]

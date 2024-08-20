@@ -6,51 +6,27 @@ use gateway::inference::types::{ContentBlock, ContentBlockChunk, Text};
 use gateway::model::ProviderConfig;
 
 use crate::providers::common::{
-    create_json_inference_request, create_simple_inference_request,
-    create_streaming_inference_request, create_streaming_json_inference_request,
+    create_json_inference_request, create_streaming_json_inference_request,
     create_streaming_tool_inference_request, create_tool_inference_request,
+    test_simple_inference_request_with_provider, test_streaming_inference_request_with_provider,
 };
 
-#[tokio::test]
-async fn test_infer() {
+/// Get a generic provider for testing
+fn get_provider() -> ProviderConfig {
     let mut provider_config_json = json!({"type": "gcp_vertex_gemini", "model_id": "gemini-1.5-flash-001", "location": "us-central1"});
     let gcp_project_id = "tensorzero-public";
     provider_config_json["project_id"] = Value::String(gcp_project_id.to_string());
-    let provider: ProviderConfig = serde_json::from_value(provider_config_json).unwrap();
-    let client = reqwest::Client::new();
-    let inference_request = create_simple_inference_request();
-    let result = provider.infer(&inference_request, &client).await;
-    assert!(result.is_ok(), "{}", result.unwrap_err());
-    let result = result.unwrap();
-    assert!(result.content.len() == 1);
-    let content = result.content.first().unwrap();
-    match content {
-        ContentBlock::Text(Text { text }) => {
-            assert!(!text.is_empty());
-        }
-        _ => panic!("Expected a text content block"),
-    }
+    serde_json::from_value(provider_config_json).unwrap()
 }
 
 #[tokio::test]
-async fn test_infer_stream() {
-    let mut provider_config_json = json!({"type": "gcp_vertex_gemini", "model_id": "gemini-1.5-flash-001", "location": "us-central1"});
-    let gcp_project_id = "tensorzero-public";
-    provider_config_json["project_id"] = Value::String(gcp_project_id.to_string());
-    let provider: ProviderConfig = serde_json::from_value(provider_config_json).unwrap();
-    let client = reqwest::Client::new();
-    let inference_request = create_streaming_inference_request();
-    let result = provider.infer_stream(&inference_request, &client).await;
-    let (chunk, mut stream) = result.unwrap();
-    let mut collected_chunks = vec![chunk];
-    while let Some(chunk) = stream.next().await {
-        assert!(chunk.is_ok(), "{}", chunk.unwrap_err());
-        collected_chunks.push(chunk.unwrap());
-    }
-    assert!(!collected_chunks.is_empty());
-    // Fourth as an arbitrary middle chunk, the first and last may contain only metadata
-    assert!(collected_chunks[4].content.len() == 1);
-    assert!(collected_chunks.last().unwrap().usage.is_some());
+async fn test_simple_inference_request() {
+    test_simple_inference_request_with_provider(get_provider()).await;
+}
+
+#[tokio::test]
+async fn test_streaming_inference_request() {
+    test_streaming_inference_request_with_provider(get_provider()).await;
 }
 
 // Gemini Flash does not support JSON mode using an output schema -- the model provider knows this automatically
@@ -220,7 +196,7 @@ async fn test_streaming_json_request_flash() {
         collected_chunks.push(chunk.unwrap());
     }
     assert!(!collected_chunks.is_empty());
-    // Third as an arbitrary middle chunk, the first and last may contain only metadata
-    assert!(collected_chunks[3].content.len() == 1);
+    // 1th as an arbitrary middle chunk, the first and last may contain only metadata
+    assert!(collected_chunks[1].content.len() == 1);
     assert!(collected_chunks.last().unwrap().usage.is_some());
 }
