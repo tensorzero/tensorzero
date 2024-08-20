@@ -2,15 +2,16 @@ use aws_config::meta::region::RegionProviderChain;
 use aws_sdk_bedrockruntime::operation::converse::ConverseOutput;
 use aws_sdk_bedrockruntime::operation::converse_stream::ConverseStreamOutput;
 use aws_sdk_bedrockruntime::types::{
-    ContentBlock as BedrockContentBlock, ContentBlockDelta, ContentBlockStart, ConversationRole,
-    ConverseOutput as ConverseOutputType, ConverseStreamOutput as ConverseStreamOutputType,
-    InferenceConfiguration, Message, SystemContentBlock,
+    AnyToolChoice, AutoToolChoice, ContentBlock as BedrockContentBlock, ContentBlockDelta,
+    ContentBlockStart, ConversationRole, ConverseOutput as ConverseOutputType,
+    ConverseStreamOutput as ConverseStreamOutputType, InferenceConfiguration, Message,
+    SpecificToolChoice, SystemContentBlock, Tool, ToolChoice as AWSBedrockToolChoice,
+    ToolConfiguration, ToolInputSchema, ToolResultBlock, ToolResultContentBlock, ToolSpecification,
+    ToolUseBlock,
 };
 use aws_smithy_types::error::display::DisplayErrorContext;
 use aws_types::region::Region;
-use dashmap::{DashMap, Entry as DashMapEntry};
 use futures::{Stream, StreamExt};
-use lazy_static::lazy_static;
 use reqwest::StatusCode;
 use std::time::Duration;
 use tokio::time::Instant;
@@ -23,57 +24,38 @@ use crate::inference::types::{
     ModelInferenceResponseChunk, ModelInferenceResponseStream, RequestMessage, Role, Text,
     TextChunk, Usage,
 };
-use crate::tool::ToolCallChunk;
+use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-lazy_static! {
-     /// NOTE: The AWS client is thread-safe but not safe across Tokio runtimes. By default, `tokio::test`
-     /// spawns a new runtime for each test, causing intermittent issues with the AWS client. For tests,
-     /// use a shared runtime like in our integration tests. This isn't an issue when running the gateway
-     /// normally since that uses a single runtime.
-    static ref AWS_BEDROCK_CLIENTS: DashMap<Region, &'static aws_sdk_bedrockruntime::Client> = DashMap::new();
-}
-
-async fn get_aws_bedrock_client(
-    region: Option<Region>,
-) -> Result<&'static aws_sdk_bedrockruntime::Client, Error> {
-    // Decide which AWS region to use. We try the following in order:
-    // - The provided `region` argument
-    // - The region defined by the credentials (e.g. `AWS_REGION` environment variable)
-    // - The default region (us-east-1)
-    let region = RegionProviderChain::first_try(region)
-        .or_default_provider()
-        .or_else(Region::new("us-east-1"))
-        .region()
-        .await
-        .ok_or(Error::AWSBedrockClient {
-            status_code: StatusCode::INTERNAL_SERVER_ERROR,
-            message: "Failed to determine AWS region.".to_string(),
-        })?;
-
-    let client: &aws_sdk_bedrockruntime::Client = match AWS_BEDROCK_CLIENTS.entry(region) {
-        DashMapEntry::Occupied(entry) => entry.get(),
-        DashMapEntry::Vacant(entry) => {
-            tracing::trace!(
-                "Creating new AWS Bedrock client for region: {}",
-                entry.key()
-            );
-            let config = aws_config::from_env()
-                .region(entry.key().clone())
-                .load()
-                .await;
-            let client = Box::leak(Box::new(aws_sdk_bedrockruntime::Client::new(&config)));
-            entry.insert(client);
-            client
-        }
-    };
-
-    Ok(client)
-}
-
-#[derive(Clone, Debug)]
+// NB: If you add `Clone` someday, you'll need to wrap client in Arc
+#[derive(Debug)]
 pub struct AWSBedrockProvider {
     pub model_id: String,
-    pub region: Option<Region>,
+    client: aws_sdk_bedrockruntime::Client,
+}
+
+impl AWSBedrockProvider {
+    pub async fn new(model_id: String, region: Option<Region>) -> Result<Self, Error> {
+        // Decide which AWS region to use. We try the following in order:
+        // - The provided `region` argument
+        // - The region defined by the credentials (e.g. `AWS_REGION` environment variable)
+        // - The default region (us-east-1)
+        let region = RegionProviderChain::first_try(region)
+            .or_default_provider()
+            .or_else(Region::new("us-east-1"))
+            .region()
+            .await
+            .ok_or(Error::AWSBedrockClient {
+                status_code: StatusCode::INTERNAL_SERVER_ERROR,
+                message: "Failed to determine AWS region.".to_string(),
+            })?;
+
+        tracing::trace!("Creating new AWS Bedrock client for region: {region}",);
+
+        let config = aws_config::from_env().region(region).load().await;
+        let client = aws_sdk_bedrockruntime::Client::new(&config);
+
+        Ok(Self { model_id, client })
+    }
 }
 
 impl InferenceProvider for AWSBedrockProvider {
@@ -82,8 +64,6 @@ impl InferenceProvider for AWSBedrockProvider {
         request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
     ) -> Result<ModelInferenceResponse, Error> {
-        let aws_bedrock_client = get_aws_bedrock_client(self.region.clone()).await?;
-
         // TODO (#55): add support for guardrails and additional fields
 
         let messages: Vec<Message> = request
@@ -100,9 +80,11 @@ impl InferenceProvider for AWSBedrockProvider {
         if let Some(temperature) = request.temperature {
             inference_config = inference_config.temperature(temperature);
         }
+
         // Note: AWS Bedrock does not support seed
 
-        let mut bedrock_request = aws_bedrock_client
+        let mut bedrock_request = self
+            .client
             .converse()
             .model_id(&self.model_id)
             .set_messages(Some(messages))
@@ -113,7 +95,26 @@ impl InferenceProvider for AWSBedrockProvider {
             bedrock_request = bedrock_request.system(system_block);
         }
 
-        // TODO (#18, #30): .tool_config(...)
+        if let Some(tool_config) = request.tool_config {
+            let tools: Vec<Tool> = tool_config
+                .tools_available
+                .iter()
+                .map(Tool::try_from)
+                .collect::<Result<Vec<_>, _>>()?;
+
+            let tool_choice: AWSBedrockToolChoice = tool_config.tool_choice.clone().try_into()?;
+
+            let aws_bedrock_tool_config = ToolConfiguration::builder()
+                .set_tools(Some(tools))
+                .tool_choice(tool_choice)
+                .build()
+                .map_err(|e| Error::AWSBedrockClient {
+                    status_code: StatusCode::INTERNAL_SERVER_ERROR,
+                    message: format!("Error configuring AWS Bedrock tool config: {e}"),
+                })?;
+
+            bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
+        }
 
         let start_time = Instant::now();
         let output = bedrock_request
@@ -138,8 +139,6 @@ impl InferenceProvider for AWSBedrockProvider {
         request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
     ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error> {
-        let aws_bedrock_client = get_aws_bedrock_client(self.region.clone()).await?;
-
         // TODO (#55): add support for guardrails and additional fields
 
         let messages: Vec<Message> = request
@@ -157,7 +156,8 @@ impl InferenceProvider for AWSBedrockProvider {
             inference_config = inference_config.temperature(temperature);
         }
 
-        let mut bedrock_request = aws_bedrock_client
+        let mut bedrock_request = self
+            .client
             .converse_stream()
             .model_id(&self.model_id)
             .set_messages(Some(messages))
@@ -168,7 +168,26 @@ impl InferenceProvider for AWSBedrockProvider {
             bedrock_request = bedrock_request.system(system_block);
         }
 
-        // TODO (#18, #30): .tool_config(...)
+        if let Some(tool_config) = request.tool_config {
+            let tools: Vec<Tool> = tool_config
+                .tools_available
+                .iter()
+                .map(Tool::try_from)
+                .collect::<Result<Vec<_>, _>>()?;
+
+            let tool_choice: AWSBedrockToolChoice = tool_config.tool_choice.clone().try_into()?;
+
+            let aws_bedrock_tool_config = ToolConfiguration::builder()
+                .set_tools(Some(tools))
+                .tool_choice(tool_choice)
+                .build()
+                .map_err(|e| Error::AWSBedrockClient {
+                    status_code: StatusCode::INTERNAL_SERVER_ERROR,
+                    message: format!("Error configuring AWS Bedrock tool config: {e}"),
+                })?;
+
+            bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
+        }
 
         let start_time = Instant::now();
         let stream = bedrock_request
@@ -357,9 +376,46 @@ impl TryFrom<&ContentBlock> for BedrockContentBlock {
     fn try_from(block: &ContentBlock) -> Result<Self, Self::Error> {
         match block {
             ContentBlock::Text(Text { text }) => Ok(BedrockContentBlock::Text(text.clone())),
-            _ => Err(Error::TypeConversion {
-                message: "Unsupported content block type for AWS Bedrock.".to_string(),
-            }), // TODO (#18, #30): handle tool use and tool call blocks
+            ContentBlock::ToolCall(tool_call) => {
+                // Convert the tool call arguments from String to JSON Value...
+                let input = serde_json::from_str(&tool_call.arguments).map_err(|e| {
+                    Error::AWSBedrockServer {
+                        message: format!("Error parsing tool call arguments as JSON Value: {e}"),
+                    }
+                })?;
+
+                // ...then convert the JSON Value to an AWS SDK Document
+                let input = serde_json::from_value(input).map_err(|e| Error::AWSBedrockServer {
+                    message: format!(
+                        "Error converting tool call arguments to AWS SDK Document: {e}"
+                    ),
+                })?;
+
+                let tool_use_block = ToolUseBlock::builder()
+                    .name(tool_call.name.clone())
+                    .input(input)
+                    .tool_use_id(tool_call.id.clone())
+                    .build()
+                    .map_err(|_| Error::AWSBedrockClient {
+                        status_code: StatusCode::BAD_REQUEST,
+                        message: "Error serializing tool call block".to_string(),
+                    })?;
+
+                Ok(BedrockContentBlock::ToolUse(tool_use_block))
+            }
+            ContentBlock::ToolResult(tool_result) => {
+                let tool_result_block = ToolResultBlock::builder()
+                    .tool_use_id(tool_result.id.clone())
+                    .content(ToolResultContentBlock::Text(tool_result.result.clone()))
+                    // NOTE: The AWS Bedrock SDK doesn't include `name` in the ToolResultBlock
+                    .build()
+                    .map_err(|_| Error::AWSBedrockClient {
+                        status_code: StatusCode::BAD_REQUEST,
+                        message: "Error serializing tool result block".to_string(),
+                    })?;
+
+                Ok(BedrockContentBlock::ToolResult(tool_result_block))
+            }
         }
     }
 }
@@ -370,9 +426,25 @@ impl TryFrom<BedrockContentBlock> for ContentBlock {
     fn try_from(block: BedrockContentBlock) -> Result<Self, Self::Error> {
         match block {
             BedrockContentBlock::Text(text) => Ok(text.into()),
+            BedrockContentBlock::ToolUse(tool_use) => {
+                let arguments = serde_json::to_string(&tool_use.input).map_err(|e| {
+                    Error::AWSBedrockServer {
+                        message: format!("Error parsing tool call arguments from AWS Bedrock: {e}"),
+                    }
+                })?;
+
+                Ok(ContentBlock::ToolCall(ToolCall {
+                    name: tool_use.name,
+                    arguments,
+                    id: tool_use.tool_use_id,
+                }))
+            }
             _ => Err(Error::TypeConversion {
-                message: "Unsupported content block type for AWS Bedrock.".to_string(),
-            }), // TODO (#18, #30): handle tool use and tool call blocks
+                message: format!(
+                    "Unsupported content block type for AWS Bedrock: {}",
+                    std::any::type_name_of_val(&block)
+                ),
+            }),
         }
     }
 }
@@ -430,14 +502,15 @@ impl TryFrom<ConverseOutputWithLatency> for ModelInferenceResponse {
             .map(|block| block.try_into())
             .collect::<Result<Vec<ContentBlock>, _>>()?;
 
-        let usage = match output.usage {
-            Some(usage) => Usage {
-                prompt_tokens: usage.input_tokens as u32,
-                completion_tokens: usage.output_tokens as u32,
-            },
-            #[allow(clippy::todo)] // TODO (#160)
-            None => todo!(), // TODO (#18): this should be nullable
-        };
+        let usage = output
+            .usage
+            .map(|u| Usage {
+                prompt_tokens: u.input_tokens as u32,
+                completion_tokens: u.output_tokens as u32,
+            })
+            .ok_or(Error::AWSBedrockServer {
+                message: "AWS Bedrock returned a message without usage information.".to_string(),
+            })?;
 
         Ok(ModelInferenceResponse::new(content, raw, usage, latency))
     }
@@ -458,6 +531,73 @@ fn serialize_aws_bedrock_struct<T: std::fmt::Debug>(output: &T) -> Result<String
     })
 }
 
+impl TryFrom<&ToolConfig> for Tool {
+    type Error = Error;
+
+    fn try_from(tool_config: &ToolConfig) -> Result<Self, Error> {
+        let tool_input_schema = ToolInputSchema::Json(
+            serde_json::from_value(tool_config.parameters().clone()).map_err(|e| {
+                Error::AWSBedrockClient {
+                    status_code: StatusCode::INTERNAL_SERVER_ERROR,
+                    message: format!("Error parsing tool input schema: {e}"),
+                }
+            })?,
+        );
+
+        let tool_spec = ToolSpecification::builder()
+            .name(tool_config.name())
+            .description(tool_config.description())
+            .input_schema(tool_input_schema)
+            .build()
+            .map_err(|_| Error::AWSBedrockClient {
+                status_code: StatusCode::INTERNAL_SERVER_ERROR,
+                message: "Error configuring AWS Bedrock tool choice (this should never happen)"
+                    .to_string(),
+            })?;
+
+        Ok(Tool::ToolSpec(tool_spec))
+    }
+}
+
+impl TryFrom<ToolChoice> for AWSBedrockToolChoice {
+    type Error = Error;
+
+    fn try_from(tool_choice: ToolChoice) -> Result<Self, Error> {
+        match tool_choice {
+            ToolChoice::None => Err(Error::InvalidTool {
+                message: "Tool choice is None. AWS Bedrock does not support tool choice None."
+                    .to_string(),
+            }),
+            ToolChoice::Auto => Ok(AWSBedrockToolChoice::Auto(
+                AutoToolChoice::builder().build(),
+            )),
+            ToolChoice::Required => Ok(AWSBedrockToolChoice::Any(AnyToolChoice::builder().build())),
+            ToolChoice::Tool(tool_name) => Ok(AWSBedrockToolChoice::Tool(
+                SpecificToolChoice::builder()
+                    .name(tool_name)
+                    .build()
+                    .map_err(|_| Error::AWSBedrockClient {
+                        status_code: StatusCode::INTERNAL_SERVER_ERROR,
+                        message:
+                            "Error configuring AWS Bedrock tool choice (this should never happen)"
+                                .to_string(),
+                    })?,
+            )),
+            ToolChoice::Implicit => Ok(AWSBedrockToolChoice::Tool(
+                SpecificToolChoice::builder()
+                    .name("respond")
+                    .build()
+                    .map_err(|_| Error::AWSBedrockClient {
+                        status_code: StatusCode::INTERNAL_SERVER_ERROR,
+                        message:
+                            "Error configuring AWS Bedrock tool choice (this should never happen)"
+                                .to_string(),
+                    })?,
+            )),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -468,7 +608,7 @@ mod tests {
     async fn test_get_aws_bedrock_client() {
         #[traced_test]
         async fn first_run() {
-            get_aws_bedrock_client(Some(Region::new("uk-hogwarts-1")))
+            AWSBedrockProvider::new("test".to_string(), Some(Region::new("uk-hogwarts-1")))
                 .await
                 .unwrap();
 
@@ -479,23 +619,27 @@ mod tests {
 
         #[traced_test]
         async fn second_run() {
-            get_aws_bedrock_client(Some(Region::new("uk-hogwarts-1")))
+            AWSBedrockProvider::new("test".to_string(), Some(Region::new("uk-hogwarts-1")))
                 .await
                 .unwrap();
 
-            assert!(!logs_contain(
+            assert!(logs_contain(
                 "Creating new AWS Bedrock client for region: uk-hogwarts-1"
             ));
         }
 
         #[traced_test]
         async fn third_run() {
-            get_aws_bedrock_client(None).await.unwrap();
+            AWSBedrockProvider::new("test".to_string(), None)
+                .await
+                .unwrap();
+
+            assert!(logs_contain("Creating new AWS Bedrock client for region:"));
         }
 
         #[traced_test]
         async fn fourth_run() {
-            get_aws_bedrock_client(Some(Region::new("me-shire-2")))
+            AWSBedrockProvider::new("test".to_string(), Some(Region::new("me-shire-2")))
                 .await
                 .unwrap();
 
@@ -504,27 +648,11 @@ mod tests {
             ));
         }
 
-        #[traced_test]
-        async fn fifth_run() {
-            get_aws_bedrock_client(None).await.unwrap();
-
-            assert!(!logs_contain("Creating new AWS Bedrock client for region:"));
-        }
-
-        // First call ("uk-hogwarts-1") should trigger client creation
+        // Every call should trigger client creation since each provider has its own AWS Bedrock client
         first_run().await;
-
-        // Second call ("uk-hogwarts-1") should not trigger client creation
         second_run().await;
-
-        // Third call (None) is unclear: we also can't guarantee that it will create a provider because another test might have already created it.
         third_run().await;
-
-        // Fourth call ("me-shire-2") should trigger client creation
         fourth_run().await;
-
-        // Fifth call (None) should not trigger client creation
-        fifth_run().await;
 
         // NOTE: There isn't an easy way to test the fallback between the default provider and the last-resort fallback region.
         // We can only test that the method returns either of these regions when an explicit region is not provided.

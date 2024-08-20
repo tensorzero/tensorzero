@@ -7,7 +7,7 @@ use std::time::Duration;
 use tokio::signal;
 
 use gateway::clickhouse_migration_manager;
-use gateway::config_parser::get_config;
+use gateway::config_parser::Config;
 use gateway::endpoints;
 use gateway::gateway_util;
 use gateway::observability;
@@ -22,10 +22,13 @@ async fn main() {
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
 
     // Load config
-    let config = get_config();
+    let config: &'static Config = Box::leak(Box::new(
+        Config::load().expect_pretty("Failed to load config"),
+    ));
 
+    // Initialize AppState
     let app_state =
-        gateway_util::AppStateData::new().expect_pretty("Failed to initialize AppState");
+        gateway_util::AppStateData::new(config).expect_pretty("Failed to initialize AppState");
 
     // Run ClickHouse migrations (if any)
     if !config.gateway.disable_observability {

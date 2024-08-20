@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::config_parser::{get_config, Config, MetricConfigLevel, MetricConfigType};
+use crate::config_parser::{Config, MetricConfigLevel, MetricConfigType};
 use crate::error::Error;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 
@@ -47,6 +47,7 @@ impl From<&MetricConfigType> for FeedbackType {
 #[debug_handler(state = AppStateData)]
 pub async fn feedback_handler(
     State(AppStateData {
+        config,
         clickhouse_connection_info,
         ..
     }): AppState,
@@ -54,7 +55,7 @@ pub async fn feedback_handler(
 ) -> Result<Json<Value>, Error> {
     // Get the metric config or return an error if it doesn't exist
     let feedback_metadata = get_feedback_metadata(
-        get_config(),
+        config,
         &params.metric_name,
         params.episode_id,
         params.inference_id,

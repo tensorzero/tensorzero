@@ -33,20 +33,22 @@ pub async fn health_handler(
 #[cfg(test)]
 mod tests {
 
+    use crate::config_parser::Config;
     use crate::testing::get_unit_test_app_state_data;
 
     use super::*;
 
     #[tokio::test]
     async fn test_health_handler() {
-        let app_state_data = get_unit_test_app_state_data(true);
+        let config = Box::leak(Box::new(Config::default()));
+        let app_state_data = get_unit_test_app_state_data(config, true);
         let response = health_handler(State(app_state_data)).await;
         assert!(response.is_ok());
         let response_value = response.unwrap();
         assert_eq!(response_value.get("gateway").unwrap(), "ok");
         assert_eq!(response_value.get("clickhouse").unwrap(), "ok");
 
-        let app_state_data = get_unit_test_app_state_data(false);
+        let app_state_data = get_unit_test_app_state_data(config, false);
         let response = health_handler(State(app_state_data)).await;
         assert!(response.is_err());
         let (status_code, error_json) = response.unwrap_err();
