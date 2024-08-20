@@ -14,11 +14,6 @@ use gateway::tool::{
     StaticToolConfig, ToolCall, ToolCallConfig, ToolChoice, ToolConfig, ToolResult,
 };
 
-pub trait TestableProviderConfig {
-    async fn get_simple_inference_request_provider() -> Option<ProviderConfig>;
-    async fn get_streaming_inference_request_provider() -> Option<ProviderConfig>;
-}
-
 /// Enforce that every provider implements a common set of tests.
 ///
 /// To achieve that, each provider should implement the TestableProviderConfig trait and call the
@@ -26,6 +21,11 @@ pub trait TestableProviderConfig {
 ///
 /// If some test doesn't apply to a particular provider (e.g. provider doesn't support tool use),
 /// then the provider should return `None` from the corresponding method.
+pub trait TestableProviderConfig {
+    async fn get_simple_inference_request_provider() -> Option<ProviderConfig>;
+    async fn get_streaming_inference_request_provider() -> Option<ProviderConfig>;
+}
+
 #[macro_export]
 macro_rules! enforce_provider_tests {
     ($struct_name:ident) => {
