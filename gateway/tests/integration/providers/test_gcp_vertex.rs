@@ -8,6 +8,7 @@ use gateway::model::ProviderConfig;
 use crate::providers::common::{
     create_json_inference_request, create_simple_inference_request,
     create_streaming_inference_request, create_streaming_json_inference_request,
+    create_tool_inference_request,
 };
 
 #[tokio::test]
@@ -111,10 +112,60 @@ async fn test_json_request_pro() {
     }
 }
 
-// #[tokio::test]
-// async fn test_infer_with_tool_calls() {
-// }
+#[tokio::test]
+async fn test_infer_with_tool_calls_pro() {
+    // Load API key from environment variable
+    let mut provider_config_json = json!({"type": "gcp_vertex_gemini", "model_id": "gemini-1.5-pro-001", "location": "us-central1"});
+    let gcp_project_id = "tensorzero-public";
+    provider_config_json["project_id"] = Value::String(gcp_project_id.to_string());
+    let provider: ProviderConfig = serde_json::from_value(provider_config_json).unwrap();
+    let client = reqwest::Client::new();
 
+    let inference_request = create_tool_inference_request();
+
+    let result = provider.infer(&inference_request, &client).await;
+    assert!(result.is_ok());
+    let response = result.unwrap();
+    assert!(response.content.len() == 1);
+    let content = response.content.first().unwrap();
+    match content {
+        ContentBlock::ToolCall(tool_call) => {
+            assert!(tool_call.name == "get_weather");
+            let arguments: serde_json::Value = serde_json::from_str(&tool_call.arguments)
+                .expect("Failed to parse tool call arguments");
+            assert!(arguments.get("location").is_some());
+        }
+        _ => unreachable!(),
+    }
+}
+
+/// Gemini Flash does not support tool calls with Any but we test to see if the Any mode is handled correctly (best effort with Auto)
+#[tokio::test]
+async fn test_infer_with_tool_calls_flash() {
+    // Load API key from environment variable
+    let mut provider_config_json = json!({"type": "gcp_vertex_gemini", "model_id": "gemini-1.5-flash-001", "location": "us-central1"});
+    let gcp_project_id = "tensorzero-public";
+    provider_config_json["project_id"] = Value::String(gcp_project_id.to_string());
+    let provider: ProviderConfig = serde_json::from_value(provider_config_json).unwrap();
+    let client = reqwest::Client::new();
+
+    let inference_request = create_tool_inference_request();
+
+    let result = provider.infer(&inference_request, &client).await;
+    assert!(result.is_ok());
+    let response = result.unwrap();
+    assert!(response.content.len() == 1);
+    let content = response.content.first().unwrap();
+    match content {
+        ContentBlock::ToolCall(tool_call) => {
+            assert!(tool_call.name == "get_weather");
+            let arguments: serde_json::Value = serde_json::from_str(&tool_call.arguments)
+                .expect("Failed to parse tool call arguments");
+            assert!(arguments.get("location").is_some());
+        }
+        _ => unreachable!(),
+    }
+}
 // Gemini Flash does not support JSON mode using an output schema -- the model provider knows this automatically
 // We test the Flash and Pro here so that we can test both code paths
 #[tokio::test]

@@ -359,29 +359,23 @@ enum GCPVertexGeminiTool<'a> {
 }
 
 impl<'a> From<&'a ToolConfig> for GCPVertexGeminiFunctionDeclaration<'a> {
-    fn from(_tool: &'a ToolConfig) -> Self {
-        unimplemented!();
-        // let mut parameters = tool.parameters.value.clone();
-        // if let Some(obj) = parameters.as_object_mut() {
-        //     obj.remove("additionalProperties");
-        //     obj.remove("$schema");
-        // }
+    fn from(tool: &'a ToolConfig) -> Self {
+        let mut parameters = tool.parameters().clone();
+        if let Some(obj) = parameters.as_object_mut() {
+            obj.remove("additionalProperties");
+            obj.remove("$schema");
+        }
 
-        // GCPVertexGeminiFunctionDeclaration {
-        //     name: &tool.name,
-        //     description: Some(&tool.description),
-        //     parameters: Some(parameters),
-        // }
+        GCPVertexGeminiFunctionDeclaration {
+            name: tool.name(),
+            description: Some(tool.description()),
+            parameters: Some(parameters),
+        }
     }
 }
 
 impl<'a> From<&'a Vec<ToolConfig>> for GCPVertexGeminiTool<'a> {
     fn from(tools: &'a Vec<ToolConfig>) -> Self {
-        // let mut function_declarations = Vec::new();
-        // for tool in tools {
-        //     function_declarations.push(tool.into());
-        // }
-        // GCPVertexGeminiTool::FunctionDeclarations(function_declarations)
         let function_declarations: Vec<GCPVertexGeminiFunctionDeclaration<'a>> =
             tools.iter().map(|tc| tc.into()).collect();
         GCPVertexGeminiTool::FunctionDeclarations(function_declarations)
@@ -389,7 +383,7 @@ impl<'a> From<&'a Vec<ToolConfig>> for GCPVertexGeminiTool<'a> {
 }
 
 #[derive(Serialize, PartialEq, Debug)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[serde(rename_all = "snake_case")]
 enum GCPVertexGeminiFunctionCallingMode {
     Auto,
     Any,
@@ -412,8 +406,11 @@ struct GCPVertexGeminiToolConfig<'a> {
 // Auto is the default mode where a tool could be called but it isn't required.
 // Any is a mode where a tool is required and if allowed_function_names is Some it has to be from that list.
 // See [the documentation](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/ToolConfig) for details.
-impl<'a> From<&'a ToolChoice> for GCPVertexGeminiToolConfig<'a> {
-    fn from(tool_choice: &'a ToolChoice) -> Self {
+static MODELS_SUPPORTING_ANY_MODE: &[&str] = &["gemini-1.5-pro-001"];
+
+impl<'a> From<(&'a ToolChoice, &'a str)> for GCPVertexGeminiToolConfig<'a> {
+    fn from(input: (&'a ToolChoice, &'a str)) -> Self {
+        let (tool_choice, model_name) = input;
         match tool_choice {
             ToolChoice::None => GCPVertexGeminiToolConfig {
                 function_calling_config: GCPVertexGeminiFunctionCallingConfig {
@@ -427,24 +424,57 @@ impl<'a> From<&'a ToolChoice> for GCPVertexGeminiToolConfig<'a> {
                     allowed_function_names: None,
                 },
             },
-            ToolChoice::Required => GCPVertexGeminiToolConfig {
-                function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                    mode: GCPVertexGeminiFunctionCallingMode::Any,
-                    allowed_function_names: None,
-                },
-            },
-            ToolChoice::Tool(tool_name) => GCPVertexGeminiToolConfig {
-                function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                    mode: GCPVertexGeminiFunctionCallingMode::Any,
-                    allowed_function_names: Some(vec![tool_name]),
-                },
-            },
-            ToolChoice::Implicit => GCPVertexGeminiToolConfig {
-                function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                    mode: GCPVertexGeminiFunctionCallingMode::Any,
-                    allowed_function_names: Some(vec!["respond"]),
-                },
-            },
+            ToolChoice::Required => {
+                if MODELS_SUPPORTING_ANY_MODE.contains(&model_name) {
+                    GCPVertexGeminiToolConfig {
+                        function_calling_config: GCPVertexGeminiFunctionCallingConfig {
+                            mode: GCPVertexGeminiFunctionCallingMode::Any,
+                            allowed_function_names: None,
+                        },
+                    }
+                } else {
+                    GCPVertexGeminiToolConfig {
+                        function_calling_config: GCPVertexGeminiFunctionCallingConfig {
+                            mode: GCPVertexGeminiFunctionCallingMode::Auto,
+                            allowed_function_names: None,
+                        },
+                    }
+                }
+            }
+            ToolChoice::Tool(tool_name) => {
+                if MODELS_SUPPORTING_ANY_MODE.contains(&model_name) {
+                    GCPVertexGeminiToolConfig {
+                        function_calling_config: GCPVertexGeminiFunctionCallingConfig {
+                            mode: GCPVertexGeminiFunctionCallingMode::Any,
+                            allowed_function_names: Some(vec![tool_name]),
+                        },
+                    }
+                } else {
+                    GCPVertexGeminiToolConfig {
+                        function_calling_config: GCPVertexGeminiFunctionCallingConfig {
+                            mode: GCPVertexGeminiFunctionCallingMode::Auto,
+                            allowed_function_names: None,
+                        },
+                    }
+                }
+            }
+            ToolChoice::Implicit => {
+                if MODELS_SUPPORTING_ANY_MODE.contains(&model_name) {
+                    GCPVertexGeminiToolConfig {
+                        function_calling_config: GCPVertexGeminiFunctionCallingConfig {
+                            mode: GCPVertexGeminiFunctionCallingMode::Any,
+                            allowed_function_names: Some(vec!["respond"]),
+                        },
+                    }
+                } else {
+                    GCPVertexGeminiToolConfig {
+                        function_calling_config: GCPVertexGeminiFunctionCallingConfig {
+                            mode: GCPVertexGeminiFunctionCallingMode::Auto,
+                            allowed_function_names: None,
+                        },
+                    }
+                }
+            }
         }
     }
 }
@@ -482,7 +512,7 @@ struct GCPVertexGeminiRequest<'a> {
 }
 
 impl<'a> GCPVertexGeminiRequest<'a> {
-    pub fn new(request: &'a ModelInferenceRequest<'a>, model_name: &str) -> Result<Self, Error> {
+    pub fn new(request: &'a ModelInferenceRequest<'a>, model_name: &'a str) -> Result<Self, Error> {
         if request.messages.is_empty() {
             return Err(Error::InvalidRequest {
                 message: "GCP Vertex Gemini requires at least one message".to_string(),
@@ -500,7 +530,7 @@ impl<'a> GCPVertexGeminiRequest<'a> {
             .iter()
             .map(GCPVertexGeminiContent::from)
             .collect();
-        let (tools, tool_config) = prepare_tools(request);
+        let (tools, tool_config) = prepare_tools(request, model_name);
         let (response_mime_type, response_schema) = match request.json_mode {
             JSONMode::On | JSONMode::Strict => match request.output_schema {
                 Some(output_schema) => {
@@ -545,6 +575,7 @@ impl<'a> GCPVertexGeminiRequest<'a> {
 
 fn prepare_tools<'a>(
     request: &'a ModelInferenceRequest<'a>,
+    model_name: &'a str,
 ) -> (
     Option<Vec<GCPVertexGeminiTool<'a>>>,
     Option<GCPVertexGeminiToolConfig<'a>>,
@@ -555,7 +586,7 @@ fn prepare_tools<'a>(
                 return (None, None);
             }
             let tools = Some(vec![(&tool_config.tools_available).into()]);
-            let tool_config = Some((&tool_config.tool_choice).into());
+            let tool_config = Some((&tool_config.tool_choice, model_name).into());
             (tools, tool_config)
         }
         None => (None, None),
@@ -565,20 +596,16 @@ fn prepare_tools<'a>(
 #[derive(Deserialize, Serialize)]
 struct GCPVertexGeminiResponseFunctionCall {
     name: String,
-    args: String,
+    args: Value,
 }
 
 #[derive(Deserialize, Serialize)]
-#[serde(rename_all = "camelCase", untagged)]
+#[serde(rename_all = "camelCase")]
 enum GCPVertexGeminiResponseContentPart {
-    Text {
-        text: String,
-    },
+    Text(String),
     // TODO (#19): InlineData { inline_data: Blob },
     // TODO (#19): FileData { file_data: FileData },
-    FunctionCall {
-        function_call: GCPVertexGeminiResponseFunctionCall,
-    },
+    FunctionCall(GCPVertexGeminiResponseFunctionCall),
     // TODO (#19, if ever needed): FunctionResponse
     // TODO (#19): VideoMetadata { video_metadata: VideoMetadata },
 }
@@ -586,7 +613,7 @@ enum GCPVertexGeminiResponseContentPart {
 impl From<GCPVertexGeminiResponseContentPart> for ContentBlockChunk {
     fn from(part: GCPVertexGeminiResponseContentPart) -> Self {
         match part {
-            GCPVertexGeminiResponseContentPart::Text { text } => {
+            GCPVertexGeminiResponseContentPart::Text(text) => {
                 ContentBlockChunk::Text(TextChunk {
                     text,
                     // TODO as below
@@ -606,17 +633,24 @@ impl From<GCPVertexGeminiResponseContentPart> for ContentBlockChunk {
     }
 }
 
-impl From<GCPVertexGeminiResponseContentPart> for ContentBlock {
-    fn from(part: GCPVertexGeminiResponseContentPart) -> Self {
+impl TryFrom<GCPVertexGeminiResponseContentPart> for ContentBlock {
+    type Error = Error;
+    fn try_from(part: GCPVertexGeminiResponseContentPart) -> Result<Self, Self::Error> {
         match part {
-            GCPVertexGeminiResponseContentPart::Text { text } => text.into(),
-            GCPVertexGeminiResponseContentPart::FunctionCall { function_call } => {
-                ContentBlock::ToolCall(ToolCall {
+            GCPVertexGeminiResponseContentPart::Text(text) => Ok(text.into()),
+            GCPVertexGeminiResponseContentPart::FunctionCall(function_call) => {
+                Ok(ContentBlock::ToolCall(ToolCall {
                     name: function_call.name,
-                    arguments: function_call.args,
+                    arguments: serde_json::to_string(&function_call.args).map_err(|e| {
+                        Error::Serialization {
+                            message: format!(
+                                "Error serializing function call arguments returned from GCP: {e}"
+                            ),
+                        }
+                    })?,
                     // GCP doesn't have the concept of tool call ID so we generate one for our bookkeeping
                     id: Uuid::now_v7().to_string(),
-                })
+                }))
             }
         }
     }
@@ -684,7 +718,10 @@ impl TryFrom<GCPVertexGeminiResponseWithLatency> for ModelInferenceResponse {
                 })
             }
         };
-        let content: Vec<ContentBlock> = parts.into_iter().map(|part| part.into()).collect();
+        let content: Vec<ContentBlock> = parts
+            .into_iter()
+            .map(|part| part.try_into())
+            .collect::<Result<Vec<ContentBlock>, Error>>()?;
         let usage = body
             .usage_metadata
             .ok_or(Error::GCPVertexServer {
@@ -763,7 +800,10 @@ fn handle_gcp_vertex_gemini_error(
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::*;
+    use crate::inference::providers::common::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
     use crate::inference::types::{FunctionType, JSONMode};
     use crate::tool::{ToolCallConfig, ToolResult};
 
@@ -849,58 +889,43 @@ mod tests {
     }
 
     // TODO(#19): Figure out how GCP wants tool calls
-    // #[test]
-    // fn test_from_vec_tool() {
-    //     let parameters = [
-    //         serde_json::json!({
-    //             "type": "object",
-    //             "properties": {
-    //                 "location": {"type": "string"},
-    //                 "unit": {"type": "string"}
-    //             },
-    //             "required": ["location", "unit"]
-    //         }),
-    //         serde_json::json!({
-    //             "type": "object",
-    //             "properties": {
-    //                 "timezone": {"type": "string"}
-    //             },
-    //             "required": ["timezone"]
-    //         }),
-    //     ];
-    //     let tool_config1 = ToolConfig {
-    //         name: "get_weather".to_string(),
-    //         parameters: JSONSchemaFromPath::from_value(&parameters[0]),
-    //         description: "Get the weather for a given location".to_string(),
-    //     };
-    //     let tool_config2 = ToolConfig {
-    //         name: "get_time".to_string(),
-    //         parameters: JSONSchemaFromPath::from_value(&parameters[1]),
-    //         description: "Get the current time for a given timezone".to_string(),
-    //     };
-    //     let tools = vec![&tool_config1, &tool_config2];
-    //     let tool = GCPVertexGeminiTool::from(&tools);
-    //     assert_eq!(
-    //         tool,
-    //         GCPVertexGeminiTool::FunctionDeclarations(vec![
-    //             GCPVertexGeminiFunctionDeclaration {
-    //                 name: "get_weather",
-    //                 description: Some("Get the weather for a given location"),
-    //                 parameters: Some(parameters[0].clone()),
-    //             },
-    //             GCPVertexGeminiFunctionDeclaration {
-    //                 name: "get_time",
-    //                 description: Some("Get the current time for a given timezone"),
-    //                 parameters: Some(parameters[1].clone()),
-    //             }
-    //         ])
-    //     );
-    // }
+    #[test]
+    fn test_from_vec_tool() {
+        let tool = GCPVertexGeminiTool::from(&MULTI_TOOL_CONFIG.tools_available);
+        assert_eq!(
+            tool,
+            GCPVertexGeminiTool::FunctionDeclarations(vec![
+                GCPVertexGeminiFunctionDeclaration {
+                    name: "get_weather",
+                    description: Some("Get the current weather in a given location"),
+                    parameters: Some(MULTI_TOOL_CONFIG.tools_available[0].parameters().clone()),
+                },
+                GCPVertexGeminiFunctionDeclaration {
+                    name: "query_articles",
+                    description: Some("Query articles from Wikipedia"),
+                    parameters: Some(MULTI_TOOL_CONFIG.tools_available[1].parameters().clone()),
+                }
+            ])
+        );
+    }
 
     #[test]
     fn test_from_tool_choice() {
         let tool_choice = ToolChoice::Auto;
-        let tool_config = GCPVertexGeminiToolConfig::from(&tool_choice);
+        let pro_model_name = "gemini-1.5-pro-001";
+        let flash_model_name = "gemini-1.5-flash-001";
+        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, pro_model_name));
+        assert_eq!(
+            tool_config,
+            GCPVertexGeminiToolConfig {
+                function_calling_config: GCPVertexGeminiFunctionCallingConfig {
+                    mode: GCPVertexGeminiFunctionCallingMode::Auto,
+                    allowed_function_names: None,
+                }
+            }
+        );
+        let tool_choice = ToolChoice::Auto;
+        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, flash_model_name));
         assert_eq!(
             tool_config,
             GCPVertexGeminiToolConfig {
@@ -911,8 +936,47 @@ mod tests {
             }
         );
 
+        // Flash is still Auto mode since it doesn't support Any mode
+        let tool_choice = ToolChoice::Required;
+        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, flash_model_name));
+        assert_eq!(
+            tool_config,
+            GCPVertexGeminiToolConfig {
+                function_calling_config: GCPVertexGeminiFunctionCallingConfig {
+                    mode: GCPVertexGeminiFunctionCallingMode::Auto,
+                    allowed_function_names: None,
+                }
+            }
+        );
+
+        // The Pro model supports Any mode
+        let tool_choice = ToolChoice::Required;
+        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, pro_model_name));
+        assert_eq!(
+            tool_config,
+            GCPVertexGeminiToolConfig {
+                function_calling_config: GCPVertexGeminiFunctionCallingConfig {
+                    mode: GCPVertexGeminiFunctionCallingMode::Any,
+                    allowed_function_names: None,
+                }
+            }
+        );
+
         let tool_choice = ToolChoice::Tool("get_weather".to_string());
-        let tool_config = GCPVertexGeminiToolConfig::from(&tool_choice);
+        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, flash_model_name));
+        assert_eq!(
+            tool_config,
+            GCPVertexGeminiToolConfig {
+                function_calling_config: GCPVertexGeminiFunctionCallingConfig {
+                    mode: GCPVertexGeminiFunctionCallingMode::Auto,
+                    allowed_function_names: None,
+                }
+            }
+        );
+
+        // The Pro model supports Any mode with allowed function names
+        let tool_choice = ToolChoice::Tool("get_weather".to_string());
+        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, pro_model_name));
         assert_eq!(
             tool_config,
             GCPVertexGeminiToolConfig {
@@ -923,8 +987,9 @@ mod tests {
             }
         );
 
+        // Both Flash and Pro support None mode
         let tool_choice = ToolChoice::None;
-        let tool_config = GCPVertexGeminiToolConfig::from(&tool_choice);
+        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, flash_model_name));
         assert_eq!(
             tool_config,
             GCPVertexGeminiToolConfig {
@@ -935,26 +1000,40 @@ mod tests {
             }
         );
 
-        let tool_choice = ToolChoice::Required;
-        let tool_config = GCPVertexGeminiToolConfig::from(&tool_choice);
+        let tool_choice = ToolChoice::None;
+        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, pro_model_name));
         assert_eq!(
             tool_config,
             GCPVertexGeminiToolConfig {
                 function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                    mode: GCPVertexGeminiFunctionCallingMode::Any,
+                    mode: GCPVertexGeminiFunctionCallingMode::None,
                     allowed_function_names: None,
                 }
             }
         );
 
+        // The Pro model supports Any mode and implicit tool calling works better
         let tool_choice = ToolChoice::Implicit;
-        let tool_config = GCPVertexGeminiToolConfig::from(&tool_choice);
+        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, pro_model_name));
         assert_eq!(
             tool_config,
             GCPVertexGeminiToolConfig {
                 function_calling_config: GCPVertexGeminiFunctionCallingConfig {
                     mode: GCPVertexGeminiFunctionCallingMode::Any,
                     allowed_function_names: Some(vec!["respond"]),
+                }
+            }
+        );
+
+        // The Flash model doesn't support mandatoryimplicit tool calling
+        let tool_choice = ToolChoice::Implicit;
+        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, flash_model_name));
+        assert_eq!(
+            tool_config,
+            GCPVertexGeminiToolConfig {
+                function_calling_config: GCPVertexGeminiFunctionCallingConfig {
+                    mode: GCPVertexGeminiFunctionCallingMode::Auto,
+                    allowed_function_names: None,
                 }
             }
         );
@@ -1172,9 +1251,7 @@ mod tests {
 
     #[test]
     fn test_gcp_to_t0_response() {
-        let part = GCPVertexGeminiResponseContentPart::Text {
-            text: "test_assistant".to_string(),
-        };
+        let part = GCPVertexGeminiResponseContentPart::Text("test_assistant".to_string());
         let content = GCPVertexGeminiResponseContent { parts: vec![part] };
         let candidate = GCPVertexGeminiResponseCandidate {
             content: Some(content),
@@ -1208,15 +1285,13 @@ mod tests {
         );
         assert_eq!(model_inference_response.latency, latency);
 
-        let text_part = GCPVertexGeminiResponseContentPart::Text {
-            text: "Here's the weather information:".to_string(),
-        };
-        let function_call_part = GCPVertexGeminiResponseContentPart::FunctionCall {
-            function_call: GCPVertexGeminiResponseFunctionCall {
+        let text_part =
+            GCPVertexGeminiResponseContentPart::Text("Here's the weather information:".to_string());
+        let function_call_part =
+            GCPVertexGeminiResponseContentPart::FunctionCall(GCPVertexGeminiResponseFunctionCall {
                 name: "get_weather".to_string(),
-                args: r#"{"location": "New York", "unit": "celsius"}"#.to_string(),
-            },
-        };
+                args: json!({"location": "New York", "unit": "celsius"}),
+            });
         let content = GCPVertexGeminiResponseContent {
             parts: vec![text_part, function_call_part],
         };
@@ -1247,7 +1322,7 @@ mod tests {
             assert_eq!(tool_call.name, "get_weather");
             assert_eq!(
                 tool_call.arguments,
-                r#"{"location": "New York", "unit": "celsius"}"#
+                r#"{"location":"New York","unit":"celsius"}"#
             );
         } else {
             unreachable!()
@@ -1262,24 +1337,21 @@ mod tests {
         );
         assert_eq!(model_inference_response.latency, latency);
 
-        let text_part1 = GCPVertexGeminiResponseContentPart::Text {
-            text: "Here's the weather information:".to_string(),
-        };
-        let function_call_part = GCPVertexGeminiResponseContentPart::FunctionCall {
-            function_call: GCPVertexGeminiResponseFunctionCall {
+        let text_part1 =
+            GCPVertexGeminiResponseContentPart::Text("Here's the weather information:".to_string());
+        let function_call_part =
+            GCPVertexGeminiResponseContentPart::FunctionCall(GCPVertexGeminiResponseFunctionCall {
                 name: "get_weather".to_string(),
-                args: r#"{"location": "New York", "unit": "celsius"}"#.to_string(),
-            },
-        };
-        let text_part2 = GCPVertexGeminiResponseContentPart::Text {
-            text: "And here's a restaurant recommendation:".to_string(),
-        };
-        let function_call_part2 = GCPVertexGeminiResponseContentPart::FunctionCall {
-            function_call: GCPVertexGeminiResponseFunctionCall {
+                args: json!({"location": "New York", "unit": "celsius"}),
+            });
+        let text_part2 = GCPVertexGeminiResponseContentPart::Text(
+            "And here's a restaurant recommendation:".to_string(),
+        );
+        let function_call_part2 =
+            GCPVertexGeminiResponseContentPart::FunctionCall(GCPVertexGeminiResponseFunctionCall {
                 name: "get_restaurant".to_string(),
-                args: r#"{"cuisine": "Italian", "price_range": "moderate"}"#.to_string(),
-            },
-        };
+                args: json!({"cuisine": "Italian", "price_range": "moderate"}),
+            });
         let content = GCPVertexGeminiResponseContent {
             parts: vec![
                 text_part1,
@@ -1316,12 +1388,12 @@ mod tests {
             assert_eq!(tool_call1.name, "get_weather");
             assert_eq!(
                 tool_call1.arguments,
-                r#"{"location": "New York", "unit": "celsius"}"#
+                r#"{"location":"New York","unit":"celsius"}"#
             );
             assert_eq!(tool_call2.name, "get_restaurant");
             assert_eq!(
                 tool_call2.arguments,
-                r#"{"cuisine": "Italian", "price_range": "moderate"}"#
+                r#"{"cuisine":"Italian","price_range":"moderate"}"#
             );
         } else {
             unreachable!(
@@ -1340,83 +1412,84 @@ mod tests {
         assert_eq!(model_inference_response.latency, latency);
     }
 
-    // TODO(#19): Figure out how GCP wants tool calls
-    // #[test]
-    // fn test_prepare_tools() {
-    //     let parameters = json!({
-    //         "type": "object",
-    //         "properties": {
-    //             "location": {
-    //                 "type": "string",
-    //                 "description": "The city and state, e.g. San Francisco, CA"
-    //             }
-    //         },
-    //         "required": ["location"]
-    //     });
-
-    //     let tool_config = ToolConfig {
-    //         name: "get_weather".to_string(),
-    //         parameters: JSONSchemaFromPath::from_value(&parameters),
-    //         description: "Get the current weather".to_string(),
-    //     };
-    //     let tool_config = Box::leak(Box::new(tool_config));
-    //     let tool_config = ToolCallConfig {
-    //         tools_available: vec![tool_config],
-    //         tool_choice: &ToolChoice::Auto,
-    //         parallel_tool_calls: true,
-    //     };
-    //     let request_with_tools = ModelInferenceRequest {
-    //         messages: vec![RequestMessage {
-    //             role: Role::User,
-    //             content: vec!["What's the weather?".to_string().into()],
-    //         }],
-    //         system: None,
-    //         temperature: None,
-    //         max_tokens: None,
-    //         stream: false,
-    //         json_mode: JSONMode::On,
-    //         tool_config: Some(&tool_config),
-    //         function_type: FunctionType::Chat,
-    //         output_schema: None,
-    //     };
-    //     let (tools, tool_choice) = prepare_tools(&request_with_tools);
-    //     let tools = tools.unwrap();
-    //     assert_eq!(tools.len(), 1);
-    //     match &tools[0] {
-    //         GCPVertexGeminiTool::FunctionDeclarations(functions) => {
-    //             assert_eq!(functions[0].name, "get_weather");
-    //             assert_eq!(functions[0].description, Some("Get the current weather"));
-    //             assert_eq!(functions[0].parameters, Some(parameters));
-    //         }
-    //     }
-    //     let tool_choice = tool_choice.unwrap();
-    //     assert_eq!(
-    //         tool_choice.function_calling_config.mode,
-    //         GCPVertexGeminiFunctionCallingMode::Auto
-    //     );
-    //     let tool_config = ToolCallConfig {
-    //         tools_available: vec![],
-    //         tool_choice: &ToolChoice::Required,
-    //         parallel_tool_calls: true,
-    //     };
-
-    //     // Test no tools but a tool choice and make sure tool choice output is None
-    //     let request_without_tools = ModelInferenceRequest {
-    //         messages: vec![RequestMessage {
-    //             role: Role::User,
-    //             content: vec!["What's the weather?".to_string().into()],
-    //         }],
-    //         system: None,
-    //         temperature: None,
-    //         max_tokens: None,
-    //         stream: false,
-    //         json_mode: JSONMode::On,
-    //         tool_config: Some(&tool_config),
-    //         function_type: FunctionType::Chat,
-    //         output_schema: None,
-    //     };
-    //     let (tools, tool_choice) = prepare_tools(&request_without_tools);
-    //     assert!(tools.is_none());
-    //     assert!(tool_choice.is_none());
-    // }
+    #[test]
+    fn test_prepare_tools() {
+        let request_with_tools = ModelInferenceRequest {
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: JSONMode::On,
+            tool_config: Some(&MULTI_TOOL_CONFIG),
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+        let (tools, tool_choice) = prepare_tools(&request_with_tools, "gemini-1.5-pro-001");
+        let tools = tools.unwrap();
+        let tool_config = tool_choice.unwrap();
+        assert_eq!(
+            tool_config.function_calling_config.mode,
+            GCPVertexGeminiFunctionCallingMode::Any,
+        );
+        assert_eq!(tools.len(), 1);
+        match &tools[0] {
+            GCPVertexGeminiTool::FunctionDeclarations(function_declarations) => {
+                assert_eq!(function_declarations.len(), 2);
+                assert_eq!(function_declarations[0].name, WEATHER_TOOL.name());
+                assert_eq!(
+                    function_declarations[0].parameters,
+                    Some(WEATHER_TOOL.parameters().clone())
+                );
+                assert_eq!(function_declarations[1].name, QUERY_TOOL.name());
+                assert_eq!(
+                    function_declarations[1].parameters,
+                    Some(QUERY_TOOL.parameters().clone())
+                );
+            }
+        }
+        let request_with_tools = ModelInferenceRequest {
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: JSONMode::On,
+            tool_config: Some(&MULTI_TOOL_CONFIG),
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+        let (tools, tool_choice) = prepare_tools(&request_with_tools, "gemini-1.5-flash-001");
+        let tools = tools.unwrap();
+        let tool_config = tool_choice.unwrap();
+        // Flash models do not support function calling mode Any
+        assert_eq!(
+            tool_config.function_calling_config.mode,
+            GCPVertexGeminiFunctionCallingMode::Auto,
+        );
+        assert_eq!(tools.len(), 1);
+        match &tools[0] {
+            GCPVertexGeminiTool::FunctionDeclarations(function_declarations) => {
+                assert_eq!(function_declarations.len(), 2);
+                assert_eq!(function_declarations[0].name, WEATHER_TOOL.name());
+                assert_eq!(
+                    function_declarations[0].parameters,
+                    Some(WEATHER_TOOL.parameters().clone())
+                );
+                assert_eq!(function_declarations[1].name, QUERY_TOOL.name());
+                assert_eq!(
+                    function_declarations[1].parameters,
+                    Some(QUERY_TOOL.parameters().clone())
+                );
+            }
+        }
+    }
 }
