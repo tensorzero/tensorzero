@@ -525,14 +525,15 @@ impl TryFrom<ConverseOutputWithLatency> for ModelInferenceResponse {
             .map(|block| block.try_into())
             .collect::<Result<Vec<ContentBlock>, _>>()?;
 
-        let usage = output.usage.ok_or(Error::AWSBedrockServer {
-            message: "AWS Bedrock returned a message without usage information.".to_string(),
-        })?;
-
-        let usage = Usage {
-            prompt_tokens: usage.input_tokens as u32,
-            completion_tokens: usage.output_tokens as u32,
-        };
+        let usage = output
+            .usage
+            .map(|u| Usage {
+                prompt_tokens: u.input_tokens as u32,
+                completion_tokens: u.output_tokens as u32,
+            })
+            .ok_or(Error::AWSBedrockServer {
+                message: "AWS Bedrock returned a message without usage information.".to_string(),
+            })?;
 
         Ok(ModelInferenceResponse::new(content, raw, usage, latency))
     }
