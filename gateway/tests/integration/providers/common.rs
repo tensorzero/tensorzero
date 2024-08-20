@@ -1,33 +1,105 @@
+use futures::StreamExt;
+use lazy_static::lazy_static;
+use serde_json::json;
+
+use gateway::inference::providers::azure::AzureProvider;
+use gateway::inference::providers::provider_trait::InferenceProvider;
 use gateway::inference::types::{
-    ContentBlock, FunctionType, JSONMode, ModelInferenceRequest, RequestMessage, Role,
+    ContentBlock, ContentBlockChunk, FunctionType, JSONMode, ModelInferenceRequest,
+    ModelInferenceResponse, RequestMessage, Role,
 };
 use gateway::jsonschema_util::JSONSchemaFromPath;
+use gateway::model::ProviderConfig;
 use gateway::tool::{
     StaticToolConfig, ToolCall, ToolCallConfig, ToolChoice, ToolConfig, ToolResult,
 };
-use lazy_static::lazy_static;
-use serde_json::json;
 
 pub fn create_simple_inference_request<'a>() -> ModelInferenceRequest<'a> {
     let messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["Is Santa Clause real?".to_string().into()],
+        content: vec!["What is the capital of Japan?".to_string().into()],
     }];
-    let system = Some("You are a helpful but mischevious assistant.".to_string());
-    let max_tokens = Some(100);
-    let temperature = Some(1.);
-    let seed = Some(69);
+
+    let system = Some("You are a school teacher.".to_string());
+
     ModelInferenceRequest {
         messages,
         system,
         tool_config: None,
-        temperature,
-        max_tokens,
-        seed,
+        temperature: Some(0.5),
+        max_tokens: Some(100),
+        seed: Some(0),
         stream: false,
         json_mode: JSONMode::Off,
         function_type: FunctionType::Chat,
         output_schema: None,
+    }
+}
+
+pub fn evaluate_simple_inference_request(result: ModelInferenceResponse) {
+    assert!(result.content.len() == 1);
+
+    let content = result.content.first().unwrap();
+
+    match content {
+        ContentBlock::Text(block) => {
+            assert!(block.text.contains("Tokyo"));
+        }
+        _ => panic!("Expected a text block"),
+    }
+}
+
+pub async fn test_simple_inference_request_with_provider(provider: ProviderConfig) {
+    let inference_request = create_simple_inference_request();
+    let client = reqwest::Client::new();
+    let result = provider.infer(&inference_request, &client).await.unwrap();
+    evaluate_simple_inference_request(result);
+}
+
+pub async fn test_streaming_inference_request_with_provider(provider: ProviderConfig) {
+    // Set up the inference request
+    let mut inference_request = create_simple_inference_request();
+    inference_request.stream = true;
+    let client = reqwest::Client::new();
+
+    // Run the inference request
+    let result = provider
+        .infer_stream(&inference_request, &client)
+        .await
+        .unwrap();
+
+    // Collect the chunks
+    let (first_chunk, mut stream) = result;
+    let mut collected_chunks = vec![first_chunk];
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.unwrap();
+        assert!(chunk.content.len() <= 1);
+        collected_chunks.push(chunk);
+    }
+
+    // Check the generation
+    let generation = collected_chunks
+        .iter()
+        .filter(|chunk| !chunk.content.is_empty())
+        .map(|chunk| chunk.content.first().unwrap())
+        .map(|content| match content {
+            ContentBlockChunk::Text(block) => block.text.clone(),
+            _ => panic!("Expected a text block"),
+        })
+        .collect::<Vec<String>>()
+        .join("");
+    assert!(generation.contains("Tokyo"), "{}", generation);
+
+    // Check the usage
+    match provider {
+        // NOTE: Azure OpenAI service does not return streaming usage and to the best of our knowledge
+        // there's no way to get it to do so.
+        ProviderConfig::Azure(AzureProvider { .. }) => {
+            assert!(collected_chunks.last().unwrap().usage.is_none());
+        }
+        _ => {
+            assert!(collected_chunks.last().unwrap().usage.is_some());
+        }
     }
 }
 
@@ -165,28 +237,6 @@ pub fn create_tool_result_inference_request() -> ModelInferenceRequest<'static> 
         max_tokens: Some(100),
         seed: None,
         stream: false,
-        json_mode: JSONMode::Off,
-        function_type: FunctionType::Chat,
-        output_schema: None,
-    }
-}
-
-pub fn create_streaming_inference_request<'a>() -> ModelInferenceRequest<'a> {
-    let messages = vec![RequestMessage {
-        role: Role::User,
-        content: vec!["Is Santa Clause real?".to_string().into()],
-    }];
-    let system = Some("You are a helpful but mischevious assistant.".to_string());
-    let max_tokens = Some(100);
-    let seed = Some(69);
-    ModelInferenceRequest {
-        messages,
-        system,
-        tool_config: None,
-        temperature: Some(1.),
-        max_tokens,
-        seed,
-        stream: true,
         json_mode: JSONMode::Off,
         function_type: FunctionType::Chat,
         output_schema: None,
