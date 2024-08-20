@@ -27,7 +27,6 @@ pub struct TestProviders {
     pub tool_use_inference: Vec<&'static ProviderConfig>,
     pub tool_use_streaming_inference: Vec<&'static ProviderConfig>,
     pub tool_result_inference: Vec<&'static ProviderConfig>,
-    #[allow(dead_code)] // TODO
     pub tool_result_streaming_inference: Vec<&'static ProviderConfig>,
     pub json_mode_inference: Vec<&'static ProviderConfig>,
     pub json_mode_streaming_inference: Vec<&'static ProviderConfig>,
@@ -78,7 +77,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_simple_inference_request_with_provider;
         use $crate::providers::common::test_streaming_inference_request_with_provider;
         use $crate::providers::common::test_tool_result_inference_request_with_provider;
-        // use $crate::providers::common::test_tool_result_streaming_inference_request_with_provider;
+        use $crate::providers::common::test_tool_result_streaming_inference_request_with_provider;
         use $crate::providers::common::test_tool_use_inference_request_with_provider;
         use $crate::providers::common::test_tool_use_streaming_inference_request_with_provider;
 
@@ -138,13 +137,13 @@ macro_rules! generate_provider_tests {
             }
         }
 
-        // #[tokio::test]
-        // async fn test_tool_result_streaming_inference_request() {
-        //     let providers = $func().await.tool_result_streaming_inference;
-        //     for provider in providers {
-        //         test_tool_result_streaming_inference_request_with_provider(provider).await;
-        //     }
-        // }
+        #[tokio::test]
+        async fn test_tool_result_streaming_inference_request() {
+            let providers = $func().await.tool_result_streaming_inference;
+            for provider in providers {
+                test_tool_result_streaming_inference_request_with_provider(provider).await;
+            }
+        }
     };
 }
 
@@ -425,6 +424,50 @@ pub async fn test_tool_result_inference_request_with_provider(provider: &Provide
             assert!(block.text.contains("70"), "{}", block.text);
         }
         _ => panic!("Unexpected content block: {:?}", content),
+    }
+}
+
+pub async fn test_tool_result_streaming_inference_request_with_provider(provider: &ProviderConfig) {
+    // Set up and make the inference request
+    let client = reqwest::Client::new();
+    let mut inference_request = create_tool_result_inference_request();
+    inference_request.stream = true;
+    let result = provider
+        .infer_stream(&inference_request, &client)
+        .await
+        .unwrap();
+
+    // Collect the chunks
+    let (chunk, mut stream) = result;
+    let mut collected_chunks = vec![chunk];
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.unwrap();
+        collected_chunks.push(chunk);
+    }
+
+    // Check the generation
+    let generation = collected_chunks
+        .iter()
+        .filter(|chunk| !chunk.content.is_empty())
+        .map(|chunk| chunk.content.first().unwrap())
+        .map(|content| match content {
+            ContentBlockChunk::Text(block) => block.text.clone(),
+            _ => panic!("Expected a text block"),
+        })
+        .collect::<Vec<String>>()
+        .join("");
+    assert!(generation.contains("New York"), "{}", generation);
+    assert!(generation.contains("70"), "{}", generation);
+
+    // Check the usage
+    match provider {
+        // NOTE: Azure does not return usage for streaming inference (to the best of our knowledge)
+        ProviderConfig::Azure(AzureProvider { .. }) => {
+            assert!(collected_chunks.last().unwrap().usage.is_none());
+        }
+        _ => {
+            assert!(collected_chunks.last().unwrap().usage.is_some());
+        }
     }
 }
 
