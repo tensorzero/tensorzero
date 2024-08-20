@@ -27,7 +27,7 @@ async fn test_infer() {
         ContentBlock::Text(Text { text }) => {
             assert!(!text.is_empty());
         }
-        _ => unreachable!(),
+        _ => panic!("Expected a text content block"),
     }
 }
 
@@ -78,7 +78,7 @@ async fn test_json_request_flash() {
             assert!(result_json.get("honest_answer").is_some());
             assert!(result_json.get("mischevious_answer").is_some());
         }
-        _ => unreachable!(),
+        _ => panic!("Expected a text content block"),
     }
 }
 
@@ -107,7 +107,7 @@ async fn test_json_request_pro() {
             assert!(result_json.get("honest_answer").is_some());
             assert!(result_json.get("mischevious_answer").is_some());
         }
-        _ => unreachable!(),
+        _ => panic!("Expected a text content block"),
     }
 }
 
