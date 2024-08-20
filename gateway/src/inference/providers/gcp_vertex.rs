@@ -296,15 +296,15 @@ enum GCPVertexGeminiContentPart<'a> {
     Text {
         text: &'a str,
     },
-    // TODO (#19): InlineData { inline_data: Blob },
-    // TODO (#19): FileData { file_data: FileData },
+    // TODO (if needed): InlineData { inline_data: Blob },
+    // TODO (if needed): FileData { file_data: FileData },
     FunctionCall {
         function_call: GCPVertexGeminiFunctionCall<'a>,
     },
     FunctionResponse {
         function_response: GCPVertexGeminiFunctionResponse<'a>,
     },
-    // TODO (#19): VideoMetadata { video_metadata: VideoMetadata },
+    // TODO (if needed): VideoMetadata { video_metadata: VideoMetadata },
 }
 
 impl<'a> From<&'a ContentBlock> for GCPVertexGeminiContentPart<'a> {
@@ -349,7 +349,7 @@ struct GCPVertexGeminiFunctionDeclaration<'a> {
     parameters: Option<Value>, // Should be a JSONSchema as a Value
 }
 
-// TODO (#19): implement [Retrieval](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/Tool#Retrieval)
+// TODO (if needed): implement [Retrieval](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/Tool#Retrieval)
 // and [GoogleSearchRetrieval](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/Tool#GoogleSearchRetrieval)
 // tools.
 #[derive(Serialize, PartialEq, Debug)]
@@ -406,7 +406,7 @@ struct GCPVertexGeminiToolConfig<'a> {
 // Auto is the default mode where a tool could be called but it isn't required.
 // Any is a mode where a tool is required and if allowed_function_names is Some it has to be from that list.
 // See [the documentation](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/ToolConfig) for details.
-static MODELS_SUPPORTING_ANY_MODE: &[&str] = &["gemini-1.5-pro-001"];
+const MODELS_SUPPORTING_ANY_MODE: &[&str] = &["gemini-1.5-pro-001"];
 
 impl<'a> From<(&'a ToolChoice, &'a str)> for GCPVertexGeminiToolConfig<'a> {
     fn from(input: (&'a ToolChoice, &'a str)) -> Self {
@@ -488,7 +488,7 @@ enum GCPVertexGeminiResponseMimeType {
     ApplicationJson,
 }
 
-// TODO (#19): add the other options [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/GenerationConfig)
+// TODO (if needed): add the other options [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/GenerationConfig)
 #[derive(Serialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiGenerationConfig<'a> {
@@ -508,7 +508,7 @@ struct GCPVertexGeminiRequest<'a> {
     tool_config: Option<GCPVertexGeminiToolConfig<'a>>,
     generation_config: Option<GCPVertexGeminiGenerationConfig<'a>>,
     system_instruction: Option<GCPVertexGeminiContent<'a>>,
-    // TODO (#19): [Safety Settings](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/SafetySetting)
+    // TODO (if needed): [Safety Settings](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/SafetySetting)
 }
 
 impl<'a> GCPVertexGeminiRequest<'a> {
@@ -603,14 +603,17 @@ struct GCPVertexGeminiResponseFunctionCall {
 #[serde(rename_all = "camelCase")]
 enum GCPVertexGeminiResponseContentPart {
     Text(String),
-    // TODO (#19): InlineData { inline_data: Blob },
-    // TODO (#19): FileData { file_data: FileData },
+    // TODO (if needed): InlineData { inline_data: Blob },
+    // TODO (if needed): FileData { file_data: FileData },
     FunctionCall(GCPVertexGeminiResponseFunctionCall),
-    // TODO (#19, if ever needed): FunctionResponse
-    // TODO (#19): VideoMetadata { video_metadata: VideoMetadata },
+    // TODO (if needed): FunctionResponse
+    // TODO (if needed): VideoMetadata { video_metadata: VideoMetadata },
 }
 
 impl From<GCPVertexGeminiResponseContentPart> for ContentBlockChunk {
+    /// GCP Vertex Gemini does not support parallel tool calling or multiple content blocks as far as I can tell.
+    /// So there is no issue with bookkeeping IDs for content blocks.
+    /// We should revisit this if they begin to support it.
     fn from(part: GCPVertexGeminiResponseContentPart) -> Self {
         match part {
             GCPVertexGeminiResponseContentPart::Text(text) => ContentBlockChunk::Text(TextChunk {
@@ -897,7 +900,6 @@ mod tests {
         );
     }
 
-    // TODO(#19): Figure out how GCP wants tool calls
     #[test]
     fn test_from_vec_tool() {
         let tool = GCPVertexGeminiTool::from(&MULTI_TOOL_CONFIG.tools_available);
