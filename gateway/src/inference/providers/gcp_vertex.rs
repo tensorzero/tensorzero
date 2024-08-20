@@ -551,7 +551,6 @@ fn prepare_tools<'a>(
 ) {
     match request.tool_config {
         Some(tool_config) => {
-            println!("tool_config: {:?}", tool_config);
             if tool_config.tools_available.is_empty() {
                 return (None, None);
             }

@@ -270,9 +270,8 @@ pub struct ToolCallChunk {
     pub arguments: String,
 }
 
-pub static IMPLICIT_TOOL_NAME: &str = "respond";
-pub static IMPLICIT_TOOL_DESCRIPTION: &str =
-    "Respond to the user using the output schema provided.";
+pub const IMPLICIT_TOOL_NAME: &str = "respond";
+pub const IMPLICIT_TOOL_DESCRIPTION: &str = "Respond to the user using the output schema provided.";
 
 impl ToolConfig {
     pub async fn validate_arguments(&self, arguments: &Value) -> Result<(), Error> {
