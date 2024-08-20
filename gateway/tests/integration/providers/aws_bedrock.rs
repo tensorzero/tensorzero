@@ -8,17 +8,25 @@ use crate::providers::common::{
     create_streaming_tool_inference_request, create_streaming_tool_result_inference_request,
     create_tool_inference_request, create_tool_result_inference_request,
     test_simple_inference_request_with_provider, test_streaming_inference_request_with_provider,
+    TestableProviderConfig,
 };
 
-/// Get a provider with the default model and API key
+crate::enforce_provider_tests!(AWSBedrockProvider);
+
+impl TestableProviderConfig for AWSBedrockProvider {
+    async fn get_simple_inference_request_provider() -> Option<ProviderConfig> {
+        Some(get_provider().await)
+    }
+
+    async fn get_streaming_inference_request_provider() -> Option<ProviderConfig> {
+        Some(get_provider().await)
+    }
+}
+
+/// Get a generic provider for testing
 async fn get_provider() -> ProviderConfig {
     let model_id = "anthropic.claude-3-haiku-20240307-v1:0".to_string();
     ProviderConfig::AWSBedrock(AWSBedrockProvider::new(model_id, None).await.unwrap())
-}
-
-#[tokio::test]
-async fn test_simple_inference_request() {
-    test_simple_inference_request_with_provider(get_provider().await).await;
 }
 
 #[tokio::test]
@@ -47,11 +55,6 @@ async fn test_simple_inference_request_with_broken_region() {
     );
 
     test_simple_inference_request_with_provider(provider).await;
-}
-
-#[tokio::test]
-async fn test_streaming_inference_request() {
-    test_streaming_inference_request_with_provider(get_provider().await).await;
 }
 
 #[tokio::test]
