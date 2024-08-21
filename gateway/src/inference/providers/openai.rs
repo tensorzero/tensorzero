@@ -408,6 +408,7 @@ pub(super) struct OpenAIFunction<'a> {
 pub(super) struct OpenAITool<'a> {
     pub(super) r#type: OpenAIToolType,
     pub(super) function: OpenAIFunction<'a>,
+    pub(super) strict: bool,
 }
 
 impl<'a> From<&'a ToolConfig> for OpenAITool<'a> {
@@ -419,6 +420,7 @@ impl<'a> From<&'a ToolConfig> for OpenAITool<'a> {
                 description: Some(tool.description()),
                 parameters: tool.parameters(),
             },
+            strict: tool.strict(),
         }
     }
 }
@@ -474,8 +476,8 @@ impl<'a> From<&'a ToolChoice> for OpenAIToolChoice<'a> {
 }
 
 #[derive(Debug, Serialize)]
-pub struct StreamOptions {
-    pub include_usage: bool,
+pub(super) struct StreamOptions {
+    pub(super) include_usage: bool,
 }
 
 /// This struct defines the supported parameters for the OpenAI API
