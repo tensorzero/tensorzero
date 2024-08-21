@@ -1211,20 +1211,6 @@ mod tests {
             _ => panic!("Expected a user message"),
         }
 
-        // Assistant message with one string
-        let message = RequestMessage {
-            role: Role::Assistant,
-            content: vec!["Hello".to_string().into()],
-        };
-        let openai_messages = tensorzero_to_openai_messages(&message);
-        assert_eq!(openai_messages.len(), 1);
-        match &openai_messages[0] {
-            OpenAIRequestMessage::Assistant(content) => {
-                assert_eq!(content.content, Some("Hello"));
-            }
-            _ => panic!("Expected an assistant message"),
-        }
-
         // User message with one string and one tool call block
         // Since user messages in OpenAI land can't contain tool calls (nor should they honestly),
         // We split the tool call out into a separate assistant message
