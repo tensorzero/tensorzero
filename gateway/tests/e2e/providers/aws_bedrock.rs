@@ -16,19 +16,6 @@ async fn get_providers() -> E2ETestProviders {
     })
 }
 
-/// AWS Bedrock E2E tests
-///
-/// This file contains a set of tests that check that the AWS Bedrock integration works and the appropriate stuff is written to DB.
-///
-/// Currently we test:
-/// - basic inference
-/// - streaming inference
-///
-/// TODOs (#81):
-/// - tool calling
-/// - JSON mode
-/// - other API parameters (temp, max_tokens, etc.)
-
 #[tokio::test]
 async fn test_inference_with_explicit_region() {
     let client = Client::new();
