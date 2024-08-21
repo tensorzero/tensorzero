@@ -9,10 +9,9 @@ use crate::common::{
     select_model_inferences_clickhouse,
 };
 
-use gateway::model::ProviderConfig;
-
-struct E2ETestProvider {
-    variant_name: String,
+#[derive(Clone, Debug)]
+pub struct E2ETestProvider {
+    pub variant_name: String,
 }
 
 /// Enforce that every provider implements a common set of tests.
@@ -22,50 +21,43 @@ struct E2ETestProvider {
 ///
 /// If some test doesn't apply to a particular provider (e.g. provider doesn't support tool use),
 /// then the provider should return an empty vector for the corresponding test.
-pub struct TestProviders {
-    pub simple_inference: Vec<&'static ProviderConfig>,
-    // pub streaming_inference: Vec<&'static ProviderConfig>,
-    // pub tool_use_inference: Vec<&'static ProviderConfig>,
-    // pub tool_use_streaming_inference: Vec<&'static ProviderConfig>,
-    // pub tool_result_inference: Vec<&'static ProviderConfig>,
-    // pub tool_result_streaming_inference: Vec<&'static ProviderConfig>,
-    // pub json_mode_inference: Vec<&'static ProviderConfig>,
-    // pub json_mode_streaming_inference: Vec<&'static ProviderConfig>,
+pub struct E2ETestProviders {
+    pub simple_inference: Vec<E2ETestProvider>,
+    // pub streaming_inference: Vec<E2ETestProvider>,
+    // pub tool_use_inference: Vec<E2ETestProvider>,
+    // pub tool_use_streaming_inference: Vec<E2ETestProvider>,
+    // pub tool_result_inference: Vec<E2ETestProvider>,
+    // pub tool_result_streaming_inference: Vec<E2ETestProvider>,
+    // pub json_mode_inference: Vec<E2ETestProvider>,
+    // pub json_mode_streaming_inference: Vec<E2ETestProvider>,
 }
 
-impl TestProviders {
-    pub fn with_provider(provider: ProviderConfig) -> Self {
-        let provider = Box::leak(Box::new(provider));
+impl E2ETestProviders {
+    pub fn with_provider(provider: E2ETestProvider) -> Self {
+        let providers = vec![provider];
 
         Self {
-            simple_inference: vec![provider],
-            // streaming_inference: vec![provider],
-            // tool_use_inference: vec![provider],
-            // tool_use_streaming_inference: vec![provider],
-            // tool_result_inference: vec![provider],
-            // tool_result_streaming_inference: vec![provider],
-            // json_mode_inference: vec![provider],
-            // json_mode_streaming_inference: vec![provider],
+            simple_inference: providers.clone(),
+            // streaming_inference: providers.clone(),
+            // tool_use_inference: providers.clone(),
+            // tool_use_streaming_inference: providers.clone(),
+            // tool_result_inference: providers.clone(),
+            // tool_result_streaming_inference: providers.clone(),
+            // json_mode_inference: providers.clone(),
+            // json_mode_streaming_inference: providers,
         }
     }
 
-    pub fn with_providers(providers: Vec<ProviderConfig>) -> Self {
-        let mut static_providers: Vec<&'static ProviderConfig> = vec![];
-
-        for provider in providers {
-            let static_provider = Box::leak(Box::new(provider));
-            static_providers.push(static_provider);
-        }
-
+    pub fn with_providers(providers: Vec<E2ETestProvider>) -> Self {
         Self {
-            simple_inference: static_providers.clone(),
-            // streaming_inference: static_providers.clone(),
-            // tool_use_inference: static_providers.clone(),
-            // tool_use_streaming_inference: static_providers.clone(),
+            simple_inference: providers.clone(),
+            // streaming_inference: providers.clone(),
+            // tool_use_inference: providers.clone(),
+            // tool_use_streaming_inference: providers.clone(),
             // tool_result_inference: static_providers.clone(),
-            // tool_result_streaming_inference: static_providers.clone(),
-            // json_mode_inference: static_providers.clone(),
-            // json_mode_streaming_inference: static_providers,
+            // tool_result_streaming_inference: providers.clone(),
+            // json_mode_inference: providers.clone(),
+            // json_mode_streaming_inference: providers,
         }
     }
 }
@@ -148,21 +140,21 @@ macro_rules! generate_provider_tests {
     };
 }
 
-pub async fn test_simple_inference_request_with_provider(provider: &ProviderConfig) {
+pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvider) {
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
         "function_name": "basic_test",
-        "variant_name": "anthropic",
+        "variant_name": provider.variant_name,
         "episode_id": episode_id,
         "input":
             {
-               "system": {"assistant_name": "AskJeeves"},
+               "system": {"assistant_name": "Megumin"},
                "messages": [
                 {
                     "role": "user",
-                    "content": "Hello, world!"
+                    "content": "What is the capital of Japan?"
                 }
             ]},
         "stream": false,
@@ -174,7 +166,8 @@ pub async fn test_simple_inference_request_with_provider(provider: &ProviderConf
         .send()
         .await
         .unwrap();
-    // Check Response is OK, then fields in order
+
+    // Check that the response is ok
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
     let content_blocks = response_json.get("output").unwrap().as_array().unwrap();
@@ -183,9 +176,16 @@ pub async fn test_simple_inference_request_with_provider(provider: &ProviderConf
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
+    assert!(content.contains("Tokyo"));
+
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    // Check that the episode_id is here
+    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+    assert_eq!(episode_id_response, episode_id);
 
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -193,27 +193,28 @@ pub async fn test_simple_inference_request_with_provider(provider: &ProviderConf
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
 
-    // First, check Inference table
+    // First, check Inference table...
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
+    let id = Uuid::parse_str(id).unwrap();
+    assert_eq!(id, inference_id);
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     let correct_input = json!({
-        "system": {"assistant_name": "AskJeeves"},
+        "system": {"assistant_name": "Megumin"},
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "Hello, world!"}]
+                "content": [{"type": "text", "value": "What is the capital of Japan?"}]
             }
         ]
     });
     assert_eq!(input, correct_input);
-    let content_blocks = result.get("output").unwrap().as_str().unwrap();
+
     // Check that content_blocks is a list of blocks length 1
+    let content_blocks = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
     assert_eq!(content_blocks.len(), 1);
     let content_block = content_blocks.first().unwrap();
@@ -222,13 +223,16 @@ pub async fn test_simple_inference_request_with_provider(provider: &ProviderConf
     assert_eq!(content_block_type, "text");
     let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
     assert_eq!(clickhouse_content, content);
+
     // Check that episode_id is here and correct
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
     assert_eq!(retrieved_episode_id, episode_id);
+
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, "anthropic");
+    assert_eq!(variant_name, provider.variant_name);
+
     // Check the processing time
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
