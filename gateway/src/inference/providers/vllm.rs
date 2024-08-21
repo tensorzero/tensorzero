@@ -32,7 +32,7 @@ pub struct VLLMProvider {
 /// Key differences between vLLM and OpenAI inference:
 /// - vLLM supports guided decoding
 /// - vLLM only supports a specific tool and nothing else (and the implementation varies among LLMs)
-///   Today, we can't support this so we are leaving it as an open issue.
+///   **Today, we can't support tools** so we are leaving it as an open issue.
 impl InferenceProvider for VLLMProvider {
     async fn infer<'a>(
         &'a self,
@@ -135,21 +135,6 @@ fn map_openai_to_vllm_error(e: Error) -> Error {
     }
 }
 
-// #[derive(Debug, PartialEq, Serialize)]
-// struct VllmTool<'a> {
-//     r#type: OpenAIToolType,
-//     function: OpenAIFunction<'a>,
-// }
-
-// impl<'a> From<OpenAITool<'a>> for VllmTool<'a> {
-//     fn from(tool: OpenAITool<'a>) -> Self {
-//         VllmTool {
-//             r#type: tool.r#type,
-//             function: tool.function,
-//         }
-//     }
-// }
-
 /// This struct defines the supported parameters for the vLLM inference API
 /// See the [vLLM API documentation](https://docs.vllm.ai/en/stable/index.html)
 /// for more details.
@@ -167,10 +152,6 @@ struct VLLMRequest<'a> {
     stream_options: Option<StreamOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
     guided_json: Option<&'a Value>,
-    // #[serde(skip_serializing_if = "Option::is_none")]
-    // tools: Option<Vec<VllmTool<'a>>>,
-    // #[serde(skip_serializing_if = "Option::is_none")]
-    // tool_choice: Option<OpenAIToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     seed: Option<u32>,
 }
@@ -180,9 +161,6 @@ impl<'a> VLLMRequest<'a> {
         model: &'a str,
         request: &'a ModelInferenceRequest,
     ) -> Result<VLLMRequest<'a>, Error> {
-        // TODO(Viraj): handle this
-        // NB: Fireworks will throw an error if you give FireworksResponseFormat::Text and then also include tools.
-        // So we just don't include it as Text is the same as None anyway.
         let guided_json = match (&request.json_mode, request.output_schema) {
             (JSONMode::On | JSONMode::Strict, Some(schema)) => Some(schema),
             _ => None,
@@ -200,21 +178,7 @@ impl<'a> VLLMRequest<'a> {
                 message: "TensorZero does not support tool use with vLLM. Please use a different provider.".to_string(),
             });
         }
-        // let tool_choice = match &tools {
-        //     Some(tools) => {
-        //         if tools.len() > 1 {
-        //             tracing::warn!("vLLM does not support multiple tools in a single request. Using the first tool.");
-        //         }
-        //         Some(OpenAIToolChoice::Specific(SpecificToolChoice {
-        //             r#type: OpenAIToolType::Function,
-        //             function: SpecificToolFunction {
-        //                 name: tools[0].function.name,
-        //             },
-        //         }))
-        //     }
-        //     None => None,
-        // };
-        // let tools = tools.map(|t| t.into_iter().map(VllmTool::from).collect());
+
         Ok(VLLMRequest {
             messages,
             model,
@@ -223,8 +187,6 @@ impl<'a> VLLMRequest<'a> {
             stream: request.stream,
             stream_options,
             guided_json,
-            // tools,
-            // tool_choice,
             seed: request.seed,
         })
     }
@@ -274,20 +236,7 @@ mod tests {
         assert_eq!(vllm_request.max_tokens, Some(100));
         assert!(!vllm_request.stream);
         assert_eq!(vllm_request.guided_json, Some(&output_schema));
-        // assert!(vllm_request.tools.is_some());
-        // let tools = vllm_request.tools.as_ref().unwrap();
-        // assert_eq!(tools.len(), 1);
-        // assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        // assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
-        // assert_eq!(
-        //     vllm_request.tool_choice,
-        //     Some(OpenAIToolChoice::Specific(SpecificToolChoice {
-        //         r#type: OpenAIToolType::Function,
-        //         function: SpecificToolFunction {
-        //             name: WEATHER_TOOL.name(),
-        //         }
-        //     }))
-        // );
+
         let output_schema = json!({
             "type": "object",
             "properties": {
