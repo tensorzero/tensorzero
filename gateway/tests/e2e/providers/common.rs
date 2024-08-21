@@ -433,7 +433,7 @@ pub async fn test_tool_use_inference_request_with_provider(provider: E2ETestProv
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the weather like in New York City?"
+                    "content": "What is the weather like in Tokyo?"
                 }
             ]},
         "stream": false,
@@ -447,49 +447,85 @@ pub async fn test_tool_use_inference_request_with_provider(provider: E2ETestProv
         .send()
         .await
         .unwrap();
-    // Check Response is OK, then fields in order
+
+    // Check if the API response is fine
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
-    // No output schema so parsed content should not be in response
-    assert!(response_json.get("parsed_content").is_none());
-    // Check that inference_id is here
+
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-    // Check that raw_content is same as content
-    let content_blocks: &Vec<Value> = response_json.get("output").unwrap().as_array().unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
+
+    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+    assert_eq!(episode_id_response, episode_id);
+
+    let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, provider.variant_name);
+
+    let output = response_json.get("output").unwrap().as_array().unwrap();
+    assert_eq!(output.len(), 1);
+    let content_block = output.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let _: Value = serde_json::from_str(arguments).unwrap();
-    content_block.get("id").unwrap().as_str().unwrap();
+
+    let _ = content_block.get("id").unwrap().as_str().unwrap();
+
     let name = content_block.get("name").unwrap().as_str().unwrap();
     assert_eq!(name, "get_weather");
     let parsed_name = content_block.get("parsed_name").unwrap().as_str().unwrap();
     assert_eq!(parsed_name, "get_weather");
-    // This could fail if the LLM fails to return correct arguments (similarly in the Inference table)
-    content_block.get("parsed_arguments").unwrap();
 
-    // Check that type is "chat"
-    // Check that usage is correct
+    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
+    let arguments: Value = serde_json::from_str(arguments).unwrap();
+    let arguments = arguments.as_object().unwrap();
+    assert!(arguments.len() == 1 || arguments.len() == 2);
+    let location = arguments.get("location").unwrap().as_str().unwrap();
+    assert_eq!(location, "Tokyo");
+    if arguments.len() == 2 {
+        let units = arguments.get("units").unwrap().as_str().unwrap();
+        assert!(units == "fahrenheit" || units == "celsius");
+    }
+
+    let parsed_arguments = content_block.get("parsed_arguments").unwrap();
+    let parsed_arguments = parsed_arguments.as_object().unwrap();
+    assert!(parsed_arguments.len() == 1 || parsed_arguments.len() == 2);
+    let location = parsed_arguments.get("location").unwrap().as_str().unwrap();
+    assert_eq!(location, "Tokyo");
+    if parsed_arguments.len() == 2 {
+        let units = parsed_arguments.get("units").unwrap().as_str().unwrap();
+        assert!(units == "fahrenheit" || units == "celsius");
+    }
+
     let usage = response_json.get("usage").unwrap();
     let usage = usage.as_object().unwrap();
     let prompt_tokens = usage.get("prompt_tokens").unwrap().as_u64().unwrap();
     let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
     assert!(prompt_tokens > 10);
     assert!(completion_tokens > 0);
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check ClickHouse
+    // Check if ClickHouse is correct - Inference table
     let clickhouse = get_clickhouse().await;
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
+
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, inference_id);
+
+    let function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(function_name, "weather_helper");
+
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, provider.variant_name);
+
+    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
+    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
+    assert_eq!(episode_id_result, episode_id);
+
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     let correct_input: Value = json!(
@@ -500,61 +536,98 @@ pub async fn test_tool_use_inference_request_with_provider(provider: E2ETestProv
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in New York City?"}]
+                    "content": [{"type": "text", "value": "What is the weather like in Tokyo?"}]
                 }
             ]
         }
     );
     assert_eq!(input, correct_input);
-    // Check that content blocks are correct
-    let content_blocks = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-    // Check that the tool call is correctly stored
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let _: Value = serde_json::from_str(arguments).unwrap();
-    content_block.get("id").unwrap().as_str().unwrap();
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_weather");
-    let parsed_name = content_block.get("parsed_name").unwrap().as_str().unwrap();
-    assert_eq!(parsed_name, "get_weather");
-    content_block.get("parsed_arguments").unwrap();
-    // Check that episode_id is here and correct
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
-    // Check the variant name
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
 
-    // Check the ModelInference Table
+    let output_clickhouse: Vec<Value> =
+        serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
+    assert_eq!(output_clickhouse, *output);
+
+    let tool_params: Value =
+        serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
+    assert_eq!(tool_params["tool_choice"], "required");
+    assert_eq!(tool_params["parallel_tool_calls"], false);
+
+    let tools_available = tool_params["tools_available"].as_array().unwrap();
+    assert_eq!(tools_available.len(), 1);
+    let tool = tools_available.first().unwrap();
+    assert_eq!(tool["name"], "get_weather");
+    assert_eq!(
+        tool["description"],
+        "Get the current weather in a given location"
+    );
+    assert_eq!(tool["strict"], false);
+
+    let tool_parameters = tool["parameters"].as_object().unwrap();
+    assert_eq!(tool_parameters["type"], "object");
+    assert!(tool_parameters.get("properties").is_some());
+    assert!(tool_parameters.get("required").is_some());
+    assert_eq!(tool_parameters["additionalProperties"], false);
+
+    let properties = tool_parameters["properties"].as_object().unwrap();
+    assert!(properties.contains_key("location"));
+    assert!(properties.contains_key("units"));
+
+    let location = properties["location"].as_object().unwrap();
+    assert_eq!(location["type"], "string");
+
+    let units = properties["units"].as_object().unwrap();
+    assert_eq!(units["type"], "string");
+    let units_enum = units["enum"].as_array().unwrap();
+    assert_eq!(units_enum.len(), 2);
+    assert!(units_enum.contains(&json!("fahrenheit")));
+    assert!(units_enum.contains(&json!("celsius")));
+
+    let required = tool_parameters["required"].as_array().unwrap();
+    assert!(required.contains(&json!("location")));
+
+    // Check if ClickHouse is correct - ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
+
     let id = result.get("id").unwrap().as_str().unwrap();
     let _ = Uuid::parse_str(id).unwrap();
+
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input_result = result.get("input").unwrap().as_str().unwrap();
-    let input_result: Value = serde_json::from_str(input_result).unwrap();
-    assert_eq!(input_result, correct_input);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    assert_eq!(input, correct_input);
+
+    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
+    let output_clickhouse_model: Vec<Value> =
+        serde_json::from_str(output_clickhouse_model).unwrap();
+    assert_eq!(output_clickhouse_model.len(), 1);
+    let content_block = output_clickhouse_model.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
-    // Check that the tool call is correctly stored (no parsing here)
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let _: Value = serde_json::from_str(arguments).unwrap();
-    content_block.get("id").unwrap().as_str().unwrap();
+
+    let _ = content_block.get("id").unwrap().as_str().unwrap();
+
     let name = content_block.get("name").unwrap().as_str().unwrap();
     assert_eq!(name, "get_weather");
+
+    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
+    let arguments: Value = serde_json::from_str(arguments).unwrap();
+    let arguments = arguments.as_object().unwrap();
+    assert!(arguments.len() == 1 || arguments.len() == 2);
+    let location = arguments.get("location").unwrap().as_str().unwrap();
+    assert_eq!(location, "Tokyo");
+    if arguments.len() == 2 {
+        let units = arguments.get("units").unwrap().as_str().unwrap();
+        assert!(units == "fahrenheit" || units == "celsius");
+    }
+
+    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    assert!(raw_response.contains("Tokyo"));
+    assert!(raw_response.contains("get_weather"));
 
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     assert!(input_tokens > 10);
@@ -563,5 +636,4 @@ pub async fn test_tool_use_inference_request_with_provider(provider: E2ETestProv
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
     assert!(result.get("ttft_ms").unwrap().is_null());
-    result.get("raw_response").unwrap().as_str().unwrap();
 }
