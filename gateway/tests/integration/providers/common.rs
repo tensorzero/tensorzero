@@ -18,11 +18,11 @@ use gateway::tool::{
 /// Enforce that every provider implements a common set of tests.
 ///
 /// To achieve that, each provider should call the `generate_provider_tests!` macro along with a
-/// function that returns a `TestProviders` struct.
+/// function that returns a `IntegrationTestProviders` struct.
 ///
 /// If some test doesn't apply to a particular provider (e.g. provider doesn't support tool use),
 /// then the provider should return an empty vector for the corresponding test.
-pub struct TestProviders {
+pub struct IntegrationTestProviders {
     pub simple_inference: Vec<&'static ProviderConfig>,
     pub streaming_inference: Vec<&'static ProviderConfig>,
     pub tool_use_inference: Vec<&'static ProviderConfig>,
@@ -33,7 +33,7 @@ pub struct TestProviders {
     pub json_mode_streaming_inference: Vec<&'static ProviderConfig>,
 }
 
-impl TestProviders {
+impl IntegrationTestProviders {
     pub fn with_provider(provider: ProviderConfig) -> Self {
         let provider = Box::leak(Box::new(provider));
 

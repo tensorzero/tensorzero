@@ -4,18 +4,18 @@ use std::env;
 use gateway::inference::providers::together::TogetherProvider;
 use gateway::model::ProviderConfig;
 
-use crate::providers::common::TestProviders;
+use crate::providers::common::IntegrationTestProviders;
 
 crate::generate_provider_tests!(get_providers);
 
-async fn get_providers() -> TestProviders {
+async fn get_providers() -> IntegrationTestProviders {
     let provider = Box::leak(Box::new(get_provider()));
     let provider_tool_use = Box::leak(Box::new(get_provider_tool_use()));
 
     // TODOs (#80):
     // - Together seems to have a different format for tool use responses compared to OpenAI (breaking)
     // - Together's function calling for Llama 3.1 is different from Llama 3.0 (breaking) - we should test both
-    TestProviders {
+    IntegrationTestProviders {
         simple_inference: vec![provider],
         streaming_inference: vec![provider],
         tool_use_inference: vec![provider_tool_use],

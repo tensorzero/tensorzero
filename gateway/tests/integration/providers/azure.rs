@@ -4,11 +4,11 @@ use std::env;
 use gateway::inference::providers::azure::AzureProvider;
 use gateway::model::ProviderConfig;
 
-use crate::providers::common::TestProviders;
+use crate::providers::common::IntegrationTestProviders;
 
 crate::generate_provider_tests!(get_providers);
 
-async fn get_providers() -> TestProviders {
+async fn get_providers() -> IntegrationTestProviders {
     // Generic provider for testing
     let api_key = env::var("AZURE_OPENAI_API_KEY")
         .expect("Environment variable AZURE_OPENAI_API_KEY must be set");
@@ -26,5 +26,5 @@ async fn get_providers() -> TestProviders {
         deployment_id,
     });
 
-    TestProviders::with_provider(provider)
+    IntegrationTestProviders::with_provider(provider)
 }

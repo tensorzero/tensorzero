@@ -4,15 +4,15 @@ use std::env;
 use gateway::inference::providers::fireworks::FireworksProvider;
 use gateway::model::ProviderConfig;
 
-use crate::providers::common::TestProviders;
+use crate::providers::common::IntegrationTestProviders;
 
 crate::generate_provider_tests!(get_providers);
 
-async fn get_providers() -> TestProviders {
+async fn get_providers() -> IntegrationTestProviders {
     let provider = Box::leak(Box::new(get_provider()));
     let provider_tool_use = Box::leak(Box::new(get_provider_tool_use()));
 
-    TestProviders {
+    IntegrationTestProviders {
         simple_inference: vec![provider],
         streaming_inference: vec![provider],
         tool_use_inference: vec![provider_tool_use],
