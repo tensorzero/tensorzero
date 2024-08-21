@@ -301,6 +301,7 @@ fn tensorzero_to_openai_system_message(system: Option<&str>) -> Option<OpenAIReq
 
 fn tensorzero_to_openai_messages(message: &RequestMessage) -> Vec<OpenAIRequestMessage<'_>> {
     let mut messages = Vec::new();
+    let mut tool_calls = Vec::new();
     let mut first_assistant_message_index: Option<usize> = None;
     for block in message.content.iter() {
         match block {
@@ -323,20 +324,14 @@ fn tensorzero_to_openai_messages(message: &RequestMessage) -> Vec<OpenAIRequestM
                 }
             },
             ContentBlock::ToolCall(tool_call) => {
-                let tool_call = OpenAIRequestToolCall {
+                tool_calls.push(OpenAIRequestToolCall {
                     id: &tool_call.id,
                     r#type: OpenAIToolType::Function,
                     function: OpenAIRequestFunctionCall {
                         name: &tool_call.name,
                         arguments: &tool_call.arguments,
                     },
-                };
-                messages.push(OpenAIRequestMessage::Assistant(
-                    OpenAIAssistantRequestMessage {
-                        content: None,
-                        tool_calls: Some(vec![tool_call]),
-                    },
-                ));
+                });
             }
             ContentBlock::ToolResult(tool_result) => {
                 let message = OpenAIRequestMessage::Tool(OpenAIToolRequestMessage {
@@ -347,7 +342,23 @@ fn tensorzero_to_openai_messages(message: &RequestMessage) -> Vec<OpenAIRequestM
             }
         }
     }
-
+    if !tool_calls.is_empty() {
+        match first_assistant_message_index {
+            Some(index) => {
+                if let Some(OpenAIRequestMessage::Assistant(msg)) = messages.get_mut(index) {
+                    msg.tool_calls = Some(tool_calls);
+                }
+            }
+            None => {
+                messages.push(OpenAIRequestMessage::Assistant(
+                    OpenAIAssistantRequestMessage {
+                        content: None,
+                        tool_calls: Some(tool_calls),
+                    },
+                ));
+            }
+        }
+    }
     messages
 }
 
@@ -397,7 +408,6 @@ pub(super) struct OpenAIFunction<'a> {
 pub(super) struct OpenAITool<'a> {
     pub(super) r#type: OpenAIToolType,
     pub(super) function: OpenAIFunction<'a>,
-    pub(super) strict: bool,
 }
 
 impl<'a> From<&'a ToolConfig> for OpenAITool<'a> {
@@ -409,7 +419,6 @@ impl<'a> From<&'a ToolConfig> for OpenAITool<'a> {
                 description: Some(tool.description()),
                 parameters: tool.parameters(),
             },
-            strict: tool.strict(),
         }
     }
 }
@@ -617,9 +626,7 @@ impl TryFrom<OpenAIResponseWithLatency> for ModelInferenceResponse {
             .message;
         let mut content: Vec<ContentBlock> = Vec::new();
         if let Some(text) = message.content {
-            if !text.is_empty() {
-                content.push(text.into());
-            }
+            content.push(text.into());
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
@@ -1224,17 +1231,10 @@ mod tests {
             content: vec!["Hello".to_string().into(), tool_block],
         };
         let openai_messages = tensorzero_to_openai_messages(&multi_block_message);
-        assert_eq!(openai_messages.len(), 2);
+        assert_eq!(openai_messages.len(), 1);
         match &openai_messages[0] {
             OpenAIRequestMessage::Assistant(content) => {
                 assert_eq!(content.content, Some("Hello"));
-                assert!(content.tool_calls.is_none());
-            }
-            _ => panic!("Expected an assistant message"),
-        }
-        match &openai_messages[1] {
-            OpenAIRequestMessage::Assistant(content) => {
-                assert_eq!(content.content, None);
                 let tool_calls = content.tool_calls.as_ref().unwrap();
                 assert_eq!(tool_calls.len(), 1);
                 assert_eq!(tool_calls[0].id, "call1");
