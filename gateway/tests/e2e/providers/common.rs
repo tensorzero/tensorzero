@@ -26,6 +26,7 @@ pub struct E2ETestProviders {
     pub streaming_inference: Vec<E2ETestProvider>,
     pub tool_use_inference: Vec<E2ETestProvider>,
     pub tool_use_streaming_inference: Vec<E2ETestProvider>,
+    // TODO (#173): Add tests for multi-turn tool use
     // pub tool_multi_turn_inference: Vec<E2ETestProvider>,
     // pub tool_multi_turn_streaming_inference: Vec<E2ETestProvider>,
     pub json_mode_inference: Vec<E2ETestProvider>,
@@ -41,6 +42,7 @@ impl E2ETestProviders {
             streaming_inference: providers.clone(),
             tool_use_inference: providers.clone(),
             tool_use_streaming_inference: providers.clone(),
+            // TODO (#173): Add tests for multi-turn tool use
             // tool_multi_turn_inference: providers.clone(),
             // tool_multi_turn_streaming_inference: providers.clone(),
             json_mode_inference: providers.clone(),
@@ -54,6 +56,7 @@ impl E2ETestProviders {
             streaming_inference: providers.clone(),
             tool_use_inference: providers.clone(),
             tool_use_streaming_inference: providers.clone(),
+            // TODO (#173): Add tests for multi-turn tool use
             // tool_multi_turn_inference: static_providers.clone(),
             // tool_multi_turn_streaming_inference: providers.clone(),
             json_mode_inference: providers.clone(),
@@ -69,6 +72,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_json_mode_streaming_inference_request_with_provider;
         use $crate::providers::common::test_simple_inference_request_with_provider;
         use $crate::providers::common::test_streaming_inference_request_with_provider;
+        // TODO (#173): Add tests for multi-turn tool use
         // use $crate::providers::common::test_tool_multi_turn_inference_request_with_provider;
         // use $crate::providers::common::test_tool_multi_turn_streaming_inference_request_with_provider;
         use $crate::providers::common::test_tool_use_inference_request_with_provider;
@@ -106,6 +110,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        // TODO (#173): Add tests for multi-turn tool use
         // #[tokio::test]
         // async fn test_tool_multi_turn_inference_request() {
         //     let providers = $func().await.tool_multi_turn_inference;
