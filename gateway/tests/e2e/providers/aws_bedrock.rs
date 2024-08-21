@@ -13,11 +13,9 @@ use crate::providers::common::{E2ETestProvider, E2ETestProviders};
 crate::generate_provider_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
-    let provider = E2ETestProvider {
+    E2ETestProviders::with_provider(E2ETestProvider {
         variant_name: "aws-bedrock".to_string(),
-    };
-
-    E2ETestProviders::with_provider(provider)
+    })
 }
 
 /// AWS Bedrock E2E tests
