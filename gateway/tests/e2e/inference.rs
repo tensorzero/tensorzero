@@ -654,11 +654,11 @@ async fn e2e_test_inference_json_fail() {
 /// a response which satisfies the schema.
 /// We expect to see a filled-out `content` field in the response and a filled-out `output` field in the table.
 #[tokio::test]
-async fn e2e_test_inference_json_succeed() {
+async fn e2e_test_inference_json_success() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
-        "function_name": "json_succeed",
+        "function_name": "json_success",
         "episode_id": episode_id,
         "input":
             {

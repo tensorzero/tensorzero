@@ -36,7 +36,7 @@ async fn test_json_request() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
-        "function_name": "json_succeed",
+        "function_name": "json_success",
         "episode_id": episode_id,
         "input":
             {
@@ -155,7 +155,7 @@ async fn test_json_request_streaming() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
-        "function_name": "json_succeed",
+        "function_name": "json_success",
         "episode_id": episode_id,
         "input":
             {
