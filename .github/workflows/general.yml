@@ -20,14 +20,10 @@ jobs:
       - name: Set up Cargo Cache
         uses: Swatinem/rust-cache@v2
 
-      - name: Install cargo-nextest
-        uses: baptiste0928/cargo-install@v1
+      - name: Install cargo-nextest and cargo-deny
+        uses: taiki-e/install-action@v2
         with:
-          crate: cargo-nextest
-          args: --locked
-
-      - name: Install cargo-deny
-        uses: taiki-e/install-action@cargo-deny
+          tool: cargo-nextest,cargo-deny
 
       - name: Build (Rust)
         run: cargo build --verbose

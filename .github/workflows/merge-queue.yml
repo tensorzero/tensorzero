@@ -43,10 +43,9 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Install cargo-nextest
-        uses: baptiste0928/cargo-install@v1
+        uses: taiki-e/install-action@v2
         with:
-          crate: cargo-nextest
-          args: --locked
+          tool: cargo-nextest
 
       - name: Write GCP JWT key to file
         env:
@@ -61,7 +60,7 @@ jobs:
             docker-gateway-usr-local-cargo-registry
             docker-gateway-usr-local-cargo-git
             docker-gateway-src-target
-          key: cache-${{ hashFiles('./Dockerfile') }}
+          key: cache-docker-mounts-${{ runner.os }}
 
       - name: Inject cache into Docker
         uses: reproducible-containers/buildkit-cache-dance@v3.1.0

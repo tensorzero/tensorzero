@@ -228,7 +228,9 @@ impl<'a> From<&'a ToolCall> for OpenAIRequestToolCall<'a> {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(super) struct OpenAIAssistantRequestMessage<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<Vec<OpenAIRequestToolCall<'a>>>,
 }
 
@@ -301,8 +303,7 @@ fn tensorzero_to_openai_system_message(system: Option<&str>) -> Option<OpenAIReq
 
 fn tensorzero_to_openai_messages(message: &RequestMessage) -> Vec<OpenAIRequestMessage<'_>> {
     let mut messages = Vec::new();
-    let mut tool_calls = Vec::new();
-    let mut first_assistant_message_index: Option<usize> = None;
+
     for block in message.content.iter() {
         match block {
             ContentBlock::Text(Text { text }) => match message.role {
@@ -318,20 +319,24 @@ fn tensorzero_to_openai_messages(message: &RequestMessage) -> Vec<OpenAIRequestM
                             tool_calls: None,
                         },
                     ));
-                    if first_assistant_message_index.is_none() {
-                        first_assistant_message_index = Some(messages.len() - 1);
-                    }
                 }
             },
             ContentBlock::ToolCall(tool_call) => {
-                tool_calls.push(OpenAIRequestToolCall {
+                let tool_call = OpenAIRequestToolCall {
                     id: &tool_call.id,
                     r#type: OpenAIToolType::Function,
                     function: OpenAIRequestFunctionCall {
                         name: &tool_call.name,
                         arguments: &tool_call.arguments,
                     },
-                });
+                };
+
+                messages.push(OpenAIRequestMessage::Assistant(
+                    OpenAIAssistantRequestMessage {
+                        content: None,
+                        tool_calls: Some(vec![tool_call]),
+                    },
+                ));
             }
             ContentBlock::ToolResult(tool_result) => {
                 let message = OpenAIRequestMessage::Tool(OpenAIToolRequestMessage {
@@ -342,23 +347,7 @@ fn tensorzero_to_openai_messages(message: &RequestMessage) -> Vec<OpenAIRequestM
             }
         }
     }
-    if !tool_calls.is_empty() {
-        match first_assistant_message_index {
-            Some(index) => {
-                if let Some(OpenAIRequestMessage::Assistant(msg)) = messages.get_mut(index) {
-                    msg.tool_calls = Some(tool_calls);
-                }
-            }
-            None => {
-                messages.push(OpenAIRequestMessage::Assistant(
-                    OpenAIAssistantRequestMessage {
-                        content: None,
-                        tool_calls: Some(tool_calls),
-                    },
-                ));
-            }
-        }
-    }
+
     messages
 }
 
@@ -486,7 +475,7 @@ pub(super) struct StreamOptions {
 /// We are not handling logprobs, top_logprobs, n,
 /// presence_penalty, seed, service_tier, stop, user,
 /// or the deprecated function_call and functions arguments.
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct OpenAIRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     model: &'a str,
@@ -1220,30 +1209,6 @@ mod tests {
                 assert_eq!(content.content, "How are you?");
             }
             _ => panic!("Expected a user message"),
-        }
-
-        // Assistant message with one string and one tool block
-        let tool_block = ContentBlock::ToolCall(ToolCall {
-            id: "call1".to_string(),
-            name: "test_function".to_string(),
-            arguments: "{}".to_string(),
-        });
-        let multi_block_message = RequestMessage {
-            role: Role::Assistant,
-            content: vec!["Hello".to_string().into(), tool_block],
-        };
-        let openai_messages = tensorzero_to_openai_messages(&multi_block_message);
-        assert_eq!(openai_messages.len(), 1);
-        match &openai_messages[0] {
-            OpenAIRequestMessage::Assistant(content) => {
-                assert_eq!(content.content, Some("Hello"));
-                let tool_calls = content.tool_calls.as_ref().unwrap();
-                assert_eq!(tool_calls.len(), 1);
-                assert_eq!(tool_calls[0].id, "call1");
-                assert_eq!(tool_calls[0].function.name, "test_function");
-                assert_eq!(tool_calls[0].function.arguments, "{}");
-            }
-            _ => panic!("Expected an assistant message"),
         }
 
         // User message with one string and one tool call block

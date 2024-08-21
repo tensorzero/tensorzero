@@ -281,13 +281,13 @@ impl From<Role> for GCPVertexGeminiRole {
 #[derive(Serialize, PartialEq, Debug)]
 struct GCPVertexGeminiFunctionCall<'a> {
     name: &'a str,
-    args: &'a str, // JSON as string
+    args: Value,
 }
 
 #[derive(Serialize, PartialEq, Debug)]
 struct GCPVertexGeminiFunctionResponse<'a> {
     name: &'a str,
-    response: &'a str, // JSON as string
+    response: Value,
 }
 
 #[derive(Serialize, PartialEq, Debug)]
@@ -307,22 +307,57 @@ enum GCPVertexGeminiContentPart<'a> {
     // TODO (if needed): VideoMetadata { video_metadata: VideoMetadata },
 }
 
-impl<'a> From<&'a ContentBlock> for GCPVertexGeminiContentPart<'a> {
-    fn from(block: &'a ContentBlock) -> Self {
+impl<'a> TryFrom<&'a ContentBlock> for GCPVertexGeminiContentPart<'a> {
+    type Error = Error;
+
+    fn try_from(block: &'a ContentBlock) -> Result<Self, Error> {
         match block {
-            ContentBlock::Text(Text { text }) => GCPVertexGeminiContentPart::Text { text },
-            ContentBlock::ToolResult(tool_result) => GCPVertexGeminiContentPart::FunctionResponse {
-                function_response: GCPVertexGeminiFunctionResponse {
-                    name: &tool_result.name,
-                    response: &tool_result.result,
-                },
-            },
-            ContentBlock::ToolCall(tool_call) => GCPVertexGeminiContentPart::FunctionCall {
-                function_call: GCPVertexGeminiFunctionCall {
-                    name: &tool_call.name,
-                    args: &tool_call.arguments,
-                },
-            },
+            ContentBlock::Text(Text { text }) => Ok(GCPVertexGeminiContentPart::Text { text }),
+            ContentBlock::ToolResult(tool_result) => {
+                // Convert the tool result from String to JSON Value (GCP expects an object)
+                let response: Value = serde_json::from_str(&tool_result.result).map_err(|e| {
+                    Error::GCPVertexClient {
+                        status_code: StatusCode::BAD_REQUEST,
+                        message: format!("Error parsing tool result as JSON Value: {e}"),
+                    }
+                })?;
+
+                // GCP expects the format below according to [the documentation](https://ai.google.dev/gemini-api/docs/function-calling#multi-turn-example-1)
+                let response = serde_json::json!({
+                    "name": tool_result.name,
+                    "content": response,
+                });
+
+                Ok(GCPVertexGeminiContentPart::FunctionResponse {
+                    function_response: GCPVertexGeminiFunctionResponse {
+                        name: &tool_result.name,
+                        response,
+                    },
+                })
+            }
+            ContentBlock::ToolCall(tool_call) => {
+                // Convert the tool call arguments from String to JSON Value (GCP expects an object)
+                let args: Value = serde_json::from_str(&tool_call.arguments).map_err(|e| {
+                    Error::GCPVertexClient {
+                        status_code: StatusCode::BAD_REQUEST,
+                        message: format!("Error parsing tool call arguments as JSON Value: {e}"),
+                    }
+                })?;
+
+                if !args.is_object() {
+                    return Err(Error::GCPVertexClient {
+                        status_code: StatusCode::BAD_REQUEST,
+                        message: "Tool call arguments must be a JSON object".to_string(),
+                    });
+                }
+
+                Ok(GCPVertexGeminiContentPart::FunctionCall {
+                    function_call: GCPVertexGeminiFunctionCall {
+                        name: &tool_call.name,
+                        args,
+                    },
+                })
+            }
         }
     }
 }
@@ -333,12 +368,18 @@ struct GCPVertexGeminiContent<'a> {
     parts: Vec<GCPVertexGeminiContentPart<'a>>,
 }
 
-impl<'a> From<&'a RequestMessage> for GCPVertexGeminiContent<'a> {
-    fn from(message: &'a RequestMessage) -> Self {
+impl<'a> TryFrom<&'a RequestMessage> for GCPVertexGeminiContent<'a> {
+    type Error = Error;
+
+    fn try_from(message: &'a RequestMessage) -> Result<Self, Self::Error> {
         let role = GCPVertexGeminiRole::from(message.role);
-        let parts: Vec<GCPVertexGeminiContentPart> =
-            message.content.iter().map(|block| block.into()).collect();
-        GCPVertexGeminiContent { role, parts }
+        let parts: Vec<GCPVertexGeminiContentPart> = message
+            .content
+            .iter()
+            .map(|block| block.try_into())
+            .collect::<Result<_, _>>()?;
+
+        Ok(GCPVertexGeminiContent { role, parts })
     }
 }
 
@@ -528,8 +569,8 @@ impl<'a> GCPVertexGeminiRequest<'a> {
         let contents: Vec<GCPVertexGeminiContent> = request
             .messages
             .iter()
-            .map(GCPVertexGeminiContent::from)
-            .collect();
+            .map(GCPVertexGeminiContent::try_from)
+            .collect::<Result<_, _>>()?;
         let (tools, tool_config) = prepare_tools(request, model_name);
         let (response_mime_type, response_schema) = match request.json_mode {
             JSONMode::On | JSONMode::Strict => match request.output_schema {
@@ -850,7 +891,7 @@ mod tests {
             role: Role::User,
             content: vec!["Hello, world!".to_string().into()],
         };
-        let content = GCPVertexGeminiContent::from(&message);
+        let content = GCPVertexGeminiContent::try_from(&message).unwrap();
         assert_eq!(content.role, GCPVertexGeminiRole::User);
         assert_eq!(content.parts.len(), 1);
         assert_eq!(
@@ -864,7 +905,7 @@ mod tests {
             role: Role::Assistant,
             content: vec!["Hello, world!".to_string().into()],
         };
-        let content = GCPVertexGeminiContent::from(&message);
+        let content = GCPVertexGeminiContent::try_from(&message).unwrap();
         assert_eq!(content.role, GCPVertexGeminiRole::Model);
         assert_eq!(content.parts.len(), 1);
         assert_eq!(
@@ -884,7 +925,7 @@ mod tests {
                 }),
             ],
         };
-        let content = GCPVertexGeminiContent::from(&message);
+        let content = GCPVertexGeminiContent::try_from(&message).unwrap();
         assert_eq!(content.role, GCPVertexGeminiRole::Model);
         assert_eq!(content.parts.len(), 2);
         assert_eq!(
@@ -898,7 +939,7 @@ mod tests {
             GCPVertexGeminiContentPart::FunctionCall {
                 function_call: GCPVertexGeminiFunctionCall {
                     name: "get_weather",
-                    args: r#"{"location": "New York", "unit": "celsius"}"#,
+                    args: json!({"location": "New York", "unit": "celsius"}),
                 }
             }
         );
@@ -911,7 +952,7 @@ mod tests {
                 result: r#"{"temperature": 25, "conditions": "sunny"}"#.to_string(),
             })],
         };
-        let content = GCPVertexGeminiContent::from(&message);
+        let content = GCPVertexGeminiContent::try_from(&message).unwrap();
         assert_eq!(content.role, GCPVertexGeminiRole::User);
         assert_eq!(content.parts.len(), 1);
         assert_eq!(
@@ -919,7 +960,10 @@ mod tests {
             GCPVertexGeminiContentPart::FunctionResponse {
                 function_response: GCPVertexGeminiFunctionResponse {
                     name: "get_weather",
-                    response: r#"{"temperature": 25, "conditions": "sunny"}"#,
+                    response: json!({
+                        "name": "get_weather",
+                        "content": json!({"temperature": 25, "conditions": "sunny"})
+                    }),
                 }
             }
         );
