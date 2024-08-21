@@ -167,39 +167,57 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
         .await
         .unwrap();
 
-    // Check that the response is ok
+    // Check that the API response is ok
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
-    let content_blocks = response_json.get("output").unwrap().as_array().unwrap();
-    assert!(content_blocks.len() == 1);
-    let content_block = content_blocks.first().unwrap();
+
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+    assert_eq!(episode_id_response, episode_id);
+
+    let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, provider.variant_name);
+
+    let output = response_json.get("output").unwrap().as_array().unwrap();
+    assert_eq!(output.len(), 1);
+    let content_block = output.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
     assert!(content.contains("Tokyo"));
 
-    // Check that inference_id is here
-    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id = Uuid::parse_str(inference_id).unwrap();
+    let usage = response_json.get("usage").unwrap();
+    let input_tokens = usage.get("prompt_tokens").unwrap().as_u64().unwrap();
+    assert!(input_tokens > 5);
+    let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
+    assert!(completion_tokens > 5);
 
-    // Check that the episode_id is here
-    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
-
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check ClickHouse
+    // Check if ClickHouse is ok - Inference Table
     let clickhouse = get_clickhouse().await;
-
-    // First, check Inference table...
     let result = select_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
+
     let id = result.get("id").unwrap().as_str().unwrap();
     let id = Uuid::parse_str(id).unwrap();
     assert_eq!(id, inference_id);
+
+    let function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(function_name, "basic_test");
+
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, provider.variant_name);
+
+    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+    assert_eq!(retrieved_episode_id, episode_id);
+
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     let correct_input = json!({
@@ -213,27 +231,32 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     });
     assert_eq!(input, correct_input);
 
-    // Check that content_blocks is a list of blocks length 1
     let content_blocks = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
     assert_eq!(content_blocks.len(), 1);
     let content_block = content_blocks.first().unwrap();
-    // Check the type and content in the block
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
     let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
     assert_eq!(clickhouse_content, content);
 
-    // Check that episode_id is here and correct
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
+    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
+    assert!(tool_params.is_empty());
 
-    // Check the variant name
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
+    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    let inference_params = inference_params.get("chat_completion").unwrap();
+    assert!(inference_params.get("temperature").unwrap().is_null());
+    assert!(inference_params.get("seed").unwrap().is_null());
+    assert_eq!(
+        inference_params
+            .get("max_tokens")
+            .unwrap()
+            .as_u64()
+            .unwrap(),
+        100
+    );
 
-    // Check the processing time
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
 
@@ -241,12 +264,18 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
+
+    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
+    assert!(Uuid::parse_str(model_inference_id).is_ok());
+
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
+
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, correct_input);
+
     let output = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
     assert_eq!(content_blocks.len(), 1);
@@ -256,6 +285,10 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
     assert_eq!(clickhouse_content, content);
 
+    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    assert!(raw_response.contains("Tokyo"));
+    assert!(serde_json::from_str::<Value>(raw_response).is_ok());
+
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     assert!(input_tokens > 5);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
@@ -263,8 +296,6 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
     assert!(result.get("ttft_ms").unwrap().is_null());
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
-    let _ = serde_json::from_str::<Value>(raw_response).unwrap();
 }
 
 pub async fn test_streaming_inference_request_with_provider(provider: E2ETestProvider) {
@@ -335,7 +366,7 @@ pub async fn test_streaming_inference_request_with_provider(provider: E2ETestPro
     );
     assert_eq!(episode_id_response.unwrap(), episode_id);
 
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Check ClickHouse
