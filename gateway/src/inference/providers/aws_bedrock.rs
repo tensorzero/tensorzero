@@ -379,7 +379,8 @@ impl TryFrom<&ContentBlock> for BedrockContentBlock {
             ContentBlock::ToolCall(tool_call) => {
                 // Convert the tool call arguments from String to JSON Value...
                 let input = serde_json::from_str(&tool_call.arguments).map_err(|e| {
-                    Error::AWSBedrockServer {
+                    Error::AWSBedrockClient {
+                        status_code: StatusCode::BAD_REQUEST,
                         message: format!("Error parsing tool call arguments as JSON Value: {e}"),
                     }
                 })?;
