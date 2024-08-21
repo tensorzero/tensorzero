@@ -63,10 +63,10 @@ async fn test_strict_json_request() {
     // Check that usage is correct
     let usage = response_json.get("usage").unwrap();
     let usage = usage.as_object().unwrap();
-    let prompt_tokens = usage.get("prompt_tokens").unwrap().as_u64().unwrap();
-    let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
-    assert!(prompt_tokens > 10);
-    assert!(completion_tokens > 5);
+    let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
+    assert!(input_tokens > 10);
+    assert!(output_tokens > 5);
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
@@ -202,10 +202,10 @@ async fn test_inference_dynamic_tools() {
     // Check that usage is correct
     let usage = response_json.get("usage").unwrap();
     let usage = usage.as_object().unwrap();
-    let prompt_tokens = usage.get("prompt_tokens").unwrap().as_u64().unwrap();
-    let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
-    assert!(prompt_tokens > 10);
-    assert!(completion_tokens > 0);
+    let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
+    assert!(input_tokens > 10);
+    assert!(output_tokens > 0);
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 

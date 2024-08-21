@@ -701,8 +701,8 @@ mod tests {
                 assert_eq!(
                     chat_response.usage,
                     Usage {
-                        prompt_tokens: 10,
-                        completion_tokens: 10,
+                        input_tokens: 10,
+                        output_tokens: 10,
                     }
                 );
                 assert_eq!(chat_response.model_inference_responses.len(), 1);
@@ -763,8 +763,8 @@ mod tests {
                 assert_eq!(
                     chat_response.usage,
                     Usage {
-                        prompt_tokens: 10,
-                        completion_tokens: 10,
+                        input_tokens: 10,
+                        output_tokens: 10,
                     }
                 );
             }
@@ -813,8 +813,8 @@ mod tests {
                 assert_eq!(
                     json_result.usage,
                     Usage {
-                        prompt_tokens: 10,
-                        completion_tokens: 10,
+                        input_tokens: 10,
+                        output_tokens: 10,
                     }
                 );
                 assert_eq!(json_result.model_inference_responses.len(), 1);
@@ -856,8 +856,8 @@ mod tests {
                 assert_eq!(
                     json_result.usage,
                     Usage {
-                        prompt_tokens: 10,
-                        completion_tokens: 10,
+                        input_tokens: 10,
+                        output_tokens: 10,
                     }
                 );
                 assert_eq!(json_result.model_inference_responses.len(), 1);
@@ -967,8 +967,8 @@ mod tests {
                 assert_eq!(
                     chunk.usage,
                     Some(Usage {
-                        prompt_tokens: 10,
-                        completion_tokens: 16
+                        input_tokens: 10,
+                        output_tokens: 16
                     })
                 );
                 break;

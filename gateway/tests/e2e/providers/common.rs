@@ -194,10 +194,10 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     assert!(content.contains("Tokyo"));
 
     let usage = response_json.get("usage").unwrap();
-    let input_tokens = usage.get("prompt_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
     assert!(input_tokens > 5);
-    let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
-    assert!(completion_tokens > 5);
+    let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
+    assert!(output_tokens > 5);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -346,8 +346,8 @@ pub async fn test_streaming_inference_request_with_provider(provider: E2ETestPro
 
     let mut inference_id: Option<Uuid> = None;
     let mut full_content = String::new();
-    let mut prompt_tokens = 0;
-    let mut completion_tokens = 0;
+    let mut input_tokens = 0;
+    let mut output_tokens = 0;
     for chunk in chunks.clone() {
         let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
 
@@ -374,8 +374,8 @@ pub async fn test_streaming_inference_request_with_provider(provider: E2ETestPro
         }
 
         if let Some(usage) = chunk_json.get("usage") {
-            prompt_tokens += usage.get("prompt_tokens").unwrap().as_u64().unwrap();
-            completion_tokens += usage.get("completion_tokens").unwrap().as_u64().unwrap();
+            input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
+            output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
         }
     }
 
@@ -387,11 +387,11 @@ pub async fn test_streaming_inference_request_with_provider(provider: E2ETestPro
 
     // NB: Azure doesn't support input/output tokens during streaming
     if provider.variant_name != "azure" {
-        assert!(prompt_tokens > 5);
-        assert!(completion_tokens > 5);
+        assert!(input_tokens > 5);
+        assert!(output_tokens > 5);
     } else {
-        assert_eq!(prompt_tokens, 0);
-        assert_eq!(completion_tokens, 0);
+        assert_eq!(input_tokens, 0);
+        assert_eq!(output_tokens, 0);
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
@@ -587,10 +587,10 @@ pub async fn test_tool_use_inference_request_with_provider(provider: E2ETestProv
 
     let usage = response_json.get("usage").unwrap();
     let usage = usage.as_object().unwrap();
-    let prompt_tokens = usage.get("prompt_tokens").unwrap().as_u64().unwrap();
-    let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
-    assert!(prompt_tokens > 0);
-    assert!(completion_tokens > 0);
+    let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
+    assert!(input_tokens > 0);
+    assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -771,8 +771,8 @@ pub async fn test_tool_use_streaming_inference_request_with_provider(provider: E
     let mut inference_id = None;
     let mut tool_id: Option<String> = None;
     let mut arguments = String::new();
-    let mut prompt_tokens = 0;
-    let mut completion_tokens = 0;
+    let mut input_tokens = 0;
+    let mut output_tokens = 0;
 
     for chunk in chunks {
         let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
@@ -806,18 +806,18 @@ pub async fn test_tool_use_streaming_inference_request_with_provider(provider: E
         }
 
         if let Some(usage) = chunk_json.get("usage").and_then(|u| u.as_object()) {
-            prompt_tokens += usage.get("prompt_tokens").unwrap().as_u64().unwrap();
-            completion_tokens += usage.get("completion_tokens").unwrap().as_u64().unwrap();
+            input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
+            output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
         }
     }
 
     // NB: Azure doesn't return usage during streaming
     if provider.variant_name != "azure" {
-        assert!(prompt_tokens > 0);
-        assert!(completion_tokens > 0);
+        assert!(input_tokens > 0);
+        assert!(output_tokens > 0);
     } else {
-        assert_eq!(prompt_tokens, 0);
-        assert_eq!(completion_tokens, 0);
+        assert_eq!(input_tokens, 0);
+        assert_eq!(output_tokens, 0);
     }
 
     let inference_id = inference_id.unwrap();
@@ -1039,10 +1039,10 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
     assert_eq!(&raw_output, output.get("parsed").unwrap());
 
     let usage = response_json.get("usage").unwrap();
-    let input_tokens = usage.get("prompt_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
     assert!(input_tokens > 5);
-    let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
-    assert!(completion_tokens > 5);
+    let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
+    assert!(output_tokens > 5);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -1187,8 +1187,8 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
 
     let mut inference_id: Option<Uuid> = None;
     let mut full_content = String::new();
-    let mut prompt_tokens = 0;
-    let mut completion_tokens = 0;
+    let mut input_tokens = 0;
+    let mut output_tokens = 0;
     for chunk in chunks.clone() {
         let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
 
@@ -1213,8 +1213,8 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         }
 
         if let Some(usage) = chunk_json.get("usage") {
-            prompt_tokens += usage.get("prompt_tokens").unwrap().as_u64().unwrap();
-            completion_tokens += usage.get("completion_tokens").unwrap().as_u64().unwrap();
+            input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
+            output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
         }
     }
 
@@ -1226,11 +1226,11 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
 
     // NB: Azure doesn't support input/output tokens during streaming
     if provider.variant_name != "azure" {
-        assert!(prompt_tokens > 5);
-        assert!(completion_tokens > 5);
+        assert!(input_tokens > 5);
+        assert!(output_tokens > 5);
     } else {
-        assert_eq!(prompt_tokens, 0);
-        assert_eq!(completion_tokens, 0);
+        assert_eq!(input_tokens, 0);
+        assert_eq!(output_tokens, 0);
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
