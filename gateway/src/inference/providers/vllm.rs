@@ -171,6 +171,7 @@ impl<'a> VLLMRequest<'a> {
             false => None,
         };
         let messages = prepare_openai_messages(request);
+        // TODO (#169): Implement tool calling.
         if request.tool_config.is_some() {
             return Err(Error::VLLMServer {
                 message: "TensorZero does not support tool use with vLLM. Please use a different provider.".to_string(),
