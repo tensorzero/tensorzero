@@ -39,69 +39,6 @@ impl TestableProviderConfig for VLLMProvider {
     }
 }
 
-// vLLM does not support tool calls well enough for us to do so.
-// #[tokio::test]
-// async fn test_infer_with_tool_calls() {
-//     // Load API key from environment variable
-//     let api_key = env::var("VLLM_API_KEY").expect("VLLM_API_KEY must be set");
-//     let api_key = SecretString::new(api_key);
-//     let model_name = env::var("VLLM_MODEL_NAME").expect("VLLM_MODEL_NAME must be set");
-//     let api_base = env::var("VLLM_API_BASE").expect("VLLM_API_BASE must be set");
-//     let client = reqwest::Client::new();
-
-//     let inference_request = create_tool_inference_request().clone();
-
-//     let provider = ProviderConfig::VLLM(VLLMProvider {
-//         model_name: model_name.to_string(),
-//         api_key: Some(api_key),
-//         api_base: api_base.to_string(),
-//     });
-//     let result = provider.infer(&inference_request, &client).await;
-//     let response = result.unwrap();
-//     assert!(response.content.len() == 1);
-//     let content = response.content.first().unwrap();
-//     match content {
-//         ContentBlock::ToolCall(tool_call) => {
-//             assert!(tool_call.name == "get_weather");
-//             let arguments: serde_json::Value = serde_json::from_str(&tool_call.arguments)
-//                 .expect("Failed to parse tool call arguments");
-//             assert!(arguments.get("location").is_some());
-//         }
-//         _ => panic!("Expected a tool call content block"),
-//     }
-// }
-
-// #[tokio::test]
-// async fn test_infer_with_tool_calls_and_results() {
-//     // Load API key from environment variable
-//     let api_key = env::var("VLLM_API_KEY").expect("VLLM_API_KEY must be set");
-//     let api_key = SecretString::new(api_key);
-//     let model_name = env::var("VLLM_MODEL_NAME").expect("VLLM_MODEL_NAME must be set");
-//     let api_base = env::var("VLLM_API_BASE").expect("VLLM_API_BASE must be set");
-//     let client = reqwest::Client::new();
-
-//     let inference_request = create_tool_result_inference_request().clone();
-
-//     let provider = ProviderConfig::VLLM(VLLMProvider {
-//         model_name: model_name.to_string(),
-//         api_key: Some(api_key),
-//         api_base: api_base.to_string(),
-//     });
-//     let result = provider.infer(&inference_request, &client).await;
-//     let response = result.unwrap();
-//     assert!(response.content.len() == 1);
-//     let content = response.content.first().unwrap();
-//     match content {
-//         ContentBlock::ToolCall(tool_call) => {
-//             assert!(tool_call.name == "get_weather");
-//             let arguments: serde_json::Value = serde_json::from_str(&tool_call.arguments)
-//                 .expect("Failed to parse tool call arguments");
-//             assert!(arguments.get("location").is_some());
-//         }
-//         _ => panic!("Expected a tool call content block"),
-//     }
-// }
-
 #[tokio::test]
 async fn test_json_request() {
     // Load API key from environment variable

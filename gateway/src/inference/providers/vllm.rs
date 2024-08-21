@@ -15,9 +15,8 @@ use crate::{
 
 use super::{
     openai::{
-        get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
-        stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseWithLatency,
-        StreamOptions,
+        get_chat_url, handle_openai_error, prepare_openai_messages, stream_openai,
+        OpenAIRequestMessage, OpenAIResponse, OpenAIResponseWithLatency, StreamOptions,
     },
     provider_trait::InferenceProvider,
 };
@@ -172,8 +171,7 @@ impl<'a> VLLMRequest<'a> {
             false => None,
         };
         let messages = prepare_openai_messages(request);
-        let (tools, _, _) = prepare_openai_tools(request);
-        if tools.is_some() {
+        if request.tool_config.is_some() {
             return Err(Error::VLLMServer {
                 message: "TensorZero does not support tool use with vLLM. Please use a different provider.".to_string(),
             });
@@ -223,7 +221,7 @@ mod tests {
             seed: Some(69),
             stream: false,
             json_mode: JSONMode::On,
-            tool_config: None, // Some(&WEATHER_TOOL_CONFIG),
+            tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
         };

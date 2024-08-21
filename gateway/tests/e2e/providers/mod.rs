@@ -5,3 +5,4 @@ mod fireworks;
 mod gcp_vertex;
 mod openai;
 mod together;
+mod vllm;
