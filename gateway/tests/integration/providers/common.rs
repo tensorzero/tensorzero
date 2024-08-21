@@ -17,10 +17,11 @@ use gateway::tool::{
 
 /// Enforce that every provider implements a common set of tests.
 ///
-/// To achieve that, each provider should call the `generate_provider_tests!` macro. TODO TODO
+/// To achieve that, each provider should call the `generate_provider_tests!` macro along with a
+/// function that returns a `TestProviders` struct.
 ///
 /// If some test doesn't apply to a particular provider (e.g. provider doesn't support tool use),
-/// then the provider should return `None` from the corresponding method.
+/// then the provider should return an empty vector for the corresponding test.
 pub struct TestProviders {
     pub simple_inference: Vec<&'static ProviderConfig>,
     pub streaming_inference: Vec<&'static ProviderConfig>,
