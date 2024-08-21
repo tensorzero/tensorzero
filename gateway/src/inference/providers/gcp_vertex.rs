@@ -710,6 +710,7 @@ struct GCPVertexGeminiResponseContent {
 
 #[derive(Deserialize, Serialize)]
 struct GCPVertexGeminiResponseCandidate {
+    #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<GCPVertexGeminiResponseContent>,
 }
 

@@ -564,9 +564,11 @@ impl From<OpenAIResponseToolCall> for ToolCall {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct OpenAIResponseMessage {
+    #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<Vec<OpenAIResponseToolCall>>,
 }
 
@@ -647,7 +649,9 @@ struct OpenAIToolCallChunk {
 // This doesn't include role
 #[derive(Debug, PartialEq, Deserialize, Serialize, Clone)]
 struct OpenAIDelta {
+    #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<Vec<OpenAIToolCallChunk>>,
 }
 
@@ -660,6 +664,7 @@ struct OpenAIChatChunkChoice {
 #[derive(Debug, PartialEq, Deserialize, Serialize, Clone)]
 struct OpenAIChatChunk {
     choices: Vec<OpenAIChatChunkChoice>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     usage: Option<OpenAIUsage>,
 }
 

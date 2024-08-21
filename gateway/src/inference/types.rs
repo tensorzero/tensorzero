@@ -231,6 +231,7 @@ pub struct ChatInferenceResultChunk {
     pub inference_id: Uuid,
     pub content: Vec<ContentBlockChunk>,
     pub created: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
 }
 
@@ -239,6 +240,7 @@ pub struct JsonInferenceResultChunk {
     pub inference_id: Uuid,
     pub raw: String,
     pub created: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
 }
 
@@ -381,12 +383,17 @@ impl ModelInferenceDatabaseInsert {
 }
 
 impl ModelInferenceResponse {
-    pub fn new(content: Vec<ContentBlock>, raw: String, usage: Usage, latency: Latency) -> Self {
+    pub fn new(
+        content: Vec<ContentBlock>,
+        raw_response: String,
+        usage: Usage,
+        latency: Latency,
+    ) -> Self {
         Self {
             id: Uuid::now_v7(),
             created: current_timestamp(),
             content,
-            raw_response: raw,
+            raw_response,
             usage,
             latency,
         }
