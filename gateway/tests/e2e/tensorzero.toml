@@ -122,12 +122,12 @@ type = "together"
 model_name = "mistralai/Mixtral-8x7B-Instruct-v0.1"
 
 
-[models."mistralai/Mistral-Nemo-Instruct-2407"]
+[models."microsoft/Phi-3.5-mini-instruct"]
 routing = ["vllm"]
 
-[models."mistralai/Mistral-Nemo-Instruct-2407".providers.vllm]
+[models."microsoft/Phi-3.5-mini-instruct".providers.vllm]
 type = "vllm"
-model_name = "mistralai/Mistral-Nemo-Instruct-2407"
+model_name = "microsoft/Phi-3.5-mini-instruct"
 api_base = "https://tensorzero--vllm-openai-compatible-serve.modal.run/v1/"
 
 [models.test]
@@ -251,7 +251,7 @@ system_template = "config/functions/basic_test/prompt/system_template.minijinja"
 [functions.basic_test.variants.vllm]
 type = "chat_completion"
 weight = 0
-model = "mistralai/Mistral-Nemo-Instruct-2407"
+model = "microsoft/Phi-3.5-mini-instruct"
 system_template = "config/functions/basic_test/prompt/system_template.minijinja"
 
 [functions.model_fallback_test]
@@ -341,7 +341,7 @@ system_template = "config/functions/json_succeed/prompt/system_template.minijinj
 [functions.json_succeed.variants.vllm]
 type = "chat_completion"
 weight = 0
-model = "mistralai/Mistral-Nemo-Instruct-2407"
+model = "microsoft/Phi-3.5-mini-instruct"
 system_template = "config/functions/json_succeed/prompt/system_template.minijinja"
 
 
