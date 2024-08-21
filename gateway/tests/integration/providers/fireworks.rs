@@ -17,8 +17,8 @@ async fn get_providers() -> TestProviders {
         streaming_inference: vec![provider],
         tool_use_inference: vec![provider_tool_use],
         tool_use_streaming_inference: vec![provider_tool_use],
-        tool_result_inference: vec![provider_tool_use],
-        tool_result_streaming_inference: vec![provider_tool_use],
+        tool_multi_turn_inference: vec![provider_tool_use],
+        tool_multi_turn_streaming_inference: vec![provider_tool_use],
         json_mode_inference: vec![provider],
         json_mode_streaming_inference: vec![provider],
     }

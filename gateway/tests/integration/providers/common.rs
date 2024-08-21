@@ -27,8 +27,8 @@ pub struct TestProviders {
     pub streaming_inference: Vec<&'static ProviderConfig>,
     pub tool_use_inference: Vec<&'static ProviderConfig>,
     pub tool_use_streaming_inference: Vec<&'static ProviderConfig>,
-    pub tool_result_inference: Vec<&'static ProviderConfig>,
-    pub tool_result_streaming_inference: Vec<&'static ProviderConfig>,
+    pub tool_multi_turn_inference: Vec<&'static ProviderConfig>,
+    pub tool_multi_turn_streaming_inference: Vec<&'static ProviderConfig>,
     pub json_mode_inference: Vec<&'static ProviderConfig>,
     pub json_mode_streaming_inference: Vec<&'static ProviderConfig>,
 }
@@ -42,8 +42,8 @@ impl TestProviders {
             streaming_inference: vec![provider],
             tool_use_inference: vec![provider],
             tool_use_streaming_inference: vec![provider],
-            tool_result_inference: vec![provider],
-            tool_result_streaming_inference: vec![provider],
+            tool_multi_turn_inference: vec![provider],
+            tool_multi_turn_streaming_inference: vec![provider],
             json_mode_inference: vec![provider],
             json_mode_streaming_inference: vec![provider],
         }
@@ -62,8 +62,8 @@ impl TestProviders {
             streaming_inference: static_providers.clone(),
             tool_use_inference: static_providers.clone(),
             tool_use_streaming_inference: static_providers.clone(),
-            tool_result_inference: static_providers.clone(),
-            tool_result_streaming_inference: static_providers.clone(),
+            tool_multi_turn_inference: static_providers.clone(),
+            tool_multi_turn_streaming_inference: static_providers.clone(),
             json_mode_inference: static_providers.clone(),
             json_mode_streaming_inference: static_providers,
         }
@@ -77,8 +77,8 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_json_mode_streaming_inference_request_with_provider;
         use $crate::providers::common::test_simple_inference_request_with_provider;
         use $crate::providers::common::test_streaming_inference_request_with_provider;
-        use $crate::providers::common::test_tool_result_inference_request_with_provider;
-        use $crate::providers::common::test_tool_result_streaming_inference_request_with_provider;
+        use $crate::providers::common::test_tool_multi_turn_inference_request_with_provider;
+        use $crate::providers::common::test_tool_multi_turn_streaming_inference_request_with_provider;
         use $crate::providers::common::test_tool_use_inference_request_with_provider;
         use $crate::providers::common::test_tool_use_streaming_inference_request_with_provider;
 
@@ -131,18 +131,18 @@ macro_rules! generate_provider_tests {
         }
 
         #[tokio::test]
-        async fn test_tool_result_inference_request() {
-            let providers = $func().await.tool_result_inference;
+        async fn test_tool_multi_turn_inference_request() {
+            let providers = $func().await.tool_multi_turn_inference;
             for provider in providers {
-                test_tool_result_inference_request_with_provider(provider).await;
+                test_tool_multi_turn_inference_request_with_provider(provider).await;
             }
         }
 
         #[tokio::test]
-        async fn test_tool_result_streaming_inference_request() {
-            let providers = $func().await.tool_result_streaming_inference;
+        async fn test_tool_multi_turn_streaming_inference_request() {
+            let providers = $func().await.tool_multi_turn_streaming_inference;
             for provider in providers {
-                test_tool_result_streaming_inference_request_with_provider(provider).await;
+                test_tool_multi_turn_streaming_inference_request_with_provider(provider).await;
             }
         }
     };
@@ -240,9 +240,11 @@ pub async fn test_streaming_inference_request_with_provider(provider: &ProviderC
 pub fn create_tool_use_inference_request() -> ModelInferenceRequest<'static> {
     let messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What's the weather like in New York currently?"
-            .to_string()
-            .into()],
+        content: vec![
+            "What's the weather like in New York currently? Use the `get_weather` tool."
+                .to_string()
+                .into(),
+        ],
     }];
 
     // Fine to leak during test execution
@@ -364,13 +366,15 @@ pub async fn test_tool_use_streaming_inference_request_with_provider(provider: &
     }
 }
 
-fn create_tool_result_inference_request() -> ModelInferenceRequest<'static> {
+fn create_tool_multi_turn_inference_request() -> ModelInferenceRequest<'static> {
     let messages = vec![
         RequestMessage {
             role: Role::User,
-            content: vec!["What's the weather like in New York currently?"
-                .to_string()
-                .into()],
+            content: vec![
+                "What's the weather like in New York currently? Use the `get_weather` tool."
+                    .to_string()
+                    .into(),
+            ],
         },
         RequestMessage {
             role: Role::Assistant,
@@ -410,10 +414,10 @@ fn create_tool_result_inference_request() -> ModelInferenceRequest<'static> {
     }
 }
 
-pub async fn test_tool_result_inference_request_with_provider(provider: &ProviderConfig) {
+pub async fn test_tool_multi_turn_inference_request_with_provider(provider: &ProviderConfig) {
     // Set up and make the inference request
     let client = reqwest::Client::new();
-    let inference_request = create_tool_result_inference_request();
+    let inference_request = create_tool_multi_turn_inference_request();
     let result = provider.infer(&inference_request, &client).await.unwrap();
 
     // Check the result
@@ -428,10 +432,12 @@ pub async fn test_tool_result_inference_request_with_provider(provider: &Provide
     }
 }
 
-pub async fn test_tool_result_streaming_inference_request_with_provider(provider: &ProviderConfig) {
+pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
+    provider: &ProviderConfig,
+) {
     // Set up and make the inference request
     let client = reqwest::Client::new();
-    let mut inference_request = create_tool_result_inference_request();
+    let mut inference_request = create_tool_multi_turn_inference_request();
     inference_request.stream = true;
     let result = provider
         .infer_stream(&inference_request, &client)
