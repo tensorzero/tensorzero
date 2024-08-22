@@ -1,16 +1,16 @@
 use gateway::{inference::providers::aws_bedrock::AWSBedrockProvider, model::ProviderConfig};
 
-use crate::providers::common::TestProviders;
+use crate::providers::common::IntegrationTestProviders;
 
 crate::generate_provider_tests!(get_providers);
 
-async fn get_providers() -> TestProviders {
+async fn get_providers() -> IntegrationTestProviders {
     // Generic provider for testing
     let model_id = "anthropic.claude-3-haiku-20240307-v1:0".to_string();
     let provider =
         ProviderConfig::AWSBedrock(AWSBedrockProvider::new(model_id, None).await.unwrap());
 
-    TestProviders::with_provider(provider)
+    IntegrationTestProviders::with_provider(provider)
 }
 
 #[tokio::test]

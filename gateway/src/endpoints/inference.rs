@@ -448,6 +448,7 @@ struct ChatInferenceResponseChunk {
     episode_id: Uuid,
     variant_name: String,
     content: Vec<ContentBlockChunk>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     usage: Option<Usage>,
 }
 
@@ -457,6 +458,7 @@ struct JsonInferenceResponseChunk {
     episode_id: Uuid,
     variant_name: String,
     raw: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     usage: Option<Usage>,
 }
 

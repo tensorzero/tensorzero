@@ -15,158 +15,6 @@ use crate::common::{
 };
 
 #[tokio::test]
-async fn e2e_test_inference_basic() {
-    let episode_id = Uuid::now_v7();
-
-    let payload = json!({
-        "function_name": "basic_test",
-        "episode_id": episode_id,
-        "input":{
-            "system": {"assistant_name": "AskJeeves"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [{"type": "text", "value": "Hello, world!"}]
-                }
-            ]},
-        "stream": false,
-    });
-
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
-
-    // Check Response is OK, then fields in order
-    assert_eq!(response.status(), StatusCode::OK);
-    let response_json = response.json::<Value>().await.unwrap();
-    let content_blocks = response_json.get("output").unwrap().as_array().unwrap();
-    assert!(content_blocks.len() == 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
-    // Check that inference_id is here
-    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id = Uuid::parse_str(inference_id).unwrap();
-    // Check that parsed_output is not here
-    assert!(response_json.get("parsed_output").is_none());
-    // Check that model_inference_responses is not here
-    assert!(response_json.get("model_inference_responses").is_none());
-
-    // Check that usage is correct
-    let usage = response_json.get("usage").unwrap();
-    let usage = usage.as_object().unwrap();
-    let prompt_tokens = usage.get("prompt_tokens").unwrap().as_u64().unwrap();
-    let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
-    assert_eq!(prompt_tokens, 10);
-    assert_eq!(completion_tokens, 10);
-
-    // Check that the episode_id is correct
-    let response_episode_id = response_json.get("episode_id").unwrap().as_str().unwrap();
-    let response_episode_id = Uuid::parse_str(response_episode_id).unwrap();
-    assert_eq!(response_episode_id, episode_id);
-
-    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-    // Check ClickHouse
-    let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, inference_id);
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, payload["input"]);
-    let content_blocks = result.get("output").unwrap().as_str().unwrap();
-    // Check that content_blocks is a list of blocks length 1
-    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    // Check the type and content in the block
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
-    // Check that episode_id is here and correct
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
-    // Check the variant name
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, "test");
-    // Check the inference_params (set via config)
-    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
-    let chat_completion_inference_params = inference_params
-        .get("chat_completion")
-        .unwrap()
-        .as_object()
-        .unwrap();
-    let temperature = chat_completion_inference_params
-        .get("temperature")
-        .unwrap()
-        .as_f64()
-        .unwrap();
-    assert_eq!(temperature, 1.0);
-    let max_tokens = chat_completion_inference_params
-        .get("max_tokens")
-        .unwrap()
-        .as_u64()
-        .unwrap();
-    assert_eq!(max_tokens, 100);
-    let seed = chat_completion_inference_params
-        .get("seed")
-        .unwrap()
-        .as_u64()
-        .unwrap();
-    assert_eq!(seed, 69);
-    assert!(result
-        .get("tool_params")
-        .unwrap()
-        .as_str()
-        .unwrap()
-        .is_empty());
-
-    // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, payload["input"]);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
-
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
-    assert_eq!(input_tokens, 10);
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
-    assert_eq!(output_tokens, 10);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
-    assert_eq!(
-        result.get("raw_response").unwrap().as_str().unwrap(),
-        DUMMY_INFER_RESPONSE_RAW
-    );
-}
-
-#[tokio::test]
 async fn e2e_test_inference_dryrun() {
     let payload = json!({
         "function_name": "basic_test",
@@ -253,10 +101,10 @@ async fn e2e_test_inference_model_fallback() {
     // Check that usage is correct
     let usage = response_json.get("usage").unwrap();
     let usage = usage.as_object().unwrap();
-    let prompt_tokens = usage.get("prompt_tokens").unwrap().as_u64().unwrap();
-    let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
-    assert_eq!(prompt_tokens, 10);
-    assert_eq!(completion_tokens, 10);
+    let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
+    assert_eq!(input_tokens, 10);
+    assert_eq!(output_tokens, 10);
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
@@ -389,10 +237,10 @@ async fn e2e_test_tool_call() {
     // Check that usage is correct
     let usage = response_json.get("usage").unwrap();
     let usage = usage.as_object().unwrap();
-    let prompt_tokens = usage.get("prompt_tokens").unwrap().as_u64().unwrap();
-    let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
-    assert_eq!(prompt_tokens, 10);
-    assert_eq!(completion_tokens, 10);
+    let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
+    assert_eq!(input_tokens, 10);
+    assert_eq!(output_tokens, 10);
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
@@ -566,10 +414,10 @@ async fn e2e_test_tool_call_malformed() {
     // Check that usage is correct
     let usage = response_json.get("usage").unwrap();
     let usage = usage.as_object().unwrap();
-    let prompt_tokens = usage.get("prompt_tokens").unwrap().as_u64().unwrap();
-    let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
-    assert_eq!(prompt_tokens, 10);
-    assert_eq!(completion_tokens, 10);
+    let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
+    assert_eq!(input_tokens, 10);
+    assert_eq!(output_tokens, 10);
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
@@ -728,10 +576,10 @@ async fn e2e_test_inference_json_fail() {
     // Check that usage is correct
     let usage = response_json.get("usage").unwrap();
     let usage = usage.as_object().unwrap();
-    let prompt_tokens = usage.get("prompt_tokens").unwrap().as_u64().unwrap();
-    let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
-    assert_eq!(prompt_tokens, 10);
-    assert_eq!(completion_tokens, 10);
+    let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
+    assert_eq!(input_tokens, 10);
+    assert_eq!(output_tokens, 10);
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
@@ -806,11 +654,11 @@ async fn e2e_test_inference_json_fail() {
 /// a response which satisfies the schema.
 /// We expect to see a filled-out `content` field in the response and a filled-out `output` field in the table.
 #[tokio::test]
-async fn e2e_test_inference_json_succeed() {
+async fn e2e_test_inference_json_success() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
-        "function_name": "json_succeed",
+        "function_name": "json_success",
         "episode_id": episode_id,
         "input":
             {
@@ -846,10 +694,10 @@ async fn e2e_test_inference_json_succeed() {
     // Check that usage is correct
     let usage = response_json.get("usage").unwrap();
     let usage = usage.as_object().unwrap();
-    let prompt_tokens = usage.get("prompt_tokens").unwrap().as_u64().unwrap();
-    let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
-    assert_eq!(prompt_tokens, 10);
-    assert_eq!(completion_tokens, 10);
+    let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
+    assert_eq!(input_tokens, 10);
+    assert_eq!(output_tokens, 10);
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
@@ -980,10 +828,10 @@ async fn e2e_test_variant_failover() {
     // Check that usage is correct
     let usage = response_json.get("usage").unwrap();
     let usage = usage.as_object().unwrap();
-    let prompt_tokens = usage.get("prompt_tokens").unwrap().as_u64().unwrap();
-    let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
-    assert_eq!(prompt_tokens, 10);
-    assert_eq!(completion_tokens, 10);
+    let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
+    assert_eq!(input_tokens, 10);
+    assert_eq!(output_tokens, 10);
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
@@ -1039,7 +887,7 @@ async fn e2e_test_variant_failover() {
     let temperature = chat_completion_inference_params.get("temperature").unwrap();
     assert!(temperature.is_null());
     let max_tokens = chat_completion_inference_params.get("max_tokens").unwrap();
-    assert!(max_tokens.is_null());
+    assert_eq!(max_tokens.as_u64().unwrap(), 100);
     let seed = chat_completion_inference_params.get("seed").unwrap();
     assert!(seed.is_null());
 
@@ -1140,10 +988,10 @@ async fn e2e_test_streaming() {
                 .unwrap()
                 .is_empty());
             let usage = chunk_json.get("usage").unwrap().as_object().unwrap();
-            let prompt_tokens = usage.get("prompt_tokens").unwrap().as_u64().unwrap();
-            let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
-            assert_eq!(prompt_tokens, 10);
-            assert_eq!(completion_tokens, 16);
+            let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
+            let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
+            assert_eq!(input_tokens, 10);
+            assert_eq!(output_tokens, 16);
             inference_id = Some(
                 Uuid::parse_str(chunk_json.get("inference_id").unwrap().as_str().unwrap()).unwrap(),
             );
@@ -1290,10 +1138,10 @@ async fn e2e_test_streaming_dryrun() {
                 .unwrap()
                 .is_empty());
             let usage = chunk_json.get("usage").unwrap().as_object().unwrap();
-            let prompt_tokens = usage.get("prompt_tokens").unwrap().as_u64().unwrap();
-            let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
-            assert_eq!(prompt_tokens, 10);
-            assert_eq!(completion_tokens, 16);
+            let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
+            let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
+            assert_eq!(input_tokens, 10);
+            assert_eq!(output_tokens, 16);
             inference_id = Some(
                 Uuid::parse_str(chunk_json.get("inference_id").unwrap().as_str().unwrap()).unwrap(),
             );
@@ -1375,10 +1223,10 @@ async fn e2e_test_tool_call_streaming() {
                 .unwrap()
                 .is_empty());
             let usage = chunk_json.get("usage").unwrap().as_object().unwrap();
-            let prompt_tokens = usage.get("prompt_tokens").unwrap().as_u64().unwrap();
-            let completion_tokens = usage.get("completion_tokens").unwrap().as_u64().unwrap();
-            assert_eq!(prompt_tokens, 10);
-            assert_eq!(completion_tokens, 5);
+            let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
+            let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
+            assert_eq!(input_tokens, 10);
+            assert_eq!(output_tokens, 5);
             inference_id = Some(
                 Uuid::parse_str(chunk_json.get("inference_id").unwrap().as_str().unwrap()).unwrap(),
             );

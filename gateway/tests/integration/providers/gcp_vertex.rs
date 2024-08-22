@@ -2,12 +2,15 @@ use serde_json::{json, Value};
 
 use gateway::model::ProviderConfig;
 
-use crate::providers::common::TestProviders;
+use crate::providers::common::IntegrationTestProviders;
 
 crate::generate_provider_tests!(get_providers);
 
-async fn get_providers() -> TestProviders {
-    TestProviders::with_providers(vec![get_provider_gemini_flash(), get_provider_gemini_pro()])
+async fn get_providers() -> IntegrationTestProviders {
+    IntegrationTestProviders::with_providers(vec![
+        get_provider_gemini_flash(),
+        get_provider_gemini_pro(),
+    ])
 }
 
 /// Get a Gemini Flash provider for testing
