@@ -19,7 +19,7 @@ env:
   TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }} # for integration/E2E tests
   VLLM_API_KEY: ${{ secrets.VLLM_API_KEY }} # for integration/E2E tests
   VLLM_MODEL_NAME: "microsoft/Phi-3.5-mini-instruct"
-  VLLM_API_BASE: "https://tensorzero--vllm-openai-compatible-serve.modal.run/v1/"
+  VLLM_API_BASE: "https://pun1owldydhycl-8000.proxy.runpod.net/v1/"
 
 jobs:
   live-tests:

@@ -128,7 +128,7 @@ routing = ["vllm"]
 [models."microsoft/Phi-3.5-mini-instruct".providers.vllm]
 type = "vllm"
 model_name = "microsoft/Phi-3.5-mini-instruct"
-api_base = "https://tensorzero--vllm-openai-compatible-serve.modal.run/v1/"
+api_base = "https://pun1owldydhycl-8000.proxy.runpod.net/v1/"
 
 [models.test]
 routing = ["good"]
