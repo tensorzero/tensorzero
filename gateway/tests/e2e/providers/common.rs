@@ -1224,8 +1224,8 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         "full_content: {full_content}"
     );
 
-    // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name != "azure" {
+    // NB: Azure and Together don't support input/output tokens during streaming
+    if provider.variant_name != "azure" && provider.variant_name != "together" {
         assert!(input_tokens > 5);
         assert!(output_tokens > 5);
     } else {
@@ -1335,8 +1335,8 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
 
-    // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name != "azure" {
+    // NB: Azure and Together don't support input/output tokens during streaming
+    if provider.variant_name != "azure" && provider.variant_name != "together" {
         assert!(input_tokens > 5);
         assert!(output_tokens > 5);
     } else {
