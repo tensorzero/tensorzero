@@ -1,7 +1,9 @@
 [build]
 rustflags = [
-    "-C", "target-cpu=native",
-    "--cfg", "aws_sdk_unstable",  # needed for aws-smithy-types + serde-(de)serialize
+    "-C",
+    "target-cpu=native",
+    "--cfg",
+    "aws_sdk_unstable",  # needed for aws-smithy-types + serde-(de)serialize
 ]
 
 

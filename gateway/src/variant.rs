@@ -252,7 +252,7 @@ impl ChatCompletionConfig {
                     stream,
                     json_mode: (&self.json_mode).into(),
                     function_type: FunctionType::Json,
-                    output_schema: None,
+                    output_schema: Some(json_config.output_schema.value),
                 }
             }
         })
@@ -1053,6 +1053,113 @@ mod tests {
         assert_eq!(model_request.temperature, Some(1.));
         assert_eq!(model_request.max_tokens, Some(200));
         assert_eq!(model_request.seed, Some(420));
+        assert_eq!(inference_params.chat_completion.temperature, Some(1.));
+        assert_eq!(inference_params.chat_completion.max_tokens, Some(200));
+        assert_eq!(inference_params.chat_completion.seed, Some(420));
+        // We will vary temperature, max_tokens, and seed
+        let chat_completion_config = ChatCompletionConfig::default();
+        let mut inference_params = InferenceParams {
+            chat_completion: ChatCompletionInferenceParams {
+                temperature: Some(0.9),
+                ..Default::default()
+            },
+        };
+        let model_request = chat_completion_config
+            .prepare_request(
+                &input,
+                &function_config,
+                &templates,
+                tool_config.as_ref(),
+                stream,
+                &mut inference_params,
+            )
+            .unwrap();
+        assert_eq!(model_request.temperature, Some(0.9));
+        assert_eq!(model_request.max_tokens, None);
+        assert_eq!(model_request.seed, None);
+        assert_eq!(inference_params.chat_completion.temperature, Some(0.9));
+        assert_eq!(inference_params.chat_completion.max_tokens, None);
+        assert_eq!(inference_params.chat_completion.seed, None);
+
+        // We will vary temperature, max_tokens, and seed
+        let chat_completion_config = ChatCompletionConfig {
+            temperature: Some(0.5),
+            max_tokens: Some(100),
+            seed: Some(69),
+            ..Default::default()
+        };
+        // Do a JSON function
+        let output_schema_value = json!({
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "age": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "email": {
+                    "type": "string",
+                    "format": "email"
+                }
+            },
+            "required": ["name", "age"]
+        });
+        let function_config = FunctionConfig::Json(FunctionConfigJson {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            output_schema: JSONSchemaFromPath::from_value(&output_schema_value),
+            implicit_tool_call_config: ToolCallConfig {
+                tools_available: vec![],
+                tool_choice: ToolChoice::Auto,
+                parallel_tool_calls: false,
+            },
+        });
+        let mut inference_params = InferenceParams::default();
+        let model_request = chat_completion_config
+            .prepare_request(
+                &input,
+                &function_config,
+                &templates,
+                tool_config.as_ref(),
+                stream,
+                &mut inference_params,
+            )
+            .unwrap();
+        assert_eq!(model_request.temperature, Some(0.5));
+        assert_eq!(model_request.max_tokens, Some(100));
+        assert_eq!(model_request.seed, Some(69));
+        assert_eq!(model_request.json_mode, JSONMode::On);
+        assert_eq!(model_request.output_schema, Some(&output_schema_value));
+        assert_eq!(inference_params.chat_completion.temperature, Some(0.5));
+        assert_eq!(inference_params.chat_completion.max_tokens, Some(100));
+        assert_eq!(inference_params.chat_completion.seed, Some(69));
+
+        let mut inference_params = InferenceParams {
+            chat_completion: ChatCompletionInferenceParams {
+                temperature: Some(1.),
+                max_tokens: Some(200),
+                seed: Some(420),
+            },
+        };
+        let model_request = chat_completion_config
+            .prepare_request(
+                &input,
+                &function_config,
+                &templates,
+                tool_config.as_ref(),
+                stream,
+                &mut inference_params,
+            )
+            .unwrap();
+        assert_eq!(model_request.temperature, Some(1.));
+        assert_eq!(model_request.max_tokens, Some(200));
+        assert_eq!(model_request.seed, Some(420));
+        assert_eq!(model_request.json_mode, JSONMode::On);
+        assert_eq!(model_request.output_schema, Some(&output_schema_value));
         assert_eq!(inference_params.chat_completion.temperature, Some(1.));
         assert_eq!(inference_params.chat_completion.max_tokens, Some(200));
         assert_eq!(inference_params.chat_completion.seed, Some(420));

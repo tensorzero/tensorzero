@@ -541,7 +541,7 @@ struct GCPVertexGeminiGenerationConfig<'a> {
     max_output_tokens: Option<u32>,
     seed: Option<u32>,
     response_mime_type: Option<GCPVertexGeminiResponseMimeType>,
-    response_schema: Option<&'a Value>,
+    response_schema: Option<Value>,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -582,7 +582,7 @@ impl<'a> GCPVertexGeminiRequest<'a> {
                     // JSON mode is only supported for Gemini Pro models not Flash.
                     let strict_json_models = ["gemini-1.5-pro-001"];
                     let response_schema = if strict_json_models.contains(&model_name) {
-                        Some(output_schema)
+                        Some(process_output_schema(output_schema)?)
                     } else {
                         None
                     };
@@ -635,6 +635,31 @@ fn prepare_tools<'a>(
         }
         None => (None, None),
     }
+}
+
+fn process_output_schema(output_schema: &Value) -> Result<Value, Error> {
+    let mut schema = output_schema.clone();
+
+    /// Recursively remove all instances of "additionalProperties"
+    fn remove_additional_properties(value: &mut Value) {
+        match value {
+            Value::Object(obj) => {
+                obj.remove("additionalProperties");
+                for (_, v) in obj.iter_mut() {
+                    remove_additional_properties(v);
+                }
+            }
+            Value::Array(arr) => {
+                for v in arr.iter_mut() {
+                    remove_additional_properties(v);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    remove_additional_properties(&mut schema);
+    Ok(schema)
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1248,7 +1273,7 @@ mod tests {
         );
         assert_eq!(
             request.generation_config.as_ref().unwrap().response_schema,
-            Some(&output_schema)
+            Some(output_schema.clone())
         );
 
         let inference_request = ModelInferenceRequest {
@@ -1556,5 +1581,99 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn test_process_output_schema() {
+        let output_schema = json!({
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "age": {"type": "integer", "minimum": 0},
+                "email": {"type": "string", "format": "email"}
+            }
+        });
+        let processed_schema = process_output_schema(&output_schema).unwrap();
+        assert_eq!(processed_schema, output_schema);
+
+        // Test with a schema that includes additionalProperties
+        let output_schema_with_additional = json!({
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "age": {"type": "integer", "minimum": 0}
+            },
+            "additionalProperties": true
+        });
+        let output_schema_without_additional = json!({
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "age": {"type": "integer", "minimum": 0}
+            },
+        });
+        let processed_schema_with_additional =
+            process_output_schema(&output_schema_with_additional).unwrap();
+        assert_eq!(
+            processed_schema_with_additional,
+            output_schema_without_additional
+        );
+
+        // Test with a schema that explicitly disallows additional properties
+        let output_schema_no_additional = json!({
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "age": {"type": "integer", "minimum": 0}
+            },
+            "additionalProperties": false
+        });
+        let processed_schema_no_additional =
+            process_output_schema(&output_schema_no_additional).unwrap();
+        assert_eq!(
+            processed_schema_no_additional,
+            output_schema_without_additional
+        );
+        // Test with a schema that includes recursive additionalProperties
+        let output_schema_recursive = json!({
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "children": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "age": {"type": "integer", "minimum": 0}
+                        },
+                        "additionalProperties": {
+                            "$ref": "#"
+                        }
+                    }
+                }
+            },
+            "additionalProperties": {
+                "$ref": "#"
+            }
+        });
+        let expected_processed_schema = json!({
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "children": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "age": {"type": "integer", "minimum": 0}
+                        }
+                    }
+                }
+            }
+        });
+        let processed_schema_recursive = process_output_schema(&output_schema_recursive).unwrap();
+        assert_eq!(processed_schema_recursive, expected_processed_schema);
     }
 }

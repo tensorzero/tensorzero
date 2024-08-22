@@ -121,6 +121,15 @@ routing = ["together"]
 type = "together"
 model_name = "mistralai/Mixtral-8x7B-Instruct-v0.1"
 
+
+[models."microsoft/Phi-3.5-mini-instruct"]
+routing = ["vllm"]
+
+[models."microsoft/Phi-3.5-mini-instruct".providers.vllm]
+type = "vllm"
+model_name = "microsoft/Phi-3.5-mini-instruct"
+api_base = "https://pun1owldydhycl-8000.proxy.runpod.net/v1/"
+
 [models.test]
 routing = ["good"]
 
@@ -255,6 +264,13 @@ model = "llama3.1-8b-instruct-together"
 system_template = "config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.vllm]
+type = "chat_completion"
+weight = 0
+model = "microsoft/Phi-3.5-mini-instruct"
+system_template = "config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.model_fallback_test]
 type = "chat"
 system_schema = "config/functions/basic_test/system_schema.json"
@@ -354,6 +370,13 @@ max_tokens = 100
 type = "chat_completion"
 weight = 0
 model = "llama3.1-8b-instruct-together"
+system_template = "config/functions/json_success/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.json_success.variants.vllm]
+type = "chat_completion"
+weight = 0
+model = "microsoft/Phi-3.5-mini-instruct"
 system_template = "config/functions/json_success/prompt/system_template.minijinja"
 max_tokens = 100
 
