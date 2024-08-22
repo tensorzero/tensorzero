@@ -313,7 +313,7 @@ async fn e2e_test_tool_call() {
             .unwrap()
             == "get_weather"
     );
-    assert!(tool_params.get("tool_choice").unwrap().as_str().unwrap() == "required");
+    assert!(tool_params.get("tool_choice").unwrap().as_str().unwrap() == "auto");
     assert!(!tool_params
         .get("parallel_tool_calls")
         .unwrap()
@@ -490,7 +490,7 @@ async fn e2e_test_tool_call_malformed() {
             .unwrap()
             == "get_weather"
     );
-    assert!(tool_params.get("tool_choice").unwrap().as_str().unwrap() == "required");
+    assert!(tool_params.get("tool_choice").unwrap().as_str().unwrap() == "auto");
     assert!(!tool_params
         .get("parallel_tool_calls")
         .unwrap()
@@ -1305,7 +1305,7 @@ async fn e2e_test_tool_call_streaming() {
             .unwrap()
             == "get_weather"
     );
-    assert!(tool_params.get("tool_choice").unwrap().as_str().unwrap() == "required");
+    assert!(tool_params.get("tool_choice").unwrap().as_str().unwrap() == "auto");
     assert!(!tool_params
         .get("parallel_tool_calls")
         .unwrap()

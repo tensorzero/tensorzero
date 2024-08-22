@@ -72,10 +72,11 @@ impl<'a> Migration for Migration0000<'a> {
         let query = r#"
             CREATE TABLE IF NOT EXISTS BooleanMetricFeedback
             (
-                id UUID,
-                target_id UUID,
+                id UUID, -- must be a UUIDv7
+                target_id UUID, -- must be a UUIDv7
                 metric_name LowCardinality(String),
-                value Bool
+                value Bool,
+                timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
             ) ENGINE = MergeTree()
             ORDER BY (metric_name, target_id);
         "#;
@@ -85,10 +86,11 @@ impl<'a> Migration for Migration0000<'a> {
         let query = r#"
             CREATE TABLE IF NOT EXISTS BooleanMetricFeedback
             (
-                id UUID,
-                target_id UUID,
+                id UUID, -- must be a UUIDv7
+                target_id UUID, -- must be a UUIDv7
                 metric_name LowCardinality(String),
-                value Bool
+                value Bool,
+                timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
             ) ENGINE = MergeTree()
             ORDER BY (metric_name, target_id);
         "#;
@@ -98,10 +100,11 @@ impl<'a> Migration for Migration0000<'a> {
         let query = r#"
             CREATE TABLE IF NOT EXISTS CommentFeedback
             (
-                id UUID,
-                target_id UUID,
+                id UUID, -- must be a UUIDv7
+                target_id UUID, -- must be a UUIDv7
                 target_type Enum('inference' = 1, 'episode' = 2),
-                value String
+                value String,
+                timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
             ) ENGINE = MergeTree()
             ORDER BY target_id;
         "#;
@@ -111,9 +114,10 @@ impl<'a> Migration for Migration0000<'a> {
         let query = r#"
            CREATE TABLE IF NOT EXISTS DemonstrationFeedback
             (
-                id UUID,
-                inference_id UUID,
-                value String
+                id UUID, -- must be a UUIDv7
+                inference_id UUID, -- must be a UUIDv7
+                value String,
+                timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
             ) ENGINE = MergeTree()
             ORDER BY inference_id;
         "#;
@@ -123,10 +127,11 @@ impl<'a> Migration for Migration0000<'a> {
         let query = r#"
             CREATE TABLE IF NOT EXISTS FloatMetricFeedback
             (
-                id UUID,
-                target_id UUID,
+                id UUID, -- must be a UUIDv7
+                target_id UUID, -- must be a UUIDv7
                 metric_name LowCardinality(String),
-                value Float32
+                value Float32,
+                timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
             ) ENGINE = MergeTree()
             ORDER BY (metric_name, target_id);
         "#;
@@ -136,15 +141,16 @@ impl<'a> Migration for Migration0000<'a> {
         let query = r#"
             CREATE TABLE IF NOT EXISTS Inference
             (
-                id UUID,
+                id UUID, -- must be a UUIDv7
                 function_name LowCardinality(String),
                 variant_name LowCardinality(String),
-                episode_id UUID,
+                episode_id UUID, -- must be a UUIDv7
                 input String,
                 output String,
                 tool_params String,
                 inference_params String,
                 processing_time_ms UInt32,
+                timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
             ) ENGINE = MergeTree()
             ORDER BY (function_name, variant_name, episode_id);
         "#;
@@ -154,8 +160,8 @@ impl<'a> Migration for Migration0000<'a> {
         let query = r#"
             CREATE TABLE IF NOT EXISTS ModelInference
             (
-                id UUID,
-                inference_id UUID,
+                id UUID, -- must be a UUIDv7
+                inference_id UUID, -- must be a UUIDv7
                 input String,
                 -- Serialized content blocks as output by model
                 output String,
@@ -164,6 +170,7 @@ impl<'a> Migration for Migration0000<'a> {
                 output_tokens UInt32,
                 response_time_ms UInt32,
                 ttft_ms Nullable(UInt32),
+                timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
             ) ENGINE = MergeTree()
             ORDER BY inference_id;
         "#;

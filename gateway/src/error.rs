@@ -134,8 +134,8 @@ pub enum Error {
         message: String,
     },
     OutputParsing {
-        raw_output: String,
         message: String,
+        raw_output: String,
     },
     OutputValidation {
         source: Box<Error>,
@@ -457,8 +457,7 @@ impl std::fmt::Display for Error {
             } => {
                 write!(
                     f,
-                    "Error parsing output as JSON with message: {}: {}",
-                    message, raw_output
+                    "Error parsing output as JSON with message: {message}: {raw_output}"
                 )
             }
             Error::OutputValidation { source } => {

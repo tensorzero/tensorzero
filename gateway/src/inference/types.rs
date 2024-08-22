@@ -468,13 +468,12 @@ impl ChatInferenceResult {
         tool_config: Option<&ToolCallConfig>,
     ) -> Vec<ContentBlockOutput> {
         if content.is_empty() {
-            Error::OutputParsing {
-                raw_output: "".to_string(),
-                message: "Output parsing failed due to empty content".to_string(),
+            Error::Inference {
+                message: "No content blocks in inference result".to_string(),
             }
             .log();
-            return vec![];
         }
+
         let mut output = Vec::new();
         for content in content.into_iter() {
             match content {
@@ -488,9 +487,9 @@ impl ChatInferenceResult {
                 }
                 ContentBlock::ToolResult(tool_result) => {
                     Error::OutputParsing {
-                        raw_output: serde_json::to_string(&tool_result).unwrap_or_default(),
                         message: "Tool results are not supported in output for Chat functions"
                             .to_string(),
+                        raw_output: serde_json::to_string(&tool_result).unwrap_or_default(),
                     }
                     .log();
                 }

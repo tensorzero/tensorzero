@@ -418,7 +418,7 @@ max_tokens = 100
 type = "chat"
 system_schema = "config/functions/weather_helper/system_schema.json"
 tools = ["get_weather"]
-tool_choice = "required"
+tool_choice = "auto"
 parallel_tool_calls = false
 
 [functions.weather_helper.variants.variant]

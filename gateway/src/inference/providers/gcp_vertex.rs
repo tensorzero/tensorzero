@@ -169,17 +169,19 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             response_time: start_time.elapsed(),
         };
         if res.status().is_success() {
-            let body = res.json::<GCPVertexGeminiResponse>().await.map_err(|e| {
-                Error::GCPVertexServer {
-                    message: format!("Error parsing response: {e}"),
-                }
+            let body = res.text().await.map_err(|e| Error::GCPVertexServer {
+                message: format!("Error parsing text response: {e}"),
+            })?;
+
+            let body = serde_json::from_str(&body).map_err(|e| Error::GCPVertexServer {
+                message: format!("Error parsing JSON response: {e}: {body}"),
             })?;
             let body_with_latency = GCPVertexGeminiResponseWithLatency { body, latency };
             Ok(body_with_latency.try_into()?)
         } else {
             let response_code = res.status();
             let error_body = res.text().await.map_err(|e| Error::GCPVertexServer {
-                message: format!("Error parsing response: {e}"),
+                message: format!("Error parsing text response: {e}"),
             })?;
             handle_gcp_vertex_gemini_error(response_code, error_body)
         }
@@ -240,7 +242,7 @@ fn stream_gcp_vertex_gemini(
                     Event::Open => continue,
                     Event::Message(message) => {
                         let data: Result<GCPVertexGeminiResponse, Error> = serde_json::from_str(&message.data).map_err(|e| Error::GCPVertexServer {
-                            message: format!("Error parsing response: {e}"),
+                            message: format!("Error parsing streaming JSON response: {e}"),
                         });
                         let data = match data {
                             Ok(data) => data,
@@ -640,7 +642,7 @@ struct GCPVertexGeminiResponseFunctionCall {
     args: Value,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 enum GCPVertexGeminiResponseContentPart {
     Text(String),
@@ -703,37 +705,40 @@ impl TryFrom<GCPVertexGeminiResponseContentPart> for ContentBlock {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct GCPVertexGeminiResponseContent {
     parts: Vec<GCPVertexGeminiResponseContentPart>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct GCPVertexGeminiResponseCandidate {
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<GCPVertexGeminiResponseContent>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiUsageMetadata {
     prompt_token_count: u32,
-    candidates_token_count: u32,
+    // GCP doesn't return output tokens in certain edge cases (e.g. generation blocked by safety settings)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    candidates_token_count: Option<u32>,
 }
 
 impl From<GCPVertexGeminiUsageMetadata> for Usage {
     fn from(usage_metadata: GCPVertexGeminiUsageMetadata) -> Self {
         Usage {
             input_tokens: usage_metadata.prompt_token_count,
-            output_tokens: usage_metadata.candidates_token_count,
+            output_tokens: usage_metadata.candidates_token_count.unwrap_or(0),
         }
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiResponse {
     candidates: Vec<GCPVertexGeminiResponseCandidate>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     usage_metadata: Option<GCPVertexGeminiUsageMetadata>,
 }
 
@@ -747,8 +752,9 @@ impl TryFrom<GCPVertexGeminiResponseWithLatency> for ModelInferenceResponse {
     fn try_from(response: GCPVertexGeminiResponseWithLatency) -> Result<Self, Self::Error> {
         let GCPVertexGeminiResponseWithLatency { body, latency } = response;
         let raw = serde_json::to_string(&body).map_err(|e| Error::GCPVertexServer {
-            message: format!("Error parsing response from GCP Vertex Gemini: {e}"),
+            message: format!("Error serializing response from GCP Vertex Gemini: {e}"),
         })?;
+
         // GCP Vertex Gemini response can contain multiple candidates and each of these can contain
         // multiple content parts. We will only use the first candidate but handle all parts of the response therein.
         let first_candidate = body
@@ -758,18 +764,17 @@ impl TryFrom<GCPVertexGeminiResponseWithLatency> for ModelInferenceResponse {
             .ok_or(Error::GCPVertexServer {
                 message: "GCP Vertex Gemini response has no candidates".to_string(),
             })?;
-        let parts = match first_candidate.content {
-            Some(content) => content.parts,
-            None => {
-                return Err(Error::GCPVertexServer {
-                    message: "GCP Vertex Gemini response has no content".to_string(),
-                })
-            }
+
+        // GCP sometimes doesn't return content in the response (e.g. safety settings blocked the generation).
+        let content: Vec<ContentBlock> = match first_candidate.content {
+            Some(content) => content
+                .parts
+                .into_iter()
+                .map(|part| part.try_into())
+                .collect::<Result<Vec<ContentBlock>, Error>>()?,
+            None => vec![],
         };
-        let content: Vec<ContentBlock> = parts
-            .into_iter()
-            .map(|part| part.try_into())
-            .collect::<Result<Vec<ContentBlock>, Error>>()?;
+
         let usage = body
             .usage_metadata
             .ok_or(Error::GCPVertexServer {
@@ -796,9 +801,11 @@ impl TryFrom<GCPVertexGeminiStreamResponseWithMetadata> for ModelInferenceRespon
             latency,
             inference_id,
         } = response;
+
         let raw = serde_json::to_string(&body).map_err(|e| Error::GCPVertexServer {
-            message: format!("Error parsing response from GCP Vertex Gemini: {e}"),
+            message: format!("Error serializing streaming response from GCP Vertex Gemini: {e}"),
         })?;
+
         let first_candidate = body
             .candidates
             .into_iter()
@@ -806,21 +813,19 @@ impl TryFrom<GCPVertexGeminiStreamResponseWithMetadata> for ModelInferenceRespon
             .ok_or(Error::GCPVertexServer {
                 message: "GCP Vertex Gemini response has no candidates".to_string(),
             })?;
-        let parts = match first_candidate.content {
-            Some(content) => content.parts,
-            None => {
-                return Err(Error::GCPVertexServer {
-                    message: "GCP Vertex Gemini response has no content".to_string(),
-                })
-            }
+
+        // GCP sometimes returns chunks without content (e.g. they might have usage only).
+        let mut content: Vec<ContentBlockChunk> = match first_candidate.content {
+            Some(content) => content.parts.into_iter().map(|part| part.into()).collect(),
+            None => vec![],
         };
-        let mut content: Vec<ContentBlockChunk> =
-            parts.into_iter().map(|part| part.into()).collect();
+
         // GCP occasionally spuriously returns empty text chunks. We filter these out.
         content.retain(|chunk| match chunk {
             ContentBlockChunk::Text(text) => !text.text.is_empty(),
             _ => true,
         });
+
         Ok(ModelInferenceResponseChunk::new(
             inference_id,
             content,
@@ -1316,7 +1321,7 @@ mod tests {
             candidates: vec![candidate],
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: 10,
-                candidates_token_count: 10,
+                candidates_token_count: Some(10),
             }),
         };
         let latency = Latency::NonStreaming {
@@ -1358,7 +1363,7 @@ mod tests {
             candidates: vec![candidate],
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: 15,
-                candidates_token_count: 20,
+                candidates_token_count: Some(20),
             }),
         };
         let latency = Latency::NonStreaming {
@@ -1423,7 +1428,7 @@ mod tests {
             candidates: vec![candidate],
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
                 prompt_token_count: 25,
-                candidates_token_count: 40,
+                candidates_token_count: Some(40),
             }),
         };
         let latency = Latency::NonStreaming {
