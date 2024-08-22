@@ -1,3 +1,6 @@
+use async_trait::async_trait;
+use serde_json::Value;
+
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::clickhouse_migration_manager::migration_trait::Migration;
 use crate::error::Error;
@@ -5,179 +8,77 @@ use crate::error::Error;
 /// This migration modifies the `ModelInference` table to add columns for
 /// `model_name` and `model_provider_name`.
 
-pub struct Migration0001<'a> {
-    pub clickhouse: &'a ClickHouseConnectionInfo,
+pub struct Migration0001 {
+    pub clickhouse: ClickHouseConnectionInfo,
 }
 
-impl<'a> Migration for Migration0000<'a> {
+#[async_trait]
+impl Migration for Migration0001 {
     /// Check if you can connect to the database
     async fn can_apply(&self) -> Result<(), Error> {
         self.clickhouse
             .health()
             .await
             .map_err(|e| Error::ClickHouseMigration {
-                id: "0000".to_string(),
+                id: "0001".to_string(),
                 message: e.to_string(),
-            })
+            })?;
+        // Should be a newline-delimited list of table names
+        let tables = self.clickhouse.run_query("SHOW TABLES".to_string()).await?;
+        // Parse into a vec of &str
+        let table_vec: Vec<&str> = tables.split('\n').map(|s| s.trim()).collect();
+        // Throw an error if ModelInference is not in the set
+        if !table_vec.contains(&"ModelInference") {
+            return Err(Error::ClickHouseMigration {
+                id: "0001".to_string(),
+                message: "ModelInference table not found".to_string(),
+            });
+        }
+        Ok(())
     }
 
-    /// Check if the tables exist
+    /// Check if the columns exist, if not then we should apply the migration
     async fn should_apply(&self) -> Result<bool, Error> {
-        let database = self.clickhouse.database();
-
-        let tables = vec![
-            "BooleanMetricFeedback",
-            "CommentFeedback",
-            "DemonstrationFeedback",
-            "FloatMetricFeedback",
-            "Inference",
-            "ModelInference",
-        ];
-
-        for table in tables {
-            let query = format!(
-                r#"SELECT EXISTS(
-                    SELECT 1
-                    FROM system.tables
-                    WHERE database = '{database}' AND name = '{table}'
-                )"#
-            );
-
-            match self.clickhouse.run_query(query).await {
-                // If `can_apply` succeeds but this fails, it likely means the database does not exist
-                Err(_) => return Ok(true),
-                Ok(response) => {
-                    if response.trim() != "1" {
-                        return Ok(true);
-                    }
-                }
+        let rows = self
+            .clickhouse
+            .run_query("DESCRIBE ModelInference FORMAT JSONEachRow".to_string())
+            .await?;
+        // rows is a JSONL format, let's iterate over each row
+        for row in rows.trim().split('\n') {
+            let row: Value = serde_json::from_str(row).map_err(|e| Error::ClickHouseMigration {
+                id: "0001".to_string(),
+                message: e.to_string(),
+            })?;
+            let name = row.get("name").ok_or(Error::ClickHouseMigration {
+                id: "0001".to_string(),
+                message: "name field not found in column of ModelInference".to_string(),
+            })?;
+            if name == "model_name" || name == "model_provider_name" {
+                return Ok(false);
             }
         }
 
-        Ok(false)
+        Ok(true)
     }
 
     async fn apply(&self) -> Result<(), Error> {
-        // Create the database if it doesn't exist
-        self.clickhouse.create_database().await?;
-
-        // Create the `BooleanMetricFeedback` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS BooleanMetricFeedback
-            (
-                id UUID,
-                target_id UUID,
-                metric_name LowCardinality(String),
-                value Bool
-            ) ENGINE = MergeTree()
-            ORDER BY (metric_name, target_id);
-        "#;
-        let _ = self.clickhouse.run_query(query.to_string()).await?;
-
-        // Create the `BooleanMetricFeedback` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS BooleanMetricFeedback
-            (
-                id UUID,
-                target_id UUID,
-                metric_name LowCardinality(String),
-                value Bool
-            ) ENGINE = MergeTree()
-            ORDER BY (metric_name, target_id);
-        "#;
-        let _ = self.clickhouse.run_query(query.to_string()).await?;
-
-        // Create the `CommentFeedback` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS CommentFeedback
-            (
-                id UUID,
-                target_id UUID,
-                target_type Enum('inference' = 1, 'episode' = 2),
-                value String
-            ) ENGINE = MergeTree()
-            ORDER BY target_id;
-        "#;
-        let _ = self.clickhouse.run_query(query.to_string()).await?;
-
-        // Create the `DemonstrationFeedback` table
-        let query = r#"
-           CREATE TABLE IF NOT EXISTS DemonstrationFeedback
-            (
-                id UUID,
-                inference_id UUID,
-                value String
-            ) ENGINE = MergeTree()
-            ORDER BY inference_id;
-        "#;
-        let _ = self.clickhouse.run_query(query.to_string()).await?;
-
-        // Create the `FloatMetricFeedback` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS FloatMetricFeedback
-            (
-                id UUID,
-                target_id UUID,
-                metric_name LowCardinality(String),
-                value Float32
-            ) ENGINE = MergeTree()
-            ORDER BY (metric_name, target_id);
-        "#;
-        let _ = self.clickhouse.run_query(query.to_string()).await?;
-
-        // Create the `Inference` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS Inference
-            (
-                id UUID,
-                function_name LowCardinality(String),
-                variant_name LowCardinality(String),
-                episode_id UUID,
-                input String,
-                output String,
-                tool_params String,
-                inference_params String,
-                processing_time_ms UInt32,
-            ) ENGINE = MergeTree()
-            ORDER BY (function_name, variant_name, episode_id);
-        "#;
-        let _ = self.clickhouse.run_query(query.to_string()).await?;
-
-        // Create the `ModelInference` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS ModelInference
-            (
-                id UUID,
-                inference_id UUID,
-                input String,
-                -- Serialized content blocks as output by model
-                output String,
-                raw_response String,
-                input_tokens UInt32,
-                output_tokens UInt32,
-                response_time_ms UInt32,
-                ttft_ms Nullable(UInt32),
-            ) ENGINE = MergeTree()
-            ORDER BY inference_id;
-        "#;
-        let _ = self.clickhouse.run_query(query.to_string()).await?;
-
+        // Alter the `ModelInference` table to add the `model_name` and `model_provider_name` columns
+        self.clickhouse
+            .run_query("ALTER TABLE ModelInference ADD COLUMN model_name String, ADD COLUMN model_provider_name String".to_string())
+            .await?;
         Ok(())
     }
 
     fn rollback_instructions(&self) -> String {
-        let database = self.clickhouse.database();
-
-        format!(
-            "\
+        "\
             **CAREFUL: THIS WILL DELETE ALL DATA**\n\
             \n\
             -- Drop the database\n\
-            DROP DATABASE IF EXISTS {database};\n\
+            ALTER TABLE ModelInference DROP COLUMN model_name, DROP COLUMN model_provider_name\n\
             \n\
             **CAREFUL: THIS WILL DELETE ALL DATA**\n\
             "
-        )
+        .to_string()
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)
