@@ -269,6 +269,7 @@ type = "chat_completion"
 weight = 0
 model = "microsoft/Phi-3.5-mini-instruct"
 system_template = "config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
 
 [functions.model_fallback_test]
 type = "chat"
@@ -372,12 +373,12 @@ model = "llama3.1-8b-instruct-together"
 system_template = "config/functions/json_success/prompt/system_template.minijinja"
 max_tokens = 100
 
-[functions.json_succeed.variants.vllm]
+[functions.json_success.variants.vllm]
 type = "chat_completion"
 weight = 0
 model = "microsoft/Phi-3.5-mini-instruct"
-system_template = "config/functions/json_succeed/prompt/system_template.minijinja"
-
+system_template = "config/functions/json_success/prompt/system_template.minijinja"
+max_tokens = 100
 
 [functions.variant_failover]
 type = "chat"
