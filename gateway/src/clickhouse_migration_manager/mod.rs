@@ -1,4 +1,4 @@
-mod migration_trait;
+pub mod migration_trait;
 mod migrations;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
@@ -21,8 +21,8 @@ pub fn get_migrations(clickhouse: &ClickHouseConnectionInfo) -> Vec<Box<dyn Migr
 pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     let migrations = get_migrations(clickhouse);
 
-    for migration in migrations {
-        run_migration(&migration).await?;
+    for (i, migration) in migrations.iter().enumerate() {
+        run_migration(&migration, i).await?;
     }
     // NOTE:
     // When we add more migrations, we need to add a test that applies them in a cumulative (N^2) way.
@@ -41,15 +41,12 @@ pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
 }
 
 #[allow(clippy::borrowed_box)]
-async fn run_migration(migration: &Box<dyn Migration>) -> Result<(), Error> {
+pub async fn run_migration(migration: &Box<dyn Migration>, i: usize) -> Result<(), Error> {
     migration.can_apply().await?;
 
     if migration.should_apply().await? {
         // Get the migration name (e.g. `Migration0000`)
-        let migration_name = std::any::type_name_of_val(&migration)
-            .split("::")
-            .last()
-            .unwrap_or("Unknown migration");
+        let migration_name = format!("Migration{:04}", i);
 
         tracing::info!("Applying migration: {migration_name}");
 
@@ -166,7 +163,7 @@ mod tests {
         let mock_migration: Box<dyn Migration> = Box::new(original_migration.clone());
 
         // First check that method succeeds
-        assert!(run_migration(&mock_migration).await.is_ok());
+        assert!(run_migration(&mock_migration, 0).await.is_ok());
 
         // Check that we called every method
         assert!(original_migration
@@ -191,7 +188,7 @@ mod tests {
         });
         let mock_migration: Box<dyn Migration> = Box::new(original_migration.clone());
         // First check that the method fails
-        assert!(run_migration(&mock_migration).await.is_err());
+        assert!(run_migration(&mock_migration, 0).await.is_err());
 
         // Check that we called every method
         assert!(original_migration
@@ -216,7 +213,7 @@ mod tests {
         });
         let mock_migration: Box<dyn Migration> = Box::new(original_migration.clone());
         // First check that the method succeeds
-        assert!(run_migration(&mock_migration).await.is_ok());
+        assert!(run_migration(&mock_migration, 0).await.is_ok());
 
         // Check that we called every method
         assert!(original_migration
@@ -241,7 +238,7 @@ mod tests {
         });
         let mock_migration: Box<dyn Migration> = Box::new(original_migration.clone());
         // First check that the method fails
-        assert!(run_migration(&mock_migration).await.is_err());
+        assert!(run_migration(&mock_migration, 0).await.is_err());
 
         // Check that we called every method
         assert!(original_migration
@@ -266,7 +263,7 @@ mod tests {
         });
         let mock_migration: Box<dyn Migration> = Box::new(original_migration.clone());
         // First check that the method fails
-        assert!(run_migration(&mock_migration).await.is_ok());
+        assert!(run_migration(&mock_migration, 0).await.is_ok());
 
         // Check that we called every method
         assert!(original_migration
