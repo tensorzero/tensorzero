@@ -1,5 +1,5 @@
 pub mod migration_trait;
-mod migrations;
+pub mod migrations;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::Error;
@@ -7,23 +7,9 @@ use migration_trait::Migration;
 use migrations::migration_0000::Migration0000;
 use migrations::migration_0001::Migration0001;
 
-pub fn get_migrations(clickhouse: &ClickHouseConnectionInfo) -> Vec<Box<dyn Migration>> {
-    vec![
-        Box::new(Migration0000 {
-            clickhouse: clickhouse.clone(),
-        }),
-        Box::new(Migration0001 {
-            clickhouse: clickhouse.clone(),
-        }),
-    ]
-}
-
 pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
-    let migrations = get_migrations(clickhouse);
-
-    for (i, migration) in migrations.iter().enumerate() {
-        run_migration(&migration, i).await?;
-    }
+    run_migration(&Migration0000 { clickhouse }).await?;
+    run_migration(&Migration0001 { clickhouse }).await?;
     // NOTE:
     // When we add more migrations, we need to add a test that applies them in a cumulative (N^2) way.
     //
@@ -40,13 +26,15 @@ pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     Ok(())
 }
 
-#[allow(clippy::borrowed_box)]
-pub async fn run_migration(migration: &Box<dyn Migration>, i: usize) -> Result<(), Error> {
+pub async fn run_migration(migration: &impl Migration) -> Result<(), Error> {
     migration.can_apply().await?;
 
     if migration.should_apply().await? {
         // Get the migration name (e.g. `Migration0000`)
-        let migration_name = format!("Migration{:04}", i);
+        let migration_name = std::any::type_name_of_val(&migration)
+            .split("::")
+            .last()
+            .unwrap_or("Unknown migration");
 
         tracing::info!("Applying migration: {migration_name}");
 
@@ -83,8 +71,6 @@ pub async fn run_migration(migration: &Box<dyn Migration>, i: usize) -> Result<(
 
 mod tests {
     use super::*;
-    use async_trait::async_trait;
-    use std::sync::Arc;
 
     struct MockMigration {
         can_apply_result: bool,
@@ -112,8 +98,7 @@ mod tests {
         }
     }
 
-    #[async_trait]
-    impl Migration for Arc<MockMigration> {
+    impl Migration for MockMigration {
         async fn can_apply(&self) -> Result<(), Error> {
             self.called_can_apply
                 .store(true, std::sync::atomic::Ordering::Relaxed);
@@ -159,123 +144,122 @@ mod tests {
 
     #[tokio::test]
     async fn test_run_migration_happy_path() {
-        let original_migration = Arc::new(MockMigration::default());
-        let mock_migration: Box<dyn Migration> = Box::new(original_migration.clone());
+        let mock_migration = MockMigration::default();
 
         // First check that method succeeds
-        assert!(run_migration(&mock_migration, 0).await.is_ok());
+        assert!(run_migration(&mock_migration).await.is_ok());
 
         // Check that we called every method
-        assert!(original_migration
+        assert!(mock_migration
             .called_can_apply
             .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(original_migration
+        assert!(mock_migration
             .called_should_apply
             .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(original_migration
+        assert!(mock_migration
             .called_apply
             .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(original_migration
+        assert!(mock_migration
             .called_has_succeeded
             .load(std::sync::atomic::Ordering::Relaxed));
     }
 
     #[tokio::test]
     async fn test_run_migration_can_apply_fails() {
-        let original_migration = Arc::new(MockMigration {
+        let mock_migration = MockMigration {
             can_apply_result: false,
             ..Default::default()
-        });
-        let mock_migration: Box<dyn Migration> = Box::new(original_migration.clone());
+        };
+
         // First check that the method fails
-        assert!(run_migration(&mock_migration, 0).await.is_err());
+        assert!(run_migration(&mock_migration).await.is_err());
 
         // Check that we called every method
-        assert!(original_migration
+        assert!(mock_migration
             .called_can_apply
             .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(!original_migration
+        assert!(!mock_migration
             .called_should_apply
             .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(!original_migration
+        assert!(!mock_migration
             .called_apply
             .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(!original_migration
+        assert!(!mock_migration
             .called_has_succeeded
             .load(std::sync::atomic::Ordering::Relaxed));
     }
 
     #[tokio::test]
     async fn test_run_migration_should_apply_false() {
-        let original_migration = Arc::new(MockMigration {
+        let mock_migration = MockMigration {
             should_apply_result: false,
             ..Default::default()
-        });
-        let mock_migration: Box<dyn Migration> = Box::new(original_migration.clone());
+        };
+
         // First check that the method succeeds
-        assert!(run_migration(&mock_migration, 0).await.is_ok());
+        assert!(run_migration(&mock_migration).await.is_ok());
 
         // Check that we called every method
-        assert!(original_migration
+        assert!(mock_migration
             .called_can_apply
             .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(original_migration
+        assert!(mock_migration
             .called_should_apply
             .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(!original_migration
+        assert!(!mock_migration
             .called_apply
             .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(!original_migration
+        assert!(!mock_migration
             .called_has_succeeded
             .load(std::sync::atomic::Ordering::Relaxed));
     }
 
     #[tokio::test]
     async fn test_run_migration_apply_fails() {
-        let original_migration = Arc::new(MockMigration {
+        let mock_migration = MockMigration {
             apply_result: false,
             ..Default::default()
-        });
-        let mock_migration: Box<dyn Migration> = Box::new(original_migration.clone());
+        };
+
         // First check that the method fails
-        assert!(run_migration(&mock_migration, 0).await.is_err());
+        assert!(run_migration(&mock_migration).await.is_err());
 
         // Check that we called every method
-        assert!(original_migration
+        assert!(mock_migration
             .called_can_apply
             .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(original_migration
+        assert!(mock_migration
             .called_should_apply
             .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(original_migration
+        assert!(mock_migration
             .called_apply
             .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(!original_migration
+        assert!(!mock_migration
             .called_has_succeeded
             .load(std::sync::atomic::Ordering::Relaxed));
     }
 
     #[tokio::test]
     async fn test_run_migration_has_succeeded_false() {
-        let original_migration = Arc::new(MockMigration {
+        let mock_migration = MockMigration {
             has_succeeded_result: false,
             ..Default::default()
-        });
-        let mock_migration: Box<dyn Migration> = Box::new(original_migration.clone());
+        };
+
         // First check that the method fails
-        assert!(run_migration(&mock_migration, 0).await.is_ok());
+        assert!(run_migration(&mock_migration).await.is_ok());
 
         // Check that we called every method
-        assert!(original_migration
+        assert!(mock_migration
             .called_can_apply
             .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(original_migration
+        assert!(mock_migration
             .called_should_apply
             .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(original_migration
+        assert!(mock_migration
             .called_apply
             .load(std::sync::atomic::Ordering::Relaxed));
-        assert!(original_migration
+        assert!(mock_migration
             .called_has_succeeded
             .load(std::sync::atomic::Ordering::Relaxed));
     }

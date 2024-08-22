@@ -1,5 +1,3 @@
-use async_trait::async_trait;
-
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::clickhouse_migration_manager::migration_trait::Migration;
 use crate::error::Error;
@@ -14,12 +12,11 @@ use crate::error::Error;
 /// - Inference
 /// - ModelInference
 
-pub struct Migration0000 {
-    pub clickhouse: ClickHouseConnectionInfo,
+pub struct Migration0000<'a> {
+    pub clickhouse: &'a ClickHouseConnectionInfo,
 }
 
-#[async_trait]
-impl Migration for Migration0000 {
+impl<'a> Migration for Migration0000<'a> {
     /// Check if you can connect to the database
     async fn can_apply(&self) -> Result<(), Error> {
         self.clickhouse

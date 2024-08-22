@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use serde_json::Value;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
@@ -8,12 +7,11 @@ use crate::error::Error;
 /// This migration modifies the `ModelInference` table to add columns for
 /// `model_name` and `model_provider_name`.
 
-pub struct Migration0001 {
-    pub clickhouse: ClickHouseConnectionInfo,
+pub struct Migration0001<'a> {
+    pub clickhouse: &'a ClickHouseConnectionInfo,
 }
 
-#[async_trait]
-impl Migration for Migration0001 {
+impl<'a> Migration for Migration0001<'a> {
     /// Check if you can connect to the database
     async fn can_apply(&self) -> Result<(), Error> {
         self.clickhouse
