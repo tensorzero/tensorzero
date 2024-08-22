@@ -172,6 +172,8 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
 
+    println!("API response: {response_json:#?}");
+
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
@@ -249,8 +251,8 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
-    assert!(inference_params.get("temperature").unwrap().is_null());
-    assert!(inference_params.get("seed").unwrap().is_null());
+    assert!(inference_params.get("temperature").is_none());
+    assert!(inference_params.get("seed").is_none());
     assert_eq!(
         inference_params
             .get("max_tokens")
@@ -352,10 +354,7 @@ pub async fn test_streaming_inference_request_with_provider(provider: E2ETestPro
     for chunk in chunks.clone() {
         let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
 
-        #[allow(clippy::print_stderr)]
-        {
-            println!("API response chunk: {chunk_json:#?}");
-        }
+        println!("API response chunk: {chunk_json:#?}");
 
         let chunk_inference_id = chunk_json.get("inference_id").unwrap().as_str().unwrap();
         let chunk_inference_id = Uuid::parse_str(chunk_inference_id).unwrap();
@@ -450,8 +449,8 @@ pub async fn test_streaming_inference_request_with_provider(provider: E2ETestPro
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
-    assert!(inference_params.get("temperature").unwrap().is_null());
-    assert!(inference_params.get("seed").unwrap().is_null());
+    assert!(inference_params.get("temperature").is_none());
+    assert!(inference_params.get("seed").is_none());
     assert_eq!(
         inference_params
             .get("max_tokens")
@@ -795,10 +794,7 @@ pub async fn test_tool_use_streaming_inference_request_with_provider(provider: E
     for chunk in chunks {
         let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
 
-        #[allow(clippy::print_stderr)]
-        {
-            println!("API response chunk: {chunk_json:#?}");
-        }
+        println!("API response chunk: {chunk_json:#?}");
 
         let chunk_inference_id = chunk_json.get("inference_id").unwrap().as_str().unwrap();
         let chunk_inference_id = Uuid::parse_str(chunk_inference_id).unwrap();
@@ -1177,8 +1173,8 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
-    assert!(inference_params.get("temperature").unwrap().is_null());
-    assert!(inference_params.get("seed").unwrap().is_null());
+    assert!(inference_params.get("temperature").is_none());
+    assert!(inference_params.get("seed").is_none());
     assert_eq!(
         inference_params
             .get("max_tokens")
@@ -1303,10 +1299,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     for chunk in chunks.clone() {
         let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
 
-        #[allow(clippy::print_stderr)]
-        {
-            println!("API response chunk: {chunk_json:#?}");
-        }
+        println!("API response chunk: {chunk_json:#?}");
 
         let chunk_inference_id = chunk_json.get("inference_id").unwrap().as_str().unwrap();
         let chunk_inference_id = Uuid::parse_str(chunk_inference_id).unwrap();
@@ -1425,8 +1418,8 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
-    assert!(inference_params.get("temperature").unwrap().is_null());
-    assert!(inference_params.get("seed").unwrap().is_null());
+    assert!(inference_params.get("temperature").is_none());
+    assert!(inference_params.get("seed").is_none());
     assert_eq!(
         inference_params
             .get("max_tokens")
@@ -1604,8 +1597,8 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
-    assert!(inference_params.get("temperature").unwrap().is_null());
-    assert!(inference_params.get("seed").unwrap().is_null());
+    assert!(inference_params.get("temperature").is_none());
+    assert!(inference_params.get("seed").is_none());
     assert_eq!(
         inference_params
             .get("max_tokens")
@@ -1707,10 +1700,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     for chunk in chunks.clone() {
         let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
 
-        #[allow(clippy::print_stderr)]
-        {
-            println!("API response chunk: {chunk_json:#?}");
-        }
+        println!("API response chunk: {chunk_json:#?}");
 
         let chunk_inference_id = chunk_json.get("inference_id").unwrap().as_str().unwrap();
         let chunk_inference_id = Uuid::parse_str(chunk_inference_id).unwrap();
@@ -1805,8 +1795,8 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
-    assert!(inference_params.get("temperature").unwrap().is_null());
-    assert!(inference_params.get("seed").unwrap().is_null());
+    assert!(inference_params.get("temperature").is_none());
+    assert!(inference_params.get("seed").is_none());
     assert_eq!(
         inference_params
             .get("max_tokens")

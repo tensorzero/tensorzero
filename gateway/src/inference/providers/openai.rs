@@ -631,15 +631,16 @@ impl TryFrom<OpenAIResponseWithLatency> for ModelInferenceResponse {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct OpenAIFunctionCallChunk {
     name: Option<String>,
     arguments: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct OpenAIToolCallChunk {
     index: u8,
+    #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<String>,
     // NOTE: these are externally tagged enums, for now we're gonna just keep this hardcoded as there's only one option
     // If we were to do this better, we would need to check the `type` field

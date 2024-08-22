@@ -884,12 +884,13 @@ async fn e2e_test_variant_failover() {
         .unwrap()
         .as_object()
         .unwrap();
-    let temperature = chat_completion_inference_params.get("temperature").unwrap();
-    assert!(temperature.is_null());
+
+    assert!(chat_completion_inference_params
+        .get("temperature")
+        .is_none());
     let max_tokens = chat_completion_inference_params.get("max_tokens").unwrap();
     assert_eq!(max_tokens.as_u64().unwrap(), 100);
-    let seed = chat_completion_inference_params.get("seed").unwrap();
-    assert!(seed.is_null());
+    assert!(chat_completion_inference_params.get("seed").is_none());
 
     // Check the ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)

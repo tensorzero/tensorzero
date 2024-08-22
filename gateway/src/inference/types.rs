@@ -25,6 +25,7 @@ use crate::{error::Error, variant::JsonEnforcement};
 /// A request is made that contains an Input
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Input {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub system: Option<Value>,
     pub messages: Vec<InputMessage>,
 }
@@ -175,7 +176,7 @@ pub enum InferenceResult {
     Json(JsonInferenceResult),
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct ChatInferenceResult {
     pub inference_id: Uuid,
     created: u64,
@@ -255,7 +256,7 @@ pub enum InferenceResultChunk {
 /// For this we convert the InferenceResult into an Inference and ModelInferences,
 /// which are written to ClickHouse tables of the same name asynchronously.
 
-#[derive(Serialize, Debug)]
+#[derive(Debug, Serialize)]
 pub struct InferenceDatabaseInsert {
     pub id: Uuid,
     pub function_name: String,

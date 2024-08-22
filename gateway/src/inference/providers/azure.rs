@@ -173,7 +173,7 @@ impl<'a> From<OpenAIToolChoice<'a>> for AzureToolChoice<'a> {
 /// We are not handling logprobs, top_logprobs, n, prompt_truncate_len
 /// presence_penalty, frequency_penalty, seed, service_tier, stop, user,
 /// or context_length_exceeded_behavior
-#[derive(Serialize, Debug)]
+#[derive(Debug, Serialize)]
 struct AzureRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     model: &'a str,

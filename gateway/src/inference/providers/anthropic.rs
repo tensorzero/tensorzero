@@ -166,7 +166,7 @@ fn stream_anthropic(
     }
 }
 
-#[derive(Serialize, PartialEq, Debug, Clone)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 /// Anthropic doesn't handle the system message in this way
 /// It's a field of the POST body instead
@@ -504,7 +504,9 @@ struct AnthropicResponseBody {
     role: String,   // this is always "assistant"
     content: Vec<AnthropicContentBlock>,
     model: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     stop_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     stop_sequence: Option<String>,
     usage: AnthropicUsage,
 }

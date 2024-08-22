@@ -264,7 +264,7 @@ fn stream_gcp_vertex_gemini(
     }
 }
 
-#[derive(Serialize, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 enum GCPVertexGeminiRole {
     User,
@@ -280,19 +280,19 @@ impl From<Role> for GCPVertexGeminiRole {
     }
 }
 
-#[derive(Serialize, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Serialize)]
 struct GCPVertexGeminiFunctionCall<'a> {
     name: &'a str,
     args: Value,
 }
 
-#[derive(Serialize, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Serialize)]
 struct GCPVertexGeminiFunctionResponse<'a> {
     name: &'a str,
     response: Value,
 }
 
-#[derive(Serialize, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase", untagged)]
 enum GCPVertexGeminiContentPart<'a> {
     Text {
@@ -364,7 +364,7 @@ impl<'a> TryFrom<&'a ContentBlock> for GCPVertexGeminiContentPart<'a> {
     }
 }
 
-#[derive(Serialize, Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize)]
 struct GCPVertexGeminiContent<'a> {
     role: GCPVertexGeminiRole,
     parts: Vec<GCPVertexGeminiContentPart<'a>>,
@@ -385,7 +385,7 @@ impl<'a> TryFrom<&'a RequestMessage> for GCPVertexGeminiContent<'a> {
     }
 }
 
-#[derive(Serialize, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Serialize)]
 struct GCPVertexGeminiFunctionDeclaration<'a> {
     name: &'a str,
     description: Option<&'a str>,
@@ -395,7 +395,7 @@ struct GCPVertexGeminiFunctionDeclaration<'a> {
 // TODO (if needed): implement [Retrieval](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/Tool#Retrieval)
 // and [GoogleSearchRetrieval](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/Tool#GoogleSearchRetrieval)
 // tools.
-#[derive(Serialize, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 enum GCPVertexGeminiTool<'a> {
     FunctionDeclarations(Vec<GCPVertexGeminiFunctionDeclaration<'a>>),
@@ -425,7 +425,7 @@ impl<'a> From<&'a Vec<ToolConfig>> for GCPVertexGeminiTool<'a> {
     }
 }
 
-#[derive(Serialize, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 enum GCPVertexGeminiFunctionCallingMode {
     Auto,
@@ -433,14 +433,15 @@ enum GCPVertexGeminiFunctionCallingMode {
     None,
 }
 
-#[derive(Serialize, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiFunctionCallingConfig<'a> {
     mode: GCPVertexGeminiFunctionCallingMode,
+    #[serde(skip_serializing_if = "Option::is_none")]
     allowed_function_names: Option<Vec<&'a str>>,
 }
 
-#[derive(Serialize, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiToolConfig<'a> {
     function_calling_config: GCPVertexGeminiFunctionCallingConfig<'a>,
@@ -522,7 +523,7 @@ impl<'a> From<(&'a ToolChoice, &'a str)> for GCPVertexGeminiToolConfig<'a> {
     }
 }
 
-#[derive(Serialize, Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize)]
 enum GCPVertexGeminiResponseMimeType {
     #[serde(rename = "text/plain")]
     #[allow(dead_code)]
@@ -532,7 +533,7 @@ enum GCPVertexGeminiResponseMimeType {
 }
 
 // TODO (if needed): add the other options [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/GenerationConfig)
-#[derive(Serialize, Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiGenerationConfig<'a> {
     stop_sequences: Option<Vec<&'a str>>,
@@ -543,7 +544,7 @@ struct GCPVertexGeminiGenerationConfig<'a> {
     response_schema: Option<&'a Value>,
 }
 
-#[derive(Serialize, Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiRequest<'a> {
     contents: Vec<GCPVertexGeminiContent<'a>>,
