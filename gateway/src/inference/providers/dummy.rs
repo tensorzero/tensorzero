@@ -43,8 +43,8 @@ lazy_static! {
 }
 pub static DUMMY_JSON_RESPONSE_RAW: &str = r#"{"answer":"Hello"}"#;
 pub static DUMMY_INFER_USAGE: Usage = Usage {
-    prompt_tokens: 10,
-    completion_tokens: 10,
+    input_tokens: 10,
+    output_tokens: 10,
 };
 pub static DUMMY_STREAMING_RESPONSE: [&str; 16] = [
     "Wally,",
@@ -105,7 +105,7 @@ impl InferenceProvider for DummyProvider {
             "json" => vec![r#"{"answer":"Hello"}"#.to_string().into()],
             _ => vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()],
         };
-        let raw = match self.model_name.as_str() {
+        let raw_response = match self.model_name.as_str() {
             #[allow(clippy::unwrap_used)]
             "tool" => serde_json::to_string(&*DUMMY_TOOL_RESPONSE).unwrap(),
             #[allow(clippy::unwrap_used)]
@@ -122,7 +122,7 @@ impl InferenceProvider for DummyProvider {
             id,
             created,
             content,
-            raw_response: raw,
+            raw_response,
             usage,
             latency,
         })
@@ -200,8 +200,8 @@ impl InferenceProvider for DummyProvider {
                 created,
                 content: vec![],
                 usage: Some(crate::inference::types::Usage {
-                    prompt_tokens: 10,
-                    completion_tokens: total_tokens,
+                    input_tokens: 10,
+                    output_tokens: total_tokens,
                 }),
                 raw_response: "".to_string(),
                 latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),

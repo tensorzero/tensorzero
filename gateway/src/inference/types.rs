@@ -146,8 +146,8 @@ pub struct ModelInferenceResponse {
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Usage {
-    pub prompt_tokens: u32,
-    pub completion_tokens: u32,
+    pub input_tokens: u32,
+    pub output_tokens: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -231,6 +231,7 @@ pub struct ChatInferenceResultChunk {
     pub inference_id: Uuid,
     pub content: Vec<ContentBlockChunk>,
     pub created: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
 }
 
@@ -239,6 +240,7 @@ pub struct JsonInferenceResultChunk {
     pub inference_id: Uuid,
     pub raw: String,
     pub created: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
 }
 
@@ -372,8 +374,8 @@ impl ModelInferenceDatabaseInsert {
             // We write the serialized JSON form of the ContentBlocks output by the model
             output: serde_json::to_string(&response.content).unwrap_or_default(),
             raw_response: response.raw_response,
-            input_tokens: response.usage.prompt_tokens,
-            output_tokens: response.usage.completion_tokens,
+            input_tokens: response.usage.input_tokens,
+            output_tokens: response.usage.output_tokens,
             response_time_ms: latency_ms,
             ttft_ms,
         }
@@ -381,12 +383,17 @@ impl ModelInferenceDatabaseInsert {
 }
 
 impl ModelInferenceResponse {
-    pub fn new(content: Vec<ContentBlock>, raw: String, usage: Usage, latency: Latency) -> Self {
+    pub fn new(
+        content: Vec<ContentBlock>,
+        raw_response: String,
+        usage: Usage,
+        latency: Latency,
+    ) -> Self {
         Self {
             id: Uuid::now_v7(),
             created: current_timestamp(),
             content,
-            raw_response: raw,
+            raw_response,
             usage,
             latency,
         }
@@ -685,12 +692,10 @@ pub async fn collect_chunks(
             };
         }
         if let Some(chunk_usage) = chunk.usage {
-            usage.prompt_tokens = usage
-                .prompt_tokens
-                .saturating_add(chunk_usage.prompt_tokens);
-            usage.completion_tokens = usage
-                .completion_tokens
-                .saturating_add(chunk_usage.completion_tokens);
+            usage.input_tokens = usage.input_tokens.saturating_add(chunk_usage.input_tokens);
+            usage.output_tokens = usage
+                .output_tokens
+                .saturating_add(chunk_usage.output_tokens);
         }
     }
 
@@ -762,8 +767,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let content = vec!["Hello, world!".to_string().into()];
         let usage = Usage {
-            prompt_tokens: 10,
-            completion_tokens: 20,
+            input_tokens: 10,
+            output_tokens: 20,
         };
         let model_inference_responses = vec![ModelInferenceResponse::new(
             content.clone(),
@@ -950,8 +955,8 @@ mod tests {
                 })],
                 created,
                 usage: Some(Usage {
-                    prompt_tokens: 2,
-                    completion_tokens: 4,
+                    input_tokens: 2,
+                    output_tokens: 4,
                 }),
                 raw_response: ", world!\"}".to_string(),
                 latency: Duration::from_millis(250),
@@ -970,8 +975,8 @@ mod tests {
         assert_eq!(
             chat_result.usage,
             Usage {
-                prompt_tokens: 2,
-                completion_tokens: 4,
+                input_tokens: 2,
+                output_tokens: 4,
             }
         );
 
@@ -996,12 +1001,12 @@ mod tests {
             output_schema,
         });
         let usage1 = Usage {
-            prompt_tokens: 10,
-            completion_tokens: 5,
+            input_tokens: 10,
+            output_tokens: 5,
         };
         let usage2 = Usage {
-            prompt_tokens: 5,
-            completion_tokens: 10,
+            input_tokens: 5,
+            output_tokens: 10,
         };
         let chunks = vec![
             ModelInferenceResponseChunk {
@@ -1044,8 +1049,8 @@ mod tests {
                 assert_eq!(
                     json_result.usage,
                     Usage {
-                        prompt_tokens: 15,
-                        completion_tokens: 15,
+                        input_tokens: 15,
+                        output_tokens: 15,
                     }
                 );
             }
@@ -1056,8 +1061,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let created = current_timestamp();
         let usage = Usage {
-            prompt_tokens: 10,
-            completion_tokens: 5,
+            input_tokens: 10,
+            output_tokens: 5,
         };
         let chunks = vec![
             ModelInferenceResponseChunk {
@@ -1100,8 +1105,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let created = current_timestamp();
         let usage = Usage {
-            prompt_tokens: 15,
-            completion_tokens: 10,
+            input_tokens: 15,
+            output_tokens: 10,
         };
         let chunks = vec![
             ModelInferenceResponseChunk {
@@ -1169,12 +1174,12 @@ mod tests {
             output_schema,
         });
         let usage1 = Usage {
-            prompt_tokens: 10,
-            completion_tokens: 5,
+            input_tokens: 10,
+            output_tokens: 5,
         };
         let usage2 = Usage {
-            prompt_tokens: 5,
-            completion_tokens: 10,
+            input_tokens: 5,
+            output_tokens: 10,
         };
         let chunks = vec![
             ModelInferenceResponseChunk {
@@ -1219,8 +1224,8 @@ mod tests {
                 assert_eq!(
                     json_result.usage,
                     Usage {
-                        prompt_tokens: 15,
-                        completion_tokens: 15,
+                        input_tokens: 15,
+                        output_tokens: 15,
                     }
                 );
             }
