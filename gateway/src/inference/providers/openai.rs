@@ -465,8 +465,8 @@ impl<'a> From<&'a ToolChoice> for OpenAIToolChoice<'a> {
 }
 
 #[derive(Debug, Serialize)]
-struct StreamOptions {
-    include_usage: bool,
+pub(super) struct StreamOptions {
+    pub(super) include_usage: bool,
 }
 
 /// This struct defines the supported parameters for the OpenAI API

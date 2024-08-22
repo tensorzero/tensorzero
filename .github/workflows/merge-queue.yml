@@ -17,6 +17,9 @@ env:
   GCP_VERTEX_CREDENTIALS_PATH: ${{ github.workspace }}/gcp_jwt_key.json
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }} # for integration/E2E tests
   TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }} # for integration/E2E tests
+  VLLM_API_KEY: ${{ secrets.VLLM_API_KEY }} # for integration/E2E tests
+  VLLM_MODEL_NAME: "microsoft/Phi-3.5-mini-instruct"
+  VLLM_API_BASE: ${{ secrets.VLLM_API_BASE }}
 
 jobs:
   live-tests:
