@@ -13,6 +13,8 @@ async fn get_providers() -> E2ETestProviders {
         streaming_inference: providers.clone(),
         tool_use_inference: vec![],
         tool_use_streaming_inference: vec![],
+        tool_multi_turn_inference: vec![],
+        tool_multi_turn_streaming_inference: vec![],
         json_mode_inference: providers.clone(),
         json_mode_streaming_inference: providers,
     }
