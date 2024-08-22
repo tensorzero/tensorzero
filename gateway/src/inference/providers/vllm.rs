@@ -5,21 +5,17 @@ use serde::Serialize;
 use serde_json::Value;
 use tokio::time::Instant;
 
-use crate::{
-    error::Error,
-    inference::types::{
-        JSONMode, Latency, ModelInferenceRequest, ModelInferenceResponse,
-        ModelInferenceResponseChunk, ModelInferenceResponseStream,
-    },
+use crate::error::Error;
+use crate::inference::types::{
+    JSONMode, Latency, ModelInferenceRequest, ModelInferenceResponse, ModelInferenceResponseChunk,
+    ModelInferenceResponseStream,
 };
 
-use super::{
-    openai::{
-        get_chat_url, handle_openai_error, prepare_openai_messages, stream_openai,
-        OpenAIRequestMessage, OpenAIResponse, OpenAIResponseWithLatency, StreamOptions,
-    },
-    provider_trait::InferenceProvider,
+use super::openai::{
+    get_chat_url, handle_openai_error, prepare_openai_messages, stream_openai,
+    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseWithLatency, StreamOptions,
 };
+use super::provider_trait::InferenceProvider;
 
 #[derive(Debug)]
 pub struct VLLMProvider {
@@ -31,7 +27,7 @@ pub struct VLLMProvider {
 /// Key differences between vLLM and OpenAI inference:
 /// - vLLM supports guided decoding
 /// - vLLM only supports a specific tool and nothing else (and the implementation varies among LLMs)
-///   **Today, we can't support tools** so we are leaving it as an open issue.
+///   **Today, we can't support tools** so we are leaving it as an open issue (#169).
 impl InferenceProvider for VLLMProvider {
     async fn infer<'a>(
         &'a self,
@@ -173,7 +169,8 @@ impl<'a> VLLMRequest<'a> {
         let messages = prepare_openai_messages(request);
         // TODO (#169): Implement tool calling.
         if request.tool_config.is_some() {
-            return Err(Error::VLLMServer {
+            return Err(Error::VLLMClient {
+                status_code: reqwest::StatusCode::BAD_REQUEST,
                 message: "TensorZero does not support tool use with vLLM. Please use a different provider.".to_string(),
             });
         }

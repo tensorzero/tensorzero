@@ -636,8 +636,8 @@ fn prepare_tools<'a>(
 
 fn process_output_schema(output_schema: &Value) -> Result<Value, Error> {
     let mut schema = output_schema.clone();
-    // Remove all instances of "additionalProperties"
-    // Recursively remove all instances of "additionalProperties"
+
+    /// Recursively remove all instances of "additionalProperties"
     fn remove_additional_properties(value: &mut Value) {
         match value {
             Value::Object(obj) => {
