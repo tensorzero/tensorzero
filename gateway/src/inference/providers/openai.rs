@@ -51,20 +51,18 @@ impl InferenceProvider for OpenAIProvider {
                 message: format!("Error sending request to OpenAI: {e}"),
             })?;
         if res.status().is_success() {
-            let response_body =
-                res.json::<OpenAIResponse>()
-                    .await
-                    .map_err(|e| Error::OpenAIServer {
-                        message: format!("Error parsing response: {e}"),
-                    })?;
+            let response = res.text().await.map_err(|e| Error::OpenAIServer {
+                message: format!("Error parsing text response: {e}"),
+            })?;
+
+            let response = serde_json::from_str(&response).map_err(|e| Error::OpenAIServer {
+                message: format!("Error parsing JSON response: {e}: {response}"),
+            })?;
+
             let latency = Latency::NonStreaming {
                 response_time: start_time.elapsed(),
             };
-            Ok(OpenAIResponseWithLatency {
-                response: response_body,
-                latency,
-            }
-            .try_into()?)
+            Ok(OpenAIResponseWithLatency { response, latency }.try_into()?)
         } else {
             handle_openai_error(
                 res.status(),
@@ -631,15 +629,16 @@ impl TryFrom<OpenAIResponseWithLatency> for ModelInferenceResponse {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct OpenAIFunctionCallChunk {
     name: Option<String>,
     arguments: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct OpenAIToolCallChunk {
     index: u8,
+    #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<String>,
     // NOTE: these are externally tagged enums, for now we're gonna just keep this hardcoded as there's only one option
     // If we were to do this better, we would need to check the `type` field
@@ -647,7 +646,7 @@ struct OpenAIToolCallChunk {
 }
 
 // This doesn't include role
-#[derive(Debug, PartialEq, Deserialize, Serialize, Clone)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct OpenAIDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
@@ -656,12 +655,12 @@ struct OpenAIDelta {
 }
 
 // This doesn't include logprobs, finish_reason, and index
-#[derive(Debug, PartialEq, Deserialize, Serialize, Clone)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct OpenAIChatChunkChoice {
     delta: OpenAIDelta,
 }
 
-#[derive(Debug, PartialEq, Deserialize, Serialize, Clone)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct OpenAIChatChunk {
     choices: Vec<OpenAIChatChunkChoice>,
     #[serde(skip_serializing_if = "Option::is_none")]

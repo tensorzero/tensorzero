@@ -53,14 +53,16 @@ impl InferenceProvider for AnthropicProvider {
             response_time: start_time.elapsed(),
         };
         if res.status().is_success() {
-            let body =
-                res.json::<AnthropicResponseBody>()
-                    .await
-                    .map_err(|e| Error::AnthropicServer {
-                        message: format!("Error parsing response: {e}"),
-                    })?;
-            let body_with_latency = AnthropicResponseBodyWithLatency { body, latency };
-            Ok(body_with_latency.try_into()?)
+            let response = res.text().await.map_err(|e| Error::AnthropicServer {
+                message: format!("Error parsing text response: {e}"),
+            })?;
+
+            let response = serde_json::from_str(&response).map_err(|e| Error::AnthropicServer {
+                message: format!("Error parsing JSON response: {e}: {response}"),
+            })?;
+
+            let response_with_latency = AnthropicResponseWithLatency { response, latency };
+            Ok(response_with_latency.try_into()?)
         } else {
             let response_code = res.status();
             let error_body =
@@ -166,7 +168,7 @@ fn stream_anthropic(
     }
 }
 
-#[derive(Serialize, PartialEq, Debug, Clone)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 /// Anthropic doesn't handle the system message in this way
 /// It's a field of the POST body instead
@@ -498,31 +500,36 @@ impl From<AnthropicUsage> for Usage {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct AnthropicResponseBody {
+struct AnthropicResponse {
     id: String,
     r#type: String, // this is always "message"
     role: String,   // this is always "assistant"
     content: Vec<AnthropicContentBlock>,
     model: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     stop_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     stop_sequence: Option<String>,
     usage: AnthropicUsage,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-struct AnthropicResponseBodyWithLatency {
-    body: AnthropicResponseBody,
+struct AnthropicResponseWithLatency {
+    response: AnthropicResponse,
     latency: Latency,
 }
 
-impl TryFrom<AnthropicResponseBodyWithLatency> for ModelInferenceResponse {
+impl TryFrom<AnthropicResponseWithLatency> for ModelInferenceResponse {
     type Error = Error;
-    fn try_from(value: AnthropicResponseBodyWithLatency) -> Result<Self, Self::Error> {
-        let AnthropicResponseBodyWithLatency { body, latency } = value;
-        let raw = serde_json::to_string(&body).map_err(|e| Error::AnthropicServer {
-            message: format!("Error parsing response from Anthropic: {e}"),
-        })?;
-        let content: Vec<ContentBlock> = body
+    fn try_from(value: AnthropicResponseWithLatency) -> Result<Self, Self::Error> {
+        let AnthropicResponseWithLatency { response, latency } = value;
+
+        let raw_response =
+            serde_json::to_string(&response).map_err(|e| Error::AnthropicServer {
+                message: format!("Error parsing response from Anthropic: {e}"),
+            })?;
+
+        let content: Vec<ContentBlock> = response
             .content
             .into_iter()
             .map(|block| block.try_into())
@@ -530,8 +537,8 @@ impl TryFrom<AnthropicResponseBodyWithLatency> for ModelInferenceResponse {
 
         Ok(ModelInferenceResponse::new(
             content,
-            raw,
-            body.usage.into(),
+            raw_response,
+            response.usage.into(),
             latency,
         ))
     }
@@ -1378,7 +1385,7 @@ mod tests {
     #[test]
     fn test_anthropic_response_conversion() {
         // Test case 1: Text response
-        let anthropic_response_body = AnthropicResponseBody {
+        let anthropic_response_body = AnthropicResponse {
             id: "1".to_string(),
             r#type: "message".to_string(),
             role: "assistant".to_string(),
@@ -1396,8 +1403,8 @@ mod tests {
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
         };
-        let body_with_latency = AnthropicResponseBodyWithLatency {
-            body: anthropic_response_body.clone(),
+        let body_with_latency = AnthropicResponseWithLatency {
+            response: anthropic_response_body.clone(),
             latency: latency.clone(),
         };
 
@@ -1408,15 +1415,13 @@ mod tests {
         );
 
         let raw_json = json!(anthropic_response_body).to_string();
-        let parsed_raw: serde_json::Value =
-            serde_json::from_str(&inference_response.raw_response).unwrap();
-        assert_eq!(raw_json, serde_json::json!(parsed_raw).to_string());
+        assert_eq!(raw_json, inference_response.raw_response);
         assert_eq!(inference_response.usage.input_tokens, 100);
         assert_eq!(inference_response.usage.output_tokens, 50);
         assert_eq!(inference_response.latency, latency);
 
         // Test case 2: Tool call response
-        let anthropic_response_body = AnthropicResponseBody {
+        let anthropic_response_body = AnthropicResponse {
             id: "2".to_string(),
             r#type: "message".to_string(),
             role: "assistant".to_string(),
@@ -1433,8 +1438,8 @@ mod tests {
                 output_tokens: 50,
             },
         };
-        let body_with_latency = AnthropicResponseBodyWithLatency {
-            body: anthropic_response_body.clone(),
+        let body_with_latency = AnthropicResponseWithLatency {
+            response: anthropic_response_body.clone(),
             latency: latency.clone(),
         };
 
@@ -1450,15 +1455,13 @@ mod tests {
         );
 
         let raw_json = json!(anthropic_response_body).to_string();
-        let parsed_raw: serde_json::Value =
-            serde_json::from_str(&inference_response.raw_response).unwrap();
-        assert_eq!(raw_json, serde_json::json!(parsed_raw).to_string());
+        assert_eq!(raw_json, inference_response.raw_response);
         assert_eq!(inference_response.usage.input_tokens, 100);
         assert_eq!(inference_response.usage.output_tokens, 50);
         assert_eq!(inference_response.latency, latency);
 
         // Test case 3: Mixed response (text and tool call)
-        let anthropic_response_body = AnthropicResponseBody {
+        let anthropic_response_body = AnthropicResponse {
             id: "3".to_string(),
             r#type: "message".to_string(),
             role: "assistant".to_string(),
@@ -1480,8 +1483,8 @@ mod tests {
                 output_tokens: 50,
             },
         };
-        let body_with_latency = AnthropicResponseBodyWithLatency {
-            body: anthropic_response_body.clone(),
+        let body_with_latency = AnthropicResponseWithLatency {
+            response: anthropic_response_body.clone(),
             latency: latency.clone(),
         };
         let inference_response = ModelInferenceResponse::try_from(body_with_latency).unwrap();
@@ -1500,9 +1503,7 @@ mod tests {
         );
 
         let raw_json = json!(anthropic_response_body).to_string();
-        let parsed_raw: serde_json::Value =
-            serde_json::from_str(&inference_response.raw_response).unwrap();
-        assert_eq!(raw_json, serde_json::json!(parsed_raw).to_string());
+        assert_eq!(raw_json, inference_response.raw_response);
 
         assert_eq!(inference_response.usage.input_tokens, 100);
         assert_eq!(inference_response.usage.output_tokens, 50);

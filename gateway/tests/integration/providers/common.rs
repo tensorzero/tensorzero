@@ -1,3 +1,5 @@
+#![allow(clippy::print_stdout)]
+
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use serde_json::json;
@@ -178,6 +180,8 @@ pub async fn test_simple_inference_request_with_provider(provider: &ProviderConf
     // Run the inference request
     let result = provider.infer(&inference_request, &client).await.unwrap();
 
+    println!("Result: {result:#?}");
+
     // Evaluate the results
     assert!(result.content.len() == 1);
 
@@ -208,6 +212,7 @@ pub async fn test_streaming_inference_request_with_provider(provider: &ProviderC
     let mut collected_chunks = vec![first_chunk];
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.unwrap();
+        println!("Chunk: {chunk:#?}");
         assert!(chunk.content.len() <= 1);
         collected_chunks.push(chunk);
     }
@@ -223,7 +228,10 @@ pub async fn test_streaming_inference_request_with_provider(provider: &ProviderC
         })
         .collect::<Vec<String>>()
         .join("");
-    assert!(generation.contains("Tokyo"), "{}", generation);
+
+    println!("Generation: {}", generation);
+
+    assert!(generation.contains("Tokyo"));
 
     // Check the usage
     match provider {
@@ -274,6 +282,8 @@ pub async fn test_tool_use_inference_request_with_provider(provider: &ProviderCo
     let client = reqwest::Client::new();
     let result = provider.infer(&inference_request, &client).await.unwrap();
 
+    println!("Result: {result:#?}");
+
     // Check the result
     assert!(result.content.len() == 1, "{:#?}", result.content);
     let content = result.content.first().unwrap();
@@ -314,6 +324,7 @@ pub async fn test_tool_use_streaming_inference_request_with_provider(provider: &
     let mut collected_chunks = vec![chunk];
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.unwrap();
+        println!("Chunk: {chunk:#?}");
         collected_chunks.push(chunk);
     }
 
@@ -347,7 +358,7 @@ pub async fn test_tool_use_streaming_inference_request_with_provider(provider: &
     assert!(arguments.keys().any(|key| key == "location"));
     assert!(arguments["location"] == "New York");
 
-    // unit is optional
+    // `unit` is optional
     if arguments.len() == 2 {
         assert!(arguments.keys().any(|key| key == "unit"));
         assert!(arguments["unit"] == "celsius" || arguments["unit"] == "fahrenheit");
@@ -420,6 +431,8 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: &Pro
     let inference_request = create_tool_multi_turn_inference_request();
     let result = provider.infer(&inference_request, &client).await.unwrap();
 
+    println!("Result: {result:#?}");
+
     // Check the result
     assert!(result.content.len() == 1);
     let content = result.content.first().unwrap();
@@ -449,6 +462,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     let mut collected_chunks = vec![chunk];
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.unwrap();
+        println!("Chunk: {chunk:#?}");
         collected_chunks.push(chunk);
     }
 
@@ -530,6 +544,8 @@ pub async fn test_json_mode_inference_request_with_provider(provider: &ProviderC
     let client = reqwest::Client::new();
     let result = provider.infer(&inference_request, &client).await.unwrap();
 
+    println!("Result: {result:#?}");
+
     // Check the result
     assert!(result.content.len() == 1);
     let content = result.content.first().unwrap();
@@ -568,6 +584,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     let mut collected_chunks = vec![first_chunk];
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.unwrap();
+        println!("Chunk: {chunk:#?}");
         assert!(chunk.content.len() <= 1);
         collected_chunks.push(chunk);
     }
@@ -584,6 +601,8 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         .collect::<Vec<String>>()
         .join("");
 
+    println!("Generation: {}", generation);
+
     // Ensure the generation is valid JSON
     let parsed_json: serde_json::Value = serde_json::from_str(&generation).unwrap();
     let parsed_json = parsed_json.as_object().unwrap();
@@ -591,7 +610,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     assert!(parsed_json.len() == 1 || parsed_json.len() == 2);
     assert!(parsed_json.get("answer").unwrap().as_str().unwrap() == "8");
 
-    // reasoning is optional
+    // `reasoning` is optional
     if parsed_json.len() == 2 {
         assert!(parsed_json.keys().any(|key| key == "reasoning"));
     }

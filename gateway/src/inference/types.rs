@@ -25,6 +25,7 @@ use crate::{error::Error, variant::JsonEnforcement};
 /// A request is made that contains an Input
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Input {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub system: Option<Value>,
     pub messages: Vec<InputMessage>,
 }
@@ -175,7 +176,7 @@ pub enum InferenceResult {
     Json(JsonInferenceResult),
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct ChatInferenceResult {
     pub inference_id: Uuid,
     created: u64,
@@ -255,7 +256,7 @@ pub enum InferenceResultChunk {
 /// For this we convert the InferenceResult into an Inference and ModelInferences,
 /// which are written to ClickHouse tables of the same name asynchronously.
 
-#[derive(Serialize, Debug)]
+#[derive(Debug, Serialize)]
 pub struct InferenceDatabaseInsert {
     pub id: Uuid,
     pub function_name: String,
@@ -468,13 +469,12 @@ impl ChatInferenceResult {
         tool_config: Option<&ToolCallConfig>,
     ) -> Vec<ContentBlockOutput> {
         if content.is_empty() {
-            Error::OutputParsing {
-                raw_output: "".to_string(),
-                message: "Output parsing failed due to empty content".to_string(),
+            Error::Inference {
+                message: "No content blocks in inference result".to_string(),
             }
             .log();
-            return vec![];
         }
+
         let mut output = Vec::new();
         for content in content.into_iter() {
             match content {
@@ -488,9 +488,9 @@ impl ChatInferenceResult {
                 }
                 ContentBlock::ToolResult(tool_result) => {
                     Error::OutputParsing {
-                        raw_output: serde_json::to_string(&tool_result).unwrap_or_default(),
                         message: "Tool results are not supported in output for Chat functions"
                             .to_string(),
+                        raw_output: serde_json::to_string(&tool_result).unwrap_or_default(),
                     }
                     .log();
                 }
