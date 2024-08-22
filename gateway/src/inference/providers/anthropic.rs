@@ -1408,9 +1408,7 @@ mod tests {
         );
 
         let raw_json = json!(anthropic_response_body).to_string();
-        let parsed_raw: serde_json::Value =
-            serde_json::from_str(&inference_response.raw_response).unwrap();
-        assert_eq!(raw_json, serde_json::json!(parsed_raw).to_string());
+        assert_eq!(raw_json, inference_response.raw_response);
         assert_eq!(inference_response.usage.input_tokens, 100);
         assert_eq!(inference_response.usage.output_tokens, 50);
         assert_eq!(inference_response.latency, latency);
@@ -1450,9 +1448,7 @@ mod tests {
         );
 
         let raw_json = json!(anthropic_response_body).to_string();
-        let parsed_raw: serde_json::Value =
-            serde_json::from_str(&inference_response.raw_response).unwrap();
-        assert_eq!(raw_json, serde_json::json!(parsed_raw).to_string());
+        assert_eq!(raw_json, inference_response.raw_response);
         assert_eq!(inference_response.usage.input_tokens, 100);
         assert_eq!(inference_response.usage.output_tokens, 50);
         assert_eq!(inference_response.latency, latency);
@@ -1500,9 +1496,7 @@ mod tests {
         );
 
         let raw_json = json!(anthropic_response_body).to_string();
-        let parsed_raw: serde_json::Value =
-            serde_json::from_str(&inference_response.raw_response).unwrap();
-        assert_eq!(raw_json, serde_json::json!(parsed_raw).to_string());
+        assert_eq!(raw_json, inference_response.raw_response);
 
         assert_eq!(inference_response.usage.input_tokens, 100);
         assert_eq!(inference_response.usage.output_tokens, 50);
