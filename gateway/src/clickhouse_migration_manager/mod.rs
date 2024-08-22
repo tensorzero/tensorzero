@@ -5,6 +5,7 @@ use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::Error;
 use migration_trait::Migration;
 use migrations::migration_0000::Migration0000;
+use migrations::migration_0001::Migration0001;
 
 pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     run_migration(&Migration0000 { clickhouse }).await?;
