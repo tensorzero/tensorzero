@@ -7,12 +7,12 @@ use gateway::model::ProviderConfig;
 
 use crate::providers::common::create_json_mode_inference_request;
 
-use crate::providers::common::TestProviders;
+use crate::providers::common::IntegrationTestProviders;
 
 crate::generate_provider_tests!(get_providers);
 
-async fn get_providers() -> TestProviders {
-    TestProviders::with_provider(get_provider())
+async fn get_providers() -> IntegrationTestProviders {
+    IntegrationTestProviders::with_provider(get_provider())
 }
 
 /// Get a generic provider for testing

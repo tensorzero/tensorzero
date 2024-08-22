@@ -491,8 +491,8 @@ pub struct AnthropicUsage {
 impl From<AnthropicUsage> for Usage {
     fn from(value: AnthropicUsage) -> Self {
         Usage {
-            prompt_tokens: value.input_tokens,
-            completion_tokens: value.output_tokens,
+            input_tokens: value.input_tokens,
+            output_tokens: value.output_tokens,
         }
     }
 }
@@ -1371,8 +1371,8 @@ mod tests {
 
         let usage: Usage = anthropic_usage.into();
 
-        assert_eq!(usage.prompt_tokens, 100);
-        assert_eq!(usage.completion_tokens, 50);
+        assert_eq!(usage.input_tokens, 100);
+        assert_eq!(usage.output_tokens, 50);
     }
 
     #[test]
@@ -1411,8 +1411,8 @@ mod tests {
         let parsed_raw: serde_json::Value =
             serde_json::from_str(&inference_response.raw_response).unwrap();
         assert_eq!(raw_json, serde_json::json!(parsed_raw).to_string());
-        assert_eq!(inference_response.usage.prompt_tokens, 100);
-        assert_eq!(inference_response.usage.completion_tokens, 50);
+        assert_eq!(inference_response.usage.input_tokens, 100);
+        assert_eq!(inference_response.usage.output_tokens, 50);
         assert_eq!(inference_response.latency, latency);
 
         // Test case 2: Tool call response
@@ -1453,8 +1453,8 @@ mod tests {
         let parsed_raw: serde_json::Value =
             serde_json::from_str(&inference_response.raw_response).unwrap();
         assert_eq!(raw_json, serde_json::json!(parsed_raw).to_string());
-        assert_eq!(inference_response.usage.prompt_tokens, 100);
-        assert_eq!(inference_response.usage.completion_tokens, 50);
+        assert_eq!(inference_response.usage.input_tokens, 100);
+        assert_eq!(inference_response.usage.output_tokens, 50);
         assert_eq!(inference_response.latency, latency);
 
         // Test case 3: Mixed response (text and tool call)
@@ -1504,8 +1504,8 @@ mod tests {
             serde_json::from_str(&inference_response.raw_response).unwrap();
         assert_eq!(raw_json, serde_json::json!(parsed_raw).to_string());
 
-        assert_eq!(inference_response.usage.prompt_tokens, 100);
-        assert_eq!(inference_response.usage.completion_tokens, 50);
+        assert_eq!(inference_response.usage.input_tokens, 100);
+        assert_eq!(inference_response.usage.output_tokens, 50);
         assert_eq!(inference_response.latency, latency);
     }
 
@@ -1736,8 +1736,8 @@ mod tests {
         assert_eq!(chunk.content.len(), 0);
         assert!(chunk.usage.is_some());
         let usage = chunk.usage.unwrap();
-        assert_eq!(usage.prompt_tokens, 10);
-        assert_eq!(usage.completion_tokens, 20);
+        assert_eq!(usage.input_tokens, 10);
+        assert_eq!(usage.output_tokens, 20);
         assert_eq!(chunk.latency, latency);
 
         // Test MessageStart with usage
@@ -1757,8 +1757,8 @@ mod tests {
         assert_eq!(chunk.content.len(), 0);
         assert!(chunk.usage.is_some());
         let usage = chunk.usage.unwrap();
-        assert_eq!(usage.prompt_tokens, 5);
-        assert_eq!(usage.completion_tokens, 15);
+        assert_eq!(usage.input_tokens, 5);
+        assert_eq!(usage.output_tokens, 15);
         assert_eq!(chunk.latency, latency);
 
         // Test MessageStop

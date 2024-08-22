@@ -735,6 +735,7 @@ struct GCPVertexGeminiResponseContent {
 
 #[derive(Deserialize, Serialize)]
 struct GCPVertexGeminiResponseCandidate {
+    #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<GCPVertexGeminiResponseContent>,
 }
 
@@ -748,8 +749,8 @@ struct GCPVertexGeminiUsageMetadata {
 impl From<GCPVertexGeminiUsageMetadata> for Usage {
     fn from(usage_metadata: GCPVertexGeminiUsageMetadata) -> Self {
         Usage {
-            prompt_tokens: usage_metadata.prompt_token_count,
-            completion_tokens: usage_metadata.candidates_token_count,
+            input_tokens: usage_metadata.prompt_token_count,
+            output_tokens: usage_metadata.candidates_token_count,
         }
     }
 }
@@ -1359,8 +1360,8 @@ mod tests {
         assert_eq!(
             model_inference_response.usage,
             Usage {
-                prompt_tokens: 10,
-                completion_tokens: 10,
+                input_tokens: 10,
+                output_tokens: 10,
             }
         );
         assert_eq!(model_inference_response.latency, latency);
@@ -1411,8 +1412,8 @@ mod tests {
         assert_eq!(
             model_inference_response.usage,
             Usage {
-                prompt_tokens: 15,
-                completion_tokens: 20,
+                input_tokens: 15,
+                output_tokens: 20,
             }
         );
         assert_eq!(model_inference_response.latency, latency);
@@ -1485,8 +1486,8 @@ mod tests {
         assert_eq!(
             model_inference_response.usage,
             Usage {
-                prompt_tokens: 25,
-                completion_tokens: 40,
+                input_tokens: 25,
+                output_tokens: 40,
             }
         );
         assert_eq!(model_inference_response.latency, latency);

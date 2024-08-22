@@ -4,22 +4,22 @@ use std::env;
 use gateway::inference::providers::vllm::VLLMProvider;
 use gateway::model::ProviderConfig;
 
-use super::common::TestProviders;
+use super::common::IntegrationTestProviders;
 
 crate::generate_provider_tests!(get_providers);
 
 /// Get a generic provider for testing
-async fn get_providers() -> TestProviders {
+async fn get_providers() -> IntegrationTestProviders {
     let provider = Box::leak(Box::new(get_provider()));
 
     // TODOs (#169): support tool use and tool result inference
-    TestProviders {
+    IntegrationTestProviders {
         simple_inference: vec![provider],
         streaming_inference: vec![provider],
         tool_use_inference: vec![],
         tool_use_streaming_inference: vec![],
-        tool_result_inference: vec![],
-        tool_result_streaming_inference: vec![],
+        tool_multi_turn_inference: vec![],
+        tool_multi_turn_streaming_inference: vec![],
         json_mode_inference: vec![provider],
         json_mode_streaming_inference: vec![provider],
     }

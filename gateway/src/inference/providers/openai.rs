@@ -535,8 +535,8 @@ struct OpenAIUsage {
 impl From<OpenAIUsage> for Usage {
     fn from(usage: OpenAIUsage) -> Self {
         Usage {
-            prompt_tokens: usage.prompt_tokens,
-            completion_tokens: usage.completion_tokens,
+            input_tokens: usage.prompt_tokens,
+            output_tokens: usage.completion_tokens,
         }
     }
 }
@@ -564,9 +564,11 @@ impl From<OpenAIResponseToolCall> for ToolCall {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct OpenAIResponseMessage {
+    #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<Vec<OpenAIResponseToolCall>>,
 }
 
@@ -647,7 +649,9 @@ struct OpenAIToolCallChunk {
 // This doesn't include role
 #[derive(Debug, PartialEq, Deserialize, Serialize, Clone)]
 struct OpenAIDelta {
+    #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<Vec<OpenAIToolCallChunk>>,
 }
 
@@ -660,6 +664,7 @@ struct OpenAIChatChunkChoice {
 #[derive(Debug, PartialEq, Deserialize, Serialize, Clone)]
 struct OpenAIChatChunk {
     choices: Vec<OpenAIChatChunkChoice>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     usage: Option<OpenAIUsage>,
 }
 
@@ -1002,8 +1007,8 @@ mod tests {
             inference_response.content,
             vec!["Hello, world!".to_string().into()]
         );
-        assert_eq!(inference_response.usage.prompt_tokens, 10);
-        assert_eq!(inference_response.usage.completion_tokens, 20);
+        assert_eq!(inference_response.usage.input_tokens, 10);
+        assert_eq!(inference_response.usage.output_tokens, 20);
         assert_eq!(
             inference_response.latency,
             Latency::NonStreaming {
@@ -1050,8 +1055,8 @@ mod tests {
                 arguments: "{}".to_string(),
             })]
         );
-        assert_eq!(inference_response.usage.prompt_tokens, 15);
-        assert_eq!(inference_response.usage.completion_tokens, 25);
+        assert_eq!(inference_response.usage.input_tokens, 15);
+        assert_eq!(inference_response.usage.output_tokens, 25);
         assert_eq!(
             inference_response.latency,
             Latency::NonStreaming {
@@ -1398,8 +1403,8 @@ mod tests {
         assert_eq!(
             message.usage,
             Some(Usage {
-                prompt_tokens: 10,
-                completion_tokens: 20,
+                input_tokens: 10,
+                output_tokens: 20,
             })
         );
     }
