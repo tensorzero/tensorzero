@@ -347,19 +347,19 @@ impl std::fmt::Display for Error {
                 write!(f, "Error from Anthropic client: {}", message)
             }
             Error::AnthropicServer { message } => {
-                write!(f, "Error from Anthropic servers: {}", message)
+                write!(f, "Error from Anthropic server: {}", message)
             }
             Error::AWSBedrockClient { message, .. } => {
                 write!(f, "Error from AWS Bedrock client: {}", message)
             }
             Error::AWSBedrockServer { message } => {
-                write!(f, "Error from AWS Bedrock servers: {}", message)
+                write!(f, "Error from AWS Bedrock server: {}", message)
             }
             Error::AzureClient { message, .. } => {
                 write!(f, "Error from Azure client: {}", message)
             }
             Error::AzureServer { message } => {
-                write!(f, "Error from Azure servers: {}", message)
+                write!(f, "Error from Azure server: {}", message)
             }
             Error::ChannelWrite { message } => {
                 write!(f, "Error writing to channel: {}", message)
@@ -377,7 +377,7 @@ impl std::fmt::Display for Error {
                 write!(f, "Error from Fireworks client: {}", message)
             }
             Error::FireworksServer { message } => {
-                write!(f, "Error from Fireworks servers: {}", message)
+                write!(f, "Error from Fireworks server: {}", message)
             }
             Error::GCPCredentials { message } => {
                 write!(f, "Error in acquiring GCP credentials: {}", message)
@@ -386,7 +386,7 @@ impl std::fmt::Display for Error {
                 write!(f, "Error from GCP Vertex client: {}", message)
             }
             Error::GCPVertexServer { message } => {
-                write!(f, "Error from GCP Vertex servers: {}", message)
+                write!(f, "Error from GCP Vertex server: {}", message)
             }
             Error::Inference { message } => write!(f, "{}", message),
             Error::InferenceClient { message } => write!(f, "{}", message),
@@ -461,7 +461,7 @@ impl std::fmt::Display for Error {
             Error::OpenAIClient { message, .. } => {
                 write!(f, "Error from OpenAI client: {}", message)
             }
-            Error::OpenAIServer { message } => write!(f, "Error from OpenAI servers: {}", message),
+            Error::OpenAIServer { message } => write!(f, "Error from OpenAI server: {}", message),
             Error::OutputParsing {
                 raw_output,
                 message,
@@ -484,7 +484,7 @@ impl std::fmt::Display for Error {
                 write!(f, "Error from Together client: {}", message)
             }
             Error::TogetherServer { message } => {
-                write!(f, "Error from Together servers: {}", message)
+                write!(f, "Error from Together server: {}", message)
             }
             Error::ToolNotFound { name } => write!(f, "Tool not found: {}", name),
             Error::ToolNotLoaded { name } => write!(f, "Tool not loaded: {}", name),
@@ -496,7 +496,7 @@ impl std::fmt::Display for Error {
             Error::VLLMClient { message, .. } => {
                 write!(f, "Error from vLLM client: {}", message)
             }
-            Error::VLLMServer { message } => write!(f, "Error from vLLM servers: {}", message),
+            Error::VLLMServer { message } => write!(f, "Error from vLLM server: {}", message),
         }
     }
 }
