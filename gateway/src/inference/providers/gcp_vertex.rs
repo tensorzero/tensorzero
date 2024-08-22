@@ -15,8 +15,8 @@ use crate::inference::types::{
     ContentBlock, ContentBlockChunk, JSONMode, Latency, Role, Text, TextChunk,
 };
 use crate::inference::types::{
-    ModelInferenceRequest, ModelInferenceResponse, ModelInferenceResponseChunk,
-    ModelInferenceResponseStream, RequestMessage, Usage,
+    ModelInferenceRequest, ModelInferenceResponseStream, ProviderInferenceResponse,
+    ProviderInferenceResponseChunk, RequestMessage, Usage,
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
@@ -148,7 +148,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-    ) -> Result<ModelInferenceResponse, Error> {
+    ) -> Result<ProviderInferenceResponse, Error> {
         let credentials = self.credentials.as_ref().ok_or(Error::ApiKeyMissing {
             provider_name: "GCP Vertex Gemini".to_string(),
         })?;
@@ -190,7 +190,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-    ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error> {
+    ) -> Result<(ProviderInferenceResponseChunk, ModelInferenceResponseStream), Error> {
         let credentials = self.credentials.as_ref().ok_or(Error::ApiKeyMissing {
             provider_name: "GCP Vertex Gemini".to_string(),
         })?;
@@ -223,7 +223,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
 fn stream_gcp_vertex_gemini(
     mut event_source: EventSource,
     start_time: Instant,
-) -> impl Stream<Item = Result<ModelInferenceResponseChunk, Error>> {
+) -> impl Stream<Item = Result<ProviderInferenceResponseChunk, Error>> {
     async_stream::stream! {
         let inference_id = Uuid::now_v7();
         while let Some(ev) = event_source.next().await {
@@ -741,7 +741,7 @@ struct GCPVertexGeminiResponseWithLatency {
     latency: Latency,
 }
 
-impl TryFrom<GCPVertexGeminiResponseWithLatency> for ModelInferenceResponse {
+impl TryFrom<GCPVertexGeminiResponseWithLatency> for ProviderInferenceResponse {
     type Error = Error;
     fn try_from(response: GCPVertexGeminiResponseWithLatency) -> Result<Self, Self::Error> {
         let GCPVertexGeminiResponseWithLatency { body, latency } = response;
@@ -777,7 +777,7 @@ impl TryFrom<GCPVertexGeminiResponseWithLatency> for ModelInferenceResponse {
             })?
             .into();
 
-        Ok(ModelInferenceResponse::new(content, raw, usage, latency))
+        Ok(ProviderInferenceResponse::new(content, raw, usage, latency))
     }
 }
 
@@ -787,7 +787,7 @@ struct GCPVertexGeminiStreamResponseWithMetadata {
     inference_id: Uuid,
 }
 
-impl TryFrom<GCPVertexGeminiStreamResponseWithMetadata> for ModelInferenceResponseChunk {
+impl TryFrom<GCPVertexGeminiStreamResponseWithMetadata> for ProviderInferenceResponseChunk {
     type Error = Error;
     fn try_from(response: GCPVertexGeminiStreamResponseWithMetadata) -> Result<Self, Self::Error> {
         let GCPVertexGeminiStreamResponseWithMetadata {
@@ -820,7 +820,7 @@ impl TryFrom<GCPVertexGeminiStreamResponseWithMetadata> for ModelInferenceRespon
             ContentBlockChunk::Text(text) => !text.text.is_empty(),
             _ => true,
         });
-        Ok(ModelInferenceResponseChunk::new(
+        Ok(ProviderInferenceResponseChunk::new(
             inference_id,
             content,
             body.usage_metadata
@@ -834,7 +834,7 @@ impl TryFrom<GCPVertexGeminiStreamResponseWithMetadata> for ModelInferenceRespon
 fn handle_gcp_vertex_gemini_error(
     response_code: StatusCode,
     response_body: String,
-) -> Result<ModelInferenceResponse, Error> {
+) -> Result<ProviderInferenceResponse, Error> {
     match response_code {
         StatusCode::UNAUTHORIZED
         | StatusCode::BAD_REQUEST
@@ -1325,7 +1325,7 @@ mod tests {
             body: response,
             latency: latency.clone(),
         };
-        let model_inference_response: ModelInferenceResponse =
+        let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
         assert_eq!(
             model_inference_response.content,
@@ -1367,7 +1367,7 @@ mod tests {
             body: response,
             latency: latency.clone(),
         };
-        let model_inference_response: ModelInferenceResponse =
+        let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
 
         if let [ContentBlock::Text(Text { text }), ContentBlock::ToolCall(tool_call)] =
@@ -1432,7 +1432,7 @@ mod tests {
             body: response,
             latency: latency.clone(),
         };
-        let model_inference_response: ModelInferenceResponse =
+        let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
 
         if let [ContentBlock::Text(Text { text: text1 }), ContentBlock::ToolCall(tool_call1), ContentBlock::Text(Text { text: text2 }), ContentBlock::ToolCall(tool_call2)] =

@@ -19,8 +19,8 @@ use crate::{
             together::TogetherProvider,
         },
         types::{
-            ModelInferenceRequest, ModelInferenceResponse, ModelInferenceResponseChunk,
-            ModelInferenceResponseStream,
+            ModelInferenceRequest, ModelInferenceResponseStream, ProviderInferenceResponse,
+            ProviderInferenceResponseChunk,
         },
     },
 };
@@ -38,7 +38,7 @@ impl ModelConfig {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         client: &'a Client,
-    ) -> Result<ModelInferenceResponse, Error> {
+    ) -> Result<ProviderInferenceResponse, Error> {
         let mut provider_errors: Vec<Error> = Vec::new();
         for provider_name in &self.routing {
             let provider_config =
@@ -65,7 +65,7 @@ impl ModelConfig {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         client: &'a Client,
-    ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error> {
+    ) -> Result<(ProviderInferenceResponseChunk, ModelInferenceResponseStream), Error> {
         let mut provider_errors: Vec<Error> = Vec::new();
         for provider_name in &self.routing {
             let provider_config =
@@ -247,7 +247,7 @@ impl InferenceProvider for ProviderConfig {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         client: &'a Client,
-    ) -> Result<ModelInferenceResponse, Error> {
+    ) -> Result<ProviderInferenceResponse, Error> {
         match self {
             ProviderConfig::Anthropic(provider) => provider.infer(request, client).await,
             ProviderConfig::AWSBedrock(provider) => provider.infer(request, client).await,
@@ -265,7 +265,7 @@ impl InferenceProvider for ProviderConfig {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         client: &'a Client,
-    ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error> {
+    ) -> Result<(ProviderInferenceResponseChunk, ModelInferenceResponseStream), Error> {
         match self {
             ProviderConfig::Anthropic(provider) => provider.infer_stream(request, client).await,
             ProviderConfig::AWSBedrock(provider) => provider.infer_stream(request, client).await,

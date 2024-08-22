@@ -14,7 +14,7 @@ use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, JSONMode, Latency, ModelInferenceRequest,
-    ModelInferenceResponse, ModelInferenceResponseChunk, ModelInferenceResponseStream,
+    ModelInferenceResponseStream, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     RequestMessage, Role, Text, TextChunk, Usage,
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
@@ -33,7 +33,7 @@ impl InferenceProvider for OpenAIProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-    ) -> Result<ModelInferenceResponse, Error> {
+    ) -> Result<ProviderInferenceResponse, Error> {
         let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
             provider_name: "OpenAI".to_string(),
         })?;
@@ -79,7 +79,7 @@ impl InferenceProvider for OpenAIProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-    ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error> {
+    ) -> Result<(ProviderInferenceResponseChunk, ModelInferenceResponseStream), Error> {
         let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
             provider_name: "OpenAI".to_string(),
         })?;
@@ -115,7 +115,7 @@ impl InferenceProvider for OpenAIProvider {
 pub fn stream_openai(
     mut event_source: EventSource,
     start_time: Instant,
-) -> impl Stream<Item = Result<ModelInferenceResponseChunk, Error>> {
+) -> impl Stream<Item = Result<ProviderInferenceResponseChunk, Error>> {
     let mut tool_call_ids = Vec::new();
     let mut tool_call_names = Vec::new();
     async_stream::stream! {
@@ -175,7 +175,7 @@ pub(super) fn get_chat_url(base_url: Option<&str>) -> Result<Url, Error> {
 pub(super) fn handle_openai_error(
     response_code: StatusCode,
     response_body: &str,
-) -> Result<ModelInferenceResponse, Error> {
+) -> Result<ProviderInferenceResponse, Error> {
     match response_code {
         StatusCode::BAD_REQUEST
         | StatusCode::UNAUTHORIZED
@@ -589,7 +589,7 @@ pub(super) struct OpenAIResponseWithLatency {
     pub(super) latency: Latency,
 }
 
-impl TryFrom<OpenAIResponseWithLatency> for ModelInferenceResponse {
+impl TryFrom<OpenAIResponseWithLatency> for ProviderInferenceResponse {
     type Error = Error;
     fn try_from(value: OpenAIResponseWithLatency) -> Result<Self, Self::Error> {
         let OpenAIResponseWithLatency {
@@ -625,7 +625,7 @@ impl TryFrom<OpenAIResponseWithLatency> for ModelInferenceResponse {
             }
         }
 
-        Ok(ModelInferenceResponse::new(content, raw, usage, latency))
+        Ok(ProviderInferenceResponse::new(content, raw, usage, latency))
     }
 }
 
@@ -670,7 +670,7 @@ fn openai_to_tensorzero_chunk(
     latency: Duration,
     tool_call_ids: &mut Vec<String>,
     tool_names: &mut Vec<String>,
-) -> Result<ModelInferenceResponseChunk, Error> {
+) -> Result<ProviderInferenceResponseChunk, Error> {
     let raw_message = serde_json::to_string(&chunk).map_err(|e| Error::OpenAIServer {
         message: format!("Error parsing response from OpenAI: {e}"),
     })?;
@@ -716,7 +716,7 @@ fn openai_to_tensorzero_chunk(
         }
     }
 
-    Ok(ModelInferenceResponseChunk::new(
+    Ok(ProviderInferenceResponseChunk::new(
         inference_id,
         content,
         usage,
@@ -990,7 +990,7 @@ mod tests {
             },
         };
 
-        let result = ModelInferenceResponse::try_from(OpenAIResponseWithLatency {
+        let result = ProviderInferenceResponse::try_from(OpenAIResponseWithLatency {
             response: valid_response,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
@@ -1034,7 +1034,7 @@ mod tests {
             },
         };
 
-        let result = ModelInferenceResponse::try_from(OpenAIResponseWithLatency {
+        let result = ProviderInferenceResponse::try_from(OpenAIResponseWithLatency {
             response: valid_response_with_tools,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(110),
@@ -1069,7 +1069,7 @@ mod tests {
             },
         };
 
-        let result = ModelInferenceResponse::try_from(OpenAIResponseWithLatency {
+        let result = ProviderInferenceResponse::try_from(OpenAIResponseWithLatency {
             response: invalid_response_no_choices,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(120),
@@ -1103,7 +1103,7 @@ mod tests {
             },
         };
 
-        let result = ModelInferenceResponse::try_from(OpenAIResponseWithLatency {
+        let result = ProviderInferenceResponse::try_from(OpenAIResponseWithLatency {
             response: invalid_response_multiple_choices,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(130),

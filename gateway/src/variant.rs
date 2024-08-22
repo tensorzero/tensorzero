@@ -9,7 +9,7 @@ use crate::error::Error;
 use crate::function::FunctionConfig;
 use crate::inference::types::{
     ContentBlock, FunctionType, Input, InputMessageContent, JSONMode, ModelInferenceRequest,
-    ModelInferenceResponseChunk, RequestMessage, Role,
+    ProviderInferenceResponseChunk, RequestMessage, Role,
 };
 use crate::minijinja_util::TemplateConfig;
 use crate::tool::ToolCallConfig;
@@ -79,7 +79,7 @@ pub trait Variant {
         inference_config: &InferenceConfig,
         client: &Client,
         inference_params: &mut InferenceParams,
-    ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error>;
+    ) -> Result<(ProviderInferenceResponseChunk, ModelInferenceResponseStream), Error>;
 }
 
 impl VariantConfig {
@@ -130,7 +130,7 @@ impl Variant for VariantConfig {
         inference_config: &InferenceConfig<'_>,
         client: &Client,
         inference_params: &mut InferenceParams,
-    ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error> {
+    ) -> Result<(ProviderInferenceResponseChunk, ModelInferenceResponseStream), Error> {
         match self {
             VariantConfig::ChatCompletion(params) => {
                 params
@@ -306,7 +306,7 @@ impl Variant for ChatCompletionConfig {
         inference_config: &InferenceConfig<'_>,
         client: &Client,
         inference_params: &mut InferenceParams,
-    ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error> {
+    ) -> Result<(ProviderInferenceResponseChunk, ModelInferenceResponseStream), Error> {
         let request = self.prepare_request(
             input,
             inference_config.function,

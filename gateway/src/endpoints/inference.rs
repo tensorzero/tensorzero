@@ -18,8 +18,8 @@ use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
     collect_chunks, ContentBlockChunk, ContentBlockOutput, InferenceDatabaseInsert,
-    InferenceResult, InferenceResultChunk, Input, JsonInferenceOutput, ModelInferenceResponseChunk,
-    ModelInferenceResponseStream, Usage,
+    InferenceResult, InferenceResultChunk, Input, JsonInferenceOutput,
+    ModelInferenceResponseStream, ProviderInferenceResponseChunk, Usage,
 };
 use crate::tool::{DynamicToolParams, ToolCallConfig};
 use crate::uuid_util::validate_episode_id;
@@ -256,7 +256,7 @@ pub async fn inference_handler(
 fn create_stream(
     function: &'static FunctionConfig,
     metadata: InferenceMetadata,
-    first_chunk: ModelInferenceResponseChunk,
+    first_chunk: ProviderInferenceResponseChunk,
     mut stream: ModelInferenceResponseStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     tool_config: Option<ToolCallConfig>,
@@ -324,7 +324,7 @@ fn create_stream(
 fn prepare_event(
     function: &FunctionConfig,
     metadata: &InferenceMetadata,
-    chunk: ModelInferenceResponseChunk,
+    chunk: ProviderInferenceResponseChunk,
 ) -> Result<Event, Error> {
     let result_chunk = match function {
         FunctionConfig::Chat(_) => InferenceResultChunk::Chat(chunk.into()),
@@ -527,13 +527,13 @@ mod tests {
     use uuid::Uuid;
 
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
-    use crate::inference::types::{ContentBlockChunk, ModelInferenceResponseChunk, TextChunk};
+    use crate::inference::types::{ContentBlockChunk, ProviderInferenceResponseChunk, TextChunk};
     use crate::jsonschema_util::JSONSchemaFromPath;
 
     #[tokio::test]
     async fn test_prepare_event() {
         // Test case 1: Valid Chat ModelInferenceResponseChunk
-        let chunk = ModelInferenceResponseChunk {
+        let chunk = ProviderInferenceResponseChunk {
             inference_id: Uuid::now_v7(),
             content: vec![ContentBlockChunk::Text(TextChunk {
                 text: "Test content".to_string(),
@@ -572,7 +572,7 @@ mod tests {
         // This test doesn't do much so consider deleting or doing more.
 
         // Test case 2: Valid JSON ModelInferenceResponseChunk
-        let chunk = ModelInferenceResponseChunk {
+        let chunk = ProviderInferenceResponseChunk {
             inference_id: Uuid::now_v7(),
             content: vec![ContentBlockChunk::Text(TextChunk {
                 text: "Test content".to_string(),

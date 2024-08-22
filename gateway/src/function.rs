@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::error::{Error, ResultExt};
 use crate::inference::types::{
     ChatInferenceResult, ContentBlock, InferenceResult, Input, InputMessageContent,
-    JsonInferenceResult, ModelInferenceResponse, Role, Usage,
+    JsonInferenceResult, ProviderInferenceResponse, Role, Usage,
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
@@ -139,7 +139,7 @@ impl FunctionConfig {
         inference_id: Uuid,
         content_blocks: Vec<ContentBlock>,
         usage: Usage,
-        model_inference_responses: Vec<ModelInferenceResponse>,
+        model_inference_responses: Vec<ProviderInferenceResponse>,
         tool_config: Option<&ToolCallConfig>,
     ) -> Result<InferenceResult, Error> {
         match self {
@@ -1194,7 +1194,7 @@ mod tests {
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
         };
-        let model_response = ModelInferenceResponse::new(
+        let model_response = ProviderInferenceResponse::new(
             content_blocks.clone(),
             "content".to_string(),
             usage.clone(),
@@ -1234,7 +1234,7 @@ mod tests {
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
         };
-        let model_response = ModelInferenceResponse::new(
+        let model_response = ProviderInferenceResponse::new(
             content_blocks.clone(),
             "content".to_string(),
             usage.clone(),
@@ -1274,7 +1274,7 @@ mod tests {
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
         };
-        let model_response = ModelInferenceResponse::new(
+        let model_response = ProviderInferenceResponse::new(
             content_blocks.clone(),
             "content".to_string(),
             usage.clone(),
@@ -1313,7 +1313,7 @@ mod tests {
             prompt_tokens: 10,
             completion_tokens: 10,
         };
-        let model_response = ModelInferenceResponse::new(
+        let model_response = ProviderInferenceResponse::new(
             content_blocks.clone(),
             "content".to_string(),
             usage.clone(),
@@ -1355,7 +1355,7 @@ mod tests {
             prompt_tokens: 10,
             completion_tokens: 10,
         };
-        let model_response = ModelInferenceResponse::new(
+        let model_response = ProviderInferenceResponse::new(
             content_blocks.clone(),
             "content".to_string(),
             usage.clone(),
@@ -1394,7 +1394,7 @@ mod tests {
             prompt_tokens: 10,
             completion_tokens: 10,
         };
-        let model_response = ModelInferenceResponse::new(
+        let model_response = ProviderInferenceResponse::new(
             content_blocks.clone(),
             "content".to_string(),
             usage.clone(),
