@@ -1,3 +1,4 @@
+use futures::StreamExt;
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::Value;
@@ -8,13 +9,14 @@ use crate::endpoints::inference::InferenceParams;
 use crate::error::Error;
 use crate::function::FunctionConfig;
 use crate::inference::types::{
-    ContentBlock, FunctionType, Input, InputMessageContent, JSONMode, ModelInferenceRequest,
-    ModelInferenceResult, ProviderInferenceResponseChunk, RequestMessage, Role,
+    ContentBlock, FunctionType, InferenceResultChunk, InferenceResultStream, Input,
+    InputMessageContent, JSONMode, ModelInferenceRequest, ModelInferenceResult, RequestMessage,
+    Role,
 };
 use crate::minijinja_util::TemplateConfig;
 use crate::tool::ToolCallConfig;
 use crate::{
-    inference::types::{InferenceResult, InputMessage, ProviderInferenceResponseStream},
+    inference::types::{InferenceResult, InputMessage},
     model::ModelConfig,
 };
 
@@ -59,7 +61,7 @@ pub enum JsonEnforcement {
 /// It doesn't take into account inference-time overrides (e.g. dynamic tools).
 pub struct InferenceConfig<'a> {
     // pub models: &'a HashMap<String, ModelConfig>,
-    pub function: &'a FunctionConfig,
+    // pub function: &'a FunctionConfig,
     pub tool_config: Option<&'a ToolCallConfig>,
     pub templates: &'a TemplateConfig<'a>,
 }
@@ -74,23 +76,25 @@ pub trait Variant {
         &'a self,
         input: &Input,
         models: &'a HashMap<String, ModelConfig>,
+        function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         client: &'request Client,
         inference_params: &mut InferenceParams,
     ) -> Result<InferenceResult<'a>, Error>;
 
-    async fn infer_stream<'a, 'request>(
-        &'a self,
+    async fn infer_stream<'request>(
+        &'static self,
         input: &Input,
-        models: &'a HashMap<String, ModelConfig>,
+        models: &'static HashMap<String, ModelConfig>,
+        function: &'static FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         client: &'request Client,
         inference_params: &mut InferenceParams,
     ) -> Result<
         (
-            ProviderInferenceResponseChunk,
-            ProviderInferenceResponseStream,
-            ModelUsedInfo<'a>,
+            InferenceResultChunk,
+            InferenceResultStream,
+            ModelUsedInfo<'static>,
         ),
         Error,
     >;
@@ -126,6 +130,7 @@ impl Variant for VariantConfig {
         &'a self,
         input: &Input,
         models: &'a HashMap<String, ModelConfig>,
+        function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         client: &'request Client,
         inference_params: &mut InferenceParams,
@@ -133,31 +138,46 @@ impl Variant for VariantConfig {
         match self {
             VariantConfig::ChatCompletion(params) => {
                 params
-                    .infer(input, models, inference_config, client, inference_params)
+                    .infer(
+                        input,
+                        models,
+                        function,
+                        inference_config,
+                        client,
+                        inference_params,
+                    )
                     .await
             }
         }
     }
 
-    async fn infer_stream<'a, 'request>(
-        &'a self,
+    async fn infer_stream<'request>(
+        &'static self,
         input: &Input,
-        models: &'a HashMap<String, ModelConfig>,
+        models: &'static HashMap<String, ModelConfig>,
+        function: &'static FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         client: &'request Client,
         inference_params: &mut InferenceParams,
     ) -> Result<
         (
-            ProviderInferenceResponseChunk,
-            ProviderInferenceResponseStream,
-            ModelUsedInfo<'a>,
+            InferenceResultChunk,
+            InferenceResultStream,
+            ModelUsedInfo<'static>,
         ),
         Error,
     > {
         match self {
             VariantConfig::ChatCompletion(params) => {
                 params
-                    .infer_stream(input, models, inference_config, client, inference_params)
+                    .infer_stream(
+                        input,
+                        models,
+                        function,
+                        inference_config,
+                        client,
+                        inference_params,
+                    )
                     .await
             }
         }
@@ -287,13 +307,14 @@ impl Variant for ChatCompletionConfig {
         &'a self,
         input: &Input,
         models: &'a HashMap<String, ModelConfig>,
+        function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         client: &'request Client,
         inference_params: &mut InferenceParams,
     ) -> Result<InferenceResult<'a>, Error> {
         let request = self.prepare_request(
             input,
-            inference_config.function,
+            function,
             inference_config.templates,
             inference_config.tool_config,
             false,
@@ -311,8 +332,7 @@ impl Variant for ChatCompletionConfig {
         let raw_content = model_inference_result.content.clone();
         let usage = model_inference_result.usage.clone();
         let model_inference_results = vec![model_inference_result];
-        inference_config
-            .function
+        function
             .prepare_response(
                 inference_id,
                 raw_content,
@@ -323,24 +343,25 @@ impl Variant for ChatCompletionConfig {
             .await
     }
 
-    async fn infer_stream<'a, 'request>(
-        &'a self,
+    async fn infer_stream<'request>(
+        &'static self,
         input: &Input,
-        models: &'a HashMap<String, ModelConfig>,
+        models: &'static HashMap<String, ModelConfig>,
+        function: &'static FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         client: &'request Client,
         inference_params: &mut InferenceParams,
     ) -> Result<
         (
-            ProviderInferenceResponseChunk,
-            ProviderInferenceResponseStream,
-            ModelUsedInfo<'a>,
+            InferenceResultChunk,
+            InferenceResultStream,
+            ModelUsedInfo<'static>,
         ),
         Error,
     > {
         let request = self.prepare_request(
             input,
-            inference_config.function,
+            function,
             inference_config.templates,
             inference_config.tool_config,
             true,
@@ -355,7 +376,17 @@ impl Variant for ChatCompletionConfig {
             model_name: &self.model,
             model_provider_name,
         };
-        Ok((first_chunk, stream, model_used_info))
+        let first_chunk = match function {
+            FunctionConfig::Chat(_) => InferenceResultChunk::Chat(first_chunk.into()),
+            FunctionConfig::Json(_) => InferenceResultChunk::Json(first_chunk.into()),
+        };
+        let stream = stream.map(move |chunk| {
+            chunk.map(|chunk| match function {
+                FunctionConfig::Chat(_) => InferenceResultChunk::Chat(chunk.into()),
+                FunctionConfig::Json(_) => InferenceResultChunk::Json(chunk.into()),
+            })
+        });
+        Ok((first_chunk, Box::pin(stream), model_used_info))
     }
 }
 
@@ -629,7 +660,6 @@ mod tests {
         };
         let mut inference_params = InferenceParams::default();
         let inference_config = InferenceConfig {
-            function: &function_config,
             templates: &templates,
             tool_config: None,
         };
@@ -638,6 +668,7 @@ mod tests {
             .infer(
                 &input,
                 &models,
+                &function_config,
                 &inference_config,
                 &client,
                 &mut inference_params,
@@ -664,7 +695,6 @@ mod tests {
         };
         let models = HashMap::from([("invalid_model".to_string(), text_model_config)]);
         let inference_config = InferenceConfig {
-            function: &function_config,
             templates: &templates,
             tool_config: None,
         };
@@ -672,6 +702,7 @@ mod tests {
             .infer(
                 &input,
                 &models,
+                &function_config,
                 &inference_config,
                 &client,
                 &mut inference_params,
@@ -691,7 +722,6 @@ mod tests {
         let mut inference_params = InferenceParams::default();
         let models = HashMap::from([("error".to_string(), error_model_config)]);
         let inference_config = InferenceConfig {
-            function: &function_config,
             templates: &templates,
             tool_config: None,
         };
@@ -699,6 +729,7 @@ mod tests {
             .infer(
                 &input,
                 &models,
+                &function_config,
                 &inference_config,
                 &client,
                 &mut inference_params,
@@ -732,7 +763,6 @@ mod tests {
         };
         let models = HashMap::from([("good".to_string(), text_model_config)]);
         let inference_config = InferenceConfig {
-            function: &function_config,
             templates: &templates,
             tool_config: None,
         };
@@ -740,6 +770,7 @@ mod tests {
             .infer(
                 &input,
                 &models,
+                &function_config,
                 &inference_config,
                 &client,
                 &mut inference_params,
@@ -794,7 +825,6 @@ mod tests {
         let models = HashMap::from([("tool".to_string(), tool_model_config)]);
         let weather_tool_config = get_weather_tool_config();
         let inference_config = InferenceConfig {
-            function: &function_config,
             templates: &templates,
             tool_config: Some(&weather_tool_config),
         };
@@ -802,6 +832,7 @@ mod tests {
             .infer(
                 &input,
                 &models,
+                &function_config,
                 &inference_config,
                 &client,
                 &mut inference_params,
@@ -870,7 +901,6 @@ mod tests {
             implicit_tool_call_config,
         });
         let inference_config = InferenceConfig {
-            function: &json_function_config,
             templates: &templates,
             tool_config: None,
         };
@@ -879,6 +909,7 @@ mod tests {
             .infer(
                 &input,
                 &models,
+                &json_function_config,
                 &inference_config,
                 &client,
                 &mut inference_params,
@@ -915,7 +946,6 @@ mod tests {
         let mut inference_params = InferenceParams::default();
         let models = HashMap::from([("json".to_string(), json_model_config)]);
         let inference_config = InferenceConfig {
-            function: &json_function_config,
             templates: &templates,
             tool_config: None,
         };
@@ -930,6 +960,7 @@ mod tests {
             .infer(
                 &input,
                 &models,
+                &json_function_config,
                 &inference_config,
                 &client,
                 &mut inference_params,
@@ -965,7 +996,7 @@ mod tests {
     async fn test_infer_chat_completion_stream() {
         let client = Client::new();
         let templates = get_test_template_config();
-        let function_config = FunctionConfig::Chat(FunctionConfigChat {
+        let function_config = Box::leak(Box::new(FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: None,
@@ -973,7 +1004,7 @@ mod tests {
             tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: false,
-        });
+        })));
         let system_template_name = "system";
         let user_template_name = "greeting_with_age";
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
@@ -1000,23 +1031,26 @@ mod tests {
             system: Some(json!({"assistant_name": "R2-D2"})),
             messages,
         };
-        let chat_completion_config = ChatCompletionConfig {
+        let chat_completion_config = Box::leak(Box::new(ChatCompletionConfig {
             model: "error".to_string(),
             weight: 1.0,
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
             ..Default::default()
-        };
-        let models = HashMap::from([("error".to_string(), error_model_config)]);
+        }));
+        let models = Box::leak(Box::new(HashMap::from([(
+            "error".to_string(),
+            error_model_config,
+        )])));
         let inference_config = InferenceConfig {
-            function: &function_config,
             templates: &templates,
             tool_config: None,
         };
         let result = chat_completion_config
             .infer_stream(
                 &input,
-                &models,
+                models,
+                function_config,
                 &inference_config,
                 &client,
                 &mut inference_params,
@@ -1034,29 +1068,36 @@ mod tests {
 
         // Test case 2: Model inference succeeds
         let mut inference_params = InferenceParams::default();
-        let chat_completion_config = ChatCompletionConfig {
+        let chat_completion_config = Box::leak(Box::new(ChatCompletionConfig {
             model: "good".to_string(),
             weight: 1.0,
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
             ..Default::default()
-        };
-        let models = HashMap::from([("good".to_string(), text_model_config)]);
+        }));
+        let models = Box::leak(Box::new(HashMap::from([(
+            "good".to_string(),
+            text_model_config,
+        )])));
         let inference_config = InferenceConfig {
-            function: &function_config,
             templates: &templates,
             tool_config: None,
         };
         let (first_chunk, mut stream, models_used) = chat_completion_config
             .infer_stream(
                 &input,
-                &models,
+                models,
+                function_config,
                 &inference_config,
                 &client,
                 &mut inference_params,
             )
             .await
             .unwrap();
+        let first_chunk = match first_chunk {
+            InferenceResultChunk::Chat(chunk) => chunk,
+            _ => panic!("Expected Chat inference response"),
+        };
         assert_eq!(
             first_chunk.content,
             vec![ContentBlockChunk::Text(TextChunk {
@@ -1072,14 +1113,18 @@ mod tests {
             if i == 16 {
                 // max length of text, but we have a usage chunk left
                 assert_eq!(
-                    chunk.usage,
-                    Some(Usage {
+                    chunk.usage(),
+                    Some(&Usage {
                         input_tokens: 10,
                         output_tokens: 16
                     })
                 );
                 break;
             }
+            let chunk = match chunk {
+                InferenceResultChunk::Chat(chunk) => chunk,
+                _ => panic!("Expected Chat inference response"),
+            };
             assert_eq!(
                 chunk.content,
                 vec![ContentBlockChunk::Text(TextChunk {
