@@ -26,7 +26,7 @@ jobs:
           tool: cargo-nextest,cargo-deny
 
       - name: X
-        run: echo {{ env.CARGO_NEXTEST_ARGS }}
+        run: echo ${{ env.CARGO_NEXTEST_ARGS }}
 
       - name: Build (Rust)
         run: cargo build --verbose
@@ -41,4 +41,4 @@ jobs:
 
       - name: Test (Rust)
         run: |
-          cargo test-unit --profile ci {{ env.CARGO_NEXTEST_ARGS }}
+          cargo test-unit --profile ci ${{ env.CARGO_NEXTEST_ARGS }}
