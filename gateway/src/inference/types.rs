@@ -816,6 +816,8 @@ impl From<&JsonEnforcement> for JSONMode {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Instant;
+
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::providers::common::get_weather_tool_config;
     use crate::jsonschema_util::JSONSchemaFromPath;
@@ -833,14 +835,18 @@ mod tests {
             prompt_tokens: 10,
             completion_tokens: 20,
         };
-        let model_inference_responses = vec![ProviderInferenceResponse::new(
-            content.clone(),
-            "".to_string(),
-            usage.clone(),
-            Latency::NonStreaming {
+        let model_inference_responses = vec![ModelInferenceResult {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            content: content.clone(),
+            raw_response: "".to_string(),
+            usage: usage.clone(),
+            latency: Latency::NonStreaming {
                 response_time: Duration::default(),
             },
-        )];
+            model_provider_name: "test_provider",
+            model_name: "test_model",
+        }];
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
             content.clone(),
@@ -852,6 +858,13 @@ mod tests {
         let output_content = ["Hello, world!".to_string().into()];
         assert_eq!(chat_inference_response.output, output_content);
         assert_eq!(chat_inference_response.usage, usage);
+        assert_eq!(chat_inference_response.model_inference_results.len(), 1);
+        let model_inference_result = chat_inference_response
+            .model_inference_results
+            .first()
+            .unwrap();
+        assert_eq!(model_inference_result.model_name, "test_model");
+        assert_eq!(model_inference_result.model_provider_name, "test_provider");
 
         // Case 2: A tool call that fails argument validation
         let inference_id = Uuid::now_v7();
@@ -860,14 +873,19 @@ mod tests {
             arguments: r#"{"where": "the moon"}"#.to_string(),
             id: "0".to_string(),
         })];
-        let model_inference_responses = vec![ProviderInferenceResponse::new(
-            content.clone(),
-            "".to_string(),
-            usage.clone(),
-            Latency::NonStreaming {
+        let model_inference_responses = vec![ModelInferenceResult {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            content: content.clone(),
+            raw_response: "".to_string(),
+            usage: usage.clone(),
+            latency: Latency::NonStreaming {
                 response_time: Duration::default(),
             },
-        )];
+            model_provider_name: "test_provider",
+            model_name: "test_model",
+        }];
+
         let weather_tool_config = get_weather_tool_config();
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
@@ -897,14 +915,19 @@ mod tests {
             arguments: r#"{"where": "the moon"}"#.to_string(),
             id: "0".to_string(),
         })];
-        let model_inference_responses = vec![ProviderInferenceResponse::new(
-            content.clone(),
-            "".to_string(),
-            usage.clone(),
-            Latency::NonStreaming {
+        let model_inference_responses = vec![ModelInferenceResult {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            content: content.clone(),
+            raw_response: "".to_string(),
+            usage: usage.clone(),
+            latency: Latency::NonStreaming {
                 response_time: Duration::default(),
             },
-        )];
+            model_provider_name: "test_provider",
+            model_name: "test_model",
+        }];
+
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
             content,
@@ -933,14 +956,19 @@ mod tests {
             arguments: r#"{"location": "the moon", "units": "celsius"}"#.to_string(),
             id: "0".to_string(),
         })];
-        let model_inference_responses = vec![ProviderInferenceResponse::new(
-            content.clone(),
-            "".to_string(),
-            usage.clone(),
-            Latency::NonStreaming {
+        let model_inference_responses = vec![ModelInferenceResult {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            content: content.clone(),
+            raw_response: "".to_string(),
+            usage: usage.clone(),
+            latency: Latency::NonStreaming {
                 response_time: Duration::default(),
             },
-        )];
+            model_provider_name: "test_provider",
+            model_name: "test_model",
+        }];
+
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
             content,
@@ -983,7 +1011,16 @@ mod tests {
         let tool_config = Box::leak(Box::new(tool_config));
         let chunks = vec![];
         let function = FunctionConfig::Chat(FunctionConfigChat::default());
-        let result = collect_chunks(chunks, &function, Some(tool_config)).await;
+        let model_name = "test_model";
+        let model_provider_name = "test_provider";
+        let result = collect_chunks(
+            chunks,
+            &function,
+            Some(tool_config),
+            model_name,
+            model_provider_name,
+        )
+        .await;
         assert_eq!(
             result.unwrap_err(),
             Error::TypeConversion {
@@ -1025,9 +1062,15 @@ mod tests {
                 latency: Duration::from_millis(250),
             },
         ];
-        let result = collect_chunks(chunks, &function, Some(tool_config))
-            .await
-            .unwrap();
+        let result = collect_chunks(
+            chunks,
+            &function,
+            Some(tool_config),
+            model_name,
+            model_provider_name,
+        )
+        .await
+        .unwrap();
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
             _ => panic!("Expected Chat inference response"),
@@ -1041,6 +1084,13 @@ mod tests {
                 prompt_tokens: 2,
                 completion_tokens: 4,
             }
+        );
+        assert_eq!(chat_result.model_inference_results.len(), 1);
+        let model_inference_result = chat_result.model_inference_results.first().unwrap();
+        assert_eq!(model_inference_result.model_name, model_name);
+        assert_eq!(
+            model_inference_result.model_provider_name,
+            model_provider_name
         );
 
         // Test Case 3: a JSON string that passes validation and also include usage in each chunk
@@ -1095,9 +1145,15 @@ mod tests {
                 latency: Duration::from_millis(250),
             },
         ];
-        let response = collect_chunks(chunks, &function_config, None)
-            .await
-            .unwrap();
+        let response = collect_chunks(
+            chunks,
+            &function_config,
+            None,
+            model_name,
+            model_provider_name,
+        )
+        .await
+        .unwrap();
         match response {
             InferenceResult::Json(json_result) => {
                 assert_eq!(json_result.inference_id, inference_id);
@@ -1115,6 +1171,13 @@ mod tests {
                         prompt_tokens: 15,
                         completion_tokens: 15,
                     }
+                );
+                assert_eq!(json_result.model_inference_results.len(), 1);
+                let model_inference_result = json_result.model_inference_results.first().unwrap();
+                assert_eq!(model_inference_result.model_name, model_name);
+                assert_eq!(
+                    model_inference_result.model_provider_name,
+                    model_provider_name
                 );
             }
             _ => panic!("Expected Json inference response"),
@@ -1151,7 +1214,14 @@ mod tests {
                 latency: Duration::from_millis(200),
             },
         ];
-        let result = collect_chunks(chunks, &function_config, None).await;
+        let result = collect_chunks(
+            chunks,
+            &function_config,
+            None,
+            model_name,
+            model_provider_name,
+        )
+        .await;
         assert!(result.is_ok());
         match result {
             Ok(InferenceResult::Json(json_result)) => {
@@ -1160,6 +1230,13 @@ mod tests {
                 assert_eq!(json_result.usage, usage);
                 assert_eq!(json_result.output.parsed, None);
                 assert_eq!(json_result.output.raw, "{\"name\":\"John\"}".to_string());
+                assert_eq!(json_result.model_inference_results.len(), 1);
+                let model_inference_result = json_result.model_inference_results.first().unwrap();
+                assert_eq!(model_inference_result.model_name, model_name);
+                assert_eq!(
+                    model_inference_result.model_provider_name,
+                    model_provider_name
+                );
             }
             _ => panic!("Expected Json inference response"),
         }
@@ -1203,7 +1280,14 @@ mod tests {
                 latency: Duration::from_millis(300),
             },
         ];
-        let result = collect_chunks(chunks, &function, Some(tool_config)).await;
+        let result = collect_chunks(
+            chunks,
+            &function,
+            Some(tool_config),
+            model_name,
+            model_provider_name,
+        )
+        .await;
         if let Ok(InferenceResult::Chat(chat_response)) = result {
             assert_eq!(chat_response.inference_id, inference_id);
             assert_eq!(chat_response.created, created);
@@ -1212,6 +1296,13 @@ mod tests {
                 vec!["{\"name\":\"John\",\"age\":30}".to_string().into()]
             );
             assert_eq!(chat_response.usage, usage);
+            assert_eq!(chat_response.model_inference_results.len(), 1);
+            let model_inference_result = chat_response.model_inference_results.first().unwrap();
+            assert_eq!(model_inference_result.model_name, model_name);
+            assert_eq!(
+                model_inference_result.model_provider_name,
+                model_provider_name
+            );
         } else {
             panic!("Expected Ok(InferenceResult::Chat), got {:?}", result);
         }
@@ -1270,9 +1361,15 @@ mod tests {
                 latency: Duration::from_millis(250),
             },
         ];
-        let response = collect_chunks(chunks, &function_config, None)
-            .await
-            .unwrap();
+        let response = collect_chunks(
+            chunks,
+            &function_config,
+            None,
+            model_name,
+            model_provider_name,
+        )
+        .await
+        .unwrap();
         match response {
             InferenceResult::Json(json_result) => {
                 assert_eq!(json_result.inference_id, inference_id);
@@ -1290,6 +1387,13 @@ mod tests {
                         prompt_tokens: 15,
                         completion_tokens: 15,
                     }
+                );
+                assert_eq!(json_result.model_inference_results.len(), 1);
+                let model_inference_result = json_result.model_inference_results.first().unwrap();
+                assert_eq!(model_inference_result.model_name, model_name);
+                assert_eq!(
+                    model_inference_result.model_provider_name,
+                    model_provider_name
                 );
             }
             _ => panic!("Expected Json inference response"),

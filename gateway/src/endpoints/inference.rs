@@ -568,6 +568,8 @@ mod tests {
             dryrun: false,
             inference_params: InferenceParams::default(),
             start_time: Instant::now(),
+            model_name: "test_model",
+            model_provider_name: "test_provider",
         };
 
         let result = prepare_event(&function, &inference_metadata, chunk);
@@ -609,6 +611,8 @@ mod tests {
             dryrun: false,
             inference_params: InferenceParams::default(),
             start_time: Instant::now(),
+            model_name: "test_model",
+            model_provider_name: "test_provider",
         };
 
         let result = prepare_event(&function, &inference_metadata, chunk);

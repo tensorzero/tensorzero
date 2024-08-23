@@ -388,6 +388,7 @@ mod tests {
     use super::*;
     use serde_json::json;
     use std::time::Duration;
+    use std::time::Instant;
     use std::{io::Write, path::PathBuf};
     use tempfile::NamedTempFile;
     use tracing_test::traced_test;
@@ -1194,12 +1195,16 @@ mod tests {
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
         };
-        let model_response = ProviderInferenceResponse::new(
-            content_blocks.clone(),
-            "content".to_string(),
-            usage.clone(),
+        let model_response = ModelInferenceResult {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            content: content_blocks.clone(),
+            raw_response: "content".to_string(),
+            usage: usage.clone(),
+            model_provider_name: "model_provider_name",
+            model_name: "model_name",
             latency,
-        );
+        };
         let response = function_config
             .prepare_response(
                 inference_id,
@@ -1234,12 +1239,16 @@ mod tests {
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
         };
-        let model_response = ProviderInferenceResponse::new(
-            content_blocks.clone(),
-            "content".to_string(),
-            usage.clone(),
+        let model_response = ModelInferenceResult {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            content: content_blocks.clone(),
+            raw_response: "content".to_string(),
+            usage: usage.clone(),
+            model_provider_name: "model_provider_name",
+            model_name: "model_name",
             latency,
-        );
+        };
         let response = function_config
             .prepare_response(
                 inference_id,
@@ -1274,12 +1283,16 @@ mod tests {
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
         };
-        let model_response = ProviderInferenceResponse::new(
-            content_blocks.clone(),
-            "content".to_string(),
-            usage.clone(),
+        let model_response = ModelInferenceResult {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            content: content_blocks.clone(),
+            raw_response: "content".to_string(),
+            usage: usage.clone(),
+            model_provider_name: "model_provider_name",
+            model_name: "model_name",
             latency,
-        );
+        };
         let response = function_config
             .prepare_response(
                 inference_id,
@@ -1313,14 +1326,18 @@ mod tests {
             prompt_tokens: 10,
             completion_tokens: 10,
         };
-        let model_response = ProviderInferenceResponse::new(
-            content_blocks.clone(),
-            "content".to_string(),
-            usage.clone(),
-            Latency::NonStreaming {
+        let model_response = ModelInferenceResult {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            content: content_blocks.clone(),
+            raw_response: "content".to_string(),
+            usage: usage.clone(),
+            model_provider_name: "model_provider_name",
+            model_name: "model_name",
+            latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
-        );
+        };
         let response = function_config
             .prepare_response(
                 inference_id,
@@ -1355,14 +1372,18 @@ mod tests {
             prompt_tokens: 10,
             completion_tokens: 10,
         };
-        let model_response = ProviderInferenceResponse::new(
-            content_blocks.clone(),
-            "content".to_string(),
-            usage.clone(),
-            Latency::NonStreaming {
+        let model_response = ModelInferenceResult {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            content: content_blocks.clone(),
+            raw_response: "content".to_string(),
+            usage: usage.clone(),
+            model_provider_name: "model_provider_name",
+            model_name: "model_name",
+            latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
-        );
+        };
         let response = function_config
             .prepare_response(
                 inference_id,
@@ -1394,14 +1415,18 @@ mod tests {
             prompt_tokens: 10,
             completion_tokens: 10,
         };
-        let model_response = ProviderInferenceResponse::new(
-            content_blocks.clone(),
-            "content".to_string(),
-            usage.clone(),
-            Latency::NonStreaming {
+        let model_response = ModelInferenceResult {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            content: content_blocks.clone(),
+            raw_response: "content".to_string(),
+            usage: usage.clone(),
+            model_provider_name: "model_provider_name",
+            model_name: "model_name",
+            latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
-        );
+        };
         let error = function_config
             .prepare_response(
                 inference_id,

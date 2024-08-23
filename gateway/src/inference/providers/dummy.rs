@@ -9,8 +9,8 @@ use super::provider_trait::InferenceProvider;
 
 use crate::error::Error;
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest, ProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseChunk, Usage,
+    ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest, ProviderInferenceResponse,
+    ProviderInferenceResponseChunk, ProviderInferenceResponseStream, Usage,
 };
 use crate::tool::{ToolCall, ToolCallChunk};
 
@@ -132,7 +132,13 @@ impl InferenceProvider for DummyProvider {
         &'a self,
         _request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
-    ) -> Result<(ProviderInferenceResponseChunk, ProviderInferenceResponseStream), Error> {
+    ) -> Result<
+        (
+            ProviderInferenceResponseChunk,
+            ProviderInferenceResponseStream,
+        ),
+        Error,
+    > {
         if self.model_name == "error" {
             return Err(Error::InferenceClient {
                 message: "Error sending request to Dummy provider.".to_string(),

@@ -353,7 +353,7 @@ impl Variant for ChatCompletionConfig {
             model_config.infer_stream(&request, client).await?;
         let model_used_info = ModelUsedInfo {
             model_name: &self.model,
-            model_provider_name: model_provider_name,
+            model_provider_name,
         };
         Ok((first_chunk, stream, model_used_info))
     }
@@ -604,15 +604,15 @@ mod tests {
             providers: HashMap::from([("good".to_string(), good_provider_config)]),
         };
         let json_model_config = ModelConfig {
-            routing: vec!["json".to_string()],
-            providers: HashMap::from([("json".to_string(), json_provider_config)]),
+            routing: vec!["json_provider".to_string()],
+            providers: HashMap::from([("json_provider".to_string(), json_provider_config)]),
         };
         let tool_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "tool".to_string(),
         });
         let tool_model_config = ModelConfig {
-            routing: vec!["tool".to_string()],
-            providers: HashMap::from([("tool".to_string(), tool_provider_config)]),
+            routing: vec!["tool_provider".to_string()],
+            providers: HashMap::from([("tool_provider".to_string(), tool_provider_config)]),
         };
         let error_model_config = ModelConfig {
             routing: vec!["error".to_string()],
@@ -629,13 +629,19 @@ mod tests {
         };
         let mut inference_params = InferenceParams::default();
         let inference_config = InferenceConfig {
-            models: &HashMap::new(),
             function: &function_config,
             templates: &templates,
             tool_config: None,
         };
+        let models = HashMap::new();
         let result = chat_completion_config
-            .infer(&input, &inference_config, &client, &mut inference_params)
+            .infer(
+                &input,
+                &models,
+                &inference_config,
+                &client,
+                &mut inference_params,
+            )
             .await
             .unwrap_err();
         match result {
@@ -658,13 +664,18 @@ mod tests {
         };
         let models = HashMap::from([("invalid_model".to_string(), text_model_config)]);
         let inference_config = InferenceConfig {
-            models: &models,
             function: &function_config,
             templates: &templates,
             tool_config: None,
         };
         let result = chat_completion_config
-            .infer(&input, &inference_config, &client, &mut inference_params)
+            .infer(
+                &input,
+                &models,
+                &inference_config,
+                &client,
+                &mut inference_params,
+            )
             .await
             .unwrap_err();
         assert!(matches!(result, Error::UnknownModel { .. }), "{}", result);
@@ -680,13 +691,18 @@ mod tests {
         let mut inference_params = InferenceParams::default();
         let models = HashMap::from([("error".to_string(), error_model_config)]);
         let inference_config = InferenceConfig {
-            models: &models,
             function: &function_config,
             templates: &templates,
             tool_config: None,
         };
         let result = chat_completion_config
-            .infer(&input, &inference_config, &client, &mut inference_params)
+            .infer(
+                &input,
+                &models,
+                &inference_config,
+                &client,
+                &mut inference_params,
+            )
             .await
             .unwrap_err();
         assert_eq!(
@@ -711,18 +727,23 @@ mod tests {
             model_name: "good".to_string(),
         });
         let text_model_config = ModelConfig {
-            routing: vec!["good".to_string()],
-            providers: HashMap::from([("good".to_string(), good_provider_config)]),
+            routing: vec!["good_provider".to_string()],
+            providers: HashMap::from([("good_provider".to_string(), good_provider_config)]),
         };
         let models = HashMap::from([("good".to_string(), text_model_config)]);
         let inference_config = InferenceConfig {
-            models: &models,
             function: &function_config,
             templates: &templates,
             tool_config: None,
         };
         let result = chat_completion_config
-            .infer(&input, &inference_config, &client, &mut inference_params)
+            .infer(
+                &input,
+                &models,
+                &inference_config,
+                &client,
+                &mut inference_params,
+            )
             .await
             .unwrap();
         assert!(matches!(result, InferenceResult::Chat(_)));
@@ -743,6 +764,14 @@ mod tests {
                 assert_eq!(
                     chat_response.model_inference_results[0].content,
                     vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()]
+                );
+                assert_eq!(
+                    chat_response.model_inference_results[0].model_name,
+                    "good".to_string()
+                );
+                assert_eq!(
+                    chat_response.model_inference_results[0].model_provider_name,
+                    "good_provider".to_string()
                 );
             }
             _ => panic!("Expected Chat inference response"),
@@ -765,13 +794,18 @@ mod tests {
         let models = HashMap::from([("tool".to_string(), tool_model_config)]);
         let weather_tool_config = get_weather_tool_config();
         let inference_config = InferenceConfig {
-            models: &models,
             function: &function_config,
             templates: &templates,
             tool_config: Some(&weather_tool_config),
         };
         let result = chat_completion_config
-            .infer(&input, &inference_config, &client, &mut inference_params)
+            .infer(
+                &input,
+                &models,
+                &inference_config,
+                &client,
+                &mut inference_params,
+            )
             .await
             .unwrap();
         assert!(matches!(result, InferenceResult::Chat(_)));
@@ -801,6 +835,15 @@ mod tests {
                         completion_tokens: 10,
                     }
                 );
+                assert_eq!(chat_response.model_inference_results.len(), 1);
+                assert_eq!(
+                    chat_response.model_inference_results[0].model_provider_name,
+                    "tool_provider".to_string()
+                );
+                assert_eq!(
+                    chat_response.model_inference_results[0].model_name,
+                    "tool".to_string()
+                );
             }
             _ => panic!("Expected Chat inference response"),
         }
@@ -827,14 +870,19 @@ mod tests {
             implicit_tool_call_config,
         });
         let inference_config = InferenceConfig {
-            models: &models,
             function: &json_function_config,
             templates: &templates,
             tool_config: None,
         };
         let mut inference_params = InferenceParams::default();
         let result = chat_completion_config
-            .infer(&input, &inference_config, &client, &mut inference_params)
+            .infer(
+                &input,
+                &models,
+                &inference_config,
+                &client,
+                &mut inference_params,
+            )
             .await
             .unwrap();
         match result {
@@ -867,7 +915,6 @@ mod tests {
         let mut inference_params = InferenceParams::default();
         let models = HashMap::from([("json".to_string(), json_model_config)]);
         let inference_config = InferenceConfig {
-            models: &models,
             function: &json_function_config,
             templates: &templates,
             tool_config: None,
@@ -880,7 +927,13 @@ mod tests {
             ..Default::default()
         };
         let result = chat_completion_config
-            .infer(&input, &inference_config, &client, &mut inference_params)
+            .infer(
+                &input,
+                &models,
+                &inference_config,
+                &client,
+                &mut inference_params,
+            )
             .await
             .unwrap();
         match result {
@@ -895,6 +948,14 @@ mod tests {
                     }
                 );
                 assert_eq!(json_result.model_inference_results.len(), 1);
+                assert_eq!(
+                    json_result.model_inference_results[0].model_provider_name,
+                    "json_provider".to_string()
+                );
+                assert_eq!(
+                    json_result.model_inference_results[0].model_name,
+                    "json".to_string()
+                );
             }
             _ => panic!("Expected Json inference response"),
         }
@@ -922,12 +983,12 @@ mod tests {
             model_name: "error".to_string(),
         });
         let text_model_config = ModelConfig {
-            routing: vec!["good".to_string()],
-            providers: HashMap::from([("good".to_string(), good_provider_config)]),
+            routing: vec!["good_provider".to_string()],
+            providers: HashMap::from([("good_provider".to_string(), good_provider_config)]),
         };
         let error_model_config = ModelConfig {
-            routing: vec!["error".to_string()],
-            providers: HashMap::from([("error".to_string(), error_provider_config)]),
+            routing: vec!["error_provider".to_string()],
+            providers: HashMap::from([("error_provider".to_string(), error_provider_config)]),
         };
         // Test case 1: Model inference fails because of model issues
         let mut inference_params = InferenceParams::default();
@@ -948,13 +1009,18 @@ mod tests {
         };
         let models = HashMap::from([("error".to_string(), error_model_config)]);
         let inference_config = InferenceConfig {
-            models: &models,
             function: &function_config,
             templates: &templates,
             tool_config: None,
         };
         let result = chat_completion_config
-            .infer_stream(&input, &inference_config, &client, &mut inference_params)
+            .infer_stream(
+                &input,
+                &models,
+                &inference_config,
+                &client,
+                &mut inference_params,
+            )
             .await;
         match result {
             Err(Error::ModelProvidersExhausted {
@@ -977,13 +1043,18 @@ mod tests {
         };
         let models = HashMap::from([("good".to_string(), text_model_config)]);
         let inference_config = InferenceConfig {
-            models: &models,
             function: &function_config,
             templates: &templates,
             tool_config: None,
         };
-        let (first_chunk, mut stream) = chat_completion_config
-            .infer_stream(&input, &inference_config, &client, &mut inference_params)
+        let (first_chunk, mut stream, models_used) = chat_completion_config
+            .infer_stream(
+                &input,
+                &models,
+                &inference_config,
+                &client,
+                &mut inference_params,
+            )
             .await
             .unwrap();
         assert_eq!(
@@ -993,6 +1064,8 @@ mod tests {
                 id: "0".to_string()
             })]
         );
+        assert_eq!(models_used.model_name, "good".to_string());
+        assert_eq!(models_used.model_provider_name, "good_provider".to_string());
         let mut i = 1;
         while let Some(chunk_result) = stream.next().await {
             let chunk = chunk_result.unwrap();

@@ -4,3 +4,7 @@ slow-timeout = { period = "5s", terminate-after = 3 }
 
 [profile.ci]
 retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
+
+[profile.unit]
+retries = { backoff = "fixed", count = 0, delay = "5s", jitter = true }
+slow-timeout = { period = "2s", terminate-after = 1 }

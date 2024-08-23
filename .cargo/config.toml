@@ -6,7 +6,7 @@ rustflags = [
 
 
 [alias]
-test-unit = "nextest run --lib --bins"
+test-unit = "nextest run --lib --bins --profile unit"
 test-integration = "nextest run --test integration"
 test-e2e = "nextest run --test e2e --features e2e_tests"
 test-all = "nextest run --features e2e_tests"
