@@ -242,6 +242,13 @@ model = "llama3.1-8b-instruct-fireworks"
 system_template = "config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.fireworks-firefunction]
+type = "chat_completion"
+weight = 0
+model = "firefunction-v2"
+system_template = "config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.gcp-vertex-gemini-flash]
 type = "chat_completion"
 weight = 0
@@ -324,10 +331,26 @@ type = "chat_completion"
 weight = 0
 model = "claude-3-haiku-20240307-anthropic"
 system_template = "config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "default"
+max_tokens = 100
+
+[functions.json_success.variants.anthropic-implicit]
+type = "chat_completion"
+weight = 0
+model = "claude-3-haiku-20240307-anthropic"
+system_template = "config/functions/json_success/prompt/system_template.minijinja"
 json_mode = "implicit_tool"
 max_tokens = 100
 
 [functions.json_success.variants.aws-bedrock]
+type = "chat_completion"
+weight = 0
+model = "claude-3-haiku-20240307-aws-bedrock"
+system_template = "config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "default"
+max_tokens = 100
+
+[functions.json_success.variants.aws-bedrock-implicit]
 type = "chat_completion"
 weight = 0
 model = "claude-3-haiku-20240307-aws-bedrock"
@@ -343,11 +366,28 @@ system_template = "config/functions/json_success/prompt/system_template.minijinj
 json_mode = "default"
 max_tokens = 100
 
+[functions.json_success.variants.azure-implicit]
+type = "chat_completion"
+weight = 0
+model = "gpt-4o-mini-azure"
+system_template = "config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "implicit_tool"
+max_tokens = 100
+
 [functions.json_success.variants.fireworks]
 type = "chat_completion"
 weight = 0
 model = "llama3.1-8b-instruct-fireworks"
 system_template = "config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "default"
+max_tokens = 100
+
+[functions.json_success.variants.fireworks-implicit]
+type = "chat_completion"
+weight = 0
+model = "firefunction-v2"
+system_template = "config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "implicit_tool"
 max_tokens = 100
 
 [functions.json_success.variants.gcp-vertex-gemini-flash]
@@ -355,6 +395,15 @@ type = "chat_completion"
 weight = 0
 model = "gemini-1.5-flash-001"
 system_template = "config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "default"
+max_tokens = 100
+
+[functions.json_success.variants.gcp-vertex-gemini-flash-implicit]
+type = "chat_completion"
+weight = 0
+model = "gemini-1.5-flash-001"
+system_template = "config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "implicit_tool"
 max_tokens = 100
 
 [functions.json_success.variants.gcp-vertex-gemini-pro]
@@ -362,6 +411,15 @@ type = "chat_completion"
 weight = 0
 model = "gemini-1.5-pro-001"
 system_template = "config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "default"
+max_tokens = 100
+
+[functions.json_success.variants.gcp-vertex-gemini-pro-implicit]
+type = "chat_completion"
+weight = 0
+model = "gemini-1.5-pro-001"
+system_template = "config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "implicit_tool"
 max_tokens = 100
 
 [functions.json_success.variants.mistral]
@@ -377,9 +435,18 @@ type = "chat_completion"
 weight = 0
 model = "gpt-4o-mini-2024-07-18"
 system_template = "config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "default"
 max_tokens = 100
 
-[functions.json_success.variants.openai_strict]
+[functions.json_success.variants.openai-implicit]
+type = "chat_completion"
+weight = 0
+model = "gpt-4o-mini-2024-07-18"
+system_template = "config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "implicit_tool"
+max_tokens = 100
+
+[functions.json_success.variants.openai-strict]
 type = "chat_completion"
 weight = 0
 model = "gpt-4o-mini-2024-07-18"
@@ -392,6 +459,15 @@ type = "chat_completion"
 weight = 0
 model = "llama3.1-8b-instruct-together"
 system_template = "config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "default"
+max_tokens = 100
+
+[functions.json_success.variants.together-implicit]
+type = "chat_completion"
+weight = 0
+model = "llama3.1-8b-instruct-together"
+system_template = "config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "implicit_tool"
 max_tokens = 100
 
 [functions.json_success.variants.vllm]
@@ -399,6 +475,15 @@ type = "chat_completion"
 weight = 0
 model = "microsoft/Phi-3.5-mini-instruct"
 system_template = "config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "default"
+max_tokens = 100
+
+[functions.json_success.variants.vllm-implicit]
+type = "chat_completion"
+weight = 0
+model = "microsoft/Phi-3.5-mini-instruct"
+system_template = "config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "implicit_tool"
 max_tokens = 100
 
 [functions.variant_failover]
@@ -547,14 +632,14 @@ max_tokens = 100
 # └────────────────────────────────────────────────────────────────────────────┘
 
 [metrics.task_success]
-type = "boolean"    # "boolean", "float"
-optimize = "max"    # "min", "max"
-level = "inference" # "inference", "episode"
+type = "boolean"
+optimize = "max"
+level = "inference"
 
 [metrics.goal_achieved]
-type = "boolean"  # "boolean", "float"
-optimize = "max"  # "min", "max"
-level = "episode" # "inference", "episode"
+type = "boolean"
+optimize = "max"
+level = "episode"
 
 [metrics.user_rating]
 type = "float"

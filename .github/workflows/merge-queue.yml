@@ -102,4 +102,4 @@ jobs:
 
       - name: Run integration and E2E tests
         run: |
-          cargo test-all --profile ci
+          cargo test-all --profile ci ${{ vars.CARGO_NEXTEST_ARGS }}
