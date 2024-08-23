@@ -450,7 +450,7 @@ impl<'a> From<&'a ToolChoice> for OpenAIToolChoice<'a> {
             ToolChoice::None => OpenAIToolChoice::String(OpenAIToolChoiceString::None),
             ToolChoice::Auto => OpenAIToolChoice::String(OpenAIToolChoiceString::Auto),
             ToolChoice::Required => OpenAIToolChoice::String(OpenAIToolChoiceString::Required),
-            ToolChoice::Tool(tool_name) => OpenAIToolChoice::Specific(SpecificToolChoice {
+            ToolChoice::Specific(tool_name) => OpenAIToolChoice::Specific(SpecificToolChoice {
                 r#type: OpenAIToolType::Function,
                 function: SpecificToolFunction { name: tool_name },
             }),

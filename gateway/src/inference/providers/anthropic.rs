@@ -204,7 +204,7 @@ impl<'a> TryFrom<&'a ToolChoice> for AnthropicToolChoice<'a> {
         match tool_choice {
             ToolChoice::Auto => Ok(AnthropicToolChoice::Auto),
             ToolChoice::Required => Ok(AnthropicToolChoice::Any),
-            ToolChoice::Tool(name) => Ok(AnthropicToolChoice::Tool { name }),
+            ToolChoice::Specific(name) => Ok(AnthropicToolChoice::Tool { name }),
             ToolChoice::None => Err(Error::InvalidTool {
                 message: "Tool choice is None. Anthropic does not support tool choice None."
                     .to_string(),
@@ -785,7 +785,7 @@ mod tests {
         assert!(anthropic_tool_choice.is_ok());
         assert_eq!(anthropic_tool_choice.unwrap(), AnthropicToolChoice::Any);
 
-        let tool_choice = ToolChoice::Tool("test".to_string());
+        let tool_choice = ToolChoice::Specific("test".to_string());
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_choice);
         assert!(anthropic_tool_choice.is_ok());
         assert_eq!(

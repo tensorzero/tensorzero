@@ -19,10 +19,10 @@ lazy_static! {
         strict: false,
     };
     pub static ref WEATHER_TOOL: ToolConfig = ToolConfig::Static(&WEATHER_TOOL_CONFIG_STATIC);
-    pub static ref WEATHER_TOOL_CHOICE: ToolChoice = ToolChoice::Tool("get_weather".to_string());
+    pub static ref WEATHER_TOOL_CHOICE: ToolChoice = ToolChoice::Specific("get_weather".to_string());
     pub static ref WEATHER_TOOL_CONFIG: ToolCallConfig = ToolCallConfig {
         tools_available: vec![ToolConfig::Static(&WEATHER_TOOL_CONFIG_STATIC)],
-        tool_choice: ToolChoice::Tool("get_weather".to_string()),
+        tool_choice: ToolChoice::Specific("get_weather".to_string()),
         parallel_tool_calls: false,
     };
     static ref QUERY_TOOL_CONFIG: StaticToolConfig = StaticToolConfig {
@@ -55,7 +55,7 @@ pub fn get_weather_tool_config() -> ToolCallConfig {
     let weather_tool = ToolConfig::Static(&WEATHER_TOOL_CONFIG_STATIC);
     ToolCallConfig {
         tools_available: vec![weather_tool],
-        tool_choice: ToolChoice::Tool("get_weather".to_string()),
+        tool_choice: ToolChoice::Specific("get_weather".to_string()),
         parallel_tool_calls: false,
     }
 }

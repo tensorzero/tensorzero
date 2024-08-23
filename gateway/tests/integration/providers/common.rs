@@ -258,7 +258,7 @@ pub fn create_tool_use_inference_request() -> ModelInferenceRequest<'static> {
     // Fine to leak during test execution
     let tool_config = Box::leak(Box::new(ToolCallConfig {
         tools_available: vec![ToolConfig::Static(&WEATHER_TOOL_CONFIG)],
-        tool_choice: ToolChoice::Tool("get_weather".to_string()),
+        tool_choice: ToolChoice::Specific("get_weather".to_string()),
         parallel_tool_calls: false,
     }));
 

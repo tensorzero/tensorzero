@@ -485,7 +485,7 @@ impl<'a> From<(&'a ToolChoice, &'a str)> for GCPVertexGeminiToolConfig<'a> {
                     }
                 }
             }
-            ToolChoice::Tool(tool_name) => {
+            ToolChoice::Specific(tool_name) => {
                 if MODELS_SUPPORTING_ANY_MODE.contains(&model_name) {
                     GCPVertexGeminiToolConfig {
                         function_calling_config: GCPVertexGeminiFunctionCallingConfig {
@@ -1052,7 +1052,7 @@ mod tests {
             }
         );
 
-        let tool_choice = ToolChoice::Tool("get_weather".to_string());
+        let tool_choice = ToolChoice::Specific("get_weather".to_string());
         let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, flash_model_name));
         assert_eq!(
             tool_config,
@@ -1065,7 +1065,7 @@ mod tests {
         );
 
         // The Pro model supports Any mode with allowed function names
-        let tool_choice = ToolChoice::Tool("get_weather".to_string());
+        let tool_choice = ToolChoice::Specific("get_weather".to_string());
         let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, pro_model_name));
         assert_eq!(
             tool_config,

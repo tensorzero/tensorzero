@@ -127,7 +127,7 @@ impl ToolCallConfig {
             .tool_choice
             .unwrap_or_else(|| function_tool_choice.clone());
         // If the tool choice is a specific tool, make sure it's in the list of available tools
-        if let ToolChoice::Tool(tool_name) = &tool_choice {
+        if let ToolChoice::Specific(tool_name) = &tool_choice {
             if !tools_available.iter().any(|tool| match tool {
                 ToolConfig::Static(config) => config.name == *tool_name,
                 ToolConfig::Dynamic(config) => config.name == *tool_name,
@@ -236,14 +236,14 @@ impl ToolCallConfig {
         let implicit_tool_config = ToolConfig::Implicit(ImplicitToolConfig { parameters });
         Self {
             tools_available: vec![implicit_tool_config],
-            tool_choice: ToolChoice::Tool(IMPLICIT_TOOL_NAME.to_string()),
+            tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
             parallel_tool_calls: false,
         }
     }
 }
 
 /// A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ToolResult {
     pub name: String,
     pub result: String,
@@ -254,15 +254,15 @@ pub struct ToolResult {
 /// and even specify which tool to be used.
 ///
 /// This enum is used to denote this tool choice.
-#[derive(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ToolChoice {
     None,
     #[default]
     Auto,
     Required,
-    // Forces the LLM to call a particular tool, the String is the name of the Tool
-    Tool(String),
+    // Forces the LLM to call a specific tool. The String is the name of the tool.
+    Specific(String),
     // It is occasionally helpful to make an "implicit" tool call to enforce that a JSON schema is followed
     // In this case, the tool call is not exposed to the client, but the output is still validated against the schema
     // Implicit means that the tool will always be called "respond" and that we should convert it back to chat-style output
@@ -396,7 +396,8 @@ mod tests {
         static ref ALL_FUNCTION_TOOLS: Vec<String> =
             vec!["get_weather".to_string(), "query_articles".to_string()];
         static ref AUTO_TOOL_CHOICE: ToolChoice = ToolChoice::Auto;
-        static ref WEATHER_TOOL_CHOICE: ToolChoice = ToolChoice::Tool("get_weather".to_string());
+        static ref WEATHER_TOOL_CHOICE: ToolChoice =
+            ToolChoice::Specific("get_weather".to_string());
     }
 
     #[tokio::test]
@@ -452,7 +453,7 @@ mod tests {
 
         // Dynamic tool config specifies a particular tool to call and it's in the function tools list
         let dynamic_tool_params = DynamicToolParams {
-            tool_choice: Some(ToolChoice::Tool("get_weather".to_string())),
+            tool_choice: Some(ToolChoice::Specific("get_weather".to_string())),
             ..Default::default()
         };
         let tool_call_config = ToolCallConfig::new(
@@ -467,13 +468,13 @@ mod tests {
         assert_eq!(tool_call_config.tools_available.len(), 2);
         assert_eq!(
             tool_call_config.tool_choice,
-            ToolChoice::Tool("get_weather".to_string())
+            ToolChoice::Specific("get_weather".to_string())
         );
         assert!(tool_call_config.parallel_tool_calls);
 
         // Dynamic tool config specifies a particular tool to call and it's not in the function tools list
         let dynamic_tool_params = DynamicToolParams {
-            tool_choice: Some(ToolChoice::Tool("establish_campground".to_string())),
+            tool_choice: Some(ToolChoice::Specific("establish_campground".to_string())),
             ..Default::default()
         };
         let err = ToolCallConfig::new(
@@ -559,7 +560,7 @@ mod tests {
                 parameters: json!({}),
                 strict: false,
             }]),
-            tool_choice: Some(ToolChoice::Tool("establish_campground".to_string())),
+            tool_choice: Some(ToolChoice::Specific("establish_campground".to_string())),
             ..Default::default()
         };
         let tool_call_config = ToolCallConfig::new(
@@ -579,7 +580,7 @@ mod tests {
         assert!(tool_call_config.parallel_tool_calls);
         assert_eq!(
             tool_call_config.tool_choice,
-            ToolChoice::Tool("establish_campground".to_string())
+            ToolChoice::Specific("establish_campground".to_string())
         );
         assert!(!tool_call_config.tools_available[0].strict());
     }

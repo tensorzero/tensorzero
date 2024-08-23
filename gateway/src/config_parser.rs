@@ -552,7 +552,7 @@ impl UninitializedFunctionConfig {
                 });
                 let implicit_tool_call_config = ToolCallConfig {
                     tools_available: vec![implicit_tool],
-                    tool_choice: ToolChoice::Tool(IMPLICIT_TOOL_NAME.to_string()),
+                    tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
                     parallel_tool_calls: false,
                 };
                 Ok(FunctionConfig::Json(FunctionConfigJson {
