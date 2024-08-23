@@ -191,7 +191,7 @@ pub struct ModelInferenceResult<'a> {
 }
 
 /// As a Variant might make use of multiple model inferences, we then combine
-/// one or more ModelInferenceResponses into a single InferenceResult (but we keep the original ModelInferenceResponses around).
+/// one or more ModelInferenceResults into a single InferenceResult (but we keep the original ModelInferenceResults around for storage).
 /// In the non-streaming case, this InferenceResult is converted into an InferenceResponse and sent to the client.
 /// See below for streaming case.
 
@@ -227,7 +227,7 @@ pub struct JsonInferenceOutput {
     pub parsed: Option<Value>,
 }
 
-/// In the streaming case we convert ModelInferenceResponseChunks into a InferenceResultChunk, which is then
+/// In the streaming case we convert ProviderInferenceResponseChunks into a InferenceResultChunk, which is then
 /// converted into an InferenceResponseChunk and sent to the client.
 /// We then collect all the InferenceResultChunks into an InferenceResult for validation and storage after the fact.
 
@@ -280,7 +280,7 @@ pub enum InferenceResultChunk {
 }
 
 /// Alongside the response, we also store information about what happened during the request.
-/// For this we convert the InferenceResult into an Inference and ModelInferences,
+/// For this we convert the InferenceResult into an InferenceDatabaseInsert and ModelInferenceDatabaseInserts,
 /// which are written to ClickHouse tables of the same name asynchronously.
 
 #[derive(Debug, Serialize)]
