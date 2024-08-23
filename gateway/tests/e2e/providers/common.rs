@@ -36,40 +36,6 @@ pub struct E2ETestProviders {
     pub json_mode_streaming_inference: Vec<E2ETestProvider>,
 }
 
-impl E2ETestProviders {
-    pub fn with_provider(provider: E2ETestProvider) -> Self {
-        let providers = vec![provider];
-
-        Self {
-            simple_inference: providers.clone(),
-            streaming_inference: providers.clone(),
-            tool_use_inference: providers.clone(),
-            tool_use_streaming_inference: providers.clone(),
-            tool_multi_turn_inference: providers.clone(),
-            tool_multi_turn_streaming_inference: providers.clone(),
-            dynamic_tool_use_inference: providers.clone(),
-            dynamic_tool_use_streaming_inference: providers.clone(),
-            json_mode_inference: providers.clone(),
-            json_mode_streaming_inference: providers,
-        }
-    }
-
-    pub fn with_providers(providers: Vec<E2ETestProvider>) -> Self {
-        Self {
-            simple_inference: providers.clone(),
-            streaming_inference: providers.clone(),
-            tool_use_inference: providers.clone(),
-            tool_use_streaming_inference: providers.clone(),
-            tool_multi_turn_inference: providers.clone(),
-            tool_multi_turn_streaming_inference: providers.clone(),
-            dynamic_tool_use_inference: providers.clone(),
-            dynamic_tool_use_streaming_inference: providers.clone(),
-            json_mode_inference: providers.clone(),
-            json_mode_streaming_inference: providers,
-        }
-    }
-}
-
 #[macro_export]
 macro_rules! generate_provider_tests {
     ($func:ident) => {
