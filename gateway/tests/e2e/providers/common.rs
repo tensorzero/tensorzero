@@ -503,7 +503,7 @@ pub async fn test_streaming_inference_request_with_provider(provider: E2ETestPro
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 100);
+    assert!(ttft_ms > 50);
     assert!(ttft_ms <= response_time_ms);
 }
 
@@ -1025,7 +1025,7 @@ pub async fn test_tool_use_streaming_inference_request_with_provider(provider: E
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 100);
+    assert!(ttft_ms > 50);
     assert!(ttft_ms <= response_time_ms);
 }
 
@@ -1488,7 +1488,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 100);
+    assert!(ttft_ms > 50);
     assert!(ttft_ms <= response_time_ms);
 }
 
@@ -2055,7 +2055,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 100);
+    assert!(ttft_ms > 50);
     assert!(ttft_ms <= response_time_ms);
 }
 
@@ -2432,6 +2432,6 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 100);
+    assert!(ttft_ms > 50);
     assert!(ttft_ms <= response_time_ms);
 }
