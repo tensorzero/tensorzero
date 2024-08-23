@@ -1,2 +1,3 @@
-def hello() -> str:
-    return "Hello from TensorZero!"
+from .client import TensorZeroClient
+
+__all__ = ["TensorZeroClient"]
