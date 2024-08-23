@@ -526,14 +526,14 @@ max_tokens = 100
 # └────────────────────────────────────────────────────────────────────────────┘
 
 [metrics.task_success]
-type = "boolean"    # "boolean", "float"
-optimize = "max"    # "min", "max"
-level = "inference" # "inference", "episode"
+type = "boolean"
+optimize = "max"
+level = "inference"
 
 [metrics.goal_achieved]
-type = "boolean"  # "boolean", "float"
-optimize = "max"  # "min", "max"
-level = "episode" # "inference", "episode"
+type = "boolean"
+optimize = "max"
+level = "episode"
 
 [metrics.user_rating]
 type = "float"
