@@ -121,7 +121,6 @@ routing = ["together"]
 type = "together"
 model_name = "mistralai/Mixtral-8x7B-Instruct-v0.1"
 
-
 [models."microsoft/Phi-3.5-mini-instruct"]
 routing = ["vllm"]
 
@@ -129,6 +128,13 @@ routing = ["vllm"]
 type = "vllm"
 model_name = "microsoft/Phi-3.5-mini-instruct"
 api_base = "https://pun1owldydhycl-8000.proxy.runpod.net/v1/"
+
+[models."open-mistral-nemo-2407"]
+routing = ["mistral"]
+
+[models."open-mistral-nemo-2407".providers.mistral]
+type = "mistral"
+model_name = "open-mistral-nemo-2407"
 
 [models.test]
 routing = ["good"]
@@ -250,6 +256,13 @@ model = "gemini-1.5-pro-001"
 system_template = "config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.mistral]
+type = "chat_completion"
+weight = 0
+model = "open-mistral-nemo-2407"
+system_template = "config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.openai]
 type = "chat_completion"
 weight = 0
@@ -349,6 +362,14 @@ type = "chat_completion"
 weight = 0
 model = "gemini-1.5-pro-001"
 system_template = "config/functions/json_success/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.json_success.variants.mistral]
+type = "chat_completion"
+weight = 0
+model = "open-mistral-nemo-2407"
+system_template = "config/functions/json_success/prompt/system_template.minijinja"
+json_mode = "implicit_tool"
 max_tokens = 100
 
 [functions.json_success.variants.openai]
@@ -497,6 +518,13 @@ max_tokens = 100
 type = "chat_completion"
 weight = 0
 model = "gemini-1.5-pro-001"
+system_template = "config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.weather_helper.variants.mistral]
+type = "chat_completion"
+weight = 0
+model = "open-mistral-nemo-2407"
 system_template = "config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 100
 
