@@ -412,12 +412,12 @@ pub async fn test_streaming_inference_request_with_provider(provider: E2ETestPro
     assert!(full_content.to_lowercase().contains("tokyo"));
 
     // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name != "azure" {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
-    } else {
+    if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
+    } else {
+        assert!(input_tokens > 0);
+        assert!(output_tokens > 0);
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
@@ -525,12 +525,12 @@ pub async fn test_streaming_inference_request_with_provider(provider: E2ETestPro
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
 
     // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name != "azure" {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
-    } else {
+    if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
+    } else {
+        assert!(input_tokens > 0);
+        assert!(output_tokens > 0);
     }
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
@@ -875,12 +875,12 @@ pub async fn test_tool_use_streaming_inference_request_with_provider(provider: E
     }
 
     // NB: Azure doesn't return usage during streaming
-    if provider.variant_name != "azure" {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
-    } else {
+    if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
+    } else {
+        assert!(input_tokens > 0);
+        assert!(output_tokens > 0);
     }
 
     let inference_id = inference_id.unwrap();
@@ -1047,12 +1047,12 @@ pub async fn test_tool_use_streaming_inference_request_with_provider(provider: E
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
 
     // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name != "azure" {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
-    } else {
+    if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
+    } else {
+        assert!(input_tokens > 0);
+        assert!(output_tokens > 0);
     }
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
@@ -1373,12 +1373,12 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     assert!(full_content.to_lowercase().contains("tokyo"));
 
     // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name != "azure" {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
-    } else {
+    if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
+    } else {
+        assert!(input_tokens > 0);
+        assert!(output_tokens > 0);
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
@@ -1510,12 +1510,12 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
 
     // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name != "azure" {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
-    } else {
+    if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
+    } else {
+        assert!(input_tokens > 0);
+        assert!(output_tokens > 0);
     }
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
@@ -1906,12 +1906,12 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     }
 
     // NB: Azure doesn't return usage during streaming
-    if provider.variant_name != "azure" {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
-    } else {
+    if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
+    } else {
+        assert!(input_tokens > 0);
+        assert!(output_tokens > 0);
     }
 
     let inference_id = inference_id.unwrap();
@@ -2077,12 +2077,12 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
 
     // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name != "azure" {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
-    } else {
+    if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
+    } else {
+        assert!(input_tokens > 0);
+        assert!(output_tokens > 0);
     }
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
@@ -2339,12 +2339,12 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     assert!(full_content.to_lowercase().contains("tokyo"));
 
     // NB: Azure and Together don't support input/output tokens during streaming
-    if provider.variant_name != "azure" && provider.variant_name != "together" {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
-    } else {
+    if provider.variant_name.contains("azure") || provider.variant_name.contains("together") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
+    } else {
+        assert!(input_tokens > 0);
+        assert!(output_tokens > 0);
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
@@ -2454,12 +2454,12 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
 
     // NB: Azure and Together don't support input/output tokens during streaming
-    if provider.variant_name != "azure" && provider.variant_name != "together" {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
-    } else {
+    if provider.variant_name.contains("azure") || provider.variant_name.contains("together") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
+    } else {
+        assert!(input_tokens > 0);
+        assert!(output_tokens > 0);
     }
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
