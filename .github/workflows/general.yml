@@ -25,6 +25,9 @@ jobs:
         with:
           tool: cargo-nextest,cargo-deny
 
+      - name: X
+        run: echo {{ env.CARGO_NEXTEST_ARGS }}
+
       - name: Build (Rust)
         run: cargo build --verbose
 
