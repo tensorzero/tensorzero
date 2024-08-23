@@ -20,7 +20,7 @@ use uuid::Uuid;
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest, ModelInferenceResponseStream,
+    ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest, ProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
     TextChunk, Usage,
 };
@@ -138,7 +138,7 @@ impl InferenceProvider for AWSBedrockProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
-    ) -> Result<(ProviderInferenceResponseChunk, ModelInferenceResponseStream), Error> {
+    ) -> Result<(ProviderInferenceResponseChunk, ProviderInferenceResponseStream), Error> {
         // TODO (#55): add support for guardrails and additional fields
 
         let messages: Vec<Message> = request

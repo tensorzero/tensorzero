@@ -19,8 +19,8 @@ use crate::{
             together::TogetherProvider,
         },
         types::{
-            ModelInferenceRequest, ModelInferenceResponseStream, ProviderInferenceResponse,
-            ProviderInferenceResponseChunk,
+            ModelInferenceRequest, ModelInferenceResponse, ProviderInferenceResponse,
+            ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
         },
     },
 };
@@ -34,11 +34,11 @@ pub struct ModelConfig {
 }
 
 impl ModelConfig {
-    pub async fn infer<'a>(
+    pub async fn infer<'a, 'request>(
         &'a self,
-        request: &'a ModelInferenceRequest<'a>,
-        client: &'a Client,
-    ) -> Result<ProviderInferenceResponse, Error> {
+        request: &'request ModelInferenceRequest<'request>,
+        client: &'request Client,
+    ) -> Result<ModelInferenceResponse<'a>, Error> {
         let mut provider_errors: Vec<Error> = Vec::new();
         for provider_name in &self.routing {
             let provider_config =
@@ -53,7 +53,9 @@ impl ModelConfig {
                     for error in &provider_errors {
                         error.log();
                     }
-                    return Ok(response);
+                    let model_inference_response =
+                        ModelInferenceResponse::new(response, provider_name);
+                    return Ok(model_inference_response);
                 }
                 Err(error) => provider_errors.push(error),
             }
@@ -61,11 +63,18 @@ impl ModelConfig {
         Err(Error::ModelProvidersExhausted { provider_errors })
     }
 
-    pub async fn infer_stream<'a>(
+    pub async fn infer_stream<'a, 'request>(
         &'a self,
-        request: &'a ModelInferenceRequest<'a>,
-        client: &'a Client,
-    ) -> Result<(ProviderInferenceResponseChunk, ModelInferenceResponseStream), Error> {
+        request: &'request ModelInferenceRequest<'request>,
+        client: &'request Client,
+    ) -> Result<
+        (
+            ProviderInferenceResponseChunk,
+            ProviderInferenceResponseStream,
+            &'a str,
+        ),
+        Error,
+    > {
         let mut provider_errors: Vec<Error> = Vec::new();
         for provider_name in &self.routing {
             let provider_config =
@@ -80,7 +89,8 @@ impl ModelConfig {
                     for error in &provider_errors {
                         error.log();
                     }
-                    return Ok(response);
+                    let (chunk, stream) = response;
+                    return Ok((chunk, stream, provider_name));
                 }
                 Err(error) => provider_errors.push(error),
             }
@@ -265,7 +275,13 @@ impl InferenceProvider for ProviderConfig {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         client: &'a Client,
-    ) -> Result<(ProviderInferenceResponseChunk, ModelInferenceResponseStream), Error> {
+    ) -> Result<
+        (
+            ProviderInferenceResponseChunk,
+            ProviderInferenceResponseStream,
+        ),
+        Error,
+    > {
         match self {
             ProviderConfig::Anthropic(provider) => provider.infer_stream(request, client).await,
             ProviderConfig::AWSBedrock(provider) => provider.infer_stream(request, client).await,

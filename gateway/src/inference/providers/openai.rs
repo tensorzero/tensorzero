@@ -14,7 +14,7 @@ use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, JSONMode, Latency, ModelInferenceRequest,
-    ModelInferenceResponseStream, ProviderInferenceResponse, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStream, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     RequestMessage, Role, Text, TextChunk, Usage,
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
@@ -79,7 +79,7 @@ impl InferenceProvider for OpenAIProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-    ) -> Result<(ProviderInferenceResponseChunk, ModelInferenceResponseStream), Error> {
+    ) -> Result<(ProviderInferenceResponseChunk, ProviderInferenceResponseStream), Error> {
         let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
             provider_name: "OpenAI".to_string(),
         })?;

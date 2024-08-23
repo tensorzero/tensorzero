@@ -7,7 +7,7 @@ use tokio::time::Instant;
 
 use crate::error::Error;
 use crate::inference::types::{
-    JSONMode, Latency, ModelInferenceRequest, ModelInferenceResponseStream,
+    JSONMode, Latency, ModelInferenceRequest, ProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk,
 };
 
@@ -80,7 +80,7 @@ impl InferenceProvider for AzureProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-    ) -> Result<(ProviderInferenceResponseChunk, ModelInferenceResponseStream), Error> {
+    ) -> Result<(ProviderInferenceResponseChunk, ProviderInferenceResponseStream), Error> {
         let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
             provider_name: "Azure".to_string(),
         })?;

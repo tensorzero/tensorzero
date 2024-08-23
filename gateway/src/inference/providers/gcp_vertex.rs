@@ -15,7 +15,7 @@ use crate::inference::types::{
     ContentBlock, ContentBlockChunk, JSONMode, Latency, Role, Text, TextChunk,
 };
 use crate::inference::types::{
-    ModelInferenceRequest, ModelInferenceResponseStream, ProviderInferenceResponse,
+    ModelInferenceRequest, ProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseChunk, RequestMessage, Usage,
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
@@ -190,7 +190,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-    ) -> Result<(ProviderInferenceResponseChunk, ModelInferenceResponseStream), Error> {
+    ) -> Result<(ProviderInferenceResponseChunk, ProviderInferenceResponseStream), Error> {
         let credentials = self.credentials.as_ref().ok_or(Error::ApiKeyMissing {
             provider_name: "GCP Vertex Gemini".to_string(),
         })?;

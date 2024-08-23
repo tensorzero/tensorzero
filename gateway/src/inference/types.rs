@@ -132,7 +132,7 @@ pub struct ModelInferenceRequest<'a> {
 ///
 /// In both non-streaming and streaming inference, each ModelProvider recieves data from the provider in a
 /// a (private) provider-specific format that is then transformed into a ProviderInferenceResponse (non-streaming)
-/// or a stream of ModelInferenceResponseChunks (streaming).
+/// or a stream of ProviderInferenceResponseChunks (streaming).
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ProviderInferenceResponse {
@@ -162,6 +162,33 @@ pub enum Latency {
     },
 }
 
+/// After a ProviderInferenceResponse is returned to the Model,
+/// it is converted into a ModelInferenceResponse that includes additional metadata (such as the model provider name).
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ModelInferenceResponse<'a> {
+    pub id: Uuid,
+    pub created: u64,
+    pub content: Vec<ContentBlock>,
+    pub raw_response: String,
+    pub usage: Usage,
+    pub latency: Latency,
+    pub model_provider_name: &'a str,
+}
+
+/// Finally, in the Variant we convert the ModelInferenceResponse into a ModelInferenceResult
+/// that includes additional metadata (such as the model name).
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ModelInferenceResult<'a> {
+    pub id: Uuid,
+    pub created: u64,
+    pub content: Vec<ContentBlock>,
+    pub raw_response: String,
+    pub usage: Usage,
+    pub latency: Latency,
+    pub model_provider_name: &'a str,
+    pub model_name: &'a str,
+}
+
 /// As a Variant might make use of multiple model inferences, we then combine
 /// one or more ModelInferenceResponses into a single InferenceResult (but we keep the original ModelInferenceResponses around).
 /// In the non-streaming case, this InferenceResult is converted into an InferenceResponse and sent to the client.
@@ -170,27 +197,27 @@ pub enum Latency {
 /// This type contains the result of running a variant of a function
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum InferenceResult {
-    Chat(ChatInferenceResult),
-    Json(JsonInferenceResult),
+pub enum InferenceResult<'a> {
+    Chat(ChatInferenceResult<'a>),
+    Json(JsonInferenceResult<'a>),
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct ChatInferenceResult {
+pub struct ChatInferenceResult<'a> {
     pub inference_id: Uuid,
     created: u64,
     pub output: Vec<ContentBlockOutput>,
     pub usage: Usage,
-    pub model_inference_responses: Vec<ProviderInferenceResponse>,
+    pub model_inference_results: Vec<ModelInferenceResult<'a>>,
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct JsonInferenceResult {
+pub struct JsonInferenceResult<'a> {
     pub inference_id: Uuid,
     created: u64,
     pub output: JsonInferenceOutput,
     pub usage: Usage,
-    pub model_inference_responses: Vec<ProviderInferenceResponse>,
+    pub model_inference_results: Vec<ModelInferenceResult<'a>>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -276,6 +303,8 @@ pub struct ModelInferenceDatabaseInsert {
     pub input_tokens: u32,
     pub output_tokens: u32,
     pub response_time_ms: u32,
+    pub model_name: String,
+    pub model_provider_name: String,
     pub ttft_ms: Option<u32>,
 }
 
@@ -352,10 +381,42 @@ impl From<String> for ContentBlock {
     }
 }
 
+impl<'a> ModelInferenceResponse<'a> {
+    pub fn new(
+        provider_inference_response: ProviderInferenceResponse,
+        model_provider_name: &'a str,
+    ) -> Self {
+        Self {
+            id: provider_inference_response.id,
+            created: provider_inference_response.created,
+            content: provider_inference_response.content,
+            raw_response: provider_inference_response.raw_response,
+            usage: provider_inference_response.usage,
+            latency: provider_inference_response.latency,
+            model_provider_name,
+        }
+    }
+}
+
+impl<'a> ModelInferenceResult<'a> {
+    pub fn new(model_inference_response: ModelInferenceResponse<'a>, model_name: &'a str) -> Self {
+        Self {
+            id: model_inference_response.id,
+            created: model_inference_response.created,
+            content: model_inference_response.content,
+            raw_response: model_inference_response.raw_response,
+            usage: model_inference_response.usage,
+            latency: model_inference_response.latency,
+            model_provider_name: model_inference_response.model_provider_name,
+            model_name,
+        }
+    }
+}
+
 impl ModelInferenceDatabaseInsert {
-    pub fn new(response: ProviderInferenceResponse, input: String, inference_id: Uuid) -> Self {
+    pub fn new(result: ModelInferenceResult, input: String, inference_id: Uuid) -> Self {
         // TODO (#30): deal with tools
-        let (latency_ms, ttft_ms) = match response.latency {
+        let (latency_ms, ttft_ms) = match result.latency {
             Latency::Streaming {
                 ttft,
                 response_time,
@@ -370,12 +431,14 @@ impl ModelInferenceDatabaseInsert {
             inference_id,
             input,
             // We write the serialized JSON form of the ContentBlocks output by the model
-            output: serde_json::to_string(&response.content).unwrap_or_default(),
-            raw_response: response.raw_response,
-            input_tokens: response.usage.prompt_tokens,
-            output_tokens: response.usage.completion_tokens,
+            output: serde_json::to_string(&result.content).unwrap_or_default(),
+            raw_response: result.raw_response,
+            input_tokens: result.usage.prompt_tokens,
+            output_tokens: result.usage.completion_tokens,
             response_time_ms: latency_ms,
             ttft_ms,
+            model_provider_name: result.model_provider_name.to_string(),
+            model_name: result.model_name.to_string(),
         }
     }
 }
@@ -393,11 +456,11 @@ impl ProviderInferenceResponse {
     }
 }
 
-impl InferenceResult {
+impl<'a> InferenceResult<'a> {
     pub fn get_serialized_model_inferences(&self, input: &str) -> Vec<serde_json::Value> {
         let model_inference_responses = match self {
-            InferenceResult::Chat(chat_result) => &chat_result.model_inference_responses,
-            InferenceResult::Json(json_result) => &json_result.model_inference_responses,
+            InferenceResult::Chat(chat_result) => &chat_result.model_inference_results,
+            InferenceResult::Json(json_result) => &json_result.model_inference_results,
         };
         let inference_id = match self {
             InferenceResult::Chat(chat_result) => chat_result.inference_id,
@@ -414,13 +477,13 @@ impl InferenceResult {
     }
 }
 
-impl JsonInferenceResult {
+impl<'a> JsonInferenceResult<'a> {
     pub fn new(
         inference_id: Uuid,
         raw: String,
         parsed: Option<Value>,
         usage: Usage,
-        model_inference_responses: Vec<ProviderInferenceResponse>,
+        model_inference_results: Vec<ModelInferenceResult<'a>>,
     ) -> Self {
         let output = JsonInferenceOutput { raw, parsed };
         Self {
@@ -428,17 +491,17 @@ impl JsonInferenceResult {
             created: current_timestamp(),
             output,
             usage,
-            model_inference_responses,
+            model_inference_results,
         }
     }
 }
 
-impl ChatInferenceResult {
+impl<'a> ChatInferenceResult<'a> {
     pub async fn new(
         inference_id: Uuid,
         raw_content: Vec<ContentBlock>,
         usage: Usage,
-        model_inference_responses: Vec<ProviderInferenceResponse>,
+        model_inference_results: Vec<ModelInferenceResult<'a>>,
         tool_config: Option<&ToolCallConfig>,
     ) -> Self {
         #[allow(clippy::expect_used)]
@@ -452,7 +515,7 @@ impl ChatInferenceResult {
             created,
             output,
             usage,
-            model_inference_responses,
+            model_inference_results,
         }
     }
 
@@ -611,11 +674,14 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
     }
 }
 
-pub async fn collect_chunks(
+/// TODO: handle the lifetimes and creation of InferenceResult types here
+pub async fn collect_chunks<'a>(
     value: Vec<ProviderInferenceResponseChunk>,
     function: &FunctionConfig,
     tool_config: Option<&ToolCallConfig>,
-) -> Result<InferenceResult, Error> {
+    model_name: &'a str,
+    model_provider_name: &'a str,
+) -> Result<InferenceResult<'a>, Error> {
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
 
     let inference_id = value
@@ -709,12 +775,14 @@ pub async fn collect_chunks(
         usage.clone(),
         latency.clone(),
     );
+    let model_inference_response = ModelInferenceResponse::new(model_response, model_provider_name);
+    let model_inference_result = ModelInferenceResult::new(model_inference_response, model_name);
     function
         .prepare_response(
             inference_id,
             content_blocks,
             usage,
-            vec![model_response],
+            vec![model_inference_result],
             tool_config,
         )
         .await
@@ -732,7 +800,7 @@ impl From<ToolCallChunk> for ToolCall {
     }
 }
 
-pub type ModelInferenceResponseStream =
+pub type ProviderInferenceResponseStream =
     Pin<Box<dyn Stream<Item = Result<ProviderInferenceResponseChunk, Error>> + Send>>;
 
 impl From<&JsonEnforcement> for JSONMode {

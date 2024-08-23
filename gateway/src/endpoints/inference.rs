@@ -19,7 +19,7 @@ use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
     collect_chunks, ContentBlockChunk, ContentBlockOutput, InferenceDatabaseInsert,
     InferenceResult, InferenceResultChunk, Input, JsonInferenceOutput,
-    ModelInferenceResponseStream, ProviderInferenceResponseChunk, Usage,
+    ProviderInferenceResponseChunk, ProviderInferenceResponseStream, Usage,
 };
 use crate::tool::{DynamicToolParams, ToolCallConfig};
 use crate::uuid_util::validate_episode_id;
@@ -62,7 +62,7 @@ pub struct Params {
 }
 
 #[derive(Clone, Debug)]
-struct InferenceMetadata {
+struct InferenceMetadata<'a> {
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
@@ -70,6 +70,8 @@ struct InferenceMetadata {
     pub dryrun: bool,
     pub start_time: Instant,
     pub inference_params: InferenceParams,
+    pub model_name: &'a str,
+    pub model_provider_name: &'a str,
 }
 
 /// A handler for the inference endpoint
@@ -136,7 +138,6 @@ pub async fn inference_handler(
     // Keep track of which variants failed
     let mut variant_errors = vec![];
     let inference_config = InferenceConfig {
-        models: &config.models,
         function,
         templates: &config.templates,
         tool_config: tool_config.as_ref(),
@@ -156,6 +157,7 @@ pub async fn inference_handler(
             let result = variant
                 .infer_stream(
                     &params.input,
+                    &config.models,
                     &inference_config,
                     &http_client,
                     &mut variant_inference_params,
@@ -163,8 +165,8 @@ pub async fn inference_handler(
                 .await;
 
             // Make sure the response worked (incl. first chunk) prior to launching the thread and starting to return chunks
-            let (chunk, stream) = match result {
-                Ok((chunk, stream)) => (chunk, stream),
+            let (chunk, stream, model_used_info) = match result {
+                Ok((chunk, stream, model_used_info)) => (chunk, stream, model_used_info),
                 Err(e) => {
                     variant_errors.push(e);
                     continue;
@@ -180,6 +182,8 @@ pub async fn inference_handler(
                 dryrun,
                 start_time,
                 inference_params: variant_inference_params,
+                model_name: model_used_info.model_name,
+                model_provider_name: model_used_info.model_provider_name,
             };
 
             let stream = create_stream(
@@ -198,6 +202,7 @@ pub async fn inference_handler(
             let result = variant
                 .infer(
                     &params.input,
+                    &config.models,
                     &inference_config,
                     &http_client,
                     &mut variant_inference_params,
@@ -255,9 +260,9 @@ pub async fn inference_handler(
 
 fn create_stream(
     function: &'static FunctionConfig,
-    metadata: InferenceMetadata,
+    metadata: InferenceMetadata<'static>,
     first_chunk: ProviderInferenceResponseChunk,
-    mut stream: ModelInferenceResponseStream,
+    mut stream: ProviderInferenceResponseStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     tool_config: Option<ToolCallConfig>,
 ) -> impl Stream<Item = Result<Event, Error>> + Send {
@@ -294,7 +299,7 @@ fn create_stream(
 
         if !metadata.dryrun {
             let inference_response: Result<InferenceResult, Error> =
-                collect_chunks(buffer, function, tool_config.as_ref()).await;
+                collect_chunks(buffer, function, tool_config.as_ref(), metadata.model_name, metadata.model_provider_name).await;
 
             let inference_response = inference_response.ok_or_log();
 
@@ -355,10 +360,10 @@ pub struct InferenceDatabaseInsertMetadata {
     pub processing_time: Duration,
 }
 
-async fn write_inference(
+async fn write_inference<'a>(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     input: Input,
-    result: InferenceResult,
+    result: InferenceResult<'a>,
     metadata: InferenceDatabaseInsertMetadata,
 ) {
     let serialized_input = match serde_json::to_string(&input).map_err(|e| Error::Serialization {

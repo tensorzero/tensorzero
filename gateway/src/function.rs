@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::error::{Error, ResultExt};
 use crate::inference::types::{
     ChatInferenceResult, ContentBlock, InferenceResult, Input, InputMessageContent,
-    JsonInferenceResult, ProviderInferenceResponse, Role, Usage,
+    JsonInferenceResult, ModelInferenceResult, Role, Usage,
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
@@ -134,21 +134,21 @@ impl FunctionConfig {
         }
     }
 
-    pub async fn prepare_response(
+    pub async fn prepare_response<'a>(
         &self,
         inference_id: Uuid,
         content_blocks: Vec<ContentBlock>,
         usage: Usage,
-        model_inference_responses: Vec<ProviderInferenceResponse>,
+        model_inference_results: Vec<ModelInferenceResult<'a>>,
         tool_config: Option<&ToolCallConfig>,
-    ) -> Result<InferenceResult, Error> {
+    ) -> Result<InferenceResult<'a>, Error> {
         match self {
             FunctionConfig::Chat(..) => Ok(InferenceResult::Chat(
                 ChatInferenceResult::new(
                     inference_id,
                     content_blocks,
                     usage,
-                    model_inference_responses,
+                    model_inference_results,
                     tool_config,
                 )
                 .await,
@@ -194,7 +194,7 @@ impl FunctionConfig {
                     raw,
                     parsed_output,
                     usage,
-                    model_inference_responses,
+                    model_inference_results,
                 )))
             }
         }
@@ -1219,7 +1219,7 @@ mod tests {
                 assert!(result.output.parsed.is_none());
                 assert_eq!(result.output.raw, "Hello, world!");
                 assert_eq!(result.usage, usage);
-                assert_eq!(result.model_inference_responses, vec![model_response]);
+                assert_eq!(result.model_inference_results, vec![model_response]);
             }
             _ => panic!("Expected a JSON inference result"),
         }
@@ -1259,7 +1259,7 @@ mod tests {
                 );
                 assert_eq!(result.output.raw, r#"{"name": "Jerry", "age": 30}"#);
                 assert_eq!(result.usage, usage);
-                assert_eq!(result.model_inference_responses, vec![model_response]);
+                assert_eq!(result.model_inference_results, vec![model_response]);
             }
             _ => panic!("Expected a JSON inference result"),
         }
@@ -1296,7 +1296,7 @@ mod tests {
                 assert!(result.output.parsed.is_none());
                 assert_eq!(result.output.raw, r#"{"name": "Jerry", "age": "thirty"}"#);
                 assert_eq!(result.usage, usage);
-                assert_eq!(result.model_inference_responses, vec![model_response]);
+                assert_eq!(result.model_inference_results, vec![model_response]);
             }
             _ => panic!("Expected a JSON inference result"),
         }
@@ -1338,7 +1338,7 @@ mod tests {
                 assert!(result.output.parsed.is_none());
                 assert_eq!(result.output.raw, "tool_call_arguments");
                 assert_eq!(result.usage, usage);
-                assert_eq!(result.model_inference_responses, vec![model_response]);
+                assert_eq!(result.model_inference_results, vec![model_response]);
             }
             _ => panic!("Expected a JSON inference result"),
         }
@@ -1382,7 +1382,7 @@ mod tests {
                 );
                 assert_eq!(result.output.raw, r#"{"name": "Jerry", "age": 30}"#);
                 assert_eq!(result.usage, usage);
-                assert_eq!(result.model_inference_responses, vec![model_response]);
+                assert_eq!(result.model_inference_results, vec![model_response]);
             }
             _ => panic!("Expected a JSON inference result"),
         }
