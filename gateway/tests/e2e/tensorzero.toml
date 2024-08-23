@@ -236,6 +236,13 @@ model = "llama3.1-8b-instruct-fireworks"
 system_template = "config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.fireworks-firefunction]
+type = "chat_completion"
+weight = 0
+model = "firefunction-v2"
+system_template = "config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.gcp-vertex-gemini-flash]
 type = "chat_completion"
 weight = 0
