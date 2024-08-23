@@ -38,4 +38,4 @@ jobs:
 
       - name: Test (Rust)
         run: |
-          cargo test-unit --profile ci
+          cargo test-unit --profile ci {{ env.CARGO_NEXTEST_ARGS }}
