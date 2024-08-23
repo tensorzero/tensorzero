@@ -518,7 +518,7 @@ pub async fn test_tool_use_inference_request_with_provider(provider: E2ETestProv
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the weather like in Tokyo? Use the `get_weather` tool."
+                    "content": "What is the weather like in Tokyo (in Celsius)? Use the `get_weather` tool."
                 }
             ]},
         "stream": false,
@@ -567,13 +567,11 @@ pub async fn test_tool_use_inference_request_with_provider(provider: E2ETestProv
     let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
     let arguments: Value = serde_json::from_str(arguments).unwrap();
     let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 1 || arguments.len() == 2);
+    assert!(arguments.len() == 2);
     let location = arguments.get("location").unwrap().as_str().unwrap();
     assert_eq!(location.to_lowercase(), "tokyo");
-    if arguments.len() == 2 {
-        let units = arguments.get("units").unwrap().as_str().unwrap();
-        assert!(units == "fahrenheit" || units == "celsius");
-    }
+    let units = arguments.get("units").unwrap().as_str().unwrap();
+    assert!(units == "celsius");
 
     let parsed_arguments = content_block.get("parsed_arguments").unwrap();
     let parsed_arguments = parsed_arguments.as_object().unwrap();
@@ -627,7 +625,7 @@ pub async fn test_tool_use_inference_request_with_provider(provider: E2ETestProv
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo? Use the `get_weather` tool."}]
+                    "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the `get_weather` tool."}]
                 }
             ]
         }
@@ -721,13 +719,11 @@ pub async fn test_tool_use_inference_request_with_provider(provider: E2ETestProv
     let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
     let arguments: Value = serde_json::from_str(arguments).unwrap();
     let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 1 || arguments.len() == 2);
+    assert!(arguments.len() == 2);
     let location = arguments.get("location").unwrap().as_str().unwrap();
     assert_eq!(location.to_lowercase(), "tokyo");
-    if arguments.len() == 2 {
-        let units = arguments.get("units").unwrap().as_str().unwrap();
-        assert!(units == "fahrenheit" || units == "celsius");
-    }
+    let units = arguments.get("units").unwrap().as_str().unwrap();
+    assert!(units == "celsius");
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
@@ -753,7 +749,7 @@ pub async fn test_tool_use_streaming_inference_request_with_provider(provider: E
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the weather like in Tokyo? Use the `get_weather` tool."
+                    "content": "What is the weather like in Tokyo (in Celsius)? Use the `get_weather` tool."
                 }
             ]},
         "stream": true,
@@ -888,7 +884,7 @@ pub async fn test_tool_use_streaming_inference_request_with_provider(provider: E
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo? Use the `get_weather` tool."}]
+                    "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the `get_weather` tool."}]
                 }
             ]
         }
@@ -994,13 +990,11 @@ pub async fn test_tool_use_streaming_inference_request_with_provider(provider: E
     let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
     let arguments: Value = serde_json::from_str(arguments).unwrap();
     let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 1 || arguments.len() == 2);
+    assert!(arguments.len() == 2);
     let location = arguments.get("location").unwrap().as_str().unwrap();
     assert_eq!(location.to_lowercase(), "tokyo");
-    if arguments.len() == 2 {
-        let units = arguments.get("units").unwrap().as_str().unwrap();
-        assert!(units == "fahrenheit" || units == "celsius");
-    }
+    let units = arguments.get("units").unwrap().as_str().unwrap();
+    assert!(units == "celsius");
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("get_weather"));
@@ -1040,7 +1034,7 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the weather like in Tokyo? Use the `get_weather` tool."
+                    "content": "What is the weather like in Tokyo (in Celsius)? Use the `get_weather` tool."
                 },
                 {
                     "role": "assistant",
@@ -1138,7 +1132,7 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the weather like in Tokyo? Use the `get_weather` tool."}]
+                "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the `get_weather` tool."}]
             },
             {
                 "role": "assistant",
@@ -1246,7 +1240,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the weather like in Tokyo? Use the `get_weather` tool."
+                    "content": "What is the weather like in Tokyo (in Celsius)? Use the `get_weather` tool."
                 },
                 {
                     "role": "assistant",
@@ -1379,7 +1373,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the weather like in Tokyo? Use the `get_weather` tool."}]
+                "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the `get_weather` tool."}]
             },
             {
                 "role": "assistant",
@@ -1503,7 +1497,7 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the weather like in Tokyo? Use the provided `get_temperature` tool. Do not say anything else, just call the function."
+                    "content": "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."
                 }
             ]},
         "stream": false,
@@ -1573,13 +1567,11 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
     let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
     let arguments: Value = serde_json::from_str(arguments).unwrap();
     let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 1 || arguments.len() == 2);
+    assert!(arguments.len() == 2);
     let location = arguments.get("location").unwrap().as_str().unwrap();
     assert_eq!(location.to_lowercase(), "tokyo");
-    if arguments.len() == 2 {
-        let units = arguments.get("units").unwrap().as_str().unwrap();
-        assert!(units == "fahrenheit" || units == "celsius");
-    }
+    let units = arguments.get("units").unwrap().as_str().unwrap();
+    assert!(units == "celsius");
 
     let parsed_arguments = content_block.get("parsed_arguments").unwrap();
     let parsed_arguments = parsed_arguments.as_object().unwrap();
@@ -1633,7 +1625,7 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo? Use the provided `get_temperature` tool. Do not say anything else, just call the function."}]
+                    "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."}]
                 }
             ]
         }
@@ -1726,12 +1718,12 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
     let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
     let arguments: Value = serde_json::from_str(arguments).unwrap();
     let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 1 || arguments.len() == 2);
+    assert!(arguments.len() == 2);
     let location = arguments.get("location").unwrap().as_str().unwrap();
     assert_eq!(location.to_lowercase(), "tokyo");
     if arguments.len() == 2 {
         let units = arguments.get("units").unwrap().as_str().unwrap();
-        assert!(units == "fahrenheit" || units == "celsius");
+        assert!(units == "celsius");
     }
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
@@ -1760,7 +1752,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the weather like in Tokyo? Use the provided `get_temperature` tool. Do not say anything else, just call the function."
+                    "content": "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."
                 }
             ]},
         "stream": true,
@@ -1919,7 +1911,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo? Use the provided `get_temperature` tool. Do not say anything else, just call the function."}]
+                    "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."}]
                 }
             ]
         }
@@ -2024,13 +2016,11 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
     let arguments: Value = serde_json::from_str(arguments).unwrap();
     let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 1 || arguments.len() == 2);
+    assert!(arguments.len() == 2);
     let location = arguments.get("location").unwrap().as_str().unwrap();
     assert_eq!(location.to_lowercase(), "tokyo");
-    if arguments.len() == 2 {
-        let units = arguments.get("units").unwrap().as_str().unwrap();
-        assert!(units == "fahrenheit" || units == "celsius");
-    }
+    let units = arguments.get("units").unwrap().as_str().unwrap();
+    assert!(units == "celsius");
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("get_temperature"));
