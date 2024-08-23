@@ -5,6 +5,8 @@ crate::generate_provider_tests!(get_providers);
 async fn get_providers() -> E2ETestProviders {
     let providers = vec![E2ETestProvider {
         variant_name: "vllm".to_string(),
+        model_name: "microsoft/Phi-3.5-mini-instruct".to_string(),
+        model_provider_name: "vllm".to_string(),
     }];
 
     // TODOs (#169): Implement a solution for vLLM tool use

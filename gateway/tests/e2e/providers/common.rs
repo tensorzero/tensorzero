@@ -14,6 +14,8 @@ use crate::common::{
 #[derive(Clone, Debug)]
 pub struct E2ETestProvider {
     pub variant_name: String,
+    pub model_name: String,
+    pub model_provider_name: String,
 }
 
 /// Enforce that every provider implements a common set of tests.
@@ -283,6 +285,11 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, correct_input);
 
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
     let output = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
     assert_eq!(content_blocks.len(), 1);
@@ -480,6 +487,11 @@ pub async fn test_streaming_inference_request_with_provider(provider: E2ETestPro
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, correct_input);
+
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
 
     let output = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
@@ -703,6 +715,11 @@ pub async fn test_tool_use_inference_request_with_provider(provider: E2ETestProv
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, correct_input);
+
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
 
     let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
     let output_clickhouse_model: Vec<Value> =
@@ -969,6 +986,11 @@ pub async fn test_tool_use_streaming_inference_request_with_provider(provider: E
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, correct_input);
 
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
     let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
     let output_clickhouse_model: Vec<Value> =
         serde_json::from_str(output_clickhouse_model).unwrap();
@@ -1204,6 +1226,11 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, correct_input);
+
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
 
     let output = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
@@ -1450,6 +1477,11 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, correct_input);
 
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
     let output = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
     assert_eq!(content_blocks.len(), 1);
@@ -1628,6 +1660,11 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, correct_input);
+
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
 
     let output_clickhouse = result.get("output").unwrap().as_str().unwrap();
     assert!(output_clickhouse.to_lowercase().contains("tokyo"));
@@ -1826,6 +1863,11 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, correct_input);
+
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
 
     let output_clickhouse = result.get("output").unwrap().as_str().unwrap();
     assert!(output_clickhouse.to_lowercase().contains("tokyo"));

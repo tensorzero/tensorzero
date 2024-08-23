@@ -13,6 +13,8 @@ crate::generate_provider_tests!(get_providers);
 async fn get_providers() -> E2ETestProviders {
     E2ETestProviders::with_provider(E2ETestProvider {
         variant_name: "openai".to_string(),
+        model_name: "gpt-4o-mini-2024-07-18".to_string(),
+        model_provider_name: "openai".to_string(),
     })
 }
 

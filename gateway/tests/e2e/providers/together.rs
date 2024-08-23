@@ -5,6 +5,8 @@ crate::generate_provider_tests!(get_providers);
 async fn get_providers() -> E2ETestProviders {
     let providers = vec![E2ETestProvider {
         variant_name: "together".to_string(),
+        model_name: "llama3.1-8b-instruct-together".to_string(),
+        model_provider_name: "together".to_string(),
     }];
 
     // TODOs (#80):

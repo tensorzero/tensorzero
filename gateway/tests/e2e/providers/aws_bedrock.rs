@@ -13,6 +13,8 @@ crate::generate_provider_tests!(get_providers);
 async fn get_providers() -> E2ETestProviders {
     E2ETestProviders::with_provider(E2ETestProvider {
         variant_name: "aws-bedrock".to_string(),
+        model_name: "claude-3-haiku-20240307-aws-bedrock".to_string(),
+        model_provider_name: "aws-bedrock".to_string(),
     })
 }
 
@@ -111,6 +113,10 @@ async fn test_inference_with_explicit_region() {
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, correct_input);
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, "claude-3-haiku-20240307-us-east-1");
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, "aws-bedrock-us-east-1");
     let output = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
     assert_eq!(content_blocks.len(), 1);
