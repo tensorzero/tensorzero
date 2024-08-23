@@ -25,6 +25,7 @@ use crate::{error::Error, variant::JsonEnforcement};
 /// A request is made that contains an Input
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Input {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub system: Option<Value>,
     pub messages: Vec<InputMessage>,
 }
@@ -146,8 +147,8 @@ pub struct ProviderInferenceResponse {
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Usage {
-    pub prompt_tokens: u32,
-    pub completion_tokens: u32,
+    pub input_tokens: u32,
+    pub output_tokens: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -202,7 +203,7 @@ pub enum InferenceResult<'a> {
     Json(JsonInferenceResult<'a>),
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct ChatInferenceResult<'a> {
     pub inference_id: Uuid,
     created: u64,
@@ -258,6 +259,7 @@ pub struct ChatInferenceResultChunk {
     pub inference_id: Uuid,
     pub content: Vec<ContentBlockChunk>,
     pub created: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
 }
 
@@ -266,6 +268,7 @@ pub struct JsonInferenceResultChunk {
     pub inference_id: Uuid,
     pub raw: String,
     pub created: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
 }
 
@@ -280,7 +283,7 @@ pub enum InferenceResultChunk {
 /// For this we convert the InferenceResult into an Inference and ModelInferences,
 /// which are written to ClickHouse tables of the same name asynchronously.
 
-#[derive(Serialize, Debug)]
+#[derive(Debug, Serialize)]
 pub struct InferenceDatabaseInsert {
     pub id: Uuid,
     pub function_name: String,
@@ -433,8 +436,8 @@ impl ModelInferenceDatabaseInsert {
             // We write the serialized JSON form of the ContentBlocks output by the model
             output: serde_json::to_string(&result.content).unwrap_or_default(),
             raw_response: result.raw_response,
-            input_tokens: result.usage.prompt_tokens,
-            output_tokens: result.usage.completion_tokens,
+            input_tokens: result.usage.input_tokens,
+            output_tokens: result.usage.output_tokens,
             response_time_ms: latency_ms,
             ttft_ms,
             model_provider_name: result.model_provider_name.to_string(),
@@ -444,12 +447,17 @@ impl ModelInferenceDatabaseInsert {
 }
 
 impl ProviderInferenceResponse {
-    pub fn new(content: Vec<ContentBlock>, raw: String, usage: Usage, latency: Latency) -> Self {
+    pub fn new(
+        content: Vec<ContentBlock>,
+        raw_response: String,
+        usage: Usage,
+        latency: Latency,
+    ) -> Self {
         Self {
             id: Uuid::now_v7(),
             created: current_timestamp(),
             content,
-            raw_response: raw,
+            raw_response,
             usage,
             latency,
         }
@@ -524,13 +532,12 @@ impl<'a> ChatInferenceResult<'a> {
         tool_config: Option<&ToolCallConfig>,
     ) -> Vec<ContentBlockOutput> {
         if content.is_empty() {
-            Error::OutputParsing {
-                raw_output: "".to_string(),
-                message: "Output parsing failed due to empty content".to_string(),
+            Error::Inference {
+                message: "No content blocks in inference result".to_string(),
             }
             .log();
-            return vec![];
         }
+
         let mut output = Vec::new();
         for content in content.into_iter() {
             match content {
@@ -544,9 +551,9 @@ impl<'a> ChatInferenceResult<'a> {
                 }
                 ContentBlock::ToolResult(tool_result) => {
                     Error::OutputParsing {
-                        raw_output: serde_json::to_string(&tool_result).unwrap_or_default(),
                         message: "Tool results are not supported in output for Chat functions"
                             .to_string(),
+                        raw_output: serde_json::to_string(&tool_result).unwrap_or_default(),
                     }
                     .log();
                 }
@@ -751,12 +758,10 @@ pub async fn collect_chunks<'a>(
             };
         }
         if let Some(chunk_usage) = chunk.usage {
-            usage.prompt_tokens = usage
-                .prompt_tokens
-                .saturating_add(chunk_usage.prompt_tokens);
-            usage.completion_tokens = usage
-                .completion_tokens
-                .saturating_add(chunk_usage.completion_tokens);
+            usage.input_tokens = usage.input_tokens.saturating_add(chunk_usage.input_tokens);
+            usage.output_tokens = usage
+                .output_tokens
+                .saturating_add(chunk_usage.output_tokens);
         }
     }
 
@@ -832,8 +837,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let content = vec!["Hello, world!".to_string().into()];
         let usage = Usage {
-            prompt_tokens: 10,
-            completion_tokens: 20,
+            input_tokens: 10,
+            output_tokens: 20,
         };
         let model_inference_responses = vec![ModelInferenceResult {
             id: Uuid::now_v7(),
@@ -1055,8 +1060,8 @@ mod tests {
                 })],
                 created,
                 usage: Some(Usage {
-                    prompt_tokens: 2,
-                    completion_tokens: 4,
+                    input_tokens: 2,
+                    output_tokens: 4,
                 }),
                 raw_response: ", world!\"}".to_string(),
                 latency: Duration::from_millis(250),
@@ -1081,8 +1086,8 @@ mod tests {
         assert_eq!(
             chat_result.usage,
             Usage {
-                prompt_tokens: 2,
-                completion_tokens: 4,
+                input_tokens: 2,
+                output_tokens: 4,
             }
         );
         assert_eq!(chat_result.model_inference_results.len(), 1);
@@ -1114,12 +1119,12 @@ mod tests {
             output_schema,
         });
         let usage1 = Usage {
-            prompt_tokens: 10,
-            completion_tokens: 5,
+            input_tokens: 10,
+            output_tokens: 5,
         };
         let usage2 = Usage {
-            prompt_tokens: 5,
-            completion_tokens: 10,
+            input_tokens: 5,
+            output_tokens: 10,
         };
         let chunks = vec![
             ProviderInferenceResponseChunk {
@@ -1168,8 +1173,8 @@ mod tests {
                 assert_eq!(
                     json_result.usage,
                     Usage {
-                        prompt_tokens: 15,
-                        completion_tokens: 15,
+                        input_tokens: 15,
+                        output_tokens: 15,
                     }
                 );
                 assert_eq!(json_result.model_inference_results.len(), 1);
@@ -1187,8 +1192,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let created = current_timestamp();
         let usage = Usage {
-            prompt_tokens: 10,
-            completion_tokens: 5,
+            input_tokens: 10,
+            output_tokens: 5,
         };
         let chunks = vec![
             ProviderInferenceResponseChunk {
@@ -1245,8 +1250,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let created = current_timestamp();
         let usage = Usage {
-            prompt_tokens: 15,
-            completion_tokens: 10,
+            input_tokens: 15,
+            output_tokens: 10,
         };
         let chunks = vec![
             ProviderInferenceResponseChunk {
@@ -1328,12 +1333,12 @@ mod tests {
             output_schema,
         });
         let usage1 = Usage {
-            prompt_tokens: 10,
-            completion_tokens: 5,
+            input_tokens: 10,
+            output_tokens: 5,
         };
         let usage2 = Usage {
-            prompt_tokens: 5,
-            completion_tokens: 10,
+            input_tokens: 5,
+            output_tokens: 10,
         };
         let chunks = vec![
             ProviderInferenceResponseChunk {
@@ -1384,8 +1389,8 @@ mod tests {
                 assert_eq!(
                     json_result.usage,
                     Usage {
-                        prompt_tokens: 15,
-                        completion_tokens: 15,
+                        input_tokens: 15,
+                        output_tokens: 15,
                     }
                 );
                 assert_eq!(json_result.model_inference_results.len(), 1);

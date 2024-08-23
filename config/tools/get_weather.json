@@ -10,6 +10,6 @@
       "enum": ["fahrenheit", "celsius"]
     }
   },
-  "required": ["location", "units"],
+  "required": ["location"],
   "additionalProperties": false
 }

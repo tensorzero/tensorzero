@@ -17,7 +17,7 @@ use crate::{
 use super::{
     openai::{
         get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
-        stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseWithLatency, OpenAITool,
+        stream_openai, OpenAIRequestMessage, OpenAIResponseWithLatency, OpenAITool,
         OpenAIToolChoice,
     },
     provider_trait::InferenceProvider,
@@ -56,14 +56,16 @@ impl InferenceProvider for TogetherProvider {
                 status_code: e.status().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
             })?;
         if res.status().is_success() {
-            let response_body =
-                res.json::<OpenAIResponse>()
-                    .await
-                    .map_err(|e| Error::TogetherServer {
-                        message: format!("Error parsing response: {e}"),
-                    })?;
+            let response = res.text().await.map_err(|e| Error::TogetherServer {
+                message: format!("Error parsing text response: {e}"),
+            })?;
+
+            let response = serde_json::from_str(&response).map_err(|e| Error::TogetherServer {
+                message: format!("Error parsing JSON response: {e}: {response}"),
+            })?;
+
             Ok(OpenAIResponseWithLatency {
-                response: response_body,
+                response,
                 latency: Latency::NonStreaming {
                     response_time: start_time.elapsed(),
                 },

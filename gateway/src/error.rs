@@ -134,8 +134,8 @@ pub enum Error {
         message: String,
     },
     OutputParsing {
-        raw_output: String,
         message: String,
+        raw_output: String,
     },
     OutputValidation {
         source: Box<Error>,
@@ -176,6 +176,13 @@ pub enum Error {
     },
     UnknownMetric {
         name: String,
+    },
+    VLLMClient {
+        message: String,
+        status_code: StatusCode,
+    },
+    VLLMServer {
+        message: String,
     },
 }
 
@@ -237,6 +244,8 @@ impl Error {
             Error::UnknownTool { .. } => tracing::Level::ERROR,
             Error::UnknownVariant { .. } => tracing::Level::WARN,
             Error::UnknownMetric { .. } => tracing::Level::WARN,
+            Error::VLLMClient { .. } => tracing::Level::WARN,
+            Error::VLLMServer { .. } => tracing::Level::ERROR,
         }
     }
 
@@ -297,6 +306,8 @@ impl Error {
             Error::UnknownTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::UnknownVariant { .. } => StatusCode::NOT_FOUND,
             Error::UnknownMetric { .. } => StatusCode::NOT_FOUND,
+            Error::VLLMClient { status_code, .. } => *status_code,
+            Error::VLLMServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
@@ -336,19 +347,19 @@ impl std::fmt::Display for Error {
                 write!(f, "Error from Anthropic client: {}", message)
             }
             Error::AnthropicServer { message } => {
-                write!(f, "Error from Anthropic servers: {}", message)
+                write!(f, "Error from Anthropic server: {}", message)
             }
             Error::AWSBedrockClient { message, .. } => {
                 write!(f, "Error from AWS Bedrock client: {}", message)
             }
             Error::AWSBedrockServer { message } => {
-                write!(f, "Error from AWS Bedrock servers: {}", message)
+                write!(f, "Error from AWS Bedrock server: {}", message)
             }
             Error::AzureClient { message, .. } => {
                 write!(f, "Error from Azure client: {}", message)
             }
             Error::AzureServer { message } => {
-                write!(f, "Error from Azure servers: {}", message)
+                write!(f, "Error from Azure server: {}", message)
             }
             Error::ChannelWrite { message } => {
                 write!(f, "Error writing to channel: {}", message)
@@ -366,7 +377,7 @@ impl std::fmt::Display for Error {
                 write!(f, "Error from Fireworks client: {}", message)
             }
             Error::FireworksServer { message } => {
-                write!(f, "Error from Fireworks servers: {}", message)
+                write!(f, "Error from Fireworks server: {}", message)
             }
             Error::GCPCredentials { message } => {
                 write!(f, "Error in acquiring GCP credentials: {}", message)
@@ -375,7 +386,7 @@ impl std::fmt::Display for Error {
                 write!(f, "Error from GCP Vertex client: {}", message)
             }
             Error::GCPVertexServer { message } => {
-                write!(f, "Error from GCP Vertex servers: {}", message)
+                write!(f, "Error from GCP Vertex server: {}", message)
             }
             Error::Inference { message } => write!(f, "{}", message),
             Error::InferenceClient { message } => write!(f, "{}", message),
@@ -450,15 +461,14 @@ impl std::fmt::Display for Error {
             Error::OpenAIClient { message, .. } => {
                 write!(f, "Error from OpenAI client: {}", message)
             }
-            Error::OpenAIServer { message } => write!(f, "Error from OpenAI servers: {}", message),
+            Error::OpenAIServer { message } => write!(f, "Error from OpenAI server: {}", message),
             Error::OutputParsing {
                 raw_output,
                 message,
             } => {
                 write!(
                     f,
-                    "Error parsing output as JSON with message: {}: {}",
-                    message, raw_output
+                    "Error parsing output as JSON with message: {message}: {raw_output}"
                 )
             }
             Error::OutputValidation { source } => {
@@ -473,7 +483,7 @@ impl std::fmt::Display for Error {
                 write!(f, "Error from Together client: {}", message)
             }
             Error::TogetherServer { message } => {
-                write!(f, "Error from Together servers: {}", message)
+                write!(f, "Error from Together server: {}", message)
             }
             Error::ToolNotFound { name } => write!(f, "Tool not found: {}", name),
             Error::ToolNotLoaded { name } => write!(f, "Tool not loaded: {}", name),
@@ -482,6 +492,10 @@ impl std::fmt::Display for Error {
             Error::UnknownTool { name } => write!(f, "Unknown tool: {}", name),
             Error::UnknownVariant { name } => write!(f, "Unknown variant: {}", name),
             Error::UnknownMetric { name } => write!(f, "Unknown metric: {}", name),
+            Error::VLLMClient { message, .. } => {
+                write!(f, "Error from vLLM client: {}", message)
+            }
+            Error::VLLMServer { message } => write!(f, "Error from vLLM server: {}", message),
         }
     }
 }

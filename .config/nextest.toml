@@ -1,6 +1,6 @@
 [profile.default]
 retries = { backoff = "fixed", count = 2, delay = "5s", jitter = true }
-slow-timeout = { period = "5s", terminate-after = 3 }
+slow-timeout = { period = "10s", terminate-after = 3 }
 
 [profile.ci]
 retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }

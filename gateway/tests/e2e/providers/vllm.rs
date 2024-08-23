@@ -4,12 +4,10 @@ crate::generate_provider_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
     let providers = vec![E2ETestProvider {
-        variant_name: "together".to_string(),
+        variant_name: "vllm".to_string(),
     }];
 
-    // TODOs (#80):
-    // - Together seems to have a different format for tool use responses compared to OpenAI (breaking)
-    // - Together's function calling for Llama 3.1 is different from Llama 3.0 (breaking) - we should test both
+    // TODOs (#169): Implement a solution for vLLM tool use
     E2ETestProviders {
         simple_inference: providers.clone(),
         streaming_inference: providers.clone(),

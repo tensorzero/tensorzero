@@ -10,3 +10,4 @@ pub mod gcp_vertex;
 pub mod openai;
 pub mod provider_trait;
 pub mod together;
+pub mod vllm;

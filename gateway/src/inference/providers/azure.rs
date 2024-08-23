@@ -13,7 +13,7 @@ use crate::inference::types::{
 
 use super::openai::{
     handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
-    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseWithLatency, OpenAITool, OpenAIToolChoice,
+    OpenAIRequestMessage, OpenAIResponseWithLatency, OpenAITool, OpenAIToolChoice,
     OpenAIToolChoiceString, SpecificToolChoice,
 };
 use super::provider_trait::InferenceProvider;
@@ -53,18 +53,18 @@ impl InferenceProvider for AzureProvider {
             let latency = Latency::NonStreaming {
                 response_time: start_time.elapsed(),
             };
-            let response_body =
-                res.json::<OpenAIResponse>()
-                    .await
-                    .map_err(|e| Error::AzureServer {
-                        message: format!("Error parsing response: {e}"),
-                    })?;
-            Ok(OpenAIResponseWithLatency {
-                response: response_body,
-                latency,
-            }
-            .try_into()
-            .map_err(map_openai_to_azure_error)?)
+
+            let response = res.text().await.map_err(|e| Error::AnthropicServer {
+                message: format!("Error parsing text response: {e}"),
+            })?;
+
+            let response = serde_json::from_str(&response).map_err(|e| Error::AnthropicServer {
+                message: format!("Error parsing JSON response: {e}: {response}"),
+            })?;
+
+            Ok(OpenAIResponseWithLatency { response, latency }
+                .try_into()
+                .map_err(map_openai_to_azure_error)?)
         } else {
             handle_openai_error(
                 res.status(),
@@ -179,7 +179,7 @@ impl<'a> From<OpenAIToolChoice<'a>> for AzureToolChoice<'a> {
 /// We are not handling logprobs, top_logprobs, n, prompt_truncate_len
 /// presence_penalty, frequency_penalty, seed, service_tier, stop, user,
 /// or context_length_exceeded_behavior
-#[derive(Serialize, Debug)]
+#[derive(Debug, Serialize)]
 struct AzureRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     model: &'a str,

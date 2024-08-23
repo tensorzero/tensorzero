@@ -16,8 +16,8 @@ use crate::{
 use super::{
     openai::{
         get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
-        stream_openai, OpenAIFunction, OpenAIRequestMessage, OpenAIResponse,
-        OpenAIResponseWithLatency, OpenAITool, OpenAIToolChoice, OpenAIToolType,
+        stream_openai, OpenAIFunction, OpenAIRequestMessage, OpenAIResponseWithLatency, OpenAITool,
+        OpenAIToolChoice, OpenAIToolType,
     },
     provider_trait::InferenceProvider,
 };
@@ -60,18 +60,17 @@ impl InferenceProvider for FireworksProvider {
             response_time: start_time.elapsed(),
         };
         if res.status().is_success() {
-            let response_body =
-                res.json::<OpenAIResponse>()
-                    .await
-                    .map_err(|e| Error::FireworksServer {
-                        message: format!("Error parsing response: {e}"),
-                    })?;
-            Ok(OpenAIResponseWithLatency {
-                response: response_body,
-                latency,
-            }
-            .try_into()
-            .map_err(map_openai_to_fireworks_error)?)
+            let response = res.text().await.map_err(|e| Error::FireworksServer {
+                message: format!("Error parsing text response: {e}"),
+            })?;
+
+            let response = serde_json::from_str(&response).map_err(|e| Error::FireworksServer {
+                message: format!("Error parsing JSON response: {e}: {response}"),
+            })?;
+
+            Ok(OpenAIResponseWithLatency { response, latency }
+                .try_into()
+                .map_err(map_openai_to_fireworks_error)?)
         } else {
             handle_openai_error(
                 res.status(),

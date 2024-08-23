@@ -167,7 +167,7 @@ impl ToolCallConfig {
 /// if `allowed_tools` is not provided, all tools are allowed.
 /// `additional_tools` are the tools that are provided at runtime, which we compile on the fly.
 /// `tool_choice` and `parallel_tool_calls` are optional and will override the function-level values.
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(Default))]
 pub struct DynamicToolParams {
     pub allowed_tools: Option<Vec<String>>,
@@ -261,11 +261,13 @@ pub enum ToolChoice {
     #[default]
     Auto,
     Required,
-    Tool(String), // Forces the LLM to call a particular tool, the String is the name of the Tool
-    Implicit, // It is occasionally helpful to make an "implicit" tool call to enforce that a JSON schema is followed
-              // In this case, the tool call is not exposed to the client, but the output is still validated against the schema
-              // Implicit means that the tool will always be called "respond" and that we should convert it back to chat-style output
-              // before response.
+    // Forces the LLM to call a particular tool, the String is the name of the Tool
+    Tool(String),
+    // It is occasionally helpful to make an "implicit" tool call to enforce that a JSON schema is followed
+    // In this case, the tool call is not exposed to the client, but the output is still validated against the schema
+    // Implicit means that the tool will always be called "respond" and that we should convert it back to chat-style output
+    // before response.
+    Implicit,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

@@ -347,8 +347,8 @@ fn bedrock_to_tensorzero_stream_message(
                 None => Ok(None),
                 Some(usage) => {
                     let usage = Some(Usage {
-                        prompt_tokens: usage.input_tokens as u32,
-                        completion_tokens: usage.output_tokens as u32,
+                        input_tokens: usage.input_tokens as u32,
+                        output_tokens: usage.output_tokens as u32,
                     });
 
                     Ok(Some(ProviderInferenceResponseChunk::new(
@@ -512,8 +512,8 @@ impl TryFrom<ConverseOutputWithLatency> for ProviderInferenceResponse {
         let usage = output
             .usage
             .map(|u| Usage {
-                prompt_tokens: u.input_tokens as u32,
-                completion_tokens: u.output_tokens as u32,
+                input_tokens: u.input_tokens as u32,
+                output_tokens: u.output_tokens as u32,
             })
             .ok_or(Error::AWSBedrockServer {
                 message: "AWS Bedrock returned a message without usage information.".to_string(),

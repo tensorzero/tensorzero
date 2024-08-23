@@ -17,6 +17,7 @@ use crate::{
             openai::OpenAIProvider,
             provider_trait::InferenceProvider,
             together::TogetherProvider,
+            vllm::VLLMProvider,
         },
         types::{
             ModelInferenceRequest, ModelInferenceResponse, ProviderInferenceResponse,
@@ -108,6 +109,7 @@ pub enum ProviderConfig {
     GCPVertexGemini(GCPVertexGeminiProvider),
     OpenAI(OpenAIProvider),
     Together(TogetherProvider),
+    VLLM(VLLMProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
 }
@@ -154,6 +156,11 @@ impl<'de> Deserialize<'de> for ProviderConfig {
             },
             Together {
                 model_name: String,
+            },
+            #[allow(clippy::upper_case_acronyms)]
+            VLLM {
+                model_name: String,
+                api_base: String,
             },
             #[cfg(any(test, feature = "e2e_tests"))]
             Dummy {
@@ -244,6 +251,14 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                     api_key: env::var("TOGETHER_API_KEY").ok().map(SecretString::new),
                 })
             }
+            ProviderConfigHelper::VLLM {
+                model_name,
+                api_base,
+            } => ProviderConfig::VLLM(VLLMProvider {
+                model_name,
+                api_base,
+                api_key: env::var("VLLM_API_KEY").ok().map(SecretString::new),
+            }),
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfigHelper::Dummy { model_name } => {
                 ProviderConfig::Dummy(DummyProvider { model_name })
@@ -266,6 +281,7 @@ impl InferenceProvider for ProviderConfig {
             ProviderConfig::GCPVertexGemini(provider) => provider.infer(request, client).await,
             ProviderConfig::OpenAI(provider) => provider.infer(request, client).await,
             ProviderConfig::Together(provider) => provider.infer(request, client).await,
+            ProviderConfig::VLLM(provider) => provider.infer(request, client).await,
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => provider.infer(request, client).await,
         }
@@ -292,6 +308,7 @@ impl InferenceProvider for ProviderConfig {
             }
             ProviderConfig::OpenAI(provider) => provider.infer_stream(request, client).await,
             ProviderConfig::Together(provider) => provider.infer_stream(request, client).await,
+            ProviderConfig::VLLM(provider) => provider.infer_stream(request, client).await,
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => provider.infer_stream(request, client).await,
         }

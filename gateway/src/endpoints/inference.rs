@@ -453,6 +453,7 @@ struct ChatInferenceResponseChunk {
     episode_id: Uuid,
     variant_name: String,
     content: Vec<ContentBlockChunk>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     usage: Option<Usage>,
 }
 
@@ -462,6 +463,7 @@ struct JsonInferenceResponseChunk {
     episode_id: Uuid,
     variant_name: String,
     raw: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     usage: Option<Usage>,
 }
 
@@ -499,8 +501,11 @@ pub struct InferenceParams {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct ChatCompletionInferenceParams {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub seed: Option<u32>,
 }
 

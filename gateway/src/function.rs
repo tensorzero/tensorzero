@@ -1189,8 +1189,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let content_blocks = vec!["Hello, world!".to_string().into()];
         let usage = Usage {
-            prompt_tokens: 10,
-            completion_tokens: 10,
+            input_tokens: 10,
+            output_tokens: 10,
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -1233,8 +1233,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let content_blocks = vec![r#"{"name": "Jerry", "age": 30}"#.to_string().into()];
         let usage = Usage {
-            prompt_tokens: 10,
-            completion_tokens: 10,
+            input_tokens: 10,
+            output_tokens: 10,
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -1277,8 +1277,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let content_blocks = vec![r#"{"name": "Jerry", "age": "thirty"}"#.to_string().into()];
         let usage = Usage {
-            prompt_tokens: 10,
-            completion_tokens: 10,
+            input_tokens: 10,
+            output_tokens: 10,
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -1323,8 +1323,8 @@ mod tests {
         };
         let content_blocks = vec![ContentBlock::ToolCall(tool_call)];
         let usage = Usage {
-            prompt_tokens: 10,
-            completion_tokens: 10,
+            input_tokens: 10,
+            output_tokens: 10,
         };
         let model_response = ModelInferenceResult {
             id: Uuid::now_v7(),
@@ -1369,8 +1369,8 @@ mod tests {
         };
         let content_blocks = vec![ContentBlock::ToolCall(tool_call)];
         let usage = Usage {
-            prompt_tokens: 10,
-            completion_tokens: 10,
+            input_tokens: 10,
+            output_tokens: 10,
         };
         let model_response = ModelInferenceResult {
             id: Uuid::now_v7(),
@@ -1412,8 +1412,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let content_blocks = Vec::new();
         let usage = Usage {
-            prompt_tokens: 10,
-            completion_tokens: 10,
+            input_tokens: 10,
+            output_tokens: 10,
         };
         let model_response = ModelInferenceResult {
             id: Uuid::now_v7(),
