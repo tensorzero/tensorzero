@@ -22,7 +22,9 @@ async fn get_providers() -> E2ETestProviders {
     // - Together's function calling for Llama 3.1 is different from Llama 3.0 (breaking) - we should test both
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
-        streaming_inference: standard_providers.clone(),
+        simple_streaming_inference: standard_providers.clone(),
+        inference_params_inference: standard_providers.clone(),
+        inference_params_streaming_inference: standard_providers.clone(),
         tool_use_inference: vec![],
         tool_use_streaming_inference: vec![],
         tool_multi_turn_inference: vec![],

@@ -15,7 +15,7 @@ async fn get_providers() -> IntegrationTestProviders {
     // TODOs (#169): support tool use and tool result inference
     IntegrationTestProviders {
         simple_inference: vec![provider],
-        streaming_inference: vec![provider],
+        simple_streaming_inference: vec![provider],
         tool_use_inference: vec![],
         tool_use_streaming_inference: vec![],
         tool_multi_turn_inference: vec![],

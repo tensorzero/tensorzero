@@ -25,7 +25,9 @@ pub struct E2ETestProvider {
 /// then the provider should return an empty vector for the corresponding test.
 pub struct E2ETestProviders {
     pub simple_inference: Vec<E2ETestProvider>,
-    pub streaming_inference: Vec<E2ETestProvider>,
+    pub simple_streaming_inference: Vec<E2ETestProvider>,
+    pub inference_params_inference: Vec<E2ETestProvider>,
+    pub inference_params_streaming_inference: Vec<E2ETestProvider>,
     pub tool_use_inference: Vec<E2ETestProvider>,
     pub tool_use_streaming_inference: Vec<E2ETestProvider>,
     pub tool_multi_turn_inference: Vec<E2ETestProvider>,
@@ -41,10 +43,12 @@ macro_rules! generate_provider_tests {
     ($func:ident) => {
         use $crate::providers::common::test_dynamic_tool_use_inference_request_with_provider;
         use $crate::providers::common::test_dynamic_tool_use_streaming_inference_request_with_provider;
+        use $crate::providers::common::test_inference_params_inference_request_with_provider;
+        use $crate::providers::common::test_inference_params_streaming_inference_request_with_provider;
         use $crate::providers::common::test_json_mode_inference_request_with_provider;
         use $crate::providers::common::test_json_mode_streaming_inference_request_with_provider;
         use $crate::providers::common::test_simple_inference_request_with_provider;
-        use $crate::providers::common::test_streaming_inference_request_with_provider;
+        use $crate::providers::common::test_simple_streaming_inference_request_with_provider;
         use $crate::providers::common::test_tool_multi_turn_inference_request_with_provider;
         use $crate::providers::common::test_tool_multi_turn_streaming_inference_request_with_provider;
         use $crate::providers::common::test_tool_use_inference_request_with_provider;
@@ -59,10 +63,26 @@ macro_rules! generate_provider_tests {
         }
 
         #[tokio::test]
-        async fn test_streaming_inference_request() {
-            let providers = $func().await.streaming_inference;
+        async fn test_simple_streaming_inference_request() {
+            let providers = $func().await.simple_streaming_inference;
             for provider in providers {
-                test_streaming_inference_request_with_provider(provider).await;
+                test_simple_streaming_inference_request_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_inference_params_inference_request() {
+            let providers = $func().await.inference_params_inference;
+            for provider in providers {
+                test_inference_params_inference_request_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_inference_params_streaming_inference_request() {
+            let providers = $func().await.inference_params_streaming_inference;
+            for provider in providers {
+                test_inference_params_streaming_inference_request_with_provider(provider).await;
             }
         }
 
@@ -295,7 +315,7 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     assert!(result.get("ttft_ms").unwrap().is_null());
 }
 
-pub async fn test_streaming_inference_request_with_provider(provider: E2ETestProvider) {
+pub async fn test_simple_streaming_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -449,6 +469,415 @@ pub async fn test_streaming_inference_request_with_provider(provider: E2ETestPro
             .unwrap(),
         100
     );
+
+    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+    assert!(processing_time_ms > 0);
+
+    // Check ClickHouse - ModelInference Table
+    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ModelInference: {result:#?}");
+
+    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
+    assert!(Uuid::parse_str(model_inference_id).is_ok());
+
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    assert_eq!(input, correct_input);
+
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
+    assert_eq!(content_blocks.len(), 1);
+    let content_block = content_blocks.first().unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(clickhouse_content, full_content);
+
+    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+
+    // Check if raw_response is valid JSONL
+    for line in raw_response.lines() {
+        assert!(serde_json::from_str::<Value>(line).is_ok());
+    }
+
+    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+
+    // NB: Azure doesn't support input/output tokens during streaming
+    if provider.variant_name.contains("azure") {
+        assert_eq!(input_tokens, 0);
+        assert_eq!(output_tokens, 0);
+    } else {
+        assert!(input_tokens > 0);
+        assert!(output_tokens > 0);
+    }
+
+    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    assert!(response_time_ms > 0);
+
+    let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
+    assert!(ttft_ms > 50);
+    assert!(ttft_ms <= response_time_ms);
+}
+
+pub async fn test_inference_params_inference_request_with_provider(provider: E2ETestProvider) {
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": provider.variant_name,
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the capital city of Japan?"
+                }
+            ]},
+        "params": {
+            "chat_completion": {
+                "temperature": 0.9,
+                "seed": 1337,
+                "max_tokens": 120,
+            },
+            "json": {
+                "temperature": 0.8,
+                "seed": 7331,
+                "max_tokens": 80,
+            }
+        },
+        "stream": false,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("API response: {response_json:#?}");
+
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+    assert_eq!(episode_id_response, episode_id);
+
+    let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, provider.variant_name);
+
+    let output = response_json.get("output").unwrap().as_array().unwrap();
+    assert_eq!(output.len(), 1);
+    let content_block = output.first().unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let content = content_block.get("text").unwrap().as_str().unwrap();
+    assert!(content.to_lowercase().contains("tokyo"));
+
+    let usage = response_json.get("usage").unwrap();
+    let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
+    assert!(input_tokens > 0);
+    let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
+    assert!(output_tokens > 0);
+
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check if ClickHouse is ok - Inference Table
+    let clickhouse = get_clickhouse().await;
+    let result = select_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - Inference: {result:#?}");
+
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id = Uuid::parse_str(id).unwrap();
+    assert_eq!(id, inference_id);
+
+    let function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(function_name, "basic_test");
+
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, provider.variant_name);
+
+    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+    assert_eq!(retrieved_episode_id, episode_id);
+
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let correct_input = json!({
+        "system": {"assistant_name": "Dr. Mehta"},
+        "messages": [
+            {
+                "role": "user",
+                "content": [{"type": "text", "value": "What is the capital city of Japan?"}]
+            }
+        ]
+    });
+    assert_eq!(input, correct_input);
+
+    let content_blocks = result.get("output").unwrap().as_str().unwrap();
+    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    assert_eq!(content_blocks.len(), 1);
+    let content_block = content_blocks.first().unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(clickhouse_content, content);
+
+    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
+    assert!(tool_params.is_empty());
+
+    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
+    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    let inference_params = inference_params.get("chat_completion").unwrap();
+    let temperature = inference_params
+        .get("temperature")
+        .unwrap()
+        .as_f64()
+        .unwrap();
+    assert_eq!(temperature, 0.9);
+    let seed = inference_params.get("seed").unwrap().as_u64().unwrap();
+    assert_eq!(seed, 1337);
+    let max_tokens = inference_params
+        .get("max_tokens")
+        .unwrap()
+        .as_u64()
+        .unwrap();
+    assert_eq!(max_tokens, 120);
+
+    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+    assert!(processing_time_ms > 0);
+
+    // Check the ModelInference Table
+    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ModelInference: {result:#?}");
+
+    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
+    assert!(Uuid::parse_str(model_inference_id).is_ok());
+
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    assert_eq!(input, correct_input);
+
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
+    assert_eq!(content_blocks.len(), 1);
+    let content_block = content_blocks.first().unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(clickhouse_content, content);
+
+    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    assert!(raw_response.to_lowercase().contains("tokyo"));
+    assert!(serde_json::from_str::<Value>(raw_response).is_ok());
+
+    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    assert!(input_tokens > 0);
+    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    assert!(output_tokens > 0);
+    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    assert!(response_time_ms > 0);
+    assert!(result.get("ttft_ms").unwrap().is_null());
+}
+
+pub async fn test_inference_params_streaming_inference_request_with_provider(
+    provider: E2ETestProvider,
+) {
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": provider.variant_name,
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the capital city of Japan?"
+                }
+            ]},
+        "params": {
+            "chat_completion": {
+                "temperature": 0.9,
+                "seed": 1337,
+                "max_tokens": 120,
+            },
+            "json": {
+                "temperature": 0.8,
+                "seed": 7331,
+                "max_tokens": 80,
+            }
+        },
+        "stream": true,
+    });
+
+    let mut event_source = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .eventsource()
+        .unwrap();
+
+    let mut chunks = vec![];
+    let mut found_done_chunk = false;
+    while let Some(event) = event_source.next().await {
+        let event = event.unwrap();
+        match event {
+            Event::Open => continue,
+            Event::Message(message) => {
+                if message.data == "[DONE]" {
+                    found_done_chunk = true;
+                    break;
+                }
+                chunks.push(message.data);
+            }
+        }
+    }
+    assert!(found_done_chunk);
+
+    let mut inference_id: Option<Uuid> = None;
+    let mut full_content = String::new();
+    let mut input_tokens = 0;
+    let mut output_tokens = 0;
+    for chunk in chunks.clone() {
+        let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
+
+        println!("API response chunk: {chunk_json:#?}");
+
+        let chunk_inference_id = chunk_json.get("inference_id").unwrap().as_str().unwrap();
+        let chunk_inference_id = Uuid::parse_str(chunk_inference_id).unwrap();
+        match inference_id {
+            Some(inference_id) => {
+                assert_eq!(inference_id, chunk_inference_id);
+            }
+            None => {
+                inference_id = Some(chunk_inference_id);
+            }
+        }
+
+        let chunk_episode_id = chunk_json.get("episode_id").unwrap().as_str().unwrap();
+        let chunk_episode_id = Uuid::parse_str(chunk_episode_id).unwrap();
+        assert_eq!(chunk_episode_id, episode_id);
+
+        let content_blocks = chunk_json.get("content").unwrap().as_array().unwrap();
+        if !content_blocks.is_empty() {
+            let content_block = content_blocks.first().unwrap();
+            let content = content_block.get("text").unwrap().as_str().unwrap();
+            full_content.push_str(content);
+        }
+
+        if let Some(usage) = chunk_json.get("usage") {
+            input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
+            output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+        }
+    }
+
+    let inference_id = inference_id.unwrap();
+    assert!(full_content.to_lowercase().contains("tokyo"));
+
+    // NB: Azure doesn't support input/output tokens during streaming
+    if provider.variant_name.contains("azure") {
+        assert_eq!(input_tokens, 0);
+        assert_eq!(output_tokens, 0);
+    } else {
+        assert!(input_tokens > 0);
+        assert!(output_tokens > 0);
+    }
+
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check ClickHouse - Inference Table
+    let clickhouse = get_clickhouse().await;
+    let result = select_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - Inference: {result:#?}");
+
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, inference_id);
+
+    let function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(function_name, "basic_test");
+
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, provider.variant_name);
+
+    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
+    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
+    assert_eq!(episode_id_result, episode_id);
+
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let correct_input = json!({
+        "system": {"assistant_name": "Dr. Mehta"},
+        "messages": [
+            {
+                "role": "user",
+                "content": [{"type": "text", "value": "What is the capital city of Japan?"}]
+            }
+        ]
+    });
+    assert_eq!(input, correct_input);
+
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<Value> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 1);
+    let content_block = output.first().unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(clickhouse_content, full_content);
+
+    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
+    assert!(tool_params.is_empty());
+
+    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
+    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    let inference_params = inference_params.get("chat_completion").unwrap();
+    let temperature = inference_params
+        .get("temperature")
+        .unwrap()
+        .as_f64()
+        .unwrap();
+    assert_eq!(temperature, 0.9);
+    let seed = inference_params.get("seed").unwrap().as_u64().unwrap();
+    assert_eq!(seed, 1337);
+    let max_tokens = inference_params
+        .get("max_tokens")
+        .unwrap()
+        .as_u64()
+        .unwrap();
+    assert_eq!(max_tokens, 120);
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);

@@ -26,7 +26,7 @@ use gateway::tool::{
 /// then the provider should return an empty vector for the corresponding test.
 pub struct IntegrationTestProviders {
     pub simple_inference: Vec<&'static ProviderConfig>,
-    pub streaming_inference: Vec<&'static ProviderConfig>,
+    pub simple_streaming_inference: Vec<&'static ProviderConfig>,
     pub tool_use_inference: Vec<&'static ProviderConfig>,
     pub tool_use_streaming_inference: Vec<&'static ProviderConfig>,
     pub tool_multi_turn_inference: Vec<&'static ProviderConfig>,
@@ -41,7 +41,7 @@ impl IntegrationTestProviders {
 
         Self {
             simple_inference: vec![provider],
-            streaming_inference: vec![provider],
+            simple_streaming_inference: vec![provider],
             tool_use_inference: vec![provider],
             tool_use_streaming_inference: vec![provider],
             tool_multi_turn_inference: vec![provider],
@@ -61,7 +61,7 @@ impl IntegrationTestProviders {
 
         Self {
             simple_inference: static_providers.clone(),
-            streaming_inference: static_providers.clone(),
+            simple_streaming_inference: static_providers.clone(),
             tool_use_inference: static_providers.clone(),
             tool_use_streaming_inference: static_providers.clone(),
             tool_multi_turn_inference: static_providers.clone(),
@@ -78,7 +78,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_json_mode_inference_request_with_provider;
         use $crate::providers::common::test_json_mode_streaming_inference_request_with_provider;
         use $crate::providers::common::test_simple_inference_request_with_provider;
-        use $crate::providers::common::test_streaming_inference_request_with_provider;
+        use $crate::providers::common::test_simple_streaming_inference_request_with_provider;
         use $crate::providers::common::test_tool_multi_turn_inference_request_with_provider;
         use $crate::providers::common::test_tool_multi_turn_streaming_inference_request_with_provider;
         use $crate::providers::common::test_tool_use_inference_request_with_provider;
@@ -93,10 +93,10 @@ macro_rules! generate_provider_tests {
         }
 
         #[tokio::test]
-        async fn test_streaming_inference_request() {
-            let providers = $func().await.streaming_inference;
+        async fn test_simple_streaming_inference_request() {
+            let providers = $func().await.simple_streaming_inference;
             for provider in providers {
-                test_streaming_inference_request_with_provider(provider).await;
+                test_simple_streaming_inference_request_with_provider(provider).await;
             }
         }
 
@@ -195,7 +195,7 @@ pub async fn test_simple_inference_request_with_provider(provider: &ProviderConf
     }
 }
 
-pub async fn test_streaming_inference_request_with_provider(provider: &ProviderConfig) {
+pub async fn test_simple_streaming_inference_request_with_provider(provider: &ProviderConfig) {
     // Set up the inference request
     let mut inference_request = create_simple_inference_request();
     inference_request.stream = true;

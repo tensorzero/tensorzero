@@ -10,7 +10,9 @@ async fn get_providers() -> E2ETestProviders {
     // TODOs (#169): Implement a solution for vLLM tool use
     E2ETestProviders {
         simple_inference: providers.clone(),
-        streaming_inference: providers.clone(),
+        simple_streaming_inference: providers.clone(),
+        inference_params_inference: providers.clone(),
+        inference_params_streaming_inference: providers.clone(),
         tool_use_inference: vec![],
         tool_use_streaming_inference: vec![],
         tool_multi_turn_inference: vec![],
