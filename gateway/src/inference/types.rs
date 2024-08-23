@@ -681,7 +681,6 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
     }
 }
 
-/// TODO: handle the lifetimes and creation of InferenceResult types here
 pub async fn collect_chunks<'a>(
     value: Vec<ProviderInferenceResponseChunk>,
     function: &FunctionConfig,
