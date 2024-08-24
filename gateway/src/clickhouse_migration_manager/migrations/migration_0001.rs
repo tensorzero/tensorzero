@@ -69,12 +69,12 @@ impl<'a> Migration for Migration0001<'a> {
 
     fn rollback_instructions(&self) -> String {
         "\
-            **CAREFUL: THIS WILL DELETE ALL DATA**\n\
+            **CAREFUL: THIS WILL DELETE DATA**\n\
             \n\
-            -- Drop the database\n\
+            -- Drop the columns\n\
             ALTER TABLE ModelInference DROP COLUMN model_name, DROP COLUMN model_provider_name\n\
             \n\
-            **CAREFUL: THIS WILL DELETE ALL DATA**\n\
+            **CAREFUL: THIS WILL DELETE DATA**\n\
             "
         .to_string()
     }

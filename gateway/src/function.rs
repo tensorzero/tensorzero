@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::error::{Error, ResultExt};
 use crate::inference::types::{
     ChatInferenceResult, ContentBlock, InferenceResult, Input, InputMessageContent,
-    JsonInferenceResult, ModelInferenceResult, Role, Usage,
+    JsonInferenceResult, ModelInferenceResponseWithMetadata, Role, Usage,
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
@@ -139,7 +139,7 @@ impl FunctionConfig {
         inference_id: Uuid,
         content_blocks: Vec<ContentBlock>,
         usage: Usage,
-        model_inference_results: Vec<ModelInferenceResult<'a>>,
+        model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
         tool_config: Option<&ToolCallConfig>,
     ) -> Result<InferenceResult<'a>, Error> {
         match self {
@@ -1195,7 +1195,7 @@ mod tests {
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
         };
-        let model_response = ModelInferenceResult {
+        let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             content: content_blocks.clone(),
@@ -1239,7 +1239,7 @@ mod tests {
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
         };
-        let model_response = ModelInferenceResult {
+        let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             content: content_blocks.clone(),
@@ -1283,7 +1283,7 @@ mod tests {
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
         };
-        let model_response = ModelInferenceResult {
+        let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             content: content_blocks.clone(),
@@ -1326,7 +1326,7 @@ mod tests {
             input_tokens: 10,
             output_tokens: 10,
         };
-        let model_response = ModelInferenceResult {
+        let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             content: content_blocks.clone(),
@@ -1372,7 +1372,7 @@ mod tests {
             input_tokens: 10,
             output_tokens: 10,
         };
-        let model_response = ModelInferenceResult {
+        let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             content: content_blocks.clone(),
@@ -1415,7 +1415,7 @@ mod tests {
             input_tokens: 10,
             output_tokens: 10,
         };
-        let model_response = ModelInferenceResult {
+        let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             content: content_blocks.clone(),

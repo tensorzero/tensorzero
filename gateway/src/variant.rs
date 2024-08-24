@@ -10,8 +10,8 @@ use crate::error::Error;
 use crate::function::FunctionConfig;
 use crate::inference::types::{
     ContentBlock, FunctionType, InferenceResultChunk, InferenceResultStream, Input,
-    InputMessageContent, JSONMode, ModelInferenceRequest, ModelInferenceResult, RequestMessage,
-    Role,
+    InputMessageContent, JSONMode, ModelInferenceRequest, ModelInferenceResponseWithMetadata,
+    RequestMessage, Role,
 };
 use crate::minijinja_util::TemplateConfig;
 use crate::tool::ToolCallConfig;
@@ -60,8 +60,6 @@ pub enum JsonEnforcement {
 /// Maps to the subset of Config that applies to the current inference request.
 /// It doesn't take into account inference-time overrides (e.g. dynamic tools).
 pub struct InferenceConfig<'a> {
-    // pub models: &'a HashMap<String, ModelConfig>,
-    // pub function: &'a FunctionConfig,
     pub tool_config: Option<&'a ToolCallConfig>,
     pub templates: &'a TemplateConfig<'a>,
 }
@@ -325,7 +323,7 @@ impl Variant for ChatCompletionConfig {
         })?;
         let model_inference_response = model_config.infer(&request, client).await?;
         let model_inference_result =
-            ModelInferenceResult::new(model_inference_response, &self.model);
+            ModelInferenceResponseWithMetadata::new(model_inference_response, &self.model);
 
         let inference_id = Uuid::now_v7();
 

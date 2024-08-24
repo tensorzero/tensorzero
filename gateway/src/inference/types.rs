@@ -176,10 +176,10 @@ pub struct ModelInferenceResponse<'a> {
     pub model_provider_name: &'a str,
 }
 
-/// Finally, in the Variant we convert the ModelInferenceResponse into a ModelInferenceResult
+/// Finally, in the Variant we convert the ModelInferenceResponse into a ModelInferenceResponseWithMetadata
 /// that includes additional metadata (such as the model name).
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ModelInferenceResult<'a> {
+pub struct ModelInferenceResponseWithMetadata<'a> {
     pub id: Uuid,
     pub created: u64,
     pub content: Vec<ContentBlock>,
@@ -209,7 +209,7 @@ pub struct ChatInferenceResult<'a> {
     created: u64,
     pub output: Vec<ContentBlockOutput>,
     pub usage: Usage,
-    pub model_inference_results: Vec<ModelInferenceResult<'a>>,
+    pub model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -218,7 +218,7 @@ pub struct JsonInferenceResult<'a> {
     created: u64,
     pub output: JsonInferenceOutput,
     pub usage: Usage,
-    pub model_inference_results: Vec<ModelInferenceResult<'a>>,
+    pub model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -405,7 +405,7 @@ impl<'a> ModelInferenceResponse<'a> {
     }
 }
 
-impl<'a> ModelInferenceResult<'a> {
+impl<'a> ModelInferenceResponseWithMetadata<'a> {
     pub fn new(model_inference_response: ModelInferenceResponse<'a>, model_name: &'a str) -> Self {
         Self {
             id: model_inference_response.id,
@@ -421,7 +421,11 @@ impl<'a> ModelInferenceResult<'a> {
 }
 
 impl ModelInferenceDatabaseInsert {
-    pub fn new(result: ModelInferenceResult, input: String, inference_id: Uuid) -> Self {
+    pub fn new(
+        result: ModelInferenceResponseWithMetadata,
+        input: String,
+        inference_id: Uuid,
+    ) -> Self {
         // TODO (#30): deal with tools
         let (latency_ms, ttft_ms) = match result.latency {
             Latency::Streaming {
@@ -495,7 +499,7 @@ impl<'a> JsonInferenceResult<'a> {
         raw: String,
         parsed: Option<Value>,
         usage: Usage,
-        model_inference_results: Vec<ModelInferenceResult<'a>>,
+        model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
     ) -> Self {
         let output = JsonInferenceOutput { raw, parsed };
         Self {
@@ -513,7 +517,7 @@ impl<'a> ChatInferenceResult<'a> {
         inference_id: Uuid,
         raw_content: Vec<ContentBlock>,
         usage: Usage,
-        model_inference_results: Vec<ModelInferenceResult<'a>>,
+        model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
         tool_config: Option<&ToolCallConfig>,
     ) -> Self {
         #[allow(clippy::expect_used)]
@@ -841,7 +845,8 @@ pub async fn collect_chunks<'a>(
         latency.clone(),
     );
     let model_inference_response = ModelInferenceResponse::new(model_response, model_provider_name);
-    let model_inference_result = ModelInferenceResult::new(model_inference_response, model_name);
+    let model_inference_result =
+        ModelInferenceResponseWithMetadata::new(model_inference_response, model_name);
     function
         .prepare_response(
             inference_id,
@@ -903,7 +908,7 @@ mod tests {
             input_tokens: 10,
             output_tokens: 20,
         };
-        let model_inference_responses = vec![ModelInferenceResult {
+        let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             content: content.clone(),
@@ -941,7 +946,7 @@ mod tests {
             arguments: r#"{"where": "the moon"}"#.to_string(),
             id: "0".to_string(),
         })];
-        let model_inference_responses = vec![ModelInferenceResult {
+        let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             content: content.clone(),
@@ -983,7 +988,7 @@ mod tests {
             arguments: r#"{"where": "the moon"}"#.to_string(),
             id: "0".to_string(),
         })];
-        let model_inference_responses = vec![ModelInferenceResult {
+        let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             content: content.clone(),
@@ -1024,7 +1029,7 @@ mod tests {
             arguments: r#"{"location": "the moon", "units": "celsius"}"#.to_string(),
             id: "0".to_string(),
         })];
-        let model_inference_responses = vec![ModelInferenceResult {
+        let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
             content: content.clone(),
