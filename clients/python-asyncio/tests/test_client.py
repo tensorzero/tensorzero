@@ -7,16 +7,14 @@ from typing import Dict, Any
 import pytest_asyncio
 from tensorzero import TensorZeroClient
 
-# Mock server responses
-mock_inference_response = {
-    "result": "Mocked inference result",
-    "inference_id": "123e4567-e89b-12d3-a456-426614174000"
-}
 
-mock_feedback_response = {
-    "status": "success",
-    "message": "Feedback recorded"
-}
+"""
+TODOs:
+ - [ ] Write top-level documentation for the client and for the tests
+ - [ ] Add a set of dataclasses for output types
+ - [ ] Add tests covering function calling and JSON functions
+"""
+
 
 @pytest_asyncio.fixture
 async def client():
