@@ -11,11 +11,37 @@ use crate::providers::common::{E2ETestProvider, E2ETestProviders};
 crate::generate_provider_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
-    E2ETestProviders::with_provider(E2ETestProvider {
+    let standard_providers = vec![E2ETestProvider {
         variant_name: "aws-bedrock".to_string(),
         model_name: "claude-3-haiku-20240307-aws-bedrock".to_string(),
         model_provider_name: "aws-bedrock".to_string(),
-    })
+    }];
+
+    let json_providers = vec![
+        E2ETestProvider {
+            variant_name: "aws-bedrock".to_string(),
+            model_name: "claude-3-haiku-20240307-aws-bedrock".to_string(),
+            model_provider_name: "aws-bedrock".to_string(),
+        },
+        E2ETestProvider {
+            variant_name: "aws-bedrock-implicit".to_string(),
+            model_name: "claude-3-haiku-20240307-aws-bedrock".to_string(),
+            model_provider_name: "aws-bedrock".to_string(),
+        },
+    ];
+
+    E2ETestProviders {
+        simple_inference: standard_providers.clone(),
+        streaming_inference: standard_providers.clone(),
+        tool_use_inference: standard_providers.clone(),
+        tool_use_streaming_inference: standard_providers.clone(),
+        tool_multi_turn_inference: standard_providers.clone(),
+        tool_multi_turn_streaming_inference: standard_providers.clone(),
+        dynamic_tool_use_inference: standard_providers.clone(),
+        dynamic_tool_use_streaming_inference: standard_providers.clone(),
+        json_mode_inference: json_providers.clone(),
+        json_mode_streaming_inference: json_providers,
+    }
 }
 
 #[tokio::test]

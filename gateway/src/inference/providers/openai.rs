@@ -359,9 +359,9 @@ fn tensorzero_to_openai_messages(message: &RequestMessage) -> Vec<OpenAIRequestM
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "type")]
 enum OpenAIResponseFormat {
-    JsonObject,
     #[default]
     Text,
+    JsonObject,
     JsonSchema {
         json_schema: Value,
     },
