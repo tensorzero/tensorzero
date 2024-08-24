@@ -1047,7 +1047,7 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
                     "content": [
                         {
                             "type": "tool_call",
-                            "id": "tool_call_1",
+                            "id": "123456789",
                             "name": "get_weather",
                             "arguments": "{\"location\": \"Tokyo\"}"
                         }
@@ -1058,7 +1058,7 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
                     "content": [
                         {
                             "type": "tool_result",
-                            "id": "tool_call_1",
+                            "id": "123456789",
                             "name": "get_weather",
                             "result": "70"
                         }
@@ -1142,11 +1142,11 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
             },
             {
                 "role": "assistant",
-                "content": [{"type": "tool_call", "id": "tool_call_1", "name": "get_weather", "arguments": "{\"location\": \"Tokyo\"}"}]
+                "content": [{"type": "tool_call", "id": "123456789", "name": "get_weather", "arguments": "{\"location\": \"Tokyo\"}"}]
             },
             {
                 "role": "user",
-                "content": [{"type": "tool_result", "id": "tool_call_1", "name": "get_weather", "result": "70"}]
+                "content": [{"type": "tool_result", "id": "123456789", "name": "get_weather", "result": "70"}]
             }
         ]
     });
@@ -1253,7 +1253,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
                     "content": [
                         {
                             "type": "tool_call",
-                            "id": "tool_call_1",
+                            "id": "123456789",
                             "name": "get_weather",
                             "arguments": "{\"location\": \"Tokyo\"}"
                         }
@@ -1264,7 +1264,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
                     "content": [
                         {
                             "type": "tool_result",
-                            "id": "tool_call_1",
+                            "id": "123456789",
                             "name": "get_weather",
                             "result": "70"
                         }
@@ -1386,7 +1386,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
                 "content": [
                     {
                         "type": "tool_call",
-                        "id": "tool_call_1",
+                        "id": "123456789",
                         "name": "get_weather",
                         "arguments": "{\"location\": \"Tokyo\"}"
                     }
@@ -1397,7 +1397,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
                 "content": [
                     {
                         "type": "tool_result",
-                        "id": "tool_call_1",
+                        "id": "123456789",
                         "name": "get_weather",
                         "result": "70"
                     }

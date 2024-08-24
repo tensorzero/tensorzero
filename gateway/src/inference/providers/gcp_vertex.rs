@@ -502,23 +502,6 @@ impl<'a> From<(&'a ToolChoice, &'a str)> for GCPVertexGeminiToolConfig<'a> {
                     }
                 }
             }
-            ToolChoice::Implicit => {
-                if MODELS_SUPPORTING_ANY_MODE.contains(&model_name) {
-                    GCPVertexGeminiToolConfig {
-                        function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                            mode: GCPVertexGeminiFunctionCallingMode::Any,
-                            allowed_function_names: Some(vec!["respond"]),
-                        },
-                    }
-                } else {
-                    GCPVertexGeminiToolConfig {
-                        function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                            mode: GCPVertexGeminiFunctionCallingMode::Auto,
-                            allowed_function_names: None,
-                        },
-                    }
-                }
-            }
         }
     }
 }
@@ -1097,32 +1080,6 @@ mod tests {
             GCPVertexGeminiToolConfig {
                 function_calling_config: GCPVertexGeminiFunctionCallingConfig {
                     mode: GCPVertexGeminiFunctionCallingMode::None,
-                    allowed_function_names: None,
-                }
-            }
-        );
-
-        // The Pro model supports Any mode and implicit tool calling works better
-        let tool_choice = ToolChoice::Implicit;
-        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, pro_model_name));
-        assert_eq!(
-            tool_config,
-            GCPVertexGeminiToolConfig {
-                function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                    mode: GCPVertexGeminiFunctionCallingMode::Any,
-                    allowed_function_names: Some(vec!["respond"]),
-                }
-            }
-        );
-
-        // The Flash model doesn't support mandatoryimplicit tool calling
-        let tool_choice = ToolChoice::Implicit;
-        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, flash_model_name));
-        assert_eq!(
-            tool_config,
-            GCPVertexGeminiToolConfig {
-                function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                    mode: GCPVertexGeminiFunctionCallingMode::Auto,
                     allowed_function_names: None,
                 }
             }

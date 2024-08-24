@@ -120,6 +120,13 @@ pub enum Error {
         template_name: String,
         message: String,
     },
+    MistralClient {
+        message: String,
+        status_code: StatusCode,
+    },
+    MistralServer {
+        message: String,
+    },
     ModelProvidersExhausted {
         provider_errors: Vec<Error>,
     },
@@ -226,6 +233,8 @@ impl Error {
             Error::MiniJinjaTemplate { .. } => tracing::Level::ERROR,
             Error::MiniJinjaTemplateMissing { .. } => tracing::Level::ERROR,
             Error::MiniJinjaTemplateRender { .. } => tracing::Level::ERROR,
+            Error::MistralClient { .. } => tracing::Level::WARN,
+            Error::MistralServer { .. } => tracing::Level::ERROR,
             Error::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
             Error::Observability { .. } => tracing::Level::ERROR,
             Error::OpenAIClient { .. } => tracing::Level::WARN,
@@ -288,6 +297,8 @@ impl Error {
             Error::MiniJinjaTemplate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::MiniJinjaTemplateMissing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::MiniJinjaTemplateRender { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::MistralClient { status_code, .. } => *status_code,
+            Error::MistralServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::OpenAIClient { status_code, .. } => *status_code,
@@ -443,6 +454,12 @@ impl std::fmt::Display for Error {
                 message,
             } => {
                 write!(f, "Error rendering template {}: {}", template_name, message)
+            }
+            Error::MistralClient { message, .. } => {
+                write!(f, "Error from Mistral client: {}", message)
+            }
+            Error::MistralServer { message } => {
+                write!(f, "Error from Mistral server: {}", message)
             }
             Error::ModelProvidersExhausted { provider_errors } => {
                 write!(
