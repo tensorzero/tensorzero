@@ -8,6 +8,7 @@ dependencies = [
     "httpx>=0.27.0",
     "pytest>=8.3.2",
     "pytest-asyncio>=0.24.0",
+    "uuid7>=0.1.0",
 ]
 
 [build-system]
