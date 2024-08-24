@@ -13,6 +13,7 @@ TODOs:
  - [ ] Write top-level documentation for the client and for the tests
  - [ ] Add a set of dataclasses for output types
  - [ ] Add tests covering function calling and JSON functions
+ - [ ] Add a description to the pyproject.toml
 """
 
 
