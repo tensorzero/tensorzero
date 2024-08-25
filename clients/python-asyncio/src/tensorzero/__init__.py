@@ -1,4 +1,4 @@
-from .client import TensorZeroClient
+from .client import TensorZero
 from .types import (
     ChatInferenceResponse,
     ContentBlock,
@@ -15,7 +15,7 @@ from .types import (
 
 # TODO(viraj): arrange this neatly, alphabetize, etc
 __all__ = [
-    "TensorZeroClient",
+    "TensorZero",
     "ChatInferenceResponse",
     "InferenceChunk",
     "InferenceResponse",
