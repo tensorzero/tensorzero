@@ -374,16 +374,9 @@ impl Variant for ChatCompletionConfig {
             model_name: &self.model,
             model_provider_name,
         };
-        let first_chunk = match function {
-            FunctionConfig::Chat(_) => InferenceResultChunk::Chat(first_chunk.into()),
-            FunctionConfig::Json(_) => InferenceResultChunk::Json(first_chunk.into()),
-        };
-        let stream = stream.map(move |chunk| {
-            chunk.map(|chunk| match function {
-                FunctionConfig::Chat(_) => InferenceResultChunk::Chat(chunk.into()),
-                FunctionConfig::Json(_) => InferenceResultChunk::Json(chunk.into()),
-            })
-        });
+        let first_chunk = InferenceResultChunk::new(first_chunk, function);
+        let stream =
+            stream.map(move |chunk| chunk.map(|chunk| InferenceResultChunk::new(chunk, function)));
         Ok((first_chunk, Box::pin(stream), model_used_info))
     }
 }

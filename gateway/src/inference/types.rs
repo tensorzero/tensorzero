@@ -687,6 +687,15 @@ impl InferenceResultChunk {
     }
 }
 
+impl InferenceResultChunk {
+    pub fn new(chunk: ProviderInferenceResponseChunk, function: &FunctionConfig) -> Self {
+        match function {
+            FunctionConfig::Chat(_) => Self::Chat(chunk.into()),
+            FunctionConfig::Json(_) => Self::Json(chunk.into()),
+        }
+    }
+}
+
 impl From<ProviderInferenceResponseChunk> for ChatInferenceResultChunk {
     fn from(chunk: ProviderInferenceResponseChunk) -> Self {
         Self {
