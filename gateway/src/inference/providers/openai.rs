@@ -138,6 +138,9 @@ pub fn stream_openai(
                                     e, message.data
                                 ),
                             });
+
+                        println!("data: {data:#?}");
+
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
                             openai_to_tensorzero_chunk(d, inference_id, latency, &mut tool_call_ids, &mut tool_call_names)
