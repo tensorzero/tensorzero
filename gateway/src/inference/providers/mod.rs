@@ -7,6 +7,7 @@ pub mod common;
 pub mod dummy;
 pub mod fireworks;
 pub mod gcp_vertex;
+pub mod mistral;
 pub mod openai;
 pub mod provider_trait;
 pub mod together;

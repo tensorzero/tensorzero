@@ -584,17 +584,6 @@ impl TryFrom<ToolChoice> for AWSBedrockToolChoice {
                                 .to_string(),
                     })?,
             )),
-            ToolChoice::Implicit => Ok(AWSBedrockToolChoice::Tool(
-                SpecificToolChoice::builder()
-                    .name("respond")
-                    .build()
-                    .map_err(|_| Error::AWSBedrockClient {
-                        status_code: StatusCode::INTERNAL_SERVER_ERROR,
-                        message:
-                            "Error configuring AWS Bedrock tool choice (this should never happen)"
-                                .to_string(),
-                    })?,
-            )),
         }
     }
 }

@@ -209,7 +209,6 @@ impl<'a> TryFrom<&'a ToolChoice> for AnthropicToolChoice<'a> {
                 message: "Tool choice is None. Anthropic does not support tool choice None."
                     .to_string(),
             }),
-            ToolChoice::Implicit => Ok(AnthropicToolChoice::Tool { name: "respond" }),
         }
     }
 }
@@ -791,14 +790,6 @@ mod tests {
         assert_eq!(
             anthropic_tool_choice.unwrap(),
             AnthropicToolChoice::Tool { name: "test" }
-        );
-
-        let tool_choice = ToolChoice::Implicit;
-        let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_choice);
-        assert!(anthropic_tool_choice.is_ok());
-        assert_eq!(
-            anthropic_tool_choice.unwrap(),
-            AnthropicToolChoice::Tool { name: "respond" }
         );
     }
 
