@@ -39,3 +39,9 @@ jobs:
       - name: Test (Rust)
         run: |
           cargo test-unit --profile ci ${{ vars.CARGO_NEXTEST_ARGS }}
+
+      - name: List (Python)
+        run: |
+          python -m pip install ruff
+          ruff format --check .
+          ruff check --output-format=github --select I .
