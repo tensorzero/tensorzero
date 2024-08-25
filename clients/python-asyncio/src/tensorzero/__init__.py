@@ -1,16 +1,16 @@
 from .client import TensorZeroClient
 from .types import (
-    InferenceChunk,
-    InferenceResponse,
     ChatInferenceResponse,
     ContentBlock,
-    Text,
-    ToolCall,
-    Usage,
-    JsonInferenceOutput,
-    TextChunk,
     FeedbackResponse,
+    InferenceChunk,
+    InferenceResponse,
+    JsonInferenceOutput,
+    Text,
+    TextChunk,
+    ToolCall,
     ToolCallChunk,
+    Usage,
 )
 
 # TODO(viraj): arrange this neatly, alphabetize, etc

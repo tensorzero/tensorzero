@@ -1,23 +1,22 @@
-import pytest
 from uuid import UUID
-from uuid_extensions import uuid7
 
+import pytest
 import pytest_asyncio
 from tensorzero import (
+    FeedbackResponse,
     TensorZeroClient,
     Text,
     TextChunk,
-    FeedbackResponse,
     ToolCall,
     ToolCallChunk,
 )
-
+from uuid_extensions import uuid7
 
 """
 TODOs:
  - [ ] Write top-level documentation for the client and for the tests
  - [x] Add a set of dataclasses for output types
- - [ ] Add tests covering function calling and JSON functions
+ - [x] Add tests covering function calling and JSON functions
  - [ ] Add a description to the pyproject.toml
  - [ ] Add to precommit and CI Ruff stuff for linting, import sorting, formatting, etc
 """

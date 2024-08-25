@@ -1,13 +1,15 @@
 import json
+from typing import Any, AsyncGenerator, Dict, List, Optional, Union
 from uuid import UUID
+
 import httpx
-from typing import AsyncGenerator, Dict, Any, List, Optional, Union
+
 from .types import (
-    parse_inference_chunk,
-    parse_inference_response,
+    FeedbackResponse,
     InferenceChunk,
     InferenceResponse,
-    FeedbackResponse,
+    parse_inference_chunk,
+    parse_inference_response,
 )
 
 
