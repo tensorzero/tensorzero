@@ -175,8 +175,8 @@ requires-dist = [{ name = "httpx", specifier = ">=0.27.0" }]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
+    { name = "pytest", specifier = ">=8.3.2" },
+    { name = "pytest-asyncio", specifier = ">=0.24.0" },
     { name = "uuid7", specifier = ">=0.1.0" },
 ]
 

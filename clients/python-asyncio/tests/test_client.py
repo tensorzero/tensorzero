@@ -5,7 +5,7 @@ from uuid_extensions import uuid7
 from typing import Dict, Any
 
 import pytest_asyncio
-from tensorzero import TensorZeroClient
+from tensorzero import TensorZeroClient, ChatInferenceResponse, ContentBlock, Text
 
 
 """
@@ -24,22 +24,18 @@ async def client():
 
 @pytest.mark.asyncio
 async def test_basic_inference(client):
-    # TODO (viraj): fix this to use our types
     result = await client.inference(
         function_name="basic_test",
         input={"system": {"assistant_name": "Alfred Pennyworth"}, "messages": [{"role": "user", "content": "Hello"}]},
     )
-    inference_id = UUID(result["inference_id"])
-    episode_id = UUID(result["episode_id"])
-    variant_name = result["variant_name"]
-    assert variant_name == "test"
-    output = result["output"]
+    assert result.variant_name == "test"
+    output = result.output
     assert len(output) == 1
-    assert output[0]["type"] == "text"
-    assert output[0]["text"] == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
-    usage = result["usage"]
-    assert usage["input_tokens"] == 10
-    assert usage["output_tokens"] == 10
+    assert isinstance(output[0], Text)
+    assert output[0].text == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    usage = result.usage
+    assert usage.input_tokens == 10
+    assert usage.output_tokens == 10
 
 
 @pytest.mark.asyncio
