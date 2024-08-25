@@ -1024,13 +1024,11 @@ pub async fn test_tool_use_inference_request_with_provider(provider: E2ETestProv
 
     let parsed_arguments = content_block.get("parsed_arguments").unwrap();
     let parsed_arguments = parsed_arguments.as_object().unwrap();
-    assert!(parsed_arguments.len() == 1 || parsed_arguments.len() == 2);
+    assert!(parsed_arguments.len() == 2);
     let location = parsed_arguments.get("location").unwrap().as_str().unwrap();
     assert_eq!(location.to_lowercase(), "tokyo");
-    if parsed_arguments.len() == 2 {
-        let units = parsed_arguments.get("units").unwrap().as_str().unwrap();
-        assert!(units == "fahrenheit" || units == "celsius");
-    }
+    let units = parsed_arguments.get("units").unwrap().as_str().unwrap();
+    assert!(units == "celsius");
 
     let usage = response_json.get("usage").unwrap();
     let usage = usage.as_object().unwrap();
@@ -2027,13 +2025,11 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
 
     let parsed_arguments = content_block.get("parsed_arguments").unwrap();
     let parsed_arguments = parsed_arguments.as_object().unwrap();
-    assert!(parsed_arguments.len() == 1 || parsed_arguments.len() == 2);
+    assert!(parsed_arguments.len() == 2);
     let location = parsed_arguments.get("location").unwrap().as_str().unwrap();
     assert_eq!(location.to_lowercase(), "tokyo");
-    if parsed_arguments.len() == 2 {
-        let units = parsed_arguments.get("units").unwrap().as_str().unwrap();
-        assert!(units == "fahrenheit" || units == "celsius");
-    }
+    let units = parsed_arguments.get("units").unwrap().as_str().unwrap();
+    assert!(units == "celsius");
 
     let usage = response_json.get("usage").unwrap();
     let usage = usage.as_object().unwrap();
@@ -2592,13 +2588,9 @@ pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2
 
     let parsed_arguments = content_block.get("parsed_arguments").unwrap();
     let parsed_arguments = parsed_arguments.as_object().unwrap();
-    assert!(parsed_arguments.len() == 1 || parsed_arguments.len() == 2);
+    assert!(parsed_arguments.len() == 1);
     let location = parsed_arguments.get("location").unwrap().as_str().unwrap();
     assert_eq!(location.to_lowercase(), "tokyo");
-    if parsed_arguments.len() == 2 {
-        let units = parsed_arguments.get("units").unwrap().as_str().unwrap();
-        assert!(units == "fahrenheit" || units == "celsius");
-    }
 
     let usage = response_json.get("usage").unwrap();
     let usage = usage.as_object().unwrap();
@@ -2705,8 +2697,7 @@ pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2
     let required = tool_parameters["required"].as_array().unwrap();
     assert!(required.contains(&json!("location")));
 
-    // Validate the `get_temperature` tool
-    assert_eq!(tools_available.len(), 2);
+    // Validate the `get_humidity` tool
     let tool = tools_available
         .iter()
         .find(|tool| tool["name"] == "get_humidity")
@@ -2775,10 +2766,8 @@ pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2
     assert!(arguments.len() == 2);
     let location = arguments.get("location").unwrap().as_str().unwrap();
     assert_eq!(location.to_lowercase(), "tokyo");
-    if arguments.len() == 2 {
-        let units = arguments.get("units").unwrap().as_str().unwrap();
-        assert!(units == "celsius");
-    }
+    let units = arguments.get("units").unwrap().as_str().unwrap();
+    assert!(units == "celsius");
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
