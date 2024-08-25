@@ -153,3 +153,8 @@ def parse_content_block_chunk(block: Dict[str, Any]) -> ContentBlockChunk:
         )
     else:
         raise ValueError(f"Unknown content block type: {block}")
+
+# Types for feedback
+@dataclass
+class FeedbackResponse:
+    feedback_id: UUID

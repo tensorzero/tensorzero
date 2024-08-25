@@ -5,7 +5,7 @@ from uuid_extensions import uuid7
 from typing import Dict, Any
 
 import pytest_asyncio
-from tensorzero import TensorZeroClient, ChatInferenceResponse, ContentBlock, Text, TextChunk
+from tensorzero import TensorZeroClient, ChatInferenceResponse, ContentBlock, Text, TextChunk, FeedbackResponse
 
 
 """
@@ -92,24 +92,21 @@ async def test_feedback(client):
         value=5,
         episode_id=uuid7()
     )
-    assert len(result) == 1
-    feedback_id = UUID(result["feedback_id"])
+    assert isinstance(result, FeedbackResponse)
 
     result = await client.feedback(
         metric_name="task_success",
         value=True,
         inference_id=uuid7()
     )
-    assert len(result) == 1
-    feedback_id = UUID(result["feedback_id"])
+    assert isinstance(result, FeedbackResponse)
 
     result = await client.feedback(
         metric_name="demonstration",
         value="hi how are you",
         inference_id=uuid7()
     )
-    assert len(result) == 1
-    feedback_id = UUID(result["feedback_id"])
+    assert isinstance(result, FeedbackResponse)
 
 
 

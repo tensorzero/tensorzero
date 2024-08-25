@@ -3,7 +3,7 @@ from uuid import UUID
 import httpx
 from enum import Enum
 from typing import AsyncGenerator, Dict, Any, List, Optional, Union
-from .types import parse_inference_chunk, parse_inference_response, InferenceChunk, InferenceResponse
+from .types import parse_inference_chunk, parse_inference_response, InferenceChunk, InferenceResponse, FeedbackResponse
 
 class TensorZeroClient:
     def __init__(self, base_url: str):
@@ -109,7 +109,8 @@ class TensorZeroClient:
         url = f"{self.base_url}/feedback"
         response = await self.client.post(url, json=data)
         response.raise_for_status()
-        return response.json()
+        feedback_result = FeedbackResponse(**response.json())
+        return feedback_result
 
     async def close(self):
         """
