@@ -1,4 +1,3 @@
-use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -28,16 +27,6 @@ pub struct FunctionConfigChat {
     pub tools: Vec<String>, // tool names
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: bool,
-}
-
-#[derive(Debug, Default, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum JsonEnforcement {
-    #[default]
-    Default,
-    Strict,
-    ImplicitTool,
-    Off,
 }
 
 #[derive(Debug)]
