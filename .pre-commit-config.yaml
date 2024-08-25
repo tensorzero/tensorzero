@@ -58,4 +58,4 @@ repos:
       - id: ruff
         args: ["check", "--select", "I", "--fix", "."]
       - id: ruff-format
-        args: ["format", "--fix", "."]
+        args: ["--check", "."]
