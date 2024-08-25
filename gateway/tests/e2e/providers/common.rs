@@ -34,6 +34,8 @@ pub struct E2ETestProviders {
     pub tool_multi_turn_streaming_inference: Vec<E2ETestProvider>,
     pub dynamic_tool_use_inference: Vec<E2ETestProvider>,
     pub dynamic_tool_use_streaming_inference: Vec<E2ETestProvider>,
+    pub parallel_tool_use_inference: Vec<E2ETestProvider>,
+    pub parallel_tool_use_streaming_inference: Vec<E2ETestProvider>,
     pub json_mode_inference: Vec<E2ETestProvider>,
     pub json_mode_streaming_inference: Vec<E2ETestProvider>,
 }
@@ -47,6 +49,8 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_inference_params_streaming_inference_request_with_provider;
         use $crate::providers::common::test_json_mode_inference_request_with_provider;
         use $crate::providers::common::test_json_mode_streaming_inference_request_with_provider;
+        use $crate::providers::common::test_parallel_tool_use_inference_request_with_provider;
+        use $crate::providers::common::test_parallel_tool_use_streaming_inference_request_with_provider;
         use $crate::providers::common::test_simple_inference_request_with_provider;
         use $crate::providers::common::test_simple_streaming_inference_request_with_provider;
         use $crate::providers::common::test_tool_multi_turn_inference_request_with_provider;
@@ -131,6 +135,22 @@ macro_rules! generate_provider_tests {
             let providers = $func().await.dynamic_tool_use_streaming_inference;
             for provider in providers {
                 test_dynamic_tool_use_streaming_inference_request_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_parallel_tool_use_inference_request() {
+            let providers = $func().await.parallel_tool_use_inference;
+            for provider in providers {
+                test_parallel_tool_use_inference_request_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_parallel_tool_use_streaming_inference_request() {
+            let providers = $func().await.parallel_tool_use_streaming_inference;
+            for provider in providers {
+                test_parallel_tool_use_streaming_inference_request_with_provider(provider).await;
             }
         }
 
@@ -224,7 +244,7 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     assert_eq!(id, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "basic_test");
+    assert_eq!(function_name, payload["function_name"]);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -422,7 +442,7 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "basic_test");
+    assert_eq!(function_name, payload["function_name"]);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -611,7 +631,7 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
     assert_eq!(id, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "basic_test");
+    assert_eq!(function_name, payload["function_name"]);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -827,7 +847,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "basic_test");
+    assert_eq!(function_name, payload["function_name"]);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -947,7 +967,7 @@ pub async fn test_tool_use_inference_request_with_provider(provider: E2ETestProv
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the weather like in Tokyo (in Celsius)? Use the `get_weather` tool."
+                    "content": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."
                 }
             ]},
         "stream": false,
@@ -986,12 +1006,12 @@ pub async fn test_tool_use_inference_request_with_provider(provider: E2ETestProv
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
 
-    let _ = content_block.get("id").unwrap().as_str().unwrap();
+    assert!(content_block.get("id").unwrap().as_str().is_some());
 
     let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_weather");
+    assert_eq!(name, "get_temperature");
     let parsed_name = content_block.get("parsed_name").unwrap().as_str().unwrap();
-    assert_eq!(parsed_name, "get_weather");
+    assert_eq!(parsed_name, "get_temperature");
 
     let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
     let arguments: Value = serde_json::from_str(arguments).unwrap();
@@ -1054,7 +1074,7 @@ pub async fn test_tool_use_inference_request_with_provider(provider: E2ETestProv
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the `get_weather` tool."}]
+                    "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
                 }
             ]
         }
@@ -1073,10 +1093,10 @@ pub async fn test_tool_use_inference_request_with_provider(provider: E2ETestProv
     let tools_available = tool_params["tools_available"].as_array().unwrap();
     assert_eq!(tools_available.len(), 1);
     let tool = tools_available.first().unwrap();
-    assert_eq!(tool["name"], "get_weather");
+    assert_eq!(tool["name"], "get_temperature");
     assert_eq!(
         tool["description"],
-        "Get the current weather in a given location"
+        "Get the current temperature in a given location"
     );
     assert_eq!(tool["strict"], false);
 
@@ -1119,7 +1139,7 @@ pub async fn test_tool_use_inference_request_with_provider(provider: E2ETestProv
     println!("ClickHouse - ModelInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
-    let _ = Uuid::parse_str(id).unwrap();
+    assert!(Uuid::parse_str(id).is_ok());
 
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
@@ -1140,10 +1160,10 @@ pub async fn test_tool_use_inference_request_with_provider(provider: E2ETestProv
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
 
-    let _ = content_block.get("id").unwrap().as_str().unwrap();
+    assert!(content_block.get("id").unwrap().as_str().is_some());
 
     let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_weather");
+    assert_eq!(name, "get_temperature");
 
     let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
     let arguments: Value = serde_json::from_str(arguments).unwrap();
@@ -1156,7 +1176,7 @@ pub async fn test_tool_use_inference_request_with_provider(provider: E2ETestProv
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
-    assert!(raw_response.contains("get_weather"));
+    assert!(raw_response.contains("get_temperature"));
 
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     assert!(input_tokens > 0);
@@ -1178,7 +1198,7 @@ pub async fn test_tool_use_streaming_inference_request_with_provider(provider: E
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the weather like in Tokyo (in Celsius)? Use the `get_weather` tool."
+                    "content": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."
                 }
             ]},
         "stream": true,
@@ -1237,7 +1257,10 @@ pub async fn test_tool_use_streaming_inference_request_with_provider(provider: E
 
             match block_type {
                 "tool_call" => {
-                    assert_eq!(block.get("name").unwrap().as_str().unwrap(), "get_weather");
+                    assert_eq!(
+                        block.get("name").unwrap().as_str().unwrap(),
+                        "get_temperature"
+                    );
 
                     let block_tool_id = block.get("id").unwrap().as_str().unwrap();
                     match &tool_id {
@@ -1313,7 +1336,7 @@ pub async fn test_tool_use_streaming_inference_request_with_provider(provider: E
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the `get_weather` tool."}]
+                    "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
                 }
             ]
         }
@@ -1329,7 +1352,7 @@ pub async fn test_tool_use_streaming_inference_request_with_provider(provider: E
     assert_eq!(content_block.get("id").unwrap().as_str().unwrap(), tool_id);
     assert_eq!(
         content_block.get("name").unwrap().as_str().unwrap(),
-        "get_weather"
+        "get_temperature"
     );
     assert_eq!(
         content_block.get("arguments").unwrap().as_str().unwrap(),
@@ -1344,10 +1367,10 @@ pub async fn test_tool_use_streaming_inference_request_with_provider(provider: E
     let tools_available = tool_params["tools_available"].as_array().unwrap();
     assert_eq!(tools_available.len(), 1);
     let tool = tools_available.first().unwrap();
-    assert_eq!(tool["name"], "get_weather");
+    assert_eq!(tool["name"], "get_temperature");
     assert_eq!(
         tool["description"],
-        "Get the current weather in a given location"
+        "Get the current temperature in a given location"
     );
     assert_eq!(tool["strict"], false);
 
@@ -1390,7 +1413,7 @@ pub async fn test_tool_use_streaming_inference_request_with_provider(provider: E
     println!("ClickHouse - ModelInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
-    let _ = Uuid::parse_str(id).unwrap();
+    assert!(Uuid::parse_str(id).is_ok());
 
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
@@ -1411,10 +1434,10 @@ pub async fn test_tool_use_streaming_inference_request_with_provider(provider: E
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
 
-    let _ = content_block.get("id").unwrap().as_str().unwrap();
+    assert!(content_block.get("id").unwrap().as_str().is_some());
 
     let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_weather");
+    assert_eq!(name, "get_temperature");
 
     let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
     let arguments: Value = serde_json::from_str(arguments).unwrap();
@@ -1426,7 +1449,7 @@ pub async fn test_tool_use_streaming_inference_request_with_provider(provider: E
     assert!(units == "celsius");
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
-    assert!(raw_response.contains("get_weather"));
+    assert!(raw_response.contains("get_temperature"));
     // Check if raw_response is valid JSONL
     for line in raw_response.lines() {
         assert!(serde_json::from_str::<Value>(line).is_ok());
@@ -1463,7 +1486,7 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the weather like in Tokyo (in Celsius)? Use the `get_weather` tool."
+                    "content": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."
                 },
                 {
                     "role": "assistant",
@@ -1471,7 +1494,7 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
                         {
                             "type": "tool_call",
                             "id": "tool_call_1",
-                            "name": "get_weather",
+                            "name": "get_temperature",
                             "arguments": "{\"location\": \"Tokyo\"}"
                         }
                     ]
@@ -1482,7 +1505,7 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
                         {
                             "type": "tool_result",
                             "id": "tool_call_1",
-                            "name": "get_weather",
+                            "name": "get_temperature",
                             "result": "70"
                         }
                     ]
@@ -1561,15 +1584,15 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the `get_weather` tool."}]
+                "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
             },
             {
                 "role": "assistant",
-                "content": [{"type": "tool_call", "id": "tool_call_1", "name": "get_weather", "arguments": "{\"location\": \"Tokyo\"}"}]
+                "content": [{"type": "tool_call", "id": "tool_call_1", "name": "get_temperature", "arguments": "{\"location\": \"Tokyo\"}"}]
             },
             {
                 "role": "user",
-                "content": [{"type": "tool_result", "id": "tool_call_1", "name": "get_weather", "result": "70"}]
+                "content": [{"type": "tool_result", "id": "tool_call_1", "name": "get_temperature", "result": "70"}]
             }
         ]
     });
@@ -1592,10 +1615,10 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
     let tools_available = tool_params["tools_available"].as_array().unwrap();
     assert_eq!(tools_available.len(), 1);
     let tool = tools_available.first().unwrap();
-    assert_eq!(tool["name"], "get_weather");
+    assert_eq!(tool["name"], "get_temperature");
     assert_eq!(
         tool["description"],
-        "Get the current weather in a given location"
+        "Get the current temperature in a given location"
     );
     assert_eq!(tool["strict"], false);
 
@@ -1669,7 +1692,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the weather like in Tokyo (in Celsius)? Use the `get_weather` tool."
+                    "content": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."
                 },
                 {
                     "role": "assistant",
@@ -1677,7 +1700,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
                         {
                             "type": "tool_call",
                             "id": "tool_call_1",
-                            "name": "get_weather",
+                            "name": "get_temperature",
                             "arguments": "{\"location\": \"Tokyo\"}"
                         }
                     ]
@@ -1688,7 +1711,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
                         {
                             "type": "tool_result",
                             "id": "tool_call_1",
-                            "name": "get_weather",
+                            "name": "get_temperature",
                             "result": "70"
                         }
                     ]
@@ -1802,7 +1825,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the `get_weather` tool."}]
+                "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
             },
             {
                 "role": "assistant",
@@ -1810,7 +1833,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
                     {
                         "type": "tool_call",
                         "id": "tool_call_1",
-                        "name": "get_weather",
+                        "name": "get_temperature",
                         "arguments": "{\"location\": \"Tokyo\"}"
                     }
                 ]
@@ -1821,7 +1844,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
                     {
                         "type": "tool_result",
                         "id": "tool_call_1",
-                        "name": "get_weather",
+                        "name": "get_temperature",
                         "result": "70"
                     }
                 ]
@@ -1986,7 +2009,7 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
 
-    let _ = content_block.get("id").unwrap().as_str().unwrap();
+    assert!(content_block.get("id").unwrap().as_str().is_some());
 
     let name = content_block.get("name").unwrap().as_str().unwrap();
     assert_eq!(name, "get_temperature");
@@ -2035,7 +2058,7 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "basic_test");
+    assert_eq!(function_name, payload["function_name"]);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -2118,7 +2141,7 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
     println!("ClickHouse - ModelInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
-    let _ = Uuid::parse_str(id).unwrap();
+    assert!(Uuid::parse_str(id).is_ok());
 
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
@@ -2139,7 +2162,7 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
 
-    let _ = content_block.get("id").unwrap().as_str().unwrap();
+    assert!(content_block.get("id").unwrap().as_str().is_some());
 
     let name = content_block.get("name").unwrap().as_str().unwrap();
     assert_eq!(name, "get_temperature");
@@ -2321,7 +2344,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "basic_test");
+    assert_eq!(function_name, payload["function_name"]);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -2416,7 +2439,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     println!("ClickHouse - ModelInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
-    let _ = Uuid::parse_str(id).unwrap();
+    assert!(Uuid::parse_str(id).is_ok());
 
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
@@ -2437,7 +2460,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
 
-    let _ = content_block.get("id").unwrap().as_str().unwrap();
+    assert!(content_block.get("id").unwrap().as_str().is_some());
 
     let name = content_block.get("name").unwrap().as_str().unwrap();
     assert_eq!(name, "get_temperature");
@@ -2476,6 +2499,270 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
     assert!(ttft_ms > 50);
     assert!(ttft_ms <= response_time_ms);
+}
+
+pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2ETestProvider) {
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "weather_helper_parallel",
+        "episode_id": episode_id,
+        "input":{
+            "system": {"assistant_name": "Dr. Mehta"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
+                }
+            ]},
+        "stream": false,
+        "variant_name": provider.variant_name,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check if the API response is fine
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("API response: {response_json:#?}");
+
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+    assert_eq!(episode_id_response, episode_id);
+
+    let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, provider.variant_name);
+
+    let output = response_json.get("output").unwrap().as_array().unwrap();
+
+    // Validate the `get_temperature` tool call
+    let content_block = output
+        .iter()
+        .find(|block| block["name"] == "get_temperature")
+        .unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "tool_call");
+
+    assert!(content_block.get("id").unwrap().as_str().is_some());
+
+    let name = content_block.get("name").unwrap().as_str().unwrap();
+    assert_eq!(name, "get_temperature");
+    let parsed_name = content_block.get("parsed_name").unwrap().as_str().unwrap();
+    assert_eq!(parsed_name, "get_temperature");
+
+    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
+    let arguments: Value = serde_json::from_str(arguments).unwrap();
+    let arguments = arguments.as_object().unwrap();
+    assert!(arguments.len() == 2);
+    let location = arguments.get("location").unwrap().as_str().unwrap();
+    assert_eq!(location.to_lowercase(), "tokyo");
+    let units = arguments.get("units").unwrap().as_str().unwrap();
+    assert!(units == "celsius");
+
+    // Validate the `get_humidity` tool call
+    let content_block = output
+        .iter()
+        .find(|block| block["name"] == "get_humidity")
+        .unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "tool_call");
+
+    assert!(content_block.get("id").unwrap().as_str().is_some());
+
+    let name = content_block.get("name").unwrap().as_str().unwrap();
+    assert_eq!(name, "get_humidity");
+    let parsed_name = content_block.get("parsed_name").unwrap().as_str().unwrap();
+    assert_eq!(parsed_name, "get_humidity");
+
+    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
+    let arguments: Value = serde_json::from_str(arguments).unwrap();
+    let arguments = arguments.as_object().unwrap();
+    assert!(arguments.len() == 1);
+    let location = arguments.get("location").unwrap().as_str().unwrap();
+    assert_eq!(location.to_lowercase(), "tokyo");
+
+    let parsed_arguments = content_block.get("parsed_arguments").unwrap();
+    let parsed_arguments = parsed_arguments.as_object().unwrap();
+    assert!(parsed_arguments.len() == 1 || parsed_arguments.len() == 2);
+    let location = parsed_arguments.get("location").unwrap().as_str().unwrap();
+    assert_eq!(location.to_lowercase(), "tokyo");
+    if parsed_arguments.len() == 2 {
+        let units = parsed_arguments.get("units").unwrap().as_str().unwrap();
+        assert!(units == "fahrenheit" || units == "celsius");
+    }
+
+    let usage = response_json.get("usage").unwrap();
+    let usage = usage.as_object().unwrap();
+    let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
+    assert!(input_tokens > 0);
+    assert!(output_tokens > 0);
+
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check if ClickHouse is correct - Inference table
+    let clickhouse = get_clickhouse().await;
+    let result = select_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - Inference: {result:#?}");
+
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, inference_id);
+
+    let function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(function_name, payload["function_name"]);
+
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, provider.variant_name);
+
+    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
+    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
+    assert_eq!(episode_id_result, episode_id);
+
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let correct_input: Value = json!(
+        {
+            "system": {
+                "assistant_name": "Dr. Mehta"
+            },
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{
+                        "type": "text",
+                        "value": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
+                    }]
+                }
+            ]
+        }
+    );
+    assert_eq!(input, correct_input);
+
+    let output_clickhouse: Vec<Value> =
+        serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
+    assert_eq!(output_clickhouse, *output);
+
+    let tool_params: Value =
+        serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
+    assert_eq!(tool_params["tool_choice"], "auto");
+    assert_eq!(tool_params["parallel_tool_calls"], true);
+
+    let tools_available = tool_params["tools_available"].as_array().unwrap();
+    assert_eq!(tools_available.len(), 2);
+    let tool = tools_available.first().unwrap();
+    assert_eq!(tool["name"], "get_temperature");
+    assert_eq!(
+        tool["description"],
+        "Get the current temperature in a given location"
+    );
+    assert_eq!(tool["strict"], false);
+
+    let tool_parameters = tool["parameters"].as_object().unwrap();
+    assert_eq!(tool_parameters["type"], "object");
+    assert!(tool_parameters.get("properties").is_some());
+    assert!(tool_parameters.get("required").is_some());
+
+    let properties = tool_parameters["properties"].as_object().unwrap();
+    assert!(properties.contains_key("location"));
+    assert!(properties.contains_key("units"));
+
+    let location = properties["location"].as_object().unwrap();
+    assert_eq!(location["type"], "string");
+    assert_eq!(
+        location["description"],
+        "The location to get the temperature for (e.g. \"New York\")"
+    );
+
+    let units = properties["units"].as_object().unwrap();
+    assert_eq!(units["type"], "string");
+    assert_eq!(
+        units["description"],
+        "The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")"
+    );
+    let units_enum = units["enum"].as_array().unwrap();
+    assert_eq!(units_enum.len(), 2);
+    assert!(units_enum.contains(&json!("fahrenheit")));
+    assert!(units_enum.contains(&json!("celsius")));
+
+    let required = tool_parameters["required"].as_array().unwrap();
+    assert!(required.contains(&json!("location")));
+
+    // Check if ClickHouse is correct - ModelInference Table
+    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ModelInference: {result:#?}");
+
+    let id = result.get("id").unwrap().as_str().unwrap();
+    assert!(Uuid::parse_str(id).is_ok());
+
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    assert_eq!(input, correct_input);
+
+    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
+    let output_clickhouse_model: Vec<Value> =
+        serde_json::from_str(output_clickhouse_model).unwrap();
+    assert!(!output_clickhouse_model.is_empty()); // could be > 1 if the model returns text as well
+    let content_block = output_clickhouse_model
+        .iter()
+        .find(|block| block["type"] == "tool_call")
+        .unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "tool_call");
+
+    assert!(content_block.get("id").unwrap().as_str().is_some());
+
+    let name = content_block.get("name").unwrap().as_str().unwrap();
+    assert_eq!(name, "get_temperature");
+
+    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
+    let arguments: Value = serde_json::from_str(arguments).unwrap();
+    let arguments = arguments.as_object().unwrap();
+    assert!(arguments.len() == 2);
+    let location = arguments.get("location").unwrap().as_str().unwrap();
+    assert_eq!(location.to_lowercase(), "tokyo");
+    if arguments.len() == 2 {
+        let units = arguments.get("units").unwrap().as_str().unwrap();
+        assert!(units == "celsius");
+    }
+
+    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    assert!(raw_response.to_lowercase().contains("tokyo"));
+    assert!(raw_response.contains("get_temperature"));
+
+    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    assert!(input_tokens > 0);
+    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    assert!(output_tokens > 0);
+    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    assert!(response_time_ms > 0);
+    assert!(result.get("ttft_ms").unwrap().is_null());
+}
+
+pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
+    provider: E2ETestProvider,
+) {
+    // todo!()
 }
 
 pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestProvider) {

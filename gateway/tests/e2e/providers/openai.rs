@@ -29,7 +29,9 @@ async fn get_providers() -> E2ETestProviders {
         tool_multi_turn_inference: standard_providers.clone(),
         tool_multi_turn_streaming_inference: standard_providers.clone(),
         dynamic_tool_use_inference: standard_providers.clone(),
-        dynamic_tool_use_streaming_inference: standard_providers,
+        dynamic_tool_use_streaming_inference: standard_providers.clone(),
+        parallel_tool_use_inference: standard_providers.clone(),
+        parallel_tool_use_streaming_inference: standard_providers,
         json_mode_inference: json_providers.clone(),
         json_mode_streaming_inference: json_providers,
     }

@@ -334,7 +334,7 @@ mod tests {
 
     use crate::endpoints::inference::ChatCompletionInferenceParams;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
-    use crate::inference::providers::common::get_weather_tool_config;
+    use crate::inference::providers::common::get_temperature_tool_config;
     use crate::inference::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
     use crate::inference::types::{ContentBlockOutput, Usage};
     use crate::jsonschema_util::JSONSchemaFromPath;
@@ -729,7 +729,7 @@ mod tests {
             }],
         };
         let models = HashMap::from([("tool".to_string(), tool_model_config)]);
-        let weather_tool_config = get_weather_tool_config();
+        let weather_tool_config = get_temperature_tool_config();
         let inference_config = InferenceConfig {
             models: &models,
             function: &function_config,
@@ -747,12 +747,12 @@ mod tests {
                 let tool_call = &chat_response.output[0];
                 match tool_call {
                     ContentBlockOutput::ToolCall(tool_call) => {
-                        assert_eq!(tool_call.name, "get_weather");
+                        assert_eq!(tool_call.name, "get_temperature");
                         assert_eq!(
                             tool_call.arguments,
                             r#"{"location":"Brooklyn","units":"celsius"}"#
                         );
-                        assert_eq!(tool_call.parsed_name, Some("get_weather".to_string()));
+                        assert_eq!(tool_call.parsed_name, Some("get_temperature".to_string()));
                         assert_eq!(
                             tool_call.parsed_arguments,
                             Some(json!({"location": "Brooklyn", "units": "celsius"}))

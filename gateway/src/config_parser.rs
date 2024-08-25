@@ -1213,7 +1213,7 @@ mod tests {
 
         [functions.weather_helper]
         type = "chat"
-        tools = ["get_weather"]
+        tools = ["get_temperature"]
 
         [functions.weather_helper.variants.openai_promptA]
         type = "chat_completion"
@@ -1262,9 +1262,9 @@ mod tests {
         # ┌────────────────────────────────────────────────────────────────────────────┐
         # │                                   TOOLS                                    │
         # └────────────────────────────────────────────────────────────────────────────┘
-        [tools.get_weather]
+        [tools.get_temperature]
         description = "Get the weather for a given location"
-        parameters = "../config/tools/get_weather.json"
+        parameters = "../config/tools/get_temperature.json"
         "#;
 
         toml::from_str(config_str).expect("Failed to parse sample config")

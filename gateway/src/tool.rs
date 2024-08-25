@@ -356,10 +356,10 @@ mod tests {
         static ref TOOLS: HashMap<String, StaticToolConfig> = {
             let mut map = HashMap::new();
             map.insert(
-                "get_weather".to_string(),
+                "get_temperature".to_string(),
                 StaticToolConfig {
-                    name: "get_weather".to_string(),
-                    description: "Get the current weather in a given location".to_string(),
+                    name: "get_temperature".to_string(),
+                    description: "Get the current temperature in a given location".to_string(),
                     parameters: JSONSchemaFromPath::from_value(&json!({
                     "type": "object",
                     "properties": {
@@ -394,10 +394,10 @@ mod tests {
         static ref EMPTY_TOOLS: HashMap<String, StaticToolConfig> = HashMap::new();
         static ref EMPTY_FUNCTION_TOOLS: Vec<String> = vec![];
         static ref ALL_FUNCTION_TOOLS: Vec<String> =
-            vec!["get_weather".to_string(), "query_articles".to_string()];
+            vec!["get_temperature".to_string(), "query_articles".to_string()];
         static ref AUTO_TOOL_CHOICE: ToolChoice = ToolChoice::Auto;
         static ref WEATHER_TOOL_CHOICE: ToolChoice =
-            ToolChoice::Specific("get_weather".to_string());
+            ToolChoice::Specific("get_temperature".to_string());
     }
 
     #[tokio::test]
@@ -433,7 +433,7 @@ mod tests {
 
         // Empty tools in function and config but we specify an allowed tool (should fail)
         let dynamic_tool_params = DynamicToolParams {
-            allowed_tools: Some(vec!["get_weather".to_string()]),
+            allowed_tools: Some(vec!["get_temperature".to_string()]),
             ..Default::default()
         };
         let err = ToolCallConfig::new(
@@ -447,13 +447,13 @@ mod tests {
         assert_eq!(
             err,
             Error::ToolNotFound {
-                name: "get_weather".to_string()
+                name: "get_temperature".to_string()
             }
         );
 
         // Dynamic tool config specifies a particular tool to call and it's in the function tools list
         let dynamic_tool_params = DynamicToolParams {
-            tool_choice: Some(ToolChoice::Specific("get_weather".to_string())),
+            tool_choice: Some(ToolChoice::Specific("get_temperature".to_string())),
             ..Default::default()
         };
         let tool_call_config = ToolCallConfig::new(
@@ -468,7 +468,7 @@ mod tests {
         assert_eq!(tool_call_config.tools_available.len(), 2);
         assert_eq!(
             tool_call_config.tool_choice,
-            ToolChoice::Specific("get_weather".to_string())
+            ToolChoice::Specific("get_temperature".to_string())
         );
         assert!(tool_call_config.parallel_tool_calls);
 
@@ -521,7 +521,7 @@ mod tests {
         // We pass a list of a single allowed tool and then configure a new tool
         // This should remove the other configured tools and add the new tool
         let dynamic_tool_params = DynamicToolParams {
-            allowed_tools: Some(vec!["get_weather".to_string()]),
+            allowed_tools: Some(vec!["get_temperature".to_string()]),
             additional_tools: Some(vec![Tool {
                 name: "establish_campground".to_string(),
                 description: "Establish a campground".to_string(),
@@ -543,7 +543,10 @@ mod tests {
         assert_eq!(tool_call_config.tools_available.len(), 2);
         // The following code depends on an implementation detail for this ordering,
         // might break if we change the order
-        assert_eq!(tool_call_config.tools_available[0].name(), "get_weather");
+        assert_eq!(
+            tool_call_config.tools_available[0].name(),
+            "get_temperature"
+        );
         assert_eq!(
             tool_call_config.tools_available[1].name(),
             "establish_campground"
@@ -588,7 +591,7 @@ mod tests {
     #[tokio::test]
     async fn test_tool_call_output_new() {
         let tool_call = ToolCall {
-            name: "get_weather".to_string(),
+            name: "get_temperature".to_string(),
             arguments: "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}".to_string(),
             id: "123".to_string(),
         };
@@ -603,7 +606,7 @@ mod tests {
         .unwrap();
         // Tool call is valid, so we should get a valid ToolCallOutput
         let tool_call_output = ToolCallOutput::new(tool_call, Some(&tool_call_config)).await;
-        assert_eq!(tool_call_output.name, "get_weather");
+        assert_eq!(tool_call_output.name, "get_temperature");
         assert_eq!(
             tool_call_output.arguments,
             "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}"
@@ -611,7 +614,7 @@ mod tests {
         assert_eq!(tool_call_output.id, "123");
         assert_eq!(
             tool_call_output.parsed_name,
-            Some("get_weather".to_string())
+            Some("get_temperature".to_string())
         );
         assert_eq!(
             tool_call_output.parsed_arguments,
@@ -623,18 +626,18 @@ mod tests {
 
         // Bad arguments, but valid name (parsed_name is set but parsed_arguments is not)
         let tool_call = ToolCall {
-            name: "get_weather".to_string(),
+            name: "get_temperature".to_string(),
             arguments: "{\"location\": \"San Francisco\", \"unit\": \"kelvin\"}".to_string(),
             id: "321".to_string(),
         };
         let tool_call_output = ToolCallOutput::new(tool_call, Some(&tool_call_config)).await;
         assert_eq!(
             tool_call_output.parsed_name,
-            Some("get_weather".to_string())
+            Some("get_temperature".to_string())
         );
         assert_eq!(tool_call_output.parsed_arguments, None);
         assert_eq!(tool_call_output.id, "321");
-        assert_eq!(tool_call_output.name, "get_weather");
+        assert_eq!(tool_call_output.name, "get_temperature");
         assert_eq!(
             tool_call_output.arguments,
             "{\"location\": \"San Francisco\", \"unit\": \"kelvin\"}"

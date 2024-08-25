@@ -249,7 +249,7 @@ pub fn create_tool_use_inference_request() -> ModelInferenceRequest<'static> {
     let messages = vec![RequestMessage {
         role: Role::User,
         content: vec![
-            "What's the weather like in New York currently? Use the `get_weather` tool."
+            "What's the weather like in New York currently? Use the `get_temperature` tool."
                 .to_string()
                 .into(),
         ],
@@ -258,7 +258,7 @@ pub fn create_tool_use_inference_request() -> ModelInferenceRequest<'static> {
     // Fine to leak during test execution
     let tool_config = Box::leak(Box::new(ToolCallConfig {
         tools_available: vec![ToolConfig::Static(&WEATHER_TOOL_CONFIG)],
-        tool_choice: ToolChoice::Specific("get_weather".to_string()),
+        tool_choice: ToolChoice::Specific("get_temperature".to_string()),
         parallel_tool_calls: false,
     }));
 
@@ -289,7 +289,7 @@ pub async fn test_tool_use_inference_request_with_provider(provider: &ProviderCo
     let content = result.content.first().unwrap();
     match content {
         ContentBlock::ToolCall(tool_call) => {
-            assert!(tool_call.name == "get_weather");
+            assert!(tool_call.name == "get_temperature");
 
             let arguments: serde_json::Value = serde_json::from_str(&tool_call.arguments)
                 .expect("Failed to parse tool call arguments");
@@ -332,7 +332,7 @@ pub async fn test_tool_use_streaming_inference_request_with_provider(provider: &
     for chunk in &collected_chunks {
         match chunk.content.first() {
             Some(ContentBlockChunk::ToolCall(tool_call)) => {
-                assert!(tool_call.name == "get_weather");
+                assert!(tool_call.name == "get_temperature");
             }
             None => continue, // we might get empty chunks (e.g. the usage chunk)
             _ => panic!("Unexpected content block"),
@@ -382,7 +382,7 @@ fn create_tool_multi_turn_inference_request() -> ModelInferenceRequest<'static> 
         RequestMessage {
             role: Role::User,
             content: vec![
-                "What's the weather like in New York currently? Use the `get_weather` tool."
+                "What's the weather like in New York currently? Use the `get_temperature` tool."
                     .to_string()
                     .into(),
             ],
@@ -390,7 +390,7 @@ fn create_tool_multi_turn_inference_request() -> ModelInferenceRequest<'static> 
         RequestMessage {
             role: Role::Assistant,
             content: vec![ContentBlock::ToolCall(ToolCall {
-                name: "get_weather".to_string(),
+                name: "get_temperature".to_string(),
                 arguments: "{\"location\": \"New York\"}".to_string(),
                 id: "1".to_string(),
             })],
@@ -398,7 +398,7 @@ fn create_tool_multi_turn_inference_request() -> ModelInferenceRequest<'static> 
         RequestMessage {
             role: Role::User,
             content: vec![ContentBlock::ToolResult(ToolResult {
-                name: "get_weather".to_string(),
+                name: "get_temperature".to_string(),
                 id: "1".to_string(),
                 result: "70".to_string(),
             })],
@@ -630,8 +630,8 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
 
 lazy_static! {
     static ref WEATHER_TOOL_CONFIG: StaticToolConfig = StaticToolConfig {
-        name: "get_weather".to_string(),
-        description: "Get the current weather in a given location".to_string(),
+        name: "get_temperature".to_string(),
+        description: "Get the current temperature in a given location".to_string(),
         parameters: JSONSchemaFromPath::from_value(&json!({
             "type": "object",
             "properties": {

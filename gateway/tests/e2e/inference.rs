@@ -227,9 +227,9 @@ async fn e2e_test_tool_call() {
     let id = content_block.get("id").unwrap().as_str().unwrap();
     assert_eq!(id, "0");
     let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_weather");
+    assert_eq!(name, "get_temperature");
     let parsed_name = content_block.get("parsed_name").unwrap().as_str().unwrap();
-    assert_eq!(parsed_name, "get_weather");
+    assert_eq!(parsed_name, "get_temperature");
     let parsed_arguments = content_block.get("parsed_arguments").unwrap();
     assert_eq!(parsed_arguments, &*DUMMY_TOOL_RESPONSE,);
 
@@ -282,9 +282,9 @@ async fn e2e_test_tool_call() {
     let id = content_block.get("id").unwrap().as_str().unwrap();
     assert_eq!(id, "0");
     let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_weather");
+    assert_eq!(name, "get_temperature");
     let parsed_name = content_block.get("parsed_name").unwrap().as_str().unwrap();
-    assert_eq!(parsed_name, "get_weather");
+    assert_eq!(parsed_name, "get_temperature");
     let parsed_arguments = content_block.get("parsed_arguments").unwrap();
     assert_eq!(parsed_arguments, &*DUMMY_TOOL_RESPONSE,);
     // Check that episode_id is here and correct
@@ -311,7 +311,7 @@ async fn e2e_test_tool_call() {
             .unwrap()
             .as_str()
             .unwrap()
-            == "get_weather"
+            == "get_temperature"
     );
     assert!(tool_params.get("tool_choice").unwrap().as_str().unwrap() == "auto");
     assert!(!tool_params
@@ -345,7 +345,7 @@ async fn e2e_test_tool_call() {
     let id = content_block.get("id").unwrap().as_str().unwrap();
     assert_eq!(id, "0");
     let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_weather");
+    assert_eq!(name, "get_temperature");
 
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     assert_eq!(input_tokens, 10);
@@ -404,9 +404,9 @@ async fn e2e_test_tool_call_malformed() {
     let id = content_block.get("id").unwrap().as_str().unwrap();
     assert_eq!(id, "0");
     let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_weather");
+    assert_eq!(name, "get_temperature");
     let parsed_name = content_block.get("parsed_name").unwrap().as_str().unwrap();
-    assert_eq!(parsed_name, "get_weather");
+    assert_eq!(parsed_name, "get_temperature");
     let parsed_arguments = content_block.get("parsed_arguments").unwrap();
     assert!(parsed_arguments.is_null());
 
@@ -459,9 +459,9 @@ async fn e2e_test_tool_call_malformed() {
     let id = content_block.get("id").unwrap().as_str().unwrap();
     assert_eq!(id, "0");
     let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_weather");
+    assert_eq!(name, "get_temperature");
     let parsed_name = content_block.get("parsed_name").unwrap().as_str().unwrap();
-    assert_eq!(parsed_name, "get_weather");
+    assert_eq!(parsed_name, "get_temperature");
     let parsed_arguments = content_block.get("parsed_arguments").unwrap();
     assert!(parsed_arguments.is_null());
     // Check that episode_id is here and correct
@@ -488,7 +488,7 @@ async fn e2e_test_tool_call_malformed() {
             .unwrap()
             .as_str()
             .unwrap()
-            == "get_weather"
+            == "get_temperature"
     );
     assert!(tool_params.get("tool_choice").unwrap().as_str().unwrap() == "auto");
     assert!(!tool_params
@@ -522,7 +522,7 @@ async fn e2e_test_tool_call_malformed() {
     let id = content_block.get("id").unwrap().as_str().unwrap();
     assert_eq!(id, "0");
     let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_weather");
+    assert_eq!(name, "get_temperature");
 
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     assert_eq!(input_tokens, 10);
@@ -1275,9 +1275,9 @@ async fn e2e_test_tool_call_streaming() {
     let id = content_block.get("id").unwrap().as_str().unwrap();
     assert_eq!(id, "0");
     let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_weather");
+    assert_eq!(name, "get_temperature");
     let parsed_name = content_block.get("parsed_name").unwrap().as_str().unwrap();
-    assert_eq!(parsed_name, "get_weather");
+    assert_eq!(parsed_name, "get_temperature");
     let parsed_arguments = content_block.get("parsed_arguments").unwrap();
     assert_eq!(parsed_arguments, &*DUMMY_TOOL_RESPONSE,);
     // Check that episode_id is here and correct
@@ -1304,7 +1304,7 @@ async fn e2e_test_tool_call_streaming() {
             .unwrap()
             .as_str()
             .unwrap()
-            == "get_weather"
+            == "get_temperature"
     );
     assert!(tool_params.get("tool_choice").unwrap().as_str().unwrap() == "auto");
     assert!(!tool_params
@@ -1338,7 +1338,7 @@ async fn e2e_test_tool_call_streaming() {
     let id = content_block.get("id").unwrap().as_str().unwrap();
     assert_eq!(id, "0");
     let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_weather");
+    assert_eq!(name, "get_temperature");
 
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     assert_eq!(input_tokens, 10);

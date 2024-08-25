@@ -930,7 +930,7 @@ mod tests {
                 "Here's the result of the function call:".to_string().into(),
                 ContentBlock::ToolCall(ToolCall {
                     id: "call_1".to_string(),
-                    name: "get_weather".to_string(),
+                    name: "get_temperature".to_string(),
                     arguments: r#"{"location": "New York", "unit": "celsius"}"#.to_string(),
                 }),
             ],
@@ -948,7 +948,7 @@ mod tests {
             content.parts[1],
             GCPVertexGeminiContentPart::FunctionCall {
                 function_call: GCPVertexGeminiFunctionCall {
-                    name: "get_weather",
+                    name: "get_temperature",
                     args: json!({"location": "New York", "unit": "celsius"}),
                 }
             }
@@ -958,7 +958,7 @@ mod tests {
             role: Role::User,
             content: vec![ContentBlock::ToolResult(ToolResult {
                 id: "call_1".to_string(),
-                name: "get_weather".to_string(),
+                name: "get_temperature".to_string(),
                 result: r#"{"temperature": 25, "conditions": "sunny"}"#.to_string(),
             })],
         };
@@ -969,9 +969,9 @@ mod tests {
             content.parts[0],
             GCPVertexGeminiContentPart::FunctionResponse {
                 function_response: GCPVertexGeminiFunctionResponse {
-                    name: "get_weather",
+                    name: "get_temperature",
                     response: json!({
-                        "name": "get_weather",
+                        "name": "get_temperature",
                         "content": json!({"temperature": 25, "conditions": "sunny"})
                     }),
                 }
@@ -986,8 +986,8 @@ mod tests {
             tool,
             GCPVertexGeminiTool::FunctionDeclarations(vec![
                 GCPVertexGeminiFunctionDeclaration {
-                    name: "get_weather",
-                    description: Some("Get the current weather in a given location"),
+                    name: "get_temperature",
+                    description: Some("Get the current temperature in a given location"),
                     parameters: Some(MULTI_TOOL_CONFIG.tools_available[0].parameters().clone()),
                 },
                 GCPVertexGeminiFunctionDeclaration {
@@ -1052,7 +1052,7 @@ mod tests {
             }
         );
 
-        let tool_choice = ToolChoice::Specific("get_weather".to_string());
+        let tool_choice = ToolChoice::Specific("get_temperature".to_string());
         let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, flash_model_name));
         assert_eq!(
             tool_config,
@@ -1065,14 +1065,14 @@ mod tests {
         );
 
         // The Pro model supports Any mode with allowed function names
-        let tool_choice = ToolChoice::Specific("get_weather".to_string());
+        let tool_choice = ToolChoice::Specific("get_temperature".to_string());
         let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, pro_model_name));
         assert_eq!(
             tool_config,
             GCPVertexGeminiToolConfig {
                 function_calling_config: GCPVertexGeminiFunctionCallingConfig {
                     mode: GCPVertexGeminiFunctionCallingMode::Any,
-                    allowed_function_names: Some(vec!["get_weather"]),
+                    allowed_function_names: Some(vec!["get_temperature"]),
                 }
             }
         );
@@ -1379,7 +1379,7 @@ mod tests {
             GCPVertexGeminiResponseContentPart::Text("Here's the weather information:".to_string());
         let function_call_part =
             GCPVertexGeminiResponseContentPart::FunctionCall(GCPVertexGeminiResponseFunctionCall {
-                name: "get_weather".to_string(),
+                name: "get_temperature".to_string(),
                 args: json!({"location": "New York", "unit": "celsius"}),
             });
         let content = GCPVertexGeminiResponseContent {
@@ -1409,7 +1409,7 @@ mod tests {
             &model_inference_response.content[..]
         {
             assert_eq!(text, "Here's the weather information:");
-            assert_eq!(tool_call.name, "get_weather");
+            assert_eq!(tool_call.name, "get_temperature");
             assert_eq!(
                 tool_call.arguments,
                 r#"{"location":"New York","unit":"celsius"}"#
@@ -1431,7 +1431,7 @@ mod tests {
             GCPVertexGeminiResponseContentPart::Text("Here's the weather information:".to_string());
         let function_call_part =
             GCPVertexGeminiResponseContentPart::FunctionCall(GCPVertexGeminiResponseFunctionCall {
-                name: "get_weather".to_string(),
+                name: "get_temperature".to_string(),
                 args: json!({"location": "New York", "unit": "celsius"}),
             });
         let text_part2 = GCPVertexGeminiResponseContentPart::Text(
@@ -1475,7 +1475,7 @@ mod tests {
         {
             assert_eq!(text1, "Here's the weather information:");
             assert_eq!(text2, "And here's a restaurant recommendation:");
-            assert_eq!(tool_call1.name, "get_weather");
+            assert_eq!(tool_call1.name, "get_temperature");
             assert_eq!(
                 tool_call1.arguments,
                 r#"{"location":"New York","unit":"celsius"}"#
