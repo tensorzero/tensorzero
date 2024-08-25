@@ -14,6 +14,8 @@ use crate::common::{
 #[derive(Clone, Debug)]
 pub struct E2ETestProvider {
     pub variant_name: String,
+    pub model_name: String,
+    pub model_provider_name: String,
 }
 
 /// Enforce that every provider implements a common set of tests.
@@ -313,6 +315,11 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, correct_input);
 
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
     let output = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
     assert_eq!(content_blocks.len(), 1);
@@ -510,6 +517,11 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, correct_input);
+
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
 
     let output = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
@@ -1147,6 +1159,11 @@ pub async fn test_tool_use_inference_request_with_provider(provider: E2ETestProv
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, correct_input);
 
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
     let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
     let output_clickhouse_model: Vec<Value> =
         serde_json::from_str(output_clickhouse_model).unwrap();
@@ -1421,6 +1438,11 @@ pub async fn test_tool_use_streaming_inference_request_with_provider(provider: E
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, correct_input);
 
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
     let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
     let output_clickhouse_model: Vec<Value> =
         serde_json::from_str(output_clickhouse_model).unwrap();
@@ -1491,7 +1513,7 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
                     "content": [
                         {
                             "type": "tool_call",
-                            "id": "tool_call_1",
+                            "id": "123456789",
                             "name": "get_temperature",
                             "arguments": "{\"location\": \"Tokyo\"}"
                         }
@@ -1502,7 +1524,7 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
                     "content": [
                         {
                             "type": "tool_result",
-                            "id": "tool_call_1",
+                            "id": "123456789",
                             "name": "get_temperature",
                             "result": "70"
                         }
@@ -1586,11 +1608,11 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
             },
             {
                 "role": "assistant",
-                "content": [{"type": "tool_call", "id": "tool_call_1", "name": "get_temperature", "arguments": "{\"location\": \"Tokyo\"}"}]
+                "content": [{"type": "tool_call", "id": "123456789", "name": "get_temperature", "arguments": "{\"location\": \"Tokyo\"}"}]
             },
             {
                 "role": "user",
-                "content": [{"type": "tool_result", "id": "tool_call_1", "name": "get_temperature", "result": "70"}]
+                "content": [{"type": "tool_result", "id": "123456789", "name": "get_temperature", "result": "70"}]
             }
         ]
     });
@@ -1655,6 +1677,11 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, correct_input);
 
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
     let output = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
     assert_eq!(content_blocks.len(), 1);
@@ -1697,7 +1724,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
                     "content": [
                         {
                             "type": "tool_call",
-                            "id": "tool_call_1",
+                            "id": "123456789",
                             "name": "get_temperature",
                             "arguments": "{\"location\": \"Tokyo\"}"
                         }
@@ -1708,7 +1735,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
                     "content": [
                         {
                             "type": "tool_result",
-                            "id": "tool_call_1",
+                            "id": "123456789",
                             "name": "get_temperature",
                             "result": "70"
                         }
@@ -1830,7 +1857,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
                 "content": [
                     {
                         "type": "tool_call",
-                        "id": "tool_call_1",
+                        "id": "123456789",
                         "name": "get_temperature",
                         "arguments": "{\"location\": \"Tokyo\"}"
                     }
@@ -1841,7 +1868,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
                 "content": [
                     {
                         "type": "tool_result",
-                        "id": "tool_call_1",
+                        "id": "123456789",
                         "name": "get_temperature",
                         "result": "70"
                     }
@@ -1899,6 +1926,11 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, correct_input);
+
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
 
     let output = result.get("output").unwrap().as_str().unwrap();
     let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
@@ -3299,6 +3331,11 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, correct_input);
 
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
     let output_clickhouse = result.get("output").unwrap().as_str().unwrap();
     assert!(output_clickhouse.to_lowercase().contains("tokyo"));
     let output_clickhouse: Value = serde_json::from_str(output_clickhouse).unwrap();
@@ -3496,6 +3533,11 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(input, correct_input);
+
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
 
     let output_clickhouse = result.get("output").unwrap().as_str().unwrap();
     assert!(output_clickhouse.to_lowercase().contains("tokyo"));

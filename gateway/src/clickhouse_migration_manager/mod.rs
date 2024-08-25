@@ -1,14 +1,15 @@
-mod migration_trait;
-mod migrations;
+pub mod migration_trait;
+pub mod migrations;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::Error;
 use migration_trait::Migration;
 use migrations::migration_0000::Migration0000;
+use migrations::migration_0001::Migration0001;
 
 pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     run_migration(&Migration0000 { clickhouse }).await?;
-
+    run_migration(&Migration0001 { clickhouse }).await?;
     // NOTE:
     // When we add more migrations, we need to add a test that applies them in a cumulative (N^2) way.
     //
@@ -19,13 +20,13 @@ pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     //
     // We need to check that previous migrations return false for should_apply() (i.e. are noops).
     //
-    // You should expand gateway::tests::e2e::clickhouse_migration_manager::test_clickhouse_migration_manager
+    // You should expand gateway::tests::e2e::clickhouse_migration_manager::clickhouse_migration_manager
     // to test this.
 
     Ok(())
 }
 
-async fn run_migration(migration: &impl Migration) -> Result<(), Error> {
+pub async fn run_migration(migration: &impl Migration) -> Result<(), Error> {
     migration.can_apply().await?;
 
     if migration.should_apply().await? {

@@ -14,14 +14,15 @@ use crate::{
             azure::AzureProvider,
             fireworks::FireworksProvider,
             gcp_vertex::{GCPCredentials, GCPVertexGeminiProvider},
+            mistral::MistralProvider,
             openai::OpenAIProvider,
             provider_trait::InferenceProvider,
             together::TogetherProvider,
             vllm::VLLMProvider,
         },
         types::{
-            ModelInferenceRequest, ModelInferenceResponse, ModelInferenceResponseChunk,
-            ModelInferenceResponseStream,
+            ModelInferenceRequest, ModelInferenceResponse, ProviderInferenceResponse,
+            ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
         },
     },
 };
@@ -35,11 +36,11 @@ pub struct ModelConfig {
 }
 
 impl ModelConfig {
-    pub async fn infer<'a>(
+    pub async fn infer<'a, 'request>(
         &'a self,
-        request: &'a ModelInferenceRequest<'a>,
-        client: &'a Client,
-    ) -> Result<ModelInferenceResponse, Error> {
+        request: &'request ModelInferenceRequest<'request>,
+        client: &'request Client,
+    ) -> Result<ModelInferenceResponse<'a>, Error> {
         let mut provider_errors: Vec<Error> = Vec::new();
         for provider_name in &self.routing {
             let provider_config =
@@ -54,7 +55,9 @@ impl ModelConfig {
                     for error in &provider_errors {
                         error.log();
                     }
-                    return Ok(response);
+                    let model_inference_response =
+                        ModelInferenceResponse::new(response, provider_name);
+                    return Ok(model_inference_response);
                 }
                 Err(error) => provider_errors.push(error),
             }
@@ -62,11 +65,18 @@ impl ModelConfig {
         Err(Error::ModelProvidersExhausted { provider_errors })
     }
 
-    pub async fn infer_stream<'a>(
+    pub async fn infer_stream<'a, 'request>(
         &'a self,
-        request: &'a ModelInferenceRequest<'a>,
-        client: &'a Client,
-    ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error> {
+        request: &'request ModelInferenceRequest<'request>,
+        client: &'request Client,
+    ) -> Result<
+        (
+            ProviderInferenceResponseChunk,
+            ProviderInferenceResponseStream,
+            &'a str,
+        ),
+        Error,
+    > {
         let mut provider_errors: Vec<Error> = Vec::new();
         for provider_name in &self.routing {
             let provider_config =
@@ -81,7 +91,8 @@ impl ModelConfig {
                     for error in &provider_errors {
                         error.log();
                     }
-                    return Ok(response);
+                    let (chunk, stream) = response;
+                    return Ok((chunk, stream, provider_name));
                 }
                 Err(error) => provider_errors.push(error),
             }
@@ -97,6 +108,7 @@ pub enum ProviderConfig {
     Azure(AzureProvider),
     Fireworks(FireworksProvider),
     GCPVertexGemini(GCPVertexGeminiProvider),
+    Mistral(MistralProvider),
     OpenAI(OpenAIProvider),
     Together(TogetherProvider),
     VLLM(VLLMProvider),
@@ -138,6 +150,9 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 project_id: String,
             },
             Fireworks {
+                model_name: String,
+            },
+            Mistral {
                 model_name: String,
             },
             OpenAI {
@@ -227,6 +242,12 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                     model_id,
                 })
             }
+            ProviderConfigHelper::Mistral { model_name } => {
+                ProviderConfig::Mistral(MistralProvider {
+                    model_name,
+                    api_key: env::var("MISTRAL_API_KEY").ok().map(SecretString::new),
+                })
+            }
             ProviderConfigHelper::OpenAI {
                 model_name,
                 api_base,
@@ -262,13 +283,14 @@ impl InferenceProvider for ProviderConfig {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         client: &'a Client,
-    ) -> Result<ModelInferenceResponse, Error> {
+    ) -> Result<ProviderInferenceResponse, Error> {
         match self {
             ProviderConfig::Anthropic(provider) => provider.infer(request, client).await,
             ProviderConfig::AWSBedrock(provider) => provider.infer(request, client).await,
             ProviderConfig::Azure(provider) => provider.infer(request, client).await,
             ProviderConfig::Fireworks(provider) => provider.infer(request, client).await,
             ProviderConfig::GCPVertexGemini(provider) => provider.infer(request, client).await,
+            ProviderConfig::Mistral(provider) => provider.infer(request, client).await,
             ProviderConfig::OpenAI(provider) => provider.infer(request, client).await,
             ProviderConfig::Together(provider) => provider.infer(request, client).await,
             ProviderConfig::VLLM(provider) => provider.infer(request, client).await,
@@ -281,7 +303,13 @@ impl InferenceProvider for ProviderConfig {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         client: &'a Client,
-    ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error> {
+    ) -> Result<
+        (
+            ProviderInferenceResponseChunk,
+            ProviderInferenceResponseStream,
+        ),
+        Error,
+    > {
         match self {
             ProviderConfig::Anthropic(provider) => provider.infer_stream(request, client).await,
             ProviderConfig::AWSBedrock(provider) => provider.infer_stream(request, client).await,
@@ -290,6 +318,7 @@ impl InferenceProvider for ProviderConfig {
             ProviderConfig::GCPVertexGemini(provider) => {
                 provider.infer_stream(request, client).await
             }
+            ProviderConfig::Mistral(provider) => provider.infer_stream(request, client).await,
             ProviderConfig::OpenAI(provider) => provider.infer_stream(request, client).await,
             ProviderConfig::Together(provider) => provider.infer_stream(request, client).await,
             ProviderConfig::VLLM(provider) => provider.infer_stream(request, client).await,
@@ -323,8 +352,8 @@ mod tests {
             model_name: "error".to_string(),
         });
         let model_config = ModelConfig {
-            routing: vec!["good".to_string()],
-            providers: HashMap::from([("good".to_string(), good_provider_config)]),
+            routing: vec!["good_provider".to_string()],
+            providers: HashMap::from([("good_provider".to_string(), good_provider_config)]),
         };
         let tool_config = ToolCallConfig {
             tools_available: vec![],
@@ -355,6 +384,7 @@ mod tests {
         assert_eq!(raw, DUMMY_INFER_RESPONSE_RAW);
         let usage = response.usage;
         assert_eq!(usage, DUMMY_INFER_USAGE);
+        assert_eq!(response.model_provider_name, "good_provider");
 
         // Try inferring the bad model
         let model_config = ModelConfig {
@@ -402,10 +432,10 @@ mod tests {
         };
 
         let model_config = ModelConfig {
-            routing: vec!["error".to_string(), "good".to_string()],
+            routing: vec!["error_provider".to_string(), "good_provider".to_string()],
             providers: HashMap::from([
-                ("error".to_string(), bad_provider_config),
-                ("good".to_string(), good_provider_config),
+                ("error_provider".to_string(), bad_provider_config),
+                ("good_provider".to_string(), good_provider_config),
             ]),
         };
 
@@ -421,6 +451,7 @@ mod tests {
         assert_eq!(raw, DUMMY_INFER_RESPONSE_RAW);
         let usage = response.usage;
         assert_eq!(usage, DUMMY_INFER_USAGE);
+        assert_eq!(response.model_provider_name, "good_provider");
     }
 
     #[tokio::test]
@@ -447,10 +478,10 @@ mod tests {
 
         // Test good model
         let model_config = ModelConfig {
-            routing: vec!["good".to_string()],
-            providers: HashMap::from([("good".to_string(), good_provider_config)]),
+            routing: vec!["good_provider".to_string()],
+            providers: HashMap::from([("good_provider".to_string(), good_provider_config)]),
         };
-        let (initial_chunk, stream) = model_config
+        let (initial_chunk, stream, model_provider_name) = model_config
             .infer_stream(&request, &Client::new())
             .await
             .unwrap();
@@ -461,7 +492,7 @@ mod tests {
                 id: "0".to_string(),
             })],
         );
-
+        assert_eq!(model_provider_name, "good_provider");
         let mut collected_content: Vec<ContentBlockChunk> =
             vec![ContentBlockChunk::Text(TextChunk {
                 text: DUMMY_STREAMING_RESPONSE[0].to_string(),
@@ -532,17 +563,17 @@ mod tests {
 
         // Test fallback
         let model_config = ModelConfig {
-            routing: vec!["error".to_string(), "good".to_string()],
+            routing: vec!["error_provider".to_string(), "good_provider".to_string()],
             providers: HashMap::from([
-                ("error".to_string(), bad_provider_config),
-                ("good".to_string(), good_provider_config),
+                ("error_provider".to_string(), bad_provider_config),
+                ("good_provider".to_string(), good_provider_config),
             ]),
         };
-        let (initial_chunk, stream) = model_config
+        let (initial_chunk, stream, model_provider_name) = model_config
             .infer_stream(&request, &Client::new())
             .await
             .unwrap();
-
+        assert_eq!(model_provider_name, "good_provider");
         // Ensure that the error for the bad provider was logged, but the request worked nonetheless
         assert!(logs_contain("Error sending request to Dummy provider"));
 

@@ -1,4 +1,3 @@
-use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -7,7 +6,7 @@ use uuid::Uuid;
 use crate::error::{Error, ResultExt};
 use crate::inference::types::{
     ChatInferenceResult, ContentBlock, InferenceResult, Input, InputMessageContent,
-    JsonInferenceResult, ModelInferenceResponse, Role, Usage,
+    JsonInferenceResult, ModelInferenceResponseWithMetadata, Role, Usage,
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
@@ -28,16 +27,6 @@ pub struct FunctionConfigChat {
     pub tools: Vec<String>, // tool names
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: bool,
-}
-
-#[derive(Debug, Default, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum JsonEnforcement {
-    #[default]
-    Default,
-    Strict,
-    ImplicitTool,
-    Off,
 }
 
 #[derive(Debug)]
@@ -134,21 +123,21 @@ impl FunctionConfig {
         }
     }
 
-    pub async fn prepare_response(
+    pub async fn prepare_response<'a>(
         &self,
         inference_id: Uuid,
         content_blocks: Vec<ContentBlock>,
         usage: Usage,
-        model_inference_responses: Vec<ModelInferenceResponse>,
+        model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
         tool_config: Option<&ToolCallConfig>,
-    ) -> Result<InferenceResult, Error> {
+    ) -> Result<InferenceResult<'a>, Error> {
         match self {
             FunctionConfig::Chat(..) => Ok(InferenceResult::Chat(
                 ChatInferenceResult::new(
                     inference_id,
                     content_blocks,
                     usage,
-                    model_inference_responses,
+                    model_inference_results,
                     tool_config,
                 )
                 .await,
@@ -194,7 +183,7 @@ impl FunctionConfig {
                     raw,
                     parsed_output,
                     usage,
-                    model_inference_responses,
+                    model_inference_results,
                 )))
             }
         }
@@ -388,6 +377,7 @@ mod tests {
     use super::*;
     use serde_json::json;
     use std::time::Duration;
+    use std::time::Instant;
     use std::{io::Write, path::PathBuf};
     use tempfile::NamedTempFile;
     use tracing_test::traced_test;
@@ -1194,12 +1184,16 @@ mod tests {
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
         };
-        let model_response = ModelInferenceResponse::new(
-            content_blocks.clone(),
-            "content".to_string(),
-            usage.clone(),
+        let model_response = ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            content: content_blocks.clone(),
+            raw_response: "content".to_string(),
+            usage: usage.clone(),
+            model_provider_name: "model_provider_name",
+            model_name: "model_name",
             latency,
-        );
+        };
         let response = function_config
             .prepare_response(
                 inference_id,
@@ -1219,7 +1213,7 @@ mod tests {
                 assert!(result.output.parsed.is_none());
                 assert_eq!(result.output.raw, "Hello, world!");
                 assert_eq!(result.usage, usage);
-                assert_eq!(result.model_inference_responses, vec![model_response]);
+                assert_eq!(result.model_inference_results, vec![model_response]);
             }
             _ => panic!("Expected a JSON inference result"),
         }
@@ -1234,12 +1228,16 @@ mod tests {
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
         };
-        let model_response = ModelInferenceResponse::new(
-            content_blocks.clone(),
-            "content".to_string(),
-            usage.clone(),
+        let model_response = ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            content: content_blocks.clone(),
+            raw_response: "content".to_string(),
+            usage: usage.clone(),
+            model_provider_name: "model_provider_name",
+            model_name: "model_name",
             latency,
-        );
+        };
         let response = function_config
             .prepare_response(
                 inference_id,
@@ -1259,7 +1257,7 @@ mod tests {
                 );
                 assert_eq!(result.output.raw, r#"{"name": "Jerry", "age": 30}"#);
                 assert_eq!(result.usage, usage);
-                assert_eq!(result.model_inference_responses, vec![model_response]);
+                assert_eq!(result.model_inference_results, vec![model_response]);
             }
             _ => panic!("Expected a JSON inference result"),
         }
@@ -1274,12 +1272,16 @@ mod tests {
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
         };
-        let model_response = ModelInferenceResponse::new(
-            content_blocks.clone(),
-            "content".to_string(),
-            usage.clone(),
+        let model_response = ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            content: content_blocks.clone(),
+            raw_response: "content".to_string(),
+            usage: usage.clone(),
+            model_provider_name: "model_provider_name",
+            model_name: "model_name",
             latency,
-        );
+        };
         let response = function_config
             .prepare_response(
                 inference_id,
@@ -1296,7 +1298,7 @@ mod tests {
                 assert!(result.output.parsed.is_none());
                 assert_eq!(result.output.raw, r#"{"name": "Jerry", "age": "thirty"}"#);
                 assert_eq!(result.usage, usage);
-                assert_eq!(result.model_inference_responses, vec![model_response]);
+                assert_eq!(result.model_inference_results, vec![model_response]);
             }
             _ => panic!("Expected a JSON inference result"),
         }
@@ -1313,14 +1315,18 @@ mod tests {
             input_tokens: 10,
             output_tokens: 10,
         };
-        let model_response = ModelInferenceResponse::new(
-            content_blocks.clone(),
-            "content".to_string(),
-            usage.clone(),
-            Latency::NonStreaming {
+        let model_response = ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            content: content_blocks.clone(),
+            raw_response: "content".to_string(),
+            usage: usage.clone(),
+            model_provider_name: "model_provider_name",
+            model_name: "model_name",
+            latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
-        );
+        };
         let response = function_config
             .prepare_response(
                 inference_id,
@@ -1338,7 +1344,7 @@ mod tests {
                 assert!(result.output.parsed.is_none());
                 assert_eq!(result.output.raw, "tool_call_arguments");
                 assert_eq!(result.usage, usage);
-                assert_eq!(result.model_inference_responses, vec![model_response]);
+                assert_eq!(result.model_inference_results, vec![model_response]);
             }
             _ => panic!("Expected a JSON inference result"),
         }
@@ -1355,14 +1361,18 @@ mod tests {
             input_tokens: 10,
             output_tokens: 10,
         };
-        let model_response = ModelInferenceResponse::new(
-            content_blocks.clone(),
-            "content".to_string(),
-            usage.clone(),
-            Latency::NonStreaming {
+        let model_response = ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            content: content_blocks.clone(),
+            raw_response: "content".to_string(),
+            usage: usage.clone(),
+            model_provider_name: "model_provider_name",
+            model_name: "model_name",
+            latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
-        );
+        };
         let response = function_config
             .prepare_response(
                 inference_id,
@@ -1382,7 +1392,7 @@ mod tests {
                 );
                 assert_eq!(result.output.raw, r#"{"name": "Jerry", "age": 30}"#);
                 assert_eq!(result.usage, usage);
-                assert_eq!(result.model_inference_responses, vec![model_response]);
+                assert_eq!(result.model_inference_results, vec![model_response]);
             }
             _ => panic!("Expected a JSON inference result"),
         }
@@ -1394,14 +1404,18 @@ mod tests {
             input_tokens: 10,
             output_tokens: 10,
         };
-        let model_response = ModelInferenceResponse::new(
-            content_blocks.clone(),
-            "content".to_string(),
-            usage.clone(),
-            Latency::NonStreaming {
+        let model_response = ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            content: content_blocks.clone(),
+            raw_response: "content".to_string(),
+            usage: usage.clone(),
+            model_provider_name: "model_provider_name",
+            model_name: "model_name",
+            latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
-        );
+        };
         let error = function_config
             .prepare_response(
                 inference_id,

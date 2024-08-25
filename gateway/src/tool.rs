@@ -263,11 +263,6 @@ pub enum ToolChoice {
     Required,
     // Forces the LLM to call a specific tool. The String is the name of the tool.
     Specific(String),
-    // It is occasionally helpful to make an "implicit" tool call to enforce that a JSON schema is followed
-    // In this case, the tool call is not exposed to the client, but the output is still validated against the schema
-    // Implicit means that the tool will always be called "respond" and that we should convert it back to chat-style output
-    // before response.
-    Implicit,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

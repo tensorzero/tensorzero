@@ -392,14 +392,14 @@ fn create_tool_multi_turn_inference_request() -> ModelInferenceRequest<'static> 
             content: vec![ContentBlock::ToolCall(ToolCall {
                 name: "get_temperature".to_string(),
                 arguments: "{\"location\": \"New York\"}".to_string(),
-                id: "1".to_string(),
+                id: "123456789".to_string(),
             })],
         },
         RequestMessage {
             role: Role::User,
             content: vec![ContentBlock::ToolResult(ToolResult {
                 name: "get_temperature".to_string(),
-                id: "1".to_string(),
+                id: "123456789".to_string(),
                 result: "70".to_string(),
             })],
         },
