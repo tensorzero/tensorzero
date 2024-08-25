@@ -40,7 +40,7 @@ jobs:
         run: |
           cargo test-unit --profile ci ${{ vars.CARGO_NEXTEST_ARGS }}
 
-      - name: List (Python)
+      - name: Lint (Python)
         run: |
           python -m pip install ruff
           ruff format --check .
