@@ -1,4 +1,25 @@
+"""
+TensorZero Client
+
+This module provides an asynchronous client for interacting with the TensorZero API.
+It includes functionality for making inference requests and sending feedback.
+
+The main class, TensorZeroClient, offers methods for:
+- Initializing the client with a base URL
+- Making inference requests (with optional streaming)
+- Sending feedback on episodes or inferences
+- Managing the client session using async context managers
+
+Usage:
+    async with TensorZeroClient(base_url) as client:
+        response = await client.inference(...)
+        feedback = await client.feedback(...)
+
+Note: This client requires the httpx library for asynchronous HTTP requests.
+"""
+
 import json
+import logging
 from typing import Any, AsyncGenerator, Dict, List, Optional, Union
 from uuid import UUID
 
@@ -22,6 +43,7 @@ class TensorZeroClient:
         """
         self.base_url = base_url
         self.client = httpx.AsyncClient()
+        self.logger = logging.getLogger(__name__)
 
     async def inference(
         self,
@@ -152,4 +174,4 @@ class TensorZeroClient:
                     data = json.loads(data)
                     yield parse_inference_chunk(data)
                 except json.JSONDecodeError:
-                    print(f"Failed to parse SSE data: {data}")
+                    self.logger.error(f"Failed to parse SSE data: {data}")

@@ -1,3 +1,22 @@
+"""
+Tests for the TensorZero client
+
+We use pytest and pytest-asyncio to run the tests.
+
+These tests cover the major functionality of the client but do not
+attempt to comprehensively cover all of TensorZero's functionality.
+See the tests across the Rust codebase for more comprehensive tests.
+
+To run:
+```
+pytest
+```
+or
+```
+uv run pytest
+```
+"""
+
 from uuid import UUID
 
 import pytest
@@ -11,15 +30,6 @@ from tensorzero import (
     ToolCallChunk,
 )
 from uuid_extensions import uuid7
-
-"""
-TODOs:
- - [ ] Write top-level documentation for the client and for the tests
- - [x] Add a set of dataclasses for output types
- - [x] Add tests covering function calling and JSON functions
- - [ ] Add a description to the pyproject.toml
- - [ ] Add to precommit and CI Ruff stuff for linting, import sorting, formatting, etc
-"""
 
 
 @pytest_asyncio.fixture
