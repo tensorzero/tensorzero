@@ -20,8 +20,8 @@ use uuid::Uuid;
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest, ModelInferenceResponse,
-    ModelInferenceResponseChunk, ModelInferenceResponseStream, RequestMessage, Role, Text,
+    ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest, ProviderInferenceResponse,
+    ProviderInferenceResponseChunk, ProviderInferenceResponseStream, RequestMessage, Role, Text,
     TextChunk, Usage,
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
@@ -63,7 +63,7 @@ impl InferenceProvider for AWSBedrockProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
-    ) -> Result<ModelInferenceResponse, Error> {
+    ) -> Result<ProviderInferenceResponse, Error> {
         // TODO (#55): add support for guardrails and additional fields
 
         let messages: Vec<Message> = request
@@ -138,7 +138,13 @@ impl InferenceProvider for AWSBedrockProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
-    ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error> {
+    ) -> Result<
+        (
+            ProviderInferenceResponseChunk,
+            ProviderInferenceResponseStream,
+        ),
+        Error,
+    > {
         // TODO (#55): add support for guardrails and additional fields
 
         let messages: Vec<Message> = request
@@ -218,7 +224,7 @@ impl InferenceProvider for AWSBedrockProvider {
 fn stream_bedrock(
     mut stream: ConverseStreamOutput,
     start_time: Instant,
-) -> impl Stream<Item = Result<ModelInferenceResponseChunk, Error>> {
+) -> impl Stream<Item = Result<ProviderInferenceResponseChunk, Error>> {
     async_stream::stream! {
         let inference_id = Uuid::now_v7();
         let mut current_tool_id : Option<String> = None;
@@ -259,14 +265,14 @@ fn bedrock_to_tensorzero_stream_message(
     message_latency: Duration,
     current_tool_id: &mut Option<String>,
     current_tool_name: &mut Option<String>,
-) -> Result<Option<ModelInferenceResponseChunk>, Error> {
+) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
     match output {
         ConverseStreamOutputType::ContentBlockDelta(message) => {
             let raw_message = serialize_aws_bedrock_struct(&message)?;
 
             match message.delta {
                 Some(delta) => match delta {
-                    ContentBlockDelta::Text(text) => Ok(Some(ModelInferenceResponseChunk::new(
+                    ContentBlockDelta::Text(text) => Ok(Some(ProviderInferenceResponseChunk::new(
                         inference_id,
                         vec![ContentBlockChunk::Text(TextChunk {
                             text,
@@ -277,7 +283,7 @@ fn bedrock_to_tensorzero_stream_message(
                         message_latency,
                     ))),
                     ContentBlockDelta::ToolUse(tool_use) => {
-                        Ok(Some(ModelInferenceResponseChunk::new(
+                        Ok(Some(ProviderInferenceResponseChunk::new(
                             inference_id,
                             // Take the current tool name and ID and use them to create a ToolCallChunk
                             // This is necessary because the ToolCallChunk must always contain the tool name and ID
@@ -312,7 +318,7 @@ fn bedrock_to_tensorzero_stream_message(
                     // This is a new tool call, update the ID for future chunks
                     *current_tool_id = Some(tool_use.tool_use_id.clone());
                     *current_tool_name = Some(tool_use.name.clone());
-                    Ok(Some(ModelInferenceResponseChunk::new(
+                    Ok(Some(ProviderInferenceResponseChunk::new(
                         inference_id,
                         vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                             id: tool_use.tool_use_id,
@@ -345,7 +351,7 @@ fn bedrock_to_tensorzero_stream_message(
                         output_tokens: usage.output_tokens as u32,
                     });
 
-                    Ok(Some(ModelInferenceResponseChunk::new(
+                    Ok(Some(ProviderInferenceResponseChunk::new(
                         inference_id,
                         vec![],
                         usage,
@@ -477,7 +483,7 @@ struct ConverseOutputWithLatency {
     latency: Latency,
 }
 
-impl TryFrom<ConverseOutputWithLatency> for ModelInferenceResponse {
+impl TryFrom<ConverseOutputWithLatency> for ProviderInferenceResponse {
     type Error = Error;
 
     fn try_from(value: ConverseOutputWithLatency) -> Result<Self, Self::Error> {
@@ -513,7 +519,7 @@ impl TryFrom<ConverseOutputWithLatency> for ModelInferenceResponse {
                 message: "AWS Bedrock returned a message without usage information.".to_string(),
             })?;
 
-        Ok(ModelInferenceResponse::new(content, raw, usage, latency))
+        Ok(ProviderInferenceResponse::new(content, raw, usage, latency))
     }
 }
 

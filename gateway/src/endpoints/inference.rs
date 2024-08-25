@@ -18,8 +18,8 @@ use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
     collect_chunks, ContentBlockChunk, ContentBlockOutput, InferenceDatabaseInsert,
-    InferenceResult, InferenceResultChunk, Input, JsonInferenceOutput, ModelInferenceResponseChunk,
-    ModelInferenceResponseStream, Usage,
+    InferenceResult, InferenceResultChunk, InferenceResultStream, Input, JsonInferenceOutput,
+    Usage,
 };
 use crate::tool::{DynamicToolParams, ToolCallConfig};
 use crate::uuid_util::validate_episode_id;
@@ -62,7 +62,7 @@ pub struct Params {
 }
 
 #[derive(Clone, Debug)]
-struct InferenceMetadata {
+struct InferenceMetadata<'a> {
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
@@ -70,6 +70,8 @@ struct InferenceMetadata {
     pub dryrun: bool,
     pub start_time: Instant,
     pub inference_params: InferenceParams,
+    pub model_name: &'a str,
+    pub model_provider_name: &'a str,
 }
 
 /// A handler for the inference endpoint
@@ -136,8 +138,6 @@ pub async fn inference_handler(
     // Keep track of which variants failed
     let mut variant_errors = vec![];
     let inference_config = InferenceConfig {
-        models: &config.models,
-        function,
         templates: &config.templates,
         tool_config: tool_config.as_ref(),
     };
@@ -156,6 +156,8 @@ pub async fn inference_handler(
             let result = variant
                 .infer_stream(
                     &params.input,
+                    &config.models,
+                    function,
                     &inference_config,
                     &http_client,
                     &mut variant_inference_params,
@@ -163,8 +165,8 @@ pub async fn inference_handler(
                 .await;
 
             // Make sure the response worked (incl. first chunk) prior to launching the thread and starting to return chunks
-            let (chunk, stream) = match result {
-                Ok((chunk, stream)) => (chunk, stream),
+            let (chunk, stream, model_used_info) = match result {
+                Ok((chunk, stream, model_used_info)) => (chunk, stream, model_used_info),
                 Err(e) => {
                     variant_errors.push(e);
                     continue;
@@ -180,6 +182,8 @@ pub async fn inference_handler(
                 dryrun,
                 start_time,
                 inference_params: variant_inference_params,
+                model_name: model_used_info.model_name,
+                model_provider_name: model_used_info.model_provider_name,
             };
 
             let stream = create_stream(
@@ -198,6 +202,8 @@ pub async fn inference_handler(
             let result = variant
                 .infer(
                     &params.input,
+                    &config.models,
+                    function,
                     &inference_config,
                     &http_client,
                     &mut variant_inference_params,
@@ -255,9 +261,9 @@ pub async fn inference_handler(
 
 fn create_stream(
     function: &'static FunctionConfig,
-    metadata: InferenceMetadata,
-    first_chunk: ModelInferenceResponseChunk,
-    mut stream: ModelInferenceResponseStream,
+    metadata: InferenceMetadata<'static>,
+    first_chunk: InferenceResultChunk,
+    mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     tool_config: Option<ToolCallConfig>,
 ) -> impl Stream<Item = Result<Event, Error>> + Send {
@@ -265,7 +271,7 @@ fn create_stream(
         let mut buffer = vec![first_chunk.clone()];
 
         // Send the first chunk
-        if let Some(event) = prepare_event(function, &metadata, first_chunk).ok_or_log() {
+        if let Some(event) = prepare_event(&metadata, first_chunk).ok_or_log() {
             yield Ok(event);
         }
 
@@ -275,7 +281,7 @@ fn create_stream(
                 None => continue,
             };
             buffer.push(chunk.clone());
-            let event = prepare_event(function, &metadata, chunk).ok_or_log();
+            let event = prepare_event(&metadata, chunk).ok_or_log();
             if let Some(event) = event {
                 yield Ok(event);
             }
@@ -294,7 +300,7 @@ fn create_stream(
 
         if !metadata.dryrun {
             let inference_response: Result<InferenceResult, Error> =
-                collect_chunks(buffer, function, tool_config.as_ref()).await;
+                collect_chunks(buffer, function, tool_config.as_ref(), metadata.model_name, metadata.model_provider_name).await;
 
             let inference_response = inference_response.ok_or_log();
 
@@ -322,19 +328,11 @@ fn create_stream(
 }
 
 fn prepare_event(
-    function: &FunctionConfig,
     metadata: &InferenceMetadata,
-    chunk: ModelInferenceResponseChunk,
+    chunk: InferenceResultChunk,
 ) -> Result<Event, Error> {
-    let result_chunk = match function {
-        FunctionConfig::Chat(_) => InferenceResultChunk::Chat(chunk.into()),
-        FunctionConfig::Json(_) => InferenceResultChunk::Json(chunk.into()),
-    };
-    let response_chunk = InferenceResponseChunk::new(
-        result_chunk,
-        metadata.episode_id,
-        metadata.variant_name.clone(),
-    );
+    let response_chunk =
+        InferenceResponseChunk::new(chunk, metadata.episode_id, metadata.variant_name.clone());
     let chunk_json = serde_json::to_value(response_chunk).map_err(|e| Error::Inference {
         message: format!("Failed to convert chunk to JSON: {}", e),
     })?;
@@ -355,10 +353,10 @@ pub struct InferenceDatabaseInsertMetadata {
     pub processing_time: Duration,
 }
 
-async fn write_inference(
+async fn write_inference<'a>(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     input: Input,
-    result: InferenceResult,
+    result: InferenceResult<'a>,
     metadata: InferenceDatabaseInsertMetadata,
 ) {
     let serialized_input = match serde_json::to_string(&input).map_err(|e| Error::Serialization {
@@ -527,18 +525,17 @@ impl ChatCompletionInferenceParams {
 mod tests {
     use super::*;
 
-    use serde_json::json;
-    use std::{collections::HashMap, time::Duration};
+    use std::time::Duration;
     use uuid::Uuid;
 
-    use crate::function::{FunctionConfigChat, FunctionConfigJson};
-    use crate::inference::types::{ContentBlockChunk, ModelInferenceResponseChunk, TextChunk};
-    use crate::jsonschema_util::JSONSchemaFromPath;
+    use crate::inference::types::{
+        ChatInferenceResultChunk, ContentBlockChunk, JsonInferenceResultChunk, TextChunk,
+    };
 
     #[tokio::test]
     async fn test_prepare_event() {
-        // Test case 1: Valid Chat ModelInferenceResponseChunk
-        let chunk = ModelInferenceResponseChunk {
+        // Test case 1: Valid Chat ProviderInferenceResponseChunk
+        let chunk = InferenceResultChunk::Chat(ChatInferenceResultChunk {
             inference_id: Uuid::now_v7(),
             content: vec![ContentBlockChunk::Text(TextChunk {
                 text: "Test content".to_string(),
@@ -548,14 +545,6 @@ mod tests {
             usage: None,
             raw_response: "".to_string(),
             latency: Duration::from_millis(100),
-        };
-        let function = FunctionConfig::Chat(FunctionConfigChat {
-            variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
-            tools: vec![],
-            ..Default::default()
         });
         let inference_metadata = InferenceMetadata {
             function_name: "test_function".to_string(),
@@ -568,35 +557,24 @@ mod tests {
             dryrun: false,
             inference_params: InferenceParams::default(),
             start_time: Instant::now(),
+            model_name: "test_model",
+            model_provider_name: "test_provider",
         };
 
-        let result = prepare_event(&function, &inference_metadata, chunk);
+        let result = prepare_event(&inference_metadata, chunk);
         assert!(result.is_ok());
         // TODO (#86): You could get the values of the private members using unsafe Rust.
         // For now, we won't and will rely on integration testing here.
         // This test doesn't do much so consider deleting or doing more.
 
-        // Test case 2: Valid JSON ModelInferenceResponseChunk
-        let chunk = ModelInferenceResponseChunk {
+        // Test case 2: Valid JSON ProviderInferenceResponseChunk
+        let chunk = InferenceResultChunk::Json(JsonInferenceResultChunk {
             inference_id: Uuid::now_v7(),
-            content: vec![ContentBlockChunk::Text(TextChunk {
-                text: "Test content".to_string(),
-                id: "0".to_string(),
-            })],
+            raw: "Test content".to_string(),
             created: 0,
             usage: None,
             raw_response: "".to_string(),
             latency: Duration::from_millis(100),
-        };
-        let output_schema = json!({});
-        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let function = FunctionConfig::Json(FunctionConfigJson {
-            variants: HashMap::new(),
-            system_schema: None,
-            user_schema: None,
-            assistant_schema: None,
-            implicit_tool_call_config,
-            output_schema: JSONSchemaFromPath::from_value(&output_schema),
         });
         let inference_metadata = InferenceMetadata {
             function_name: "test_function".to_string(),
@@ -609,9 +587,11 @@ mod tests {
             dryrun: false,
             inference_params: InferenceParams::default(),
             start_time: Instant::now(),
+            model_name: "test_model",
+            model_provider_name: "test_provider",
         };
 
-        let result = prepare_event(&function, &inference_metadata, chunk);
+        let result = prepare_event(&inference_metadata, chunk);
         assert!(result.is_ok());
     }
 }
