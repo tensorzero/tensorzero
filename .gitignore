@@ -21,5 +21,7 @@ Cargo.lock
 .DS_Store
 .credentials/
 
-# Python cache
-*/__pycache__/
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
