@@ -460,10 +460,6 @@ impl<'a> From<&'a ToolChoice> for OpenAIToolChoice<'a> {
                 r#type: OpenAIToolType::Function,
                 function: SpecificToolFunction { name: tool_name },
             }),
-            ToolChoice::Implicit => OpenAIToolChoice::Specific(SpecificToolChoice {
-                r#type: OpenAIToolType::Function,
-                function: SpecificToolFunction { name: "respond" },
-            }),
         }
     }
 }

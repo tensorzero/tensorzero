@@ -41,6 +41,7 @@ services:
       - CLICKHOUSE_URL=http://clickhouse:8123
       - FIREWORKS_API_KEY=${FIREWORKS_API_KEY:?Environment variable FIREWORKS_API_KEY is not set}
       - GCP_VERTEX_CREDENTIALS_PATH=/app/gcp-credentials.json
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY:?Environment variable MISTRAL_API_KEY is not set}
       - OPENAI_API_KEY=${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY is not set}
       - TOGETHER_API_KEY=${TOGETHER_API_KEY:?Environment variable TOGETHER_API_KEY is not set}
       - VLLM_API_KEY=${VLLM_API_KEY:?Environment variable VLLM_API_KEY is not set}

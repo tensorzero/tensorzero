@@ -14,6 +14,7 @@ use crate::{
             azure::AzureProvider,
             fireworks::FireworksProvider,
             gcp_vertex::{GCPCredentials, GCPVertexGeminiProvider},
+            mistral::MistralProvider,
             openai::OpenAIProvider,
             provider_trait::InferenceProvider,
             together::TogetherProvider,
@@ -107,6 +108,7 @@ pub enum ProviderConfig {
     Azure(AzureProvider),
     Fireworks(FireworksProvider),
     GCPVertexGemini(GCPVertexGeminiProvider),
+    Mistral(MistralProvider),
     OpenAI(OpenAIProvider),
     Together(TogetherProvider),
     VLLM(VLLMProvider),
@@ -148,6 +150,9 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 project_id: String,
             },
             Fireworks {
+                model_name: String,
+            },
+            Mistral {
                 model_name: String,
             },
             OpenAI {
@@ -237,6 +242,12 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                     model_id,
                 })
             }
+            ProviderConfigHelper::Mistral { model_name } => {
+                ProviderConfig::Mistral(MistralProvider {
+                    model_name,
+                    api_key: env::var("MISTRAL_API_KEY").ok().map(SecretString::new),
+                })
+            }
             ProviderConfigHelper::OpenAI {
                 model_name,
                 api_base,
@@ -279,6 +290,7 @@ impl InferenceProvider for ProviderConfig {
             ProviderConfig::Azure(provider) => provider.infer(request, client).await,
             ProviderConfig::Fireworks(provider) => provider.infer(request, client).await,
             ProviderConfig::GCPVertexGemini(provider) => provider.infer(request, client).await,
+            ProviderConfig::Mistral(provider) => provider.infer(request, client).await,
             ProviderConfig::OpenAI(provider) => provider.infer(request, client).await,
             ProviderConfig::Together(provider) => provider.infer(request, client).await,
             ProviderConfig::VLLM(provider) => provider.infer(request, client).await,
@@ -306,6 +318,7 @@ impl InferenceProvider for ProviderConfig {
             ProviderConfig::GCPVertexGemini(provider) => {
                 provider.infer_stream(request, client).await
             }
+            ProviderConfig::Mistral(provider) => provider.infer_stream(request, client).await,
             ProviderConfig::OpenAI(provider) => provider.infer_stream(request, client).await,
             ProviderConfig::Together(provider) => provider.infer_stream(request, client).await,
             ProviderConfig::VLLM(provider) => provider.infer_stream(request, client).await,

@@ -4,6 +4,7 @@ mod azure;
 mod common;
 mod fireworks;
 mod gcp_vertex;
+mod mistral;
 mod openai;
 mod together;
 mod vllm;
