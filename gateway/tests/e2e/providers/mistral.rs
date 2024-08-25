@@ -5,6 +5,8 @@ crate::generate_provider_tests!(get_providers);
 async fn get_providers() -> E2ETestProviders {
     let providers = vec![E2ETestProvider {
         variant_name: "mistral".to_string(),
+        model_name: "open-mistral-nemo-2407".to_string(),
+        model_provider_name: "mistral".to_string(),
     }];
     E2ETestProviders {
         simple_inference: providers.clone(),

@@ -534,7 +534,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_prepare_event() {
-        // Test case 1: Valid Chat ModelInferenceResponseChunk
+        // Test case 1: Valid Chat ProviderInferenceResponseChunk
         let chunk = InferenceResultChunk::Chat(ChatInferenceResultChunk {
             inference_id: Uuid::now_v7(),
             content: vec![ContentBlockChunk::Text(TextChunk {
@@ -567,7 +567,7 @@ mod tests {
         // For now, we won't and will rely on integration testing here.
         // This test doesn't do much so consider deleting or doing more.
 
-        // Test case 2: Valid JSON ModelInferenceResponseChunk
+        // Test case 2: Valid JSON ProviderInferenceResponseChunk
         let chunk = InferenceResultChunk::Json(JsonInferenceResultChunk {
             inference_id: Uuid::now_v7(),
             raw: "Test content".to_string(),
