@@ -1,3 +1,16 @@
-from .client import TensorZeroClient, ChatInferenceResponse, ContentBlock, Text, ToolCall, Usage, JsonInferenceOutput
+from .client import TensorZeroClient
+from .types import InferenceChunk, InferenceResponse, ChatInferenceResponse, ContentBlock, Text, ToolCall, Usage, JsonInferenceOutput, TextChunk
 
-__all__ = ["TensorZeroClient", "ChatInferenceResponse", "ContentBlock", "Text", "ToolCall", "Usage", "JsonInferenceOutput"]
+__all__ = [
+    "TensorZeroClient",
+    "ChatInferenceResponse",
+    "InferenceChunk",
+    "InferenceResponse",
+    "ChatInferenceResponse",
+    "ContentBlock",
+    "Text",
+    "TextChunk",
+    "ToolCall",
+    "Usage",
+    "JsonInferenceOutput"
+]

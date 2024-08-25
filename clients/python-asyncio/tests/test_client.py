@@ -5,7 +5,7 @@ from uuid_extensions import uuid7
 from typing import Dict, Any
 
 import pytest_asyncio
-from tensorzero import TensorZeroClient, ChatInferenceResponse, ContentBlock, Text
+from tensorzero import TensorZeroClient, ChatInferenceResponse, ContentBlock, Text, TextChunk
 
 
 """
@@ -67,26 +67,22 @@ async def test_inference_streaming(client):
     previous_inference_id = None
     previous_episode_id = None
     for i, chunk in enumerate(chunks):
-        inference_id = UUID(chunk["inference_id"])
-        episode_id = UUID(chunk["episode_id"])
         if previous_inference_id is not None:
-            assert inference_id == previous_inference_id
+            assert chunk.inference_id == previous_inference_id
         if previous_episode_id is not None:
-            assert episode_id == previous_episode_id
-        previous_inference_id = inference_id
-        previous_episode_id = episode_id
-        variant_name = chunk["variant_name"]
+            assert chunk.episode_id == previous_episode_id
+        previous_inference_id = chunk.inference_id
+        previous_episode_id = chunk.episode_id
+        variant_name = chunk.variant_name
         assert variant_name == "test"
-        content = chunk["content"]
         if i + 1 < len(chunks):
-            assert len(content) == 1
-            assert content[0]["type"] == "text"
-            assert content[0]["text"] == expected_text[i]
+            assert len(chunk.content) == 1
+            assert isinstance(chunk.content[0], TextChunk)
+            assert chunk.content[0].text == expected_text[i]
         else:
-            assert len(content) == 0
-            usage = chunk["usage"]
-            assert usage["input_tokens"] == 10
-            assert usage["output_tokens"] == 16
+            assert len(chunk.content) == 0
+            assert chunk.usage.input_tokens == 10
+            assert chunk.usage.output_tokens == 16
 
 @pytest.mark.asyncio
 async def test_feedback(client):
