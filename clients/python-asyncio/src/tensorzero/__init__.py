@@ -13,19 +13,17 @@ from .types import (
     Usage,
 )
 
-# TODO(viraj): arrange this neatly, alphabetize, etc
 __all__ = [
-    "TensorZero",
-    "ChatInferenceResponse",
-    "InferenceChunk",
-    "InferenceResponse",
-    "FeedbackResponse",
     "ChatInferenceResponse",
     "ContentBlock",
+    "FeedbackResponse",
+    "InferenceChunk",
+    "InferenceResponse",
+    "JsonInferenceOutput",
+    "TensorZero",
     "Text",
     "TextChunk",
     "ToolCall",
     "ToolCallChunk",
     "Usage",
-    "JsonInferenceOutput",
 ]
