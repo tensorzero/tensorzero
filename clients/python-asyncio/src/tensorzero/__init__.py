@@ -1,5 +1,17 @@
 from .client import TensorZeroClient
-from .types import InferenceChunk, InferenceResponse, ChatInferenceResponse, ContentBlock, Text, ToolCall, Usage, JsonInferenceOutput, TextChunk, FeedbackResponse
+from .types import (
+    InferenceChunk,
+    InferenceResponse,
+    ChatInferenceResponse,
+    ContentBlock,
+    Text,
+    ToolCall,
+    Usage,
+    JsonInferenceOutput,
+    TextChunk,
+    FeedbackResponse,
+    ToolCallChunk,
+)
 
 # TODO(viraj): arrange this neatly, alphabetize, etc
 __all__ = [
@@ -13,6 +25,7 @@ __all__ = [
     "Text",
     "TextChunk",
     "ToolCall",
+    "ToolCallChunk",
     "Usage",
-    "JsonInferenceOutput"
+    "JsonInferenceOutput",
 ]

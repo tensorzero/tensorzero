@@ -1,9 +1,15 @@
 import json
 from uuid import UUID
 import httpx
-from enum import Enum
 from typing import AsyncGenerator, Dict, Any, List, Optional, Union
-from .types import parse_inference_chunk, parse_inference_response, InferenceChunk, InferenceResponse, FeedbackResponse
+from .types import (
+    parse_inference_chunk,
+    parse_inference_response,
+    InferenceChunk,
+    InferenceResponse,
+    FeedbackResponse,
+)
+
 
 class TensorZeroClient:
     def __init__(self, base_url: str):
@@ -78,7 +84,7 @@ class TensorZeroClient:
         value: Any,
         episode_id: Optional[UUID] = None,
         inference_id: Optional[UUID] = None,
-        dryrun: Optional[bool] = None
+        dryrun: Optional[bool] = None,
     ) -> Dict[str, Any]:
         """
         Make a POST request to the /feedback endpoint.
@@ -96,7 +102,9 @@ class TensorZeroClient:
         if episode_id is None and inference_id is None:
             raise ValueError("Either episode_id or inference_id must be provided")
         if episode_id is not None and inference_id is not None:
-            raise ValueError("Only one of episode_id or inference_id can be provided, not both")
+            raise ValueError(
+                "Only one of episode_id or inference_id can be provided, not both"
+            )
         data = {
             "metric_name": metric_name,
             "value": value,
@@ -124,7 +132,9 @@ class TensorZeroClient:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.close()
 
-    async def _stream_sse(self, response: httpx.Response) -> AsyncGenerator[InferenceChunk, None]:
+    async def _stream_sse(
+        self, response: httpx.Response
+    ) -> AsyncGenerator[InferenceChunk, None]:
         """
         Parse the SSE stream from the response.
 
@@ -132,9 +142,9 @@ class TensorZeroClient:
         :yield: Parsed SSE events as dictionaries
         """
         async for line in response.aiter_lines():
-            if line.startswith('data: '):
+            if line.startswith("data: "):
                 data = line[6:].strip()
-                if data == '[DONE]':
+                if data == "[DONE]":
                     break
                 try:
                     data = json.loads(data)
