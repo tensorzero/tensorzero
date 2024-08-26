@@ -1,6 +1,6 @@
 # Example: Writing haikus to satisfy a judge with hidden preferences
 
-# Background
+## Background
 
 Many real-world applications involve producing some content that a human responds to. For example, advertisements are designed to be shown to humans and influence them to purchase a product. Alternately, an email draft may be pre-written for a human as a starting point for their approval or editing.
 
@@ -12,3 +12,9 @@ we have built a system that writes haikus to satisfy a critic with hidden prefer
 The critic will accept or reject haikus, and the haiku writer will learn to write haikus that satisfy the critic's preferences over time.
 
 We use a list of common nouns provided by Desi Quintans [here](https://www.desiquintans.com/nounlist) as the set of topics for the haikus.
+
+## Setup
+
+We've written TensorZero configuration files to accomplish this example and have provided them in the `config` directory. See `tensorzero.toml` for the main configuration details. If you're curious what the judge's preferences are, you can look at `config/functions/judge_haiku/judge_prompt/system_template.minijinja`.
+
+To start the TensorZero gateway locally with this configuration, run `cargo run --bin gateway -- config/tensorzero.toml`.
