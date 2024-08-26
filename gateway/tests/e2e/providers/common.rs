@@ -3616,6 +3616,7 @@ pub async fn test_parallel_tool_use_tool_choice_auto_used_inference_request_with
                     "content": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
                 }
             ]},
+        "parallel_tool_calls": true,
         "stream": false,
         "variant_name": provider.variant_name,
     });
@@ -3903,6 +3904,7 @@ pub async fn test_parallel_tool_use_tool_choice_auto_used_streaming_inference_re
                     "content": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
                 }
             ]},
+        "parallel_tool_calls": true,
         "stream": true,
         "variant_name": provider.variant_name,
     });

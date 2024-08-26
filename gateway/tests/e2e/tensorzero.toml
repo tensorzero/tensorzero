@@ -547,7 +547,6 @@ type = "chat"
 system_schema = "../../fixtures/config/functions/weather_helper/system_schema.json"
 tools = ["get_temperature"]
 tool_choice = "auto"
-parallel_tool_calls = false
 
 [functions.weather_helper.variants.variant]
 type = "chat_completion"
@@ -631,7 +630,7 @@ type = "chat"
 system_schema = "../../fixtures/config/functions/weather_helper/system_schema.json"
 tools = ["get_temperature", "get_humidity"]
 tool_choice = "auto"
-parallel_tool_calls = true
+# We use an inference-time parameter to set `parallel_tool_calls = true` for the test
 
 [functions.weather_helper_parallel.variants.openai]
 type = "chat_completion"
