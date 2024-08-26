@@ -88,9 +88,10 @@ level = "episode"
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  TOOLS                                     │
 # └────────────────────────────────────────────────────────────────────────────┘
-[tools.get_weather]
-description = "Get the current weather in a given location"
-parameters = "config/tools/get_weather.json"
+
+[tools.get_temperature]
+description = "Get the current temperature in a given location"
+parameters = "config/tools/get_temperature.json"
 
 [tools.query_articles]
 description = "Query articles from Wikipedia"

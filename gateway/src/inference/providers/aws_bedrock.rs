@@ -579,7 +579,7 @@ impl TryFrom<ToolChoice> for AWSBedrockToolChoice {
                 AutoToolChoice::builder().build(),
             )),
             ToolChoice::Required => Ok(AWSBedrockToolChoice::Any(AnyToolChoice::builder().build())),
-            ToolChoice::Tool(tool_name) => Ok(AWSBedrockToolChoice::Tool(
+            ToolChoice::Specific(tool_name) => Ok(AWSBedrockToolChoice::Tool(
                 SpecificToolChoice::builder()
                     .name(tool_name)
                     .build()

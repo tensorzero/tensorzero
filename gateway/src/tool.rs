@@ -127,7 +127,7 @@ impl ToolCallConfig {
             .tool_choice
             .unwrap_or_else(|| function_tool_choice.clone());
         // If the tool choice is a specific tool, make sure it's in the list of available tools
-        if let ToolChoice::Tool(tool_name) = &tool_choice {
+        if let ToolChoice::Specific(tool_name) = &tool_choice {
             if !tools_available.iter().any(|tool| match tool {
                 ToolConfig::Static(config) => config.name == *tool_name,
                 ToolConfig::Dynamic(config) => config.name == *tool_name,
@@ -236,14 +236,14 @@ impl ToolCallConfig {
         let implicit_tool_config = ToolConfig::Implicit(ImplicitToolConfig { parameters });
         Self {
             tools_available: vec![implicit_tool_config],
-            tool_choice: ToolChoice::Tool(IMPLICIT_TOOL_NAME.to_string()),
+            tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
             parallel_tool_calls: false,
         }
     }
 }
 
 /// A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ToolResult {
     pub name: String,
     pub result: String,
@@ -254,15 +254,15 @@ pub struct ToolResult {
 /// and even specify which tool to be used.
 ///
 /// This enum is used to denote this tool choice.
-#[derive(Clone, Debug, PartialEq, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ToolChoice {
     None,
     #[default]
     Auto,
     Required,
-    // Forces the LLM to call a particular tool, the String is the name of the Tool
-    Tool(String),
+    // Forces the LLM to call a specific tool. The String is the name of the tool.
+    Specific(String),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -351,10 +351,10 @@ mod tests {
         static ref TOOLS: HashMap<String, StaticToolConfig> = {
             let mut map = HashMap::new();
             map.insert(
-                "get_weather".to_string(),
+                "get_temperature".to_string(),
                 StaticToolConfig {
-                    name: "get_weather".to_string(),
-                    description: "Get the current weather in a given location".to_string(),
+                    name: "get_temperature".to_string(),
+                    description: "Get the current temperature in a given location".to_string(),
                     parameters: JSONSchemaFromPath::from_value(&json!({
                     "type": "object",
                     "properties": {
@@ -389,9 +389,10 @@ mod tests {
         static ref EMPTY_TOOLS: HashMap<String, StaticToolConfig> = HashMap::new();
         static ref EMPTY_FUNCTION_TOOLS: Vec<String> = vec![];
         static ref ALL_FUNCTION_TOOLS: Vec<String> =
-            vec!["get_weather".to_string(), "query_articles".to_string()];
+            vec!["get_temperature".to_string(), "query_articles".to_string()];
         static ref AUTO_TOOL_CHOICE: ToolChoice = ToolChoice::Auto;
-        static ref WEATHER_TOOL_CHOICE: ToolChoice = ToolChoice::Tool("get_weather".to_string());
+        static ref WEATHER_TOOL_CHOICE: ToolChoice =
+            ToolChoice::Specific("get_temperature".to_string());
     }
 
     #[tokio::test]
@@ -427,7 +428,7 @@ mod tests {
 
         // Empty tools in function and config but we specify an allowed tool (should fail)
         let dynamic_tool_params = DynamicToolParams {
-            allowed_tools: Some(vec!["get_weather".to_string()]),
+            allowed_tools: Some(vec!["get_temperature".to_string()]),
             ..Default::default()
         };
         let err = ToolCallConfig::new(
@@ -441,13 +442,13 @@ mod tests {
         assert_eq!(
             err,
             Error::ToolNotFound {
-                name: "get_weather".to_string()
+                name: "get_temperature".to_string()
             }
         );
 
         // Dynamic tool config specifies a particular tool to call and it's in the function tools list
         let dynamic_tool_params = DynamicToolParams {
-            tool_choice: Some(ToolChoice::Tool("get_weather".to_string())),
+            tool_choice: Some(ToolChoice::Specific("get_temperature".to_string())),
             ..Default::default()
         };
         let tool_call_config = ToolCallConfig::new(
@@ -462,13 +463,13 @@ mod tests {
         assert_eq!(tool_call_config.tools_available.len(), 2);
         assert_eq!(
             tool_call_config.tool_choice,
-            ToolChoice::Tool("get_weather".to_string())
+            ToolChoice::Specific("get_temperature".to_string())
         );
         assert!(tool_call_config.parallel_tool_calls);
 
         // Dynamic tool config specifies a particular tool to call and it's not in the function tools list
         let dynamic_tool_params = DynamicToolParams {
-            tool_choice: Some(ToolChoice::Tool("establish_campground".to_string())),
+            tool_choice: Some(ToolChoice::Specific("establish_campground".to_string())),
             ..Default::default()
         };
         let err = ToolCallConfig::new(
@@ -515,7 +516,7 @@ mod tests {
         // We pass a list of a single allowed tool and then configure a new tool
         // This should remove the other configured tools and add the new tool
         let dynamic_tool_params = DynamicToolParams {
-            allowed_tools: Some(vec!["get_weather".to_string()]),
+            allowed_tools: Some(vec!["get_temperature".to_string()]),
             additional_tools: Some(vec![Tool {
                 name: "establish_campground".to_string(),
                 description: "Establish a campground".to_string(),
@@ -537,7 +538,10 @@ mod tests {
         assert_eq!(tool_call_config.tools_available.len(), 2);
         // The following code depends on an implementation detail for this ordering,
         // might break if we change the order
-        assert_eq!(tool_call_config.tools_available[0].name(), "get_weather");
+        assert_eq!(
+            tool_call_config.tools_available[0].name(),
+            "get_temperature"
+        );
         assert_eq!(
             tool_call_config.tools_available[1].name(),
             "establish_campground"
@@ -554,7 +558,7 @@ mod tests {
                 parameters: json!({}),
                 strict: false,
             }]),
-            tool_choice: Some(ToolChoice::Tool("establish_campground".to_string())),
+            tool_choice: Some(ToolChoice::Specific("establish_campground".to_string())),
             ..Default::default()
         };
         let tool_call_config = ToolCallConfig::new(
@@ -574,7 +578,7 @@ mod tests {
         assert!(tool_call_config.parallel_tool_calls);
         assert_eq!(
             tool_call_config.tool_choice,
-            ToolChoice::Tool("establish_campground".to_string())
+            ToolChoice::Specific("establish_campground".to_string())
         );
         assert!(!tool_call_config.tools_available[0].strict());
     }
@@ -582,7 +586,7 @@ mod tests {
     #[tokio::test]
     async fn test_tool_call_output_new() {
         let tool_call = ToolCall {
-            name: "get_weather".to_string(),
+            name: "get_temperature".to_string(),
             arguments: "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}".to_string(),
             id: "123".to_string(),
         };
@@ -597,7 +601,7 @@ mod tests {
         .unwrap();
         // Tool call is valid, so we should get a valid ToolCallOutput
         let tool_call_output = ToolCallOutput::new(tool_call, Some(&tool_call_config)).await;
-        assert_eq!(tool_call_output.name, "get_weather");
+        assert_eq!(tool_call_output.name, "get_temperature");
         assert_eq!(
             tool_call_output.arguments,
             "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}"
@@ -605,7 +609,7 @@ mod tests {
         assert_eq!(tool_call_output.id, "123");
         assert_eq!(
             tool_call_output.parsed_name,
-            Some("get_weather".to_string())
+            Some("get_temperature".to_string())
         );
         assert_eq!(
             tool_call_output.parsed_arguments,
@@ -617,18 +621,18 @@ mod tests {
 
         // Bad arguments, but valid name (parsed_name is set but parsed_arguments is not)
         let tool_call = ToolCall {
-            name: "get_weather".to_string(),
+            name: "get_temperature".to_string(),
             arguments: "{\"location\": \"San Francisco\", \"unit\": \"kelvin\"}".to_string(),
             id: "321".to_string(),
         };
         let tool_call_output = ToolCallOutput::new(tool_call, Some(&tool_call_config)).await;
         assert_eq!(
             tool_call_output.parsed_name,
-            Some("get_weather".to_string())
+            Some("get_temperature".to_string())
         );
         assert_eq!(tool_call_output.parsed_arguments, None);
         assert_eq!(tool_call_output.id, "321");
-        assert_eq!(tool_call_output.name, "get_weather");
+        assert_eq!(tool_call_output.name, "get_temperature");
         assert_eq!(
             tool_call_output.arguments,
             "{\"location\": \"San Francisco\", \"unit\": \"kelvin\"}"

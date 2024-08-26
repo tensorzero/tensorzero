@@ -901,7 +901,7 @@ mod tests {
     use std::time::Instant;
 
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
-    use crate::inference::providers::common::get_weather_tool_config;
+    use crate::inference::providers::common::get_temperature_tool_config;
     use crate::jsonschema_util::JSONSchemaFromPath;
     use crate::tool::ToolChoice;
 
@@ -951,7 +951,7 @@ mod tests {
         // Case 2: A tool call that fails argument validation
         let inference_id = Uuid::now_v7();
         let content = vec![ContentBlock::ToolCall(ToolCall {
-            name: "get_weather".to_string(),
+            name: "get_temperature".to_string(),
             arguments: r#"{"where": "the moon"}"#.to_string(),
             id: "0".to_string(),
         })];
@@ -968,7 +968,7 @@ mod tests {
             model_name: "test_model",
         }];
 
-        let weather_tool_config = get_weather_tool_config();
+        let weather_tool_config = get_temperature_tool_config();
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
             content,
@@ -981,10 +981,10 @@ mod tests {
         let tool_call_block = chat_inference_response.output.first().unwrap();
         match tool_call_block {
             ContentBlockOutput::ToolCall(tool_call) => {
-                assert_eq!(tool_call.name, "get_weather");
+                assert_eq!(tool_call.name, "get_temperature");
                 assert_eq!(tool_call.arguments, r#"{"where": "the moon"}"#);
                 assert_eq!(tool_call.id, "0");
-                assert_eq!(tool_call.parsed_name, Some("get_weather".to_string()));
+                assert_eq!(tool_call.parsed_name, Some("get_temperature".to_string()));
                 assert_eq!(tool_call.parsed_arguments, None);
             }
             _ => panic!("Expected a tool call block"),
@@ -1034,7 +1034,7 @@ mod tests {
         // Case 4: A tool call that passes validation
         let inference_id = Uuid::now_v7();
         let content = vec![ContentBlock::ToolCall(ToolCall {
-            name: "get_weather".to_string(),
+            name: "get_temperature".to_string(),
             arguments: r#"{"location": "the moon", "units": "celsius"}"#.to_string(),
             id: "0".to_string(),
         })];
@@ -1063,13 +1063,13 @@ mod tests {
         let tool_call_block = chat_inference_response.output.first().unwrap();
         match tool_call_block {
             ContentBlockOutput::ToolCall(tool_call) => {
-                assert_eq!(tool_call.name, "get_weather");
+                assert_eq!(tool_call.name, "get_temperature");
                 assert_eq!(
                     tool_call.arguments,
                     r#"{"location": "the moon", "units": "celsius"}"#
                 );
                 assert_eq!(tool_call.id, "0");
-                assert_eq!(tool_call.parsed_name, Some("get_weather".to_string()));
+                assert_eq!(tool_call.parsed_name, Some("get_temperature".to_string()));
                 assert_eq!(
                     tool_call.parsed_arguments,
                     Some(
