@@ -4,10 +4,10 @@
     "haiku": {
       "type": "string"
     },
-    "subject": {
+    "topic": {
       "type": "string"
     }
   },
-  "required": ["haiku", "subject"],
+  "required": ["haiku", "topic"],
   "additionalProperties": false
 }

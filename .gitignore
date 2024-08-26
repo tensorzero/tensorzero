@@ -25,6 +25,7 @@ Cargo.lock
 __pycache__/
 *.py[cod]
 *$py.class
+.ipynb_checkpoints/
 
 # Python distribution
 dist/
