@@ -25,7 +25,7 @@ with AsyncTensorZero("http://localhost:3000") as client:
     )
 episode_id = result.episode_id
 output = result.output
-print(output[0].text)  # Will return the text of the first content block returned by TensorZero
+print(output[0].text)  # Prints the text of the first content block returned by TensorZero
 ```
 
 ### Streaming Inference
@@ -34,16 +34,14 @@ print(output[0].text)  # Will return the text of the first content block returne
 from tensorzero import AsyncTensorZero
 
 async with AsyncTensorZero() as client:
-    response = await client.chat.completions.create(
-        model="firefunction-v2",
-        messages=[{"role": "user", "content": "Hello, world!"}],
+    stream = await client.chat.completions.create(
+        function_name="basic_test",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+        stream=True,
     )
-    print(response)
+    async for chunk in stream:
+        print(chunk.content[0].text)
 ```
-
-## Development Setup
-
-- Install `uv` [→](https://docs.astral.sh/uv/getting-started/installation/)
-- Install `ruff` with `uv pip install ruff`.
-
-You should now be able to run tests with `uv run pytest` and use pre-commit hooks which depend on `ruff`.
