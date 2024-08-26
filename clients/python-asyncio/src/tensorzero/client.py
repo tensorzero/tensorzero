@@ -14,8 +14,6 @@ Usage:
     async with TensorZero(base_url) as client:
         response = await client.inference(...)
         feedback = await client.feedback(...)
-
-Note: This client requires the httpx library for asynchronous HTTP requests.
 """
 
 import json
@@ -133,10 +131,10 @@ class TensorZero:
         :param metric_name: The name of the metric to provide feedback for
         :param value: The value of the feedback. It should correspond to the metric type.
         :param inference_id: The inference ID to assign the feedback to.
-                             Only use inference_ids that were returned by the TensorZero gateway.
+                             Only use inference IDs that were returned by the TensorZero gateway.
                              Note: You can assign feedback to either an episode or an inference, but not both.
         :param episode_id: The episode ID to use for the request
-                           Only use episode_ids that were returned by the TensorZero gateway.
+                           Only use episode IDs that were returned by the TensorZero gateway.
                            Note: You can assign feedback to either an episode or an inference, but not both.
         :param dryrun: If true, the feedback request will be executed but won't be stored to the database (i.e. no-op).
         :return: {"feedback_id": str}
