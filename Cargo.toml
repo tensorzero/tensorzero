@@ -1,5 +1,5 @@
 [workspace]
-members = [
+members = [ "clients/placeholder-rust",
     "gateway",
     "gateway/tests/mock-inference-provider",
 ]
