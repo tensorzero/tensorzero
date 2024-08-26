@@ -49,3 +49,13 @@ repos:
         types: [rust]
         pass_filenames: false
         always_run: true
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.5.1
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff
+        args: ["check", "--select", "I", "--fix", "."]
+      - id: ruff-format
+        args: ["--check", "."]
