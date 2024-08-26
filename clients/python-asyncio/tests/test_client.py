@@ -128,10 +128,10 @@ async def test_tool_call_inference(client):
     output = result.output
     assert len(output) == 1
     assert isinstance(output[0], ToolCall)
-    assert output[0].name == "get_weather"
+    assert output[0].name == "get_temperature"
     assert output[0].id == "0"
     assert output[0].arguments == '{"location":"Brooklyn","units":"celsius"}'
-    assert output[0].parsed_name == "get_weather"
+    assert output[0].parsed_name == "get_temperature"
     assert output[0].parsed_arguments == {"location": "Brooklyn", "units": "celsius"}
     usage = result.usage
     assert usage.input_tokens == 10
@@ -157,10 +157,10 @@ async def test_malformed_tool_call_inference(client):
     output = result.output
     assert len(output) == 1
     assert isinstance(output[0], ToolCall)
-    assert output[0].name == "get_weather"
+    assert output[0].name == "get_temperature"
     assert output[0].id == "0"
     assert output[0].arguments == '{"location":"Brooklyn","units":"Celsius"}'
-    assert output[0].parsed_name == "get_weather"
+    assert output[0].parsed_name == "get_temperature"
     assert output[0].parsed_arguments is None
     usage = result.usage
     assert usage.input_tokens == 10
@@ -204,7 +204,7 @@ async def test_tool_call_streaming(client):
         if i + 1 < len(chunks):
             assert len(chunk.content) == 1
             assert isinstance(chunk.content[0], ToolCallChunk)
-            assert chunk.content[0].name == "get_weather"
+            assert chunk.content[0].name == "get_temperature"
             assert chunk.content[0].id == "0"
             assert chunk.content[0].arguments == expected_text[i]
         else:
