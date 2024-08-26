@@ -7,4 +7,6 @@ description = "Next-generation machine learning infrastructure"
 repository = "https://github.com/tensorzero/tensorzero"
 readme = "README.md"
 
+[workspace]
+
 [dependencies]
