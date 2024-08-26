@@ -11,18 +11,11 @@ async fn get_providers() -> E2ETestProviders {
 
     E2ETestProviders {
         simple_inference: providers.clone(),
-        simple_streaming_inference: providers.clone(),
         inference_params_inference: providers.clone(),
-        inference_params_streaming_inference: providers.clone(),
         tool_use_inference: providers.clone(),
-        tool_use_streaming_inference: providers.clone(),
         tool_multi_turn_inference: providers.clone(),
-        tool_multi_turn_streaming_inference: providers.clone(),
         dynamic_tool_use_inference: providers.clone(),
-        dynamic_tool_use_streaming_inference: providers.clone(),
         parallel_tool_use_inference: vec![],
-        parallel_tool_use_streaming_inference: vec![],
         json_mode_inference: providers.clone(),
-        json_mode_streaming_inference: providers.clone(),
     }
 }

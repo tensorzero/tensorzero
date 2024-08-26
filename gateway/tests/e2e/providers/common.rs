@@ -27,19 +27,12 @@ pub struct E2ETestProvider {
 /// then the provider should return an empty vector for the corresponding test.
 pub struct E2ETestProviders {
     pub simple_inference: Vec<E2ETestProvider>,
-    pub simple_streaming_inference: Vec<E2ETestProvider>,
     pub inference_params_inference: Vec<E2ETestProvider>,
-    pub inference_params_streaming_inference: Vec<E2ETestProvider>,
     pub tool_use_inference: Vec<E2ETestProvider>,
-    pub tool_use_streaming_inference: Vec<E2ETestProvider>,
     pub tool_multi_turn_inference: Vec<E2ETestProvider>,
-    pub tool_multi_turn_streaming_inference: Vec<E2ETestProvider>,
     pub dynamic_tool_use_inference: Vec<E2ETestProvider>,
-    pub dynamic_tool_use_streaming_inference: Vec<E2ETestProvider>,
     pub parallel_tool_use_inference: Vec<E2ETestProvider>,
-    pub parallel_tool_use_streaming_inference: Vec<E2ETestProvider>,
     pub json_mode_inference: Vec<E2ETestProvider>,
-    pub json_mode_streaming_inference: Vec<E2ETestProvider>,
 }
 
 #[macro_export]
@@ -70,7 +63,7 @@ macro_rules! generate_provider_tests {
 
         #[tokio::test]
         async fn test_simple_streaming_inference_request() {
-            let providers = $func().await.simple_streaming_inference;
+            let providers = $func().await.simple_inference;
             for provider in providers {
                 test_simple_streaming_inference_request_with_provider(provider).await;
             }
@@ -86,7 +79,7 @@ macro_rules! generate_provider_tests {
 
         #[tokio::test]
         async fn test_inference_params_streaming_inference_request() {
-            let providers = $func().await.inference_params_streaming_inference;
+            let providers = $func().await.inference_params_inference;
             for provider in providers {
                 test_inference_params_streaming_inference_request_with_provider(provider).await;
             }
@@ -102,7 +95,7 @@ macro_rules! generate_provider_tests {
 
         #[tokio::test]
         async fn test_tool_use_streaming_inference_request() {
-            let providers = $func().await.tool_use_streaming_inference;
+            let providers = $func().await.tool_use_inference;
             for provider in providers {
                 test_tool_use_streaming_inference_request_with_provider(provider).await;
             }
@@ -118,7 +111,7 @@ macro_rules! generate_provider_tests {
 
         #[tokio::test]
         async fn test_tool_multi_turn_streaming_inference_request() {
-            let providers = $func().await.tool_multi_turn_streaming_inference;
+            let providers = $func().await.tool_multi_turn_inference;
             for provider in providers {
                 test_tool_multi_turn_streaming_inference_request_with_provider(provider).await;
             }
@@ -134,7 +127,7 @@ macro_rules! generate_provider_tests {
 
         #[tokio::test]
         async fn test_dynamic_tool_use_streaming_inference_request() {
-            let providers = $func().await.dynamic_tool_use_streaming_inference;
+            let providers = $func().await.dynamic_tool_use_inference;
             for provider in providers {
                 test_dynamic_tool_use_streaming_inference_request_with_provider(provider).await;
             }
@@ -150,7 +143,7 @@ macro_rules! generate_provider_tests {
 
         #[tokio::test]
         async fn test_parallel_tool_use_streaming_inference_request() {
-            let providers = $func().await.parallel_tool_use_streaming_inference;
+            let providers = $func().await.parallel_tool_use_inference;
             for provider in providers {
                 test_parallel_tool_use_streaming_inference_request_with_provider(provider).await;
             }
@@ -166,7 +159,7 @@ macro_rules! generate_provider_tests {
 
         #[tokio::test]
         async fn test_json_mode_streaming_inference_request() {
-            let providers = $func().await.json_mode_streaming_inference;
+            let providers = $func().await.json_mode_inference;
             for provider in providers {
                 test_json_mode_streaming_inference_request_with_provider(provider).await;
             }
