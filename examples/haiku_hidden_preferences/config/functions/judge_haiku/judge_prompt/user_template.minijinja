@@ -1,0 +1,2 @@
+The topic is {{ subject}}. Here is the haiku:
+{{ haiku }}

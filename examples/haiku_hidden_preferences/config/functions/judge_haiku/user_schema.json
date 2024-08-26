@@ -1,0 +1,13 @@
+{
+  "type": "object",
+  "properties": {
+    "haiku": {
+      "type": "string"
+    },
+    "subject": {
+      "type": "string"
+    }
+  },
+  "required": ["haiku", "subject"],
+  "additionalProperties": false
+}
