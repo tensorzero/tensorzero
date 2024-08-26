@@ -1,0 +1,3 @@
+Please extract the company description from the text below.
+
+{{ text }}

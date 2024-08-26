@@ -47,7 +47,7 @@ services:
       - VLLM_API_KEY=${VLLM_API_KEY:?Environment variable VLLM_API_KEY is not set}
     volumes:
       - ./tensorzero.toml:/app/tensorzero.toml
-      - ../../../config:/app/config
+      - ../../fixtures/config:/app/config
       - ${GCP_VERTEX_CREDENTIALS_PATH:?Environment variable GCP_VERTEX_CREDENTIALS_PATH is not set}:/app/gcp-credentials.json
     depends_on:
       clickhouse:
