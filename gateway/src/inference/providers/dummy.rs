@@ -9,8 +9,8 @@ use super::provider_trait::InferenceProvider;
 
 use crate::error::Error;
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest, ModelInferenceResponse,
-    ModelInferenceResponseChunk, ModelInferenceResponseStream, Usage,
+    ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest, ProviderInferenceResponse,
+    ProviderInferenceResponseChunk, ProviderInferenceResponseStream, Usage,
 };
 use crate::tool::{ToolCall, ToolCallChunk};
 
@@ -77,7 +77,7 @@ impl InferenceProvider for DummyProvider {
         &'a self,
         _request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
-    ) -> Result<ModelInferenceResponse, Error> {
+    ) -> Result<ProviderInferenceResponse, Error> {
         if self.model_name == "error" {
             return Err(Error::InferenceClient {
                 message: "Error sending request to Dummy provider.".to_string(),
@@ -118,7 +118,7 @@ impl InferenceProvider for DummyProvider {
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
         };
-        Ok(ModelInferenceResponse {
+        Ok(ProviderInferenceResponse {
             id,
             created,
             content,
@@ -132,7 +132,13 @@ impl InferenceProvider for DummyProvider {
         &'a self,
         _request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
-    ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error> {
+    ) -> Result<
+        (
+            ProviderInferenceResponseChunk,
+            ProviderInferenceResponseStream,
+        ),
+        Error,
+    > {
         if self.model_name == "error" {
             return Err(Error::InferenceClient {
                 message: "Error sending request to Dummy provider.".to_string(),
@@ -153,7 +159,7 @@ impl InferenceProvider for DummyProvider {
 
         let total_tokens = content_chunks.len() as u32;
 
-        let initial_chunk = ModelInferenceResponseChunk {
+        let initial_chunk = ProviderInferenceResponseChunk {
             inference_id: id,
             created,
             content: vec![if is_tool_call {
@@ -175,7 +181,7 @@ impl InferenceProvider for DummyProvider {
         let content_chunk_len = content_chunks.len();
         let stream = tokio_stream::iter(content_chunks.into_iter().skip(1).enumerate())
             .map(move |(i, chunk)| {
-                Ok(ModelInferenceResponseChunk {
+                Ok(ProviderInferenceResponseChunk {
                     inference_id: id,
                     created,
                     content: vec![if is_tool_call {
@@ -195,7 +201,7 @@ impl InferenceProvider for DummyProvider {
                     latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
                 })
             })
-            .chain(tokio_stream::once(Ok(ModelInferenceResponseChunk {
+            .chain(tokio_stream::once(Ok(ProviderInferenceResponseChunk {
                 inference_id: id,
                 created,
                 content: vec![],

@@ -38,7 +38,7 @@ jobs:
 
       - name: Test (Rust)
         run: |
-          cargo test-unit --profile ci ${{ vars.CARGO_NEXTEST_ARGS }}
+          cargo test-unit ${{vars.CARGO_NEXTEST_ARGS}}
 
       - name: Lint (Python)
         run: |

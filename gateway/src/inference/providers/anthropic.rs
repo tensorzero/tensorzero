@@ -12,8 +12,8 @@ use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{ContentBlock, ContentBlockChunk, Latency, Role, Text};
 use crate::inference::types::{
-    ModelInferenceRequest, ModelInferenceResponse, ModelInferenceResponseChunk,
-    ModelInferenceResponseStream, RequestMessage, TextChunk, Usage,
+    ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStream, RequestMessage, TextChunk, Usage,
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
@@ -32,7 +32,7 @@ impl InferenceProvider for AnthropicProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-    ) -> Result<ModelInferenceResponse, Error> {
+    ) -> Result<ProviderInferenceResponse, Error> {
         let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
             provider_name: "Anthropic".to_string(),
         })?;
@@ -80,7 +80,13 @@ impl InferenceProvider for AnthropicProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-    ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error> {
+    ) -> Result<
+        (
+            ProviderInferenceResponseChunk,
+            ProviderInferenceResponseStream,
+        ),
+        Error,
+    > {
         let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
             provider_name: "Anthropic".to_string(),
         })?;
@@ -117,7 +123,7 @@ impl InferenceProvider for AnthropicProvider {
 fn stream_anthropic(
     mut event_source: EventSource,
     start_time: Instant,
-) -> impl Stream<Item = Result<ModelInferenceResponseChunk, Error>> {
+) -> impl Stream<Item = Result<ProviderInferenceResponseChunk, Error>> {
     async_stream::stream! {
         let inference_id = Uuid::now_v7();
         let mut current_tool_id : Option<String> = None;
@@ -518,7 +524,7 @@ struct AnthropicResponseWithLatency {
     latency: Latency,
 }
 
-impl TryFrom<AnthropicResponseWithLatency> for ModelInferenceResponse {
+impl TryFrom<AnthropicResponseWithLatency> for ProviderInferenceResponse {
     type Error = Error;
     fn try_from(value: AnthropicResponseWithLatency) -> Result<Self, Self::Error> {
         let AnthropicResponseWithLatency { response, latency } = value;
@@ -534,7 +540,7 @@ impl TryFrom<AnthropicResponseWithLatency> for ModelInferenceResponse {
             .map(|block| block.try_into())
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(ModelInferenceResponse::new(
+        Ok(ProviderInferenceResponse::new(
             content,
             raw_response,
             response.usage.into(),
@@ -546,7 +552,7 @@ impl TryFrom<AnthropicResponseWithLatency> for ModelInferenceResponse {
 fn handle_anthropic_error(
     response_code: StatusCode,
     response_body: AnthropicErrorBody,
-) -> Result<ModelInferenceResponse, Error> {
+) -> Result<ProviderInferenceResponse, Error> {
     match response_code {
         StatusCode::UNAUTHORIZED
         | StatusCode::BAD_REQUEST
@@ -622,14 +628,14 @@ fn anthropic_to_tensorzero_stream_message(
     message_latency: Duration,
     current_tool_id: &mut Option<String>,
     current_tool_name: &mut Option<String>,
-) -> Result<Option<ModelInferenceResponseChunk>, Error> {
+) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
     let raw_message = serde_json::to_string(&message).map_err(|e| Error::AnthropicServer {
         message: format!("Error parsing response from Anthropic: {e}"),
     })?;
     match message {
         AnthropicStreamMessage::ContentBlockDelta { delta, index } => match delta {
             AnthropicMessageBlock::TextDelta { text } => {
-                Ok(Some(ModelInferenceResponseChunk::new(
+                Ok(Some(ProviderInferenceResponseChunk::new(
                     inference_id,
                     vec![ContentBlockChunk::Text(TextChunk {
                         text,
@@ -641,7 +647,7 @@ fn anthropic_to_tensorzero_stream_message(
                 )))
             }
             AnthropicMessageBlock::InputJsonDelta { partial_json } => {
-                Ok(Some(ModelInferenceResponseChunk::new(
+                Ok(Some(ProviderInferenceResponseChunk::new(
                     inference_id,
                     // Take the current tool name and ID and use them to create a ToolCallChunk
                     // This is necessary because the ToolCallChunk must always contain the tool name and ID
@@ -673,7 +679,7 @@ fn anthropic_to_tensorzero_stream_message(
                     text,
                     id: index.to_string(),
                 });
-                Ok(Some(ModelInferenceResponseChunk::new(
+                Ok(Some(ProviderInferenceResponseChunk::new(
                     inference_id,
                     vec![text_chunk],
                     None,
@@ -685,7 +691,7 @@ fn anthropic_to_tensorzero_stream_message(
                 // This is a new tool call, update the ID for future chunks
                 *current_tool_id = Some(id.clone());
                 *current_tool_name = Some(name.clone());
-                Ok(Some(ModelInferenceResponseChunk::new(
+                Ok(Some(ProviderInferenceResponseChunk::new(
                     inference_id,
                     vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                         id,
@@ -708,7 +714,7 @@ fn anthropic_to_tensorzero_stream_message(
         }),
         AnthropicStreamMessage::MessageDelta { usage, .. } => {
             let usage = parse_usage_info(&usage);
-            Ok(Some(ModelInferenceResponseChunk::new(
+            Ok(Some(ProviderInferenceResponseChunk::new(
                 inference_id,
                 vec![],
                 Some(usage.into()),
@@ -719,7 +725,7 @@ fn anthropic_to_tensorzero_stream_message(
         AnthropicStreamMessage::MessageStart { message } => {
             if let Some(usage_info) = message.get("usage") {
                 let usage = parse_usage_info(usage_info);
-                Ok(Some(ModelInferenceResponseChunk::new(
+                Ok(Some(ProviderInferenceResponseChunk::new(
                     inference_id,
                     vec![],
                     Some(usage.into()),
@@ -1399,7 +1405,7 @@ mod tests {
             latency: latency.clone(),
         };
 
-        let inference_response = ModelInferenceResponse::try_from(body_with_latency).unwrap();
+        let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
         assert_eq!(
             inference_response.content,
             vec!["Response text".to_string().into()]
@@ -1434,7 +1440,7 @@ mod tests {
             latency: latency.clone(),
         };
 
-        let inference_response: ModelInferenceResponse = body_with_latency.try_into().unwrap();
+        let inference_response: ProviderInferenceResponse = body_with_latency.try_into().unwrap();
         assert!(inference_response.content.len() == 1);
         assert_eq!(
             inference_response.content[0],
@@ -1478,7 +1484,7 @@ mod tests {
             response: anthropic_response_body.clone(),
             latency: latency.clone(),
         };
-        let inference_response = ModelInferenceResponse::try_from(body_with_latency).unwrap();
+        let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
         assert_eq!(
             inference_response.content[0],
             "Here's the weather:".to_string().into()

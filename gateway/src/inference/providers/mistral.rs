@@ -13,7 +13,7 @@ use crate::{
     error::Error,
     inference::types::{
         ContentBlock, ContentBlockChunk, JSONMode, Latency, ModelInferenceRequest,
-        ModelInferenceResponse, ModelInferenceResponseChunk, ModelInferenceResponseStream,
+        ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
         TextChunk, Usage,
     },
     tool::{ToolCall, ToolCallChunk, ToolChoice},
@@ -38,7 +38,7 @@ impl InferenceProvider for MistralProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-    ) -> Result<ModelInferenceResponse, Error> {
+    ) -> Result<ProviderInferenceResponse, Error> {
         let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
             provider_name: "Mistral".to_string(),
         })?;
@@ -83,7 +83,13 @@ impl InferenceProvider for MistralProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-    ) -> Result<(ModelInferenceResponseChunk, ModelInferenceResponseStream), Error> {
+    ) -> Result<
+        (
+            ProviderInferenceResponseChunk,
+            ProviderInferenceResponseStream,
+        ),
+        Error,
+    > {
         let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
             provider_name: "Mistral".to_string(),
         })?;
@@ -119,7 +125,7 @@ impl InferenceProvider for MistralProvider {
 fn handle_mistral_error(
     response_code: StatusCode,
     response_body: &str,
-) -> Result<ModelInferenceResponse, Error> {
+) -> Result<ProviderInferenceResponse, Error> {
     match response_code {
         StatusCode::BAD_REQUEST
         | StatusCode::UNAUTHORIZED
@@ -137,7 +143,7 @@ fn handle_mistral_error(
 pub fn stream_mistral(
     mut event_source: EventSource,
     start_time: Instant,
-) -> impl Stream<Item = Result<ModelInferenceResponseChunk, Error>> {
+) -> impl Stream<Item = Result<ProviderInferenceResponseChunk, Error>> {
     async_stream::stream! {
         let inference_id = Uuid::now_v7();
         while let Some(ev) = event_source.next().await {
@@ -365,7 +371,7 @@ struct MistralResponseWithLatency {
     latency: Latency,
 }
 
-impl TryFrom<MistralResponseWithLatency> for ModelInferenceResponse {
+impl TryFrom<MistralResponseWithLatency> for ProviderInferenceResponse {
     type Error = Error;
     fn try_from(value: MistralResponseWithLatency) -> Result<Self, Self::Error> {
         let MistralResponseWithLatency {
@@ -403,7 +409,7 @@ impl TryFrom<MistralResponseWithLatency> for ModelInferenceResponse {
             }
         }
 
-        Ok(ModelInferenceResponse::new(content, raw, usage, latency))
+        Ok(ProviderInferenceResponse::new(content, raw, usage, latency))
     }
 }
 
@@ -449,7 +455,7 @@ fn mistral_to_tensorzero_chunk(
     mut chunk: MistralChatChunk,
     inference_id: Uuid,
     latency: Duration,
-) -> Result<ModelInferenceResponseChunk, Error> {
+) -> Result<ProviderInferenceResponseChunk, Error> {
     let raw_message = serde_json::to_string(&chunk).map_err(|e| Error::OpenAIServer {
         message: format!("Error parsing response from OpenAI: {e}"),
     })?;
@@ -480,7 +486,7 @@ fn mistral_to_tensorzero_chunk(
         }
     }
 
-    Ok(ModelInferenceResponseChunk::new(
+    Ok(ProviderInferenceResponseChunk::new(
         inference_id,
         content,
         usage,
@@ -554,7 +560,7 @@ mod tests {
             },
         };
 
-        let result = ModelInferenceResponse::try_from(MistralResponseWithLatency {
+        let result = ProviderInferenceResponse::try_from(MistralResponseWithLatency {
             response: valid_response,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
@@ -597,7 +603,7 @@ mod tests {
             },
         };
 
-        let result = ModelInferenceResponse::try_from(MistralResponseWithLatency {
+        let result = ProviderInferenceResponse::try_from(MistralResponseWithLatency {
             response: valid_response_with_tools,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(110),
@@ -632,7 +638,7 @@ mod tests {
             },
         };
 
-        let result = ModelInferenceResponse::try_from(MistralResponseWithLatency {
+        let result = ProviderInferenceResponse::try_from(MistralResponseWithLatency {
             response: invalid_response_no_choices,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(120),
@@ -666,7 +672,7 @@ mod tests {
             },
         };
 
-        let result = ModelInferenceResponse::try_from(MistralResponseWithLatency {
+        let result = ProviderInferenceResponse::try_from(MistralResponseWithLatency {
             response: invalid_response_multiple_choices,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(130),
