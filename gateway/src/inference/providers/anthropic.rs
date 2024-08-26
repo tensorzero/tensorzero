@@ -210,7 +210,7 @@ impl<'a> TryFrom<&'a ToolChoice> for AnthropicToolChoice<'a> {
         match tool_choice {
             ToolChoice::Auto => Ok(AnthropicToolChoice::Auto),
             ToolChoice::Required => Ok(AnthropicToolChoice::Any),
-            ToolChoice::Tool(name) => Ok(AnthropicToolChoice::Tool { name }),
+            ToolChoice::Specific(name) => Ok(AnthropicToolChoice::Tool { name }),
             ToolChoice::None => Err(Error::InvalidTool {
                 message: "Tool choice is None. Anthropic does not support tool choice None."
                     .to_string(),
@@ -790,7 +790,7 @@ mod tests {
         assert!(anthropic_tool_choice.is_ok());
         assert_eq!(anthropic_tool_choice.unwrap(), AnthropicToolChoice::Any);
 
-        let tool_choice = ToolChoice::Tool("test".to_string());
+        let tool_choice = ToolChoice::Specific("test".to_string());
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_choice);
         assert!(anthropic_tool_choice.is_ok());
         assert_eq!(
@@ -1086,7 +1086,7 @@ mod tests {
                 system: Some("test_system"),
                 temperature: Some(0.5),
                 tool_choice: Some(AnthropicToolChoice::Tool {
-                    name: "get_weather",
+                    name: "get_temperature",
                 }),
                 tools: Some(vec![AnthropicTool {
                     name: WEATHER_TOOL.name(),
@@ -1424,7 +1424,7 @@ mod tests {
             role: "assistant".to_string(),
             content: vec![AnthropicContentBlock::ToolUse {
                 id: "tool_call_1".to_string(),
-                name: "get_weather".to_string(),
+                name: "get_temperature".to_string(),
                 input: json!({"location": "New York"}),
             }],
             model: "model-name".to_string(),
@@ -1446,7 +1446,7 @@ mod tests {
             inference_response.content[0],
             ContentBlock::ToolCall(ToolCall {
                 id: "tool_call_1".to_string(),
-                name: "get_weather".to_string(),
+                name: "get_temperature".to_string(),
                 arguments: r#"{"location":"New York"}"#.to_string(),
             })
         );
@@ -1468,7 +1468,7 @@ mod tests {
                 },
                 AnthropicContentBlock::ToolUse {
                     id: "tool_call_2".to_string(),
-                    name: "get_weather".to_string(),
+                    name: "get_temperature".to_string(),
                     input: json!({"location": "London"}),
                 },
             ],
@@ -1494,7 +1494,7 @@ mod tests {
             inference_response.content[1],
             ContentBlock::ToolCall(ToolCall {
                 id: "tool_call_2".to_string(),
-                name: "get_weather".to_string(),
+                name: "get_temperature".to_string(),
                 arguments: r#"{"location":"London"}"#.to_string(),
             })
         );

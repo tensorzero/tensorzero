@@ -91,13 +91,13 @@ impl InferenceProvider for DummyProvider {
             .as_secs();
         let content = match self.model_name.as_str() {
             "tool" => vec![ContentBlock::ToolCall(ToolCall {
-                name: "get_weather".to_string(),
+                name: "get_temperature".to_string(),
                 #[allow(clippy::unwrap_used)]
                 arguments: serde_json::to_string(&*DUMMY_TOOL_RESPONSE).unwrap(),
                 id: "0".to_string(),
             })],
             "bad_tool" => vec![ContentBlock::ToolCall(ToolCall {
-                name: "get_weather".to_string(),
+                name: "get_temperature".to_string(),
                 #[allow(clippy::unwrap_used)]
                 arguments: serde_json::to_string(&*DUMMY_BAD_TOOL_RESPONSE).unwrap(),
                 id: "0".to_string(),
@@ -165,7 +165,7 @@ impl InferenceProvider for DummyProvider {
             content: vec![if is_tool_call {
                 ContentBlockChunk::ToolCall(ToolCallChunk {
                     id: "0".to_string(),
-                    name: "get_weather".to_string(),
+                    name: "get_temperature".to_string(),
                     arguments: content_chunks[0].to_string(),
                 })
             } else {
@@ -187,7 +187,7 @@ impl InferenceProvider for DummyProvider {
                     content: vec![if is_tool_call {
                         ContentBlockChunk::ToolCall(ToolCallChunk {
                             id: "0".to_string(),
-                            name: "get_weather".to_string(),
+                            name: "get_temperature".to_string(),
                             arguments: chunk.to_string(),
                         })
                     } else {

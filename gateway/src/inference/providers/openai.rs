@@ -144,6 +144,7 @@ pub fn stream_openai(
                                     e, message.data
                                 ),
                             });
+
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
                             openai_to_tensorzero_chunk(d, inference_id, latency, &mut tool_call_ids, &mut tool_call_names)
@@ -456,7 +457,7 @@ impl<'a> From<&'a ToolChoice> for OpenAIToolChoice<'a> {
             ToolChoice::None => OpenAIToolChoice::String(OpenAIToolChoiceString::None),
             ToolChoice::Auto => OpenAIToolChoice::String(OpenAIToolChoiceString::Auto),
             ToolChoice::Required => OpenAIToolChoice::String(OpenAIToolChoiceString::Required),
-            ToolChoice::Tool(tool_name) => OpenAIToolChoice::Specific(SpecificToolChoice {
+            ToolChoice::Specific(tool_name) => OpenAIToolChoice::Specific(SpecificToolChoice {
                 r#type: OpenAIToolType::Function,
                 function: SpecificToolFunction { name: tool_name },
             }),

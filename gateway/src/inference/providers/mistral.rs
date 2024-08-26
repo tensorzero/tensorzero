@@ -218,7 +218,7 @@ fn prepare_mistral_tools<'a>(
     match request.tool_config {
         None => Ok((None, None)),
         Some(tool_config) => match &tool_config.tool_choice {
-            ToolChoice::Tool(tool_name) => {
+            ToolChoice::Specific(tool_name) => {
                 let tool = tool_config
                     .tools_available
                     .iter()

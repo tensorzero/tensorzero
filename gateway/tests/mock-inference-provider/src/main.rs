@@ -203,7 +203,7 @@ mod tests {
             "type": "function",
             "function": {
               "name": "get_current_weather",
-              "description": "Get the current weather in a given location",
+              "description": "Get the current temperature in a given location",
               "parameters": {
                 "type": "object",
                 "properties": {
@@ -377,7 +377,7 @@ mod tests {
             "type": "function",
             "function": {
               "name": "get_current_weather",
-              "description": "Get the current weather in a given location",
+              "description": "Get the current temperature in a given location",
               "parameters": {
                 "type": "object",
                 "properties": {
