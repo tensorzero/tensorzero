@@ -26,13 +26,9 @@ use gateway::tool::{
 /// then the provider should return an empty vector for the corresponding test.
 pub struct IntegrationTestProviders {
     pub simple_inference: Vec<&'static ProviderConfig>,
-    pub simple_streaming_inference: Vec<&'static ProviderConfig>,
     pub tool_use_inference: Vec<&'static ProviderConfig>,
-    pub tool_use_streaming_inference: Vec<&'static ProviderConfig>,
     pub tool_multi_turn_inference: Vec<&'static ProviderConfig>,
-    pub tool_multi_turn_streaming_inference: Vec<&'static ProviderConfig>,
     pub json_mode_inference: Vec<&'static ProviderConfig>,
-    pub json_mode_streaming_inference: Vec<&'static ProviderConfig>,
 }
 
 impl IntegrationTestProviders {
@@ -41,13 +37,9 @@ impl IntegrationTestProviders {
 
         Self {
             simple_inference: vec![provider],
-            simple_streaming_inference: vec![provider],
             tool_use_inference: vec![provider],
-            tool_use_streaming_inference: vec![provider],
             tool_multi_turn_inference: vec![provider],
-            tool_multi_turn_streaming_inference: vec![provider],
             json_mode_inference: vec![provider],
-            json_mode_streaming_inference: vec![provider],
         }
     }
 
@@ -61,13 +53,9 @@ impl IntegrationTestProviders {
 
         Self {
             simple_inference: static_providers.clone(),
-            simple_streaming_inference: static_providers.clone(),
             tool_use_inference: static_providers.clone(),
-            tool_use_streaming_inference: static_providers.clone(),
             tool_multi_turn_inference: static_providers.clone(),
-            tool_multi_turn_streaming_inference: static_providers.clone(),
             json_mode_inference: static_providers.clone(),
-            json_mode_streaming_inference: static_providers,
         }
     }
 }
@@ -94,7 +82,7 @@ macro_rules! generate_provider_tests {
 
         #[tokio::test]
         async fn test_simple_streaming_inference_request() {
-            let providers = $func().await.simple_streaming_inference;
+            let providers = $func().await.simple_inference;
             for provider in providers {
                 test_simple_streaming_inference_request_with_provider(provider).await;
             }
@@ -110,7 +98,7 @@ macro_rules! generate_provider_tests {
 
         #[tokio::test]
         async fn test_tool_use_streaming_inference_request() {
-            let providers = $func().await.tool_use_streaming_inference;
+            let providers = $func().await.tool_use_inference;
             for provider in providers {
                 test_tool_use_streaming_inference_request_with_provider(provider).await;
             }
@@ -126,7 +114,7 @@ macro_rules! generate_provider_tests {
 
         #[tokio::test]
         async fn test_json_mode_streaming_inference_request() {
-            let providers = $func().await.json_mode_streaming_inference;
+            let providers = $func().await.json_mode_inference;
             for provider in providers {
                 test_json_mode_streaming_inference_request_with_provider(provider).await;
             }
@@ -142,7 +130,7 @@ macro_rules! generate_provider_tests {
 
         #[tokio::test]
         async fn test_tool_multi_turn_streaming_inference_request() {
-            let providers = $func().await.tool_multi_turn_streaming_inference;
+            let providers = $func().await.tool_multi_turn_inference;
             for provider in providers {
                 test_tool_multi_turn_streaming_inference_request_with_provider(provider).await;
             }

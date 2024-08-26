@@ -17,13 +17,9 @@ async fn get_providers() -> IntegrationTestProviders {
     // - Together's function calling for Llama 3.1 is different from Llama 3.0 (breaking) - we should test both
     IntegrationTestProviders {
         simple_inference: vec![provider],
-        simple_streaming_inference: vec![provider],
         tool_use_inference: vec![provider_tool_use],
-        tool_use_streaming_inference: vec![provider_tool_use],
         tool_multi_turn_inference: vec![],
-        tool_multi_turn_streaming_inference: vec![],
         json_mode_inference: vec![provider],
-        json_mode_streaming_inference: vec![provider],
     }
 }
 
