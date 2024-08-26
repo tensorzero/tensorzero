@@ -153,9 +153,16 @@ enum AzureResponseFormat {
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(untagged)]
 enum AzureToolChoice<'a> {
+    String(AzureToolChoiceString),
+    Specific(SpecificToolChoice<'a>),
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub(super) enum AzureToolChoiceString {
     None,
     Auto,
-    Specific(SpecificToolChoice<'a>),
+    // Note: Azure doesn't support required tool choice.
 }
 
 impl<'a> From<OpenAIToolChoice<'a>> for AzureToolChoice<'a> {
@@ -163,9 +170,15 @@ impl<'a> From<OpenAIToolChoice<'a>> for AzureToolChoice<'a> {
         match tool_choice {
             OpenAIToolChoice::String(tool_choice) => {
                 match tool_choice {
-                    OpenAIToolChoiceString::None => AzureToolChoice::None,
-                    OpenAIToolChoiceString::Auto => AzureToolChoice::Auto,
-                    OpenAIToolChoiceString::Required => AzureToolChoice::Auto, // Azure doesn't support required
+                    OpenAIToolChoiceString::None => {
+                        AzureToolChoice::String(AzureToolChoiceString::None)
+                    }
+                    OpenAIToolChoiceString::Auto => {
+                        AzureToolChoice::String(AzureToolChoiceString::Auto)
+                    }
+                    OpenAIToolChoiceString::Required => {
+                        AzureToolChoice::String(AzureToolChoiceString::Auto)
+                    } // Azure doesn't support required
                 }
             }
             OpenAIToolChoice::Specific(tool_choice) => AzureToolChoice::Specific(tool_choice),
@@ -279,7 +292,10 @@ mod tests {
         // Required is converted to Auto
         let json_mode = OpenAIToolChoice::String(OpenAIToolChoiceString::Required);
         let azure_json_mode = AzureToolChoice::from(json_mode);
-        assert_eq!(azure_json_mode, AzureToolChoice::Auto);
+        assert_eq!(
+            azure_json_mode,
+            AzureToolChoice::String(AzureToolChoiceString::Auto)
+        );
 
         // Specific tool choice is converted to Specific
         let specific_tool_choice = OpenAIToolChoice::Specific(SpecificToolChoice {
@@ -302,11 +318,17 @@ mod tests {
         // None is converted to None
         let none_tool_choice = OpenAIToolChoice::String(OpenAIToolChoiceString::None);
         let azure_none_tool_choice = AzureToolChoice::from(none_tool_choice);
-        assert_eq!(azure_none_tool_choice, AzureToolChoice::None);
+        assert_eq!(
+            azure_none_tool_choice,
+            AzureToolChoice::String(AzureToolChoiceString::None)
+        );
 
         // Auto is converted to Auto
         let auto_tool_choice = OpenAIToolChoice::String(OpenAIToolChoiceString::Auto);
         let azure_auto_tool_choice = AzureToolChoice::from(auto_tool_choice);
-        assert_eq!(azure_auto_tool_choice, AzureToolChoice::Auto);
+        assert_eq!(
+            azure_auto_tool_choice,
+            AzureToolChoice::String(AzureToolChoiceString::Auto)
+        );
     }
 }
