@@ -39,37 +39,36 @@ model_name = "claude-3-haiku-20240307"
 
 [functions.generate_draft]
 type = "chat"
-system_schema = "config/functions/generate_draft/system_schema.json"
+system_schema = "functions/example_generate_draft/system_schema.json"
 
 [functions.generate_draft.variants.openai_promptA]
 type = "chat_completion"
 weight = 0.9
 model = "gpt-3.5-turbo"
-system_template = "config/functions/generate_draft/promptA/system_template.minijinja"
+system_template = "functions/example_generate_draft/promptA/system_template.minijinja"
 
 [functions.generate_draft.variants.openai_promptB]
 type = "chat_completion"
 weight = 0.1
 model = "gpt-3.5-turbo"
-system_template = "config/functions/generate_draft/promptB/system_template.minijinja"
+system_template = "functions/example_generate_draft/promptB/system_template.minijinja"
 
 [functions.extract_data]
 type = "json"
-system_schema = "config/functions/extract_data/system_schema.json"
-output_schema = "config/functions/extract_data/output_schema.json"
+system_schema = "functions/example_extract_data/system_schema.json"
+output_schema = "functions/example_extract_data/output_schema.json"
 
 [functions.extract_data.variants.openai_promptA]
 type = "chat_completion"
 weight = 0.9
 model = "gpt-3.5-turbo"
-system_template = "config/functions/extract_data/promptA/system_template.minijinja"
+system_template = "functions/example_extract_data/promptA/system_template.minijinja"
 
 [functions.extract_data.variants.openai_promptB]
 type = "chat_completion"
 weight = 0.1
 model = "gpt-3.5-turbo"
-system_template = "config/functions/extract_data/promptB/system_template.minijinja"
-
+system_template = "functions/example_extract_data/promptB/system_template.minijinja"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
@@ -89,10 +88,6 @@ level = "episode"
 # │                                  TOOLS                                     │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-[tools.get_temperature]
-description = "Get the current temperature in a given location"
-parameters = "config/tools/get_temperature.json"
-
 [tools.query_articles]
 description = "Query articles from Wikipedia"
-parameters = "config/tools/query_articles.json"
+parameters = "tools/example_query_articles.json"

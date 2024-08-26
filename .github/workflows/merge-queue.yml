@@ -31,9 +31,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Login to DockerHub
         uses: docker/login-action@v3
         with:
@@ -53,53 +50,11 @@ jobs:
           GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
-      # NOTE:
-      # Setting up and spinning down the Docker mount cache takes ~5min so it's slower than doing it from scratch right now.
-      # We can re-introduce the cache if building starts taking longer than 10min.
-
-      # - name: Cache Docker mounts
-      #   uses: actions/cache@v3
-      #   id: cache-docker-mounts
-      #   with:
-      #     path: |
-      #       docker-gateway-usr-local-cargo-registry
-      #       docker-gateway-usr-local-cargo-git
-      #       docker-gateway-src-target
-      #     key: cache-docker-mounts-${{ runner.os }}
-
-      # - name: Inject cache into Docker
-      #   uses: reproducible-containers/buildkit-cache-dance@v3.1.0
-      #   with:
-      #     cache-map: |
-      #       {
-      #         "docker-gateway-usr-local-cargo-registry": {
-      #           "target": "/usr/local/cargo/registry",
-      #           "id": "tensorzero-gateway-release"
-      #         },
-      #         "docker-gateway-usr-local-cargo-git": {
-      #           "target": "/usr/local/cargo/git",
-      #           "id": "tensorzero-gateway-release"
-      #         },
-      #         "docker-gateway-src-target": {
-      #           "target": "/src/target",
-      #           "id": "tensorzero-gateway-release"
-      #         }
-      #       }
-      #     skip-extraction: ${{ steps.cache-docker-mounts.outputs.cache-hit }}
-
-      - name: Build Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          target: gateway
-          build-args: |
-            CARGO_BUILD_FLAGS=--features=e2e_tests
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Launch containers for E2E tests
+      - name: Launch ClickHouse container for E2E tests
         run: docker compose -f gateway/tests/e2e/docker-compose.yml up -d --wait
+
+      - name: Launch the gateway for E2E tests
+        run: cargo run-e2e &
 
       - name: Run integration and E2E tests
         run: |

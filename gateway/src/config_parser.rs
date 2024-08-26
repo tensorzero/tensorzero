@@ -616,7 +616,7 @@ mod tests {
         // Check that the JSON mode is set properly on the JSON variants
         let prompt_a_json_mode = match config
             .functions
-            .get("extract_data")
+            .get("json_with_schemas")
             .unwrap()
             .variants()
             .get("openai_promptA")
@@ -628,7 +628,7 @@ mod tests {
 
         let prompt_b_json_mode = match config
             .functions
-            .get("extract_data")
+            .get("json_with_schemas")
             .unwrap()
             .variants()
             .get("openai_promptB")
@@ -743,10 +743,12 @@ mod tests {
             .expect("Failed to remove `[variants]` section");
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, base_path);
-        assert_eq!(result
-            .unwrap_err(),
+        assert_eq!(
+            result.unwrap_err(),
             Error::Config {
-                message: "Failed to parse config:\nmissing field `variants`\nin `functions.generate_draft`\n".to_string()
+                message:
+                    "Failed to parse config:\nmissing field `variants`\nin `functions.generate_draft`\n"
+                        .to_string()
             }
         );
     }
@@ -816,14 +818,14 @@ mod tests {
     #[test]
     fn test_config_from_toml_table_json_function_no_output_schema() {
         let mut config = get_sample_valid_config();
-        config["functions"]["extract_data"]
+        config["functions"]["json_with_schemas"]
             .as_table_mut()
             .expect("Failed to get `functions.generate_draft` section")
             .remove("output_schema");
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, base_path);
         assert!(result.unwrap_err().to_string().contains(
-            "Failed to parse config:\nmissing field `output_schema`\nin `functions.extract_data`\n"
+            "Failed to parse config:\nmissing field `output_schema`\nin `functions.json_with_schemas`\n"
         ));
     }
 
@@ -1075,27 +1077,27 @@ mod tests {
 
         // Check if all expected templates are present
         assert_eq!(
-            templates.get("../config/functions/generate_draft/promptA/system_template.minijinja"),
+            templates.get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja"),
             Some(&PathBuf::from(
-                "/base/path/../config/functions/generate_draft/promptA/system_template.minijinja"
+                "/base/path/fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
             ))
         );
         assert_eq!(
-            templates.get("../config/functions/generate_draft/promptA/system_template.minijinja"),
+            templates.get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja"),
             Some(&PathBuf::from(
-                "/base/path/../config/functions/generate_draft/promptA/system_template.minijinja"
+                "/base/path/fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
             ))
         );
         assert_eq!(
-            templates.get("../config/functions/extract_data/promptA/system_template.minijinja"),
+            templates.get("fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"),
             Some(&PathBuf::from(
-                "/base/path/../config/functions/extract_data/promptA/system_template.minijinja"
+                "/base/path/fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
             ))
         );
         assert_eq!(
-            templates.get("../config/functions/extract_data/promptB/system_template.minijinja"),
+            templates.get("fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"),
             Some(&PathBuf::from(
-                "/base/path/../config/functions/extract_data/promptB/system_template.minijinja"
+                "/base/path/fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
             ))
         );
         assert_eq!(
@@ -1179,37 +1181,37 @@ mod tests {
 
         [functions.generate_draft]
         type = "chat"
-        system_schema = "../config/functions/generate_draft/system_schema.json"
+        system_schema = "fixtures/config/functions/generate_draft/system_schema.json"
 
         [functions.generate_draft.variants.openai_promptA]
         type = "chat_completion"
         weight = 0.9
         model = "gpt-3.5-turbo"
-        system_template = "../config/functions/generate_draft/promptA/system_template.minijinja"
+        system_template = "fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
 
         [functions.generate_draft.variants.openai_promptB]
         type = "chat_completion"
         weight = 0.1
         model = "gpt-3.5-turbo"
-        system_template = "../config/functions/generate_draft/promptB/system_template.minijinja"
+        system_template = "fixtures/config/functions/generate_draft/promptB/system_template.minijinja"
 
-        [functions.extract_data]
+        [functions.json_with_schemas]
         type = "json"
-        system_schema = "../config/functions/extract_data/system_schema.json"
-        output_schema = "../config/functions/extract_data/output_schema.json"
+        system_schema = "fixtures/config/functions/json_with_schemas/system_schema.json"
+        output_schema = "fixtures/config/functions/json_with_schemas/output_schema.json"
 
-        [functions.extract_data.variants.openai_promptA]
+        [functions.json_with_schemas.variants.openai_promptA]
         type = "chat_completion"
         weight = 0.9
         model = "gpt-3.5-turbo"
-        system_template = "../config/functions/extract_data/promptA/system_template.minijinja"
+        system_template = "fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
         json_mode = "implicit_tool"
 
-        [functions.extract_data.variants.openai_promptB]
+        [functions.json_with_schemas.variants.openai_promptB]
         type = "chat_completion"
         weight = 0.1
         model = "gpt-3.5-turbo"
-        system_template = "../config/functions/extract_data/promptB/system_template.minijinja"
+        system_template = "fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
 
         [functions.weather_helper]
         type = "chat"
@@ -1264,7 +1266,7 @@ mod tests {
         # └────────────────────────────────────────────────────────────────────────────┘
         [tools.get_temperature]
         description = "Get the weather for a given location"
-        parameters = "../config/tools/get_temperature.json"
+        parameters = "fixtures/config/tools/get_temperature.json"
         "#;
 
         toml::from_str(config_str).expect("Failed to parse sample config")
@@ -1273,7 +1275,7 @@ mod tests {
     #[test]
     fn test_tensorzero_example_file() {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let config_path = format!("{}/../tensorzero.example.toml", manifest_dir);
+        let config_path = format!("{}/../config/tensorzero.example.toml", manifest_dir);
         let config_pathbuf = PathBuf::from(&config_path);
         let base_path = config_pathbuf
             .parent()
