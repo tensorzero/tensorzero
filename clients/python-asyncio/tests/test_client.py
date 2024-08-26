@@ -22,8 +22,8 @@ from uuid import UUID
 import pytest
 import pytest_asyncio
 from tensorzero import (
+    AsyncTensorZero,
     FeedbackResponse,
-    TensorZero,
     Text,
     TextChunk,
     ToolCall,
@@ -34,7 +34,7 @@ from uuid_extensions import uuid7
 
 @pytest_asyncio.fixture
 async def client():
-    async with TensorZero("http://localhost:3000") as client:
+    async with AsyncTensorZero("http://localhost:3000") as client:
         yield client
 
 
