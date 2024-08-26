@@ -188,10 +188,15 @@ pub(crate) mod tests {
         let temp_file3 = create_temp_file(system_template);
         templates.insert("system".to_string(), temp_file3.path().to_path_buf());
 
+        // Filled in system template
+        let system_template = "You are a helpful and friendly assistant named ChatGPT";
+        let temp_file4 = create_temp_file(system_template);
+        templates.insert("system_filled".to_string(), temp_file4.path().to_path_buf());
+
         // Assistant Template
         let assistant_template = "I'm sorry but I can't help you with that because of {{ reason }}";
-        let temp_file4 = create_temp_file(assistant_template);
-        templates.insert("assistant".to_string(), temp_file4.path().to_path_buf());
+        let temp_file5 = create_temp_file(assistant_template);
+        templates.insert("assistant".to_string(), temp_file5.path().to_path_buf());
 
         // Initialize templates
         let mut template_config = TemplateConfig::new();

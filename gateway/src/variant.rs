@@ -224,22 +224,27 @@ impl ChatCompletionConfig {
     fn prepare_system_message(
         &self,
         templates: &TemplateConfig,
-        system: &Value,
-    ) -> Result<String, Error> {
+        system: Option<&Value>,
+    ) -> Result<Option<String>, Error> {
         Ok(match &self.system_template {
-            Some(template_path) => templates.template_message(
+            Some(template_path) => Some(templates.template_message(
                 template_path.to_str().ok_or(Error::InvalidTemplatePath)?,
-                system,
-            )?,
-            None => system
+                system.unwrap_or(&Value::Null),
+            )?),
+            None => {
+                match system {
+                    None => None,
+                    Some(system) =>
+                Some(system
                 .as_str()
                 .ok_or(Error::InvalidMessage {
                     message:
                         format!("System message content {} is not a string but there is no variant template", system)
                             .to_string(),
                 })?
-                .to_string(),
-        })
+                .to_string()),
+            }
+        }})
     }
 
     fn prepare_request<'a>(
@@ -256,12 +261,8 @@ impl ChatCompletionConfig {
             .iter()
             .map(|message| self.prepare_request_message(templates, message))
             .collect::<Result<Vec<_>, _>>()?;
-        let system = input
-            .system
-            .as_ref()
-            .map(|system| self.prepare_system_message(templates, system))
-            .transpose()?;
-        // NOTE: line below mutates the inference_params
+        let system = self.prepare_system_message(templates, input.system.as_ref())?;
+
         inference_params
             .chat_completion
             .backfill_with_variant_params(self.temperature, self.max_tokens, self.seed);
@@ -558,19 +559,50 @@ mod tests {
     fn test_prepare_system_message() {
         let templates = get_test_template_config();
 
-        // Test without templates
+        // Test without templates, string message
         let chat_completion_config = ChatCompletionConfig {
             model: "dummy".to_string(),
             weight: 1.0,
             ..Default::default()
         };
         let input_message = Value::String("You are a helpful assistant.".to_string());
-        let result = chat_completion_config.prepare_system_message(&templates, &input_message);
+        let result =
+            chat_completion_config.prepare_system_message(&templates, Some(&input_message));
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
-        assert_eq!(prepared_message, "You are a helpful assistant.".to_string());
+        assert_eq!(
+            prepared_message,
+            Some("You are a helpful assistant.".to_string())
+        );
 
-        // Test with templates
+        // Test without templates, object message
+        let chat_completion_config = ChatCompletionConfig {
+            model: "dummy".to_string(),
+            weight: 1.0,
+            ..Default::default()
+        };
+        let input_message = json!({"message": "You are a helpful assistant."});
+        let result =
+            chat_completion_config.prepare_system_message(&templates, Some(&input_message));
+        assert!(result.is_err());
+        let prepared_message = result.unwrap_err();
+        assert_eq!(
+            prepared_message,
+            Error::InvalidMessage { message: "System message content {\"message\":\"You are a helpful assistant.\"} is not a string but there is no variant template".to_string() }
+        );
+
+        // Test without templates, no message
+        let chat_completion_config = ChatCompletionConfig {
+            model: "dummy".to_string(),
+            weight: 1.0,
+            ..Default::default()
+        };
+        let result = chat_completion_config.prepare_system_message(&templates, None);
+        assert!(result.is_ok());
+        let prepared_message = result.unwrap();
+        assert_eq!(prepared_message, None);
+
+        // Test with templates that need new info
         let system_template_name = "system";
 
         let chat_completion_config = ChatCompletionConfig {
@@ -581,12 +613,31 @@ mod tests {
         };
 
         let input_message = serde_json::json!({"assistant_name": "ChatGPT"});
-        let result = chat_completion_config.prepare_system_message(&templates, &input_message);
+        let result =
+            chat_completion_config.prepare_system_message(&templates, Some(&input_message));
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
         assert_eq!(
             prepared_message,
-            "You are a helpful and friendly assistant named ChatGPT".to_string()
+            Some("You are a helpful and friendly assistant named ChatGPT".to_string())
+        );
+
+        // Test with template that is complete as is (string)
+        let system_template_name = "system_filled";
+
+        let chat_completion_config = ChatCompletionConfig {
+            model: "dummy".to_string(),
+            weight: 1.0,
+            system_template: Some(system_template_name.into()),
+            ..Default::default()
+        };
+
+        let result = chat_completion_config.prepare_system_message(&templates, None);
+        assert!(result.is_ok());
+        let prepared_message = result.unwrap();
+        assert_eq!(
+            prepared_message,
+            Some("You are a helpful and friendly assistant named ChatGPT".to_string())
         );
     }
 
