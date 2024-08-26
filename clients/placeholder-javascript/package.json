@@ -1,19 +1,17 @@
 {
   "name": "tensorzero",
-  "version": "0.0.1",
+  "version": "0.0.0",
   "description": "Next-generation machine learning infrastructure",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+  "scripts": {},
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tensorzero/tensorzero.git"
   },
-  "author": "",
+  "author": "TensorZero",
   "license": "Apache-2.0",
   "bugs": {
     "url": "https://github.com/tensorzero/tensorzero/issues"
   },
-  "homepage": "https://github.com/tensorzero/tensorzero#readme"
+  "homepage": "https://www.tensorzero.com"
 }
