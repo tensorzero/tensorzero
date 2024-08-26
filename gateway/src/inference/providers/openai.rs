@@ -634,7 +634,9 @@ impl TryFrom<OpenAIResponseWithLatency> for ProviderInferenceResponse {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct OpenAIFunctionCallChunk {
+    #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     arguments: Option<String>,
 }
 
@@ -699,7 +701,10 @@ fn openai_to_tensorzero_chunk(
             for tool_call in tool_calls {
                 let index = tool_call.index;
                 let id = match tool_call.id {
-                    Some(id) => {tool_call_ids.push(id.clone()); id}
+                    Some(id) => {
+                        tool_call_ids.push(id.clone());
+                        id
+                    }
                     None => {
                         tool_call_ids.get(index as usize).ok_or(Error::OpenAIServer {
                             message: "Tool call index out of bounds (meaning we haven't seen this many ids in the stream)".to_string(),
@@ -707,7 +712,10 @@ fn openai_to_tensorzero_chunk(
                     }
                 };
                 let name = match tool_call.function.name {
-                    Some(name) => {tool_names.push(name.clone()); name}
+                    Some(name) => {
+                        tool_names.push(name.clone());
+                        name
+                    }
                     None => {
                         tool_names.get(index as usize).ok_or(Error::OpenAIServer {
                             message: "Tool call index out of bounds (meaning we haven't seen this many names in the stream)".to_string(),

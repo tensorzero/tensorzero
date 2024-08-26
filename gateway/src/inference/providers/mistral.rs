@@ -258,8 +258,8 @@ fn prepare_mistral_tools<'a>(
 /// We are not handling logprobs, top_logprobs, n, prompt_truncate_len
 /// presence_penalty, frequency_penalty, service_tier, stop, user,
 /// or context_length_exceeded_behavior.
-/// NOTE: Fireworks does not support seed.
-#[derive(Serialize)]
+/// NOTE: Mistral does not support seed.
+#[derive(Debug, Serialize)]
 struct MistralRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     model: &'a str,
