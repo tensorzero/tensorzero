@@ -4,7 +4,7 @@ TensorZero Client
 This module provides an asynchronous client for interacting with the TensorZero gateway.
 It includes functionality for making inference requests and sending feedback.
 
-The main class, TensorZero, offers methods for:
+The main class, AsyncTensorZero, offers methods for:
 - Initializing the client with a base URL
 - Making inference requests (with optional streaming)
 - Sending feedback on episodes or inferences
@@ -33,7 +33,7 @@ from .types import (
 )
 
 
-class TensorZero:
+class AsyncTensorZero:
     def __init__(self, base_url: str):
         """
         Initialize the TensorZero client.
