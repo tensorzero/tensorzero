@@ -1,4 +1,4 @@
-from .client import TensorZero
+from .client import AsyncTensorZero
 from .types import (
     ChatInferenceResponse,
     ContentBlock,
@@ -20,7 +20,7 @@ __all__ = [
     "InferenceChunk",
     "InferenceResponse",
     "JsonInferenceOutput",
-    "TensorZero",
+    "AsyncTensorZero",
     "Text",
     "TextChunk",
     "ToolCall",
