@@ -52,6 +52,8 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_tool_multi_turn_streaming_inference_request_with_provider;
         use $crate::providers::common::test_tool_use_inference_request_with_provider;
         use $crate::providers::common::test_tool_use_streaming_inference_request_with_provider;
+        use $crate::providers::common::test_tool_use_tool_choice_auto_unused_inference_request_with_provider;
+        use $crate::providers::common::test_tool_use_tool_choice_auto_unused_streaming_inference_request_with_provider;
 
         #[tokio::test]
         async fn test_simple_inference_request() {
@@ -98,6 +100,22 @@ macro_rules! generate_provider_tests {
             let providers = $func().await.tool_use_inference;
             for provider in providers {
                 test_tool_use_streaming_inference_request_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_tool_use_tool_choice_auto_unused_inference_request() {
+            let providers = $func().await.tool_use_inference;
+            for provider in providers {
+                test_tool_use_tool_choice_auto_unused_inference_request_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request() {
+            let providers = $func().await.tool_use_inference;
+            for provider in providers {
+                test_tool_use_tool_choice_auto_unused_streaming_inference_request_with_provider(provider).await;
             }
         }
 
@@ -1463,6 +1481,481 @@ pub async fn test_tool_use_streaming_inference_request_with_provider(provider: E
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("get_temperature"));
+    // Check if raw_response is valid JSONL
+    for line in raw_response.lines() {
+        assert!(serde_json::from_str::<Value>(line).is_ok());
+    }
+
+    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+
+    // NB: Azure doesn't support input/output tokens during streaming
+    if provider.variant_name.contains("azure") {
+        assert_eq!(input_tokens, 0);
+        assert_eq!(output_tokens, 0);
+    } else {
+        assert!(input_tokens > 0);
+        assert!(output_tokens > 0);
+    }
+
+    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    assert!(response_time_ms > 0);
+
+    let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
+    assert!(ttft_ms > 50);
+    assert!(ttft_ms <= response_time_ms);
+}
+
+/// This test is similar to `test_tool_use_inference_request_with_provider`, but it steers the model to not use the tool.
+/// This ensures that ToolChoice::Auto is working as expected.
+pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provider(
+    provider: E2ETestProvider,
+) {
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "weather_helper",
+        "episode_id": episode_id,
+        "input":{
+            "system": {"assistant_name": "Dr. Mehta"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is your name?"
+                }
+            ]},
+        "stream": false,
+        "variant_name": provider.variant_name,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check if the API response is fine
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("API response: {response_json:#?}");
+
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+    assert_eq!(episode_id_response, episode_id);
+
+    let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, provider.variant_name);
+
+    let output = response_json.get("output").unwrap().as_array().unwrap();
+    assert!(!output.iter().any(|block| block["type"] == "tool_call"));
+    let content_block = output.iter().find(|block| block["type"] == "text").unwrap();
+    let content = content_block.get("text").unwrap().as_str().unwrap();
+    assert!(content.to_lowercase().contains("mehta"));
+
+    let usage = response_json.get("usage").unwrap();
+    let usage = usage.as_object().unwrap();
+    let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
+    assert!(input_tokens > 0);
+    assert!(output_tokens > 0);
+
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check if ClickHouse is correct - Inference table
+    let clickhouse = get_clickhouse().await;
+    let result = select_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - Inference: {result:#?}");
+
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, inference_id);
+
+    let function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(function_name, "weather_helper");
+
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, provider.variant_name);
+
+    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
+    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
+    assert_eq!(episode_id_result, episode_id);
+
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let correct_input: Value = json!(
+        {
+            "system": {
+                "assistant_name": "Dr. Mehta"
+            },
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "value": "What is your name?"}]
+                }
+            ]
+        }
+    );
+    assert_eq!(input, correct_input);
+
+    let output_clickhouse: Vec<Value> =
+        serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
+    assert_eq!(output_clickhouse, *output);
+
+    let tool_params: Value =
+        serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
+    assert_eq!(tool_params["tool_choice"], "auto");
+    assert_eq!(tool_params["parallel_tool_calls"], false);
+
+    let tools_available = tool_params["tools_available"].as_array().unwrap();
+    assert_eq!(tools_available.len(), 1);
+    let tool = tools_available.first().unwrap();
+    assert_eq!(tool["name"], "get_temperature");
+    assert_eq!(
+        tool["description"],
+        "Get the current temperature in a given location"
+    );
+    assert_eq!(tool["strict"], false);
+
+    let tool_parameters = tool["parameters"].as_object().unwrap();
+    assert_eq!(tool_parameters["type"], "object");
+    assert!(tool_parameters.get("properties").is_some());
+    assert!(tool_parameters.get("required").is_some());
+    assert_eq!(tool_parameters["additionalProperties"], false);
+
+    let properties = tool_parameters["properties"].as_object().unwrap();
+    assert!(properties.contains_key("location"));
+    assert!(properties.contains_key("units"));
+
+    let location = properties["location"].as_object().unwrap();
+    assert_eq!(location["type"], "string");
+    assert_eq!(
+        location["description"],
+        "The location to get the temperature for (e.g. \"New York\")"
+    );
+
+    let units = properties["units"].as_object().unwrap();
+    assert_eq!(units["type"], "string");
+    assert_eq!(
+        units["description"],
+        "The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")"
+    );
+    let units_enum = units["enum"].as_array().unwrap();
+    assert_eq!(units_enum.len(), 2);
+    assert!(units_enum.contains(&json!("fahrenheit")));
+    assert!(units_enum.contains(&json!("celsius")));
+
+    let required = tool_parameters["required"].as_array().unwrap();
+    assert!(required.contains(&json!("location")));
+
+    // Check if ClickHouse is correct - ModelInference Table
+    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ModelInference: {result:#?}");
+
+    let id = result.get("id").unwrap().as_str().unwrap();
+    assert!(Uuid::parse_str(id).is_ok());
+
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    assert_eq!(input, correct_input);
+
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
+    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
+    let output_clickhouse_model: Vec<Value> =
+        serde_json::from_str(output_clickhouse_model).unwrap();
+    assert!(!output_clickhouse_model
+        .iter()
+        .any(|block| block["type"] == "tool_call"));
+    let content_block = output_clickhouse_model
+        .iter()
+        .find(|block| block["type"] == "text")
+        .unwrap();
+    let content_block_text = content_block.get("text").unwrap().as_str().unwrap();
+    assert!(content_block_text.to_lowercase().contains("mehta"));
+
+    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    assert!(raw_response.to_lowercase().contains("mehta"));
+
+    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    assert!(input_tokens > 0);
+    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    assert!(output_tokens > 0);
+    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    assert!(response_time_ms > 0);
+    assert!(result.get("ttft_ms").unwrap().is_null());
+}
+
+/// This test is similar to `test_tool_use_streaming_inference_request_with_provider`, but it steers the model to not use the tool.
+/// This ensures that ToolChoice::Auto is working as expected.
+pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_with_provider(
+    provider: E2ETestProvider,
+) {
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "weather_helper",
+        "episode_id": episode_id,
+        "input":{
+            "system": {"assistant_name": "Dr. Mehta"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is your name?"
+                }
+            ]},
+        "stream": true,
+        "variant_name": provider.variant_name,
+    });
+
+    let mut event_source = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .eventsource()
+        .unwrap();
+
+    let mut chunks = vec![];
+    let mut found_done_chunk = false;
+    while let Some(event) = event_source.next().await {
+        let event = event.unwrap();
+        match event {
+            Event::Open => continue,
+            Event::Message(message) => {
+                if message.data == "[DONE]" {
+                    found_done_chunk = true;
+                    break;
+                }
+                chunks.push(message.data);
+            }
+        }
+    }
+    assert!(found_done_chunk);
+
+    let mut inference_id = None;
+    let mut full_text = String::new();
+    let mut input_tokens = 0;
+    let mut output_tokens = 0;
+
+    for chunk in chunks {
+        let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
+
+        println!("API response chunk: {chunk_json:#?}");
+
+        let chunk_inference_id = chunk_json.get("inference_id").unwrap().as_str().unwrap();
+        let chunk_inference_id = Uuid::parse_str(chunk_inference_id).unwrap();
+        match inference_id {
+            None => inference_id = Some(chunk_inference_id),
+            Some(inference_id) => assert_eq!(inference_id, chunk_inference_id),
+        }
+
+        let chunk_episode_id = chunk_json.get("episode_id").unwrap().as_str().unwrap();
+        let chunk_episode_id = Uuid::parse_str(chunk_episode_id).unwrap();
+        assert_eq!(chunk_episode_id, episode_id);
+
+        for block in chunk_json.get("content").unwrap().as_array().unwrap() {
+            assert!(block.get("id").is_some());
+
+            let block_type = block.get("type").unwrap().as_str().unwrap();
+
+            match block_type {
+                "tool_call" => {
+                    panic!("Tool call found in streaming inference response");
+                }
+                "text" => {
+                    full_text.push_str(block.get("text").unwrap().as_str().unwrap());
+                }
+                _ => {
+                    panic!("Unexpected block type: {}", block_type);
+                }
+            }
+        }
+
+        if let Some(usage) = chunk_json.get("usage").and_then(|u| u.as_object()) {
+            input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
+            output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
+        }
+    }
+
+    // NB: Azure doesn't return usage during streaming
+    if provider.variant_name.contains("azure") {
+        assert_eq!(input_tokens, 0);
+        assert_eq!(output_tokens, 0);
+    } else {
+        assert!(input_tokens > 0);
+        assert!(output_tokens > 0);
+    }
+
+    let inference_id = inference_id.unwrap();
+
+    assert!(full_text.to_lowercase().contains("mehta"));
+
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check ClickHouse - Inference Table
+    let clickhouse = get_clickhouse().await;
+    let result = select_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - Inference: {result:#?}");
+
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, inference_id);
+
+    let function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(function_name, "weather_helper");
+
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, provider.variant_name);
+
+    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
+    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
+    assert_eq!(episode_id_result, episode_id);
+
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let correct_input: Value = json!(
+        {
+            "system": {
+                "assistant_name": "Dr. Mehta"
+            },
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "value": "What is your name?"}]
+                }
+            ]
+        }
+    );
+    assert_eq!(input, correct_input);
+
+    let output_clickhouse: Vec<Value> =
+        serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
+
+    assert!(!output_clickhouse
+        .iter()
+        .any(|block| block["type"] == "tool_call"));
+
+    let content_block = output_clickhouse.first().unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    assert!(content_block
+        .get("text")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .to_lowercase()
+        .contains("mehta"));
+
+    let tool_params: Value =
+        serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
+    assert_eq!(tool_params["tool_choice"], "auto");
+    assert_eq!(tool_params["parallel_tool_calls"], false);
+
+    let tools_available = tool_params["tools_available"].as_array().unwrap();
+    assert_eq!(tools_available.len(), 1);
+    let tool = tools_available.first().unwrap();
+    assert_eq!(tool["name"], "get_temperature");
+    assert_eq!(
+        tool["description"],
+        "Get the current temperature in a given location"
+    );
+    assert_eq!(tool["strict"], false);
+
+    let tool_parameters = tool["parameters"].as_object().unwrap();
+    assert_eq!(tool_parameters["type"], "object");
+    assert!(tool_parameters.get("properties").is_some());
+    assert!(tool_parameters.get("required").is_some());
+    assert_eq!(tool_parameters["additionalProperties"], false);
+
+    let properties = tool_parameters["properties"].as_object().unwrap();
+    assert!(properties.contains_key("location"));
+    assert!(properties.contains_key("units"));
+
+    let location = properties["location"].as_object().unwrap();
+    assert_eq!(location["type"], "string");
+    assert_eq!(
+        location["description"],
+        "The location to get the temperature for (e.g. \"New York\")"
+    );
+
+    let units = properties["units"].as_object().unwrap();
+    assert_eq!(units["type"], "string");
+    assert_eq!(
+        units["description"],
+        "The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")"
+    );
+    let units_enum = units["enum"].as_array().unwrap();
+    assert_eq!(units_enum.len(), 2);
+    assert!(units_enum.contains(&json!("fahrenheit")));
+    assert!(units_enum.contains(&json!("celsius")));
+
+    let required = tool_parameters["required"].as_array().unwrap();
+    assert!(required.contains(&json!("location")));
+
+    // Check if ClickHouse is correct - ModelInference Table
+    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ModelInference: {result:#?}");
+
+    let id = result.get("id").unwrap().as_str().unwrap();
+    assert!(Uuid::parse_str(id).is_ok());
+
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    assert_eq!(input, correct_input);
+
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
+    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
+    let output_clickhouse_model: Vec<Value> =
+        serde_json::from_str(output_clickhouse_model).unwrap();
+
+    assert!(!output_clickhouse_model
+        .iter()
+        .any(|block| block["type"] == "tool_call"));
+    let content_block = output_clickhouse_model
+        .iter()
+        .find(|block| block["type"] == "text")
+        .unwrap();
+    assert!(content_block
+        .get("text")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .to_lowercase()
+        .contains("mehta"));
+
+    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     // Check if raw_response is valid JSONL
     for line in raw_response.lines() {
         assert!(serde_json::from_str::<Value>(line).is_ok());
