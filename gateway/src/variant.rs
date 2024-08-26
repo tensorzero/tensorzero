@@ -553,6 +553,62 @@ mod tests {
             }
             _ => panic!("Expected MiniJinjaTemplateRender error"),
         }
+        // Part 3: test with filled out templates
+        let system_template_name = "system";
+        let user_template_name = "user_filled";
+        let assistant_template_name = "assistant_filled";
+
+        let chat_completion_config = ChatCompletionConfig {
+            model: "dummy".to_string(),
+            weight: 1.0,
+            system_template: Some(system_template_name.into()),
+            user_template: Some(user_template_name.into()),
+            assistant_template: Some(assistant_template_name.into()),
+            json_mode: JsonEnforcement::Default,
+            ..Default::default()
+        };
+
+        // Test case 8: assistant message with null input and filled out template
+        let input_message = InputMessage {
+            role: Role::Assistant,
+            content: vec![Value::Null.into()],
+        };
+        let result = chat_completion_config.prepare_request_message(&templates, &input_message);
+        assert!(result.is_ok());
+        let prepared_message = result.unwrap();
+        match prepared_message {
+            RequestMessage {
+                role: Role::Assistant,
+                content: assistant_message,
+            } => {
+                assert_eq!(
+                    assistant_message,
+                    vec!["I'm sorry but I can't help you with that because of it's against my ethical guidelines".to_string().into()]
+                );
+            }
+            _ => panic!("Expected Assistant message"),
+        }
+
+        // Test case 9: User message with null input and filled out template
+        let input_message = InputMessage {
+            role: Role::User,
+            content: vec![Value::Null.into()],
+        };
+        let result = chat_completion_config.prepare_request_message(&templates, &input_message);
+        assert!(result.is_ok());
+        let prepared_message = result.unwrap();
+        match prepared_message {
+            RequestMessage {
+                role: Role::User,
+                content: user_message,
+            } => {
+                assert_eq!(
+                    user_message,
+                    vec!["What's the capital of Japan?".to_string().into()]
+                );
+            }
+            _ => panic!("Expected User message"),
+        }
     }
 
     #[test]

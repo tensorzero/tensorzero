@@ -198,6 +198,19 @@ pub(crate) mod tests {
         let temp_file5 = create_temp_file(assistant_template);
         templates.insert("assistant".to_string(), temp_file5.path().to_path_buf());
 
+        // Filled in assistant template
+        let assistant_template = "I'm sorry but I can't help you with that because of it's against my ethical guidelines";
+        let temp_file6 = create_temp_file(assistant_template);
+        templates.insert(
+            "assistant_filled".to_string(),
+            temp_file6.path().to_path_buf(),
+        );
+
+        // Filled in user template
+        let user_template = "What's the capital of Japan?";
+        let temp_file7 = create_temp_file(user_template);
+        templates.insert("user_filled".to_string(), temp_file7.path().to_path_buf());
+
         // Initialize templates
         let mut template_config = TemplateConfig::new();
         let _ = template_config.initialize(templates.clone());
