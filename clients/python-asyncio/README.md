@@ -1,6 +1,6 @@
 # TensorZero Python Client
 
-This is an async Python client for the TensorZero inference API. Check out the [docs](https://tensorzero.com/docs/) for more information. This client allows you to easily make inference requests and assign feedback to them via the TensorZero Gateway.
+This is an async Python client for the TensorZero gateway. Check out the [docs](https://tensorzero.com/docs/) for more information. This client allows you to easily make inference requests and assign feedback to them via the TensorZero gateway.
 
 ## Installation
 
@@ -43,5 +43,5 @@ async with AsyncTensorZero() as client:
         stream=True,
     )
     async for chunk in stream:
-        print(chunk.content[0].text)
+        print(chunk.content[0].text)  # Prints the text in each chunk returned by TensorZero
 ```
