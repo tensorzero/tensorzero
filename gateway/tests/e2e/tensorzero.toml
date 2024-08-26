@@ -186,7 +186,6 @@ model_name = "bad_tool"
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-
 [functions.basic_test]
 type = "chat"
 system_schema = "config/functions/basic_test/system_schema.json"
@@ -696,7 +695,3 @@ parameters = "config/tools/get_temperature.json"
 [tools.get_humidity]
 description = "Get the current humidity in a given location"
 parameters = "config/tools/get_humidity.json"
-
-[tools.query_articles]
-description = "Query articles from Wikipedia"
-parameters = "config/tools/query_articles.json"

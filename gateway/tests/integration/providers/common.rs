@@ -558,7 +558,7 @@ pub async fn test_json_mode_inference_request_with_provider(provider: &ProviderC
             assert!(parsed_json.len() == 1 || parsed_json.len() == 2);
             assert!(parsed_json.get("answer").unwrap().as_str().unwrap() == "8");
 
-            // reasoning is optional
+            // Reasoning is optional
             if parsed_json.len() == 2 {
                 assert!(parsed_json.keys().any(|key| key == "reasoning"));
             }
