@@ -288,12 +288,12 @@ mod tests {
     }
 
     #[test]
-    fn test_azure_json_mode_from() {
+    fn test_azure_tool_choice_from() {
         // Required is converted to Auto
-        let json_mode = OpenAIToolChoice::String(OpenAIToolChoiceString::Required);
-        let azure_json_mode = AzureToolChoice::from(json_mode);
+        let tool_choice = OpenAIToolChoice::String(OpenAIToolChoiceString::Required);
+        let azure_tool_choice = AzureToolChoice::from(tool_choice);
         assert_eq!(
-            azure_json_mode,
+            azure_tool_choice,
             AzureToolChoice::String(AzureToolChoiceString::Auto)
         );
 
