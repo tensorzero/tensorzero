@@ -583,7 +583,7 @@ model = "gpt-4o-mini-azure"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 100
 
-[functions.weather_helper.variants.fireworks]
+[functions.weather_helper.variants.fireworks-firefunction]
 type = "chat_completion"
 weight = 0
 model = "firefunction-v2"
