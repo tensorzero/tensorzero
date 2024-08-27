@@ -309,7 +309,7 @@ impl Error {
             Error::Serialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::TogetherClient { status_code, .. } => *status_code,
             Error::TogetherServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::ToolNotFound { .. } => StatusCode::NOT_FOUND,
+            Error::ToolNotFound { .. } => StatusCode::BAD_REQUEST,
             Error::ToolNotLoaded { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::TypeConversion { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::UnknownFunction { .. } => StatusCode::NOT_FOUND,

@@ -10,12 +10,6 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let tool_providers = vec![E2ETestProvider {
-        variant_name: "fireworks".to_string(),
-        model_name: "firefunction-v2".to_string(),
-        model_provider_name: "fireworks".to_string(),
-    }];
-
-    let providers_dynamic_tool_use = vec![E2ETestProvider {
         variant_name: "fireworks-firefunction".to_string(),
         model_name: "firefunction-v2".to_string(),
         model_provider_name: "fireworks".to_string(),
@@ -39,7 +33,7 @@ async fn get_providers() -> E2ETestProviders {
         inference_params_inference: providers.clone(),
         tool_use_inference: tool_providers.clone(),
         tool_multi_turn_inference: tool_providers.clone(),
-        dynamic_tool_use_inference: providers_dynamic_tool_use.clone(),
+        dynamic_tool_use_inference: tool_providers.clone(),
         parallel_tool_use_inference: vec![],
         json_mode_inference: json_providers.clone(),
     }
