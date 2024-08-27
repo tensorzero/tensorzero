@@ -160,7 +160,7 @@ enum FireworksResponseFormat<'a> {
 /// presence_penalty, frequency_penalty, service_tier, stop, user,
 /// or context_length_exceeded_behavior.
 /// NOTE: Fireworks does not support seed.
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct FireworksRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     model: &'a str,

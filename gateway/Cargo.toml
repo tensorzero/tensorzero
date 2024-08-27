@@ -9,11 +9,6 @@ e2e_tests = []
 
 
 [[test]]
-name = "integration"
-path = "tests/integration/tests.rs"
-
-
-[[test]]
 name = "e2e"
 path = "tests/e2e/tests.rs"
 required-features = ["e2e_tests"]
