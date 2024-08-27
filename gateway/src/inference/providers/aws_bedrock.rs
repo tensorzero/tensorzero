@@ -571,6 +571,8 @@ impl TryFrom<ToolChoice> for AWSBedrockToolChoice {
 
     fn try_from(tool_choice: ToolChoice) -> Result<Self, Error> {
         match tool_choice {
+            // TODO (#204): Implement ToolChoice::None workaround for AWS Bedrock.
+            //              MAKE SURE TO UPDATE THE E2E TESTS WHEN THIS IS DONE.
             ToolChoice::None => Err(Error::InvalidTool {
                 message: "Tool choice is None. AWS Bedrock does not support tool choice None."
                     .to_string(),

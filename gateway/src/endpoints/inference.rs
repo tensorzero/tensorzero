@@ -564,7 +564,7 @@ mod tests {
         let result = prepare_event(&inference_metadata, chunk);
         assert!(result.is_ok());
         // TODO (#86): You could get the values of the private members using unsafe Rust.
-        // For now, we won't and will rely on integration testing here.
+        // For now, we won't and will rely on E2E testing here.
         // This test doesn't do much so consider deleting or doing more.
 
         // Test case 2: Valid JSON ProviderInferenceResponseChunk

@@ -211,6 +211,8 @@ impl<'a> TryFrom<&'a ToolChoice> for AnthropicToolChoice<'a> {
             ToolChoice::Auto => Ok(AnthropicToolChoice::Auto),
             ToolChoice::Required => Ok(AnthropicToolChoice::Any),
             ToolChoice::Specific(name) => Ok(AnthropicToolChoice::Tool { name }),
+            // TODO (#205): Implement ToolChoice::None workaround for Anthropic.
+            //              MAKE SURE TO UPDATE THE E2E TESTS WHEN THIS IS DONE.
             ToolChoice::None => Err(Error::InvalidTool {
                 message: "Tool choice is None. Anthropic does not support tool choice None."
                     .to_string(),
