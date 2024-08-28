@@ -28,9 +28,8 @@ routing = ["azure"]
 
 [models."gpt-4o-mini-azure".providers.azure]
 type = "azure"
-model_name = "gpt-4o-mini"
-api_base = "https://t0-azure-openai-east.openai.azure.com"
 deployment_id = "gpt4o-mini-20240718"
+endpoint = "https://t0-azure-openai-east.openai.azure.com"
 
 [models.claude-3-haiku-20240307]
 routing = ["anthropic", "aws-bedrock"]
