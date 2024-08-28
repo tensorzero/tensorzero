@@ -100,7 +100,7 @@ pub enum FunctionType {
 }
 
 #[derive(Clone, Default, Debug, PartialEq)]
-pub enum ModelInferenceRequestJSONMode {
+pub enum ModelInferenceRequestJsonMode {
     #[default]
     Off,
     On,
@@ -123,7 +123,7 @@ pub struct ModelInferenceRequest<'a> {
     pub max_tokens: Option<u32>,
     pub seed: Option<u32>,
     pub stream: bool,
-    pub json_mode: ModelInferenceRequestJSONMode,
+    pub json_mode: ModelInferenceRequestJsonMode,
     pub function_type: FunctionType,
     pub output_schema: Option<&'a Value>,
 }
@@ -885,13 +885,13 @@ pub type ProviderInferenceResponseStream =
 pub type InferenceResultStream =
     Pin<Box<dyn Stream<Item = Result<InferenceResultChunk, Error>> + Send>>;
 
-impl From<&JsonMode> for ModelInferenceRequestJSONMode {
+impl From<&JsonMode> for ModelInferenceRequestJsonMode {
     fn from(json_enforcement: &JsonMode) -> Self {
         match json_enforcement {
-            JsonMode::Default => ModelInferenceRequestJSONMode::On,
-            JsonMode::Strict => ModelInferenceRequestJSONMode::Strict,
-            JsonMode::ImplicitTool => ModelInferenceRequestJSONMode::Off,
-            JsonMode::Off => ModelInferenceRequestJSONMode::Off,
+            JsonMode::Default => ModelInferenceRequestJsonMode::On,
+            JsonMode::Strict => ModelInferenceRequestJsonMode::Strict,
+            JsonMode::ImplicitTool => ModelInferenceRequestJsonMode::Off,
+            JsonMode::Off => ModelInferenceRequestJsonMode::Off,
         }
     }
 }

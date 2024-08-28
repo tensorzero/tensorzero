@@ -7,7 +7,7 @@ use tokio::time::Instant;
 
 use crate::error::Error;
 use crate::inference::types::{
-    Latency, ModelInferenceRequest, ModelInferenceRequestJSONMode, ProviderInferenceResponse,
+    Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
     ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
 };
 
@@ -211,10 +211,10 @@ struct AzureRequest<'a> {
 impl<'a> AzureRequest<'a> {
     pub fn new(request: &'a ModelInferenceRequest) -> AzureRequest<'a> {
         let response_format = match request.json_mode {
-            ModelInferenceRequestJSONMode::On | ModelInferenceRequestJSONMode::Strict => {
+            ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
                 AzureResponseFormat::JsonObject
             }
-            ModelInferenceRequestJSONMode::Off => AzureResponseFormat::Text,
+            ModelInferenceRequestJsonMode::Off => AzureResponseFormat::Text,
         };
         let messages = prepare_openai_messages(request);
         let (tools, tool_choice, _) = prepare_openai_tools(request);
@@ -238,7 +238,7 @@ mod tests {
     use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::providers::openai::{OpenAIToolType, SpecificToolFunction};
     use crate::inference::types::{
-        FunctionType, ModelInferenceRequestJSONMode, RequestMessage, Role,
+        FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
 
     #[test]
@@ -253,7 +253,7 @@ mod tests {
             max_tokens: Some(100),
             stream: false,
             seed: Some(69),
-            json_mode: ModelInferenceRequestJSONMode::On,
+            json_mode: ModelInferenceRequestJsonMode::On,
             tool_config: Some(&WEATHER_TOOL_CONFIG),
             function_type: FunctionType::Chat,
             output_schema: None,

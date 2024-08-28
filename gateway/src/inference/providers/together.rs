@@ -9,7 +9,7 @@ use tokio::time::Instant;
 use crate::{
     error::Error,
     inference::types::{
-        Latency, ModelInferenceRequest, ModelInferenceRequestJSONMode, ProviderInferenceResponse,
+        Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
         ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     },
 };
@@ -181,12 +181,12 @@ struct TogetherRequest<'a> {
 impl<'a> TogetherRequest<'a> {
     pub fn new(model: &'a str, request: &'a ModelInferenceRequest) -> TogetherRequest<'a> {
         let response_format = match request.json_mode {
-            ModelInferenceRequestJSONMode::On | ModelInferenceRequestJSONMode::Strict => {
+            ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
                 Some(TogetherResponseFormat::JsonObject {
                     schema: request.output_schema,
                 })
             }
-            ModelInferenceRequestJSONMode::Off => None,
+            ModelInferenceRequestJsonMode::Off => None,
         };
         let messages = prepare_openai_messages(request);
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
@@ -227,7 +227,7 @@ mod tests {
             max_tokens: Some(100),
             seed: Some(69),
             stream: false,
-            json_mode: ModelInferenceRequestJSONMode::Off,
+            json_mode: ModelInferenceRequestJsonMode::Off,
             tool_config: Some(&WEATHER_TOOL_CONFIG),
             function_type: FunctionType::Chat,
             output_schema: None,

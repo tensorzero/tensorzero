@@ -8,7 +8,7 @@ use tokio::time::Instant;
 use crate::{
     error::Error,
     inference::types::{
-        Latency, ModelInferenceRequest, ModelInferenceRequestJSONMode, ProviderInferenceResponse,
+        Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
         ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     },
 };
@@ -182,12 +182,12 @@ impl<'a> FireworksRequest<'a> {
         // NB: Fireworks will throw an error if you give FireworksResponseFormat::Text and then also include tools.
         // So we just don't include it as Text is the same as None anyway.
         let response_format = match request.json_mode {
-            ModelInferenceRequestJSONMode::On | ModelInferenceRequestJSONMode::Strict => {
+            ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
                 Some(FireworksResponseFormat::JsonObject {
                     schema: request.output_schema,
                 })
             }
-            ModelInferenceRequestJSONMode::Off => None,
+            ModelInferenceRequestJsonMode::Off => None,
         };
         let messages = prepare_openai_messages(request);
         let (tools, tool_choice, _) = prepare_openai_tools(request);
@@ -242,7 +242,7 @@ mod tests {
             max_tokens: Some(100),
             seed: Some(69),
             stream: false,
-            json_mode: ModelInferenceRequestJSONMode::On,
+            json_mode: ModelInferenceRequestJsonMode::On,
             tool_config: Some(&WEATHER_TOOL_CONFIG),
             function_type: FunctionType::Chat,
             output_schema: None,

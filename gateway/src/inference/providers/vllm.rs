@@ -7,7 +7,7 @@ use tokio::time::Instant;
 
 use crate::error::Error;
 use crate::inference::types::{
-    Latency, ModelInferenceRequest, ModelInferenceRequestJSONMode, ProviderInferenceResponse,
+    Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
     ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
 };
 
@@ -164,7 +164,7 @@ impl<'a> VLLMRequest<'a> {
     ) -> Result<VLLMRequest<'a>, Error> {
         let guided_json = match (&request.json_mode, request.output_schema) {
             (
-                ModelInferenceRequestJSONMode::On | ModelInferenceRequestJSONMode::Strict,
+                ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict,
                 Some(schema),
             ) => Some(schema),
             _ => None,
@@ -227,7 +227,7 @@ mod tests {
             max_tokens: Some(100),
             seed: Some(69),
             stream: false,
-            json_mode: ModelInferenceRequestJSONMode::On,
+            json_mode: ModelInferenceRequestJsonMode::On,
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
@@ -259,7 +259,7 @@ mod tests {
             max_tokens: Some(100),
             seed: Some(69),
             stream: false,
-            json_mode: ModelInferenceRequestJSONMode::On,
+            json_mode: ModelInferenceRequestJsonMode::On,
             tool_config: Some(&WEATHER_TOOL_CONFIG),
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),

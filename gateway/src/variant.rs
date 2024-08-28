@@ -10,7 +10,7 @@ use crate::error::Error;
 use crate::function::FunctionConfig;
 use crate::inference::types::{
     ContentBlock, FunctionType, InferenceResultChunk, InferenceResultStream, Input,
-    InputMessageContent, ModelInferenceRequest, ModelInferenceRequestJSONMode,
+    InputMessageContent, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     ModelInferenceResponseWithMetadata, RequestMessage, Role,
 };
 use crate::minijinja_util::TemplateConfig;
@@ -275,7 +275,7 @@ impl ChatCompletionConfig {
                 max_tokens: inference_params.chat_completion.max_tokens,
                 seed: inference_params.chat_completion.seed,
                 stream,
-                json_mode: ModelInferenceRequestJSONMode::Off,
+                json_mode: ModelInferenceRequestJsonMode::Off,
                 function_type: FunctionType::Chat,
                 output_schema: None,
             },
@@ -1382,7 +1382,7 @@ mod tests {
         assert_eq!(model_request.temperature, Some(0.5));
         assert_eq!(model_request.max_tokens, Some(100));
         assert_eq!(model_request.seed, Some(69));
-        assert_eq!(model_request.json_mode, ModelInferenceRequestJSONMode::On);
+        assert_eq!(model_request.json_mode, ModelInferenceRequestJsonMode::On);
         assert_eq!(model_request.output_schema, Some(&output_schema_value));
         assert_eq!(inference_params.chat_completion.temperature, Some(0.5));
         assert_eq!(inference_params.chat_completion.max_tokens, Some(100));
@@ -1408,7 +1408,7 @@ mod tests {
         assert_eq!(model_request.temperature, Some(1.));
         assert_eq!(model_request.max_tokens, Some(200));
         assert_eq!(model_request.seed, Some(420));
-        assert_eq!(model_request.json_mode, ModelInferenceRequestJSONMode::On);
+        assert_eq!(model_request.json_mode, ModelInferenceRequestJsonMode::On);
         assert_eq!(model_request.output_schema, Some(&output_schema_value));
         assert_eq!(inference_params.chat_completion.temperature, Some(1.));
         assert_eq!(inference_params.chat_completion.max_tokens, Some(200));
