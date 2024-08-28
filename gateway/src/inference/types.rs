@@ -1517,6 +1517,34 @@ mod tests {
             }
             _ => panic!("Expected ToolCall content"),
         }
+        // Test case for multiple content items with JSON object in text block
+        let input = json!({
+            "role": "user",
+            "content": [
+                {"type": "text", "value": {"complex": "json", "with": ["nested", "array"]}},
+                {"type": "tool_call", "id": "456", "name": "another_tool", "arguments": "{\"key\": \"value\"}"}
+            ]
+        });
+        let message: InputMessage = serde_json::from_value(input).unwrap();
+        assert_eq!(message.role, Role::User);
+        assert_eq!(message.content.len(), 2);
+        match &message.content[0] {
+            InputMessageContent::Text { value } => {
+                assert_eq!(
+                    value,
+                    &json!({"complex": "json", "with": ["nested", "array"]})
+                )
+            }
+            _ => panic!("Expected Text content with JSON object"),
+        }
+        match &message.content[1] {
+            InputMessageContent::ToolCall(tool_call) => {
+                assert_eq!(tool_call.id, "456");
+                assert_eq!(tool_call.name, "another_tool");
+                assert_eq!(tool_call.arguments, "{\"key\": \"value\"}");
+            }
+            _ => panic!("Expected ToolCall content"),
+        }
 
         // Test case for invalid role
         let input = json!({
