@@ -13,9 +13,9 @@ pip install tensorzero
 ### Non-Streaming Inference
 
 ```python
-from tensorzero import AsyncTensorZero
+from tensorzero import AsyncTensorZeroGateway
 
-with AsyncTensorZero("http://localhost:3000") as client:
+with AsyncTensorZeroGateway("http://localhost:3000") as client:
     result = await client.inference(
         function_name="basic_test",
         input={
@@ -31,9 +31,9 @@ print(output[0].text)  # Prints the text of the first content block returned by 
 ### Streaming Inference
 
 ```python
-from tensorzero import AsyncTensorZero
+from tensorzero import AsyncTensorZeroGateway
 
-async with AsyncTensorZero() as client:
+async with AsyncTensorZeroGateway("http://localhost:3000") as client:
     stream = await client.chat.completions.create(
         function_name="basic_test",
         input={
