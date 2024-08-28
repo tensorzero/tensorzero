@@ -6,6 +6,7 @@
 - Install `cargo-deny` [(→)](https://github.com/EmbarkStudios/cargo-deny): `cargo install --locked cargo-deny`
 
 To run the gateway locally using Docker, run `docker run -v "./config:/app/config" --env-file example.env -p 3000:3000 tensorzero/tensorzero`.
+
 To run the gateway locally without Docker, run `cargo run --release --bin gateway -- config/tensorzero.toml`.
 
 ## Testing
