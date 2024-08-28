@@ -123,24 +123,28 @@ impl ToolCallConfig {
                 })
             },
         ));
+
         let tool_choice = dynamic_tool_params
             .tool_choice
             .unwrap_or_else(|| function_tool_choice.clone());
+
         // If the tool choice is a specific tool, make sure it's in the list of available tools
         if let ToolChoice::Specific(tool_name) = &tool_choice {
             if !tools_available.iter().any(|tool| match tool {
                 ToolConfig::Static(config) => config.name == *tool_name,
                 ToolConfig::Dynamic(config) => config.name == *tool_name,
-                ToolConfig::Implicit(_config) => false,
+                ToolConfig::Implicit(_) => false,
             }) {
                 return Err(Error::ToolNotFound {
                     name: tool_name.clone(),
                 });
             }
         }
+
         let parallel_tool_calls = dynamic_tool_params
             .parallel_tool_calls
             .unwrap_or(function_parallel_tool_calls);
+
         let tool_call_config_option = match tools_available.is_empty() {
             true => None,
             false => Some(Self {
@@ -149,6 +153,7 @@ impl ToolCallConfig {
                 parallel_tool_calls,
             }),
         };
+
         Ok(tool_call_config_option)
     }
 

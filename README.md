@@ -5,6 +5,22 @@
 - Install `pre-commit` [(→)](https://pre-commit.com/#installation) and run `pre-commit install`
 - Install `cargo-deny` [(→)](https://github.com/EmbarkStudios/cargo-deny): `cargo install --locked cargo-deny`
 
+To run locally with Docker:
+
+```sh
+docker run --name tensorzero-gateway \
+  -v "./config:/app/config" \
+  --env-file example.env \
+  -p 3000:3000 \
+  tensorzero/gateway
+```
+
+To run locally without Docker:
+
+```sh
+cargo run --release --bin gateway -- path/to/tensorzero.toml
+```
+
 ## Testing
 
 We use [cargo-nextest](https://nexte.st/book/introduction.html) for faster and more robust testing.

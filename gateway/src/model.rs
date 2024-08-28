@@ -139,9 +139,8 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 region: Option<String>,
             },
             Azure {
-                model_name: String,
-                api_base: String,
                 deployment_id: String,
+                endpoint: String,
             },
             #[serde(rename = "gcp_vertex_gemini")]
             GCPVertexGemini {
@@ -200,13 +199,11 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 ProviderConfig::AWSBedrock(provider)
             }
             ProviderConfigHelper::Azure {
-                model_name,
-                api_base,
                 deployment_id,
+                endpoint,
             } => ProviderConfig::Azure(AzureProvider {
-                model_name,
-                api_base,
                 deployment_id,
+                endpoint,
                 api_key: env::var("AZURE_OPENAI_API_KEY").ok().map(SecretString::new),
             }),
             ProviderConfigHelper::Fireworks { model_name } => {

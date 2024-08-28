@@ -20,9 +20,8 @@ use super::provider_trait::InferenceProvider;
 
 #[derive(Debug)]
 pub struct AzureProvider {
-    pub model_name: String,
-    pub api_base: String,
     pub deployment_id: String,
+    pub endpoint: String,
     pub api_key: Option<SecretString>,
 }
 
@@ -35,8 +34,8 @@ impl InferenceProvider for AzureProvider {
         let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
             provider_name: "Azure".to_string(),
         })?;
-        let request_body = AzureRequest::new(&self.model_name, request);
-        let request_url = get_azure_chat_url(&self.api_base, &self.deployment_id);
+        let request_body = AzureRequest::new(request);
+        let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id);
         let start_time = Instant::now();
         let res = http_client
             .post(request_url)
@@ -90,8 +89,8 @@ impl InferenceProvider for AzureProvider {
         let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
             provider_name: "Azure".to_string(),
         })?;
-        let request_body = AzureRequest::new(&self.model_name, request);
-        let request_url = get_azure_chat_url(&self.api_base, &self.deployment_id);
+        let request_body = AzureRequest::new(request);
+        let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id);
         let start_time = Instant::now();
         let event_source = http_client
             .post(request_url)
@@ -133,10 +132,10 @@ fn map_openai_to_azure_error(e: Error) -> Error {
     }
 }
 
-fn get_azure_chat_url(api_base: &str, deployment_id: &str) -> String {
+fn get_azure_chat_url(endpoint: &str, deployment_id: &str) -> String {
     let api_version = "2024-06-01";
     format!(
-        "{api_base}/openai/deployments/{deployment_id}/chat/completions?api-version={api_version}"
+        "{endpoint}/openai/deployments/{deployment_id}/chat/completions?api-version={api_version}"
     )
 }
 
@@ -195,7 +194,6 @@ impl<'a> From<OpenAIToolChoice<'a>> for AzureToolChoice<'a> {
 #[derive(Debug, Serialize)]
 struct AzureRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
-    model: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -211,7 +209,7 @@ struct AzureRequest<'a> {
 }
 
 impl<'a> AzureRequest<'a> {
-    pub fn new(model: &'a str, request: &'a ModelInferenceRequest) -> AzureRequest<'a> {
+    pub fn new(request: &'a ModelInferenceRequest) -> AzureRequest<'a> {
         let response_format = match request.json_mode {
             JSONMode::On | JSONMode::Strict => AzureResponseFormat::JsonObject,
             JSONMode::Off => AzureResponseFormat::Text,
@@ -220,7 +218,6 @@ impl<'a> AzureRequest<'a> {
         let (tools, tool_choice, _) = prepare_openai_tools(request);
         AzureRequest {
             messages,
-            model,
             temperature: request.temperature,
             max_tokens: request.max_tokens,
             stream: request.stream,
@@ -258,9 +255,8 @@ mod tests {
             output_schema: None,
         };
 
-        let azure_request = AzureRequest::new("togethercomputer/llama-v3-8b", &request_with_tools);
+        let azure_request = AzureRequest::new(&request_with_tools);
 
-        assert_eq!(azure_request.model, "togethercomputer/llama-v3-8b");
         assert_eq!(azure_request.messages.len(), 1);
         assert_eq!(azure_request.temperature, Some(0.5));
         assert_eq!(azure_request.max_tokens, Some(100));

@@ -480,7 +480,7 @@ impl UninitializedConfig {
     fn get_config_path() -> String {
         match std::env::args().nth(1) {
             Some(path) => path,
-            None => "tensorzero.toml".to_string(),
+            None => "config/tensorzero.toml".to_string(),
         }
     }
 
@@ -1280,9 +1280,8 @@ mod tests {
 
         [models."gpt-3.5-turbo".providers.azure]
         type = "azure"
-        model_name = "gpt-35-turbo"
         deployment_id = "gpt-35-turbo"
-        api_base = "https://your-endpoint.openai.azure.com/"
+        endpoint = "https://your-endpoint.openai.azure.com"
 
         [models.claude-3-haiku-20240307]
         routing = ["anthropic"]
@@ -1418,7 +1417,7 @@ mod tests {
     #[test]
     fn test_tensorzero_example_file() {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let config_path = format!("{}/../config/tensorzero.example.toml", manifest_dir);
+        let config_path = format!("{}/../config/tensorzero.toml", manifest_dir);
         let config_pathbuf = PathBuf::from(&config_path);
         let base_path = config_pathbuf
             .parent()
