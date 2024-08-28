@@ -352,6 +352,7 @@ impl<'de> Deserialize<'de> for InputMessage {
         #[serde(untagged)]
         enum ContentHelper {
             Single(String),
+            Object(serde_json::Map<String, Value>),
             Multiple(Vec<InputMessageContent>),
         }
 
@@ -361,6 +362,11 @@ impl<'de> Deserialize<'de> for InputMessage {
             ContentHelper::Single(text) => {
                 vec![InputMessageContent::Text {
                     value: Value::String(text),
+                }]
+            }
+            ContentHelper::Object(object) => {
+                vec![InputMessageContent::Text {
+                    value: Value::Object(object),
                 }]
             }
             ContentHelper::Multiple(content) => content,
