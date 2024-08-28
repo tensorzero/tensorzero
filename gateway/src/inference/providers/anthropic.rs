@@ -764,7 +764,7 @@ mod tests {
     use serde_json::json;
 
     use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
-    use crate::inference::types::{FunctionType, JSONMode};
+    use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::tool::{DynamicToolConfig, ToolConfig, ToolResult};
 
@@ -929,7 +929,7 @@ mod tests {
             max_tokens: None,
             seed: None,
             stream: false,
-            json_mode: JSONMode::Off,
+            json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -961,7 +961,7 @@ mod tests {
             max_tokens: None,
             seed: None,
             stream: false,
-            json_mode: JSONMode::Off,
+            json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -1009,7 +1009,7 @@ mod tests {
             max_tokens: Some(100),
             seed: None,
             stream: true,
-            json_mode: JSONMode::On,
+            json_mode: ModelInferenceRequestJsonMode::On,
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -1067,7 +1067,7 @@ mod tests {
             max_tokens: Some(100),
             seed: None,
             stream: true,
-            json_mode: JSONMode::On,
+            json_mode: ModelInferenceRequestJsonMode::On,
             function_type: FunctionType::Chat,
             output_schema: None,
         };
