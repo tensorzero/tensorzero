@@ -638,7 +638,7 @@ impl UninitializedToolConfig {
 #[cfg(test)]
 mod tests {
 
-    use crate::variant::JsonEnforcement;
+    use crate::variant::JsonMode;
 
     use super::*;
 
@@ -667,7 +667,7 @@ mod tests {
         {
             VariantConfig::ChatCompletion(chat_config) => &chat_config.json_mode,
         };
-        assert_eq!(prompt_a_json_mode, &JsonEnforcement::ImplicitTool);
+        assert_eq!(prompt_a_json_mode, &JsonMode::ImplicitTool);
 
         let prompt_b_json_mode = match config
             .functions
@@ -679,7 +679,7 @@ mod tests {
         {
             VariantConfig::ChatCompletion(chat_config) => &chat_config.json_mode,
         };
-        assert_eq!(prompt_b_json_mode, &JsonEnforcement::Default);
+        assert_eq!(prompt_b_json_mode, &JsonMode::Default);
     }
 
     /// Ensure that the config parsing correctly handles the `gateway.bind_address` field

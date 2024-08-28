@@ -10,8 +10,8 @@ use crate::error::Error;
 use crate::function::FunctionConfig;
 use crate::inference::types::{
     ContentBlock, FunctionType, InferenceResultChunk, InferenceResultStream, Input,
-    InputMessageContent, JSONMode, ModelInferenceRequest, ModelInferenceResponseWithMetadata,
-    RequestMessage, Role,
+    InputMessageContent, ModelInferenceRequest, ModelInferenceRequestJSONMode,
+    ModelInferenceResponseWithMetadata, RequestMessage, Role,
 };
 use crate::minijinja_util::TemplateConfig;
 use crate::tool::ToolCallConfig;
@@ -40,7 +40,7 @@ pub struct ChatCompletionConfig {
     pub max_tokens: Option<u32>,
     pub seed: Option<u32>,
     #[serde(default)]
-    pub json_mode: JsonEnforcement, // Only for JSON functions, not for chat functions
+    pub json_mode: JsonMode, // Only for JSON functions, not for chat functions
 }
 
 /// This type is used to determine how to enforce JSON mode for a given variant.
@@ -49,7 +49,7 @@ pub struct ChatCompletionConfig {
 /// This is represented as a tool config in the
 #[derive(Debug, Default, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub enum JsonEnforcement {
+pub enum JsonMode {
     #[default]
     Default,
     Strict,
@@ -275,13 +275,13 @@ impl ChatCompletionConfig {
                 max_tokens: inference_params.chat_completion.max_tokens,
                 seed: inference_params.chat_completion.seed,
                 stream,
-                json_mode: JSONMode::Off,
+                json_mode: ModelInferenceRequestJSONMode::Off,
                 function_type: FunctionType::Chat,
                 output_schema: None,
             },
             FunctionConfig::Json(json_config) => {
                 let tool_config = match self.json_mode {
-                    JsonEnforcement::ImplicitTool => Some(&json_config.implicit_tool_call_config),
+                    JsonMode::ImplicitTool => Some(&json_config.implicit_tool_call_config),
                     _ => None,
                 };
                 ModelInferenceRequest {
@@ -416,7 +416,7 @@ mod tests {
             system_template: None,
             user_template: None,
             assistant_template: None,
-            json_mode: JsonEnforcement::Default,
+            json_mode: JsonMode::Default,
             temperature: None,
             max_tokens: None,
             seed: None,
@@ -481,7 +481,7 @@ mod tests {
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
             assistant_template: Some(assistant_template_name.into()),
-            json_mode: JsonEnforcement::Default,
+            json_mode: JsonMode::Default,
             ..Default::default()
         };
 
@@ -564,7 +564,7 @@ mod tests {
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
             assistant_template: Some(assistant_template_name.into()),
-            json_mode: JsonEnforcement::Default,
+            json_mode: JsonMode::Default,
             ..Default::default()
         };
 
@@ -1382,7 +1382,7 @@ mod tests {
         assert_eq!(model_request.temperature, Some(0.5));
         assert_eq!(model_request.max_tokens, Some(100));
         assert_eq!(model_request.seed, Some(69));
-        assert_eq!(model_request.json_mode, JSONMode::On);
+        assert_eq!(model_request.json_mode, ModelInferenceRequestJSONMode::On);
         assert_eq!(model_request.output_schema, Some(&output_schema_value));
         assert_eq!(inference_params.chat_completion.temperature, Some(0.5));
         assert_eq!(inference_params.chat_completion.max_tokens, Some(100));
@@ -1408,7 +1408,7 @@ mod tests {
         assert_eq!(model_request.temperature, Some(1.));
         assert_eq!(model_request.max_tokens, Some(200));
         assert_eq!(model_request.seed, Some(420));
-        assert_eq!(model_request.json_mode, JSONMode::On);
+        assert_eq!(model_request.json_mode, ModelInferenceRequestJSONMode::On);
         assert_eq!(model_request.output_schema, Some(&output_schema_value));
         assert_eq!(inference_params.chat_completion.temperature, Some(1.));
         assert_eq!(inference_params.chat_completion.max_tokens, Some(200));

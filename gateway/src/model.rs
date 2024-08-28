@@ -332,7 +332,7 @@ mod tests {
             DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW, DUMMY_INFER_USAGE,
             DUMMY_STREAMING_RESPONSE,
         },
-        types::{ContentBlockChunk, FunctionType, JSONMode, TextChunk},
+        types::{ContentBlockChunk, FunctionType, ModelInferenceRequestJSONMode, TextChunk},
     };
     use crate::tool::{ToolCallConfig, ToolChoice};
     use tokio_stream::StreamExt;
@@ -367,7 +367,7 @@ mod tests {
             max_tokens: None,
             seed: None,
             stream: false,
-            json_mode: JSONMode::Off,
+            json_mode: ModelInferenceRequestJSONMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -423,7 +423,7 @@ mod tests {
             max_tokens: None,
             seed: None,
             stream: false,
-            json_mode: JSONMode::Off,
+            json_mode: ModelInferenceRequestJSONMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -468,7 +468,7 @@ mod tests {
             max_tokens: None,
             seed: None,
             stream: true,
-            json_mode: JSONMode::Off,
+            json_mode: ModelInferenceRequestJSONMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -553,7 +553,7 @@ mod tests {
             max_tokens: None,
             seed: None,
             stream: true,
-            json_mode: JSONMode::Off,
+            json_mode: ModelInferenceRequestJSONMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
         };

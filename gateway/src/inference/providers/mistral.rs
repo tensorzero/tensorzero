@@ -12,9 +12,9 @@ use uuid::Uuid;
 use crate::{
     error::Error,
     inference::types::{
-        ContentBlock, ContentBlockChunk, JSONMode, Latency, ModelInferenceRequest,
-        ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
-        TextChunk, Usage,
+        ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest,
+        ModelInferenceRequestJSONMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
+        ProviderInferenceResponseStream, TextChunk, Usage,
     },
     tool::{ToolCall, ToolCallChunk, ToolChoice},
 };
@@ -286,8 +286,10 @@ impl<'a> MistralRequest<'a> {
         // NB: Fireworks will throw an error if you give FireworksResponseFormat::Text and then also include tools.
         // So we just don't include it as Text is the same as None anyway.
         let response_format = match request.json_mode {
-            JSONMode::On | JSONMode::Strict => Some(MistralResponseFormat::JsonObject),
-            JSONMode::Off => None,
+            ModelInferenceRequestJSONMode::On | ModelInferenceRequestJSONMode::Strict => {
+                Some(MistralResponseFormat::JsonObject)
+            }
+            ModelInferenceRequestJSONMode::Off => None,
         };
         let messages = prepare_openai_messages(request);
         let (tools, tool_choice) = prepare_mistral_tools(request)?;
@@ -516,7 +518,7 @@ mod tests {
             max_tokens: Some(100),
             seed: Some(69),
             stream: false,
-            json_mode: JSONMode::On,
+            json_mode: ModelInferenceRequestJSONMode::On,
             tool_config: Some(&WEATHER_TOOL_CONFIG),
             function_type: FunctionType::Chat,
             output_schema: None,
