@@ -8,8 +8,9 @@ In these cases, the content creator has a rough idea of what preferences humans 
 Over time, if feedback can be collected from the user, the system can learn to produce content that satisfies the user's preferences.
 
 In this example, we'll give a stylized example of such a system. For simplicity,
-we have built a system that writes haikus to satisfy a critic with hidden preferences.
-The critic will accept or reject haikus, and the haiku writer will learn to write haikus that satisfy the critic's preferences over time.
+we have built a system that writes haikus about a variety of topics to satisfy an LLM judge with hidden preferences.
+The judge will accept or reject haikus, and the haiku writer will learn to write haikus that satisfy the judge's preferences over time.
+The judge's preferences are hidden from the haiku writer and will not change during this example.
 
 We use a list of common nouns provided by Desi Quintans [here](https://www.desiquintans.com/nounlist) as the set of topics for the haikus.
 
