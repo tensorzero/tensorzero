@@ -17,4 +17,4 @@ We use a list of common nouns provided by Desi Quintans [here](https://www.desiq
 
 We've written TensorZero configuration files to accomplish this example and have provided them in the `config` directory. See `tensorzero.toml` for the main configuration details. If you're curious what the judge's preferences are, you can look at `config/functions/judge_haiku/judge_prompt/system_template.minijinja`.
 
-To start the TensorZero gateway locally with this configuration, run `cargo run --bin gateway -- config/tensorzero.toml`.
+To start the TensorZero gateway locally with this configuration, run `docker compose up -d`.
