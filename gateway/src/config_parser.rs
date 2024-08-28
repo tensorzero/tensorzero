@@ -480,7 +480,7 @@ impl UninitializedConfig {
     fn get_config_path() -> String {
         match std::env::args().nth(1) {
             Some(path) => path,
-            None => "tensorzero.toml".to_string(),
+            None => "config/tensorzero.toml".to_string(),
         }
     }
 

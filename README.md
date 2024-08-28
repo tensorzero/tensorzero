@@ -7,14 +7,18 @@
 
 To run locally with Docker:
 
-```
-docker run -v "./config:/app/config" --env-file example.env -p 3000:3000 tensorzero/gateway
+```sh
+docker run --name tensorzero-gateway \
+  -v "./config:/app/config" \
+  --env-file example.env \
+  -p 3000:3000 \
+  tensorzero/gateway
 ```
 
 To run locally without Docker:
 
-```
-cargo run --release --bin gateway -- config/tensorzero.toml
+```sh
+cargo run --release --bin gateway -- path/to/tensorzero.toml
 ```
 
 ## Testing
