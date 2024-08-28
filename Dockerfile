@@ -25,9 +25,7 @@ RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/
 # ========== gateway ==========
 
 FROM base AS gateway
-
 COPY --from=builder /release/gateway /usr/local/bin/gateway
-
-COPY ./config ./config
-
-CMD ["gateway"]
+WORKDIR /app
+EXPOSE 3000
+CMD ["gateway", "config/tensorzero.toml"]

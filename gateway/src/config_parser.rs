@@ -1417,7 +1417,7 @@ mod tests {
     #[test]
     fn test_tensorzero_example_file() {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let config_path = format!("{}/../config/tensorzero.example.toml", manifest_dir);
+        let config_path = format!("{}/../config/tensorzero.toml", manifest_dir);
         let config_pathbuf = PathBuf::from(&config_path);
         let base_path = config_pathbuf
             .parent()
