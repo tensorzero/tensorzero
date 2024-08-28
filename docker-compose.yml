@@ -1,8 +1,0 @@
-services:
-  gateway:
-    container_name: gateway
-    build:
-      context: ./gateway
-      target: gateway
-    ports:
-      - "3000:3000"
