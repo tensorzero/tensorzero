@@ -888,7 +888,7 @@ pub type InferenceResultStream =
 impl From<&JsonMode> for ModelInferenceRequestJsonMode {
     fn from(json_enforcement: &JsonMode) -> Self {
         match json_enforcement {
-            JsonMode::Default => ModelInferenceRequestJsonMode::On,
+            JsonMode::On => ModelInferenceRequestJsonMode::On,
             JsonMode::Strict => ModelInferenceRequestJsonMode::Strict,
             JsonMode::ImplicitTool => ModelInferenceRequestJsonMode::Off,
             JsonMode::Off => ModelInferenceRequestJsonMode::Off,

@@ -50,11 +50,11 @@ pub struct ChatCompletionConfig {
 #[derive(Debug, Default, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum JsonMode {
+    Off,
     #[default]
-    Default,
+    On,
     Strict,
     ImplicitTool,
-    Off,
 }
 
 /// Maps to the subset of Config that applies to the current inference request.
@@ -416,7 +416,7 @@ mod tests {
             system_template: None,
             user_template: None,
             assistant_template: None,
-            json_mode: JsonMode::Default,
+            json_mode: JsonMode::On,
             temperature: None,
             max_tokens: None,
             seed: None,
@@ -481,7 +481,7 @@ mod tests {
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
             assistant_template: Some(assistant_template_name.into()),
-            json_mode: JsonMode::Default,
+            json_mode: JsonMode::On,
             ..Default::default()
         };
 
@@ -564,7 +564,7 @@ mod tests {
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
             assistant_template: Some(assistant_template_name.into()),
-            json_mode: JsonMode::Default,
+            json_mode: JsonMode::On,
             ..Default::default()
         };
 

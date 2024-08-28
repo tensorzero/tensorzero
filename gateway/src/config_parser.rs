@@ -679,7 +679,7 @@ mod tests {
         {
             VariantConfig::ChatCompletion(chat_config) => &chat_config.json_mode,
         };
-        assert_eq!(prompt_b_json_mode, &JsonMode::Default);
+        assert_eq!(prompt_b_json_mode, &JsonMode::On);
     }
 
     /// Ensure that the config parsing correctly handles the `gateway.bind_address` field
