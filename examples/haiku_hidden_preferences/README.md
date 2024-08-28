@@ -35,6 +35,8 @@ You can now use TensorZero recipes to learn from this experience to produce bett
 We recommend starting with supervised fine-tuning of a custom OpenAI model using the notebook in `recipes/supervised_fine_tuning/openai.ipynb`.
 Each recipe should print some additional elements to add to the `tensorzero.toml` file.
 
+You can also easily experiment with other model types, prompts you think might be better, or combinations thereof by editing the `tensorzero.toml` file and writing minijinja templates directly.
+
 ## Experimenting with improved variants
 
 Once you've generated one or more improved variants (and, critically, given them some positive weight), you should restart the TensorZero gateway with the new configuration using `docker compose restart gateway`.
