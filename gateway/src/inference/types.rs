@@ -15,7 +15,7 @@ use crate::endpoints::inference::InferenceParams;
 use crate::function::FunctionConfig;
 use crate::tool::ToolCallConfigDatabaseInsert;
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolResult};
-use crate::{error::Error, variant::JsonEnforcement};
+use crate::{error::Error, variant::JsonMode};
 
 /// Data flow in TensorZero
 ///
@@ -100,7 +100,7 @@ pub enum FunctionType {
 }
 
 #[derive(Clone, Default, Debug, PartialEq)]
-pub enum JSONMode {
+pub enum ModelInferenceRequestJsonMode {
     #[default]
     Off,
     On,
@@ -123,7 +123,7 @@ pub struct ModelInferenceRequest<'a> {
     pub max_tokens: Option<u32>,
     pub seed: Option<u32>,
     pub stream: bool,
-    pub json_mode: JSONMode,
+    pub json_mode: ModelInferenceRequestJsonMode,
     pub function_type: FunctionType,
     pub output_schema: Option<&'a Value>,
 }
@@ -891,13 +891,13 @@ pub type ProviderInferenceResponseStream =
 pub type InferenceResultStream =
     Pin<Box<dyn Stream<Item = Result<InferenceResultChunk, Error>> + Send>>;
 
-impl From<&JsonEnforcement> for JSONMode {
-    fn from(json_enforcement: &JsonEnforcement) -> Self {
+impl From<&JsonMode> for ModelInferenceRequestJsonMode {
+    fn from(json_enforcement: &JsonMode) -> Self {
         match json_enforcement {
-            JsonEnforcement::Default => JSONMode::On,
-            JsonEnforcement::Strict => JSONMode::Strict,
-            JsonEnforcement::ImplicitTool => JSONMode::Off,
-            JsonEnforcement::Off => JSONMode::Off,
+            JsonMode::On => ModelInferenceRequestJsonMode::On,
+            JsonMode::Strict => ModelInferenceRequestJsonMode::Strict,
+            JsonMode::ImplicitTool => ModelInferenceRequestJsonMode::Off,
+            JsonMode::Off => ModelInferenceRequestJsonMode::Off,
         }
     }
 }
