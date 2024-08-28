@@ -4,7 +4,7 @@
 
 Many real-world applications involve producing some content that a human responds to. For example, advertisements are designed to be shown to humans and influence them to purchase a product. Alternately, an email draft may be pre-written for a human as a starting point for their approval or editing.
 
-In these cases, the content creator has a rough idea of what preferences humans broadly have but may not know the specific preferences of a particular individual.
+In these cases, the content creator has a rough idea of what preferences humans broadly have but may not know the specific preferences of a particular individual or group.
 Over time, if feedback can be collected from the user, the system can learn to produce content that satisfies the user's preferences.
 
 In this example, we'll give a stylized example of such a system. For simplicity,

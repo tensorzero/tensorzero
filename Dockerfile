@@ -30,4 +30,4 @@ COPY --from=builder /release/gateway /usr/local/bin/gateway
 
 COPY ./config ./config
 
-CMD ["gateway"]
+ENTRYPOINT ["gateway"]
