@@ -32,7 +32,6 @@ docker compose up -d --wait
 You can run the example in the `haiku.ipynb` notebook.
 Make sure to install the dependencies in the `requirements.txt` file.
 It should not require any changes to run and will automatically connect to the TensorZero gateway you started.
-The cell that actually writes and judges the haikus will take a few minutes to run.
 
 After the haikus are judged and the feedback has been posted to the TensorZero gateway, you can see the average score for each haiku variant in the last cell of the notebook.
 If this is the first time you've run the example, you should expect a single variant with a fairly low score (typically ~15%).
