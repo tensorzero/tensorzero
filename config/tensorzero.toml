@@ -36,34 +36,34 @@ model_name = "claude-3-haiku-20240307"
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-[functions.generate-draft]
+[functions.example_generate_draft]
 type = "chat"
 system_schema = "functions/example_generate_draft/system_schema.json"
 
-[functions.generate-draft.variants.openai-promptA]
+[functions.example_generate_draft.variants.openai_promptA]
 type = "chat_completion"
 weight = 0.9
 model = "gpt-3.5-turbo"
 system_template = "functions/example_generate_draft/promptA/system_template.minijinja"
 
-[functions.generate-draft.variants.openai-promptB]
+[functions.example_generate_draft.variants.openai_promptB]
 type = "chat_completion"
 weight = 0.1
 model = "gpt-3.5-turbo"
 system_template = "functions/example_generate_draft/promptB/system_template.minijinja"
 
-[functions.extract-data]
+[functions.example_extract_data]
 type = "json"
 system_schema = "functions/example_extract_data/system_schema.json"
 output_schema = "functions/example_extract_data/output_schema.json"
 
-[functions.extract-data.variants.openai-promptA]
+[functions.example_extract_data.variants.openai_promptA]
 type = "chat_completion"
 weight = 0.9
 model = "gpt-3.5-turbo"
 system_template = "functions/example_extract_data/promptA/system_template.minijinja"
 
-[functions.extract-data.variants.openai-promptB]
+[functions.example_extract_data.variants.openai_promptB]
 type = "chat_completion"
 weight = 0.1
 model = "gpt-3.5-turbo"
@@ -73,12 +73,12 @@ system_template = "functions/example_extract_data/promptB/system_template.miniji
 # │                                  METRICS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-[metrics.task-success]
+[metrics.example_task_success]
 type = "boolean"    # "boolean", "float"
 optimize = "max"    # "min", "max"
 level = "inference" # "inference", "episode"
 
-[metrics.user-rating]
+[metrics.example_user_rating]
 type = "float"
 optimize = "max"
 level = "episode"
@@ -87,6 +87,6 @@ level = "episode"
 # │                                  TOOLS                                     │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-[tools.query-articles]
+[tools.example_query_articles]
 description = "Query articles from Wikipedia"
 parameters = "tools/example_query_articles.json"
