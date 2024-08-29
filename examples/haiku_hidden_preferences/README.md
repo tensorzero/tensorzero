@@ -35,7 +35,7 @@ It should not require any changes to run and will automatically connect to the T
 
 After the haikus are judged and the feedback has been posted to the TensorZero gateway, you can see the average score for each haiku variant in the last cell of the notebook.
 If this is the first time you've run the example, you should expect a single variant with a fairly low score (typically ~15%).
-This is because the haiku writer has no knowledge of the critic's idiosyncratice preferences.
+This is because the haiku writer has no knowledge of the critic's idiosyncratic preferences.
 
 ## Improving the Haiku Writer
 
