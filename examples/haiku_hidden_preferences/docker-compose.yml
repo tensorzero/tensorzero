@@ -28,7 +28,7 @@ services:
     volumes:
       - ./config:/app/config
     environment:
-      - CLICKHOUSE_URL=http://clickhouse:8123
+      - CLICKHOUSE_URL=http://tensorzero-clickhouse-haiku-hidden-preferences:8123
     env_file:
       - ${ENV_FILE:-.env}
     ports:
