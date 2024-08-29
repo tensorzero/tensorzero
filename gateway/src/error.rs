@@ -292,7 +292,7 @@ impl Error {
             Error::InvalidTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::JsonRequest { .. } => StatusCode::BAD_REQUEST,
             Error::JsonSchema { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::JsonSchemaValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::JsonSchemaValidation { .. } => StatusCode::BAD_REQUEST,
             Error::MiniJinjaEnvironment { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::MiniJinjaTemplate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::MiniJinjaTemplateMissing { .. } => StatusCode::INTERNAL_SERVER_ERROR,

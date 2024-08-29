@@ -221,7 +221,7 @@ async def test_json_streaming(client):
         function_name="json_success",
         input={
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": "Hello, world!"}],
+            "messages": [{"role": "user", "content": {"country": "Japan"}}],
         },
         stream=True,
     )
@@ -263,12 +263,12 @@ async def test_json_streaming(client):
 
 
 @pytest.mark.asyncio
-async def test_json_sucess(client):
+async def test_json_success(client):
     result = await client.inference(
         function_name="json_success",
         input={
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": "Hello, world!"}],
+            "messages": [{"role": "user", "content": {"country": "Japan"}}],
         },
         stream=False,
     )
