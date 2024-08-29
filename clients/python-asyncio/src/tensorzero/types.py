@@ -183,4 +183,4 @@ class TensorZeroError(Exception):
         self.response = response
 
     def __str__(self):
-        return f"TensorZeroError {self.response.status_code}: {self.response.text}"
+        return f"TensorZeroError (status code {self.response.status_code}): {self.response.text}"

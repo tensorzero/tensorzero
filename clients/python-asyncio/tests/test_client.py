@@ -339,5 +339,5 @@ async def test_tensorzero_error(client):
 
     assert (
         str(excinfo.value)
-        == 'TensorZeroError 404: {"error":"Unknown function: not_a_function"}'
+        == 'TensorZeroError (status code 404): {"error":"Unknown function: not_a_function"}'
     )
