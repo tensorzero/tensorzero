@@ -5956,7 +5956,7 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": {"country": "Japan"}
                 }
             ]},
         "stream": false,
@@ -6037,7 +6037,7 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital city of Japan?"}]
+                "content": [{"type": "text", "value": {"country": "Japan"}}]
             }
         ]
     });
@@ -6126,7 +6126,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": [{"type": "text", "value": {"country": "Japan"}}]
                 }
             ]},
         "stream": true,
@@ -6234,7 +6234,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital city of Japan?"}]
+                "content": [{"type": "text", "value": {"country": "Japan"}}]
             }
         ]
     });

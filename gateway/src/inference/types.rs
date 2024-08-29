@@ -15,7 +15,7 @@ use crate::endpoints::inference::InferenceParams;
 use crate::function::FunctionConfig;
 use crate::tool::ToolCallConfigDatabaseInsert;
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolResult};
-use crate::{error::Error, variant::JsonEnforcement};
+use crate::{error::Error, variant::JsonMode};
 
 /// Data flow in TensorZero
 ///
@@ -100,7 +100,7 @@ pub enum FunctionType {
 }
 
 #[derive(Clone, Default, Debug, PartialEq)]
-pub enum JSONMode {
+pub enum ModelInferenceRequestJsonMode {
     #[default]
     Off,
     On,
@@ -123,7 +123,7 @@ pub struct ModelInferenceRequest<'a> {
     pub max_tokens: Option<u32>,
     pub seed: Option<u32>,
     pub stream: bool,
-    pub json_mode: JSONMode,
+    pub json_mode: ModelInferenceRequestJsonMode,
     pub function_type: FunctionType,
     pub output_schema: Option<&'a Value>,
 }
@@ -352,6 +352,7 @@ impl<'de> Deserialize<'de> for InputMessage {
         #[serde(untagged)]
         enum ContentHelper {
             Single(String),
+            Object(serde_json::Map<String, Value>),
             Multiple(Vec<InputMessageContent>),
         }
 
@@ -361,6 +362,11 @@ impl<'de> Deserialize<'de> for InputMessage {
             ContentHelper::Single(text) => {
                 vec![InputMessageContent::Text {
                     value: Value::String(text),
+                }]
+            }
+            ContentHelper::Object(object) => {
+                vec![InputMessageContent::Text {
+                    value: Value::Object(object),
                 }]
             }
             ContentHelper::Multiple(content) => content,
@@ -426,7 +432,6 @@ impl ModelInferenceDatabaseInsert {
         input: String,
         inference_id: Uuid,
     ) -> Self {
-        // TODO (#30): deal with tools
         let (latency_ms, ttft_ms) = match result.latency {
             Latency::Streaming {
                 ttft,
@@ -885,13 +890,13 @@ pub type ProviderInferenceResponseStream =
 pub type InferenceResultStream =
     Pin<Box<dyn Stream<Item = Result<InferenceResultChunk, Error>> + Send>>;
 
-impl From<&JsonEnforcement> for JSONMode {
-    fn from(json_enforcement: &JsonEnforcement) -> Self {
+impl From<&JsonMode> for ModelInferenceRequestJsonMode {
+    fn from(json_enforcement: &JsonMode) -> Self {
         match json_enforcement {
-            JsonEnforcement::Default => JSONMode::On,
-            JsonEnforcement::Strict => JSONMode::Strict,
-            JsonEnforcement::ImplicitTool => JSONMode::Off,
-            JsonEnforcement::Off => JSONMode::Off,
+            JsonMode::On => ModelInferenceRequestJsonMode::On,
+            JsonMode::Strict => ModelInferenceRequestJsonMode::Strict,
+            JsonMode::ImplicitTool => ModelInferenceRequestJsonMode::Off,
+            JsonMode::Off => ModelInferenceRequestJsonMode::Off,
         }
     }
 }
@@ -899,6 +904,8 @@ impl From<&JsonEnforcement> for JSONMode {
 #[cfg(test)]
 mod tests {
     use std::time::Instant;
+
+    use serde_json::json;
 
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::providers::common::get_temperature_tool_config;
@@ -1455,5 +1462,123 @@ mod tests {
             }
             _ => panic!("Expected Json inference response"),
         }
+    }
+
+    #[test]
+    fn test_deserialize_input_message() {
+        // Test case for single string content
+        let input = json!({
+            "role": "user",
+            "content": "Hello, world!"
+        });
+        let message: InputMessage = serde_json::from_value(input).unwrap();
+        assert_eq!(message.role, Role::User);
+        assert_eq!(message.content.len(), 1);
+        match &message.content[0] {
+            InputMessageContent::Text { value } => assert_eq!(value, "Hello, world!"),
+            _ => panic!("Expected Text content"),
+        }
+
+        // Test case for object content
+        let input = json!({
+            "role": "assistant",
+            "content": {"key": "value"}
+        });
+        let message: InputMessage = serde_json::from_value(input).unwrap();
+        assert_eq!(message.role, Role::Assistant);
+        assert_eq!(message.content.len(), 1);
+        match &message.content[0] {
+            InputMessageContent::Text { value } => {
+                assert_eq!(value, &json!({"key": "value"}))
+            }
+            _ => panic!("Expected Text content"),
+        }
+
+        // Test case for multiple content items
+        let input = json!({
+            "role": "user",
+            "content": [
+                {"type": "text", "value": "Hello"},
+                {"type": "tool_call", "id": "123", "name": "test_tool", "arguments": "{}"}
+            ]
+        });
+        let message: InputMessage = serde_json::from_value(input).unwrap();
+        assert_eq!(message.role, Role::User);
+        assert_eq!(message.content.len(), 2);
+        match &message.content[0] {
+            InputMessageContent::Text { value } => assert_eq!(value, "Hello"),
+            _ => panic!("Expected Text content"),
+        }
+        match &message.content[1] {
+            InputMessageContent::ToolCall(tool_call) => {
+                assert_eq!(tool_call.id, "123");
+                assert_eq!(tool_call.name, "test_tool");
+                assert_eq!(tool_call.arguments, "{}");
+            }
+            _ => panic!("Expected ToolCall content"),
+        }
+        // Test case for multiple content items with JSON object in text block
+        let input = json!({
+            "role": "user",
+            "content": [
+                {"type": "text", "value": {"complex": "json", "with": ["nested", "array"]}},
+                {"type": "tool_call", "id": "456", "name": "another_tool", "arguments": "{\"key\": \"value\"}"}
+            ]
+        });
+        let message: InputMessage = serde_json::from_value(input).unwrap();
+        assert_eq!(message.role, Role::User);
+        assert_eq!(message.content.len(), 2);
+        match &message.content[0] {
+            InputMessageContent::Text { value } => {
+                assert_eq!(
+                    value,
+                    &json!({"complex": "json", "with": ["nested", "array"]})
+                )
+            }
+            _ => panic!("Expected Text content with JSON object"),
+        }
+        match &message.content[1] {
+            InputMessageContent::ToolCall(tool_call) => {
+                assert_eq!(tool_call.id, "456");
+                assert_eq!(tool_call.name, "another_tool");
+                assert_eq!(tool_call.arguments, "{\"key\": \"value\"}");
+            }
+            _ => panic!("Expected ToolCall content"),
+        }
+
+        // Test case for invalid role
+        let input = json!({
+            "role": "invalid_role",
+            "content": "Hello"
+        });
+        assert!(serde_json::from_value::<InputMessage>(input).is_err());
+
+        // Test case for missing role
+        let input = json!({
+            "content": "Hello"
+        });
+        assert!(serde_json::from_value::<InputMessage>(input).is_err());
+
+        // Test case for missing content
+        let input = json!({
+            "role": "user"
+        });
+        assert!(serde_json::from_value::<InputMessage>(input).is_err());
+
+        // Test case for empty content array
+        let input = json!({
+            "role": "user",
+            "content": []
+        });
+        let message: InputMessage = serde_json::from_value(input).unwrap();
+        assert_eq!(message.role, Role::User);
+        assert_eq!(message.content.len(), 0);
+
+        // Test case for invalid content type
+        let input = json!({
+            "role": "user",
+            "content": [{"type": "invalid_type", "value": "test"}]
+        });
+        assert!(serde_json::from_value::<InputMessage>(input).is_err());
     }
 }
