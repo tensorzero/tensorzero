@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
 
+import httpx
+
 # Types for non-streaming inference responses
 
 
@@ -173,3 +175,12 @@ def parse_content_block_chunk(block: Dict[str, Any]) -> ContentBlockChunk:
 @dataclass
 class FeedbackResponse:
     feedback_id: UUID
+
+
+# Custom TensorZero error type
+class TensorZeroError(Exception):
+    def __init__(self, response: httpx.Response):
+        self.response = response
+
+    def __str__(self):
+        return f"TensorZeroError {self.response.status_code}: {self.response.text}"
