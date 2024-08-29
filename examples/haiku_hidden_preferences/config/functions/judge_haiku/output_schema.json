@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "properties": {
+    "reasoning": {
+      "type": "string"
+    },
+    "score": {
+      "type": "boolean"
+    }
+  },
+  "required": ["reasoning", "score"]
+}
