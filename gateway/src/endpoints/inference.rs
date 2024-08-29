@@ -168,6 +168,7 @@ pub async fn inference_handler(
             let (chunk, stream, model_used_info) = match result {
                 Ok((chunk, stream, model_used_info)) => (chunk, stream, model_used_info),
                 Err(e) => {
+                    tracing::warn!("Variant failed: {}", e);
                     variant_errors.push(e);
                     continue;
                 }
@@ -213,6 +214,7 @@ pub async fn inference_handler(
             let result = match result {
                 Ok(result) => result,
                 Err(e) => {
+                    tracing::warn!("Variant failed: {}", e);
                     variant_errors.push(e);
                     continue;
                 }
