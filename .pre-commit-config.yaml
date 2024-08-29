@@ -50,17 +50,16 @@ repos:
         pass_filenames: false
         always_run: true
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.5.1
-    hooks:
-      - id: ruff
-        args: ["check", "--select", "I", "."]
-      - id: ruff-format
-        args: ["--check", "."]
-
   - repo: https://github.com/srstevenson/nb-clean
     rev: 3.2.0
     hooks:
       - id: nb-clean
         args:
           - --remove-empty-cells
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.3
+    hooks:
+      - id: ruff
+        args: ["--select", "I", "--fix"]
+      - id: ruff-format
