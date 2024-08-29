@@ -659,10 +659,10 @@ mod tests {
         // Check that the JSON mode is set properly on the JSON variants
         let prompt_a_json_mode = match config
             .functions
-            .get("json_with_schemas")
+            .get("json-with-schemas")
             .unwrap()
             .variants()
-            .get("openai_promptA")
+            .get("openai-promptA")
             .unwrap()
         {
             VariantConfig::ChatCompletion(chat_config) => &chat_config.json_mode,
@@ -671,22 +671,22 @@ mod tests {
 
         let prompt_b_json_mode = match config
             .functions
-            .get("json_with_schemas")
+            .get("json-with-schemas")
             .unwrap()
             .variants()
-            .get("openai_promptB")
+            .get("openai-promptB")
             .unwrap()
         {
             VariantConfig::ChatCompletion(chat_config) => &chat_config.json_mode,
         };
         assert_eq!(prompt_b_json_mode, &JsonMode::On);
         // Check that the tool choice for get_weather is set to "specific" and the correct tool
-        let function = config.functions.get("weather_helper").unwrap();
+        let function = config.functions.get("weather-helper").unwrap();
         match function {
             FunctionConfig::Chat(chat_config) => {
                 assert_eq!(
                     chat_config.tool_choice,
-                    ToolChoice::Specific("get_temperature".to_string())
+                    ToolChoice::Specific("get-temperature".to_string())
                 );
             }
             _ => panic!("Expected a chat function"),
@@ -790,9 +790,9 @@ mod tests {
     #[test]
     fn test_config_from_toml_table_missing_variants() {
         let mut config = get_sample_valid_config();
-        config["functions"]["generate_draft"]
+        config["functions"]["generate-draft"]
             .as_table_mut()
-            .expect("Failed to get `functions.generate_draft` section")
+            .expect("Failed to get `functions.generate-draft` section")
             .remove("variants")
             .expect("Failed to remove `[variants]` section");
         let base_path = PathBuf::new();
@@ -801,7 +801,7 @@ mod tests {
             result.unwrap_err(),
             Error::Config {
                 message:
-                    "Failed to parse config:\nmissing field `variants`\nin `functions.generate_draft`\n"
+                    "Failed to parse config:\nmissing field `variants`\nin `functions.generate-draft`\n"
                         .to_string()
             }
         );
@@ -811,13 +811,13 @@ mod tests {
     #[test]
     fn test_config_from_toml_table_extra_variables_root() {
         let mut config = get_sample_valid_config();
-        config.insert("enable_agi".into(), true.into());
+        config.insert("enable-agi".into(), true.into());
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, base_path);
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Failed to parse config:\nunknown field `enable_agi`, expected one of"));
+            .contains("Failed to parse config:\nunknown field `enable-agi`, expected one of"));
     }
 
     /// Ensure that the config parsing fails when there are extra variables for models
@@ -827,13 +827,13 @@ mod tests {
         config["models"]["claude-3-haiku-20240307"]
             .as_table_mut()
             .expect("Failed to get `models.claude-3-haiku-20240307` section")
-            .insert("enable_agi".into(), true.into());
+            .insert("enable-agi".into(), true.into());
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, base_path);
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Failed to parse config:\nunknown field `enable_agi`, expected"));
+            .contains("Failed to parse config:\nunknown field `enable-agi`, expected"));
     }
 
     /// Ensure that the config parsing fails when there are extra variables for providers
@@ -843,43 +843,43 @@ mod tests {
         config["models"]["claude-3-haiku-20240307"]["providers"]["anthropic"]
             .as_table_mut()
             .expect("Failed to get `models.claude-3-haiku-20240307.providers.anthropic` section")
-            .insert("enable_agi".into(), true.into());
+            .insert("enable-agi".into(), true.into());
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, base_path);
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Failed to parse config:\nunknown field `enable_agi`, expected"));
+            .contains("Failed to parse config:\nunknown field `enable-agi`, expected"));
     }
 
     /// Ensure that the config parsing fails when there are extra variables for functions
     #[test]
     fn test_config_from_toml_table_extra_variables_functions() {
         let mut config = get_sample_valid_config();
-        config["functions"]["generate_draft"]
+        config["functions"]["generate-draft"]
             .as_table_mut()
-            .expect("Failed to get `functions.generate_draft` section")
-            .insert("enable_agi".into(), true.into());
+            .expect("Failed to get `functions.generate-draft` section")
+            .insert("enable-agi".into(), true.into());
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, base_path);
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Failed to parse config:\nunknown field `enable_agi`, expected"));
+            .contains("Failed to parse config:\nunknown field `enable-agi`, expected"));
     }
 
     /// Ensure that the config parsing fails when a JSON function has no output schema
     #[test]
     fn test_config_from_toml_table_json_function_no_output_schema() {
         let mut config = get_sample_valid_config();
-        config["functions"]["json_with_schemas"]
+        config["functions"]["json-with-schemas"]
             .as_table_mut()
-            .expect("Failed to get `functions.generate_draft` section")
+            .expect("Failed to get `functions.generate-draft` section")
             .remove("output_schema");
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, base_path);
         assert!(result.unwrap_err().to_string().contains(
-            "Failed to parse config:\nmissing field `output_schema`\nin `functions.json_with_schemas`\n"
+            "Failed to parse config:\nmissing field `output_schema`\nin `functions.json-with-schemas`\n"
         ));
     }
 
@@ -887,32 +887,32 @@ mod tests {
     #[test]
     fn test_config_from_toml_table_extra_variables_variants() {
         let mut config = get_sample_valid_config();
-        config["functions"]["generate_draft"]["variants"]["openai_promptA"]
+        config["functions"]["generate-draft"]["variants"]["openai-promptA"]
             .as_table_mut()
-            .expect("Failed to get `functions.generate_draft.variants.openai_promptA` section")
-            .insert("enable_agi".into(), true.into());
+            .expect("Failed to get `functions.generate-draft.variants.openai-promptA` section")
+            .insert("enable-agi".into(), true.into());
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, base_path);
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Failed to parse config:\nunknown field `enable_agi`, expected"));
+            .contains("Failed to parse config:\nunknown field `enable-agi`, expected"));
     }
 
     /// Ensure that the config parsing fails when there are extra variables for metrics
     #[test]
     fn test_config_from_toml_table_extra_variables_metrics() {
         let mut config = get_sample_valid_config();
-        config["metrics"]["task_success"]
+        config["metrics"]["task-success"]
             .as_table_mut()
-            .expect("Failed to get `metrics.task_success` section")
-            .insert("enable_agi".into(), true.into());
+            .expect("Failed to get `metrics.task-success` section")
+            .insert("enable-agi".into(), true.into());
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, base_path);
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Failed to parse config:\nunknown field `enable_agi`, expected"));
+            .contains("Failed to parse config:\nunknown field `enable-agi`, expected"));
     }
 
     /// Ensure that the config validation fails when a model has no providers in `routing`
@@ -966,7 +966,7 @@ mod tests {
     #[test]
     fn test_config_system_schema_does_not_exist() {
         let mut sample_config = get_sample_valid_config();
-        sample_config["functions"]["templates_with_variables_chat"]["system_schema"] =
+        sample_config["functions"]["templates-with-variables-chat"]["system_schema"] =
             "non_existent_file.json".into();
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(sample_config, base_path);
@@ -977,7 +977,7 @@ mod tests {
             }
         );
         let mut sample_config = get_sample_valid_config();
-        sample_config["functions"]["templates_with_variables_json"]["system_schema"] =
+        sample_config["functions"]["templates-with-variables-json"]["system_schema"] =
             "non_existent_file.json".into();
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(sample_config, base_path);
@@ -993,7 +993,7 @@ mod tests {
     #[test]
     fn test_config_user_schema_does_not_exist() {
         let mut sample_config = get_sample_valid_config();
-        sample_config["functions"]["templates_with_variables_chat"]["user_schema"] =
+        sample_config["functions"]["templates-with-variables-chat"]["user_schema"] =
             "non_existent_file.json".into();
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(sample_config, base_path);
@@ -1004,7 +1004,7 @@ mod tests {
             }
         );
         let mut sample_config = get_sample_valid_config();
-        sample_config["functions"]["templates_with_variables_json"]["user_schema"] =
+        sample_config["functions"]["templates-with-variables-json"]["user_schema"] =
             "non_existent_file.json".into();
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(sample_config, base_path);
@@ -1020,7 +1020,7 @@ mod tests {
     #[test]
     fn test_config_assistant_schema_does_not_exist() {
         let mut sample_config = get_sample_valid_config();
-        sample_config["functions"]["templates_with_variables_chat"]["assistant_schema"] =
+        sample_config["functions"]["templates-with-variables-chat"]["assistant_schema"] =
             "non_existent_file.json".into();
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(sample_config, base_path);
@@ -1031,7 +1031,7 @@ mod tests {
             }
         );
         let mut sample_config = get_sample_valid_config();
-        sample_config["functions"]["templates_with_variables_json"]["assistant_schema"] =
+        sample_config["functions"]["templates-with-variables-json"]["assistant_schema"] =
             "non_existent_file.json".into();
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(sample_config, base_path);
@@ -1047,7 +1047,7 @@ mod tests {
     #[test]
     fn test_config_system_schema_is_needed() {
         let mut sample_config = get_sample_valid_config();
-        sample_config["functions"]["templates_with_variables_chat"]
+        sample_config["functions"]["templates-with-variables-chat"]
             .as_table_mut()
             .unwrap()
             .remove("system_schema");
@@ -1056,11 +1056,11 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `functions.templates_with_variables_chat.variants.variant_with_variables`: `system_schema` is required when `system_template` is specified".to_string()
+                message: "Invalid Config: `functions.templates-with-variables-chat.variants.variant-with-variables`: `system_schema` is required when `system_template` is specified".to_string()
             }
         );
         let mut sample_config = get_sample_valid_config();
-        sample_config["functions"]["templates_with_variables_json"]
+        sample_config["functions"]["templates-with-variables-json"]
             .as_table_mut()
             .unwrap()
             .remove("system_schema");
@@ -1069,7 +1069,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `functions.templates_with_variables_json.variants.variant_with_variables`: `system_schema` is required when `system_template` is specified".to_string()
+                message: "Invalid Config: `functions.templates-with-variables-json.variants.variant-with-variables`: `system_schema` is required when `system_template` is specified".to_string()
             }
         );
     }
@@ -1078,7 +1078,7 @@ mod tests {
     #[test]
     fn test_config_user_schema_is_needed() {
         let mut sample_config = get_sample_valid_config();
-        sample_config["functions"]["templates_with_variables_chat"]
+        sample_config["functions"]["templates-with-variables-chat"]
             .as_table_mut()
             .unwrap()
             .remove("user_schema");
@@ -1087,12 +1087,12 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `functions.templates_with_variables_chat.variants.variant_with_variables`: `user_schema` is required when `user_template` is specified".to_string()
+                message: "Invalid Config: `functions.templates-with-variables-chat.variants.variant-with-variables`: `user_schema` is required when `user_template` is specified".to_string()
             }
         );
 
         let mut sample_config = get_sample_valid_config();
-        sample_config["functions"]["templates_with_variables_json"]
+        sample_config["functions"]["templates-with-variables-json"]
             .as_table_mut()
             .unwrap()
             .remove("user_schema");
@@ -1101,7 +1101,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `functions.templates_with_variables_json.variants.variant_with_variables`: `user_schema` is required when `user_template` is specified".to_string()
+                message: "Invalid Config: `functions.templates-with-variables-json.variants.variant-with-variables`: `user_schema` is required when `user_template` is specified".to_string()
             }
         );
     }
@@ -1110,7 +1110,7 @@ mod tests {
     #[test]
     fn test_config_assistant_schema_is_needed() {
         let mut sample_config = get_sample_valid_config();
-        sample_config["functions"]["templates_with_variables_chat"]
+        sample_config["functions"]["templates-with-variables-chat"]
             .as_table_mut()
             .unwrap()
             .remove("assistant_schema");
@@ -1119,11 +1119,11 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `functions.templates_with_variables_chat.variants.variant_with_variables`: `assistant_schema` is required when `assistant_template` is specified".to_string()
+                message: "Invalid Config: `functions.templates-with-variables-chat.variants.variant-with-variables`: `assistant_schema` is required when `assistant_template` is specified".to_string()
             }
         );
         let mut sample_config = get_sample_valid_config();
-        sample_config["functions"]["templates_with_variables_json"]
+        sample_config["functions"]["templates-with-variables-json"]
             .as_table_mut()
             .unwrap()
             .remove("assistant_schema");
@@ -1132,7 +1132,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `functions.templates_with_variables_json.variants.variant_with_variables`: `assistant_schema` is required when `assistant_template` is specified".to_string()
+                message: "Invalid Config: `functions.templates-with-variables-json.variants.variant-with-variables`: `assistant_schema` is required when `assistant_template` is specified".to_string()
             }
         );
     }
@@ -1141,14 +1141,14 @@ mod tests {
     #[test]
     fn test_config_validate_function_variant_negative_weight() {
         let mut config = get_sample_valid_config();
-        config["functions"]["generate_draft"]["variants"]["openai_promptA"]["weight"] =
+        config["functions"]["generate-draft"]["variants"]["openai-promptA"]["weight"] =
             toml::Value::Float(-1.0);
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, base_path);
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `functions.generate_draft.variants.openai_promptA.weight`: must be non-negative"
+                message: "Invalid Config: `functions.generate-draft.variants.openai-promptA.weight`: must be non-negative"
                     .to_string()
             }
         );
@@ -1158,7 +1158,7 @@ mod tests {
     #[test]
     fn test_config_validate_variant_model_not_in_models() {
         let mut config = get_sample_valid_config();
-        config["functions"]["generate_draft"]["variants"]["openai_promptA"]["model"] =
+        config["functions"]["generate-draft"]["variants"]["openai-promptA"]["model"] =
             "non_existent_model".into();
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, base_path);
@@ -1166,7 +1166,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `functions.generate_draft.variants.openai_promptA`: `model` must be a valid model name".to_string()
+                message: "Invalid Config: `functions.generate-draft.variants.openai-promptA`: `model` must be a valid model name".to_string()
             }
         );
     }
@@ -1175,19 +1175,19 @@ mod tests {
     #[test]
     fn test_config_validate_variant_nonexistent_tool() {
         let mut config = get_sample_valid_config();
-        config["functions"]["generate_draft"]
+        config["functions"]["generate-draft"]
             .as_table_mut()
             .unwrap()
             .insert("tools".to_string(), toml::Value::Array(vec![]));
-        config["functions"]["generate_draft"]["tools"] =
-            toml::Value::Array(vec!["non_existent_tool".into()]);
+        config["functions"]["generate-draft"]["tools"] =
+            toml::Value::Array(vec!["non-existent-tool".into()]);
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, base_path);
 
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `functions.generate_draft.tools`: tool `non_existent_tool` is not present in the config".to_string()
+                message: "Invalid Config: `functions.generate-draft.tools`: tool `non-existent-tool` is not present in the config".to_string()
             }
         );
     }
@@ -1305,54 +1305,54 @@ mod tests {
         # │                                 FUNCTIONS                                  │
         # └────────────────────────────────────────────────────────────────────────────┘
 
-        [functions.generate_draft]
+        [functions.generate-draft]
         type = "chat"
         system_schema = "fixtures/config/functions/generate_draft/system_schema.json"
 
-        [functions.generate_draft.variants.openai_promptA]
+        [functions.generate-draft.variants.openai-promptA]
         type = "chat_completion"
         weight = 0.9
         model = "gpt-3.5-turbo"
         system_template = "fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
 
-        [functions.generate_draft.variants.openai_promptB]
+        [functions.generate-draft.variants.openai-promptB]
         type = "chat_completion"
         weight = 0.1
         model = "gpt-3.5-turbo"
         system_template = "fixtures/config/functions/generate_draft/promptB/system_template.minijinja"
 
-        [functions.json_with_schemas]
+        [functions.json-with-schemas]
         type = "json"
         system_schema = "fixtures/config/functions/json_with_schemas/system_schema.json"
         output_schema = "fixtures/config/functions/json_with_schemas/output_schema.json"
 
-        [functions.json_with_schemas.variants.openai_promptA]
+        [functions.json-with-schemas.variants.openai-promptA]
         type = "chat_completion"
         weight = 0.9
         model = "gpt-3.5-turbo"
         system_template = "fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
         json_mode = "implicit_tool"
 
-        [functions.json_with_schemas.variants.openai_promptB]
+        [functions.json-with-schemas.variants.openai-promptB]
         type = "chat_completion"
         weight = 0.1
         model = "gpt-3.5-turbo"
         system_template = "fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
 
-        [functions.weather_helper]
+        [functions.weather-helper]
         type = "chat"
-        tools = ["get_temperature"]
-        tool_choice = {specific = "get_temperature"}
+        tools = ["get-temperature"]
+        tool_choice = {specific = "get-temperature"}
 
-        [functions.weather_helper.variants.openai_promptA]
+        [functions.weather-helper.variants.openai-promptA]
         type = "chat_completion"
         weight = 1.0
         model = "gpt-3.5-turbo"
 
-        [functions.templates_without_variables_chat]
+        [functions.templates-without-variables-chat]
         type = "chat"
 
-        [functions.templates_without_variables_chat.variants.variant_without_templates]
+        [functions.templates-without-variables-chat.variants.variant-without-templates]
         type = "chat_completion"
         weight = 1.0
         model = "gpt-3.5-turbo"
@@ -1360,13 +1360,13 @@ mod tests {
         user_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"
         assistant_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"
 
-        [functions.templates_with_variables_chat]
+        [functions.templates-with-variables-chat]
         type = "chat"
         system_schema = "fixtures/config/functions/templates_with_variables/system_schema.json"
         user_schema = "fixtures/config/functions/templates_with_variables/user_schema.json"
         assistant_schema = "fixtures/config/functions/templates_with_variables/assistant_schema.json"
 
-        [functions.templates_with_variables_chat.variants.variant_with_variables]
+        [functions.templates-with-variables-chat.variants.variant-with-variables]
         type = "chat_completion"
         weight = 1.0
         model = "gpt-3.5-turbo"
@@ -1374,11 +1374,11 @@ mod tests {
         user_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
         assistant_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
 
-        [functions.templates_without_variables_json]
+        [functions.templates-without-variables-json]
         type = "json"
         output_schema = "fixtures/config/functions/json_with_schemas/output_schema.json"
 
-        [functions.templates_without_variables_json.variants.variant_without_templates]
+        [functions.templates-without-variables-json.variants.variant-without-templates]
         type = "chat_completion"
         weight = 1.0
         model = "gpt-3.5-turbo"
@@ -1386,14 +1386,14 @@ mod tests {
         user_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"
         assistant_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"
 
-        [functions.templates_with_variables_json]
+        [functions.templates-with-variables-json]
         type = "json"
         system_schema = "fixtures/config/functions/templates_with_variables/system_schema.json"
         user_schema = "fixtures/config/functions/templates_with_variables/user_schema.json"
         assistant_schema = "fixtures/config/functions/templates_with_variables/assistant_schema.json"
         output_schema = "fixtures/config/functions/json_with_schemas/output_schema.json"
 
-        [functions.templates_with_variables_json.variants.variant_with_variables]
+        [functions.templates-with-variables-json.variants.variant-with-variables]
         type = "chat_completion"
         weight = 1.0
         model = "gpt-3.5-turbo"
@@ -1405,12 +1405,12 @@ mod tests {
         # │                                  METRICS                                   │
         # └────────────────────────────────────────────────────────────────────────────┘
 
-        [metrics.task_success]
+        [metrics.task-success]
         type = "boolean"
         optimize = "max"
         level = "inference"
 
-        [metrics.user_rating]
+        [metrics.user-rating]
         type = "float"
         optimize = "max"
         level = "episode"
@@ -1418,7 +1418,7 @@ mod tests {
         # ┌────────────────────────────────────────────────────────────────────────────┐
         # │                                   TOOLS                                    │
         # └────────────────────────────────────────────────────────────────────────────┘
-        [tools.get_temperature]
+        [tools.get-temperature]
         description = "Get the weather for a given location"
         parameters = "fixtures/config/tools/get_temperature.json"
         "#;
