@@ -29,6 +29,7 @@ from tensorzero import (
     ToolCall,
     ToolCallChunk,
 )
+from tensorzero.types import TensorZeroError
 from uuid_extensions import uuid7
 
 
@@ -331,4 +332,12 @@ async def test_feedback_invalid_input(client):
         )
 
 
-# Add more tests as needed for edge cases, error handling, etc.
+@pytest.mark.asyncio
+async def test_tensorzero_error(client):
+    with pytest.raises(TensorZeroError) as excinfo:
+        await client.inference(function_name="not_a_function", input={"messages": []})
+
+    assert (
+        str(excinfo.value)
+        == 'TensorZeroError (status code 404): {"error":"Unknown function: not_a_function"}'
+    )
