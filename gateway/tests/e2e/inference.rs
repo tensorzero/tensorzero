@@ -666,7 +666,7 @@ async fn e2e_test_inference_json_success() {
                 "messages": [
                 {
                     "role": "user",
-                    "content": "Hello, world!"
+                    "content": [{"type": "text", "value": {"country": "Japan"}}]
                 }
             ]},
         "stream": false,
@@ -714,7 +714,7 @@ async fn e2e_test_inference_json_success() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "Hello, world!"}]
+                "content": [{"type": "text", "value": {"country": "Japan"}}]
             }
         ]
     });

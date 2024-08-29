@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::error::{Error, ResultExt};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, JSONMode, Latency, Role, Text, TextChunk,
+    ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequestJsonMode, Role, Text, TextChunk,
 };
 use crate::inference::types::{
     ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
@@ -565,25 +565,27 @@ impl<'a> GCPVertexGeminiRequest<'a> {
             .collect::<Result<_, _>>()?;
         let (tools, tool_config) = prepare_tools(request, model_name);
         let (response_mime_type, response_schema) = match request.json_mode {
-            JSONMode::On | JSONMode::Strict => match request.output_schema {
-                Some(output_schema) => {
-                    // According to these [docs](https://ai.google.dev/gemini-api/docs/json-mode?lang=web),
-                    // JSON mode is only supported for Gemini Pro models not Flash.
-                    let strict_json_models = ["gemini-1.5-pro-001"];
-                    let response_schema = if strict_json_models.contains(&model_name) {
-                        Some(process_output_schema(output_schema)?)
-                    } else {
-                        None
-                    };
+            ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
+                match request.output_schema {
+                    Some(output_schema) => {
+                        // According to these [docs](https://ai.google.dev/gemini-api/docs/json-mode?lang=web),
+                        // JSON mode is only supported for Gemini Pro models not Flash.
+                        let strict_json_models = ["gemini-1.5-pro-001"];
+                        let response_schema = if strict_json_models.contains(&model_name) {
+                            Some(process_output_schema(output_schema)?)
+                        } else {
+                            None
+                        };
 
-                    (
-                        Some(GCPVertexGeminiResponseMimeType::ApplicationJson),
-                        response_schema,
-                    )
+                        (
+                            Some(GCPVertexGeminiResponseMimeType::ApplicationJson),
+                            response_schema,
+                        )
+                    }
+                    None => (Some(GCPVertexGeminiResponseMimeType::ApplicationJson), None),
                 }
-                None => (Some(GCPVertexGeminiResponseMimeType::ApplicationJson), None),
-            },
-            JSONMode::Off => (None, None),
+            }
+            ModelInferenceRequestJsonMode::Off => (None, None),
         };
         let generation_config = Some(GCPVertexGeminiGenerationConfig {
             stop_sequences: None,
@@ -880,7 +882,7 @@ mod tests {
 
     use super::*;
     use crate::inference::providers::common::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
-    use crate::inference::types::{FunctionType, JSONMode};
+    use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
     use crate::tool::{ToolCallConfig, ToolResult};
 
     #[test]
@@ -1107,7 +1109,7 @@ mod tests {
             max_tokens: None,
             seed: None,
             stream: false,
-            json_mode: JSONMode::Off,
+            json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -1139,7 +1141,7 @@ mod tests {
             max_tokens: None,
             seed: None,
             stream: false,
-            json_mode: JSONMode::Off,
+            json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -1184,7 +1186,7 @@ mod tests {
             max_tokens: Some(100),
             seed: Some(69),
             stream: true,
-            json_mode: JSONMode::On,
+            json_mode: ModelInferenceRequestJsonMode::On,
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
         };
@@ -1246,7 +1248,7 @@ mod tests {
             max_tokens: Some(100),
             seed: Some(69),
             stream: true,
-            json_mode: JSONMode::On,
+            json_mode: ModelInferenceRequestJsonMode::On,
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
         };
@@ -1476,7 +1478,7 @@ mod tests {
             max_tokens: None,
             seed: None,
             stream: false,
-            json_mode: JSONMode::On,
+            json_mode: ModelInferenceRequestJsonMode::On,
             tool_config: Some(&MULTI_TOOL_CONFIG),
             function_type: FunctionType::Chat,
             output_schema: None,
@@ -1514,7 +1516,7 @@ mod tests {
             max_tokens: None,
             seed: None,
             stream: false,
-            json_mode: JSONMode::On,
+            json_mode: ModelInferenceRequestJsonMode::On,
             tool_config: Some(&MULTI_TOOL_CONFIG),
             function_type: FunctionType::Chat,
             output_schema: None,

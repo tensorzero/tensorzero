@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, JSONMode, Latency, ModelInferenceRequest,
+    ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     RequestMessage, Role, Text, TextChunk, Usage,
 };
@@ -369,11 +369,11 @@ enum OpenAIResponseFormat {
 }
 
 impl OpenAIResponseFormat {
-    fn new(json_mode: &JSONMode, output_schema: Option<&Value>) -> Self {
+    fn new(json_mode: &ModelInferenceRequestJsonMode, output_schema: Option<&Value>) -> Self {
         match json_mode {
-            JSONMode::On => OpenAIResponseFormat::JsonObject,
-            JSONMode::Off => OpenAIResponseFormat::Text,
-            JSONMode::Strict => match output_schema {
+            ModelInferenceRequestJsonMode::On => OpenAIResponseFormat::JsonObject,
+            ModelInferenceRequestJsonMode::Off => OpenAIResponseFormat::Text,
+            ModelInferenceRequestJsonMode::Strict => match output_schema {
                 Some(schema) => {
                     let json_schema = json!({"name": "response", "schema": schema.clone()});
                     OpenAIResponseFormat::JsonSchema { json_schema }
@@ -860,7 +860,7 @@ mod tests {
             max_tokens: Some(100),
             seed: Some(69),
             stream: true,
-            json_mode: JSONMode::Off,
+            json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -889,7 +889,7 @@ mod tests {
             max_tokens: None,
             seed: None,
             stream: false,
-            json_mode: JSONMode::On,
+            json_mode: ModelInferenceRequestJsonMode::On,
             tool_config: Some(&WEATHER_TOOL_CONFIG),
             function_type: FunctionType::Chat,
             output_schema: None,
@@ -932,7 +932,7 @@ mod tests {
             max_tokens: None,
             seed: None,
             stream: false,
-            json_mode: JSONMode::Strict,
+            json_mode: ModelInferenceRequestJsonMode::Strict,
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
@@ -964,7 +964,7 @@ mod tests {
             max_tokens: None,
             seed: None,
             stream: false,
-            json_mode: JSONMode::Strict,
+            json_mode: ModelInferenceRequestJsonMode::Strict,
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
@@ -1140,7 +1140,7 @@ mod tests {
             max_tokens: None,
             seed: None,
             stream: false,
-            json_mode: JSONMode::On,
+            json_mode: ModelInferenceRequestJsonMode::On,
             tool_config: Some(&MULTI_TOOL_CONFIG),
             function_type: FunctionType::Chat,
             output_schema: None,
@@ -1176,7 +1176,7 @@ mod tests {
             max_tokens: None,
             seed: None,
             stream: false,
-            json_mode: JSONMode::On,
+            json_mode: ModelInferenceRequestJsonMode::On,
             tool_config: Some(&tool_config),
             function_type: FunctionType::Chat,
             output_schema: None,
@@ -1422,23 +1422,23 @@ mod tests {
     #[test]
     fn test_new_openai_response_format() {
         // Test JSON mode On
-        let json_mode = JSONMode::On;
+        let json_mode = ModelInferenceRequestJsonMode::On;
         let output_schema = None;
         let format = OpenAIResponseFormat::new(&json_mode, output_schema);
         assert_eq!(format, OpenAIResponseFormat::JsonObject);
 
         // Test JSON mode Off
-        let json_mode = JSONMode::Off;
+        let json_mode = ModelInferenceRequestJsonMode::Off;
         let format = OpenAIResponseFormat::new(&json_mode, output_schema);
         assert_eq!(format, OpenAIResponseFormat::Text);
 
         // Test JSON mode Strict with no schema
-        let json_mode = JSONMode::Strict;
+        let json_mode = ModelInferenceRequestJsonMode::Strict;
         let format = OpenAIResponseFormat::new(&json_mode, output_schema);
         assert_eq!(format, OpenAIResponseFormat::JsonObject);
 
         // Test JSON mode Strict with schema
-        let json_mode = JSONMode::Strict;
+        let json_mode = ModelInferenceRequestJsonMode::Strict;
         let schema = serde_json::json!({
             "type": "object",
             "properties": {
