@@ -680,6 +680,17 @@ mod tests {
             VariantConfig::ChatCompletion(chat_config) => &chat_config.json_mode,
         };
         assert_eq!(prompt_b_json_mode, &JsonMode::On);
+        // Check that the tool choice for get_weather is set to "specific" and the correct tool
+        let function = config.functions.get("weather_helper").unwrap();
+        match function {
+            FunctionConfig::Chat(chat_config) => {
+                assert_eq!(
+                    chat_config.tool_choice,
+                    ToolChoice::Specific("get_temperature".to_string())
+                );
+            }
+            _ => panic!("Expected a chat function"),
+        }
     }
 
     /// Ensure that the config parsing correctly handles the `gateway.bind_address` field
@@ -1331,6 +1342,7 @@ mod tests {
         [functions.weather_helper]
         type = "chat"
         tools = ["get_temperature"]
+        tool_choice = {specific = "get_temperature"}
 
         [functions.weather_helper.variants.openai_promptA]
         type = "chat_completion"
