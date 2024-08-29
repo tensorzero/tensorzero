@@ -11,7 +11,7 @@ Over time, if feedback signals can be collected, the system can learn to produce
 Here we present a stylized example of such a system.
 We've built a system that writes haikus about a variety of topics to satisfy an LLM judge with hidden preferences.
 The judge accepts or rejects haikus, and the haiku writer needs to learn to write haikus that satisfy the judge's preferences.
-The judge's preferences are hidden from the haiku writer and do not change during over time.
+The judge's preferences are hidden from the haiku writer and do not change over time.
 
 We use a [list of common nouns](https://www.desiquintans.com/nounlist) as the set of topics for the haikus.
 
