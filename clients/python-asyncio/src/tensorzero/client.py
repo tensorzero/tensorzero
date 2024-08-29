@@ -28,6 +28,7 @@ from .types import (
     FeedbackResponse,
     InferenceChunk,
     InferenceResponse,
+    TensorZeroError,
     parse_inference_chunk,
     parse_inference_response,
 )
@@ -111,7 +112,10 @@ class AsyncTensorZeroGateway:
         if parallel_tool_calls is not None:
             data["parallel_tool_calls"] = parallel_tool_calls
         response = await self.client.post(url, json=data)
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise TensorZeroError(response) from e
         if not stream:
             return parse_inference_response(response.json())
         else:
@@ -157,7 +161,10 @@ class AsyncTensorZeroGateway:
             data["inference_id"] = str(inference_id)
         url = urljoin(self.base_url, "feedback")
         response = await self.client.post(url, json=data)
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise TensorZeroError(response) from e
         feedback_result = FeedbackResponse(**response.json())
         return feedback_result
 
