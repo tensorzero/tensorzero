@@ -974,16 +974,16 @@ async fn e2e_test_streaming() {
     for (i, chunk) in chunks.iter().enumerate() {
         let chunk_json: Value = serde_json::from_str(chunk).unwrap();
         if i < DUMMY_STREAMING_RESPONSE.len() {
-            let content = chunk_json.get("content").unwrap().as_array().unwrap();
-            assert_eq!(content.len(), 1);
-            let content_block = content.first().unwrap();
+            let output = chunk_json.get("output").unwrap().as_array().unwrap();
+            assert_eq!(output.len(), 1);
+            let content_block = output.first().unwrap();
             let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
             assert_eq!(content_block_type, "text");
             let content = content_block.get("text").unwrap().as_str().unwrap();
             assert_eq!(content, DUMMY_STREAMING_RESPONSE[i]);
         } else {
             assert!(chunk_json
-                .get("content")
+                .get("output")
                 .unwrap()
                 .as_array()
                 .unwrap()
@@ -1124,16 +1124,16 @@ async fn e2e_test_streaming_dryrun() {
     for (i, chunk) in chunks.iter().enumerate() {
         let chunk_json: Value = serde_json::from_str(chunk).unwrap();
         if i < DUMMY_STREAMING_RESPONSE.len() {
-            let content = chunk_json.get("content").unwrap().as_array().unwrap();
-            assert_eq!(content.len(), 1);
-            let content_block = content.first().unwrap();
+            let output = chunk_json.get("output").unwrap().as_array().unwrap();
+            assert_eq!(output.len(), 1);
+            let content_block = output.first().unwrap();
             let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
             assert_eq!(content_block_type, "text");
             let content = content_block.get("text").unwrap().as_str().unwrap();
             assert_eq!(content, DUMMY_STREAMING_RESPONSE[i]);
         } else {
             assert!(chunk_json
-                .get("content")
+                .get("output")
                 .unwrap()
                 .as_array()
                 .unwrap()
@@ -1197,9 +1197,9 @@ async fn e2e_test_tool_call_streaming() {
     for (i, chunk) in chunks.iter().enumerate() {
         let chunk_json: Value = serde_json::from_str(chunk).unwrap();
         if i < DUMMY_STREAMING_TOOL_RESPONSE.len() {
-            let content = chunk_json.get("content").unwrap().as_array().unwrap();
-            assert_eq!(content.len(), 1);
-            let content_block = content.first().unwrap();
+            let output = chunk_json.get("output").unwrap().as_array().unwrap();
+            assert_eq!(output.len(), 1);
+            let content_block = output.first().unwrap();
             let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
             assert_eq!(content_block_type, "tool_call");
             let new_arguments = content_block.get("arguments").unwrap().as_str().unwrap();
@@ -1218,7 +1218,7 @@ async fn e2e_test_tool_call_streaming() {
             }
         } else {
             assert!(chunk_json
-                .get("content")
+                .get("output")
                 .unwrap()
                 .as_array()
                 .unwrap()

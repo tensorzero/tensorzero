@@ -491,7 +491,7 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
         let chunk_episode_id = Uuid::parse_str(chunk_episode_id).unwrap();
         assert_eq!(chunk_episode_id, episode_id);
 
-        let content_blocks = chunk_json.get("content").unwrap().as_array().unwrap();
+        let content_blocks = chunk_json.get("output").unwrap().as_array().unwrap();
         if !content_blocks.is_empty() {
             let content_block = content_blocks.first().unwrap();
             let content = content_block.get("text").unwrap().as_str().unwrap();
@@ -901,7 +901,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
         let chunk_episode_id = Uuid::parse_str(chunk_episode_id).unwrap();
         assert_eq!(chunk_episode_id, episode_id);
 
-        let content_blocks = chunk_json.get("content").unwrap().as_array().unwrap();
+        let content_blocks = chunk_json.get("output").unwrap().as_array().unwrap();
         if !content_blocks.is_empty() {
             let content_block = content_blocks.first().unwrap();
             let content = content_block.get("text").unwrap().as_str().unwrap();
@@ -1352,7 +1352,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
         let chunk_episode_id = Uuid::parse_str(chunk_episode_id).unwrap();
         assert_eq!(chunk_episode_id, episode_id);
 
-        for block in chunk_json.get("content").unwrap().as_array().unwrap() {
+        for block in chunk_json.get("output").unwrap().as_array().unwrap() {
             assert!(block.get("id").is_some());
 
             let block_type = block.get("type").unwrap().as_str().unwrap();
@@ -1846,7 +1846,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
         let chunk_episode_id = Uuid::parse_str(chunk_episode_id).unwrap();
         assert_eq!(chunk_episode_id, episode_id);
 
-        for block in chunk_json.get("content").unwrap().as_array().unwrap() {
+        for block in chunk_json.get("output").unwrap().as_array().unwrap() {
             assert!(block.get("id").is_some());
 
             let block_type = block.get("type").unwrap().as_str().unwrap();
@@ -2387,7 +2387,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
         let chunk_episode_id = Uuid::parse_str(chunk_episode_id).unwrap();
         assert_eq!(chunk_episode_id, episode_id);
 
-        for block in chunk_json.get("content").unwrap().as_array().unwrap() {
+        for block in chunk_json.get("output").unwrap().as_array().unwrap() {
             assert!(block.get("id").is_some());
 
             let block_type = block.get("type").unwrap().as_str().unwrap();
@@ -2897,7 +2897,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
         let chunk_episode_id = Uuid::parse_str(chunk_episode_id).unwrap();
         assert_eq!(chunk_episode_id, episode_id);
 
-        for block in chunk_json.get("content").unwrap().as_array().unwrap() {
+        for block in chunk_json.get("output").unwrap().as_array().unwrap() {
             assert!(block.get("id").is_some());
 
             let block_type = block.get("type").unwrap().as_str().unwrap();
@@ -3473,7 +3473,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
         let chunk_episode_id = Uuid::parse_str(chunk_episode_id).unwrap();
         assert_eq!(chunk_episode_id, episode_id);
 
-        for block in chunk_json.get("content").unwrap().as_array().unwrap() {
+        for block in chunk_json.get("output").unwrap().as_array().unwrap() {
             assert!(block.get("id").is_some());
 
             let block_type = block.get("type").unwrap().as_str().unwrap();
@@ -4034,7 +4034,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
         let chunk_episode_id = Uuid::parse_str(chunk_episode_id).unwrap();
         assert_eq!(chunk_episode_id, episode_id);
 
-        for block in chunk_json.get("content").unwrap().as_array().unwrap() {
+        for block in chunk_json.get("output").unwrap().as_array().unwrap() {
             assert!(block.get("id").is_some());
 
             let block_type = block.get("type").unwrap().as_str().unwrap();
@@ -4544,7 +4544,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
         let chunk_episode_id = Uuid::parse_str(chunk_episode_id).unwrap();
         assert_eq!(chunk_episode_id, episode_id);
 
-        let content_blocks = chunk_json.get("content").unwrap().as_array().unwrap();
+        let content_blocks = chunk_json.get("output").unwrap().as_array().unwrap();
         if !content_blocks.is_empty() {
             let content_block = content_blocks.first().unwrap();
             let content = content_block.get("text").unwrap().as_str().unwrap();
@@ -5056,7 +5056,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         let chunk_episode_id = Uuid::parse_str(chunk_episode_id).unwrap();
         assert_eq!(chunk_episode_id, episode_id);
 
-        for block in chunk_json.get("content").unwrap().as_array().unwrap() {
+        for block in chunk_json.get("output").unwrap().as_array().unwrap() {
             assert!(block.get("id").is_some());
 
             let block_type = block.get("type").unwrap().as_str().unwrap();
@@ -5634,7 +5634,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
         let chunk_episode_id = Uuid::parse_str(chunk_episode_id).unwrap();
         assert_eq!(chunk_episode_id, episode_id);
 
-        for block in chunk_json.get("content").unwrap().as_array().unwrap() {
+        for block in chunk_json.get("output").unwrap().as_array().unwrap() {
             assert!(block.get("id").is_some());
 
             let block_type = block.get("type").unwrap().as_str().unwrap();
