@@ -837,9 +837,12 @@ mod tests {
         assert_eq!(
             result,
             Error::ModelProvidersExhausted {
-                provider_errors: vec![Error::InferenceClient {
-                    message: "Error sending request to Dummy provider.".to_string()
-                }]
+                provider_errors: HashMap::from([(
+                    "error".to_string(),
+                    Error::InferenceClient {
+                        message: "Error sending request to Dummy provider.".to_string()
+                    }
+                )])
             }
         );
 
@@ -1159,7 +1162,10 @@ mod tests {
                 provider_errors, ..
             }) => {
                 assert_eq!(provider_errors.len(), 1);
-                assert!(matches!(provider_errors[0], Error::InferenceClient { .. }));
+                assert!(matches!(
+                    provider_errors["error_provider"],
+                    Error::InferenceClient { .. }
+                ));
             }
             _ => panic!("Expected ModelProvidersExhausted error"),
         }

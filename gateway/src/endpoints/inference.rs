@@ -136,7 +136,7 @@ pub async fn inference_handler(
     let stream = params.stream.unwrap_or(false);
 
     // Keep track of which variants failed
-    let mut variant_errors = vec![];
+    let mut variant_errors = std::collections::HashMap::new();
     let inference_config = InferenceConfig {
         templates: &config.templates,
         tool_config: tool_config.as_ref(),
@@ -168,7 +168,12 @@ pub async fn inference_handler(
             let (chunk, stream, model_used_info) = match result {
                 Ok((chunk, stream, model_used_info)) => (chunk, stream, model_used_info),
                 Err(e) => {
-                    variant_errors.push(e);
+                    tracing::warn!(
+                        "functions.{function_name:?}.variants.{variant_name:?} failed during inference: {e}",
+                        function_name = params.function_name,
+                        variant_name = variant_name,
+                    );
+                    variant_errors.insert(variant_name.to_string(), e);
                     continue;
                 }
             };
@@ -213,7 +218,12 @@ pub async fn inference_handler(
             let result = match result {
                 Ok(result) => result,
                 Err(e) => {
-                    variant_errors.push(e);
+                    tracing::warn!(
+                        "functions.{function_name}.variants.{variant_name} failed during inference: {e}",
+                        function_name = params.function_name,
+                        variant_name = variant_name,
+                    );
+                    variant_errors.insert(variant_name.to_string(), e);
                     continue;
                 }
             };
