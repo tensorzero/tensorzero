@@ -648,16 +648,23 @@ max_tokens = 100
 
 [functions.weather_helper_parallel]
 type = "chat"
-system_schema = "../../fixtures/config/functions/weather_helper/system_schema.json"
+system_schema = "../../fixtures/config/functions/weather_helper_parallel/system_schema.json"
 tools = ["get_temperature", "get_humidity"]
 tool_choice = "auto"
 # We use an inference-time parameter to set `parallel_tool_calls = true` for the test
+
+[functions.weather_helper_parallel.variants.fireworks-firefunction]
+type = "chat_completion"
+weight = 0
+model = "firefunction-v2"
+system_template = "../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
+max_tokens = 100
 
 [functions.weather_helper_parallel.variants.openai]
 type = "chat_completion"
 weight = 1
 model = "gpt-4o-mini-2024-07-18"
-system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+system_template = "../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
 max_tokens = 100
 
 # ┌────────────────────────────────────────────────────────────────────────────┐

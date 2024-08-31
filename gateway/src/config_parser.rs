@@ -1148,8 +1148,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `functions.generate_draft.variants.openai_promptA.weight`: must be non-negative"
-                    .to_string()
+                message: "Invalid Config: `functions.generate_draft.variants.openai_promptA.weight`: must be non-negative".to_string()
             }
         );
     }
