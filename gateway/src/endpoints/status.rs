@@ -23,11 +23,11 @@ pub async fn health_handler(
             StatusCode::SERVICE_UNAVAILABLE,
             Json(json!({
                 "gateway": "ok",
-                "clickhouse": "error"
+                "database": "error"
             })),
         ));
     }
-    Ok(Json(json!({ "gateway": "ok", "clickhouse": "ok" })))
+    Ok(Json(json!({ "gateway": "ok", "database": "ok" })))
 }
 
 #[cfg(test)]

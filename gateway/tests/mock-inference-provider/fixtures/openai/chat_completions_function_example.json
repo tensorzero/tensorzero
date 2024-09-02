@@ -25,8 +25,8 @@
   "model": "gpt-3.5-turbo-0613",
   "object": "chat.completion",
   "usage": {
-    "output_tokens": 17,
-    "input_tokens": 57,
+    "completion_tokens": 17,
+    "prompt_tokens": 57,
     "total_tokens": 74
   }
 }
