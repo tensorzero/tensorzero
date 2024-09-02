@@ -208,7 +208,7 @@ pub enum InferenceResult<'a> {
 pub struct ChatInferenceResult<'a> {
     pub inference_id: Uuid,
     created: u64,
-    pub output: Vec<ContentBlockOutput>,
+    pub content: Vec<ContentBlockOutput>,
     pub usage: Usage,
     pub model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
 }
@@ -531,11 +531,11 @@ impl<'a> ChatInferenceResult<'a> {
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards")
             .as_secs();
-        let output = Self::parse_output(raw_content, tool_config).await;
+        let content = Self::parse_output(raw_content, tool_config).await;
         Self {
             inference_id,
             created,
-            output,
+            content,
             usage,
             model_inference_results,
         }
@@ -589,7 +589,7 @@ impl InferenceDatabaseInsert {
         let inference_params = metadata.inference_params;
         match inference_response {
             InferenceResult::Chat(chat_response) => {
-                let output = serde_json::to_string(&chat_response.output)
+                let output = serde_json::to_string(&chat_response.content)
                     .map_err(|e| Error::Serialization {
                         message: format!("Failed to serialize output: {}", e),
                     })
@@ -946,7 +946,7 @@ mod tests {
         )
         .await;
         let output_content = ["Hello, world!".to_string().into()];
-        assert_eq!(chat_inference_response.output, output_content);
+        assert_eq!(chat_inference_response.content, output_content);
         assert_eq!(chat_inference_response.usage, usage);
         assert_eq!(chat_inference_response.model_inference_results.len(), 1);
         let model_inference_result = chat_inference_response
@@ -985,8 +985,8 @@ mod tests {
             Some(&weather_tool_config),
         )
         .await;
-        assert_eq!(chat_inference_response.output.len(), 1);
-        let tool_call_block = chat_inference_response.output.first().unwrap();
+        assert_eq!(chat_inference_response.content.len(), 1);
+        let tool_call_block = chat_inference_response.content.first().unwrap();
         match tool_call_block {
             ContentBlockOutput::ToolCall(tool_call) => {
                 assert_eq!(tool_call.name, "get_temperature");
@@ -1026,8 +1026,8 @@ mod tests {
             Some(&weather_tool_config),
         )
         .await;
-        assert_eq!(chat_inference_response.output.len(), 1);
-        let tool_call_block = chat_inference_response.output.first().unwrap();
+        assert_eq!(chat_inference_response.content.len(), 1);
+        let tool_call_block = chat_inference_response.content.first().unwrap();
         match tool_call_block {
             ContentBlockOutput::ToolCall(tool_call) => {
                 assert_eq!(tool_call.name, "bad name");
@@ -1067,8 +1067,8 @@ mod tests {
             Some(&weather_tool_config),
         )
         .await;
-        assert_eq!(chat_inference_response.output.len(), 1);
-        let tool_call_block = chat_inference_response.output.first().unwrap();
+        assert_eq!(chat_inference_response.content.len(), 1);
+        let tool_call_block = chat_inference_response.content.first().unwrap();
         match tool_call_block {
             ContentBlockOutput::ToolCall(tool_call) => {
                 assert_eq!(tool_call.name, "get_temperature");
@@ -1167,7 +1167,10 @@ mod tests {
         };
         assert_eq!(chat_result.inference_id, inference_id);
         assert_eq!(chat_result.created, created);
-        assert_eq!(chat_result.output, vec!["Hello, world!".to_string().into()]);
+        assert_eq!(
+            chat_result.content,
+            vec!["Hello, world!".to_string().into()]
+        );
         assert_eq!(
             chat_result.usage,
             Usage {
@@ -1364,7 +1367,7 @@ mod tests {
             assert_eq!(chat_response.inference_id, inference_id);
             assert_eq!(chat_response.created, created);
             assert_eq!(
-                chat_response.output,
+                chat_response.content,
                 vec!["{\"name\":\"John\",\"age\":30}".to_string().into()]
             );
             assert_eq!(chat_response.usage, usage);
