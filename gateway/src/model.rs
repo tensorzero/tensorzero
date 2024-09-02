@@ -41,7 +41,7 @@ impl ModelConfig {
         request: &'request ModelInferenceRequest<'request>,
         client: &'request Client,
     ) -> Result<ModelInferenceResponse<'a>, Error> {
-        let mut provider_errors: Vec<Error> = Vec::new();
+        let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
             let provider_config =
                 self.providers
@@ -52,14 +52,16 @@ impl ModelConfig {
             let response = provider_config.infer(request, client).await;
             match response {
                 Ok(response) => {
-                    for error in &provider_errors {
+                    for error in provider_errors.values() {
                         error.log();
                     }
                     let model_inference_response =
                         ModelInferenceResponse::new(response, provider_name);
                     return Ok(model_inference_response);
                 }
-                Err(error) => provider_errors.push(error),
+                Err(error) => {
+                    provider_errors.insert(provider_name.to_string(), error);
+                }
             }
         }
         Err(Error::ModelProvidersExhausted { provider_errors })
@@ -77,7 +79,7 @@ impl ModelConfig {
         ),
         Error,
     > {
-        let mut provider_errors: Vec<Error> = Vec::new();
+        let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
             let provider_config =
                 self.providers
@@ -88,13 +90,15 @@ impl ModelConfig {
             let response = provider_config.infer_stream(request, client).await;
             match response {
                 Ok(response) => {
-                    for error in &provider_errors {
+                    for error in provider_errors.values() {
                         error.log();
                     }
                     let (chunk, stream) = response;
                     return Ok((chunk, stream, provider_name));
                 }
-                Err(error) => provider_errors.push(error),
+                Err(error) => {
+                    provider_errors.insert(provider_name.to_string(), error);
+                }
             }
         }
         Err(Error::ModelProvidersExhausted { provider_errors })
@@ -217,9 +221,11 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 location,
                 project_id,
             } => {
-                // If the environment variable is not set, we will simply have None as our credentials.
-                let credentials_path = env::var("GCP_VERTEX_CREDENTIALS_PATH").ok();
-                // If the environment variable is set, we will load and validate (as much as possible)
+                // If the environment variable is not set or is empty, we will have None as our credentials.
+                let credentials_path = env::var("GCP_VERTEX_CREDENTIALS_PATH")
+                    .ok()
+                    .filter(|s| !s.is_empty());
+                // If the environment variable is set and non-empty, we will load and validate (as much as possible)
                 // the credentials from the path. If this fails, we will throw an error and stop the startup.
                 let credentials = match credentials_path {
                     Some(path) => Some(GCPCredentials::from_env(path.as_str()).map_err(|e| {
@@ -395,9 +401,12 @@ mod tests {
         assert_eq!(
             response,
             Error::ModelProvidersExhausted {
-                provider_errors: vec![Error::InferenceClient {
-                    message: "Error sending request to Dummy provider.".to_string()
-                }]
+                provider_errors: HashMap::from([(
+                    "error".to_string(),
+                    Error::InferenceClient {
+                        message: "Error sending request to Dummy provider.".to_string()
+                    }
+                )])
             }
         );
     }
@@ -526,9 +535,12 @@ mod tests {
         assert_eq!(
             error,
             Error::ModelProvidersExhausted {
-                provider_errors: vec![Error::InferenceClient {
-                    message: "Error sending request to Dummy provider.".to_string()
-                }]
+                provider_errors: HashMap::from([(
+                    "error".to_string(),
+                    Error::InferenceClient {
+                        message: "Error sending request to Dummy provider.".to_string()
+                    }
+                )])
             }
         );
     }
