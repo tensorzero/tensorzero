@@ -27,6 +27,7 @@ use crate::{error::Error, variant::JsonMode};
 pub struct Input {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system: Option<Value>,
+    #[serde(default)]
     pub messages: Vec<InputMessage>,
 }
 
