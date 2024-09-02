@@ -299,9 +299,9 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let output = response_json.get("output").unwrap().as_array().unwrap();
-    assert_eq!(output.len(), 1);
-    let content_block = output.first().unwrap();
+    let content = response_json.get("content").unwrap().as_array().unwrap();
+    assert_eq!(content.len(), 1);
+    let content_block = content.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
@@ -696,9 +696,9 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let output = response_json.get("output").unwrap().as_array().unwrap();
-    assert_eq!(output.len(), 1);
-    let content_block = output.first().unwrap();
+    let content = response_json.get("content").unwrap().as_array().unwrap();
+    assert_eq!(content.len(), 1);
+    let content_block = content.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
@@ -1094,9 +1094,9 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let output = response_json.get("output").unwrap().as_array().unwrap();
-    assert!(!output.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output
+    let content = response_json.get("content").unwrap().as_array().unwrap();
+    assert!(!content.is_empty()); // could be > 1 if the model returns text as well
+    let content_block = content
         .iter()
         .find(|block| block["type"] == "tool_call")
         .unwrap();
@@ -1178,7 +1178,7 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
 
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(output_clickhouse, *output);
+    assert_eq!(output_clickhouse, *content);
 
     let tool_params: Value =
         serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
@@ -1627,11 +1627,14 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let output = response_json.get("output").unwrap().as_array().unwrap();
-    assert!(!output.iter().any(|block| block["type"] == "tool_call"));
-    let content_block = output.iter().find(|block| block["type"] == "text").unwrap();
-    let content = content_block.get("text").unwrap().as_str().unwrap();
-    assert!(content.to_lowercase().contains("mehta"));
+    let content = response_json.get("content").unwrap().as_array().unwrap();
+    assert!(!content.iter().any(|block| block["type"] == "tool_call"));
+    let content_block = content
+        .iter()
+        .find(|block| block["type"] == "text")
+        .unwrap();
+    let content_block_text = content_block.get("text").unwrap().as_str().unwrap();
+    assert!(content_block_text.to_lowercase().contains("mehta"));
 
     let usage = response_json.get("usage").unwrap();
     let usage = usage.as_object().unwrap();
@@ -1684,7 +1687,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
 
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(output_clickhouse, *output);
+    assert_eq!(output_clickhouse, *content);
 
     let tool_params: Value =
         serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
@@ -2113,9 +2116,9 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let output = response_json.get("output").unwrap().as_array().unwrap();
-    assert!(!output.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output
+    let content = response_json.get("content").unwrap().as_array().unwrap();
+    assert!(!content.is_empty()); // could be > 1 if the model returns text as well
+    let content_block = content
         .iter()
         .find(|block| block["type"] == "tool_call")
         .unwrap();
@@ -2200,7 +2203,7 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
 
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(output_clickhouse, *output);
+    assert_eq!(output_clickhouse, *content);
 
     let tool_params: Value =
         serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
@@ -2672,9 +2675,12 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let output = response_json.get("output").unwrap().as_array().unwrap();
-    assert!(!output.iter().any(|block| block["type"] == "tool_call"));
-    let content_block = output.iter().find(|block| block["type"] == "text").unwrap();
+    let content = response_json.get("content").unwrap().as_array().unwrap();
+    assert!(!content.iter().any(|block| block["type"] == "tool_call"));
+    let content_block = content
+        .iter()
+        .find(|block| block["type"] == "text")
+        .unwrap();
     assert!(content_block.get("text").unwrap().as_str().is_some());
 
     let usage = response_json.get("usage").unwrap();
@@ -2728,7 +2734,7 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
 
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(output_clickhouse, *output);
+    assert_eq!(output_clickhouse, *content);
 
     let tool_params: Value =
         serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
@@ -3167,9 +3173,9 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let output = response_json.get("output").unwrap().as_array().unwrap();
-    assert!(!output.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output
+    let content = response_json.get("content").unwrap().as_array().unwrap();
+    assert!(!content.is_empty()); // could be > 1 if the model returns text as well
+    let content_block = content
         .iter()
         .find(|block| block["type"] == "tool_call")
         .unwrap();
@@ -3245,7 +3251,7 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
 
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(output_clickhouse, *output);
+    assert_eq!(output_clickhouse, *content);
 
     let tool_params: Value =
         serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
@@ -3789,9 +3795,9 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let output = response_json.get("output").unwrap().as_array().unwrap();
-    assert!(!output.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output
+    let content = response_json.get("content").unwrap().as_array().unwrap();
+    assert!(!content.is_empty()); // could be > 1 if the model returns text as well
+    let content_block = content
         .iter()
         .find(|block| block["type"] == "tool_call")
         .unwrap();
@@ -3867,7 +3873,7 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
 
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(output_clickhouse, *output);
+    assert_eq!(output_clickhouse, *content);
 
     let tool_params: Value =
         serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
@@ -4309,9 +4315,9 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let output = response_json.get("output").unwrap().as_array().unwrap();
-    assert_eq!(output.len(), 1);
-    let content_block = output.first().unwrap();
+    let content = response_json.get("content").unwrap().as_array().unwrap();
+    assert_eq!(content.len(), 1);
+    let content_block = content.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
     let content = content_block.get("text").unwrap().as_str().unwrap();
@@ -4781,9 +4787,9 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let output = response_json.get("output").unwrap().as_array().unwrap();
-    assert!(!output.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output
+    let content = response_json.get("content").unwrap().as_array().unwrap();
+    assert!(!content.is_empty()); // could be > 1 if the model returns text as well
+    let content_block = content
         .iter()
         .find(|block| block["type"] == "tool_call")
         .unwrap();
@@ -4865,7 +4871,7 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
 
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(output_clickhouse, *output);
+    assert_eq!(output_clickhouse, *content);
 
     let tool_params: Value =
         serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
@@ -5322,10 +5328,10 @@ pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let output = response_json.get("output").unwrap().as_array().unwrap();
+    let content = response_json.get("content").unwrap().as_array().unwrap();
 
     // Validate the `get_temperature` tool call
-    let content_block = output
+    let content_block = content
         .iter()
         .find(|block| block["name"] == "get_temperature")
         .unwrap();
@@ -5349,7 +5355,7 @@ pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2
     assert!(units == "celsius");
 
     // Validate the `get_humidity` tool call
-    let content_block = output
+    let content_block = content
         .iter()
         .find(|block| block["name"] == "get_humidity")
         .unwrap();
@@ -5430,7 +5436,7 @@ pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2
 
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(output_clickhouse, *output);
+    assert_eq!(output_clickhouse, *content);
 
     let tool_params: Value =
         serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();

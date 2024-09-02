@@ -70,7 +70,7 @@ async fn test_inference_with_explicit_region() {
     // Check Response is OK, then fields in order
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
-    let content_blocks = response_json.get("output").unwrap().as_array().unwrap();
+    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
     assert!(content_blocks.len() == 1);
     let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
