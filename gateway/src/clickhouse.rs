@@ -33,13 +33,15 @@ impl ClickHouseConnectionInfo {
         let database_url = set_e2e_test_database(database_url);
 
         let mut database = String::new();
+
+        // Get the database name from the query string
         for (key, value) in database_url.query_pairs() {
             if key == "database" {
                 database = value.to_string();
                 break;
             }
         }
-
+        // If there is no database name, we use the "default" database
         if database.is_empty() {
             database = "default".to_string();
         }
@@ -180,11 +182,14 @@ impl ClickHouseConnectionInfo {
                 ..
             } => {
                 let query = format!("CREATE DATABASE IF NOT EXISTS {}", database);
+                // In order to create the database, we need to remove the database query parameter from the URL
                 let base_url = {
                     let mut base_url = database_url.clone();
                     {
                         // Need to put a code block here just to drop the query_pairs before any awaits happen
                         let mut query_pairs = base_url.query_pairs_mut();
+                        // We clear the query pairs to remove the database parameter and then add back all other query parameters
+                        // This is because query_pairs_mut() does not have a way to remove a single query parameter
                         query_pairs.clear();
                         for (key, value) in database_url.query_pairs() {
                             if key != "database" {
@@ -271,7 +276,7 @@ async fn write_production(
 }
 
 #[cfg(feature = "e2e_tests")]
-/// Sets the database for the ClickHouse client to e2e_test for the duration of the test.
+/// Sets the database for the ClickHouse client to tensorzero_e2e_tests for the duration of the test.
 fn set_e2e_test_database(database_url: Url) -> Url {
     let mut new_database_url = database_url.clone();
     new_database_url.set_query(Some("database=tensorzero_e2e_tests"));
