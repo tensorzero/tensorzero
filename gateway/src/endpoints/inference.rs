@@ -409,7 +409,7 @@ struct ChatInferenceResponse {
     inference_id: Uuid,
     episode_id: Uuid,
     variant_name: String,
-    output: Vec<ContentBlockOutput>,
+    content: Vec<ContentBlockOutput>,
     usage: Usage,
 }
 
@@ -429,7 +429,7 @@ impl InferenceResponse {
                 inference_id: result.inference_id,
                 episode_id,
                 variant_name,
-                output: result.output,
+                content: result.content,
                 usage: result.usage,
             }),
             InferenceResult::Json(result) => InferenceResponse::Json(JsonInferenceResponse {
