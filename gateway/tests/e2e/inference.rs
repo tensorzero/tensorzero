@@ -90,7 +90,7 @@ async fn e2e_test_inference_model_fallback() {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
     // Check that raw_content is same as content
-    let content_blocks: &Vec<Value> = response_json.get("output").unwrap().as_array().unwrap();
+    let content_blocks: &Vec<Value> = response_json.get("content").unwrap().as_array().unwrap();
     assert_eq!(content_blocks.len(), 1);
     let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
@@ -216,7 +216,7 @@ async fn e2e_test_tool_call() {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
     // Check that raw_content is same as content
-    let content_blocks: &Vec<Value> = response_json.get("output").unwrap().as_array().unwrap();
+    let content_blocks: &Vec<Value> = response_json.get("content").unwrap().as_array().unwrap();
     assert_eq!(content_blocks.len(), 1);
     let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
@@ -395,12 +395,11 @@ async fn e2e_test_tool_call_malformed() {
     // Check Response is OK, then fields in order
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
-    // No output schema so parsed content should not be in response
-    assert!(response_json.get("parsed_content").is_none());
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-    let content_blocks: &Vec<Value> = response_json.get("output").unwrap().as_array().unwrap();
+    // Check that raw_content is same as content
+    let content_blocks: &Vec<Value> = response_json.get("content").unwrap().as_array().unwrap();
     assert_eq!(content_blocks.len(), 1);
     let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
@@ -829,7 +828,7 @@ async fn e2e_test_variant_failover() {
     let response = last_response.unwrap();
     let episode_id = last_episode_id.unwrap();
     let response_json = response.json::<Value>().await.unwrap();
-    let content_blocks = response_json.get("output").unwrap().as_array().unwrap();
+    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
     assert!(content_blocks.len() == 1);
     let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();

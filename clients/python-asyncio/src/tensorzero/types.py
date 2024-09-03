@@ -58,12 +58,12 @@ InferenceResponse = Union[ChatInferenceResponse, JsonInferenceResponse]
 
 
 def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
-    if "output" in data and isinstance(data["output"], list):
+    if "content" in data and isinstance(data["content"], list):
         return ChatInferenceResponse(
             inference_id=UUID(data["inference_id"]),
             episode_id=UUID(data["episode_id"]),
             variant_name=data["variant_name"],
-            output=[parse_content_block(block) for block in data["output"]],
+            output=[parse_content_block(block) for block in data["content"]],
             usage=Usage(**data["usage"]),
         )
     elif "output" in data and isinstance(data["output"], dict):
