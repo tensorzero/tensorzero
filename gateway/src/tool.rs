@@ -193,11 +193,11 @@ pub struct ToolCall {
 /// in the form that we return to the client / ClickHouse
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ToolCallOutput {
-    pub raw_name: String,
-    pub raw_arguments: String,
+    pub arguments: Option<Value>,
     pub id: String,
     pub name: Option<String>,
-    pub arguments: Option<Value>,
+    pub raw_arguments: String,
+    pub raw_name: String,
 }
 
 impl ToolCallOutput {
@@ -225,11 +225,11 @@ impl ToolCallOutput {
             None => None,
         };
         Self {
-            raw_name: tool_call.name.clone(),
-            raw_arguments: tool_call.arguments.clone(),
+            arguments: parsed_arguments,
             id: tool_call.id,
             name: parsed_name,
-            arguments: parsed_arguments,
+            raw_arguments: tool_call.arguments.clone(),
+            raw_name: tool_call.name.clone(),
         }
     }
 }
