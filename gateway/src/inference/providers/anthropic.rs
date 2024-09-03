@@ -655,13 +655,13 @@ fn anthropic_to_tensorzero_stream_message(
                     // This is necessary because the ToolCallChunk must always contain the tool name and ID
                     // even though Anthropic only sends the tool ID and name in the ToolUse chunk and not InputJSONDelta
                     vec![ContentBlockChunk::ToolCall(ToolCallChunk {
-                        name: current_tool_name.clone().ok_or(Error::AnthropicServer {
+                        raw_name: current_tool_name.clone().ok_or(Error::AnthropicServer {
                             message: "Got InputJsonDelta chunk from Anthropic without current tool name being set by a ToolUse".to_string(),
                         })?,
                         id: current_tool_id.clone().ok_or(Error::AnthropicServer {
                             message: "Got InputJsonDelta chunk from Anthropic without current tool id being set by a ToolUse".to_string(),
                         })?,
-                        arguments: partial_json,
+                        raw_arguments: partial_json,
                     })],
                     None,
                     raw_message,
@@ -697,9 +697,9 @@ fn anthropic_to_tensorzero_stream_message(
                     inference_id,
                     vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                         id,
-                        name,
+                        raw_name: name,
                         // As far as I can tell this is always {} so we ignore
-                        arguments: "".to_string(),
+                        raw_arguments: "".to_string(),
                     })],
                     None,
                     raw_message,
@@ -1592,8 +1592,8 @@ mod tests {
         match &chunk.content[0] {
             ContentBlockChunk::ToolCall(tool_call) => {
                 assert_eq!(tool_call.id, "tool_id".to_string());
-                assert_eq!(tool_call.name, "tool_name".to_string());
-                assert_eq!(tool_call.arguments, "aaaa: bbbbb".to_string());
+                assert_eq!(tool_call.raw_name, "tool_name".to_string());
+                assert_eq!(tool_call.raw_arguments, "aaaa: bbbbb".to_string());
             }
             _ => panic!("Expected a tool call content block"),
         }
@@ -1623,8 +1623,8 @@ mod tests {
         match &chunk.content[0] {
             ContentBlockChunk::ToolCall(tool_call) => {
                 assert_eq!(tool_call.id, "tool1".to_string());
-                assert_eq!(tool_call.name, "calculator".to_string());
-                assert_eq!(tool_call.arguments, "".to_string());
+                assert_eq!(tool_call.raw_name, "calculator".to_string());
+                assert_eq!(tool_call.raw_arguments, "".to_string());
             }
             _ => panic!("Expected a tool call content block"),
         }

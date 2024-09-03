@@ -289,13 +289,13 @@ fn bedrock_to_tensorzero_stream_message(
                             // This is necessary because the ToolCallChunk must always contain the tool name and ID
                             // even though AWS Bedrock only sends the tool ID and name in the ToolUse chunk and not InputJSONDelta
                             vec![ContentBlockChunk::ToolCall(ToolCallChunk {
-                                name: current_tool_name.clone().ok_or(Error::AWSBedrockServer {
+                                raw_name: current_tool_name.clone().ok_or(Error::AWSBedrockServer {
                                     message: "Got InputJsonDelta chunk from AWS Bedrock without current tool name being set by a ToolUse".to_string(),
                                 })?,
                                 id: current_tool_id.clone().ok_or(Error::AWSBedrockServer {
                                     message: "Got InputJsonDelta chunk from AWS Bedrock without current tool id being set by a ToolUse".to_string(),
                                 })?,
-                                arguments: tool_use.input,
+                                raw_arguments: tool_use.input,
                             })],
                             None,
                             raw_message,
@@ -322,8 +322,8 @@ fn bedrock_to_tensorzero_stream_message(
                         inference_id,
                         vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                             id: tool_use.tool_use_id,
-                            name: tool_use.name,
-                            arguments: "".to_string(),
+                            raw_name: tool_use.name,
+                            raw_arguments: "".to_string(),
                         })],
                         None,
                         raw_message,
