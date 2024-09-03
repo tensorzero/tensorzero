@@ -14,20 +14,22 @@ class Usage:
 
 
 @dataclass
-class Text:
+class ContentBlock:
+    pass
+
+
+@dataclass
+class Text(ContentBlock):
     text: str
 
 
 @dataclass
-class ToolCall:
+class ToolCall(ContentBlock):
     raw_name: str
     raw_arguments: Dict[str, Any]
     id: str
     name: Optional[str]
     arguments: Optional[Dict[str, Any]]
-
-
-ContentBlock = Union[Text, ToolCall]
 
 
 @dataclass
