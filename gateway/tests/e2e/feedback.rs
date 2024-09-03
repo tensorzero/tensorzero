@@ -1,13 +1,8 @@
-use gateway::clickhouse::ClickHouseConnectionInfo;
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use crate::common::{get_gateway_endpoint, select_feedback_clickhouse};
-
-lazy_static::lazy_static! {
-    static ref CLICKHOUSE_URL: String = std::env::var("CLICKHOUSE_URL").expect("CLICKHOUSE_URL must be set");
-}
+use crate::common::{get_clickhouse, get_gateway_endpoint, select_feedback_clickhouse};
 
 #[tokio::test]
 async fn e2e_test_comment_feedback() {
@@ -28,8 +23,7 @@ async fn e2e_test_comment_feedback() {
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
 
     // Check ClickHouse
-    let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests").unwrap();
+    let clickhouse = get_clickhouse().await;
     let result = select_feedback_clickhouse(&clickhouse, "CommentFeedback", feedback_id)
         .await
         .unwrap();
@@ -61,8 +55,7 @@ async fn e2e_test_comment_feedback() {
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
 
     // Check ClickHouse
-    let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests").unwrap();
+    let clickhouse = get_clickhouse().await;
     let result = select_feedback_clickhouse(&clickhouse, "CommentFeedback", feedback_id)
         .await
         .unwrap();
@@ -98,8 +91,7 @@ async fn e2e_test_demonstration_feedback() {
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
 
     // Check ClickHouse
-    let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests").unwrap();
+    let clickhouse = get_clickhouse().await;
     let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
         .await
         .unwrap();
@@ -150,8 +142,7 @@ async fn e2e_test_float_feedback() {
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
 
     // Check ClickHouse
-    let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests").unwrap();
+    let clickhouse = get_clickhouse().await;
     let result = select_feedback_clickhouse(&clickhouse, "FloatMetricFeedback", feedback_id)
         .await
         .unwrap();
@@ -247,8 +238,7 @@ async fn e2e_test_boolean_feedback() {
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
 
     // Check ClickHouse
-    let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests").unwrap();
+    let clickhouse = get_clickhouse().await;
     let result = select_feedback_clickhouse(&clickhouse, "BooleanMetricFeedback", feedback_id)
         .await
         .unwrap();
