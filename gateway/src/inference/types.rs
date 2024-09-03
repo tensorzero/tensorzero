@@ -989,11 +989,11 @@ mod tests {
         let tool_call_block = chat_inference_response.output.first().unwrap();
         match tool_call_block {
             ContentBlockOutput::ToolCall(tool_call) => {
-                assert_eq!(tool_call.name, "get_temperature");
-                assert_eq!(tool_call.arguments, r#"{"where": "the moon"}"#);
+                assert_eq!(tool_call.raw_name, "get_temperature");
+                assert_eq!(tool_call.raw_arguments, r#"{"where": "the moon"}"#);
                 assert_eq!(tool_call.id, "0");
-                assert_eq!(tool_call.parsed_name, Some("get_temperature".to_string()));
-                assert_eq!(tool_call.parsed_arguments, None);
+                assert_eq!(tool_call.name, Some("get_temperature".to_string()));
+                assert_eq!(tool_call.arguments, None);
             }
             _ => panic!("Expected a tool call block"),
         }
@@ -1030,11 +1030,11 @@ mod tests {
         let tool_call_block = chat_inference_response.output.first().unwrap();
         match tool_call_block {
             ContentBlockOutput::ToolCall(tool_call) => {
-                assert_eq!(tool_call.name, "bad name");
-                assert_eq!(tool_call.arguments, r#"{"where": "the moon"}"#);
+                assert_eq!(tool_call.raw_name, "bad name");
+                assert_eq!(tool_call.raw_arguments, r#"{"where": "the moon"}"#);
                 assert_eq!(tool_call.id, "0");
-                assert_eq!(tool_call.parsed_name, None);
-                assert_eq!(tool_call.parsed_arguments, None);
+                assert_eq!(tool_call.name, None);
+                assert_eq!(tool_call.arguments, None);
             }
             _ => panic!("Expected a tool call block"),
         }
@@ -1071,15 +1071,15 @@ mod tests {
         let tool_call_block = chat_inference_response.output.first().unwrap();
         match tool_call_block {
             ContentBlockOutput::ToolCall(tool_call) => {
-                assert_eq!(tool_call.name, "get_temperature");
+                assert_eq!(tool_call.raw_name, "get_temperature");
                 assert_eq!(
-                    tool_call.arguments,
+                    tool_call.raw_arguments,
                     r#"{"location": "the moon", "units": "celsius"}"#
                 );
                 assert_eq!(tool_call.id, "0");
-                assert_eq!(tool_call.parsed_name, Some("get_temperature".to_string()));
+                assert_eq!(tool_call.name, Some("get_temperature".to_string()));
                 assert_eq!(
-                    tool_call.parsed_arguments,
+                    tool_call.arguments,
                     Some(
                         serde_json::from_str(r#"{"location": "the moon", "units": "celsius"}"#)
                             .unwrap()

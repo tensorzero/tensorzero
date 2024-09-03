@@ -947,14 +947,14 @@ mod tests {
                 let tool_call = &chat_response.output[0];
                 match tool_call {
                     ContentBlockOutput::ToolCall(tool_call) => {
-                        assert_eq!(tool_call.name, "get_temperature");
+                        assert_eq!(tool_call.raw_name, "get_temperature");
                         assert_eq!(
-                            tool_call.arguments,
+                            tool_call.raw_arguments,
                             r#"{"location":"Brooklyn","units":"celsius"}"#
                         );
-                        assert_eq!(tool_call.parsed_name, Some("get_temperature".to_string()));
+                        assert_eq!(tool_call.name, Some("get_temperature".to_string()));
                         assert_eq!(
-                            tool_call.parsed_arguments,
+                            tool_call.arguments,
                             Some(json!({"location": "Brooklyn", "units": "celsius"}))
                         );
                     }

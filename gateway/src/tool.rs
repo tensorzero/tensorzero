@@ -193,11 +193,11 @@ pub struct ToolCall {
 /// in the form that we return to the client / ClickHouse
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ToolCallOutput {
-    pub name: String,
-    pub arguments: String,
+    pub raw_name: String,
+    pub raw_arguments: String,
     pub id: String,
-    pub parsed_name: Option<String>,
-    pub parsed_arguments: Option<Value>,
+    pub name: Option<String>,
+    pub arguments: Option<Value>,
 }
 
 impl ToolCallOutput {
@@ -225,11 +225,11 @@ impl ToolCallOutput {
             None => None,
         };
         Self {
-            name: tool_call.name.clone(),
-            arguments: tool_call.arguments.clone(),
+            raw_name: tool_call.name.clone(),
+            raw_arguments: tool_call.arguments.clone(),
             id: tool_call.id,
-            parsed_name,
-            parsed_arguments,
+            name: parsed_name,
+            arguments: parsed_arguments,
         }
     }
 }
@@ -606,18 +606,15 @@ mod tests {
         .unwrap();
         // Tool call is valid, so we should get a valid ToolCallOutput
         let tool_call_output = ToolCallOutput::new(tool_call, Some(&tool_call_config)).await;
-        assert_eq!(tool_call_output.name, "get_temperature");
+        assert_eq!(tool_call_output.raw_name, "get_temperature");
         assert_eq!(
-            tool_call_output.arguments,
+            tool_call_output.raw_arguments,
             "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}"
         );
         assert_eq!(tool_call_output.id, "123");
+        assert_eq!(tool_call_output.name, Some("get_temperature".to_string()));
         assert_eq!(
-            tool_call_output.parsed_name,
-            Some("get_temperature".to_string())
-        );
-        assert_eq!(
-            tool_call_output.parsed_arguments,
+            tool_call_output.arguments,
             Some(json!({
                 "location": "San Francisco",
                 "unit": "celsius"
@@ -631,15 +628,12 @@ mod tests {
             id: "321".to_string(),
         };
         let tool_call_output = ToolCallOutput::new(tool_call, Some(&tool_call_config)).await;
-        assert_eq!(
-            tool_call_output.parsed_name,
-            Some("get_temperature".to_string())
-        );
-        assert_eq!(tool_call_output.parsed_arguments, None);
+        assert_eq!(tool_call_output.name, Some("get_temperature".to_string()));
+        assert_eq!(tool_call_output.arguments, None);
         assert_eq!(tool_call_output.id, "321");
-        assert_eq!(tool_call_output.name, "get_temperature");
+        assert_eq!(tool_call_output.raw_name, "get_temperature");
         assert_eq!(
-            tool_call_output.arguments,
+            tool_call_output.raw_arguments,
             "{\"location\": \"San Francisco\", \"unit\": \"kelvin\"}"
         );
 
@@ -650,12 +644,12 @@ mod tests {
             id: "321".to_string(),
         };
         let tool_call_output = ToolCallOutput::new(tool_call, Some(&tool_call_config)).await;
-        assert_eq!(tool_call_output.parsed_name, None);
-        assert_eq!(tool_call_output.parsed_arguments, None);
+        assert_eq!(tool_call_output.name, None);
+        assert_eq!(tool_call_output.arguments, None);
         assert_eq!(tool_call_output.id, "321");
-        assert_eq!(tool_call_output.name, "get_wether");
+        assert_eq!(tool_call_output.raw_name, "get_wether");
         assert_eq!(
-            tool_call_output.arguments,
+            tool_call_output.raw_arguments,
             "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}"
         );
 
@@ -683,15 +677,18 @@ mod tests {
             id: "321".to_string(),
         };
         let tool_call_output = ToolCallOutput::new(tool_call, Some(&tool_call_config)).await;
-        assert_eq!(tool_call_output.name, "establish_campground");
-        assert_eq!(tool_call_output.arguments, "{\"location\": \"Lucky Dog\"}");
+        assert_eq!(tool_call_output.raw_name, "establish_campground");
+        assert_eq!(
+            tool_call_output.raw_arguments,
+            "{\"location\": \"Lucky Dog\"}"
+        );
         assert_eq!(tool_call_output.id, "321");
         assert_eq!(
-            tool_call_output.parsed_name,
+            tool_call_output.name,
             Some("establish_campground".to_string())
         );
         assert_eq!(
-            tool_call_output.parsed_arguments,
+            tool_call_output.arguments,
             Some(json!({"location": "Lucky Dog"}))
         );
     }
