@@ -273,8 +273,8 @@ pub enum ToolChoice {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ToolCallChunk {
     pub id: String,
-    pub name: String,
-    pub arguments: String,
+    pub raw_name: String,
+    pub raw_arguments: String,
 }
 
 pub const IMPLICIT_TOOL_NAME: &str = "respond";

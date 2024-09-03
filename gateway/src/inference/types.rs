@@ -722,7 +722,7 @@ impl From<ProviderInferenceResponseChunk> for ChatInferenceResultChunk {
 impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
     fn from(mut chunk: ProviderInferenceResponseChunk) -> Self {
         let raw = match chunk.content.pop() {
-            Some(ContentBlockChunk::ToolCall(tool_call)) => tool_call.arguments.to_owned(),
+            Some(ContentBlockChunk::ToolCall(tool_call)) => tool_call.raw_arguments.to_owned(),
             Some(ContentBlockChunk::Text(text)) => text.text.to_owned(),
             None => String::new(),
         };
@@ -805,7 +805,9 @@ pub async fn collect_chunks<'a>(
                                 // If there is already a tool call block with this id, append to it
                                 Some(ContentBlock::ToolCall(existing_tool_call)) => {
                                     // We assume that the name and ID are present and complete in the first chunk
-                                    existing_tool_call.arguments.push_str(&tool_call.arguments);
+                                    existing_tool_call
+                                        .arguments
+                                        .push_str(&tool_call.raw_arguments);
                                 }
                                 // If there is no tool call block, create one
                                 _ => {
@@ -879,8 +881,8 @@ impl From<ToolCallChunk> for ToolCall {
         // as well as for Chat and Tool-style Functions
         Self {
             id: tool_call.id,
-            name: tool_call.name,
-            arguments: tool_call.arguments,
+            name: tool_call.raw_name,
+            arguments: tool_call.raw_arguments,
         }
     }
 }
