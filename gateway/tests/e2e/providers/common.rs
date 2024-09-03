@@ -44,8 +44,8 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_inference_params_streaming_inference_request_with_provider;
         use $crate::providers::common::test_json_mode_inference_request_with_provider;
         use $crate::providers::common::test_json_mode_streaming_inference_request_with_provider;
-        use $crate::providers::common::test_parallel_tool_use_tool_choice_auto_used_inference_request_with_provider;
-        use $crate::providers::common::test_parallel_tool_use_tool_choice_auto_used_streaming_inference_request_with_provider;
+        use $crate::providers::common::test_parallel_tool_use_inference_request_with_provider;
+        use $crate::providers::common::test_parallel_tool_use_streaming_inference_request_with_provider;
         use $crate::providers::common::test_simple_inference_request_with_provider;
         use $crate::providers::common::test_simple_streaming_inference_request_with_provider;
         use $crate::providers::common::test_tool_multi_turn_inference_request_with_provider;
@@ -224,18 +224,18 @@ macro_rules! generate_provider_tests {
         }
 
         #[tokio::test]
-        async fn test_parallel_tool_use_tool_choice_auto_used_inference_request() {
+        async fn test_parallel_tool_use_inference_request() {
             let providers = $func().await.parallel_tool_use_inference;
             for provider in providers {
-                test_parallel_tool_use_tool_choice_auto_used_inference_request_with_provider(provider).await;
+                test_parallel_tool_use_inference_request_with_provider(provider).await;
             }
         }
 
         #[tokio::test]
-        async fn test_parallel_tool_use_tool_choice_auto_used_streaming_inference_request() {
+        async fn test_parallel_tool_use_streaming_inference_request() {
             let providers = $func().await.parallel_tool_use_inference;
             for provider in providers {
-                test_parallel_tool_use_tool_choice_auto_used_streaming_inference_request_with_provider(provider).await;
+                test_parallel_tool_use_streaming_inference_request_with_provider(provider).await;
             }
         }
 
@@ -5284,9 +5284,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     assert!(ttft_ms <= response_time_ms);
 }
 
-pub async fn test_parallel_tool_use_tool_choice_auto_used_inference_request_with_provider(
-    provider: E2ETestProvider,
-) {
+pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -5572,7 +5570,7 @@ pub async fn test_parallel_tool_use_tool_choice_auto_used_inference_request_with
     assert!(result.get("ttft_ms").unwrap().is_null());
 }
 
-pub async fn test_parallel_tool_use_tool_choice_auto_used_streaming_inference_request_with_provider(
+pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
     let episode_id = Uuid::now_v7();

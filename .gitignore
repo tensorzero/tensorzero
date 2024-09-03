@@ -25,7 +25,13 @@ Cargo.lock
 __pycache__/
 *.py[cod]
 *$py.class
-.ipynb_checkpoints/
 
-# Python distribution
+# Environment variables
+.env
+.envrc
+
+
+# Python
+.ipynb_checkpoints/
 dist/
+.venv/
