@@ -877,8 +877,6 @@ pub async fn collect_chunks<'a>(
 
 impl From<ToolCallChunk> for ToolCall {
     fn from(tool_call: ToolCallChunk) -> Self {
-        // TODO (#30): explicitly handle tools both for streaming and non-streaming
-        // as well as for Chat and Tool-style Functions
         Self {
             id: tool_call.id,
             name: tool_call.raw_name,
