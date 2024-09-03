@@ -690,8 +690,8 @@ impl From<GCPVertexGeminiResponseContentPart> for ContentBlockChunk {
                     .ok_or_log()
                     .unwrap_or_default();
                 ContentBlockChunk::ToolCall(ToolCallChunk {
-                    name: function_call.name,
-                    arguments,
+                    raw_name: function_call.name,
+                    raw_arguments: arguments,
                     id: "0".to_string(),
                 })
             }

@@ -481,8 +481,8 @@ fn mistral_to_tensorzero_chunk(
             for tool_call in tool_calls {
                 content.push(ContentBlockChunk::ToolCall(ToolCallChunk {
                     id: tool_call.id,
-                    name: tool_call.function.name,
-                    arguments: tool_call.function.arguments,
+                    raw_name: tool_call.function.name,
+                    raw_arguments: tool_call.function.arguments,
                 }));
             }
         }
