@@ -24,10 +24,6 @@ import pytest_asyncio
 from tensorzero import (
     AsyncTensorZeroGateway,
     FeedbackResponse,
-    Text,
-    TextChunk,
-    ToolCall,
-    ToolCallChunk,
 )
 from tensorzero.types import TensorZeroError
 from uuid_extensions import uuid7
@@ -51,7 +47,7 @@ async def test_basic_inference(client):
     assert result.variant_name == "test"
     output = result.output
     assert len(output) == 1
-    assert isinstance(output[0], Text)
+    assert output[0].type == "text"
     assert (
         output[0].text
         == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
@@ -103,7 +99,7 @@ async def test_inference_streaming(client):
         assert variant_name == "test"
         if i + 1 < len(chunks):
             assert len(chunk.content) == 1
-            assert isinstance(chunk.content[0], TextChunk)
+            assert chunk.content[0].type == "text"
             assert chunk.content[0].text == expected_text[i]
         else:
             assert len(chunk.content) == 0
@@ -128,7 +124,7 @@ async def test_tool_call_inference(client):
     assert result.variant_name == "variant"
     output = result.output
     assert len(output) == 1
-    assert isinstance(output[0], ToolCall)
+    assert output[0].type == "tool_call"
     assert output[0].raw_name == "get_temperature"
     assert output[0].id == "0"
     assert output[0].raw_arguments == '{"location":"Brooklyn","units":"celsius"}'
@@ -157,7 +153,7 @@ async def test_malformed_tool_call_inference(client):
     assert result.variant_name == "bad_tool"
     output = result.output
     assert len(output) == 1
-    assert isinstance(output[0], ToolCall)
+    assert output[0].type == "tool_call"
     assert output[0].raw_name == "get_temperature"
     assert output[0].id == "0"
     assert output[0].raw_arguments == '{"location":"Brooklyn","units":"Celsius"}'
@@ -204,7 +200,7 @@ async def test_tool_call_streaming(client):
         assert variant_name == "variant"
         if i + 1 < len(chunks):
             assert len(chunk.content) == 1
-            assert isinstance(chunk.content[0], ToolCallChunk)
+            assert chunk.content[0].type == "tool_call"
             assert chunk.content[0].raw_name == "get_temperature"
             assert chunk.content[0].id == "0"
             assert chunk.content[0].raw_arguments == expected_text[i]
