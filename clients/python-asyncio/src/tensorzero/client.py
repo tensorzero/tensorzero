@@ -47,6 +47,7 @@ class AsyncTensorZeroGateway:
 
     async def inference(
         self,
+        *,
         function_name: str,
         input: Dict[str, Any],
         episode_id: Optional[UUID] = None,
@@ -123,6 +124,7 @@ class AsyncTensorZeroGateway:
 
     async def feedback(
         self,
+        *,
         metric_name: str,
         value: Any,
         inference_id: Optional[UUID] = None,
