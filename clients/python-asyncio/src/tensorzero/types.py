@@ -20,11 +20,11 @@ class Text:
 
 @dataclass
 class ToolCall:
-    name: str
-    arguments: Dict[str, Any]
+    raw_name: str
+    raw_arguments: Dict[str, Any]
     id: str
-    parsed_name: Optional[str]
-    parsed_arguments: Optional[Dict[str, Any]]
+    name: Optional[str]
+    arguments: Optional[Dict[str, Any]]
 
 
 ContentBlock = Union[Text, ToolCall]
@@ -84,11 +84,11 @@ def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
         return Text(text=block["text"])
     elif block_type == "tool_call":
         return ToolCall(
-            name=block["name"],
-            arguments=block["arguments"],
+            raw_name=block["raw_name"],
+            raw_arguments=block["raw_arguments"],
             id=block["id"],
-            parsed_name=block.get("parsed_name"),
-            parsed_arguments=block.get("parsed_arguments"),
+            name=block.get("name"),
+            arguments=block.get("arguments"),
         )
     else:
         raise ValueError(f"Unknown content block type: {block}")
@@ -107,11 +107,11 @@ class TextChunk:
 
 @dataclass
 class ToolCallChunk:
-    name: str
+    raw_name: str
     # This is the tool call ID that many LLM APIs use to associate tool calls with tool responses
     id: str
-    # `arguments` will come as partial JSON
-    arguments: str
+    # `raw_arguments` will come as partial JSON
+    raw_arguments: str
 
 
 ContentBlockChunk = Union[TextChunk, ToolCallChunk]
@@ -165,7 +165,9 @@ def parse_content_block_chunk(block: Dict[str, Any]) -> ContentBlockChunk:
         return TextChunk(id=block["id"], text=block["text"])
     elif block_type == "tool_call":
         return ToolCallChunk(
-            name=block["name"], id=block["id"], arguments=block["arguments"]
+            raw_name=block["raw_name"],
+            id=block["id"],
+            raw_arguments=block["raw_arguments"],
         )
     else:
         raise ValueError(f"Unknown content block type: {block}")
