@@ -295,7 +295,6 @@ mod tests {
         );
         let config = Config {
             gateway: GatewayConfig::default(),
-            clickhouse: None,
             models: HashMap::new(),
             metrics,
             functions: HashMap::new(),
@@ -411,7 +410,6 @@ mod tests {
         metrics.insert("test_metric".to_string(), metric_config);
         let config = Config {
             gateway: GatewayConfig::default(),
-            clickhouse: None,
             models: HashMap::new(),
             metrics,
             functions: HashMap::new(),

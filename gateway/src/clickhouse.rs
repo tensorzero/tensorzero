@@ -16,23 +16,40 @@ pub enum ClickHouseConnectionInfo {
         healthy: bool,
     },
     Production {
-        base_url: Url,
+        database_url: Url,
         database: String,
         client: Client,
     },
 }
 
 impl ClickHouseConnectionInfo {
-    pub fn new(base_url: &str, database: &str) -> Result<Self, Error> {
+    pub fn new(database_url: &str) -> Result<Self, Error> {
         // Add a query string for the database using the URL crate
-        let base_url = Url::parse(base_url).map_err(|e| Error::Config {
-            message: format!("Invalid ClickHouse base URL: {}", e),
+        let database_url = Url::parse(database_url).map_err(|e| Error::Config {
+            message: format!("Invalid ClickHouse database URL: {}", e),
         })?;
 
+        #[cfg(feature = "e2e_tests")]
+        let database_url = set_e2e_test_database(database_url);
+
+        let mut database = String::new();
+        for (key, value) in database_url.query_pairs() {
+            if key == "database" {
+                database = value.to_string();
+                break;
+            }
+        }
+
+        if database.is_empty() {
+            database = "default".to_string();
+        }
+
+        let client = Client::new();
+
         Ok(Self::Production {
-            base_url,
-            database: database.to_string(),
-            client: Client::new(),
+            database_url,
+            database,
+            client,
         })
     }
 
@@ -55,20 +72,6 @@ impl ClickHouseConnectionInfo {
         }
     }
 
-    fn get_url(&self) -> String {
-        match self {
-            Self::Disabled => "".to_string(),
-            Self::Mock { .. } => "".to_string(),
-            Self::Production {
-                base_url, database, ..
-            } => {
-                let mut url = base_url.clone();
-                url.query_pairs_mut().append_pair("database", database);
-                url.to_string()
-            }
-        }
-    }
-
     pub async fn write(
         &self,
         row: &(impl Serialize + Send + Sync),
@@ -79,9 +82,11 @@ impl ClickHouseConnectionInfo {
             Self::Mock { mock_data, .. } => {
                 write_mock(row, table, &mut mock_data.write().await).await
             }
-            Self::Production { client, .. } => {
-                write_production(&self.get_url(), client, row, table).await
-            }
+            Self::Production {
+                database_url,
+                client,
+                ..
+            } => write_production(database_url, client, row, table).await,
         }
     }
 
@@ -120,8 +125,10 @@ impl ClickHouseConnectionInfo {
                 }
             }
             Self::Production {
-                base_url, client, ..
-            } => match client.get(base_url.to_string()).send().await {
+                database_url,
+                client,
+                ..
+            } => match client.get(database_url.clone()).send().await {
                 Ok(_) => Ok(()),
                 Err(e) => Err(format!("ClickHouse is not healthy: {}", e).into()),
             },
@@ -132,9 +139,13 @@ impl ClickHouseConnectionInfo {
         match self {
             Self::Disabled => Ok("".to_string()),
             Self::Mock { .. } => Ok("".to_string()),
-            Self::Production { client, .. } => {
+            Self::Production {
+                client,
+                database_url,
+                ..
+            } => {
                 let response = client
-                    .post(self.get_url())
+                    .post(database_url.clone())
                     .body(query)
                     .send()
                     .await
@@ -163,15 +174,30 @@ impl ClickHouseConnectionInfo {
             Self::Disabled => Ok(()),
             Self::Mock { .. } => Ok(()),
             Self::Production {
-                base_url,
+                database_url,
                 database,
                 client,
                 ..
             } => {
                 let query = format!("CREATE DATABASE IF NOT EXISTS {}", database);
+                let base_url = {
+                    let mut base_url = database_url.clone();
+                    {
+                        // Need to put a code block here just to drop the query_pairs before any awaits happen
+                        let mut query_pairs = base_url.query_pairs_mut();
+                        query_pairs.clear();
+                        for (key, value) in database_url.query_pairs() {
+                            if key != "database" {
+                                query_pairs.append_pair(key.as_ref(), value.as_ref());
+                            }
+                        }
+                        query_pairs.finish();
+                    }
+                    base_url
+                };
 
                 let response = client
-                    .post(base_url.clone())
+                    .post(base_url)
                     .body(query)
                     .send()
                     .await
@@ -209,7 +235,7 @@ async fn write_mock(
 }
 
 async fn write_production(
-    url: &str,
+    database_url: &Url,
     client: &Client,
     row: &(impl Serialize + Send + Sync),
     table: &str,
@@ -226,8 +252,8 @@ async fn write_production(
         {row_json}"
     );
     let response = client
-        .post(url)
-        .body(query.clone())
+        .post(database_url.clone())
+        .body(query)
         .send()
         .await
         .map_err(|e| Error::ClickHouseQuery {
@@ -242,4 +268,12 @@ async fn write_production(
                 .unwrap_or_else(|e| format!("Failed to get response text: {}", e)),
         }),
     }
+}
+
+#[cfg(feature = "e2e_tests")]
+/// Sets the database for the ClickHouse client to e2e_test for the duration of the test.
+fn set_e2e_test_database(database_url: Url) -> Url {
+    let mut new_database_url = database_url.clone();
+    new_database_url.set_query(Some("database=tensorzero_e2e_tests"));
+    new_database_url
 }
