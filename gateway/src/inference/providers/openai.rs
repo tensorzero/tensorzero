@@ -724,8 +724,8 @@ fn openai_to_tensorzero_chunk(
                 };
                 content.push(ContentBlockChunk::ToolCall(ToolCallChunk {
                     id,
-                    name,
-                    arguments: tool_call.function.arguments.unwrap_or_default(),
+                    raw_name: name,
+                    raw_arguments: tool_call.function.arguments.unwrap_or_default(),
                 }));
             }
         }
@@ -1316,8 +1316,8 @@ mod tests {
             message.content,
             vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                 id: "id1".to_string(),
-                name: "name1".to_string(),
-                arguments: "{\"hello\":\"world\"}".to_string(),
+                raw_name: "name1".to_string(),
+                raw_arguments: "{\"hello\":\"world\"}".to_string(),
             })]
         );
         // Test what a bad tool chunk would do (new ID but no names)
@@ -1380,8 +1380,8 @@ mod tests {
             message.content,
             vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                 id: "id2".to_string(),
-                name: "name2".to_string(),
-                arguments: "{\"hello\":\"world\"}".to_string(),
+                raw_name: "name2".to_string(),
+                raw_arguments: "{\"hello\":\"world\"}".to_string(),
             })]
         );
         // Check that the lists were updated

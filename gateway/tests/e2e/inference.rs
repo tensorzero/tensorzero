@@ -221,17 +221,21 @@ async fn e2e_test_tool_call() {
     let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    assert_eq!(arguments, *DUMMY_TOOL_RESPONSE);
+    let raw_name = content_block.get("raw_name").unwrap().as_str().unwrap();
+    assert_eq!(raw_name, "get_temperature");
+    let raw_arguments = content_block
+        .get("raw_arguments")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    let raw_arguments: Value = serde_json::from_str(raw_arguments).unwrap();
+    assert_eq!(raw_arguments, *DUMMY_TOOL_RESPONSE);
+    let arguments = content_block.get("arguments").unwrap().as_object().unwrap();
+    assert_eq!(arguments, DUMMY_TOOL_RESPONSE.as_object().unwrap());
     let id = content_block.get("id").unwrap().as_str().unwrap();
     assert_eq!(id, "0");
     let name = content_block.get("name").unwrap().as_str().unwrap();
     assert_eq!(name, "get_temperature");
-    let parsed_name = content_block.get("parsed_name").unwrap().as_str().unwrap();
-    assert_eq!(parsed_name, "get_temperature");
-    let parsed_arguments = content_block.get("parsed_arguments").unwrap();
-    assert_eq!(parsed_arguments, &*DUMMY_TOOL_RESPONSE,);
 
     // Check that type is "chat"
     // Check that usage is correct
@@ -276,17 +280,21 @@ async fn e2e_test_tool_call() {
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
     // Check that the tool call is correctly stored
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    assert_eq!(arguments, *DUMMY_TOOL_RESPONSE);
     let id = content_block.get("id").unwrap().as_str().unwrap();
     assert_eq!(id, "0");
+    let raw_name = content_block.get("raw_name").unwrap().as_str().unwrap();
+    assert_eq!(raw_name, "get_temperature");
+    let raw_arguments = content_block
+        .get("raw_arguments")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    let raw_arguments: Value = serde_json::from_str(raw_arguments).unwrap();
+    assert_eq!(raw_arguments, *DUMMY_TOOL_RESPONSE);
     let name = content_block.get("name").unwrap().as_str().unwrap();
     assert_eq!(name, "get_temperature");
-    let parsed_name = content_block.get("parsed_name").unwrap().as_str().unwrap();
-    assert_eq!(parsed_name, "get_temperature");
-    let parsed_arguments = content_block.get("parsed_arguments").unwrap();
-    assert_eq!(parsed_arguments, &*DUMMY_TOOL_RESPONSE,);
+    let arguments = content_block.get("arguments").unwrap().as_object().unwrap();
+    assert_eq!(arguments, DUMMY_TOOL_RESPONSE.as_object().unwrap());
     // Check that episode_id is here and correct
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
@@ -396,17 +404,21 @@ async fn e2e_test_tool_call_malformed() {
     let content_block = content_blocks.first().unwrap();
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    assert_eq!(arguments, *DUMMY_BAD_TOOL_RESPONSE);
+    let raw_name = content_block.get("raw_name").unwrap().as_str().unwrap();
+    assert_eq!(raw_name, "get_temperature");
+    let raw_arguments = content_block
+        .get("raw_arguments")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    let raw_arguments: Value = serde_json::from_str(raw_arguments).unwrap();
+    assert_eq!(raw_arguments, *DUMMY_BAD_TOOL_RESPONSE);
     let id = content_block.get("id").unwrap().as_str().unwrap();
     assert_eq!(id, "0");
-    let name = content_block.get("name").unwrap().as_str().unwrap();
+    let name = content_block.get("name").unwrap();
     assert_eq!(name, "get_temperature");
-    let parsed_name = content_block.get("parsed_name").unwrap().as_str().unwrap();
-    assert_eq!(parsed_name, "get_temperature");
-    let parsed_arguments = content_block.get("parsed_arguments").unwrap();
-    assert!(parsed_arguments.is_null());
+    let arguments = content_block.get("arguments").unwrap();
+    assert!(arguments.is_null());
 
     // Check that type is "chat"
     // Check that usage is correct
@@ -451,17 +463,21 @@ async fn e2e_test_tool_call_malformed() {
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
     // Check that the tool call is correctly stored
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    assert_eq!(arguments, *DUMMY_BAD_TOOL_RESPONSE);
+    let raw_arguments = content_block
+        .get("raw_arguments")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    let raw_arguments: Value = serde_json::from_str(raw_arguments).unwrap();
+    assert_eq!(raw_arguments, *DUMMY_BAD_TOOL_RESPONSE);
     let id = content_block.get("id").unwrap().as_str().unwrap();
     assert_eq!(id, "0");
+    let raw_name = content_block.get("raw_name").unwrap().as_str().unwrap();
+    assert_eq!(raw_name, "get_temperature");
     let name = content_block.get("name").unwrap().as_str().unwrap();
     assert_eq!(name, "get_temperature");
-    let parsed_name = content_block.get("parsed_name").unwrap().as_str().unwrap();
-    assert_eq!(parsed_name, "get_temperature");
-    let parsed_arguments = content_block.get("parsed_arguments").unwrap();
-    assert!(parsed_arguments.is_null());
+    let arguments = content_block.get("arguments").unwrap();
+    assert!(arguments.is_null());
     // Check that episode_id is here and correct
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
@@ -1200,7 +1216,11 @@ async fn e2e_test_tool_call_streaming() {
             let content_block = content.first().unwrap();
             let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
             assert_eq!(content_block_type, "tool_call");
-            let new_arguments = content_block.get("arguments").unwrap().as_str().unwrap();
+            let new_arguments = content_block
+                .get("raw_arguments")
+                .unwrap()
+                .as_str()
+                .unwrap();
             assert_eq!(new_arguments, DUMMY_STREAMING_TOOL_RESPONSE[i]);
             let new_id = content_block.get("id").unwrap().as_str().unwrap();
             if i == 0 {
@@ -1208,7 +1228,7 @@ async fn e2e_test_tool_call_streaming() {
             } else {
                 assert_eq!(id, Some(new_id.to_string()));
             }
-            let new_name = content_block.get("name").unwrap().as_str().unwrap();
+            let new_name = content_block.get("raw_name").unwrap().as_str().unwrap();
             if i == 0 {
                 name = Some(new_name.to_string());
             } else {
@@ -1267,17 +1287,21 @@ async fn e2e_test_tool_call_streaming() {
     let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "tool_call");
     // Check that the tool call is correctly returned
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    assert_eq!(arguments, *DUMMY_TOOL_RESPONSE);
+    let raw_arguments = content_block
+        .get("raw_arguments")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    let raw_arguments: Value = serde_json::from_str(raw_arguments).unwrap();
+    assert_eq!(raw_arguments, *DUMMY_TOOL_RESPONSE);
     let id = content_block.get("id").unwrap().as_str().unwrap();
     assert_eq!(id, "0");
+    let raw_name = content_block.get("raw_name").unwrap().as_str().unwrap();
+    assert_eq!(raw_name, "get_temperature");
     let name = content_block.get("name").unwrap().as_str().unwrap();
     assert_eq!(name, "get_temperature");
-    let parsed_name = content_block.get("parsed_name").unwrap().as_str().unwrap();
-    assert_eq!(parsed_name, "get_temperature");
-    let parsed_arguments = content_block.get("parsed_arguments").unwrap();
-    assert_eq!(parsed_arguments, &*DUMMY_TOOL_RESPONSE,);
+    let arguments = content_block.get("arguments").unwrap();
+    assert_eq!(arguments, &*DUMMY_TOOL_RESPONSE,);
     // Check that episode_id is here and correct
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
