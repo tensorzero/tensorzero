@@ -4739,6 +4739,7 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
                 "name": "get_temperature",
                 "description": "Get the current temperature in a given location",
                 "parameters": {
+                    "$schema": "http://json-schema.org/draft-07/schema#",
                     "type": "object",
                     "properties": {
                         "location": {
@@ -4752,6 +4753,7 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
                         }
                     },
                     "required": ["location"],
+                    "additionalProperties": false
                 }
             }
         ],
@@ -4992,6 +4994,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
                 "name": "get_temperature",
                 "description": "Get the current temperature in a given location",
                 "parameters": {
+                    "$schema": "http://json-schema.org/draft-07/schema#",
                     "type": "object",
                     "properties": {
                         "location": {
@@ -5005,6 +5008,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
                         }
                     },
                     "required": ["location"],
+                    "additionalProperties": false
                 }
             }
         ],
