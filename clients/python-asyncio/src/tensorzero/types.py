@@ -58,12 +58,12 @@ InferenceResponse = Union[ChatInferenceResponse, JsonInferenceResponse]
 
 
 def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
-    if "output" in data and isinstance(data["output"], list):
+    if "content" in data and isinstance(data["content"], list):
         return ChatInferenceResponse(
             inference_id=UUID(data["inference_id"]),
             episode_id=UUID(data["episode_id"]),
             variant_name=data["variant_name"],
-            output=[parse_content_block(block) for block in data["output"]],
+            output=[parse_content_block(block) for block in data["content"]],
             usage=Usage(**data["usage"]),
         )
     elif "output" in data and isinstance(data["output"], dict):
@@ -110,7 +110,7 @@ class ToolCallChunk:
     name: str
     # This is the tool call ID that many LLM APIs use to associate tool calls with tool responses
     id: str
-    # `arguments` will come as partial JSON
+    # `raw_arguments` will come as partial JSON
     arguments: str
 
 
@@ -165,7 +165,9 @@ def parse_content_block_chunk(block: Dict[str, Any]) -> ContentBlockChunk:
         return TextChunk(id=block["id"], text=block["text"])
     elif block_type == "tool_call":
         return ToolCallChunk(
-            name=block["name"], id=block["id"], arguments=block["arguments"]
+            name=block["name"],
+            id=block["id"],
+            arguments=block["arguments"],
         )
     else:
         raise ValueError(f"Unknown content block type: {block}")
