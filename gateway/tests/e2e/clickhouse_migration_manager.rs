@@ -2,6 +2,7 @@ use gateway::clickhouse::ClickHouseConnectionInfo;
 use gateway::clickhouse_migration_manager;
 use gateway::clickhouse_migration_manager::migrations::migration_0000::Migration0000;
 use gateway::clickhouse_migration_manager::migrations::migration_0001::Migration0001;
+use reqwest::Client;
 use tracing_test::traced_test;
 
 use crate::common::CLICKHOUSE_URL;
@@ -12,8 +13,14 @@ async fn test_clickhouse_migration_manager() {
         "tensorzero_e2e_tests_migration_manager_{}",
         uuid::Uuid::now_v7().simple()
     );
+    let mut clickhouse_url = url::Url::parse(&CLICKHOUSE_URL).unwrap();
+    clickhouse_url.set_query(Some(format!("database={}", database).as_str()));
 
-    let clickhouse = ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, &database).unwrap();
+    let clickhouse = ClickHouseConnectionInfo::Production {
+        database_url: clickhouse_url,
+        database: database.clone(),
+        client: Client::new(),
+    };
 
     // NOTE:
     // We need to split the test into two sub-functions so we can reset `traced_test`'s subscriber between each call.

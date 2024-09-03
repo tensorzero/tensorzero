@@ -25,13 +25,7 @@ impl AppStateData {
                 message: "Missing environment variable CLICKHOUSE_URL".to_string(),
             })?;
 
-            let database = config
-                .clickhouse
-                .as_ref()
-                .map(|ch| ch.database.clone())
-                .unwrap_or("tensorzero".to_string());
-
-            ClickHouseConnectionInfo::new(&clickhouse_url, &database)?
+            ClickHouseConnectionInfo::new(&clickhouse_url)?
         };
 
         let http_client = Client::new();
