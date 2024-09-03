@@ -14,20 +14,22 @@ class Usage:
 
 
 @dataclass
-class Text:
+class ContentBlock:
+    type: str
+
+
+@dataclass
+class Text(ContentBlock):
     text: str
 
 
 @dataclass
-class ToolCall:
+class ToolCall(ContentBlock):
     arguments: Optional[Dict[str, Any]]
     id: str
     name: Optional[str]
     raw_arguments: Dict[str, Any]
     raw_name: str
-
-
-ContentBlock = Union[Text, ToolCall]
 
 
 @dataclass
@@ -81,7 +83,7 @@ def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
 def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
     block_type = block["type"]
     if block_type == "text":
-        return Text(text=block["text"])
+        return Text(text=block["text"], type=block_type)
     elif block_type == "tool_call":
         return ToolCall(
             arguments=block.get("arguments"),
@@ -89,6 +91,7 @@ def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
             name=block.get("name"),
             raw_arguments=block["raw_arguments"],
             raw_name=block["raw_name"],
+            type=block_type,
         )
     else:
         raise ValueError(f"Unknown content block type: {block}")
@@ -98,7 +101,12 @@ def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
 
 
 @dataclass
-class TextChunk:
+class ContentBlockChunk:
+    type: str
+
+
+@dataclass
+class TextChunk(ContentBlockChunk):
     # In the possibility that multiple text messages are sent in a single streaming response,
     # this `id` will be used to disambiguate them
     id: str
@@ -106,15 +114,12 @@ class TextChunk:
 
 
 @dataclass
-class ToolCallChunk:
+class ToolCallChunk(ContentBlockChunk):
     # This is the tool call ID that many LLM APIs use to associate tool calls with tool responses
     id: str
     # `raw_arguments` will come as partial JSON
     raw_arguments: str
     raw_name: str
-
-
-ContentBlockChunk = Union[TextChunk, ToolCallChunk]
 
 
 @dataclass
@@ -162,12 +167,13 @@ def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:
 def parse_content_block_chunk(block: Dict[str, Any]) -> ContentBlockChunk:
     block_type = block["type"]
     if block_type == "text":
-        return TextChunk(id=block["id"], text=block["text"])
+        return TextChunk(id=block["id"], text=block["text"], type=block_type)
     elif block_type == "tool_call":
         return ToolCallChunk(
             id=block["id"],
             raw_arguments=block["raw_arguments"],
             raw_name=block["raw_name"],
+            type=block_type,
         )
     else:
         raise ValueError(f"Unknown content block type: {block}")
