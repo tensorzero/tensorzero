@@ -183,23 +183,16 @@ impl ClickHouseConnectionInfo {
             } => {
                 let query = format!("CREATE DATABASE IF NOT EXISTS {}", database);
                 // In order to create the database, we need to remove the database query parameter from the URL
-                let base_url = {
-                    let mut base_url = database_url.clone();
-                    {
-                        // Need to put a code block here just to drop the query_pairs before any awaits happen
-                        let mut query_pairs = base_url.query_pairs_mut();
-                        // We clear the query pairs to remove the database parameter and then add back all other query parameters
-                        // This is because query_pairs_mut() does not have a way to remove a single query parameter
-                        query_pairs.clear();
-                        for (key, value) in database_url.query_pairs() {
-                            if key != "database" {
-                                query_pairs.append_pair(key.as_ref(), value.as_ref());
-                            }
-                        }
-                        query_pairs.finish();
-                    }
-                    base_url
-                };
+                // Otherwise, ClickHouse will throw an error
+                let mut base_url = database_url.clone();
+                let query_pairs = database_url
+                    .query_pairs()
+                    .filter(|(key, _)| key != "database");
+                base_url
+                    .query_pairs_mut()
+                    .clear()
+                    .extend_pairs(query_pairs)
+                    .finish();
 
                 let response = client
                     .post(base_url)
