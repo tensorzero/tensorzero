@@ -84,6 +84,7 @@ weight = 1
 type = "chat_completion"
 model = "claude-3-5-sonnet-20240620"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+json_mode = "implicit_tool"
 
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
@@ -92,5 +93,15 @@ system_template = "functions/extract_entities/initial_prompt/system_template.min
 
 [metrics.exact_match]
 type = "boolean"
+level = "inference"
+optimize = "max"
+
+[metrics.valid_json]
+type = "boolean"
+level = "inference"
+optimize = "max"
+
+[metrics.jaccard_similarity]
+type = "float"
 level = "inference"
 optimize = "max"
