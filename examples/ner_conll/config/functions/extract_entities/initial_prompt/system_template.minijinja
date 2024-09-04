@@ -10,8 +10,8 @@ The entities you are extracting are:
 Please return the entities in the following JSON format:
 
 {
-    "people": ["person1", "person2", ...],
-    "organizations": ["organization1", "organization2", ...],
-    "locations": ["location1", "location2", ...],
+    "person": ["person1", "person2", ...],
+    "organization": ["organization1", "organization2", ...],
+    "location": ["location1", "location2", ...],
     "miscellaneous": ["miscellaneous1", "miscellaneous2", ...]
 }
