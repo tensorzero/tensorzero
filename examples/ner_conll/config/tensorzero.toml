@@ -1,0 +1,58 @@
+# TensorZero configuration file for the `haiku_hidden_preferences` example.
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  GENERAL                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[gateway]
+bind_address = "0.0.0.0:3000"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                   MODELS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[models."gpt-4o-2024-08-06"]
+routing = ["openai"]
+
+[models."gpt-4o-2024-08-06".providers.openai]
+type = "openai"
+model_name = "gpt-4o-2024-08-06"
+
+[models.claude-3-5-sonnet-20240620]
+routing = ["anthropic"]
+
+[models.claude-3-5-sonnet-20240620.providers.anthropic]
+type = "anthropic"
+model_name = "claude-3-5-sonnet-20240620"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.extract_entities]
+type = "json"
+output_schema = "functions/extract_entities/output_schema.json"
+
+[functions.extract_entities.variants.gpt4o_initial_prompt]
+weight = 1
+type = "chat_completion"
+model = "gpt-4o-2024-08-06"
+system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+json_mode = "strict"
+
+[functions.extract_entities.variants.sonnet_initial_prompt]
+weight = 1
+type = "chat_completion"
+model = "claude-3-5-sonnet-20240620"
+system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+json_mode = "implicit_tool"
+
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  METRICS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[metrics.exact_match]
+type = "boolean"
+level = "inference"
+optimize = "max"
