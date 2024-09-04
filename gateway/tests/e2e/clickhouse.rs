@@ -104,8 +104,7 @@ async fn test_bad_clickhouse_write() {
         .write(&payload, "BooleanMetricFeedback")
         .await
         .unwrap_err();
-    assert_eq!(
-        err.to_string(),
-        "Failed to run ClickHouse query: Code: 117. DB::Exception: Unknown field found while parsing JSONEachRow format: name: (at row 1)\n: While executing WaitForAsyncInsert. (INCORRECT_DATA) (version 24.6.2.17 (official build))\n".to_string()
-    );
+    assert!(err
+        .to_string()
+        .contains("Unknown field found while parsing JSONEachRow format: name"));
 }

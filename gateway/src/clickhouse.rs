@@ -48,12 +48,7 @@ impl ClickHouseConnectionInfo {
         }
 
         // Set ClickHouse format settings for some error checking on writes
-        database_url
-            .query_pairs_mut()
-            .append_pair("input_format_skip_unknown_fields", "0")
-            .append_pair("input_format_defaults_for_omitted_fields", "0")
-            .append_pair("input_format_null_as_default", "0")
-            .finish();
+        set_clickhouse_format_settings(&mut database_url);
 
         let client = Client::new();
 
@@ -283,4 +278,51 @@ fn set_e2e_test_database(database_url: Url) -> Url {
     let mut new_database_url = database_url.clone();
     new_database_url.set_query(Some("database=tensorzero_e2e_tests"));
     new_database_url
+}
+
+fn set_clickhouse_format_settings(database_url: &mut Url) {
+    const OVERRIDDEN_SETTINGS: [&str; 3] = [
+        "input_format_skip_unknown_fields",
+        "input_format_defaults_for_omitted_fields",
+        "input_format_null_as_default",
+    ];
+
+    let existing_pairs: Vec<(String, String)> = database_url
+        .query_pairs()
+        .map(|(k, v)| (k.into_owned(), v.into_owned()))
+        .collect();
+
+    database_url.query_pairs_mut().clear();
+
+    for (key, value) in existing_pairs {
+        if OVERRIDDEN_SETTINGS.contains(&key.as_str()) {
+            tracing::warn!(
+                "Skipping ClickHouse setting '{}' as it will be overridden",
+                key
+            );
+        } else {
+            database_url.query_pairs_mut().append_pair(&key, &value);
+        }
+    }
+
+    for setting in OVERRIDDEN_SETTINGS.iter() {
+        database_url.query_pairs_mut().append_pair(setting, "0");
+    }
+    database_url.query_pairs_mut().finish();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_set_clickhouse_format_settings() {
+        let mut database_url = Url::parse("http://localhost:8123/").unwrap();
+        set_clickhouse_format_settings(&mut database_url);
+        assert_eq!(database_url.to_string(), "http://localhost:8123/?input_format_skip_unknown_fields=0&input_format_defaults_for_omitted_fields=0&input_format_null_as_default=0");
+
+        let mut database_url = Url::parse("http://localhost:8123/?input_format_skip_unknown_fields=1&input_format_defaults_for_omitted_fields=1&input_format_null_as_default=1").unwrap();
+        set_clickhouse_format_settings(&mut database_url);
+        assert_eq!(database_url.to_string(), "http://localhost:8123/?input_format_skip_unknown_fields=0&input_format_defaults_for_omitted_fields=0&input_format_null_as_default=0");
+    }
 }
