@@ -35,14 +35,14 @@ from .types import (
 
 
 class AsyncTensorZeroGateway:
-    def __init__(self, base_url: str):
+    def __init__(self, base_url: str, *, timeout: Optional[float] = None):
         """
         Initialize the TensorZero client.
 
         :param base_url: The base URL of the TensorZero gateway. Example:"http://localhost:3000"
         """
         self.base_url = base_url
-        self.client = httpx.AsyncClient(timeout=None)
+        self.client = httpx.AsyncClient(timeout=timeout)
         self.logger = logging.getLogger(__name__)
 
     async def inference(
