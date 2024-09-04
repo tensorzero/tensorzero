@@ -154,6 +154,8 @@ async fn e2e_test_float_feedback() {
     assert_eq!(retrieved_episode_id_uuid, episode_id);
     let retrieved_value = result.get("value").unwrap().as_f64().unwrap();
     assert_eq!(retrieved_value, 32.8);
+    let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
+    assert_eq!(metric_name, "user_rating");
 
     // Test boolean feedback on episode (should fail)
     let payload = json!({"episode_id": episode_id, "metric_name": "user_rating", "value": true});
@@ -217,6 +219,8 @@ async fn e2e_test_float_feedback() {
     assert_eq!(retrieved_inference_id_uuid, inference_id);
     let retrieved_value = result.get("value").unwrap().as_f64().unwrap();
     assert_eq!(retrieved_value, 0.5);
+    let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
+    assert_eq!(metric_name, "brevity_score");
 }
 
 #[tokio::test]
@@ -250,6 +254,8 @@ async fn e2e_test_boolean_feedback() {
     assert_eq!(retrieved_inference_id_uuid, inference_id);
     let retrieved_value = result.get("value").unwrap().as_bool().unwrap();
     assert!(retrieved_value);
+    let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
+    assert_eq!(metric_name, "task_success");
 
     // Try episode-level feedback (should fail)
     let episode_id = Uuid::now_v7();
@@ -312,5 +318,7 @@ async fn e2e_test_boolean_feedback() {
     let retrieved_episode_id_uuid = Uuid::parse_str(retrieved_episode_id).unwrap();
     assert_eq!(retrieved_episode_id_uuid, episode_id);
     let retrieved_value = result.get("value").unwrap().as_bool().unwrap();
-    assert!(retrieved_value)
+    assert!(retrieved_value);
+    let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
+    assert_eq!(metric_name, "goal_achieved");
 }
