@@ -296,6 +296,7 @@ pub struct InferenceDatabaseInsert {
     pub episode_id: Uuid,
     pub input: String,
     pub output: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub inference_params: InferenceParams,
     pub processing_time_ms: u32,

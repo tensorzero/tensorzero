@@ -25,12 +25,13 @@ pub enum ClickHouseConnectionInfo {
 impl ClickHouseConnectionInfo {
     pub fn new(database_url: &str) -> Result<Self, Error> {
         // Add a query string for the database using the URL crate
-        let database_url = Url::parse(database_url).map_err(|e| Error::Config {
+        #[allow(unused_mut)]
+        let mut database_url = Url::parse(database_url).map_err(|e| Error::Config {
             message: format!("Invalid ClickHouse database URL: {}", e),
         })?;
 
         #[cfg(feature = "e2e_tests")]
-        let database_url = set_e2e_test_database(database_url);
+        let mut database_url = set_e2e_test_database(database_url);
 
         let mut database = String::new();
 
@@ -45,6 +46,14 @@ impl ClickHouseConnectionInfo {
         if database.is_empty() {
             database = "default".to_string();
         }
+
+        // Set ClickHouse format settings for some error checking on writes
+        database_url
+            .query_pairs_mut()
+            .append_pair("input_format_skip_unknown_fields", "0")
+            .append_pair("input_format_defaults_for_omitted_fields", "0")
+            .append_pair("input_format_null_as_default", "0")
+            .finish();
 
         let client = Client::new();
 
