@@ -1,0 +1,5 @@
+Please draft an email using the following information:
+
+- Recipient Name: {{ recipient_name }}
+- Sender Name: {{ sender_name }}
+- Email Purpose: {{ email_purpose }}
