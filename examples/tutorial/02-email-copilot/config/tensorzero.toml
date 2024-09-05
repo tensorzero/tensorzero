@@ -35,12 +35,12 @@ model = "my_gpt_4o_mini"
 system_template = "functions/draft_email/gpt_4o_mini_email_variant/system.minijinja"
 user_template = "functions/draft_email/gpt_4o_mini_email_variant/user.minijinja"
 
-[functions.draft_email.variants."haiku_3.5_email_variant"]
+[functions.draft_email.variants.haiku_3_email_variant]
 type = "chat_completion"
 weight = 0.3 # sample this variant 30% of the time
 model = "my_haiku_3"
-system_template = "functions/draft_email/haiku_3.5_email_variant/system.minijinja"
-user_template = "functions/draft_email/haiku_3.5_email_variant/user.minijinja"
+system_template = "functions/draft_email/haiku_3_email_variant/system.minijinja"
+user_template = "functions/draft_email/haiku_3_email_variant/user.minijinja"
 temperature = 0.9
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
