@@ -9,9 +9,13 @@ First, set the `OPENAI_API_KEY` environment variable.
 For the second example (Email Copilot), you will also need to set the `ANTHROPIC_API_KEY` environment variable.
 
 Then, execute the following commands to run the examples.
-Docker Compose will launch a ClickHouse database, launch the TensorZero Gateway, and run the requests using a Python script.
+We use Docker Compose to simplify the setup for the tutorial.
+It will launch a ClickHouse database, launch the TensorZero Gateway with the corresponding configuration, and run the API calls using a Python script.
 
 ## Examples
+
+You can find the script and configuration files for each example in its corresponding sub-directory.
+Feel free to make changes and explore!
 
 ### Part I — Simple Chatbot
 
@@ -36,8 +40,3 @@ docker compose up --build --force-recreate weather-rag
 ```bash
 docker compose up --build --force-recreate email-data-extraction
 ```
-
----
-
-You can explore the scripts and configuration files to understand how the the examples work.
-Feel free to make changes and explore!
