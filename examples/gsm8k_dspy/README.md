@@ -5,7 +5,7 @@
 The GSM8K [dataset](https://github.com/openai/grade-school-math), introduced in a [paper](https://arxiv.org/abs/2110.14168) from OpenAI, is a collection of ~8,000 grade school math word problems and their solutions.
 It has lately seen extensive use as a simple / easy benchmark for evaluating LLMs.
 We include an example of a very simple implementation of a TensorZero function for solving GSM8K in this example.
-Since this benchmark is relatively easy, we have configured this example to use the Llama 3.1 8B model served on Together's API.
+Since this benchmark is relatively easy, we have configured this example to use the Llama 3.1 8B model (zero-shot)served on Together's API.
 
 After running the example and generating some data, we show how to query a dataset of inferences from the ClickHouse database in order to optimize the prompt using a DSPy teleprompter.
 
@@ -26,7 +26,7 @@ You can run the example in the `gsm8k_dspy.ipynb` notebook.
 Make sure to install the dependencies in the `requirements.txt` file.
 It should not require any changes to run and will automatically connect to the TensorZero gateway you started.
 
-Llama 3.1 8B should score around 70% on this dataset out of the box.
+Llama 3.1 8B with a very basic zero-shot promptshould score around 30% on this dataset out of the box.
 
 ## Improving the GSM8K Solver
 

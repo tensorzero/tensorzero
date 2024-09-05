@@ -32,6 +32,11 @@ type = "chat_completion"
 model = "llama3.1-8b-instruct"
 system_template = "functions/solve_math_problem/llama-8b-baseline/system.minijinja"
 
+[functions.solve_math_problem.variants.dspy-variant]
+weight = 1
+type = "chat_completion"
+model = "llama3.1-8b-instruct"
+system_template = "functions/solve_math_problem/dspy_variant/system.minijinja"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
