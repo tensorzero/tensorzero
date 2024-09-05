@@ -28,7 +28,7 @@ async def main(gateway_url: str):
 
         location = query_result.content[0].arguments.get("location")
         units = query_result.content[0].arguments.get("units")
-        temperature = "80"  # imagine this came from some API
+        temperature = "35"  # imagine this came from some API
 
         report_result = await client.inference(
             function_name="generate_weather_report",

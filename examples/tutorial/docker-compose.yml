@@ -91,6 +91,8 @@ services:
       start_period: 30s
       start_interval: 1s
       timeout: 1s
+    ports:
+      - "3000:3000"
     depends_on:
       clickhouse:
         condition: service_healthy
