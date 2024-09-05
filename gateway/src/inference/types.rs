@@ -27,6 +27,7 @@ use crate::{error::Error, variant::JsonMode};
 pub struct Input {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system: Option<Value>,
+    #[serde(default)]
     pub messages: Vec<InputMessage>,
 }
 
@@ -207,7 +208,7 @@ pub enum InferenceResult<'a> {
 pub struct ChatInferenceResult<'a> {
     pub inference_id: Uuid,
     created: u64,
-    pub output: Vec<ContentBlockOutput>,
+    pub content: Vec<ContentBlockOutput>,
     pub usage: Usage,
     pub model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
 }
@@ -295,6 +296,7 @@ pub struct InferenceDatabaseInsert {
     pub episode_id: Uuid,
     pub input: String,
     pub output: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub inference_params: InferenceParams,
     pub processing_time_ms: u32,
@@ -530,11 +532,11 @@ impl<'a> ChatInferenceResult<'a> {
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards")
             .as_secs();
-        let output = Self::parse_output(raw_content, tool_config).await;
+        let content = Self::parse_output(raw_content, tool_config).await;
         Self {
             inference_id,
             created,
-            output,
+            content,
             usage,
             model_inference_results,
         }
@@ -588,7 +590,7 @@ impl InferenceDatabaseInsert {
         let inference_params = metadata.inference_params;
         match inference_response {
             InferenceResult::Chat(chat_response) => {
-                let output = serde_json::to_string(&chat_response.output)
+                let output = serde_json::to_string(&chat_response.content)
                     .map_err(|e| Error::Serialization {
                         message: format!("Failed to serialize output: {}", e),
                     })
@@ -721,7 +723,7 @@ impl From<ProviderInferenceResponseChunk> for ChatInferenceResultChunk {
 impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
     fn from(mut chunk: ProviderInferenceResponseChunk) -> Self {
         let raw = match chunk.content.pop() {
-            Some(ContentBlockChunk::ToolCall(tool_call)) => tool_call.arguments.to_owned(),
+            Some(ContentBlockChunk::ToolCall(tool_call)) => tool_call.raw_arguments.to_owned(),
             Some(ContentBlockChunk::Text(text)) => text.text.to_owned(),
             None => String::new(),
         };
@@ -804,7 +806,9 @@ pub async fn collect_chunks<'a>(
                                 // If there is already a tool call block with this id, append to it
                                 Some(ContentBlock::ToolCall(existing_tool_call)) => {
                                     // We assume that the name and ID are present and complete in the first chunk
-                                    existing_tool_call.arguments.push_str(&tool_call.arguments);
+                                    existing_tool_call
+                                        .arguments
+                                        .push_str(&tool_call.raw_arguments);
                                 }
                                 // If there is no tool call block, create one
                                 _ => {
@@ -874,12 +878,10 @@ pub async fn collect_chunks<'a>(
 
 impl From<ToolCallChunk> for ToolCall {
     fn from(tool_call: ToolCallChunk) -> Self {
-        // TODO (#30): explicitly handle tools both for streaming and non-streaming
-        // as well as for Chat and Tool-style Functions
         Self {
             id: tool_call.id,
-            name: tool_call.name,
-            arguments: tool_call.arguments,
+            name: tool_call.raw_name,
+            arguments: tool_call.raw_arguments,
         }
     }
 }
@@ -945,7 +947,7 @@ mod tests {
         )
         .await;
         let output_content = ["Hello, world!".to_string().into()];
-        assert_eq!(chat_inference_response.output, output_content);
+        assert_eq!(chat_inference_response.content, output_content);
         assert_eq!(chat_inference_response.usage, usage);
         assert_eq!(chat_inference_response.model_inference_results.len(), 1);
         let model_inference_result = chat_inference_response
@@ -984,15 +986,15 @@ mod tests {
             Some(&weather_tool_config),
         )
         .await;
-        assert_eq!(chat_inference_response.output.len(), 1);
-        let tool_call_block = chat_inference_response.output.first().unwrap();
+        assert_eq!(chat_inference_response.content.len(), 1);
+        let tool_call_block = chat_inference_response.content.first().unwrap();
         match tool_call_block {
             ContentBlockOutput::ToolCall(tool_call) => {
-                assert_eq!(tool_call.name, "get_temperature");
-                assert_eq!(tool_call.arguments, r#"{"where": "the moon"}"#);
+                assert_eq!(tool_call.raw_name, "get_temperature");
+                assert_eq!(tool_call.raw_arguments, r#"{"where": "the moon"}"#);
                 assert_eq!(tool_call.id, "0");
-                assert_eq!(tool_call.parsed_name, Some("get_temperature".to_string()));
-                assert_eq!(tool_call.parsed_arguments, None);
+                assert_eq!(tool_call.name, Some("get_temperature".to_string()));
+                assert_eq!(tool_call.arguments, None);
             }
             _ => panic!("Expected a tool call block"),
         }
@@ -1025,15 +1027,15 @@ mod tests {
             Some(&weather_tool_config),
         )
         .await;
-        assert_eq!(chat_inference_response.output.len(), 1);
-        let tool_call_block = chat_inference_response.output.first().unwrap();
+        assert_eq!(chat_inference_response.content.len(), 1);
+        let tool_call_block = chat_inference_response.content.first().unwrap();
         match tool_call_block {
             ContentBlockOutput::ToolCall(tool_call) => {
-                assert_eq!(tool_call.name, "bad name");
-                assert_eq!(tool_call.arguments, r#"{"where": "the moon"}"#);
+                assert_eq!(tool_call.raw_name, "bad name");
+                assert_eq!(tool_call.raw_arguments, r#"{"where": "the moon"}"#);
                 assert_eq!(tool_call.id, "0");
-                assert_eq!(tool_call.parsed_name, None);
-                assert_eq!(tool_call.parsed_arguments, None);
+                assert_eq!(tool_call.name, None);
+                assert_eq!(tool_call.arguments, None);
             }
             _ => panic!("Expected a tool call block"),
         }
@@ -1066,19 +1068,19 @@ mod tests {
             Some(&weather_tool_config),
         )
         .await;
-        assert_eq!(chat_inference_response.output.len(), 1);
-        let tool_call_block = chat_inference_response.output.first().unwrap();
+        assert_eq!(chat_inference_response.content.len(), 1);
+        let tool_call_block = chat_inference_response.content.first().unwrap();
         match tool_call_block {
             ContentBlockOutput::ToolCall(tool_call) => {
-                assert_eq!(tool_call.name, "get_temperature");
+                assert_eq!(tool_call.raw_name, "get_temperature");
                 assert_eq!(
-                    tool_call.arguments,
+                    tool_call.raw_arguments,
                     r#"{"location": "the moon", "units": "celsius"}"#
                 );
                 assert_eq!(tool_call.id, "0");
-                assert_eq!(tool_call.parsed_name, Some("get_temperature".to_string()));
+                assert_eq!(tool_call.name, Some("get_temperature".to_string()));
                 assert_eq!(
-                    tool_call.parsed_arguments,
+                    tool_call.arguments,
                     Some(
                         serde_json::from_str(r#"{"location": "the moon", "units": "celsius"}"#)
                             .unwrap()
@@ -1166,7 +1168,10 @@ mod tests {
         };
         assert_eq!(chat_result.inference_id, inference_id);
         assert_eq!(chat_result.created, created);
-        assert_eq!(chat_result.output, vec!["Hello, world!".to_string().into()]);
+        assert_eq!(
+            chat_result.content,
+            vec!["Hello, world!".to_string().into()]
+        );
         assert_eq!(
             chat_result.usage,
             Usage {
@@ -1363,7 +1368,7 @@ mod tests {
             assert_eq!(chat_response.inference_id, inference_id);
             assert_eq!(chat_response.created, created);
             assert_eq!(
-                chat_response.output,
+                chat_response.content,
                 vec!["{\"name\":\"John\",\"age\":30}".to_string().into()]
             );
             assert_eq!(chat_response.usage, usage);

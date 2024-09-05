@@ -14,20 +14,22 @@ class Usage:
 
 
 @dataclass
-class Text:
+class ContentBlock:
+    type: str
+
+
+@dataclass
+class Text(ContentBlock):
     text: str
 
 
 @dataclass
-class ToolCall:
-    name: str
-    arguments: Dict[str, Any]
+class ToolCall(ContentBlock):
+    arguments: Optional[Dict[str, Any]]
     id: str
-    parsed_name: Optional[str]
-    parsed_arguments: Optional[Dict[str, Any]]
-
-
-ContentBlock = Union[Text, ToolCall]
+    name: Optional[str]
+    raw_arguments: Dict[str, Any]
+    raw_name: str
 
 
 @dataclass
@@ -58,12 +60,12 @@ InferenceResponse = Union[ChatInferenceResponse, JsonInferenceResponse]
 
 
 def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
-    if "output" in data and isinstance(data["output"], list):
+    if "content" in data and isinstance(data["content"], list):
         return ChatInferenceResponse(
             inference_id=UUID(data["inference_id"]),
             episode_id=UUID(data["episode_id"]),
             variant_name=data["variant_name"],
-            output=[parse_content_block(block) for block in data["output"]],
+            output=[parse_content_block(block) for block in data["content"]],
             usage=Usage(**data["usage"]),
         )
     elif "output" in data and isinstance(data["output"], dict):
@@ -81,14 +83,15 @@ def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
 def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
     block_type = block["type"]
     if block_type == "text":
-        return Text(text=block["text"])
+        return Text(text=block["text"], type=block_type)
     elif block_type == "tool_call":
         return ToolCall(
-            name=block["name"],
-            arguments=block["arguments"],
+            arguments=block.get("arguments"),
             id=block["id"],
-            parsed_name=block.get("parsed_name"),
-            parsed_arguments=block.get("parsed_arguments"),
+            name=block.get("name"),
+            raw_arguments=block["raw_arguments"],
+            raw_name=block["raw_name"],
+            type=block_type,
         )
     else:
         raise ValueError(f"Unknown content block type: {block}")
@@ -98,7 +101,12 @@ def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
 
 
 @dataclass
-class TextChunk:
+class ContentBlockChunk:
+    type: str
+
+
+@dataclass
+class TextChunk(ContentBlockChunk):
     # In the possibility that multiple text messages are sent in a single streaming response,
     # this `id` will be used to disambiguate them
     id: str
@@ -106,15 +114,12 @@ class TextChunk:
 
 
 @dataclass
-class ToolCallChunk:
-    name: str
+class ToolCallChunk(ContentBlockChunk):
     # This is the tool call ID that many LLM APIs use to associate tool calls with tool responses
     id: str
-    # `arguments` will come as partial JSON
-    arguments: str
-
-
-ContentBlockChunk = Union[TextChunk, ToolCallChunk]
+    # `raw_arguments` will come as partial JSON
+    raw_arguments: str
+    raw_name: str
 
 
 @dataclass
@@ -162,10 +167,13 @@ def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:
 def parse_content_block_chunk(block: Dict[str, Any]) -> ContentBlockChunk:
     block_type = block["type"]
     if block_type == "text":
-        return TextChunk(id=block["id"], text=block["text"])
+        return TextChunk(id=block["id"], text=block["text"], type=block_type)
     elif block_type == "tool_call":
         return ToolCallChunk(
-            name=block["name"], id=block["id"], arguments=block["arguments"]
+            id=block["id"],
+            raw_arguments=block["raw_arguments"],
+            raw_name=block["raw_name"],
+            type=block_type,
         )
     else:
         raise ValueError(f"Unknown content block type: {block}")

@@ -35,18 +35,19 @@ from .types import (
 
 
 class AsyncTensorZeroGateway:
-    def __init__(self, base_url: str):
+    def __init__(self, base_url: str, *, timeout: Optional[float] = None):
         """
         Initialize the TensorZero client.
 
         :param base_url: The base URL of the TensorZero gateway. Example:"http://localhost:3000"
         """
         self.base_url = base_url
-        self.client = httpx.AsyncClient(timeout=None)
+        self.client = httpx.AsyncClient(timeout=timeout)
         self.logger = logging.getLogger(__name__)
 
     async def inference(
         self,
+        *,
         function_name: str,
         input: Dict[str, Any],
         episode_id: Optional[UUID] = None,
@@ -123,6 +124,7 @@ class AsyncTensorZeroGateway:
 
     async def feedback(
         self,
+        *,
         metric_name: str,
         value: Any,
         inference_id: Optional[UUID] = None,

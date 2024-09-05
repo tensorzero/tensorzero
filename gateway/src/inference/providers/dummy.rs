@@ -165,8 +165,8 @@ impl InferenceProvider for DummyProvider {
             content: vec![if is_tool_call {
                 ContentBlockChunk::ToolCall(ToolCallChunk {
                     id: "0".to_string(),
-                    name: "get_temperature".to_string(),
-                    arguments: content_chunks[0].to_string(),
+                    raw_name: "get_temperature".to_string(),
+                    raw_arguments: content_chunks[0].to_string(),
                 })
             } else {
                 ContentBlockChunk::Text(crate::inference::types::TextChunk {
@@ -187,8 +187,8 @@ impl InferenceProvider for DummyProvider {
                     content: vec![if is_tool_call {
                         ContentBlockChunk::ToolCall(ToolCallChunk {
                             id: "0".to_string(),
-                            name: "get_temperature".to_string(),
-                            arguments: chunk.to_string(),
+                            raw_name: "get_temperature".to_string(),
+                            raw_arguments: chunk.to_string(),
                         })
                     } else {
                         ContentBlockChunk::Text(crate::inference::types::TextChunk {

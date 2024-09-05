@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
 use serde_json::{json, Value};
@@ -5,7 +7,7 @@ use serde_json::{json, Value};
 #[derive(Debug, PartialEq)]
 pub enum Error {
     AllVariantsFailed {
-        errors: Vec<Error>,
+        errors: HashMap<String, Error>,
     },
     ApiKeyMissing {
         provider_name: String,
@@ -128,7 +130,7 @@ pub enum Error {
         message: String,
     },
     ModelProvidersExhausted {
-        provider_errors: Vec<Error>,
+        provider_errors: HashMap<String, Error>,
     },
     Observability {
         message: String,
@@ -343,7 +345,7 @@ impl std::fmt::Display for Error {
                     "All variants failed with errors: {}",
                     errors
                         .iter()
-                        .map(|e| e.to_string())
+                        .map(|(variant_name, error)| format!("{}: {}", variant_name, error))
                         .collect::<Vec<_>>()
                         .join("\n")
                 )
@@ -467,7 +469,7 @@ impl std::fmt::Display for Error {
                     "All model providers failed to infer with errors: {}",
                     provider_errors
                         .iter()
-                        .map(|e| e.to_string())
+                        .map(|(provider_name, error)| format!("{}: {}", provider_name, error))
                         .collect::<Vec<_>>()
                         .join(", ")
                 )

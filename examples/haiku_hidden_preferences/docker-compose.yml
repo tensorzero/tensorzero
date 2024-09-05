@@ -26,9 +26,11 @@ services:
     container_name: tensorzero-gateway
     image: tensorzero/gateway
     volumes:
-      - ./config:/app/config
+      - ./config:/app/config:ro
+      - ${GCP_VERTEX_CREDENTIALS_PATH:-/dev/null}:/app/gcp-credentials.json:ro
     environment:
-      - CLICKHOUSE_URL=http://tensorzero-clickhouse-haiku-hidden-preferences:8123
+      - CLICKHOUSE_URL=http://tensorzero-clickhouse-haiku-hidden-preferences:8123/?database=tensorzero
+      - GCP_VERTEX_CREDENTIALS_PATH=${GCP_VERTEX_CREDENTIALS_PATH:+/app/gcp-credentials.json}
     env_file:
       - ${ENV_FILE:-.env}
     ports:

@@ -1,13 +1,8 @@
-use gateway::clickhouse::ClickHouseConnectionInfo;
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use crate::common::{get_gateway_endpoint, select_feedback_clickhouse};
-
-lazy_static::lazy_static! {
-    static ref CLICKHOUSE_URL: String = std::env::var("CLICKHOUSE_URL").expect("CLICKHOUSE_URL must be set");
-}
+use crate::common::{get_clickhouse, get_gateway_endpoint, select_feedback_clickhouse};
 
 #[tokio::test]
 async fn e2e_test_comment_feedback() {
@@ -28,8 +23,7 @@ async fn e2e_test_comment_feedback() {
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
 
     // Check ClickHouse
-    let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests").unwrap();
+    let clickhouse = get_clickhouse().await;
     let result = select_feedback_clickhouse(&clickhouse, "CommentFeedback", feedback_id)
         .await
         .unwrap();
@@ -61,8 +55,7 @@ async fn e2e_test_comment_feedback() {
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
 
     // Check ClickHouse
-    let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests").unwrap();
+    let clickhouse = get_clickhouse().await;
     let result = select_feedback_clickhouse(&clickhouse, "CommentFeedback", feedback_id)
         .await
         .unwrap();
@@ -98,8 +91,7 @@ async fn e2e_test_demonstration_feedback() {
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
 
     // Check ClickHouse
-    let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests").unwrap();
+    let clickhouse = get_clickhouse().await;
     let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
         .await
         .unwrap();
@@ -150,8 +142,7 @@ async fn e2e_test_float_feedback() {
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
 
     // Check ClickHouse
-    let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests").unwrap();
+    let clickhouse = get_clickhouse().await;
     let result = select_feedback_clickhouse(&clickhouse, "FloatMetricFeedback", feedback_id)
         .await
         .unwrap();
@@ -163,6 +154,8 @@ async fn e2e_test_float_feedback() {
     assert_eq!(retrieved_episode_id_uuid, episode_id);
     let retrieved_value = result.get("value").unwrap().as_f64().unwrap();
     assert_eq!(retrieved_value, 32.8);
+    let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
+    assert_eq!(metric_name, "user_rating");
 
     // Test boolean feedback on episode (should fail)
     let payload = json!({"episode_id": episode_id, "metric_name": "user_rating", "value": true});
@@ -226,6 +219,8 @@ async fn e2e_test_float_feedback() {
     assert_eq!(retrieved_inference_id_uuid, inference_id);
     let retrieved_value = result.get("value").unwrap().as_f64().unwrap();
     assert_eq!(retrieved_value, 0.5);
+    let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
+    assert_eq!(metric_name, "brevity_score");
 }
 
 #[tokio::test]
@@ -247,8 +242,7 @@ async fn e2e_test_boolean_feedback() {
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
 
     // Check ClickHouse
-    let clickhouse =
-        ClickHouseConnectionInfo::new(&CLICKHOUSE_URL, "tensorzero_e2e_tests").unwrap();
+    let clickhouse = get_clickhouse().await;
     let result = select_feedback_clickhouse(&clickhouse, "BooleanMetricFeedback", feedback_id)
         .await
         .unwrap();
@@ -260,6 +254,8 @@ async fn e2e_test_boolean_feedback() {
     assert_eq!(retrieved_inference_id_uuid, inference_id);
     let retrieved_value = result.get("value").unwrap().as_bool().unwrap();
     assert!(retrieved_value);
+    let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
+    assert_eq!(metric_name, "task_success");
 
     // Try episode-level feedback (should fail)
     let episode_id = Uuid::now_v7();
@@ -322,5 +318,7 @@ async fn e2e_test_boolean_feedback() {
     let retrieved_episode_id_uuid = Uuid::parse_str(retrieved_episode_id).unwrap();
     assert_eq!(retrieved_episode_id_uuid, episode_id);
     let retrieved_value = result.get("value").unwrap().as_bool().unwrap();
-    assert!(retrieved_value)
+    assert!(retrieved_value);
+    let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
+    assert_eq!(metric_name, "goal_achieved");
 }

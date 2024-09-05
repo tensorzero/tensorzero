@@ -16,7 +16,6 @@ use crate::variant::VariantConfig;
 #[derive(Debug, Default)]
 pub struct Config<'c> {
     pub gateway: GatewayConfig,
-    pub clickhouse: Option<ClickHouseConfig>,
     pub models: HashMap<String, ModelConfig>, // model name => model config
     pub functions: HashMap<String, FunctionConfig>, // function name => function config
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
@@ -30,12 +29,6 @@ pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
     #[serde(default)]
     pub disable_observability: bool,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ClickHouseConfig {
-    pub database: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -114,7 +107,6 @@ impl<'c> Config<'c> {
 
         let mut config = Config {
             gateway,
-            clickhouse: config.clickhouse,
             models: config.models,
             functions,
             metrics: config.metrics,
@@ -463,7 +455,6 @@ impl<'c> Config<'c> {
 #[serde(deny_unknown_fields)]
 struct UninitializedConfig {
     pub gateway: Option<GatewayConfig>,
-    pub clickhouse: Option<ClickHouseConfig>,
     pub models: HashMap<String, ModelConfig>, // model name => model config
     pub functions: HashMap<String, UninitializedFunctionConfig>, // function name => function config
     #[serde(default)]
@@ -1148,8 +1139,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `functions.generate_draft.variants.openai_promptA.weight`: must be non-negative"
-                    .to_string()
+                message: "Invalid Config: `functions.generate_draft.variants.openai_promptA.weight`: must be non-negative".to_string()
             }
         );
     }

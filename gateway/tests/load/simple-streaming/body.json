@@ -8,6 +8,5 @@
       }
     ]
   },
-  "max_tokens": 100,
   "stream": true
 }

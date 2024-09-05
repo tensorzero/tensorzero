@@ -837,9 +837,12 @@ mod tests {
         assert_eq!(
             result,
             Error::ModelProvidersExhausted {
-                provider_errors: vec![Error::InferenceClient {
-                    message: "Error sending request to Dummy provider.".to_string()
-                }]
+                provider_errors: HashMap::from([(
+                    "error".to_string(),
+                    Error::InferenceClient {
+                        message: "Error sending request to Dummy provider.".to_string()
+                    }
+                )])
             }
         );
 
@@ -879,7 +882,7 @@ mod tests {
         match result {
             InferenceResult::Chat(chat_response) => {
                 assert_eq!(
-                    chat_response.output,
+                    chat_response.content,
                     vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()]
                 );
                 assert_eq!(
@@ -940,18 +943,18 @@ mod tests {
         assert!(matches!(result, InferenceResult::Chat(_)));
         match result {
             InferenceResult::Chat(chat_response) => {
-                assert_eq!(chat_response.output.len(), 1);
-                let tool_call = &chat_response.output[0];
+                assert_eq!(chat_response.content.len(), 1);
+                let tool_call = &chat_response.content[0];
                 match tool_call {
                     ContentBlockOutput::ToolCall(tool_call) => {
-                        assert_eq!(tool_call.name, "get_temperature");
+                        assert_eq!(tool_call.raw_name, "get_temperature");
                         assert_eq!(
-                            tool_call.arguments,
+                            tool_call.raw_arguments,
                             r#"{"location":"Brooklyn","units":"celsius"}"#
                         );
-                        assert_eq!(tool_call.parsed_name, Some("get_temperature".to_string()));
+                        assert_eq!(tool_call.name, Some("get_temperature".to_string()));
                         assert_eq!(
-                            tool_call.parsed_arguments,
+                            tool_call.arguments,
                             Some(json!({"location": "Brooklyn", "units": "celsius"}))
                         );
                     }
@@ -1159,7 +1162,10 @@ mod tests {
                 provider_errors, ..
             }) => {
                 assert_eq!(provider_errors.len(), 1);
-                assert!(matches!(provider_errors[0], Error::InferenceClient { .. }));
+                assert!(matches!(
+                    provider_errors["error_provider"],
+                    Error::InferenceClient { .. }
+                ));
             }
             _ => panic!("Expected ModelProvidersExhausted error"),
         }
