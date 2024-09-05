@@ -13,10 +13,10 @@ routing = ["my_openai_provider"]
 type = "openai"
 model_name = "gpt-4o-mini-2024-07-18"
 
-[models."my_haiku_3.5"]
+[models."my_haiku_3"]
 routing = ["my_anthropic_provider"]
 
-[models."my_haiku_3.5".providers.my_anthropic_provider]
+[models."my_haiku_3".providers.my_anthropic_provider]
 type = "anthropic"
 model_name = "claude-3-haiku-20240307"
 
@@ -38,7 +38,7 @@ user_template = "functions/draft_email/gpt_4o_mini_email_variant/user.minijinja"
 [functions.draft_email.variants."haiku_3.5_email_variant"]
 type = "chat_completion"
 weight = 0.3 # sample this variant 30% of the time
-model = "my_haiku_3.5"
+model = "my_haiku_3"
 system_template = "functions/draft_email/haiku_3.5_email_variant/system.minijinja"
 user_template = "functions/draft_email/haiku_3.5_email_variant/user.minijinja"
 temperature = 0.9
