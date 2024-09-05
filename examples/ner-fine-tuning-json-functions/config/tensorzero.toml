@@ -1,4 +1,4 @@
-# TensorZero configuration file for the `haiku_hidden_preferences` example.
+# TensorZero configuration file for the `ner-fine-tuning-json-functions` example.
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  GENERAL                                   │
@@ -18,33 +18,12 @@ routing = ["openai"]
 type = "openai"
 model_name = "gpt-4o-2024-08-06"
 
-[models."llama-3.1-405b-instruct"]
-routing = ["fireworks"]
-
-[models."llama-3.1-405b-instruct".providers.fireworks]
-type = "fireworks"
-model_name = "accounts/fireworks/models/llama-v3p1-405b-instruct"
-
 [models."llama-3.1-8b-instruct"]
 routing = ["fireworks"]
 
 [models."llama-3.1-8b-instruct".providers.fireworks]
 type = "fireworks"
 model_name = "accounts/fireworks/models/llama-v3p1-8b-instruct"
-
-[models."mistral-large-2407"]
-routing = ["mistral"]
-
-[models."mistral-large-2407".providers.mistral]
-type = "mistral"
-model_name = "mistral-large-2407"
-
-[models.claude-3-5-sonnet-20240620]
-routing = ["anthropic"]
-
-[models.claude-3-5-sonnet-20240620.providers.anthropic]
-type = "anthropic"
-model_name = "claude-3-5-sonnet-20240620"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
@@ -61,31 +40,11 @@ model = "gpt-4o-2024-08-06"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
 json_mode = "strict"
 
-[functions.extract_entities.variants.llama_405b_initial_prompt]
-weight = 1
-type = "chat_completion"
-model = "llama-3.1-405b-instruct"
-system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
-
 [functions.extract_entities.variants.llama_8b_initial_prompt]
 weight = 1
 type = "chat_completion"
 model = "llama-3.1-8b-instruct"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
-
-[functions.extract_entities.variants.mistral_large_initial_prompt]
-weight = 1
-type = "chat_completion"
-model = "mistral-large-2407"
-system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
-
-[functions.extract_entities.variants.claude_sonnet_initial_prompt]
-weight = 1
-type = "chat_completion"
-model = "claude-3-5-sonnet-20240620"
-system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
-json_mode = "implicit_tool"
-
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
@@ -96,12 +55,12 @@ type = "boolean"
 level = "inference"
 optimize = "max"
 
-[metrics.valid_json]
-type = "boolean"
+[metrics.jaccard_similarity]
+type = "float"
 level = "inference"
 optimize = "max"
 
-[metrics.jaccard_similarity]
-type = "float"
+[metrics.valid_json]
+type = "boolean"
 level = "inference"
 optimize = "max"
