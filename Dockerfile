@@ -20,7 +20,7 @@ RUN --mount=type=cache,id=tensorzero-gateway-release,sharing=shared,target=/usr/
 
 FROM debian:bookworm-slim AS base
 
-RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y ca-certificates openssl wget && rm -rf /var/lib/apt/lists/*
 
 # ========== gateway ==========
 
