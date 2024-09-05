@@ -35,7 +35,7 @@ from .types import (
 
 
 class AsyncTensorZeroGateway:
-    def __init__(self, base_url: str, timeout: Optional[float] = None):
+    def __init__(self, base_url: str, *, timeout: Optional[float] = None):
         """
         Initialize the TensorZero client.
 

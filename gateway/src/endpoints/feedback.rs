@@ -103,7 +103,6 @@ pub async fn feedback_handler(
                 &params.metric_name,
                 feedback_metadata.target_id,
                 params.value,
-                feedback_metadata.level,
                 feedback_id,
                 dryrun,
             )
@@ -115,7 +114,6 @@ pub async fn feedback_handler(
                 &params.metric_name,
                 feedback_metadata.target_id,
                 params.value,
-                feedback_metadata.level,
                 feedback_id,
                 dryrun,
             )
@@ -236,14 +234,13 @@ async fn write_float(
     metric_name: &str,
     target_id: Uuid,
     value: Value,
-    level: &MetricConfigLevel,
     feedback_id: Uuid,
     dryrun: bool,
 ) -> Result<(), Error> {
     let value = value.as_f64().ok_or(Error::InvalidRequest {
         message: format!("Feedback value for metric `{metric_name}` must be a number"),
     })?;
-    let payload = json!({"target_type": level, "target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id});
+    let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id});
     if !dryrun {
         connection_info
             .write(&payload, "FloatMetricFeedback")
@@ -257,14 +254,13 @@ async fn write_boolean(
     metric_name: &str,
     target_id: Uuid,
     value: Value,
-    level: &MetricConfigLevel,
     feedback_id: Uuid,
     dryrun: bool,
 ) -> Result<(), Error> {
     let value = value.as_bool().ok_or(Error::InvalidRequest {
         message: format!("Feedback value for metric `{metric_name}` must be a boolean"),
     })?;
-    let payload = json!({"target_type": level, "target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id});
+    let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id});
     if !dryrun {
         connection_info
             .write(&payload, "BooleanMetricFeedback")
@@ -594,8 +590,6 @@ mod tests {
         assert_eq!(retrieved_target_id, &episode_id.to_string());
         let retrieved_value = mock_data.get("value").unwrap();
         assert_eq!(retrieved_value, &value);
-        let retrieved_target_type = mock_data.get("target_type").unwrap();
-        assert_eq!(retrieved_target_type, "episode");
 
         // Test Boolean feedback with inference-level
         let mut metrics = HashMap::new();
@@ -648,8 +642,6 @@ mod tests {
         assert_eq!(retrieved_target_id, &inference_id.to_string());
         let retrieved_value = mock_data.get("value").unwrap();
         assert_eq!(retrieved_value, &value);
-        let retrieved_target_type = mock_data.get("target_type").unwrap();
-        assert_eq!(retrieved_target_type, "inference");
 
         // Test dryrun
         let inference_id = Uuid::now_v7();
