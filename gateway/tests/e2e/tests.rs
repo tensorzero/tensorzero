@@ -1,5 +1,5 @@
 #![cfg(test)]
-mod clickhouse_migration_manager;
+mod clickhouse;
 mod common;
 mod feedback;
 mod health;
