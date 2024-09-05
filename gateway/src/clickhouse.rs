@@ -297,7 +297,7 @@ fn set_clickhouse_format_settings(database_url: &mut Url) {
     for (key, value) in existing_pairs {
         if OVERRIDDEN_SETTINGS.contains(&key.as_str()) {
             tracing::warn!(
-                "Skipping ClickHouse setting '{}' as it will be overridden",
+                "Your ClickHouse connection URL has the setting '{}' but it will be overridden.",
                 key
             );
         } else {
