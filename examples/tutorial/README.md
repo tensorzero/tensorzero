@@ -13,21 +13,31 @@ Docker Compose will launch a ClickHouse database, launch the TensorZero Gateway,
 
 ## Examples
 
+### Part I — Simple Chatbot
+
 ```bash
 docker compose up --build --force-recreate simple-chatbot
 ```
+
+### Part II — Email Copilot
 
 ```bash
 docker compose up --build --force-recreate email-copilot
 ```
 
+### Part III — Weather RAG
+
 ```bash
 docker compose up --build --force-recreate weather-rag
 ```
 
+### Part IV — Email Data Extraction
+
 ```bash
 docker compose up --build --force-recreate email-data-extraction
 ```
+
+---
 
 You can explore the scripts and configuration files to understand how the the examples work.
 Feel free to make changes and explore!
