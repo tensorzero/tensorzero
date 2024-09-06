@@ -17,6 +17,8 @@ We use a [list of common nouns](https://www.desiquintans.com/nounlist) as the se
 
 ## Setup
 
+## TensorZero
+
 We've written TensorZero configuration files to accomplish this example and have provided them in the `config` directory.
 See `tensorzero.toml` for the main configuration details.
 You can also find the judge's preferences in `config/functions/judge_haiku/judge_prompt/system_template.minijinja`.
@@ -26,6 +28,23 @@ Docker Compose will launch the TensorZero Gateway and a test ClickHouse database
 
 ```bash
 docker compose up
+```
+
+### Python Environment
+
+#### Using [`uv`](https://github.com/astral-sh/uv) (Recommended)
+
+```bash
+uv venv  # Create a new virtual environment
+uv pip sync requirements.txt  # Install the dependencies
+```
+
+#### Using `pip`
+
+We recommend using Python 3.10+ and a virtual environment.
+
+```bash
+pip install -r requirements.txt
 ```
 
 ## Running the Example
