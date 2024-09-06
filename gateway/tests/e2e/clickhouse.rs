@@ -16,6 +16,7 @@ async fn test_clickhouse_migration_manager() {
         Uuid::now_v7().simple()
     );
     let mut clickhouse_url = url::Url::parse(&CLICKHOUSE_URL).unwrap();
+    clickhouse_url.set_path("");
     clickhouse_url.set_query(Some(format!("database={}", database).as_str()));
 
     let clickhouse = ClickHouseConnectionInfo::Production {
