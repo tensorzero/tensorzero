@@ -28,11 +28,18 @@ user_schema = "functions/solve_math_problem/user_schema.json"
 
 
 [functions.solve_math_problem.variants.llama-8b-baseline]
-weight = 1
+weight = 0
 type = "chat_completion"
 model = "llama3.1-8b-instruct"
 system_template = "functions/solve_math_problem/llama-8b-baseline/system.minijinja"
 user_template = "functions/solve_math_problem/llama-8b-baseline/user.minijinja"
+
+[functions.solve_math_problem.variants.llama-8b-dspy]
+weight = 1
+type = "chat_completion"
+model = "llama3.1-8b-instruct"
+system_template = "functions/solve_math_problem/llama-8b-dspy/system.minijinja"
+user_template = "functions/solve_math_problem/llama-8b-dspy/user.minijinja"
 
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
