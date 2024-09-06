@@ -2,11 +2,13 @@ use std::time::Duration;
 
 use futures::stream::Stream;
 use futures::StreamExt;
+use lazy_static::lazy_static;
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use tokio::time::Instant;
+use url::Url;
 use uuid::Uuid;
 
 use crate::{
@@ -27,6 +29,13 @@ use super::{
     provider_trait::InferenceProvider,
 };
 
+lazy_static! {
+    static ref MISTRAL_API_BASE: Url = {
+        #[allow(clippy::expect_used)]
+        Url::parse("https://api.mistral.ai/v1/").expect("Failed to parse MISTRAL_API_BASE")
+    };
+}
+
 #[derive(Debug)]
 pub struct MistralProvider {
     pub model_name: String,
@@ -42,9 +51,8 @@ impl InferenceProvider for MistralProvider {
         let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
             provider_name: "Mistral".to_string(),
         })?;
-        let api_base = Some("https://api.mistral.ai/v1/");
         let request_body = MistralRequest::new(&self.model_name, request)?;
-        let request_url = get_chat_url(api_base)?;
+        let request_url = get_chat_url(Some(&MISTRAL_API_BASE))?;
         let start_time = Instant::now();
         let res = http_client
             .post(request_url)
@@ -94,8 +102,7 @@ impl InferenceProvider for MistralProvider {
             provider_name: "Mistral".to_string(),
         })?;
         let request_body = MistralRequest::new(&self.model_name, request)?;
-        let api_base = Some("https://api.mistral.ai/v1/");
-        let request_url = get_chat_url(api_base)?;
+        let request_url = get_chat_url(Some(&MISTRAL_API_BASE))?;
         let start_time = Instant::now();
         let event_source = http_client
             .post(request_url)

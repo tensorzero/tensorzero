@@ -1,10 +1,12 @@
 use futures::{StreamExt, TryStreamExt};
+use lazy_static::lazy_static;
 use reqwest::StatusCode;
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
 use serde_json::Value;
 use tokio::time::Instant;
+use url::Url;
 
 use crate::{
     error::Error,
@@ -23,6 +25,13 @@ use super::{
     provider_trait::InferenceProvider,
 };
 
+lazy_static! {
+    static ref TOGETHER_API_BASE: Url = {
+        #[allow(clippy::expect_used)]
+        Url::parse("https://api.together.xyz/v1").expect("Failed to parse TOGETHER_API_BASE")
+    };
+}
+
 #[derive(Debug)]
 pub struct TogetherProvider {
     pub model_name: String,
@@ -40,9 +49,8 @@ impl InferenceProvider for TogetherProvider {
         let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
             provider_name: "Together".to_string(),
         })?;
-        let api_base = Some("https://api.together.xyz/v1");
         let request_body = TogetherRequest::new(&self.model_name, request);
-        let request_url = get_chat_url(api_base)?;
+        let request_url = get_chat_url(Some(&TOGETHER_API_BASE))?;
         let start_time = Instant::now();
         let res = http_client
             .post(request_url)
@@ -98,8 +106,7 @@ impl InferenceProvider for TogetherProvider {
             provider_name: "Together".to_string(),
         })?;
         let request_body = TogetherRequest::new(&self.model_name, request);
-        let api_base = Some("https://api.together.xyz/v1");
-        let request_url = get_chat_url(api_base)?;
+        let request_url = get_chat_url(Some(&TOGETHER_API_BASE))?;
         let start_time = Instant::now();
         let event_source = http_client
             .post(request_url)

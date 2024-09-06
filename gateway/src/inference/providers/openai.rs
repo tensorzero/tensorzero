@@ -18,13 +18,19 @@ use crate::inference::types::{
     RequestMessage, Role, Text, TextChunk, Usage,
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
+use lazy_static::lazy_static;
 
-const OPENAI_DEFAULT_BASE_URL: &str = "https://api.openai.com/v1/";
+lazy_static! {
+    static ref OPENAI_DEFAULT_BASE_URL: Url = {
+        #[allow(clippy::expect_used)]
+        Url::parse("https://api.openai.com/v1/").expect("Failed to parse OPENAI_DEFAULT_BASE_URL")
+    };
+}
 
 #[derive(Debug)]
 pub struct OpenAIProvider {
     pub model_name: String,
-    pub api_base: Option<String>,
+    pub api_base: Option<Url>,
     pub api_key: Option<SecretString>,
 }
 
@@ -38,7 +44,7 @@ impl InferenceProvider for OpenAIProvider {
             provider_name: "OpenAI".to_string(),
         })?;
         let request_body = OpenAIRequest::new(&self.model_name, request);
-        let request_url = get_chat_url(self.api_base.as_deref())?;
+        let request_url = get_chat_url(self.api_base.as_ref())?;
         let start_time = Instant::now();
         let res = http_client
             .post(request_url)
@@ -88,7 +94,7 @@ impl InferenceProvider for OpenAIProvider {
             provider_name: "OpenAI".to_string(),
         })?;
         let request_body = OpenAIRequest::new(&self.model_name, request);
-        let request_url = get_chat_url(self.api_base.as_deref())?;
+        let request_url = get_chat_url(self.api_base.as_ref())?;
         let start_time = Instant::now();
         let event_source = http_client
             .post(request_url)
@@ -159,22 +165,16 @@ pub fn stream_openai(
     }
 }
 
-pub(super) fn get_chat_url(base_url: Option<&str>) -> Result<Url, Error> {
-    let base_url = base_url.unwrap_or(OPENAI_DEFAULT_BASE_URL);
-    let base_url = if base_url.ends_with('/') {
-        base_url.to_string()
-    } else {
-        format!("{}/", base_url)
-    };
-    let url = Url::parse(&base_url)
+pub(super) fn get_chat_url(base_url: Option<&Url>) -> Result<Url, Error> {
+    let base_url = base_url.unwrap_or(&OPENAI_DEFAULT_BASE_URL);
+    let mut url = base_url.clone();
+    if !url.path().ends_with('/') {
+        url.set_path(&format!("{}/", url.path()));
+    }
+    url.join("chat/completions")
         .map_err(|e| Error::InvalidBaseUrl {
             message: e.to_string(),
-        })?
-        .join("chat/completions")
-        .map_err(|e| Error::InvalidBaseUrl {
-            message: e.to_string(),
-        })?;
-    Ok(url)
+        })
 }
 
 pub(super) fn handle_openai_error(
@@ -766,25 +766,21 @@ mod tests {
 
         // Test with custom base URL
         let custom_base = "https://custom.openai.com/api/";
-        let custom_url = get_chat_url(Some(custom_base)).unwrap();
+        let custom_url = get_chat_url(Some(&Url::parse(custom_base).unwrap())).unwrap();
         assert_eq!(
             custom_url.as_str(),
             "https://custom.openai.com/api/chat/completions"
         );
 
-        // Test with invalid URL
-        let invalid_url = get_chat_url(Some("not a url"));
-        assert!(invalid_url.is_err());
-
         // Test with URL without trailing slash
-        let unjoinable_url = get_chat_url(Some("https://example.com"));
+        let unjoinable_url = get_chat_url(Some(&Url::parse("https://example.com").unwrap()));
         assert!(unjoinable_url.is_ok());
         assert_eq!(
             unjoinable_url.unwrap().as_str(),
             "https://example.com/chat/completions"
         );
         // Test with URL that can't be joined
-        let unjoinable_url = get_chat_url(Some("https://example.com/foo"));
+        let unjoinable_url = get_chat_url(Some(&Url::parse("https://example.com/foo").unwrap()));
         assert!(unjoinable_url.is_ok());
         assert_eq!(
             unjoinable_url.unwrap().as_str(),
