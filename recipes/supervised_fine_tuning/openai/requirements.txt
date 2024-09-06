@@ -12,9 +12,10 @@ asttokens==2.4.1
     # via stack-data
 certifi==2024.8.30
     # via
+    #   clickhouse-connect
     #   httpcore
     #   httpx
-clickhouse-driver==0.2.9
+clickhouse-connect==0.7.19
     # via -r requirements.in
 comm==0.2.2
     # via ipykernel
@@ -24,10 +25,6 @@ decorator==5.1.1
     # via ipython
 distro==1.9.0
     # via openai
-exceptiongroup==1.2.2
-    # via
-    #   anyio
-    #   ipython
 executing==2.1.0
     # via stack-data
 h11==0.14.0
@@ -35,9 +32,7 @@ h11==0.14.0
 httpcore==1.0.5
     # via httpx
 httpx==0.27.2
-    # via
-    #   openai
-    #   tensorzero
+    # via openai
 idna==3.8
     # via
     #   anyio
@@ -56,6 +51,8 @@ jupyter-core==5.7.2
     # via
     #   ipykernel
     #   jupyter-client
+lz4==4.3.3
+    # via clickhouse-connect
 matplotlib-inline==0.1.7
     # via
     #   ipykernel
@@ -100,7 +97,7 @@ python-dateutil==2.9.0.post0
     #   pandas
 pytz==2024.1
     # via
-    #   clickhouse-driver
+    #   clickhouse-connect
     #   pandas
 pyzmq==26.2.0
     # via
@@ -117,8 +114,6 @@ sniffio==1.3.1
     #   openai
 stack-data==0.6.3
     # via ipython
-../../../clients/python-asyncio
-    # via -r requirements.in
 toml==0.10.2
     # via -r requirements.in
 tornado==6.4.1
@@ -137,8 +132,6 @@ traitlets==5.14.3
     #   matplotlib-inline
 typing-extensions==4.12.2
     # via
-    #   anyio
-    #   ipython
     #   openai
     #   pydantic
     #   pydantic-core
@@ -146,7 +139,9 @@ tzdata==2024.1
     # via
     #   pandas
     #   pydantic
-tzlocal==5.2
-    # via clickhouse-driver
+urllib3==2.2.2
+    # via clickhouse-connect
 wcwidth==0.2.13
     # via prompt-toolkit
+zstandard==0.23.0
+    # via clickhouse-connect
