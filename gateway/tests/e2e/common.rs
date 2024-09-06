@@ -17,10 +17,7 @@ pub fn get_gateway_endpoint(endpoint: &str) -> Url {
 }
 
 pub async fn get_clickhouse() -> ClickHouseConnectionInfo {
-    let mut clickhouse_url = url::Url::parse(&CLICKHOUSE_URL).unwrap();
-    clickhouse_url
-        .query_pairs_mut()
-        .append_pair("database", "tensorzero_e2e_tests");
+    let clickhouse_url = url::Url::parse(&CLICKHOUSE_URL).unwrap();
     ClickHouseConnectionInfo::new(clickhouse_url.as_ref()).unwrap()
 }
 
