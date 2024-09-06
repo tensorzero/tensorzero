@@ -16,6 +16,8 @@ After running the example and generating some data, we show how to query a datas
 
 ## Setup
 
+### TensorZero
+
 We've written TensorZero configuration files to accomplish this example and have provided them in the `config` directory.
 See `tensorzero.toml` for the main configuration details.
 
@@ -23,6 +25,23 @@ To get started, create a `.env` file with your Together API key (`TOGETHER_API_K
 
 ```bash
 docker compose up
+```
+
+### Python Environment
+
+#### Using [`uv`](https://github.com/astral-sh/uv) (Recommended)
+
+```bash
+uv venv  # Create a new virtual environment
+uv pip sync requirements.txt  # Install the dependencies
+```
+
+#### Using `pip`
+
+We recommend using Python 3.10+ and a virtual environment.
+
+```bash
+pip install -r requirements.txt
 ```
 
 ## Running the Example

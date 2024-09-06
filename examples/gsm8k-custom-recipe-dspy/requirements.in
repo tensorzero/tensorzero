@@ -1,0 +1,4 @@
+ipykernel
+pandas
+tensorzero @ ../../clients/python-asyncio
+tqdm
