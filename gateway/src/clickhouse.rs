@@ -23,29 +23,31 @@ pub enum ClickHouseConnectionInfo {
 }
 
 impl ClickHouseConnectionInfo {
+    /// Create a new ClickHouse connection info from a database URL.
+    /// You should always use this function in production code or generic integration tests that
+    /// don't test specific ClickHouse behavior.
+    /// For e2e tests, you should use the `get_clickhouse` function.
+    ///
+    /// However, for tests that directly test ClickHouse behavior, you can directly create the struct.
     pub fn new(database_url: &str) -> Result<Self, Error> {
         // Add a query string for the database using the URL crate
-        #[allow(unused_mut)]
         let mut database_url = Url::parse(database_url).map_err(|e| Error::Config {
             message: format!("Invalid ClickHouse database URL: {}", e),
         })?;
 
+        #[allow(unused_variables)]
+        let database = validate_clickhouse_url_get_db_name(&database_url)?
+            .unwrap_or_else(|| "default".to_string());
+
         #[cfg(feature = "e2e_tests")]
-        let mut database_url = set_e2e_test_database(database_url);
+        let database = "tensorzero_e2e_tests".to_string();
 
-        let mut database = String::new();
-
-        // Get the database name from the query string
-        for (key, value) in database_url.query_pairs() {
-            if key == "database" {
-                database = value.to_string();
-                break;
-            }
-        }
-        // If there is no database name, we use the "default" database
-        if database.is_empty() {
-            database = "default".to_string();
-        }
+        // Although we take the database name from the URL path,
+        // we need to set the query string for the database name for the ClickHouse TCP protocol
+        database_url.set_path("");
+        database_url
+            .query_pairs_mut()
+            .append_pair("database", &database);
 
         // Set ClickHouse format settings for some error checking on writes
         set_clickhouse_format_settings(&mut database_url);
@@ -272,14 +274,6 @@ async fn write_production(
     }
 }
 
-#[cfg(feature = "e2e_tests")]
-/// Sets the database for the ClickHouse client to tensorzero_e2e_tests for the duration of the test.
-fn set_e2e_test_database(database_url: Url) -> Url {
-    let mut new_database_url = database_url.clone();
-    new_database_url.set_query(Some("database=tensorzero_e2e_tests"));
-    new_database_url
-}
-
 fn set_clickhouse_format_settings(database_url: &mut Url) {
     const OVERRIDDEN_SETTINGS: [&str; 3] = [
         "input_format_skip_unknown_fields",
@@ -311,8 +305,76 @@ fn set_clickhouse_format_settings(database_url: &mut Url) {
     database_url.query_pairs_mut().finish();
 }
 
+fn validate_clickhouse_url_get_db_name(url: &Url) -> Result<Option<String>, Error> {
+    // Check the scheme
+    match url.scheme() {
+        "http" | "https" => {}
+        "clickhouse" | "clickhousedb" => {
+            return Err(Error::Config {
+                message: format!(
+                    "Invalid scheme in ClickHouse URL: '{}'. Use 'http' or 'https' instead.",
+                    url.scheme()
+                ),
+            })
+        }
+        _ => {
+            return Err(Error::Config {
+                message: format!(
+                "Invalid scheme in ClickHouse URL: '{}'. Only 'http' and 'https' are supported.",
+                url.scheme()
+            ),
+            })
+        }
+    }
+
+    // Validate the host
+    if url.host().is_none() {
+        return Err(Error::Config {
+            message: "Missing hostname in ClickHouse URL".to_string(),
+        });
+    }
+
+    // Validate the port
+    if url.port().is_none() {
+        return Err(Error::Config {
+            message: "Missing port in ClickHouse URL".to_string(),
+        });
+    }
+
+    // Validate that none of the query strings have key "database"
+    if url.query_pairs().any(|(key, _)| key == "database") {
+        return Err(Error::Config {
+            message: "The query string 'database' is not allowed in the ClickHouse URL".to_string(),
+        });
+    }
+    // username, password, and query-strings are optional, so we don't need to validate them
+
+    // Validate that the path is either empty or ends with the database name (a single segment)
+    let mut path_segments: Vec<_> = url.path_segments().map(|s| s.collect()).unwrap_or_default();
+    if let Some(last) = path_segments.last() {
+        if last.is_empty() {
+            path_segments.pop();
+        }
+    }
+    Ok(match path_segments.len() {
+        0 => None, // Empty path is valid
+        1 => {
+            if path_segments[0].is_empty() {
+                return Err(Error::Config {
+                    message: "The database name in the path of the ClickHouse URL cannot be empty".to_string(),
+                });
+            }
+            Some(path_segments[0].to_string())
+        }
+        _ => return Err(Error::Config {
+            message: "The path of the ClickHouse URL must be of length 0 or 1, and end with the database name if set".to_string(),
+        }),
+    })
+}
+
 #[cfg(test)]
 mod tests {
+
     use super::*;
 
     #[test]
@@ -324,5 +386,73 @@ mod tests {
         let mut database_url = Url::parse("http://localhost:8123/?input_format_skip_unknown_fields=1&input_format_defaults_for_omitted_fields=1&input_format_null_as_default=1").unwrap();
         set_clickhouse_format_settings(&mut database_url);
         assert_eq!(database_url.to_string(), "http://localhost:8123/?input_format_skip_unknown_fields=0&input_format_defaults_for_omitted_fields=0&input_format_null_as_default=0");
+    }
+
+    #[test]
+    fn test_validate_clickhouse_url() {
+        let database_url = Url::parse("http://localhost:8123/").unwrap();
+        let result = validate_clickhouse_url_get_db_name(&database_url).unwrap();
+        assert_eq!(result, None);
+
+        let database_url = Url::parse("clickhouse://localhost:8123/").unwrap();
+        let err = validate_clickhouse_url_get_db_name(&database_url).unwrap_err();
+        assert_eq!(
+            err,
+            Error::Config {
+                message:
+                    "Invalid scheme in ClickHouse URL: 'clickhouse'. Use 'http' or 'https' instead."
+                        .to_string(),
+            }
+        );
+
+        let database_url = Url::parse("https://localhost:8123/").unwrap();
+        let result = validate_clickhouse_url_get_db_name(&database_url).unwrap();
+        assert_eq!(result, None);
+
+        let database_url =
+            Url::parse("http://username:password@localhost:8123/database?k=v").unwrap();
+        let result = validate_clickhouse_url_get_db_name(&database_url).unwrap();
+        assert_eq!(result, Some("database".to_string()));
+
+        let database_url = Url::parse("http://localhost/").unwrap();
+        let err = validate_clickhouse_url_get_db_name(&database_url).unwrap_err();
+        assert_eq!(
+            err,
+            Error::Config {
+                message: "Missing port in ClickHouse URL".to_string(),
+            }
+        );
+
+        let database_url = Url::parse("http://localhost:8123").unwrap();
+        assert!(validate_clickhouse_url_get_db_name(&database_url).is_ok());
+
+        let database_url =
+            Url::parse("http://localhost:8123/?database=tensorzero_e2e_tests").unwrap();
+        let err = validate_clickhouse_url_get_db_name(&database_url).unwrap_err();
+        assert_eq!(
+            err,
+            Error::Config {
+                message: "The query string 'database' is not allowed in the ClickHouse URL"
+                    .to_string(),
+            }
+        );
+
+        let database_url =
+            Url::parse("http://localhost:8123/database/tensorzero_e2e_tests").unwrap();
+        let err = validate_clickhouse_url_get_db_name(&database_url).unwrap_err();
+        assert_eq!(
+            err,
+            Error::Config {
+                message: "The path of the ClickHouse URL must be of length 0 or 1, and end with the database name if set".to_string(),
+            }
+        );
+
+        let database_url = Url::parse("http://localhost:8123/database?foo=bar").unwrap();
+        let database = validate_clickhouse_url_get_db_name(&database_url).unwrap();
+        assert_eq!(database, Some("database".to_string()));
+
+        let database_url = Url::parse("http://localhost:8123/database/").unwrap();
+        let database = validate_clickhouse_url_get_db_name(&database_url).unwrap();
+        assert_eq!(database, Some("database".to_string()));
     }
 }
