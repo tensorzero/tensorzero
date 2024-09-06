@@ -30,8 +30,11 @@ __pycache__/
 .env
 .envrc
 
-
 # Python
 .ipynb_checkpoints/
 dist/
 .venv/
+
+# Misc
+.ruff_cache/
+credentials/
