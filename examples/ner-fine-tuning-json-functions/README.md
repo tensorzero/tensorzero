@@ -23,7 +23,7 @@ To get started, create a `.env` file with your OpenAI API key (`OPENAI_API_KEY`)
 Docker Compose will launch the TensorZero Gateway and a test ClickHouse database.
 
 ```bash
-docker compose up -d --wait
+docker compose up
 ```
 
 ## Running the Example
