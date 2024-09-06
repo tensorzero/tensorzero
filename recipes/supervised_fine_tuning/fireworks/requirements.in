@@ -1,5 +1,5 @@
-clickhouse-driver==0.2.9
-ipykernel==6.29.5
-minijinja==2.2.0
-toml==0.10.2
-uuid7==0.1.0
+clickhouse-driver
+ipykernel
+minijinja
+toml
+uuid7z
