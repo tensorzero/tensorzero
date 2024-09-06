@@ -1,0 +1,174 @@
+# This file launches a ClickHouse database, a TensorZero Gateway for each example, and the examples themselves.
+#
+# DO NOT USE THIS FILE IN PRODUCTION. IT IS INTENDED FOR ILLUSTRATIVE PURPOSES ONLY.
+#
+# See https://www.tensorzero.com/docs/gateway/deployment/ for instructions on how to deploy the TensorZero Gateway
+# in production.
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8123/ping",
+        ]
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+
+  gateway-simple-chatbot:
+    image: tensorzero/gateway
+    volumes:
+      - ./01-simple-chatbot/config:/app/config:ro
+    environment:
+      - CLICKHOUSE_URL=http://clickhouse:8123
+      - OPENAI_API_KEY=${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:3000/status",
+        ]
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+  gateway-email-copilot:
+    image: tensorzero/gateway
+    volumes:
+      - ./02-email-copilot/config:/app/config:ro
+    environment:
+      - CLICKHOUSE_URL=http://clickhouse:8123
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:?Environment variable ANTHROPIC_API_KEY must be set.}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:3000/status",
+        ]
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+  gateway-weather-rag:
+    image: tensorzero/gateway
+    volumes:
+      - ./03-weather-rag/config:/app/config:ro
+    environment:
+      - CLICKHOUSE_URL=http://clickhouse:8123
+      - OPENAI_API_KEY=${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:3000/status",
+        ]
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+    ports:
+      - "3000:3000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+  gateway-email-data-extraction:
+    image: tensorzero/gateway
+    volumes:
+      - ./04-email-data-extraction/config:/app/config:ro
+    environment:
+      - CLICKHOUSE_URL=http://clickhouse:8123
+      - OPENAI_API_KEY=${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:3000/status",
+        ]
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+  simple-chatbot:
+    build:
+      context: ../..
+      dockerfile: examples/tutorial/Dockerfile
+    volumes:
+      - ./01-simple-chatbot/config:/app/config:ro
+      - ./01-simple-chatbot/simple-chatbot.py:/app/script.py:ro
+    depends_on:
+      gateway-simple-chatbot:
+        condition: service_healthy
+    environment:
+      - TENSORZERO_GATEWAY_URL=http://gateway-simple-chatbot:3000
+
+  email-copilot:
+    build:
+      context: ../..
+      dockerfile: examples/tutorial/Dockerfile
+    volumes:
+      - ./02-email-copilot/config:/app/config:ro
+      - ./02-email-copilot/email-copilot.py:/app/script.py:ro
+    depends_on:
+      gateway-email-copilot:
+        condition: service_healthy
+    environment:
+      - TENSORZERO_GATEWAY_URL=http://gateway-email-copilot:3000
+
+  weather-rag:
+    build:
+      context: ../..
+      dockerfile: examples/tutorial/Dockerfile
+    volumes:
+      - ./03-weather-rag/config:/app/config:ro
+      - ./03-weather-rag/weather-rag.py:/app/script.py:ro
+    depends_on:
+      gateway-weather-rag:
+        condition: service_healthy
+    environment:
+      - TENSORZERO_GATEWAY_URL=http://gateway-weather-rag:3000
+
+  email-data-extraction:
+    build:
+      context: ../..
+      dockerfile: examples/tutorial/Dockerfile
+    volumes:
+      - ./04-email-data-extraction/config:/app/config:ro
+      - ./04-email-data-extraction/email-data-extraction.py:/app/script.py:ro
+    depends_on:
+      gateway-email-data-extraction:
+        condition: service_healthy
+    environment:
+      - TENSORZERO_GATEWAY_URL=http://gateway-email-data-extraction:3000

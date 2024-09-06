@@ -6,6 +6,7 @@ from .types import (
     InferenceChunk,
     InferenceResponse,
     JsonInferenceOutput,
+    JsonInferenceResponse,
     Text,
     TextChunk,
     ToolCall,
@@ -14,13 +15,14 @@ from .types import (
 )
 
 __all__ = [
+    "AsyncTensorZeroGateway",
     "ChatInferenceResponse",
     "ContentBlock",
     "FeedbackResponse",
     "InferenceChunk",
     "InferenceResponse",
     "JsonInferenceOutput",
-    "AsyncTensorZeroGateway",
+    "JsonInferenceResponse",
     "Text",
     "TextChunk",
     "ToolCall",
