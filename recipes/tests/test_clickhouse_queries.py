@@ -89,6 +89,8 @@ def test_double_feedback_query():
         i.function_name = 'test_function'
         AND i.id = %(inference_id)s
     """
+    # NOTE: we add the last AND i.id = %(inference_id)s to ensure that the query is using the inference id we set above
+    # and we can run the test multiple times without it failing
     result = client.execute(query, params={"inference_id": inference["id"]})
     assert len(result) == 1
     assert result[0] == (
