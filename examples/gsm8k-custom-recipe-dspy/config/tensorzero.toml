@@ -1,0 +1,43 @@
+# TensorZero configuration file for the `gsm8k-custom-recipe-dspy` example.
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  GENERAL                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[gateway]
+bind_address = "0.0.0.0:3000"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                   MODELS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[models."llama3.1-8b-instruct"]
+routing = ["together"]
+
+[models."llama3.1-8b-instruct".providers.together]
+type = "together"
+model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.solve_math_problem]
+type = "chat"
+user_schema = "functions/solve_math_problem/user_schema.json"
+
+[functions.solve_math_problem.variants.llama-8b-baseline]
+weight = 1
+type = "chat_completion"
+model = "llama3.1-8b-instruct"
+system_template = "functions/solve_math_problem/llama-8b-baseline/system.minijinja"
+user_template = "functions/solve_math_problem/llama-8b-baseline/user.minijinja"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  METRICS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[metrics.correct]
+type = "boolean"
+level = "inference"
+optimize = "max"
