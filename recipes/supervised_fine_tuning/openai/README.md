@@ -1,6 +1,6 @@
 # TensorZero Recipe: Supervised Fine-Tuning with OpenAI
 
-The `openai.ipynb` notebook provides a step-by-step guide to perform supervised fine-tuning of OpenAI models based on data collected by the TensorZero Gateway.
+The `openai.ipynb` notebook provides a step-by-step recipe to perform supervised fine-tuning of OpenAI models based on data collected by the TensorZero Gateway.
 
 ## Setup
 

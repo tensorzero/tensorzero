@@ -1,6 +1,6 @@
 # TensorZero Recipe: Supervised Fine-Tuning with Fireworks
 
-The `fireworks.ipynb` notebook provides a step-by-step guide to perform supervised fine-tuning with Fireworks based on data collected by the TensorZero Gateway.
+The `fireworks.ipynb` notebook provides a step-by-step recipe to perform supervised fine-tuning with Fireworks based on data collected by the TensorZero Gateway.
 
 ## Setup
 
