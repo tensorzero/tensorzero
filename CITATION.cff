@@ -3,7 +3,7 @@ title: TensorZero
 message: "If you use this software, please cite it as below."
 type: software
 authors:
-  - name: TensorZero
+  - name: The TensorZero Team
     email: hello@tensorzero.com
     website: "https://www.tensorzero.com"
 repository-code: "https://github.com/tensorzero/tensorzero"

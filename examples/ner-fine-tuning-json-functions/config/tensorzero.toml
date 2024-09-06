@@ -34,14 +34,14 @@ type = "json"
 output_schema = "functions/extract_entities/output_schema.json"
 
 [functions.extract_entities.variants.gpt4o_initial_prompt]
-weight = 0
+weight = 1
 type = "chat_completion"
 model = "gpt-4o-2024-08-06"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
 json_mode = "strict"
 
 [functions.extract_entities.variants.llama_8b_initial_prompt]
-weight = 0
+weight = 1
 type = "chat_completion"
 model = "llama-3.1-8b-instruct"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
