@@ -23,7 +23,9 @@ import pytest
 import pytest_asyncio
 from tensorzero import (
     AsyncTensorZeroGateway,
+    ChatInferenceResponse,
     FeedbackResponse,
+    JsonInferenceResponse,
 )
 from tensorzero.types import TensorZeroError
 from uuid_extensions import uuid7
@@ -45,11 +47,12 @@ async def test_basic_inference(client):
         },
     )
     assert result.variant_name == "test"
-    output = result.output
-    assert len(output) == 1
-    assert output[0].type == "text"
+    assert isinstance(result, ChatInferenceResponse)
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
     assert (
-        output[0].text
+        content[0].text
         == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
     )
     usage = result.usage
@@ -122,14 +125,15 @@ async def test_tool_call_inference(client):
         },
     )
     assert result.variant_name == "variant"
-    output = result.output
-    assert len(output) == 1
-    assert output[0].type == "tool_call"
-    assert output[0].raw_name == "get_temperature"
-    assert output[0].id == "0"
-    assert output[0].raw_arguments == '{"location":"Brooklyn","units":"celsius"}'
-    assert output[0].name == "get_temperature"
-    assert output[0].arguments == {"location": "Brooklyn", "units": "celsius"}
+    assert isinstance(result, ChatInferenceResponse)
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "tool_call"
+    assert content[0].raw_name == "get_temperature"
+    assert content[0].id == "0"
+    assert content[0].raw_arguments == '{"location":"Brooklyn","units":"celsius"}'
+    assert content[0].name == "get_temperature"
+    assert content[0].arguments == {"location": "Brooklyn", "units": "celsius"}
     usage = result.usage
     assert usage.input_tokens == 10
     assert usage.output_tokens == 10
@@ -151,14 +155,15 @@ async def test_malformed_tool_call_inference(client):
         variant_name="bad_tool",
     )
     assert result.variant_name == "bad_tool"
-    output = result.output
-    assert len(output) == 1
-    assert output[0].type == "tool_call"
-    assert output[0].raw_name == "get_temperature"
-    assert output[0].id == "0"
-    assert output[0].raw_arguments == '{"location":"Brooklyn","units":"Celsius"}'
-    assert output[0].name == "get_temperature"
-    assert output[0].arguments is None
+    assert isinstance(result, ChatInferenceResponse)
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "tool_call"
+    assert content[0].raw_name == "get_temperature"
+    assert content[0].id == "0"
+    assert content[0].raw_arguments == '{"location":"Brooklyn","units":"Celsius"}'
+    assert content[0].name == "get_temperature"
+    assert content[0].arguments is None
     usage = result.usage
     assert usage.input_tokens == 10
     assert usage.output_tokens == 10
@@ -270,6 +275,7 @@ async def test_json_success(client):
         stream=False,
     )
     assert result.variant_name == "test"
+    assert isinstance(result, JsonInferenceResponse)
     assert result.output.raw == '{"answer":"Hello"}'
     assert result.output.parsed == {"answer": "Hello"}
     assert result.usage.input_tokens == 10
@@ -287,6 +293,7 @@ async def test_json_failure(client):
         stream=False,
     )
     assert result.variant_name == "test"
+    assert isinstance(result, JsonInferenceResponse)
     assert (
         result.output.raw
         == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."

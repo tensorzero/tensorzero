@@ -21,10 +21,11 @@ We've written TensorZero configuration files to accomplish this example and have
 See `tensorzero.toml` for the main configuration details.
 You can also find the judge's preferences in `config/functions/judge_haiku/judge_prompt/system_template.minijinja`.
 
-To get started, create a `.env` file with your OpenAI API key (`OPENAI_API_KEY`) and run the following command. Docker Compose will launch the TensorZero gateway and a test ClickHouse database.
+To get started, create a `.env` file with your OpenAI API key (`OPENAI_API_KEY`) and run the following command.
+Docker Compose will launch the TensorZero Gateway and a test ClickHouse database.
 
 ```bash
-docker compose up -d --wait
+docker compose up
 ```
 
 ## Running the Example
