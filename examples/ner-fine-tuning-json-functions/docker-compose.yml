@@ -1,6 +1,6 @@
 services:
   clickhouse:
-    container_name: tensorzero-clickhouse-haiku-hidden-preferences
+    container_name: tensorzero-clickhouse-ner-conll
     image: clickhouse/clickhouse-server:latest
     ports:
       - "8123:8123" # HTTP port
@@ -29,7 +29,7 @@ services:
       - ./config:/app/config:ro
       - ${GCP_VERTEX_CREDENTIALS_PATH:-/dev/null}:/app/gcp-credentials.json:ro
     environment:
-      - CLICKHOUSE_URL=http://tensorzero-clickhouse-haiku-hidden-preferences:8123/?database=tensorzero
+      - CLICKHOUSE_URL=http://tensorzero-clickhouse-ner-conll:8123/?database=tensorzero
       - GCP_VERTEX_CREDENTIALS_PATH=${GCP_VERTEX_CREDENTIALS_PATH:+/app/gcp-credentials.json}
     env_file:
       - ${ENV_FILE:-.env}
