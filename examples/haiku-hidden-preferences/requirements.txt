@@ -8,9 +8,10 @@ asttokens==2.4.1
     # via stack-data
 certifi==2024.7.4
     # via
+    #   clickhouse-connect
     #   httpcore
     #   httpx
-clickhouse-driver==0.2.9
+clickhouse-connect==0.7.19
     # via -r requirements.in
 comm==0.2.2
     # via ipykernel
@@ -18,10 +19,6 @@ debugpy==1.8.5
     # via ipykernel
 decorator==5.1.1
     # via ipython
-exceptiongroup==1.2.2
-    # via
-    #   anyio
-    #   ipython
 executing==2.0.1
     # via stack-data
 h11==0.14.0
@@ -46,14 +43,20 @@ jupyter-core==5.7.2
     # via
     #   ipykernel
     #   jupyter-client
+lz4==4.3.3
+    # via clickhouse-connect
 matplotlib-inline==0.1.7
     # via
     #   ipykernel
     #   ipython
 nest-asyncio==1.6.0
     # via ipykernel
+numpy==2.1.1
+    # via pandas
 packaging==24.1
     # via ipykernel
+pandas==2.2.2
+    # via -r requirements.in
 parso==0.8.4
     # via jedi
 pexpect==4.9.0
@@ -71,9 +74,13 @@ pure-eval==0.2.3
 pygments==2.18.0
     # via ipython
 python-dateutil==2.9.0.post0
-    # via jupyter-client
+    # via
+    #   jupyter-client
+    #   pandas
 pytz==2024.1
-    # via clickhouse-driver
+    # via
+    #   clickhouse-connect
+    #   pandas
 pyzmq==26.2.0
     # via
     #   ipykernel
@@ -104,11 +111,11 @@ traitlets==5.14.3
     #   jupyter-client
     #   jupyter-core
     #   matplotlib-inline
-typing-extensions==4.12.2
-    # via
-    #   anyio
-    #   ipython
-tzlocal==5.2
-    # via clickhouse-driver
+tzdata==2024.1
+    # via pandas
+urllib3==2.2.2
+    # via clickhouse-connect
 wcwidth==0.2.13
     # via prompt-toolkit
+zstandard==0.23.0
+    # via clickhouse-connect

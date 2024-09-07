@@ -1,4 +1,5 @@
-clickhouse-driver
+clickhouse-connect
 ipykernel
+pandas
 tensorzero @ ../../clients/python-asyncio
 tqdm

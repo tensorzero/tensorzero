@@ -1,5 +1,6 @@
-clickhouse-driver
+clickhouse-connect
 ipykernel
 minijinja
+pandas
 toml
-uuid7z
+uuid7

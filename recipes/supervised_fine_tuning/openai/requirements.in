@@ -1,7 +1,7 @@
-clickhouse-driver==0.2.9
-ipykernel==6.29.5
-minijinja==2.2.0
-numpy==2.1.1
-openai==1.44.0
-pandas==2.2.2
-toml==0.10.2
+clickhouse-connect
+ipykernel
+minijinja
+numpy
+openai
+pandas
+toml
