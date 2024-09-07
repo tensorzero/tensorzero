@@ -1,3 +1,5 @@
+clickhouse_connect
+dspy-ai
 ipykernel
 pandas
 tensorzero @ ../../clients/python-asyncio
