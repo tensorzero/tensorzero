@@ -1451,4 +1451,12 @@ mod tests {
             _ => panic!("Expected JsonSchema format"),
         }
     }
+
+    #[test]
+    fn test_openai_api_base() {
+        assert_eq!(
+            OPENAI_DEFAULT_BASE_URL.as_str(),
+            "https://api.openai.com/v1/"
+        );
+    }
 }

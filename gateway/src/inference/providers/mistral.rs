@@ -738,4 +738,9 @@ mod tests {
             assert_eq!(message, "Server error");
         }
     }
+
+    #[test]
+    fn test_mistral_api_base() {
+        assert_eq!(MISTRAL_API_BASE.as_str(), "https://api.mistral.ai/v1/");
+    }
 }

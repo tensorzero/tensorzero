@@ -288,4 +288,12 @@ mod tests {
             }))
         );
     }
+
+    #[test]
+    fn test_fireworks_api_base() {
+        assert_eq!(
+            FIREWORKS_API_BASE.as_str(),
+            "https://api.fireworks.ai/inference/v1/"
+        );
+    }
 }

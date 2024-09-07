@@ -264,4 +264,9 @@ mod tests {
         );
         assert_eq!(together_request.parallel_tool_calls, Some(false));
     }
+
+    #[test]
+    fn test_together_api_base() {
+        assert_eq!(TOGETHER_API_BASE.as_str(), "https://api.together.xyz/v1");
+    }
 }
