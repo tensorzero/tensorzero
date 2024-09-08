@@ -1,9 +1,11 @@
 use futures::{StreamExt, TryStreamExt};
+use lazy_static::lazy_static;
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
 use serde_json::Value;
 use tokio::time::Instant;
+use url::Url;
 
 use crate::{
     error::Error,
@@ -21,6 +23,14 @@ use super::{
     },
     provider_trait::InferenceProvider,
 };
+
+lazy_static! {
+    static ref FIREWORKS_API_BASE: Url = {
+        #[allow(clippy::expect_used)]
+        Url::parse("https://api.fireworks.ai/inference/v1/")
+            .expect("Failed to parse FIREWORKS_API_BASE")
+    };
+}
 
 #[derive(Debug)]
 pub struct FireworksProvider {
@@ -42,9 +52,8 @@ impl InferenceProvider for FireworksProvider {
         let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
             provider_name: "Fireworks".to_string(),
         })?;
-        let api_base = Some("https://api.fireworks.ai/inference/v1/");
         let request_body = FireworksRequest::new(&self.model_name, request);
-        let request_url = get_chat_url(api_base)?;
+        let request_url = get_chat_url(Some(&FIREWORKS_API_BASE))?;
         let start_time = Instant::now();
         let res = http_client
             .post(request_url)
@@ -97,8 +106,7 @@ impl InferenceProvider for FireworksProvider {
             provider_name: "Fireworks".to_string(),
         })?;
         let request_body = FireworksRequest::new(&self.model_name, request);
-        let api_base = Some("https://api.fireworks.ai/inference/v1/");
-        let request_url = get_chat_url(api_base)?;
+        let request_url = get_chat_url(Some(&FIREWORKS_API_BASE))?;
         let start_time = Instant::now();
         let event_source = http_client
             .post(request_url)
@@ -278,6 +286,14 @@ mod tests {
                     name: WEATHER_TOOL.name(),
                 }
             }))
+        );
+    }
+
+    #[test]
+    fn test_fireworks_api_base() {
+        assert_eq!(
+            FIREWORKS_API_BASE.as_str(),
+            "https://api.fireworks.ai/inference/v1/"
         );
     }
 }

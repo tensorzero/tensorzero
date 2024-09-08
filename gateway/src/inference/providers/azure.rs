@@ -4,6 +4,7 @@ use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
 use tokio::time::Instant;
+use url::Url;
 
 use crate::error::Error;
 use crate::inference::types::{
@@ -21,7 +22,7 @@ use super::provider_trait::InferenceProvider;
 #[derive(Debug)]
 pub struct AzureProvider {
     pub deployment_id: String,
-    pub endpoint: String,
+    pub endpoint: Url,
     pub api_key: Option<SecretString>,
 }
 
@@ -35,7 +36,7 @@ impl InferenceProvider for AzureProvider {
             provider_name: "Azure".to_string(),
         })?;
         let request_body = AzureRequest::new(request);
-        let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id);
+        let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id)?;
         let start_time = Instant::now();
         let res = http_client
             .post(request_url)
@@ -90,7 +91,7 @@ impl InferenceProvider for AzureProvider {
             provider_name: "Azure".to_string(),
         })?;
         let request_body = AzureRequest::new(request);
-        let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id);
+        let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id)?;
         let start_time = Instant::now();
         let event_source = http_client
             .post(request_url)
@@ -132,11 +133,20 @@ fn map_openai_to_azure_error(e: Error) -> Error {
     }
 }
 
-fn get_azure_chat_url(endpoint: &str, deployment_id: &str) -> String {
-    let api_version = "2024-06-01";
-    format!(
-        "{endpoint}/openai/deployments/{deployment_id}/chat/completions?api-version={api_version}"
-    )
+fn get_azure_chat_url(endpoint: &Url, deployment_id: &str) -> Result<Url, Error> {
+    let mut url = endpoint.clone();
+    url.path_segments_mut()
+        .map_err(|e| Error::AzureServer {
+            message: format!("Error parsing URL: {e:?}"),
+        })?
+        .push("openai")
+        .push("deployments")
+        .push(deployment_id)
+        .push("chat")
+        .push("completions");
+    url.query_pairs_mut()
+        .append_pair("api-version", "2024-06-01");
+    Ok(url)
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]

@@ -33,10 +33,10 @@ jsonschema = "0.18.0"
 jsonwebtoken = "9.3.0"
 lazy_static = { version = "1.5.0" }
 metrics = "0.23.0"
-metrics-exporter-prometheus = {version = "0.15.3" , features = ["http-listener"], default-features = false}
+metrics-exporter-prometheus = { version = "0.15.3", features = ["http-listener"], default-features = false }
 mimalloc = "0.1.43"
-minijinja = {version = "2.1.0", features =["loader"]}
-reqwest = { version = "0.12.5", features=["json", "rustls-tls"], default-features=false }
+minijinja = { version = "2.1.0", features = ["loader"] }
+reqwest = { version = "0.12.5", features = ["json", "rustls-tls"], default-features = false }
 reqwest-eventsource = "0.6.0"
 secrecy = "0.8.0"
 serde = { version = "1.0.204", features = ["derive"] }
@@ -49,7 +49,7 @@ tokio-stream = "0.1.15"
 toml = "0.8.15"
 tracing = { version = "0.1.40", features = ["log", "release_max_level_debug"] }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter", "fmt", "json"] }
-url = "2.5.2"
+url = { version = "2.5.2", features = ["serde"] }
 uuid = { version = "1.10.0", features = ["serde", "v7"] }
 
 

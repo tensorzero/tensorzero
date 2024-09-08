@@ -2,6 +2,7 @@ use reqwest::Client;
 use secrecy::SecretString;
 use std::collections::HashMap;
 use std::env;
+use url::Url;
 
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::inference::providers::dummy::DummyProvider;
@@ -144,7 +145,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
             },
             Azure {
                 deployment_id: String,
-                endpoint: String,
+                endpoint: Url,
             },
             #[serde(rename = "gcp_vertex_gemini")]
             GCPVertexGemini {
@@ -160,7 +161,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
             },
             OpenAI {
                 model_name: String,
-                api_base: Option<String>,
+                api_base: Option<Url>,
             },
             Together {
                 model_name: String,
@@ -168,7 +169,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
             #[allow(clippy::upper_case_acronyms)]
             VLLM {
                 model_name: String,
-                api_base: String,
+                api_base: Url,
             },
             #[cfg(any(test, feature = "e2e_tests"))]
             Dummy {

@@ -4,24 +4,24 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
 use serde_json::Value;
 use tokio::time::Instant;
-
-use crate::error::Error;
-use crate::inference::types::{
-    Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
-};
+use url::Url;
 
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, stream_openai,
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseWithLatency, StreamOptions,
 };
 use super::provider_trait::InferenceProvider;
+use crate::error::Error;
+use crate::inference::types::{
+    Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
+    ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
+};
 
 #[derive(Debug)]
 pub struct VLLMProvider {
     pub model_name: String,
     pub api_key: Option<SecretString>,
-    pub api_base: String,
+    pub api_base: Url,
 }
 
 /// Key differences between vLLM and OpenAI inference:
@@ -37,9 +37,8 @@ impl InferenceProvider for VLLMProvider {
         let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
             provider_name: "vLLM".to_string(),
         })?;
-        let api_base = Some(self.api_base.as_str());
         let request_body = VLLMRequest::new(&self.model_name, request)?;
-        let request_url = get_chat_url(api_base)?;
+        let request_url = get_chat_url(Some(&self.api_base))?;
         let start_time = Instant::now();
         let res = http_client
             .post(request_url)
@@ -93,8 +92,7 @@ impl InferenceProvider for VLLMProvider {
             provider_name: "vLLM".to_string(),
         })?;
         let request_body = VLLMRequest::new(&self.model_name, request)?;
-        let api_base = Some(self.api_base.as_str());
-        let request_url = get_chat_url(api_base)?;
+        let request_url = get_chat_url(Some(&self.api_base))?;
         let start_time = Instant::now();
         let event_source = http_client
             .post(request_url)

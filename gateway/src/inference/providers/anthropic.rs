@@ -1,4 +1,5 @@
 use futures::{Stream, StreamExt};
+use lazy_static::lazy_static;
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
@@ -6,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::time::Duration;
 use tokio::time::Instant;
+use url::Url;
 use uuid::Uuid;
 
 use crate::error::Error;
@@ -17,7 +19,13 @@ use crate::inference::types::{
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-const ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com/v1/messages";
+lazy_static! {
+    static ref ANTHROPIC_BASE_URL: Url = {
+        #[allow(clippy::expect_used)]
+        Url::parse("https://api.anthropic.com/v1/messages")
+            .expect("Failed to parse ANTHROPIC_BASE_URL")
+    };
+}
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 
 #[derive(Debug)]
@@ -39,7 +47,7 @@ impl InferenceProvider for AnthropicProvider {
         let request_body = AnthropicRequestBody::new(&self.model_name, request)?;
         let start_time = Instant::now();
         let res = http_client
-            .post(ANTHROPIC_BASE_URL)
+            .post(ANTHROPIC_BASE_URL.as_ref())
             .header("anthropic-version", ANTHROPIC_API_VERSION)
             .header("x-api-key", api_key.expose_secret())
             .header("content-type", "application/json")
@@ -93,7 +101,7 @@ impl InferenceProvider for AnthropicProvider {
         let request_body = AnthropicRequestBody::new(&self.model_name, request)?;
         let start_time = Instant::now();
         let event_source = http_client
-            .post(ANTHROPIC_BASE_URL)
+            .post(ANTHROPIC_BASE_URL.as_ref())
             .header("anthropic-version", ANTHROPIC_API_VERSION)
             .header("content-type", "application/json")
             .header("x-api-key", api_key.expose_secret())
@@ -1821,5 +1829,13 @@ mod tests {
         let result = parse_usage_info(&usage_info);
         assert_eq!(result.input_tokens, 0);
         assert_eq!(result.output_tokens, 0);
+    }
+
+    #[test]
+    fn test_anthropic_base_url() {
+        assert_eq!(
+            ANTHROPIC_BASE_URL.as_str(),
+            "https://api.anthropic.com/v1/messages"
+        );
     }
 }
