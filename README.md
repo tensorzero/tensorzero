@@ -55,7 +55,7 @@ Read more about our **[Vision & Roadmap](https://www.tensorzero.com/docs/vision-
 
 **Next steps?** The **[Tutorial](https://www.tensorzero.com/docs/gateway/tutorial)** shows it's easy to set up an LLM application with TensorZero. It teaches how to build a simple chatbot, an email copilot, a weather RAG system, and a structured data extraction pipeline.
 
-**Questions?** Join our **[Slack Community](https://www.tensorzero.com/slack)** or **[Discord Server](https://www.tensorzero.com/discord)**. We monitor them closely for questions.
+**Questions?** Join our **[Slack](https://www.tensorzero.com/slack)** or **[Discord](https://www.tensorzero.com/discord)** communities. We monitor them closely for questions.
 
 **Using TensorZero at work?** Email us at **[hello@tensorzero.com](mailto:hello@tensorzero.com)** to set up a Slack or Teams channel with your team (free).
 
@@ -69,7 +69,7 @@ We are working on a series of **complete runnable examples** illustrating Tensor
 > You'll see TensorZero's "data flywheel in a box" in action: better variants leads to better data, and better data leads to better variants.
 > You'll see progress by fine-tuning the LLM multiple times.
 
-> **[Named Entity Recognition (CoNLL++) Using TensorZero JSON Functions and Fine-Tuning](https://github.com/tensorzero/tensorzero/tree/main/examples/ner-fine-tuning-json-functions)**
+> **[Fine-Tuning TensorZero JSON Functions for Named Entity Recognition (CoNLL++)](https://github.com/tensorzero/tensorzero/tree/main/examples/ner-fine-tuning-json-functions)**
 >
 > This example shows that an optimized Llama 3.1 8B model can be trained to outperform GPT-4o on an NER task using a small amount of training data, and served by Fireworks at a fraction of the cost and latency.
 
