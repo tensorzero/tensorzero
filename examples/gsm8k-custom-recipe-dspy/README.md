@@ -1,4 +1,4 @@
-# Example: Automated Prompt Engineering for GSM8K with a Custom Recipe: DSPy
+# Example: Automated Prompt Engineering for GSM8K with a Custom Recipe (DSPy)
 
 TensorZero provides a number of pre-built optimization recipes covering common LLM engineering workflows.
 But you can also easily create your own recipes and workflows!
