@@ -75,7 +75,7 @@ We are working on a series of **complete runnable examples** illustrating Tensor
 >
 > This example shows that an optimized Llama 3.1 8B model can be trained to outperform GPT-4o on an NER task using a small amount of training data, and served by Fireworks at a fraction of the cost and latency.
 
-> **[Automated Prompt Engineering for GSM8K with a Custom Recipe (DSPy)](https://github.com/tensorzero/tensorzero/tree/main/examples/gsm8k-custom-recipe-dspy)**
+> **[Automated Prompt Engineering for Math Reasoning (GSM8K) with a Custom Recipe (DSPy)](https://github.com/tensorzero/tensorzero/tree/main/examples/gsm8k-custom-recipe-dspy)**
 >
 > TensorZero provides a number of pre-built optimization recipes covering common LLM engineering workflows.
 > But you can also easily create your own recipes and workflows!
