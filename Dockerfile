@@ -26,6 +26,10 @@ RUN apt-get update && apt-get install -y ca-certificates openssl wget && rm -rf 
 
 FROM base AS gateway
 
+RUN useradd -m -s /bin/bash gateway
+
+USER gateway
+
 COPY --from=builder /release/gateway /usr/local/bin/gateway
 
 WORKDIR /app
