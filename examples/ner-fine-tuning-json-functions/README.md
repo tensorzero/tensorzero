@@ -1,4 +1,4 @@
-# Example: Named Entity Recognition (CoNLL++) Using TensorZero JSON Functions and Fine-Tuning
+# Example: Fine-Tuning TensorZero JSON Functions for Named Entity Recognition (CoNLL++) 
 
 ## Background
 
