@@ -31,6 +31,7 @@
 
 ## Overview
 
+<br>
 <p align="center" >
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="https://github.com/user-attachments/assets/34a92c18-242e-4d76-a99c-861283de68a6">
@@ -38,6 +39,7 @@
     <img alt="TensorZero Flywheel" src="https://github.com/user-attachments/assets/34a92c18-242e-4d76-a99c-861283de68a6" width=80%>
   </picture>
 </p>
+<br>
 
 The **[TensorZero Gateway](https://www.tensorzero.com/docs/gateway/)** is a high-performance model gateway written in Rust 🦀 that provides a unified interface for all your LLM applications.
 It handles structured schema-based inference with &lt;1ms P99 latency overhead (see **[Benchmarks](https://www.tensorzero.com/docs/gateway/benchmarks)**) and built-in observability and experimentation (and soon, inference-time optimizations).
