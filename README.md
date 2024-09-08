@@ -7,7 +7,7 @@
 **Why use TensorZero?** It enables a **data & learning flywheel for LLM systems** by integrating inference, observability, optimization, and experimentation.
 
 <p align="center">
-  <b><a href="https://www.tensorzero.com/" target="_blank">Homepage</a></b>
+  <b><a href="https://www.tensorzero.com/" target="_blank">Website</a></b>
   ·
   <b><a href="https://www.tensorzero.com/docs" target="_blank">Docs</a></b>
   ·
