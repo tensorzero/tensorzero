@@ -55,7 +55,7 @@ Read more about our **[Vision & Roadmap](https://www.tensorzero.com/docs/vision-
 
 **Next steps?** The **[Tutorial](https://www.tensorzero.com/docs/gateway/tutorial)** shows it's easy to set up an LLM application with TensorZero. It teaches how to build a simple chatbot, an email copilot, a weather RAG system, and a structured data extraction pipeline.
 
-**Questions?** Join our **[Slack](https://www.tensorzero.com/slack)** or **[Discord](https://www.tensorzero.com/discord)** communities. We monitor them closely for questions.
+**Questions?** Join our **[Slack](https://www.tensorzero.com/slack)** or **[Discord](https://www.tensorzero.com/discord)** communities. We monitor them closely for questions, feedback, and more.
 
 **Using TensorZero at work?** Email us at **[hello@tensorzero.com](mailto:hello@tensorzero.com)** to set up a Slack or Teams channel with your team (free).
 
