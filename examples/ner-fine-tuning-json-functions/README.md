@@ -1,4 +1,4 @@
-# Example: Fine-Tuning TensorZero JSON Functions for Named Entity Recognition (CoNLL++) 
+# Example: Fine-Tuning TensorZero JSON Functions for Named Entity Recognition (CoNLL++)
 
 ## Background
 
@@ -23,6 +23,7 @@ See `tensorzero.toml` for the main configuration details.
 
 To get started, create a `.env` file with your OpenAI API key (`OPENAI_API_KEY`) and Fireworks API key (`FIREWORKS_API_KEY`) and run the following command.
 Docker Compose will launch the TensorZero Gateway and a test ClickHouse database.
+Set `CLICKHOUSE_URL=http://localhost:8123/tensorzero` in the shell your notebook will run in.
 
 ```bash
 docker compose up
