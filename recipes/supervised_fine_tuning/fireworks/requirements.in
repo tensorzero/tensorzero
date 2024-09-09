@@ -1,6 +1,7 @@
 clickhouse-connect
 ipykernel
 minijinja
+notebook
 pandas
 toml
 uuid7
