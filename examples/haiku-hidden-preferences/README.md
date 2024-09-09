@@ -68,12 +68,7 @@ You can also easily experiment with other models, prompts you think might be bet
 
 ## Experimenting with Improved Variants
 
-Once you've generated one or more improved variants (and, critically, given them some positive weight), you should restart the TensorZero gateway with the new configuration:
-
-```bash
-docker compose restart gateway
-```
-
+Once you've generated one or more improved variants (and, critically, given them some positive weight), you should restart the TensorZero gateway with the new configuration.
 You can then re-run the haiku generation cell in the `haiku.ipynb` notebook to see how the new variants perform.
 
 From a single fine-tune we typically see a relative improvement of ~50% in the haiku score.
