@@ -26,6 +26,8 @@ You can also find the judge's preferences in `config/functions/judge_haiku/judge
 To get started, create a `.env` file with your OpenAI API key (`OPENAI_API_KEY`) and run the following command.
 Docker Compose will launch the TensorZero Gateway and a test ClickHouse database.
 
+You should set `CLICKHOUSE_URL=http://localhost:8123/tensorzero` in the shell environment your notebook will run in.
+
 ```bash
 docker compose up
 ```

@@ -1,5 +1,6 @@
 clickhouse-connect
 ipykernel
+notebook
 pandas
 tensorzero @ ../../clients/python-asyncio
 tqdm
