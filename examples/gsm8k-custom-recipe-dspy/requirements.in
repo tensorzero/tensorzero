@@ -1,6 +1,7 @@
 clickhouse_connect
 dspy-ai
 ipykernel
+notebook
 pandas
 tensorzero @ ../../clients/python-asyncio
 tqdm
