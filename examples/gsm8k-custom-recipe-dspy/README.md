@@ -21,9 +21,9 @@ After running the example and generating some data, we show how to query a datas
 We've written TensorZero configuration files to accomplish this example and have provided them in the `config` directory.
 See `tensorzero.toml` for the main configuration details.
 
-To get started, create a `.env` file with your Together API key (`TOGETHER_API_KEY`) and run the following command. Docker Compose will launch the TensorZero gateway and a test ClickHouse database.
-Be sure and set `CLICKHOUSE_URL=http://localhost:8123/tensorzero` in the shell your notebook will run in.
-You'll also want `TOGETHER_API_KEY` set for your notebook in order for DSPy to make inferences.
+To get started, create a `.env` file with your Together API key (`TOGETHER_API_KEY`) and run the following command.
+Docker Compose will launch the TensorZero gateway and a test ClickHouse database.
+Set `CLICKHOUSE_URL=http://localhost:8123/tensorzero` and `TOGETHER_API_KEY` in the shell your notebook will run in.
 
 ```bash
 docker compose up
