@@ -24,7 +24,7 @@ impl<'a> JsonSchemaRef<'a> {
 
     pub fn value(&'a self) -> &'a Value {
         match self {
-            JsonSchemaRef::Static(schema) => &schema.value,
+            JsonSchemaRef::Static(schema) => schema.value,
             JsonSchemaRef::Dynamic(schema) => &schema.value,
         }
     }

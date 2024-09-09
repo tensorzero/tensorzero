@@ -143,7 +143,7 @@ pub async fn inference_handler(
     let inference_config = InferenceConfig {
         templates: &config.templates,
         tool_config,
-        dynamic_output_schema: params.output_schema.map(|s| DynamicJSONSchema::new(s)),
+        dynamic_output_schema: params.output_schema.map(DynamicJSONSchema::new),
     };
     // Keep sampling variants until one succeeds
     while !candidate_variant_names.is_empty() {

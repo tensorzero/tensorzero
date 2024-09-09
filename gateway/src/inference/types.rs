@@ -927,7 +927,8 @@ mod tests {
 
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::providers::common::get_temperature_tool_config;
-    use crate::jsonschema_util::JSONSchemaFromPath;
+    use crate::jsonschema_util::{DynamicJSONSchema, JSONSchemaFromPath};
+    use crate::minijinja_util::TemplateConfig;
     use crate::tool::ToolChoice;
 
     use super::*;
@@ -1115,7 +1116,11 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: false,
         };
-        let tool_config = Box::leak(Box::new(tool_config));
+        let inference_config = InferenceConfig {
+            tool_config: Some(tool_config),
+            templates: &TemplateConfig::default(),
+            dynamic_output_schema: None,
+        };
         let chunks = vec![];
         let function = FunctionConfig::Chat(FunctionConfigChat::default());
         let model_name = "test_model";
@@ -1123,7 +1128,7 @@ mod tests {
         let result = collect_chunks(
             chunks,
             &function,
-            Some(tool_config),
+            &inference_config,
             model_name,
             model_provider_name,
         )
@@ -1172,7 +1177,7 @@ mod tests {
         let result = collect_chunks(
             chunks,
             &function,
-            Some(tool_config),
+            &inference_config,
             model_name,
             model_provider_name,
         )
@@ -1252,7 +1257,7 @@ mod tests {
         let response = collect_chunks(
             chunks,
             &function_config,
-            None,
+            &inference_config,
             model_name,
             model_provider_name,
         )
@@ -1315,7 +1320,7 @@ mod tests {
         let result = collect_chunks(
             chunks,
             &function_config,
-            None,
+            &inference_config,
             model_name,
             model_provider_name,
         )
@@ -1375,7 +1380,7 @@ mod tests {
         let result = collect_chunks(
             chunks,
             &function,
-            Some(tool_config),
+            &inference_config,
             model_name,
             model_provider_name,
         )
@@ -1449,7 +1454,102 @@ mod tests {
         let response = collect_chunks(
             chunks,
             &function_config,
-            None,
+            &inference_config,
+            model_name,
+            model_provider_name,
+        )
+        .await
+        .unwrap();
+        match response {
+            InferenceResult::Json(json_result) => {
+                assert_eq!(json_result.inference_id, inference_id);
+                assert_eq!(
+                    json_result.output.parsed,
+                    Some(serde_json::json!({"name": "John", "age": 30}))
+                );
+                assert_eq!(
+                    json_result.output.raw,
+                    "{\"name\":\"John\",\"age\":30}".to_string()
+                );
+                assert_eq!(
+                    json_result.usage,
+                    Usage {
+                        input_tokens: 15,
+                        output_tokens: 15,
+                    }
+                );
+                assert_eq!(json_result.model_inference_results.len(), 1);
+                let model_inference_result = json_result.model_inference_results.first().unwrap();
+                assert_eq!(model_inference_result.model_name, model_name);
+                assert_eq!(
+                    model_inference_result.model_provider_name,
+                    model_provider_name
+                );
+            }
+            _ => panic!("Expected Json inference response"),
+        }
+        // Test Case 7: a JSON string with a dynamic schema that passes validation and also include usage in each chunk
+        let inference_id = Uuid::now_v7();
+        let static_output_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+            },
+            "required": ["name"]
+        });
+        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&static_output_schema);
+        let output_schema = JSONSchemaFromPath::from_value(&static_output_schema);
+        let function_config = FunctionConfig::Json(FunctionConfigJson {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            implicit_tool_call_config,
+            output_schema,
+        });
+        let usage1 = Usage {
+            input_tokens: 10,
+            output_tokens: 5,
+        };
+        let usage2 = Usage {
+            input_tokens: 5,
+            output_tokens: 10,
+        };
+        let dynamic_output_schema = DynamicJSONSchema::new(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "age": {"type": "number"}
+            },
+            "required": ["name", "age"]
+        }));
+        let inference_config = InferenceConfig {
+            tool_config: None,
+            templates: &TemplateConfig::default(),
+            dynamic_output_schema: Some(dynamic_output_schema),
+        };
+        let chunks = vec![
+            InferenceResultChunk::Json(JsonInferenceResultChunk {
+                inference_id,
+                raw: "{\"name\":".to_string(),
+                created,
+                usage: Some(usage1.clone()),
+                raw_response: "{\"name\":".to_string(),
+                latency: Duration::from_millis(150),
+            }),
+            InferenceResultChunk::Json(JsonInferenceResultChunk {
+                inference_id,
+                raw: "\"John\",\"age\":30}".to_string(),
+                created,
+                usage: Some(usage2.clone()),
+                raw_response: "\"John\",\"age\":30}".to_string(),
+                latency: Duration::from_millis(250),
+            }),
+        ];
+        let response = collect_chunks(
+            chunks,
+            &function_config,
+            &inference_config,
             model_name,
             model_provider_name,
         )
