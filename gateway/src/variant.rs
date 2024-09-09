@@ -13,6 +13,7 @@ use crate::inference::types::{
     InputMessageContent, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     ModelInferenceResponseWithMetadata, RequestMessage, Role,
 };
+use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::tool::ToolCallConfig;
 use crate::{
@@ -60,8 +61,9 @@ pub enum JsonMode {
 /// Maps to the subset of Config that applies to the current inference request.
 /// It doesn't take into account inference-time overrides (e.g. dynamic tools).
 pub struct InferenceConfig<'a> {
-    pub tool_config: Option<&'a ToolCallConfig>,
+    pub tool_config: Option<ToolCallConfig>,
     pub templates: &'a TemplateConfig<'a>,
+    pub dynamic_output_schema: Option<DynamicJSONSchema>,
 }
 
 pub struct ModelUsedInfo<'a> {
@@ -252,7 +254,7 @@ impl ChatCompletionConfig {
         input: &Input,
         function: &'a FunctionConfig,
         templates: &TemplateConfig,
-        tool_config: Option<&'a ToolCallConfig>,
+        inference_config: &'a InferenceConfig<'a>,
         stream: bool,
         inference_params: &mut InferenceParams,
     ) -> Result<ModelInferenceRequest<'a>, Error> {
@@ -270,7 +272,7 @@ impl ChatCompletionConfig {
             FunctionConfig::Chat(_) => ModelInferenceRequest {
                 messages,
                 system,
-                tool_config,
+                tool_config: inference_config.tool_config.as_ref(),
                 temperature: inference_params.chat_completion.temperature,
                 max_tokens: inference_params.chat_completion.max_tokens,
                 seed: inference_params.chat_completion.seed,
@@ -284,6 +286,10 @@ impl ChatCompletionConfig {
                     JsonMode::ImplicitTool => Some(&json_config.implicit_tool_call_config),
                     _ => None,
                 };
+                let output_schema = match &inference_config.dynamic_output_schema {
+                    Some(schema) => Some(&schema.value),
+                    None => Some(json_config.output_schema.value),
+                };
                 ModelInferenceRequest {
                     messages,
                     system,
@@ -294,7 +300,7 @@ impl ChatCompletionConfig {
                     stream,
                     json_mode: (&self.json_mode).into(),
                     function_type: FunctionType::Json,
-                    output_schema: Some(json_config.output_schema.value),
+                    output_schema,
                 }
             }
         })
@@ -315,7 +321,7 @@ impl Variant for ChatCompletionConfig {
             input,
             function,
             inference_config.templates,
-            inference_config.tool_config,
+            inference_config,
             false,
             inference_params,
         )?;
@@ -337,7 +343,7 @@ impl Variant for ChatCompletionConfig {
                 raw_content,
                 usage,
                 model_inference_results,
-                inference_config.tool_config,
+                inference_config,
             )
             .await
     }
@@ -362,7 +368,7 @@ impl Variant for ChatCompletionConfig {
             input,
             function,
             inference_config.templates,
-            inference_config.tool_config,
+            inference_config,
             true,
             inference_params,
         )?;

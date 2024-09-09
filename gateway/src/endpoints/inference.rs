@@ -6,6 +6,7 @@ use axum::{debug_handler, Json};
 use futures::stream::Stream;
 use metrics::counter;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::time::Duration;
 use tokio::time::Instant;
 use tokio_stream::StreamExt;
@@ -21,6 +22,7 @@ use crate::inference::types::{
     InferenceResult, InferenceResultChunk, InferenceResultStream, Input, JsonInferenceOutput,
     Usage,
 };
+use crate::jsonschema_util::DynamicJSONSchema;
 use crate::tool::{DynamicToolParams, ToolCallConfig};
 use crate::uuid_util::validate_episode_id;
 use crate::variant::{InferenceConfig, Variant};
@@ -59,6 +61,7 @@ pub struct Params {
     // tool_choice: Option<ToolChoice>,
     // If true, the inference will use parallel tool calls
     // parallel_tool_calls: Option<bool>,
+    output_schema: Option<Value>,
 }
 
 #[derive(Clone, Debug)]
@@ -139,7 +142,8 @@ pub async fn inference_handler(
     let mut variant_errors = std::collections::HashMap::new();
     let inference_config = InferenceConfig {
         templates: &config.templates,
-        tool_config: tool_config.as_ref(),
+        tool_config,
+        dynamic_output_schema: params.output_schema.map(|s| DynamicJSONSchema::new(s)),
     };
     // Keep sampling variants until one succeeds
     while !candidate_variant_names.is_empty() {
@@ -197,7 +201,7 @@ pub async fn inference_handler(
                 chunk,
                 stream,
                 clickhouse_connection_info,
-                tool_config,
+                inference_config,
             );
 
             return Ok(Sse::new(stream)
@@ -234,7 +238,7 @@ pub async fn inference_handler(
                     function_name: params.function_name,
                     variant_name: variant_name.to_string(),
                     episode_id,
-                    tool_params: tool_config,
+                    tool_params: inference_config.tool_config,
                     inference_params: variant_inference_params,
                     processing_time: start_time.elapsed(),
                 };
@@ -275,7 +279,7 @@ fn create_stream(
     first_chunk: InferenceResultChunk,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
-    tool_config: Option<ToolCallConfig>,
+    inference_config: InferenceConfig<'static>,
 ) -> impl Stream<Item = Result<Event, Error>> + Send {
     async_stream::stream! {
         let mut buffer = vec![first_chunk.clone()];
@@ -310,7 +314,7 @@ fn create_stream(
 
         if !metadata.dryrun {
             let inference_response: Result<InferenceResult, Error> =
-                collect_chunks(buffer, function, tool_config.as_ref(), metadata.model_name, metadata.model_provider_name).await;
+                collect_chunks(buffer, function, &inference_config, metadata.model_name, metadata.model_provider_name).await;
 
             let inference_response = inference_response.ok_or_log();
 
@@ -319,7 +323,7 @@ fn create_stream(
                     function_name: metadata.function_name,
                     variant_name: metadata.variant_name,
                     episode_id: metadata.episode_id,
-                    tool_params: tool_config,
+                    tool_params: inference_config.tool_config,
                     inference_params: metadata.inference_params,
                     processing_time: metadata.start_time.elapsed(),
                 };

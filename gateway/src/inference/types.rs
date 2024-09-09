@@ -10,11 +10,11 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::endpoints::inference::InferenceDatabaseInsertMetadata;
 use crate::endpoints::inference::InferenceParams;
 use crate::function::FunctionConfig;
 use crate::tool::ToolCallConfigDatabaseInsert;
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolResult};
+use crate::{endpoints::inference::InferenceDatabaseInsertMetadata, variant::InferenceConfig};
 use crate::{error::Error, variant::JsonMode};
 
 /// Data flow in TensorZero
@@ -220,6 +220,7 @@ pub struct JsonInferenceResult<'a> {
     pub output: JsonInferenceOutput,
     pub usage: Usage,
     pub model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
+    pub output_schema: Value,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -300,6 +301,7 @@ pub struct InferenceDatabaseInsert {
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub inference_params: InferenceParams,
     pub processing_time_ms: u32,
+    pub output_schema: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -507,6 +509,7 @@ impl<'a> JsonInferenceResult<'a> {
         parsed: Option<Value>,
         usage: Usage,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
+        output_schema: Value,
     ) -> Self {
         let output = JsonInferenceOutput { raw, parsed };
         Self {
@@ -515,6 +518,7 @@ impl<'a> JsonInferenceResult<'a> {
             output,
             usage,
             model_inference_results,
+            output_schema,
         }
     }
 }
@@ -609,6 +613,7 @@ impl InferenceDatabaseInsert {
                     inference_params,
                     output,
                     processing_time_ms,
+                    output_schema: None,
                 }
             }
             InferenceResult::Json(json_result) => {
@@ -620,6 +625,16 @@ impl InferenceDatabaseInsert {
                         e.log();
                         String::new()
                     });
+                let output_schema = Some(
+                    serde_json::to_string(&json_result.output_schema)
+                        .map_err(|e| Error::Serialization {
+                            message: format!("Failed to serialize output schema: {}", e),
+                        })
+                        .unwrap_or_else(|e| {
+                            e.log();
+                            String::new()
+                        }),
+                );
                 Self {
                     id: json_result.inference_id,
                     function_name: metadata.function_name,
@@ -630,6 +645,7 @@ impl InferenceDatabaseInsert {
                     inference_params,
                     output,
                     processing_time_ms,
+                    output_schema,
                 }
             }
         }
@@ -742,7 +758,7 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
 pub async fn collect_chunks<'a>(
     value: Vec<InferenceResultChunk>,
     function: &FunctionConfig,
-    tool_config: Option<&ToolCallConfig>,
+    inference_config: &InferenceConfig<'a>,
     model_name: &'a str,
     model_provider_name: &'a str,
 ) -> Result<InferenceResult<'a>, Error> {
@@ -871,7 +887,7 @@ pub async fn collect_chunks<'a>(
             content_blocks,
             usage,
             vec![model_inference_result],
-            tool_config,
+            inference_config,
         )
         .await
 }

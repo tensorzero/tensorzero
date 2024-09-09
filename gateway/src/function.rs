@@ -8,9 +8,9 @@ use crate::inference::types::{
     ChatInferenceResult, ContentBlock, InferenceResult, Input, InputMessageContent,
     JsonInferenceResult, ModelInferenceResponseWithMetadata, Role, Usage,
 };
-use crate::jsonschema_util::JSONSchemaFromPath;
+use crate::jsonschema_util::{JSONSchemaFromPath, JsonSchemaRef};
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
-use crate::variant::VariantConfig;
+use crate::variant::{InferenceConfig, VariantConfig};
 
 #[derive(Debug)]
 pub enum FunctionConfig {
@@ -123,13 +123,13 @@ impl FunctionConfig {
         }
     }
 
-    pub async fn prepare_response<'a>(
+    pub async fn prepare_response<'a, 'request>(
         &self,
         inference_id: Uuid,
         content_blocks: Vec<ContentBlock>,
         usage: Usage,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
-        tool_config: Option<&ToolCallConfig>,
+        inference_config: &InferenceConfig<'request>,
     ) -> Result<InferenceResult<'a>, Error> {
         match self {
             FunctionConfig::Chat(..) => Ok(InferenceResult::Chat(
@@ -138,7 +138,7 @@ impl FunctionConfig {
                     content_blocks,
                     usage,
                     model_inference_results,
-                    tool_config,
+                    inference_config.tool_config.as_ref(),
                 )
                 .await,
             )),
@@ -167,6 +167,10 @@ impl FunctionConfig {
                         raw_output: raw.clone(),
                     })
                     .ok_or_log();
+                let output_schema = match &inference_config.dynamic_output_schema {
+                    Some(schema) => JsonSchemaRef::Dynamic(schema),
+                    None => JsonSchemaRef::Static(&params.output_schema),
+                };
 
                 // If the parsed output fails validation, we log the error and set `parsed_output` to None
                 let parsed_output = parsed_output.and_then(|parsed_output| {
@@ -184,6 +188,7 @@ impl FunctionConfig {
                     parsed_output,
                     usage,
                     model_inference_results,
+                    output_schema.value().clone(),
                 )))
             }
         }

@@ -9,6 +9,28 @@ use tokio::task::JoinHandle;
 use crate::error::Error;
 
 #[derive(Debug, Serialize)]
+pub enum JsonSchemaRef<'a> {
+    Static(&'a JSONSchemaFromPath),
+    Dynamic(&'a DynamicJSONSchema),
+}
+
+impl<'a> JsonSchemaRef<'a> {
+    pub async fn validate(&self, instance: &Value) -> Result<(), Error> {
+        match self {
+            JsonSchemaRef::Static(schema) => schema.validate(instance),
+            JsonSchemaRef::Dynamic(schema) => schema.validate(instance).await,
+        }
+    }
+
+    pub fn value(&'a self) -> &'a Value {
+        match self {
+            JsonSchemaRef::Static(schema) => &schema.value,
+            JsonSchemaRef::Dynamic(schema) => &schema.value,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
 pub struct JSONSchemaFromPath {
     #[serde(skip)]
     pub compiled: JSONSchema,
@@ -77,10 +99,12 @@ impl JSONSchemaFromPath {
 ///
 /// The public API of this struct should look very normal except validation is `async`
 /// There are just `new` and `validate` methods.
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct DynamicJSONSchema {
     pub value: Value,
+    #[serde(skip)]
     compiled_schema: OnceCell<JSONSchema>,
+    #[serde(skip)]
     compilation_task: RwLock<Option<JoinHandle<Result<JSONSchema, Error>>>>,
 }
 
