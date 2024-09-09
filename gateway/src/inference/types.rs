@@ -301,6 +301,7 @@ pub struct InferenceDatabaseInsert {
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub inference_params: InferenceParams,
     pub processing_time_ms: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub output_schema: Option<String>,
 }
 

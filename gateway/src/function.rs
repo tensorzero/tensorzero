@@ -1444,7 +1444,6 @@ mod tests {
             }
         );
 
-        // TODO (Viraj): Add tests for dynamic output schema
         let dynamic_output_schema = DynamicJSONSchema::new(serde_json::json!({
             "type": "object",
             "properties": {
