@@ -3,7 +3,7 @@
 TensorZero provides a number of pre-built optimization recipes covering common LLM engineering workflows.
 But you can also easily create your own recipes and workflows!
 
-This example shows how to optimize a TensorZero function using an arbitrary tool — namely, [DSPy](https://github.com/stanfordnlp/dspy).
+This example shows how to optimize a TensorZero function using an arbitrary tool — here, [DSPy](https://github.com/stanfordnlp/dspy).
 
 ## Background
 
