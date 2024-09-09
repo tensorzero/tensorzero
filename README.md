@@ -79,6 +79,6 @@ We are working on a series of **complete runnable examples** illustrating Tensor
 >
 > TensorZero provides a number of pre-built optimization recipes covering common LLM engineering workflows.
 > But you can also easily create your own recipes and workflows!
-> This example shows how to optimize a TensorZero function using an arbitrary tool — namely, DSPy.
+> This example shows how to optimize a TensorZero function using an arbitrary tool — here, DSPy.
 
 _& many more on the way!_
