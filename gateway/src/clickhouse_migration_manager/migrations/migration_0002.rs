@@ -4,8 +4,8 @@ use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::clickhouse_migration_manager::migration_trait::Migration;
 use crate::error::Error;
 
-/// This migration modifies the `ModelInference` table to add columns for
-/// `model_name` and `model_provider_name`.
+/// This migration modifies the `Inference` table to add a column for
+/// `output_schema`.
 
 pub struct Migration0002<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
