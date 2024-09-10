@@ -18,7 +18,9 @@
   <b><a href="https://www.tensorzero.com/discord" target="_blank">Discord</a></b>
   <br>
   <br>
-  <b><a href="https://www.tensorzero.com/docs/gateway/tutorial" target="_blank">Tutorial</a></b>
+  <b><a href="https://www.tensorzero.com/docs/gateway/quickstart" target="_blank">Quick Start (5min)</a></b>
+  ·
+  <b><a href="https://www.tensorzero.com/docs/gateway/tutorial" target="_blank">Tutorial (30min)</a></b>
   ·
   <b><a href="https://www.tensorzero.com/docs/gateway/deployment" target="_blank">Deployment Guide</a></b>
   ·
@@ -55,7 +57,7 @@ Read more about our **[Vision & Roadmap](https://www.tensorzero.com/docs/vision-
 
 ## Get Started
 
-**Next steps?** The **[Tutorial](https://www.tensorzero.com/docs/gateway/tutorial)** shows it's easy to set up an LLM application with TensorZero. It teaches how to build a simple chatbot, an email copilot, a weather RAG system, and a structured data extraction pipeline.
+**Next steps?** The **[Quick Start](https://www.tensorzero.com/docs/gateway/quickstart)** and the **[Tutorial](https://www.tensorzero.com/docs/gateway/tutorial)** show it's easy to set up an LLM application with TensorZero. The tutorial teaches how to build a simple chatbot, an email copilot, a weather RAG system, and a structured data extraction pipeline.
 
 **Questions?** Join our **[Slack](https://www.tensorzero.com/slack)** or **[Discord](https://www.tensorzero.com/discord)** communities. We monitor them closely for questions, feedback, and more.
 
