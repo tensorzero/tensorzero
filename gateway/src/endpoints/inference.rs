@@ -75,6 +75,7 @@ struct InferenceMetadata<'a> {
     pub inference_params: InferenceParams,
     pub model_name: &'a str,
     pub model_provider_name: &'a str,
+    pub raw_request: String,
 }
 
 /// A handler for the inference endpoint
@@ -193,6 +194,7 @@ pub async fn inference_handler(
                 inference_params: variant_inference_params,
                 model_name: model_used_info.model_name,
                 model_provider_name: model_used_info.model_provider_name,
+                raw_request: model_used_info.raw_request,
             };
 
             let stream = create_stream(
@@ -314,7 +316,7 @@ fn create_stream(
 
         if !metadata.dryrun {
             let inference_response: Result<InferenceResult, Error> =
-                collect_chunks(buffer, function, &inference_config, metadata.model_name, metadata.model_provider_name).await;
+                collect_chunks(buffer, function, &inference_config, metadata.model_name, metadata.model_provider_name, metadata.raw_request).await;
 
             let inference_response = inference_response.ok_or_log();
 
@@ -382,8 +384,7 @@ async fn write_inference<'a>(
             return;
         }
     };
-    let model_responses: Vec<serde_json::Value> =
-        result.get_serialized_model_inferences(&serialized_input);
+    let model_responses: Vec<serde_json::Value> = result.get_serialized_model_inferences();
     // Write the model responses to the ModelInference table
     for response in model_responses {
         clickhouse_connection_info
@@ -560,6 +561,7 @@ mod tests {
             raw_response: "".to_string(),
             latency: Duration::from_millis(100),
         });
+        let raw_request = "raw request".to_string();
         let inference_metadata = InferenceMetadata {
             function_name: "test_function".to_string(),
             variant_name: "test_variant".to_string(),
@@ -573,6 +575,7 @@ mod tests {
             start_time: Instant::now(),
             model_name: "test_model",
             model_provider_name: "test_provider",
+            raw_request: raw_request.clone(),
         };
 
         let result = prepare_event(&inference_metadata, chunk);
@@ -603,6 +606,7 @@ mod tests {
             start_time: Instant::now(),
             model_name: "test_model",
             model_provider_name: "test_provider",
+            raw_request: raw_request.clone(),
         };
 
         let result = prepare_event(&inference_metadata, chunk);

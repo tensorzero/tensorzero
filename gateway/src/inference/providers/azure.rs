@@ -14,7 +14,7 @@ use crate::inference::types::{
 
 use super::openai::{
     handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
-    OpenAIRequestMessage, OpenAIResponseWithLatency, OpenAITool, OpenAIToolChoice,
+    OpenAIRequestMessage, OpenAIResponseWithMetadata, OpenAITool, OpenAIToolChoice,
     OpenAIToolChoiceString, SpecificToolChoice,
 };
 use super::provider_trait::InferenceProvider;
@@ -36,6 +36,9 @@ impl InferenceProvider for AzureProvider {
             provider_name: "Azure".to_string(),
         })?;
         let request_body = AzureRequest::new(request);
+        let raw_request = serde_json::to_string(&request_body).map_err(|e| Error::AzureServer {
+            message: format!("Error serializing request body as JSON: {e}"),
+        })?;
         let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id)?;
         let start_time = Instant::now();
         let res = http_client
@@ -62,9 +65,13 @@ impl InferenceProvider for AzureProvider {
                 message: format!("Error parsing JSON response: {e}: {response}"),
             })?;
 
-            Ok(OpenAIResponseWithLatency { response, latency }
-                .try_into()
-                .map_err(map_openai_to_azure_error)?)
+            Ok(OpenAIResponseWithMetadata {
+                response,
+                latency,
+                raw_request,
+            }
+            .try_into()
+            .map_err(map_openai_to_azure_error)?)
         } else {
             handle_openai_error(
                 res.status(),
@@ -84,6 +91,7 @@ impl InferenceProvider for AzureProvider {
         (
             ProviderInferenceResponseChunk,
             ProviderInferenceResponseStream,
+            String,
         ),
         Error,
     > {
@@ -91,6 +99,9 @@ impl InferenceProvider for AzureProvider {
             provider_name: "Azure".to_string(),
         })?;
         let request_body = AzureRequest::new(request);
+        let raw_request = serde_json::to_string(&request_body).map_err(|e| Error::AzureServer {
+            message: format!("Error serializing request body as JSON: {e}"),
+        })?;
         let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id)?;
         let start_time = Instant::now();
         let event_source = http_client
@@ -115,7 +126,7 @@ impl InferenceProvider for AzureProvider {
                 })
             }
         };
-        Ok((chunk, stream))
+        Ok((chunk, stream, raw_request))
     }
 }
 

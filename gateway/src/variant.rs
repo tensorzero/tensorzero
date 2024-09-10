@@ -70,6 +70,7 @@ pub struct InferenceConfig<'a> {
 pub struct ModelUsedInfo<'a> {
     pub model_name: &'a str,
     pub model_provider_name: &'a str,
+    pub raw_request: String,
 }
 
 pub trait Variant {
@@ -369,11 +370,12 @@ impl Variant for ChatCompletionConfig {
         let model_config = models.get(&self.model).ok_or(Error::UnknownModel {
             name: self.model.clone(),
         })?;
-        let (first_chunk, stream, model_provider_name) =
+        let (first_chunk, stream, raw_request, model_provider_name) =
             model_config.infer_stream(&request, client).await?;
         let model_used_info = ModelUsedInfo {
             model_name: &self.model,
             model_provider_name,
+            raw_request,
         };
         let first_chunk = InferenceResultChunk::new(first_chunk, function);
         let stream =

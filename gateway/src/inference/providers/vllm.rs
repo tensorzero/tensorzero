@@ -8,7 +8,7 @@ use url::Url;
 
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, stream_openai,
-    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseWithLatency, StreamOptions,
+    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseWithMetadata, StreamOptions,
 };
 use super::provider_trait::InferenceProvider;
 use crate::error::Error;
@@ -38,6 +38,9 @@ impl InferenceProvider for VLLMProvider {
             provider_name: "vLLM".to_string(),
         })?;
         let request_body = VLLMRequest::new(&self.model_name, request)?;
+        let raw_request = serde_json::to_string(&request_body).map_err(|e| Error::VLLMServer {
+            message: format!("Error serializing request: {e}"),
+        })?;
         let request_url = get_chat_url(Some(&self.api_base))?;
         let start_time = Instant::now();
         let res = http_client
@@ -60,9 +63,10 @@ impl InferenceProvider for VLLMProvider {
                     .map_err(|e| Error::VLLMServer {
                         message: format!("Error parsing response: {e}"),
                     })?;
-            Ok(OpenAIResponseWithLatency {
+            Ok(OpenAIResponseWithMetadata {
                 response: response_body,
                 latency,
+                raw_request,
             }
             .try_into()
             .map_err(map_openai_to_vllm_error)?)
@@ -85,6 +89,7 @@ impl InferenceProvider for VLLMProvider {
         (
             ProviderInferenceResponseChunk,
             ProviderInferenceResponseStream,
+            String,
         ),
         Error,
     > {
@@ -92,6 +97,9 @@ impl InferenceProvider for VLLMProvider {
             provider_name: "vLLM".to_string(),
         })?;
         let request_body = VLLMRequest::new(&self.model_name, request)?;
+        let raw_request = serde_json::to_string(&request_body).map_err(|e| Error::VLLMServer {
+            message: format!("Error serializing request: {e}"),
+        })?;
         let request_url = get_chat_url(Some(&self.api_base))?;
         let start_time = Instant::now();
         let event_source = http_client
@@ -116,7 +124,7 @@ impl InferenceProvider for VLLMProvider {
                 })
             }
         };
-        Ok((chunk, stream))
+        Ok((chunk, stream, raw_request))
     }
 }
 

@@ -105,6 +105,7 @@ impl InferenceProvider for DummyProvider {
             "json" => vec![r#"{"answer":"Hello"}"#.to_string().into()],
             _ => vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()],
         };
+        let raw_request = "raw request".to_string();
         let raw_response = match self.model_name.as_str() {
             #[allow(clippy::unwrap_used)]
             "tool" => serde_json::to_string(&*DUMMY_TOOL_RESPONSE).unwrap(),
@@ -122,6 +123,7 @@ impl InferenceProvider for DummyProvider {
             id,
             created,
             content,
+            raw_request,
             raw_response,
             usage,
             latency,
@@ -136,6 +138,7 @@ impl InferenceProvider for DummyProvider {
         (
             ProviderInferenceResponseChunk,
             ProviderInferenceResponseStream,
+            String,
         ),
         Error,
     > {
@@ -214,6 +217,6 @@ impl InferenceProvider for DummyProvider {
             })))
             .throttle(std::time::Duration::from_millis(10));
 
-        Ok((initial_chunk, Box::pin(stream)))
+        Ok((initial_chunk, Box::pin(stream), "raw request".to_string()))
     }
 }

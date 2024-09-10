@@ -52,6 +52,10 @@ impl InferenceProvider for MistralProvider {
             provider_name: "Mistral".to_string(),
         })?;
         let request_body = MistralRequest::new(&self.model_name, request)?;
+        let raw_request =
+            serde_json::to_string(&request_body).map_err(|e| Error::MistralServer {
+                message: format!("Error serializing request: {e}"),
+            })?;
         let request_url = get_chat_url(Some(&MISTRAL_API_BASE))?;
         let start_time = Instant::now();
         let res = http_client
@@ -76,7 +80,12 @@ impl InferenceProvider for MistralProvider {
                 message: format!("Error parsing JSON response: {e}: {response}"),
             })?;
 
-            MistralResponseWithLatency { response, latency }.try_into()
+            MistralResponseWithMetadata {
+                response,
+                latency,
+                raw_request,
+            }
+            .try_into()
         } else {
             handle_mistral_error(
                 res.status(),
@@ -95,6 +104,7 @@ impl InferenceProvider for MistralProvider {
         (
             ProviderInferenceResponseChunk,
             ProviderInferenceResponseStream,
+            String,
         ),
         Error,
     > {
@@ -102,6 +112,10 @@ impl InferenceProvider for MistralProvider {
             provider_name: "Mistral".to_string(),
         })?;
         let request_body = MistralRequest::new(&self.model_name, request)?;
+        let raw_request =
+            serde_json::to_string(&request_body).map_err(|e| Error::MistralServer {
+                message: format!("Error serializing request: {e}"),
+            })?;
         let request_url = get_chat_url(Some(&MISTRAL_API_BASE))?;
         let start_time = Instant::now();
         let event_source = http_client
@@ -125,7 +139,7 @@ impl InferenceProvider for MistralProvider {
                 })
             }
         };
-        Ok((chunk, stream))
+        Ok((chunk, stream, raw_request))
     }
 }
 
@@ -375,19 +389,21 @@ struct MistralResponse {
     usage: MistralUsage,
 }
 
-struct MistralResponseWithLatency {
+struct MistralResponseWithMetadata {
     response: MistralResponse,
     latency: Latency,
+    raw_request: String,
 }
 
-impl TryFrom<MistralResponseWithLatency> for ProviderInferenceResponse {
+impl TryFrom<MistralResponseWithMetadata> for ProviderInferenceResponse {
     type Error = Error;
-    fn try_from(value: MistralResponseWithLatency) -> Result<Self, Self::Error> {
-        let MistralResponseWithLatency {
+    fn try_from(value: MistralResponseWithMetadata) -> Result<Self, Self::Error> {
+        let MistralResponseWithMetadata {
             mut response,
             latency,
+            raw_request,
         } = value;
-        let raw = serde_json::to_string(&response).map_err(|e| Error::OpenAIServer {
+        let raw_response = serde_json::to_string(&response).map_err(|e| Error::OpenAIServer {
             message: format!("Error parsing response: {e}"),
         })?;
         if response.choices.len() != 1 {
@@ -418,7 +434,13 @@ impl TryFrom<MistralResponseWithLatency> for ProviderInferenceResponse {
             }
         }
 
-        Ok(ProviderInferenceResponse::new(content, raw, usage, latency))
+        Ok(ProviderInferenceResponse::new(
+            content,
+            raw_request,
+            raw_response,
+            usage,
+            latency,
+        ))
     }
 }
 
@@ -569,12 +591,14 @@ mod tests {
                 total_tokens: 30,
             },
         };
+        let raw_request = "raw request".to_string();
 
-        let result = ProviderInferenceResponse::try_from(MistralResponseWithLatency {
+        let result = ProviderInferenceResponse::try_from(MistralResponseWithMetadata {
             response: valid_response,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
+            raw_request: raw_request.clone(),
         });
         assert!(result.is_ok());
         let inference_response = result.unwrap();
@@ -590,6 +614,7 @@ mod tests {
                 response_time: Duration::from_millis(100)
             }
         );
+        assert_eq!(inference_response.raw_request, raw_request);
 
         // Test case 2: Valid response with tool calls
         let valid_response_with_tools = MistralResponse {
@@ -613,11 +638,12 @@ mod tests {
             },
         };
 
-        let result = ProviderInferenceResponse::try_from(MistralResponseWithLatency {
+        let result = ProviderInferenceResponse::try_from(MistralResponseWithMetadata {
             response: valid_response_with_tools,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(110),
             },
+            raw_request: raw_request.clone(),
         });
         assert!(result.is_ok());
         let inference_response = result.unwrap();
@@ -637,7 +663,7 @@ mod tests {
                 response_time: Duration::from_millis(110)
             }
         );
-
+        assert_eq!(inference_response.raw_request, raw_request);
         // Test case 3: Invalid response with no choices
         let invalid_response_no_choices = MistralResponse {
             choices: vec![],
@@ -648,15 +674,15 @@ mod tests {
             },
         };
 
-        let result = ProviderInferenceResponse::try_from(MistralResponseWithLatency {
+        let result = ProviderInferenceResponse::try_from(MistralResponseWithMetadata {
             response: invalid_response_no_choices,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(120),
             },
+            raw_request: raw_request.clone(),
         });
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), Error::OpenAIServer { .. }));
-
         // Test case 4: Invalid response with multiple choices
         let invalid_response_multiple_choices = MistralResponse {
             choices: vec![
@@ -682,11 +708,12 @@ mod tests {
             },
         };
 
-        let result = ProviderInferenceResponse::try_from(MistralResponseWithLatency {
+        let result = ProviderInferenceResponse::try_from(MistralResponseWithMetadata {
             response: invalid_response_multiple_choices,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(130),
             },
+            raw_request: raw_request.clone(),
         });
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), Error::OpenAIServer { .. }));

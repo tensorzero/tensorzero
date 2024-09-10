@@ -19,7 +19,7 @@ use crate::{
 use super::{
     openai::{
         get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
-        stream_openai, OpenAIRequestMessage, OpenAIResponseWithLatency, OpenAITool,
+        stream_openai, OpenAIRequestMessage, OpenAIResponseWithMetadata, OpenAITool,
         OpenAIToolChoice,
     },
     provider_trait::InferenceProvider,
@@ -50,6 +50,10 @@ impl InferenceProvider for TogetherProvider {
             provider_name: "Together".to_string(),
         })?;
         let request_body = TogetherRequest::new(&self.model_name, request);
+        let raw_request =
+            serde_json::to_string(&request_body).map_err(|e| Error::TogetherServer {
+                message: format!("Error serializing request: {e}"),
+            })?;
         let request_url = get_chat_url(Some(&TOGETHER_API_BASE))?;
         let start_time = Instant::now();
         let res = http_client
@@ -72,11 +76,12 @@ impl InferenceProvider for TogetherProvider {
                 message: format!("Error parsing JSON response: {e}: {response}"),
             })?;
 
-            Ok(OpenAIResponseWithLatency {
+            Ok(OpenAIResponseWithMetadata {
                 response,
                 latency: Latency::NonStreaming {
                     response_time: start_time.elapsed(),
                 },
+                raw_request,
             }
             .try_into()
             .map_err(map_openai_to_together_error)?)
@@ -99,6 +104,7 @@ impl InferenceProvider for TogetherProvider {
         (
             ProviderInferenceResponseChunk,
             ProviderInferenceResponseStream,
+            String,
         ),
         Error,
     > {
@@ -106,6 +112,10 @@ impl InferenceProvider for TogetherProvider {
             provider_name: "Together".to_string(),
         })?;
         let request_body = TogetherRequest::new(&self.model_name, request);
+        let raw_request =
+            serde_json::to_string(&request_body).map_err(|e| Error::TogetherServer {
+                message: format!("Error serializing request: {e}"),
+            })?;
         let request_url = get_chat_url(Some(&TOGETHER_API_BASE))?;
         let start_time = Instant::now();
         let event_source = http_client
@@ -130,7 +140,7 @@ impl InferenceProvider for TogetherProvider {
                 })
             }
         };
-        Ok((chunk, stream))
+        Ok((chunk, stream, raw_request))
     }
 }
 

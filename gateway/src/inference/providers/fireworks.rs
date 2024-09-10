@@ -18,8 +18,8 @@ use crate::{
 use super::{
     openai::{
         get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
-        stream_openai, OpenAIFunction, OpenAIRequestMessage, OpenAIResponseWithLatency, OpenAITool,
-        OpenAIToolChoice, OpenAIToolType,
+        stream_openai, OpenAIFunction, OpenAIRequestMessage, OpenAIResponseWithMetadata,
+        OpenAITool, OpenAIToolChoice, OpenAIToolType,
     },
     provider_trait::InferenceProvider,
 };
@@ -53,6 +53,10 @@ impl InferenceProvider for FireworksProvider {
             provider_name: "Fireworks".to_string(),
         })?;
         let request_body = FireworksRequest::new(&self.model_name, request);
+        let raw_request =
+            serde_json::to_string(&request_body).map_err(|e| Error::FireworksServer {
+                message: format!("Error serializing request body: {e}"),
+            })?;
         let request_url = get_chat_url(Some(&FIREWORKS_API_BASE))?;
         let start_time = Instant::now();
         let res = http_client
@@ -77,9 +81,13 @@ impl InferenceProvider for FireworksProvider {
                 message: format!("Error parsing JSON response: {e}: {response}"),
             })?;
 
-            Ok(OpenAIResponseWithLatency { response, latency }
-                .try_into()
-                .map_err(map_openai_to_fireworks_error)?)
+            Ok(OpenAIResponseWithMetadata {
+                response,
+                latency,
+                raw_request,
+            }
+            .try_into()
+            .map_err(map_openai_to_fireworks_error)?)
         } else {
             handle_openai_error(
                 res.status(),
@@ -99,6 +107,7 @@ impl InferenceProvider for FireworksProvider {
         (
             ProviderInferenceResponseChunk,
             ProviderInferenceResponseStream,
+            String,
         ),
         Error,
     > {
@@ -106,6 +115,10 @@ impl InferenceProvider for FireworksProvider {
             provider_name: "Fireworks".to_string(),
         })?;
         let request_body = FireworksRequest::new(&self.model_name, request);
+        let raw_request =
+            serde_json::to_string(&request_body).map_err(|e| Error::FireworksServer {
+                message: format!("Error serializing request body: {e}"),
+            })?;
         let request_url = get_chat_url(Some(&FIREWORKS_API_BASE))?;
         let start_time = Instant::now();
         let event_source = http_client
@@ -131,7 +144,7 @@ impl InferenceProvider for FireworksProvider {
                 })
             }
         };
-        Ok((chunk, stream))
+        Ok((chunk, stream, raw_request))
     }
 }
 

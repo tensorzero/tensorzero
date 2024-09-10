@@ -22,6 +22,7 @@ pub trait InferenceProvider {
             (
                 ProviderInferenceResponseChunk,
                 ProviderInferenceResponseStream,
+                String,
             ),
             Error,
         >,
