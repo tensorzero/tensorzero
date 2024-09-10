@@ -43,12 +43,12 @@
 </p>
 <br>
 
-The **[TensorZero Gateway](https://www.tensorzero.com/docs/gateway/)** is a high-performance model gateway written in Rust 🦀 that provides a unified interface for all your LLM applications.
-It handles structured schema-based inference with &lt;1ms P99 latency overhead (see **[Benchmarks](https://www.tensorzero.com/docs/gateway/benchmarks)**) and built-in observability and experimentation (and soon, inference-time optimizations).
-It also collects downstream metrics and feedback associated with these inferences, with first-class support for multi-step LLM systems.
-Everything is stored in a ClickHouse data warehouse that you control for real-time, scalable, and developer-friendly analytics.
-Over time, **[TensorZero Recipes](https://www.tensorzero.com/docs/recipes)** leverage this structured dataset to optimize your prompts and models: run pre-built recipes for common workflows like fine-tuning, or create your own with complete flexibility using any language and platform.
-Finally, the gateway's experimentation features and GitOps orchestration enable you to iterate and deploy with confidence, be it a single LLM or thousands of LLMs.
+1. The **[TensorZero Gateway](https://www.tensorzero.com/docs/gateway/)** is a high-performance model gateway written in Rust 🦀 that provides a unified interface for all your LLM applications.
+2. It handles structured schema-based inference with &lt;1ms P99 latency overhead (see **[Benchmarks](https://www.tensorzero.com/docs/gateway/benchmarks)**) and built-in observability and experimentation (and soon, inference-time optimizations).
+3. It also collects downstream metrics and feedback associated with these inferences, with first-class support for multi-step LLM systems.
+4. Everything is stored in a ClickHouse data warehouse that you control for real-time, scalable, and developer-friendly analytics.
+5. Over time, **[TensorZero Recipes](https://www.tensorzero.com/docs/recipes)** leverage this structured dataset to optimize your prompts and models: run pre-built recipes for common workflows like fine-tuning, or create your own with complete flexibility using any language and platform.
+6. Finally, the gateway's experimentation features and GitOps orchestration enable you to iterate and deploy with confidence, be it a single LLM or thousands of LLMs.
 
 Our goal is to help engineers build, manage, and optimize the next generation of LLM applications: systems that learn from real-world experience.
 Read more about our **[Vision & Roadmap](https://www.tensorzero.com/docs/vision-roadmap/)**.
