@@ -82,20 +82,6 @@ impl<'a> Migration for Migration0000<'a> {
         "#;
         let _ = self.clickhouse.run_query(query.to_string()).await?;
 
-        // Create the `BooleanMetricFeedback` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS BooleanMetricFeedback
-            (
-                id UUID, -- must be a UUIDv7
-                target_id UUID, -- must be a UUIDv7
-                metric_name LowCardinality(String),
-                value Bool,
-                timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
-            ) ENGINE = MergeTree()
-            ORDER BY (metric_name, target_id);
-        "#;
-        let _ = self.clickhouse.run_query(query.to_string()).await?;
-
         // Create the `CommentFeedback` table
         let query = r#"
             CREATE TABLE IF NOT EXISTS CommentFeedback
