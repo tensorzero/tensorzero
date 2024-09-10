@@ -27,8 +27,6 @@
   <b><a href="https://www.tensorzero.com/docs/gateway/api-reference" target="_blank">API Reference</a></b>
   ·
   <b><a href="https://www.tensorzero.com/docs/gateway/deployment" target="_blank">Configuration Reference</a></b>
-  ·
-  <b><a href="https://www.tensorzero.com/docs/vision-roadmap" target="_blank">Vision & Roadmap</a></b>
 </p>
 
 ## Overview
