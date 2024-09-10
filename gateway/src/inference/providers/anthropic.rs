@@ -122,6 +122,10 @@ impl InferenceProvider for AnthropicProvider {
         };
         Ok((chunk, stream))
     }
+
+    fn has_credentials(&self) -> bool {
+        self.api_key.is_some()
+    }
 }
 
 /// Maps events from Anthropic into the TensorZero format

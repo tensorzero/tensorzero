@@ -120,6 +120,10 @@ impl InferenceProvider for OpenAIProvider {
         };
         Ok((chunk, stream))
     }
+
+    fn has_credentials(&self) -> bool {
+        self.api_key.is_some()
+    }
 }
 
 pub fn stream_openai(

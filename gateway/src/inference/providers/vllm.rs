@@ -118,6 +118,10 @@ impl InferenceProvider for VLLMProvider {
         };
         Ok((chunk, stream))
     }
+
+    fn has_credentials(&self) -> bool {
+        self.api_key.is_some()
+    }
 }
 
 fn map_openai_to_vllm_error(e: Error) -> Error {

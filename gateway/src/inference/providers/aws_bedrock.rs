@@ -219,6 +219,11 @@ impl InferenceProvider for AWSBedrockProvider {
 
         Ok((chunk, stream))
     }
+
+    fn has_credentials(&self) -> bool {
+        // TODO (#313): Actually check if the AWS Bedrock client is configured with credentials
+        true
+    }
 }
 
 fn stream_bedrock(

@@ -216,4 +216,8 @@ impl InferenceProvider for DummyProvider {
 
         Ok((initial_chunk, Box::pin(stream)))
     }
+
+    fn has_credentials(&self) -> bool {
+        true
+    }
 }
