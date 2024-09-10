@@ -218,6 +218,6 @@ impl InferenceProvider for DummyProvider {
     }
 
     fn has_credentials(&self) -> bool {
-        true
+        self.model_name != "bad_credentials"
     }
 }
