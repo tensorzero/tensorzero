@@ -1517,6 +1517,9 @@ mod tests {
 
     #[test]
     fn test_tensorzero_example_file() {
+        env::set_var("OPENAI_API_KEY", "sk-something");
+        env::set_var("ANTHROPIC_API_KEY", "sk-something");
+        env::set_var("AZURE_API_KEY", "sk-something");
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let config_path = format!("{}/../config/tensorzero.toml", manifest_dir);
         let config_pathbuf = PathBuf::from(&config_path);
