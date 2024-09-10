@@ -243,6 +243,8 @@ impl<'a> AzureRequest<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
     use super::*;
 
     use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
@@ -264,7 +266,7 @@ mod tests {
             stream: false,
             seed: Some(69),
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(&WEATHER_TOOL_CONFIG),
+            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
         };

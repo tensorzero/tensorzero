@@ -2,6 +2,7 @@ use futures::StreamExt;
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::{collections::HashMap, path::PathBuf};
 use uuid::Uuid;
 
@@ -15,7 +16,7 @@ use crate::inference::types::{
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
-use crate::tool::ToolCallConfig;
+use crate::tool::{create_dynamic_implicit_tool_config, ToolCallConfig};
 use crate::{
     inference::types::{InferenceResult, InputMessage},
     model::ModelConfig,
@@ -272,7 +273,7 @@ impl ChatCompletionConfig {
             FunctionConfig::Chat(_) => ModelInferenceRequest {
                 messages,
                 system,
-                tool_config: inference_config.tool_config.as_ref(),
+                tool_config: inference_config.tool_config.as_ref().map(Cow::Borrowed),
                 temperature: inference_params.chat_completion.temperature,
                 max_tokens: inference_params.chat_completion.max_tokens,
                 seed: inference_params.chat_completion.seed,
@@ -283,8 +284,12 @@ impl ChatCompletionConfig {
             },
             FunctionConfig::Json(json_config) => {
                 let tool_config = match self.json_mode {
-                    // TODO (Viraj): Handle the case where we have JsonMode::ImplicitTool and a dynamic output schema
-                    JsonMode::ImplicitTool => Some(&json_config.implicit_tool_call_config),
+                    JsonMode::ImplicitTool => match &inference_config.dynamic_output_schema {
+                        Some(schema) => Some(Cow::Owned(create_dynamic_implicit_tool_config(
+                            schema.value.clone(),
+                        ))),
+                        None => Some(Cow::Borrowed(&json_config.implicit_tool_call_config)),
+                    },
                     _ => None,
                 };
                 let output_schema = match &inference_config.dynamic_output_schema {

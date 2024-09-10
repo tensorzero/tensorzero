@@ -27,11 +27,12 @@ pub struct Tool {
     pub strict: bool,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ToolConfig {
     Static(&'static StaticToolConfig),
     Dynamic(DynamicToolConfig),
     Implicit(ImplicitToolConfig),
+    DynamicImplicit(DynamicImplicitToolConfig),
 }
 
 /// Contains the configuration information for a specific tool
@@ -44,7 +45,7 @@ pub struct StaticToolConfig {
 }
 
 /// Contains the configuration information for a tool defined at runtime
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct DynamicToolConfig {
     pub description: String,
     pub parameters: DynamicJSONSchema,
@@ -54,15 +55,22 @@ pub struct DynamicToolConfig {
 
 /// Contains the configuration information for a tool used in implicit tool calling for
 /// JSON schema enforcement
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ImplicitToolConfig {
     pub parameters: JSONSchemaFromPath,
+}
+
+/// Contains the configuration information for a tool used in implicit tool calling for
+/// JSON schema enforcement for a JSON schema that is dynamically passed at inference time
+#[derive(Clone, Debug, PartialEq)]
+pub struct DynamicImplicitToolConfig {
+    pub parameters: DynamicJSONSchema,
 }
 
 /// Contains all information required to tell an LLM what tools it can call
 /// and what sorts of tool calls (parallel, none, etc) it is allowed to respond with.
 /// Most inference providers can convert this into their desired tool format.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ToolCallConfig {
     pub tools_available: Vec<ToolConfig>,
     pub tool_choice: ToolChoice,
@@ -134,6 +142,7 @@ impl ToolCallConfig {
                 ToolConfig::Static(config) => config.name == *tool_name,
                 ToolConfig::Dynamic(config) => config.name == *tool_name,
                 ToolConfig::Implicit(_) => false,
+                ToolConfig::DynamicImplicit(_) => false,
             }) {
                 return Err(Error::ToolNotFound {
                     name: tool_name.clone(),
@@ -162,6 +171,7 @@ impl ToolCallConfig {
             ToolConfig::Static(config) => config.name == name,
             ToolConfig::Dynamic(config) => config.name == name,
             ToolConfig::Implicit(_config) => false,
+            ToolConfig::DynamicImplicit(_config) => false,
         })
     }
 }
@@ -286,6 +296,7 @@ impl ToolConfig {
             ToolConfig::Static(config) => config.parameters.validate(arguments),
             ToolConfig::Dynamic(config) => config.parameters.validate(arguments).await,
             ToolConfig::Implicit(config) => config.parameters.validate(arguments),
+            ToolConfig::DynamicImplicit(config) => config.parameters.validate(arguments).await,
         }
     }
 
@@ -294,6 +305,7 @@ impl ToolConfig {
             ToolConfig::Static(config) => &config.description,
             ToolConfig::Dynamic(config) => &config.description,
             ToolConfig::Implicit(_config) => IMPLICIT_TOOL_DESCRIPTION,
+            ToolConfig::DynamicImplicit(_config) => IMPLICIT_TOOL_DESCRIPTION,
         }
     }
 
@@ -302,6 +314,7 @@ impl ToolConfig {
             ToolConfig::Static(config) => config.parameters.value,
             ToolConfig::Dynamic(config) => &config.parameters.value,
             ToolConfig::Implicit(config) => config.parameters.value,
+            ToolConfig::DynamicImplicit(config) => &config.parameters.value,
         }
     }
 
@@ -310,6 +323,7 @@ impl ToolConfig {
             ToolConfig::Static(config) => &config.name,
             ToolConfig::Dynamic(config) => &config.name,
             ToolConfig::Implicit(_config) => IMPLICIT_TOOL_NAME,
+            ToolConfig::DynamicImplicit(_config) => IMPLICIT_TOOL_NAME,
         }
     }
 
@@ -318,6 +332,7 @@ impl ToolConfig {
             ToolConfig::Static(config) => config.strict,
             ToolConfig::Dynamic(config) => config.strict,
             ToolConfig::Implicit(_config) => false,
+            ToolConfig::DynamicImplicit(_config) => false,
         }
     }
 }
@@ -344,6 +359,18 @@ impl From<ToolConfig> for Tool {
             name: tool_config.name().to_string(),
             strict: tool_config.strict(),
         }
+    }
+}
+
+pub fn create_dynamic_implicit_tool_config(schema: Value) -> ToolCallConfig {
+    let tool_schema = DynamicJSONSchema::new(schema);
+    let implicit_tool = ToolConfig::DynamicImplicit(DynamicImplicitToolConfig {
+        parameters: tool_schema,
+    });
+    ToolCallConfig {
+        tools_available: vec![implicit_tool],
+        tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
+        parallel_tool_calls: false,
     }
 }
 

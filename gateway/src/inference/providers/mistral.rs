@@ -222,7 +222,7 @@ impl<'a> From<OpenAITool<'a>> for MistralTool<'a> {
 fn prepare_mistral_tools<'a>(
     request: &'a ModelInferenceRequest<'a>,
 ) -> Result<(Option<Vec<MistralTool<'a>>>, Option<MistralToolChoice>), Error> {
-    match request.tool_config {
+    match &request.tool_config {
         None => Ok((None, None)),
         Some(tool_config) => match &tool_config.tool_choice {
             ToolChoice::Specific(tool_name) => {
@@ -506,6 +506,7 @@ fn mistral_to_tensorzero_chunk(
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
     use std::time::Duration;
 
     use super::*;
@@ -526,7 +527,7 @@ mod tests {
             seed: Some(69),
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(&WEATHER_TOOL_CONFIG),
+            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
         };

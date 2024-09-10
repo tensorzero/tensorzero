@@ -278,7 +278,7 @@ pub(super) fn prepare_openai_tools<'a>(
     Option<OpenAIToolChoice<'a>>,
     Option<bool>,
 ) {
-    match request.tool_config {
+    match &request.tool_config {
         None => (None, None, None),
         Some(tool_config) => {
             if tool_config.tools_available.is_empty() {
@@ -743,6 +743,8 @@ fn openai_to_tensorzero_chunk(
 #[cfg(test)]
 mod tests {
 
+    use std::borrow::Cow;
+
     use serde_json::json;
 
     use crate::{
@@ -886,7 +888,7 @@ mod tests {
             seed: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(&WEATHER_TOOL_CONFIG),
+            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -1137,7 +1139,7 @@ mod tests {
             seed: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(&MULTI_TOOL_CONFIG),
+            tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -1173,7 +1175,7 @@ mod tests {
             seed: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(&tool_config),
+            tool_config: Some(Cow::Borrowed(&tool_config)),
             function_type: FunctionType::Chat,
             output_schema: None,
         };

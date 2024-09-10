@@ -334,6 +334,8 @@ impl InferenceProvider for ProviderConfig {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
     use crate::inference::{
         providers::dummy::{
             DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW, DUMMY_INFER_USAGE,
@@ -369,7 +371,7 @@ mod tests {
         let request = ModelInferenceRequest {
             messages: vec![],
             system: None,
-            tool_config: Some(&tool_config),
+            tool_config: Some(Cow::Borrowed(&tool_config)),
             temperature: None,
             max_tokens: None,
             seed: None,

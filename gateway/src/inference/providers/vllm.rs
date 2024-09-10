@@ -197,6 +197,8 @@ impl<'a> VLLMRequest<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
     use serde_json::json;
 
     use super::*;
@@ -258,7 +260,7 @@ mod tests {
             seed: Some(69),
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(&WEATHER_TOOL_CONFIG),
+            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
         };

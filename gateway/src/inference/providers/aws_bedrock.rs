@@ -95,7 +95,7 @@ impl InferenceProvider for AWSBedrockProvider {
             bedrock_request = bedrock_request.system(system_block);
         }
 
-        if let Some(tool_config) = request.tool_config {
+        if let Some(tool_config) = &request.tool_config {
             let tools: Vec<Tool> = tool_config
                 .tools_available
                 .iter()
@@ -174,7 +174,7 @@ impl InferenceProvider for AWSBedrockProvider {
             bedrock_request = bedrock_request.system(system_block);
         }
 
-        if let Some(tool_config) = request.tool_config {
+        if let Some(tool_config) = &request.tool_config {
             let tools: Vec<Tool> = tool_config
                 .tools_available
                 .iter()
