@@ -615,7 +615,7 @@ fn prepare_tools<'a>(
     Option<Vec<GCPVertexGeminiTool<'a>>>,
     Option<GCPVertexGeminiToolConfig<'a>>,
 ) {
-    match request.tool_config {
+    match &request.tool_config {
         Some(tool_config) => {
             if tool_config.tools_available.is_empty() {
                 return (None, None);
@@ -878,6 +878,8 @@ fn handle_gcp_vertex_gemini_error(
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
     use serde_json::json;
 
     use super::*;
@@ -1104,7 +1106,7 @@ mod tests {
         let inference_request = ModelInferenceRequest {
             messages: vec![],
             system: None,
-            tool_config: Some(&tool_config),
+            tool_config: Some(Cow::Borrowed(&tool_config)),
             temperature: None,
             max_tokens: None,
             seed: None,
@@ -1136,7 +1138,7 @@ mod tests {
         let inference_request = ModelInferenceRequest {
             messages: messages.clone(),
             system: Some("test_system".to_string()),
-            tool_config: Some(&tool_config),
+            tool_config: Some(Cow::Borrowed(&tool_config)),
             temperature: None,
             max_tokens: None,
             seed: None,
@@ -1181,7 +1183,7 @@ mod tests {
         let inference_request = ModelInferenceRequest {
             messages: messages.clone(),
             system: Some("test_system".to_string()),
-            tool_config: Some(&tool_config),
+            tool_config: Some(Cow::Borrowed(&tool_config)),
             temperature: Some(0.5),
             max_tokens: Some(100),
             seed: Some(69),
@@ -1243,7 +1245,7 @@ mod tests {
         let inference_request = ModelInferenceRequest {
             messages: messages.clone(),
             system: Some("test_system".to_string()),
-            tool_config: Some(&tool_config),
+            tool_config: Some(Cow::Borrowed(&tool_config)),
             temperature: Some(0.5),
             max_tokens: Some(100),
             seed: Some(69),
@@ -1479,7 +1481,7 @@ mod tests {
             seed: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(&MULTI_TOOL_CONFIG),
+            tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -1517,7 +1519,7 @@ mod tests {
             seed: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(&MULTI_TOOL_CONFIG),
+            tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
         };

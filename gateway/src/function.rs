@@ -8,9 +8,9 @@ use crate::inference::types::{
     ChatInferenceResult, ContentBlock, InferenceResult, Input, InputMessageContent,
     JsonInferenceResult, ModelInferenceResponseWithMetadata, Role, Usage,
 };
-use crate::jsonschema_util::JSONSchemaFromPath;
+use crate::jsonschema_util::{JSONSchemaFromPath, JsonSchemaRef};
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
-use crate::variant::VariantConfig;
+use crate::variant::{InferenceConfig, VariantConfig};
 
 #[derive(Debug)]
 pub enum FunctionConfig {
@@ -55,9 +55,6 @@ impl FunctionConfig {
     /// - For a JSON function, the input is validated against the system, user, and assistant schemas.
     ///
     /// We do not validate ContentBlocks that are not text (tool calls and tool responses).
-    ///  TODO (#30):
-    ///   We should also enforce that no dynamic tool calling information should be passed to JSON functions
-    ///   as they can't call tools.
     pub fn validate_input(&self, input: &Input) -> Result<(), Error> {
         match &self {
             FunctionConfig::Chat(params) => {
@@ -123,13 +120,13 @@ impl FunctionConfig {
         }
     }
 
-    pub async fn prepare_response<'a>(
+    pub async fn prepare_response<'a, 'request>(
         &self,
         inference_id: Uuid,
         content_blocks: Vec<ContentBlock>,
         usage: Usage,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
-        tool_config: Option<&ToolCallConfig>,
+        inference_config: &InferenceConfig<'request>,
     ) -> Result<InferenceResult<'a>, Error> {
         match self {
             FunctionConfig::Chat(..) => Ok(InferenceResult::Chat(
@@ -138,7 +135,7 @@ impl FunctionConfig {
                     content_blocks,
                     usage,
                     model_inference_results,
-                    tool_config,
+                    inference_config.tool_config.as_ref(),
                 )
                 .await,
             )),
@@ -167,23 +164,29 @@ impl FunctionConfig {
                         raw_output: raw.clone(),
                     })
                     .ok_or_log();
+                let output_schema = match &inference_config.dynamic_output_schema {
+                    Some(schema) => JsonSchemaRef::Dynamic(schema),
+                    None => JsonSchemaRef::Static(&params.output_schema),
+                };
 
                 // If the parsed output fails validation, we log the error and set `parsed_output` to None
-                let parsed_output = parsed_output.and_then(|parsed_output| {
-                    match params.output_schema.validate(&parsed_output) {
+                let parsed_output = match parsed_output {
+                    Some(parsed_output) => match output_schema.validate(&parsed_output).await {
                         Ok(_) => Some(parsed_output),
                         Err(e) => {
                             e.log();
                             None
                         }
-                    }
-                });
+                    },
+                    None => None,
+                };
                 Ok(InferenceResult::Json(JsonInferenceResult::new(
                     inference_id,
                     raw,
                     parsed_output,
                     usage,
                     model_inference_results,
+                    output_schema.value().clone(),
                 )))
             }
         }
@@ -371,6 +374,8 @@ fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
 mod tests {
     use crate::inference::types::InputMessage;
     use crate::inference::types::Latency;
+    use crate::jsonschema_util::DynamicJSONSchema;
+    use crate::minijinja_util::TemplateConfig;
     use crate::tool::ToolCall;
     use crate::variant::ChatCompletionConfig;
 
@@ -1194,13 +1199,18 @@ mod tests {
             model_name: "model_name",
             latency,
         };
+        let inference_config = InferenceConfig {
+            tool_config: None,
+            templates: &TemplateConfig::default(),
+            dynamic_output_schema: None,
+        };
         let response = function_config
             .prepare_response(
                 inference_id,
                 content_blocks,
                 usage.clone(),
                 vec![model_response.clone()],
-                None,
+                &inference_config,
             )
             .await
             .unwrap();
@@ -1244,7 +1254,7 @@ mod tests {
                 content_blocks,
                 usage.clone(),
                 vec![model_response.clone()],
-                None,
+                &inference_config,
             )
             .await
             .unwrap();
@@ -1288,7 +1298,7 @@ mod tests {
                 content_blocks,
                 usage.clone(),
                 vec![model_response.clone()],
-                None,
+                &inference_config,
             )
             .await
             .unwrap();
@@ -1333,7 +1343,7 @@ mod tests {
                 content_blocks,
                 usage.clone(),
                 vec![model_response.clone()],
-                None,
+                &inference_config,
             )
             .await
             .unwrap();
@@ -1379,7 +1389,7 @@ mod tests {
                 content_blocks,
                 usage.clone(),
                 vec![model_response.clone()],
-                None,
+                &inference_config,
             )
             .await
             .unwrap();
@@ -1422,7 +1432,7 @@ mod tests {
                 content_blocks,
                 usage.clone(),
                 vec![model_response.clone()],
-                None,
+                &inference_config,
             )
             .await
             .unwrap_err();
@@ -1432,5 +1442,244 @@ mod tests {
                 message: "No valid content blocks found in JSON function response".to_string()
             }
         );
+
+        let dynamic_output_schema = DynamicJSONSchema::new(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "answer": {
+                    "type": "string"
+                }
+            },
+            "required": ["answer"]
+        }));
+        let inference_config = InferenceConfig {
+            tool_config: None,
+            templates: &TemplateConfig::default(),
+            dynamic_output_schema: Some(dynamic_output_schema),
+        };
+        // Test with a correct content block
+        let inference_id = Uuid::now_v7();
+        let content_blocks = vec![r#"{"answer": "42"}"#.to_string().into()];
+        let usage = Usage {
+            input_tokens: 10,
+            output_tokens: 10,
+        };
+        let latency = Latency::NonStreaming {
+            response_time: Duration::from_millis(100),
+        };
+        let model_response = ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            content: content_blocks.clone(),
+            raw_response: "content".to_string(),
+            usage: usage.clone(),
+            model_provider_name: "model_provider_name",
+            model_name: "model_name",
+            latency,
+        };
+        let response = function_config
+            .prepare_response(
+                inference_id,
+                content_blocks,
+                usage.clone(),
+                vec![model_response.clone()],
+                &inference_config,
+            )
+            .await
+            .unwrap();
+        match response {
+            InferenceResult::Json(result) => {
+                assert_eq!(result.inference_id, inference_id);
+                assert_eq!(result.output.parsed.unwrap(), json!({"answer": "42"}),);
+                assert_eq!(result.output.raw, r#"{"answer": "42"}"#);
+                assert_eq!(result.usage, usage);
+                assert_eq!(result.model_inference_results, vec![model_response]);
+            }
+            _ => panic!("Expected a JSON inference result"),
+        }
+
+        // Test with an incorrect JSON content block
+        let inference_id = Uuid::now_v7();
+        let content_blocks = vec![r#"{"response": "forty-two"}"#.to_string().into()];
+        let usage = Usage {
+            input_tokens: 10,
+            output_tokens: 10,
+        };
+        let latency = Latency::NonStreaming {
+            response_time: Duration::from_millis(100),
+        };
+        let model_response = ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            content: content_blocks.clone(),
+            raw_response: "content".to_string(),
+            usage: usage.clone(),
+            model_provider_name: "model_provider_name",
+            model_name: "model_name",
+            latency,
+        };
+        let response = function_config
+            .prepare_response(
+                inference_id,
+                content_blocks,
+                usage.clone(),
+                vec![model_response.clone()],
+                &inference_config,
+            )
+            .await
+            .unwrap();
+        match response {
+            InferenceResult::Json(result) => {
+                assert_eq!(result.inference_id, inference_id);
+                assert!(result.output.parsed.is_none());
+                assert_eq!(result.output.raw, r#"{"response": "forty-two"}"#);
+                assert_eq!(result.usage, usage);
+                assert_eq!(result.model_inference_results, vec![model_response]);
+            }
+            _ => panic!("Expected a JSON inference result"),
+        }
+
+        // Test with a tool content block with bad output
+        let inference_id = Uuid::now_v7();
+        let tool_call = ToolCall {
+            id: "tool_call_id".to_string(),
+            name: "tool_call_name".to_string(),
+            arguments: "tool_call_arguments".to_string(),
+        };
+        let content_blocks = vec![ContentBlock::ToolCall(tool_call)];
+        let usage = Usage {
+            input_tokens: 10,
+            output_tokens: 10,
+        };
+        let model_response = ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            content: content_blocks.clone(),
+            raw_response: "content".to_string(),
+            usage: usage.clone(),
+            model_provider_name: "model_provider_name",
+            model_name: "model_name",
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_millis(100),
+            },
+        };
+        let response = function_config
+            .prepare_response(
+                inference_id,
+                content_blocks,
+                usage.clone(),
+                vec![model_response.clone()],
+                &inference_config,
+            )
+            .await
+            .unwrap();
+        assert!(logs_contain("JSON Schema validation failed"));
+        match response {
+            InferenceResult::Json(result) => {
+                assert_eq!(result.inference_id, inference_id);
+                assert!(result.output.parsed.is_none());
+                assert_eq!(result.output.raw, "tool_call_arguments");
+                assert_eq!(result.usage, usage);
+                assert_eq!(result.model_inference_results, vec![model_response]);
+            }
+            _ => panic!("Expected a JSON inference result"),
+        }
+
+        // Test with a tool content block with good output
+        let inference_id = Uuid::now_v7();
+        let tool_call = ToolCall {
+            id: "tool_call_id".to_string(),
+            name: "tool_call_name".to_string(),
+            arguments: r#"{"answer": "42"}"#.to_string(),
+        };
+        let content_blocks = vec![ContentBlock::ToolCall(tool_call)];
+        let usage = Usage {
+            input_tokens: 10,
+            output_tokens: 10,
+        };
+        let model_response = ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            content: content_blocks.clone(),
+            raw_response: "content".to_string(),
+            usage: usage.clone(),
+            model_provider_name: "model_provider_name",
+            model_name: "model_name",
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_millis(100),
+            },
+        };
+        let response = function_config
+            .prepare_response(
+                inference_id,
+                content_blocks,
+                usage.clone(),
+                vec![model_response.clone()],
+                &inference_config,
+            )
+            .await
+            .unwrap();
+        match response {
+            InferenceResult::Json(result) => {
+                assert_eq!(result.inference_id, inference_id);
+                assert_eq!(result.output.parsed.unwrap(), json!({"answer": "42"}),);
+                assert_eq!(result.output.raw, r#"{"answer": "42"}"#);
+                assert_eq!(result.usage, usage);
+                assert_eq!(result.model_inference_results, vec![model_response]);
+            }
+            _ => panic!("Expected a JSON inference result"),
+        }
+
+        // Test with an empty output schema
+        let output_schema = json!({});
+        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
+        let output_schema = JSONSchemaFromPath::from_value(&output_schema);
+        let function_config = FunctionConfig::Json(FunctionConfigJson {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            output_schema,
+            implicit_tool_call_config,
+        });
+        let inference_id = Uuid::now_v7();
+        let content_blocks = vec![r#"{"answer": "42"}"#.to_string().into()];
+        let usage = Usage {
+            input_tokens: 10,
+            output_tokens: 10,
+        };
+        let latency = Latency::NonStreaming {
+            response_time: Duration::from_millis(100),
+        };
+        let model_response = ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            content: content_blocks.clone(),
+            raw_response: "content".to_string(),
+            usage: usage.clone(),
+            model_provider_name: "model_provider_name",
+            model_name: "model_name",
+            latency,
+        };
+        let response = function_config
+            .prepare_response(
+                inference_id,
+                content_blocks,
+                usage.clone(),
+                vec![model_response.clone()],
+                &inference_config,
+            )
+            .await
+            .unwrap();
+        match response {
+            InferenceResult::Json(result) => {
+                assert_eq!(result.inference_id, inference_id);
+                assert_eq!(result.output.parsed.unwrap(), json!({"answer": "42"}),);
+                assert_eq!(result.output.raw, r#"{"answer": "42"}"#);
+                assert_eq!(result.usage, usage);
+                assert_eq!(result.model_inference_results, vec![model_response]);
+            }
+            _ => panic!("Expected a JSON inference result"),
+        }
     }
 }

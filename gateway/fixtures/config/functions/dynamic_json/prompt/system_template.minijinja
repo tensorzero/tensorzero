@@ -1,0 +1,7 @@
+You are a helpful and friendly assistant named {{ assistant_name }}.
+
+Do not include any other text than the JSON object.  Do not include "```json" or "```" or anything else.
+
+Please answer the questions in a JSON with the following schema:
+
+{{ schema }}

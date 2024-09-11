@@ -535,7 +535,7 @@ struct UninitializedFunctionConfigJson {
     system_schema: Option<PathBuf>,
     user_schema: Option<PathBuf>,
     assistant_schema: Option<PathBuf>,
-    output_schema: PathBuf, // schema is mandatory for JSON functions
+    output_schema: Option<PathBuf>, // schema will default to {} if not specified
 }
 
 impl UninitializedFunctionConfig {
@@ -577,12 +577,12 @@ impl UninitializedFunctionConfig {
                     .assistant_schema
                     .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
                     .transpose()?;
-                let output_schema =
-                    JSONSchemaFromPath::new(params.output_schema.clone(), base_path.as_ref())?;
-                let implicit_tool_output_schema =
-                    JSONSchemaFromPath::new(params.output_schema, base_path.as_ref())?;
+                let output_schema = match params.output_schema {
+                    Some(path) => JSONSchemaFromPath::new(path, base_path.as_ref())?,
+                    None => JSONSchemaFromPath::default(),
+                };
                 let implicit_tool = ToolConfig::Implicit(ImplicitToolConfig {
-                    parameters: implicit_tool_output_schema,
+                    parameters: output_schema.clone(),
                 });
                 let implicit_tool_call_config = ToolCallConfig {
                     tools_available: vec![implicit_tool],
@@ -859,7 +859,7 @@ mod tests {
             .contains("Failed to parse config:\nunknown field `enable_agi`, expected"));
     }
 
-    /// Ensure that the config parsing fails when a JSON function has no output schema
+    /// Ensure that the config parsing defaults properly for JSON functions with no output schema
     #[test]
     fn test_config_from_toml_table_json_function_no_output_schema() {
         let mut config = get_sample_valid_config();
@@ -869,9 +869,14 @@ mod tests {
             .remove("output_schema");
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, base_path);
-        assert!(result.unwrap_err().to_string().contains(
-            "Failed to parse config:\nmissing field `output_schema`\nin `functions.json_with_schemas`\n"
-        ));
+        let config = result.unwrap();
+        // Check that the output schema is set to {}
+        let output_schema = match config.functions.get("json_with_schemas").unwrap() {
+            FunctionConfig::Json(json_config) => &json_config.output_schema,
+            _ => panic!("Expected a JSON function"),
+        };
+        assert_eq!(output_schema, &JSONSchemaFromPath::default());
+        assert_eq!(output_schema.value, &serde_json::json!({}));
     }
 
     /// Ensure that the config parsing fails when there are extra variables for variants

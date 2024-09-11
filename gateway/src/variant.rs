@@ -2,6 +2,7 @@ use futures::StreamExt;
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::{collections::HashMap, path::PathBuf};
 use uuid::Uuid;
 
@@ -13,8 +14,9 @@ use crate::inference::types::{
     InputMessageContent, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     ModelInferenceResponseWithMetadata, RequestMessage, Role,
 };
+use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
-use crate::tool::ToolCallConfig;
+use crate::tool::{create_dynamic_implicit_tool_config, ToolCallConfig};
 use crate::{
     inference::types::{InferenceResult, InputMessage},
     model::ModelConfig,
@@ -60,8 +62,9 @@ pub enum JsonMode {
 /// Maps to the subset of Config that applies to the current inference request.
 /// It doesn't take into account inference-time overrides (e.g. dynamic tools).
 pub struct InferenceConfig<'a> {
-    pub tool_config: Option<&'a ToolCallConfig>,
+    pub tool_config: Option<ToolCallConfig>,
     pub templates: &'a TemplateConfig<'a>,
+    pub dynamic_output_schema: Option<DynamicJSONSchema>,
 }
 
 pub struct ModelUsedInfo<'a> {
@@ -251,17 +254,17 @@ impl ChatCompletionConfig {
         &self,
         input: &Input,
         function: &'a FunctionConfig,
-        templates: &TemplateConfig,
-        tool_config: Option<&'a ToolCallConfig>,
+        inference_config: &'a InferenceConfig<'a>,
         stream: bool,
         inference_params: &mut InferenceParams,
     ) -> Result<ModelInferenceRequest<'a>, Error> {
         let messages = input
             .messages
             .iter()
-            .map(|message| self.prepare_request_message(templates, message))
+            .map(|message| self.prepare_request_message(inference_config.templates, message))
             .collect::<Result<Vec<_>, _>>()?;
-        let system = self.prepare_system_message(templates, input.system.as_ref())?;
+        let system =
+            self.prepare_system_message(inference_config.templates, input.system.as_ref())?;
 
         inference_params
             .chat_completion
@@ -270,7 +273,7 @@ impl ChatCompletionConfig {
             FunctionConfig::Chat(_) => ModelInferenceRequest {
                 messages,
                 system,
-                tool_config,
+                tool_config: inference_config.tool_config.as_ref().map(Cow::Borrowed),
                 temperature: inference_params.chat_completion.temperature,
                 max_tokens: inference_params.chat_completion.max_tokens,
                 seed: inference_params.chat_completion.seed,
@@ -281,8 +284,17 @@ impl ChatCompletionConfig {
             },
             FunctionConfig::Json(json_config) => {
                 let tool_config = match self.json_mode {
-                    JsonMode::ImplicitTool => Some(&json_config.implicit_tool_call_config),
+                    JsonMode::ImplicitTool => match &inference_config.dynamic_output_schema {
+                        Some(schema) => Some(Cow::Owned(create_dynamic_implicit_tool_config(
+                            schema.value.clone(),
+                        ))),
+                        None => Some(Cow::Borrowed(&json_config.implicit_tool_call_config)),
+                    },
                     _ => None,
+                };
+                let output_schema = match &inference_config.dynamic_output_schema {
+                    Some(schema) => Some(&schema.value),
+                    None => Some(json_config.output_schema.value),
                 };
                 ModelInferenceRequest {
                     messages,
@@ -294,7 +306,7 @@ impl ChatCompletionConfig {
                     stream,
                     json_mode: (&self.json_mode).into(),
                     function_type: FunctionType::Json,
-                    output_schema: Some(json_config.output_schema.value),
+                    output_schema,
                 }
             }
         })
@@ -311,14 +323,8 @@ impl Variant for ChatCompletionConfig {
         client: &'request Client,
         inference_params: &mut InferenceParams,
     ) -> Result<InferenceResult<'a>, Error> {
-        let request = self.prepare_request(
-            input,
-            function,
-            inference_config.templates,
-            inference_config.tool_config,
-            false,
-            inference_params,
-        )?;
+        let request =
+            self.prepare_request(input, function, inference_config, false, inference_params)?;
         let model_config = models.get(&self.model).ok_or(Error::UnknownModel {
             name: self.model.clone(),
         })?;
@@ -337,7 +343,7 @@ impl Variant for ChatCompletionConfig {
                 raw_content,
                 usage,
                 model_inference_results,
-                inference_config.tool_config,
+                inference_config,
             )
             .await
     }
@@ -358,14 +364,8 @@ impl Variant for ChatCompletionConfig {
         ),
         Error,
     > {
-        let request = self.prepare_request(
-            input,
-            function,
-            inference_config.templates,
-            inference_config.tool_config,
-            true,
-            inference_params,
-        )?;
+        let request =
+            self.prepare_request(input, function, inference_config, true, inference_params)?;
         let model_config = models.get(&self.model).ok_or(Error::UnknownModel {
             name: self.model.clone(),
         })?;
@@ -760,6 +760,7 @@ mod tests {
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
+            dynamic_output_schema: None,
         };
         let models = HashMap::new();
         let result = chat_completion_config
@@ -795,6 +796,7 @@ mod tests {
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
+            dynamic_output_schema: None,
         };
         let result = chat_completion_config
             .infer(
@@ -822,6 +824,7 @@ mod tests {
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
+            dynamic_output_schema: None,
         };
         let result = chat_completion_config
             .infer(
@@ -866,6 +869,7 @@ mod tests {
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
+            dynamic_output_schema: None,
         };
         let result = chat_completion_config
             .infer(
@@ -927,7 +931,8 @@ mod tests {
         let weather_tool_config = get_temperature_tool_config();
         let inference_config = InferenceConfig {
             templates: &templates,
-            tool_config: Some(&weather_tool_config),
+            tool_config: Some(weather_tool_config),
+            dynamic_output_schema: None,
         };
         let result = chat_completion_config
             .infer(
@@ -1004,6 +1009,7 @@ mod tests {
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
+            dynamic_output_schema: None,
         };
         let mut inference_params = InferenceParams::default();
         let result = chat_completion_config
@@ -1049,6 +1055,7 @@ mod tests {
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
+            dynamic_output_schema: None,
         };
         let chat_completion_config = ChatCompletionConfig {
             model: "json".to_string(),
@@ -1071,6 +1078,164 @@ mod tests {
         match result {
             InferenceResult::Json(json_result) => {
                 assert_eq!(json_result.output.parsed, Some(json!({"answer": "Hello"})));
+                assert_eq!(json_result.output.raw, DUMMY_JSON_RESPONSE_RAW.to_string());
+                assert_eq!(
+                    json_result.usage,
+                    Usage {
+                        input_tokens: 10,
+                        output_tokens: 10,
+                    }
+                );
+                assert_eq!(json_result.model_inference_results.len(), 1);
+                assert_eq!(
+                    json_result.model_inference_results[0].model_provider_name,
+                    "json_provider".to_string()
+                );
+                assert_eq!(
+                    json_result.model_inference_results[0].model_name,
+                    "json".to_string()
+                );
+            }
+            _ => panic!("Expected Json inference response"),
+        }
+        // Test case 7: Dynamic JSON output happens and works
+        let hardcoded_output_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "response": {
+                    "type": "string"
+                }
+            },
+            "required": ["response"],
+            "additionalProperties": false
+        });
+        let implicit_tool_call_config =
+            ToolCallConfig::implicit_from_value(&hardcoded_output_schema);
+        let hardcoded_output_schema = JSONSchemaFromPath::from_value(&hardcoded_output_schema);
+        let json_function_config = FunctionConfig::Json(FunctionConfigJson {
+            variants: HashMap::new(),
+            assistant_schema: None,
+            system_schema: None,
+            user_schema: None,
+            output_schema: hardcoded_output_schema,
+            implicit_tool_call_config,
+        });
+        let mut inference_params = InferenceParams::default();
+        // Will dynamically set "answer" instead of "response"
+        let output_schema = DynamicJSONSchema::new(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "answer": {
+                    "type": "string"
+                }
+            },
+            "required": ["answer"]
+        }));
+        let inference_config = InferenceConfig {
+            templates: &templates,
+            tool_config: None,
+            dynamic_output_schema: Some(output_schema),
+        };
+        let chat_completion_config = ChatCompletionConfig {
+            model: "json".to_string(),
+            weight: 1.0,
+            system_template: Some(system_template_name.into()),
+            user_template: Some(user_template_name.into()),
+            ..Default::default()
+        };
+        let result = chat_completion_config
+            .infer(
+                &input,
+                &models,
+                &json_function_config,
+                &inference_config,
+                &client,
+                &mut inference_params,
+            )
+            .await
+            .unwrap();
+        match result {
+            InferenceResult::Json(json_result) => {
+                assert_eq!(json_result.output.parsed, Some(json!({"answer": "Hello"})));
+                assert_eq!(json_result.output.raw, DUMMY_JSON_RESPONSE_RAW.to_string());
+                assert_eq!(
+                    json_result.usage,
+                    Usage {
+                        input_tokens: 10,
+                        output_tokens: 10,
+                    }
+                );
+                assert_eq!(json_result.model_inference_results.len(), 1);
+                assert_eq!(
+                    json_result.model_inference_results[0].model_provider_name,
+                    "json_provider".to_string()
+                );
+                assert_eq!(
+                    json_result.model_inference_results[0].model_name,
+                    "json".to_string()
+                );
+            }
+            _ => panic!("Expected Json inference response"),
+        }
+        // Test case 8: Dynamic JSON output fails
+        let hardcoded_output_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "answer": {
+                    "type": "string"
+                }
+            },
+            "required": ["answer"],
+            "additionalProperties": false
+        });
+        let implicit_tool_call_config =
+            ToolCallConfig::implicit_from_value(&hardcoded_output_schema);
+        let hardcoded_output_schema = JSONSchemaFromPath::from_value(&hardcoded_output_schema);
+        let json_function_config = FunctionConfig::Json(FunctionConfigJson {
+            variants: HashMap::new(),
+            assistant_schema: None,
+            system_schema: None,
+            user_schema: None,
+            output_schema: hardcoded_output_schema,
+            implicit_tool_call_config,
+        });
+        let mut inference_params = InferenceParams::default();
+        // Will dynamically set "response" instead of "answer"
+        let output_schema = DynamicJSONSchema::new(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "response": {
+                    "type": "string"
+                }
+            },
+            "required": ["response"]
+        }));
+        let inference_config = InferenceConfig {
+            templates: &templates,
+            tool_config: None,
+            dynamic_output_schema: Some(output_schema),
+        };
+        let chat_completion_config = ChatCompletionConfig {
+            model: "json".to_string(),
+            weight: 1.0,
+            system_template: Some(system_template_name.into()),
+            user_template: Some(user_template_name.into()),
+            ..Default::default()
+        };
+        let result = chat_completion_config
+            .infer(
+                &input,
+                &models,
+                &json_function_config,
+                &inference_config,
+                &client,
+                &mut inference_params,
+            )
+            .await
+            .unwrap();
+        match result {
+            InferenceResult::Json(json_result) => {
+                assert_eq!(json_result.output.parsed, None);
                 assert_eq!(json_result.output.raw, DUMMY_JSON_RESPONSE_RAW.to_string());
                 assert_eq!(
                     json_result.usage,
@@ -1146,6 +1311,7 @@ mod tests {
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
+            dynamic_output_schema: None,
         };
         let result = chat_completion_config
             .infer_stream(
@@ -1186,6 +1352,7 @@ mod tests {
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
+            dynamic_output_schema: None,
         };
         let (first_chunk, mut stream, models_used) = chat_completion_config
             .infer_stream(
@@ -1244,15 +1411,15 @@ mod tests {
     }
 
     /// Since we test the preparation of messages extensively above, we focus here on testing the request parameter setting.
-    #[test]
-    fn test_prepare_request_params() {
+    /// We also test that the request correctly carries dynamic output schemas if set
+    #[tokio::test]
+    async fn test_prepare_request_params() {
         // We won't vary these parameters in this test
         let input = Input {
             system: None,
             messages: vec![],
         };
         let templates = get_test_template_config();
-        let tool_config = None;
         let stream = false;
         // We will vary temperature, max_tokens, and seed
         let chat_completion_config = ChatCompletionConfig {
@@ -1272,12 +1439,16 @@ mod tests {
             parallel_tool_calls: false,
         });
         let mut inference_params = InferenceParams::default();
+        let inference_config = InferenceConfig {
+            templates: &templates,
+            tool_config: None,
+            dynamic_output_schema: None,
+        };
         let model_request = chat_completion_config
             .prepare_request(
                 &input,
                 &function_config,
-                &templates,
-                tool_config.as_ref(),
+                &inference_config,
                 stream,
                 &mut inference_params,
             )
@@ -1300,8 +1471,7 @@ mod tests {
             .prepare_request(
                 &input,
                 &function_config,
-                &templates,
-                tool_config.as_ref(),
+                &inference_config,
                 stream,
                 &mut inference_params,
             )
@@ -1324,8 +1494,7 @@ mod tests {
             .prepare_request(
                 &input,
                 &function_config,
-                &templates,
-                tool_config.as_ref(),
+                &inference_config,
                 stream,
                 &mut inference_params,
             )
@@ -1374,13 +1543,17 @@ mod tests {
                 parallel_tool_calls: false,
             },
         });
+        let inference_config = InferenceConfig {
+            templates: &templates,
+            tool_config: None,
+            dynamic_output_schema: None,
+        };
         let mut inference_params = InferenceParams::default();
         let model_request = chat_completion_config
             .prepare_request(
                 &input,
                 &function_config,
-                &templates,
-                tool_config.as_ref(),
+                &inference_config,
                 stream,
                 &mut inference_params,
             )
@@ -1405,8 +1578,7 @@ mod tests {
             .prepare_request(
                 &input,
                 &function_config,
-                &templates,
-                tool_config.as_ref(),
+                &inference_config,
                 stream,
                 &mut inference_params,
             )
@@ -1431,8 +1603,7 @@ mod tests {
             .prepare_request(
                 &input,
                 &function_config,
-                &templates,
-                tool_config.as_ref(),
+                &inference_config,
                 stream,
                 &mut inference_params,
             )
@@ -1440,8 +1611,38 @@ mod tests {
         assert_eq!(model_request.temperature, Some(0.9));
         assert_eq!(model_request.max_tokens, None);
         assert_eq!(model_request.seed, None);
+        assert_eq!(model_request.output_schema, Some(&output_schema_value));
         assert_eq!(inference_params.chat_completion.temperature, Some(0.9));
         assert_eq!(inference_params.chat_completion.max_tokens, None);
         assert_eq!(inference_params.chat_completion.seed, None);
+
+        let dynamic_output_schema = DynamicJSONSchema::new(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "answer": {
+                    "type": "string"
+                }
+            },
+            "required": ["answer"]
+        }));
+        let dynamic_output_schema_value = dynamic_output_schema.value.clone();
+        let inference_config = InferenceConfig {
+            templates: &templates,
+            tool_config: None,
+            dynamic_output_schema: Some(dynamic_output_schema),
+        };
+        let model_request = chat_completion_config
+            .prepare_request(
+                &input,
+                &function_config,
+                &inference_config,
+                stream,
+                &mut inference_params,
+            )
+            .unwrap();
+        assert_eq!(
+            model_request.output_schema,
+            Some(&dynamic_output_schema_value)
+        );
     }
 }

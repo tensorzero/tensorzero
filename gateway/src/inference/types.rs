@@ -3,6 +3,7 @@ use futures::Stream;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use std::{
+    borrow::Cow,
     collections::HashMap,
     fmt,
     pin::Pin,
@@ -10,11 +11,11 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::endpoints::inference::InferenceDatabaseInsertMetadata;
 use crate::endpoints::inference::InferenceParams;
 use crate::function::FunctionConfig;
 use crate::tool::ToolCallConfigDatabaseInsert;
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolResult};
+use crate::{endpoints::inference::InferenceDatabaseInsertMetadata, variant::InferenceConfig};
 use crate::{error::Error, variant::JsonMode};
 
 /// Data flow in TensorZero
@@ -119,7 +120,7 @@ pub enum ModelInferenceRequestJsonMode {
 pub struct ModelInferenceRequest<'a> {
     pub messages: Vec<RequestMessage>,
     pub system: Option<String>,
-    pub tool_config: Option<&'a ToolCallConfig>,
+    pub tool_config: Option<Cow<'a, ToolCallConfig>>,
     pub temperature: Option<f32>,
     pub max_tokens: Option<u32>,
     pub seed: Option<u32>,
@@ -220,6 +221,7 @@ pub struct JsonInferenceResult<'a> {
     pub output: JsonInferenceOutput,
     pub usage: Usage,
     pub model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
+    pub output_schema: Value,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -300,6 +302,8 @@ pub struct InferenceDatabaseInsert {
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub inference_params: InferenceParams,
     pub processing_time_ms: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_schema: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -507,6 +511,7 @@ impl<'a> JsonInferenceResult<'a> {
         parsed: Option<Value>,
         usage: Usage,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
+        output_schema: Value,
     ) -> Self {
         let output = JsonInferenceOutput { raw, parsed };
         Self {
@@ -515,6 +520,7 @@ impl<'a> JsonInferenceResult<'a> {
             output,
             usage,
             model_inference_results,
+            output_schema,
         }
     }
 }
@@ -609,6 +615,7 @@ impl InferenceDatabaseInsert {
                     inference_params,
                     output,
                     processing_time_ms,
+                    output_schema: None,
                 }
             }
             InferenceResult::Json(json_result) => {
@@ -620,6 +627,16 @@ impl InferenceDatabaseInsert {
                         e.log();
                         String::new()
                     });
+                let output_schema = Some(
+                    serde_json::to_string(&json_result.output_schema)
+                        .map_err(|e| Error::Serialization {
+                            message: format!("Failed to serialize output schema: {}", e),
+                        })
+                        .unwrap_or_else(|e| {
+                            e.log();
+                            String::new()
+                        }),
+                );
                 Self {
                     id: json_result.inference_id,
                     function_name: metadata.function_name,
@@ -630,6 +647,7 @@ impl InferenceDatabaseInsert {
                     inference_params,
                     output,
                     processing_time_ms,
+                    output_schema,
                 }
             }
         }
@@ -742,7 +760,7 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
 pub async fn collect_chunks<'a>(
     value: Vec<InferenceResultChunk>,
     function: &FunctionConfig,
-    tool_config: Option<&ToolCallConfig>,
+    inference_config: &InferenceConfig<'a>,
     model_name: &'a str,
     model_provider_name: &'a str,
 ) -> Result<InferenceResult<'a>, Error> {
@@ -871,7 +889,7 @@ pub async fn collect_chunks<'a>(
             content_blocks,
             usage,
             vec![model_inference_result],
-            tool_config,
+            inference_config,
         )
         .await
 }
@@ -911,7 +929,8 @@ mod tests {
 
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::providers::common::get_temperature_tool_config;
-    use crate::jsonschema_util::JSONSchemaFromPath;
+    use crate::jsonschema_util::{DynamicJSONSchema, JSONSchemaFromPath};
+    use crate::minijinja_util::TemplateConfig;
     use crate::tool::ToolChoice;
 
     use super::*;
@@ -1099,7 +1118,11 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: false,
         };
-        let tool_config = Box::leak(Box::new(tool_config));
+        let inference_config = InferenceConfig {
+            tool_config: Some(tool_config),
+            templates: &TemplateConfig::default(),
+            dynamic_output_schema: None,
+        };
         let chunks = vec![];
         let function = FunctionConfig::Chat(FunctionConfigChat::default());
         let model_name = "test_model";
@@ -1107,7 +1130,7 @@ mod tests {
         let result = collect_chunks(
             chunks,
             &function,
-            Some(tool_config),
+            &inference_config,
             model_name,
             model_provider_name,
         )
@@ -1156,7 +1179,7 @@ mod tests {
         let result = collect_chunks(
             chunks,
             &function,
-            Some(tool_config),
+            &inference_config,
             model_name,
             model_provider_name,
         )
@@ -1236,7 +1259,7 @@ mod tests {
         let response = collect_chunks(
             chunks,
             &function_config,
-            None,
+            &inference_config,
             model_name,
             model_provider_name,
         )
@@ -1299,7 +1322,7 @@ mod tests {
         let result = collect_chunks(
             chunks,
             &function_config,
-            None,
+            &inference_config,
             model_name,
             model_provider_name,
         )
@@ -1359,7 +1382,7 @@ mod tests {
         let result = collect_chunks(
             chunks,
             &function,
-            Some(tool_config),
+            &inference_config,
             model_name,
             model_provider_name,
         )
@@ -1433,7 +1456,102 @@ mod tests {
         let response = collect_chunks(
             chunks,
             &function_config,
-            None,
+            &inference_config,
+            model_name,
+            model_provider_name,
+        )
+        .await
+        .unwrap();
+        match response {
+            InferenceResult::Json(json_result) => {
+                assert_eq!(json_result.inference_id, inference_id);
+                assert_eq!(
+                    json_result.output.parsed,
+                    Some(serde_json::json!({"name": "John", "age": 30}))
+                );
+                assert_eq!(
+                    json_result.output.raw,
+                    "{\"name\":\"John\",\"age\":30}".to_string()
+                );
+                assert_eq!(
+                    json_result.usage,
+                    Usage {
+                        input_tokens: 15,
+                        output_tokens: 15,
+                    }
+                );
+                assert_eq!(json_result.model_inference_results.len(), 1);
+                let model_inference_result = json_result.model_inference_results.first().unwrap();
+                assert_eq!(model_inference_result.model_name, model_name);
+                assert_eq!(
+                    model_inference_result.model_provider_name,
+                    model_provider_name
+                );
+            }
+            _ => panic!("Expected Json inference response"),
+        }
+        // Test Case 7: a JSON string with a dynamic schema that passes validation and also include usage in each chunk
+        let inference_id = Uuid::now_v7();
+        let static_output_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+            },
+            "required": ["name"]
+        });
+        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&static_output_schema);
+        let output_schema = JSONSchemaFromPath::from_value(&static_output_schema);
+        let function_config = FunctionConfig::Json(FunctionConfigJson {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            implicit_tool_call_config,
+            output_schema,
+        });
+        let usage1 = Usage {
+            input_tokens: 10,
+            output_tokens: 5,
+        };
+        let usage2 = Usage {
+            input_tokens: 5,
+            output_tokens: 10,
+        };
+        let dynamic_output_schema = DynamicJSONSchema::new(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "age": {"type": "number"}
+            },
+            "required": ["name", "age"]
+        }));
+        let inference_config = InferenceConfig {
+            tool_config: None,
+            templates: &TemplateConfig::default(),
+            dynamic_output_schema: Some(dynamic_output_schema),
+        };
+        let chunks = vec![
+            InferenceResultChunk::Json(JsonInferenceResultChunk {
+                inference_id,
+                raw: "{\"name\":".to_string(),
+                created,
+                usage: Some(usage1.clone()),
+                raw_response: "{\"name\":".to_string(),
+                latency: Duration::from_millis(150),
+            }),
+            InferenceResultChunk::Json(JsonInferenceResultChunk {
+                inference_id,
+                raw: "\"John\",\"age\":30}".to_string(),
+                created,
+                usage: Some(usage2.clone()),
+                raw_response: "\"John\",\"age\":30}".to_string(),
+                latency: Duration::from_millis(250),
+            }),
+        ];
+        let response = collect_chunks(
+            chunks,
+            &function_config,
+            &inference_config,
             model_name,
             model_provider_name,
         )

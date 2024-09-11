@@ -49,6 +49,9 @@ pub enum Error {
     Config {
         message: String,
     },
+    DynamicJsonSchema {
+        message: String,
+    },
     FireworksClient {
         message: String,
         status_code: StatusCode,
@@ -212,6 +215,7 @@ impl Error {
             Error::ClickHouseMigration { .. } => tracing::Level::ERROR,
             Error::ClickHouseQuery { .. } => tracing::Level::ERROR,
             Error::Config { .. } => tracing::Level::ERROR,
+            Error::DynamicJsonSchema { .. } => tracing::Level::WARN,
             Error::FireworksClient { .. } => tracing::Level::WARN,
             Error::FireworksServer { .. } => tracing::Level::ERROR,
             Error::GCPCredentials { .. } => tracing::Level::ERROR,
@@ -276,6 +280,7 @@ impl Error {
             Error::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ClickHouseQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::DynamicJsonSchema { .. } => StatusCode::BAD_REQUEST,
             Error::FireworksServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::FireworksClient { status_code, .. } => *status_code,
             Error::GCPCredentials { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -385,6 +390,13 @@ impl std::fmt::Display for Error {
             }
             Error::Config { message } => {
                 write!(f, "Error in TensorZero config: {}", message)
+            }
+            Error::DynamicJsonSchema { message } => {
+                write!(
+                    f,
+                    "Error in compiling client-provided JSON schema: {}",
+                    message
+                )
             }
             Error::FireworksClient { message, .. } => {
                 write!(f, "Error from Fireworks client: {}", message)

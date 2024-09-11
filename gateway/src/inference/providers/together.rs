@@ -214,6 +214,8 @@ impl<'a> TogetherRequest<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
     use super::*;
 
     use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
@@ -235,7 +237,7 @@ mod tests {
             seed: Some(69),
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::Off,
-            tool_config: Some(&WEATHER_TOOL_CONFIG),
+            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
         };

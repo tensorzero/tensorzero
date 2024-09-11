@@ -367,13 +367,14 @@ impl<'a> AnthropicRequestBody<'a> {
         let messages = prepare_messages(request_messages)?;
         let tools = request
             .tool_config
+            .as_ref()
             .map(|c| &c.tools_available)
             .map(|tools| tools.iter().map(|tool| tool.into()).collect::<Vec<_>>());
         // `tool_choice` should only be set if tools are set and non-empty
         let tool_choice: Option<AnthropicToolChoice> = tools
             .as_ref()
             .filter(|t| !t.is_empty())
-            .and(request.tool_config)
+            .and(request.tool_config.as_ref())
             .and_then(|c| (&c.tool_choice).try_into().ok());
         // NOTE: Anthropic does not support seed
         Ok(AnthropicRequestBody {
@@ -767,6 +768,8 @@ fn parse_usage_info(usage_info: &Value) -> AnthropicUsage {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
     use super::*;
 
     use serde_json::json;
@@ -1070,7 +1073,7 @@ mod tests {
         let inference_request = ModelInferenceRequest {
             messages: messages.clone(),
             system: Some("test_system".to_string()),
-            tool_config: Some(&WEATHER_TOOL_CONFIG),
+            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             temperature: Some(0.5),
             max_tokens: Some(100),
             seed: None,

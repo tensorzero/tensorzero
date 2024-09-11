@@ -3,21 +3,64 @@ use serde::Serialize;
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tokio::sync::{OnceCell, RwLock};
 use tokio::task::JoinHandle;
 
 use crate::error::Error;
 
 #[derive(Debug, Serialize)]
+pub enum JsonSchemaRef<'a> {
+    Static(&'a JSONSchemaFromPath),
+    Dynamic(&'a DynamicJSONSchema),
+}
+
+impl<'a> JsonSchemaRef<'a> {
+    pub async fn validate(&self, instance: &Value) -> Result<(), Error> {
+        match self {
+            JsonSchemaRef::Static(schema) => schema.validate(instance),
+            JsonSchemaRef::Dynamic(schema) => schema.validate(instance).await,
+        }
+    }
+
+    pub fn value(&'a self) -> &'a Value {
+        match self {
+            JsonSchemaRef::Static(schema) => schema.value,
+            JsonSchemaRef::Dynamic(schema) => &schema.value,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
 pub struct JSONSchemaFromPath {
     #[serde(skip)]
-    pub compiled: JSONSchema,
+    pub compiled: Arc<JSONSchema>,
     pub value: &'static serde_json::Value,
 }
 
 impl PartialEq for JSONSchemaFromPath {
     fn eq(&self, other: &Self) -> bool {
         self.value == other.value
+    }
+}
+
+impl Default for JSONSchemaFromPath {
+    fn default() -> Self {
+        // Create an empty JSON object
+        let empty_schema: serde_json::Value = serde_json::json!({});
+
+        // Leak the memory to create a 'static reference
+        let static_schema: &'static serde_json::Value = Box::leak(Box::new(empty_schema));
+
+        // Compile the schema
+        #[allow(clippy::expect_used)]
+        let compiled_schema =
+            JSONSchema::compile(static_schema).expect("Failed to compile empty schema");
+
+        Self {
+            compiled: Arc::new(compiled_schema),
+            value: static_schema,
+        }
     }
 }
 
@@ -39,7 +82,7 @@ impl JSONSchemaFromPath {
         let compiled_schema = JSONSchema::compile(schema_boxed).map_err(|e| Error::JsonSchema {
             message: format!("Failed to compile JSON Schema `{}`: {}", path.display(), e),
         })?;
-        let compiled = compiled_schema;
+        let compiled = Arc::new(compiled_schema);
         let value = schema_boxed;
         Ok(Self { compiled, value })
     }
@@ -50,7 +93,7 @@ impl JSONSchemaFromPath {
         #[allow(clippy::unwrap_used)]
         let compiled_schema = JSONSchema::compile(schema_boxed).unwrap();
         Self {
-            compiled: compiled_schema,
+            compiled: Arc::new(compiled_schema),
             value: schema_boxed,
         }
     }
@@ -69,6 +112,7 @@ impl JSONSchemaFromPath {
     }
 }
 
+type CompilationTask = Arc<RwLock<Option<JoinHandle<Result<Arc<JSONSchema>, Error>>>>>;
 /// This is a JSONSchema that is compiled on the fly.
 /// This is useful for schemas that are not known at compile time, in particular, for dynamic tool definitions.
 /// In order to avoid blocking the inference, we compile the schema asynchronously as the inference runs.
@@ -77,11 +121,13 @@ impl JSONSchemaFromPath {
 ///
 /// The public API of this struct should look very normal except validation is `async`
 /// There are just `new` and `validate` methods.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Clone)]
 pub struct DynamicJSONSchema {
     pub value: Value,
-    compiled_schema: OnceCell<JSONSchema>,
-    compilation_task: RwLock<Option<JoinHandle<Result<JSONSchema, Error>>>>,
+    #[serde(skip)]
+    compiled_schema: OnceCell<Arc<JSONSchema>>,
+    #[serde(skip)]
+    compilation_task: CompilationTask,
 }
 
 impl PartialEq for DynamicJSONSchema {
@@ -94,14 +140,16 @@ impl DynamicJSONSchema {
     pub fn new(schema: Value) -> Self {
         let schema_clone = schema.clone();
         let compilation_task = tokio::task::spawn_blocking(move || {
-            JSONSchema::compile(&schema_clone).map_err(|e| Error::JsonSchema {
-                message: e.to_string(),
-            })
+            JSONSchema::compile(&schema_clone)
+                .map_err(|e| Error::DynamicJsonSchema {
+                    message: e.to_string(),
+                })
+                .map(Arc::new)
         });
         Self {
             value: schema,
             compiled_schema: OnceCell::new(),
-            compilation_task: RwLock::new(Some(compilation_task)),
+            compilation_task: Arc::new(RwLock::new(Some(compilation_task))),
         }
     }
 
@@ -113,7 +161,7 @@ impl DynamicJSONSchema {
         let compiled_schema = match self.compiled_schema.get() {
             Some(compiled_schema) => compiled_schema,
             None => {
-                return Err(Error::JsonSchema {
+                return Err(Error::DynamicJsonSchema {
                     message: "Schema compilation failed".to_string(),
                 })
             }
@@ -129,7 +177,7 @@ impl DynamicJSONSchema {
         })
     }
 
-    async fn get_or_init_compiled_schema(&self) -> Result<&JSONSchema, Error> {
+    async fn get_or_init_compiled_schema(&self) -> Result<(), Error> {
         self.compiled_schema
             .get_or_try_init(|| async {
                 let mut task_guard = self.compilation_task.write().await;
@@ -140,10 +188,11 @@ impl DynamicJSONSchema {
                 } else {
                     Err(Error::JsonSchema {
                         message: "Schema compilation already completed.".to_string(),
-                    })
+                    })?
                 }
             })
-            .await
+            .await?;
+        Ok(())
     }
 }
 
