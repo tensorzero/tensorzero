@@ -1629,5 +1629,57 @@ mod tests {
             }
             _ => panic!("Expected a JSON inference result"),
         }
+
+        // Test with an empty output schema
+        let output_schema = json!({});
+        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
+        let output_schema = JSONSchemaFromPath::from_value(&output_schema);
+        let function_config = FunctionConfig::Json(FunctionConfigJson {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            output_schema,
+            implicit_tool_call_config,
+        });
+        let inference_id = Uuid::now_v7();
+        let content_blocks = vec![r#"{"answer": "42"}"#.to_string().into()];
+        let usage = Usage {
+            input_tokens: 10,
+            output_tokens: 10,
+        };
+        let latency = Latency::NonStreaming {
+            response_time: Duration::from_millis(100),
+        };
+        let model_response = ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            content: content_blocks.clone(),
+            raw_response: "content".to_string(),
+            usage: usage.clone(),
+            model_provider_name: "model_provider_name",
+            model_name: "model_name",
+            latency,
+        };
+        let response = function_config
+            .prepare_response(
+                inference_id,
+                content_blocks,
+                usage.clone(),
+                vec![model_response.clone()],
+                &inference_config,
+            )
+            .await
+            .unwrap();
+        match response {
+            InferenceResult::Json(result) => {
+                assert_eq!(result.inference_id, inference_id);
+                assert_eq!(result.output.parsed.unwrap(), json!({"answer": "42"}),);
+                assert_eq!(result.output.raw, r#"{"answer": "42"}"#);
+                assert_eq!(result.usage, usage);
+                assert_eq!(result.model_inference_results, vec![model_response]);
+            }
+            _ => panic!("Expected a JSON inference result"),
+        }
     }
 }
