@@ -134,6 +134,10 @@ impl InferenceProvider for OpenAIProvider {
         };
         Ok((chunk, stream, raw_request))
     }
+
+    fn has_credentials(&self) -> bool {
+        self.api_key.is_some()
+    }
 }
 
 pub fn stream_openai(

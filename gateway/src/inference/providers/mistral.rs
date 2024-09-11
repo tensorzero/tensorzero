@@ -141,6 +141,10 @@ impl InferenceProvider for MistralProvider {
         };
         Ok((chunk, stream, raw_request))
     }
+
+    fn has_credentials(&self) -> bool {
+        self.api_key.is_some()
+    }
 }
 
 fn handle_mistral_error(

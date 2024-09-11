@@ -332,6 +332,22 @@ impl InferenceProvider for ProviderConfig {
             ProviderConfig::Dummy(provider) => provider.infer_stream(request, client).await,
         }
     }
+
+    fn has_credentials(&self) -> bool {
+        match self {
+            ProviderConfig::Anthropic(provider) => provider.has_credentials(),
+            ProviderConfig::AWSBedrock(provider) => provider.has_credentials(),
+            ProviderConfig::Azure(provider) => provider.has_credentials(),
+            ProviderConfig::Fireworks(provider) => provider.has_credentials(),
+            ProviderConfig::GCPVertexGemini(provider) => provider.has_credentials(),
+            ProviderConfig::Mistral(provider) => provider.has_credentials(),
+            ProviderConfig::OpenAI(provider) => provider.has_credentials(),
+            ProviderConfig::Together(provider) => provider.has_credentials(),
+            ProviderConfig::VLLM(provider) => provider.has_credentials(),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            ProviderConfig::Dummy(provider) => provider.has_credentials(),
+        }
+    }
 }
 
 #[cfg(test)]

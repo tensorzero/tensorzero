@@ -146,6 +146,10 @@ impl InferenceProvider for FireworksProvider {
         };
         Ok((chunk, stream, raw_request))
     }
+
+    fn has_credentials(&self) -> bool {
+        self.api_key.is_some()
+    }
 }
 
 fn map_openai_to_fireworks_error(e: Error) -> Error {

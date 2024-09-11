@@ -225,4 +225,8 @@ impl InferenceProvider for DummyProvider {
             DUMMY_RAW_REQUEST.to_string(),
         ))
     }
+
+    fn has_credentials(&self) -> bool {
+        self.model_name != "bad_credentials"
+    }
 }
