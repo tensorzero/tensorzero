@@ -18,9 +18,9 @@ use crate::function::sample_variant;
 use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
-    collect_chunks, ContentBlockChunk, ContentBlockOutput, InferenceDatabaseInsert,
-    InferenceResult, InferenceResultChunk, InferenceResultStream, Input, JsonInferenceOutput,
-    Usage,
+    collect_chunks, ChatInferenceDatabaseInsert, ContentBlockChunk, ContentBlockOutput,
+    InferenceResult, InferenceResultChunk, InferenceResultStream, Input,
+    JsonInferenceDatabaseInsert, JsonInferenceOutput, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::tool::{DynamicToolParams, ToolCallConfig};
@@ -395,11 +395,24 @@ async fn write_inference<'a>(
             .ok_or_log();
     }
     // Write the inference to the Inference table
-    let inference = InferenceDatabaseInsert::new(result, serialized_input, metadata);
-    clickhouse_connection_info
-        .write(&inference, "Inference")
-        .await
-        .ok_or_log();
+    match result {
+        InferenceResult::Chat(result) => {
+            let chat_inference =
+                ChatInferenceDatabaseInsert::new(result, serialized_input, metadata);
+            clickhouse_connection_info
+                .write(&chat_inference, "ChatInference")
+                .await
+                .ok_or_log();
+        }
+        InferenceResult::Json(result) => {
+            let json_inference =
+                JsonInferenceDatabaseInsert::new(result, serialized_input, metadata);
+            clickhouse_connection_info
+                .write(&json_inference, "JsonInference")
+                .await
+                .ok_or_log();
+        }
+    }
 }
 
 /// InferenceResponse and InferenceResultChunk determine what gets serialized and sent to the client

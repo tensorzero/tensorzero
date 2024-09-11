@@ -290,11 +290,11 @@ pub enum InferenceResultChunk {
 }
 
 /// Alongside the response, we also store information about what happened during the request.
-/// For this we convert the InferenceResult into an InferenceDatabaseInsert and ModelInferenceDatabaseInserts,
+/// For this we convert the InferenceResult into a ChatInferenceDatabaseInsert or JsonInferenceDatabaseInsert and ModelInferenceDatabaseInserts,
 /// which are written to ClickHouse tables of the same name asynchronously.
 
 #[derive(Debug, Serialize)]
-pub struct InferenceDatabaseInsert {
+pub struct ChatInferenceDatabaseInsert {
     pub id: Uuid,
     pub function_name: String,
     pub variant_name: String,
@@ -305,8 +305,19 @@ pub struct InferenceDatabaseInsert {
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub inference_params: InferenceParams,
     pub processing_time_ms: u32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub output_schema: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct JsonInferenceDatabaseInsert {
+    pub id: Uuid,
+    pub function_name: String,
+    pub variant_name: String,
+    pub episode_id: Uuid,
+    pub input: String,
+    pub output: String,
+    pub inference_params: InferenceParams,
+    pub processing_time_ms: u32,
+    pub output_schema: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -583,9 +594,9 @@ impl<'a> ChatInferenceResult<'a> {
     }
 }
 
-impl InferenceDatabaseInsert {
+impl ChatInferenceDatabaseInsert {
     pub fn new(
-        inference_response: InferenceResult,
+        chat_result: ChatInferenceResult,
         input: String,
         metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
@@ -593,62 +604,65 @@ impl InferenceDatabaseInsert {
 
         let tool_params = metadata.tool_params.map(ToolCallConfigDatabaseInsert::from);
         let inference_params = metadata.inference_params;
-        match inference_response {
-            InferenceResult::Chat(chat_response) => {
-                let output = serde_json::to_string(&chat_response.content)
-                    .map_err(|e| Error::Serialization {
-                        message: format!("Failed to serialize output: {}", e),
-                    })
-                    .unwrap_or_else(|e| {
-                        e.log();
-                        String::new()
-                    });
+        let output = serde_json::to_string(&chat_result.content)
+            .map_err(|e| Error::Serialization {
+                message: format!("Failed to serialize output: {}", e),
+            })
+            .unwrap_or_else(|e| {
+                e.log();
+                String::new()
+            });
 
-                Self {
-                    id: chat_response.inference_id,
-                    function_name: metadata.function_name,
-                    variant_name: metadata.variant_name,
-                    episode_id: metadata.episode_id,
-                    input,
-                    tool_params,
-                    inference_params,
-                    output,
-                    processing_time_ms,
-                    output_schema: None,
-                }
-            }
-            InferenceResult::Json(json_result) => {
-                let output = serde_json::to_string(&json_result.output)
-                    .map_err(|e| Error::Serialization {
-                        message: format!("Failed to serialize output: {}", e),
-                    })
-                    .unwrap_or_else(|e| {
-                        e.log();
-                        String::new()
-                    });
-                let output_schema = Some(
-                    serde_json::to_string(&json_result.output_schema)
-                        .map_err(|e| Error::Serialization {
-                            message: format!("Failed to serialize output schema: {}", e),
-                        })
-                        .unwrap_or_else(|e| {
-                            e.log();
-                            String::new()
-                        }),
-                );
-                Self {
-                    id: json_result.inference_id,
-                    function_name: metadata.function_name,
-                    variant_name: metadata.variant_name,
-                    episode_id: metadata.episode_id,
-                    input,
-                    tool_params,
-                    inference_params,
-                    output,
-                    processing_time_ms,
-                    output_schema,
-                }
-            }
+        Self {
+            id: chat_result.inference_id,
+            function_name: metadata.function_name,
+            variant_name: metadata.variant_name,
+            episode_id: metadata.episode_id,
+            input,
+            tool_params,
+            inference_params,
+            output,
+            processing_time_ms,
+        }
+    }
+}
+
+impl JsonInferenceDatabaseInsert {
+    pub fn new(
+        json_result: JsonInferenceResult,
+        input: String,
+        metadata: InferenceDatabaseInsertMetadata,
+    ) -> Self {
+        let processing_time_ms = metadata.processing_time.as_millis() as u32;
+
+        let inference_params = metadata.inference_params;
+
+        let output = serde_json::to_string(&json_result.output)
+            .map_err(|e| Error::Serialization {
+                message: format!("Failed to serialize output: {}", e),
+            })
+            .unwrap_or_else(|e| {
+                e.log();
+                String::new()
+            });
+        let output_schema = serde_json::to_string(&json_result.output_schema)
+            .map_err(|e| Error::Serialization {
+                message: format!("Failed to serialize output schema: {}", e),
+            })
+            .unwrap_or_else(|e| {
+                e.log();
+                String::new()
+            });
+        Self {
+            id: json_result.inference_id,
+            function_name: metadata.function_name,
+            variant_name: metadata.variant_name,
+            episode_id: metadata.episode_id,
+            input,
+            inference_params,
+            output,
+            processing_time_ms,
+            output_schema,
         }
     }
 }
