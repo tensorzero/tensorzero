@@ -226,6 +226,10 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         };
         Ok((chunk, stream))
     }
+
+    fn has_credentials(&self) -> bool {
+        self.credentials.is_some()
+    }
 }
 
 fn stream_gcp_vertex_gemini(

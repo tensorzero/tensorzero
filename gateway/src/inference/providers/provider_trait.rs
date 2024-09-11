@@ -27,4 +27,6 @@ pub trait InferenceProvider {
         >,
     > + Send
            + 'a;
+
+    fn has_credentials(&self) -> bool;
 }

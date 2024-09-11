@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::error::Error;
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
+use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelConfig;
@@ -352,10 +353,21 @@ impl<'c> Config<'c> {
                 // Validate variant-specific config
                 match variant {
                     VariantConfig::ChatCompletion(params) => {
+                        let model_name = &params.model;
                         // Ensure that the model exists
-                        if !self.models.contains_key(&params.model) {
+                        let model = self.models.get(model_name).ok_or_else(|| Error::Config {
+                            message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `model` must be a valid model name"),
+                        })?;
+
+                        // If the variant has positive weight, ensure that at least one provider in the model has credentials
+                        if variant.weight() > 0.0
+                            && !model
+                                .providers
+                                .values()
+                                .any(|provider| provider.has_credentials())
+                        {
                             return Err(Error::Config {
-                                message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `model` must be a valid model name"),
+                                message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: at least one provider in model `{model_name}` must have credentials"),
                             });
                         }
                     }
@@ -629,9 +641,11 @@ impl UninitializedToolConfig {
 #[cfg(test)]
 mod tests {
 
-    use crate::variant::JsonMode;
-
     use super::*;
+
+    use std::env;
+
+    use crate::variant::JsonMode;
 
     /// Ensure that the sample valid config can be parsed without panicking
     #[test]
@@ -758,6 +772,88 @@ mod tests {
                 message: "Failed to parse config:\nmissing field `providers`\nin `models.claude-3-haiku-20240307`\n".to_string()
             }
         );
+    }
+
+    /// Ensure that the config parsing fails when the model credentials are missing
+    #[test]
+    fn test_config_from_toml_table_missing_credentials() {
+        let mut config = get_sample_valid_config();
+        let base_path = PathBuf::new();
+
+        // Add a new variant called generate_draft_dummy to the generate_draft function
+        let generate_draft = config["functions"]["generate_draft"]
+            .as_table_mut()
+            .expect("Failed to get `functions.generate_draft` section");
+
+        let variants = generate_draft["variants"]
+            .as_table_mut()
+            .expect("Failed to get `variants` section");
+
+        variants.insert(
+            "generate_draft_dummy".into(),
+            toml::Value::Table({
+                let mut table = toml::Table::new();
+                table.insert("type".into(), "chat_completion".into());
+                table.insert("weight".into(), 1.0.into());
+                table.insert("model".into(), "dummy".into());
+                table.insert(
+                    "system_template".into(),
+                    "fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
+                        .into(),
+                );
+                table
+            }),
+        );
+
+        // Add a new model "dummy" with a provider of type "dummy" with name "bad_credentials"
+        let models = config["models"].as_table_mut().unwrap();
+        models.insert(
+            "dummy".into(),
+            toml::Value::Table({
+                let mut dummy_model = toml::Table::new();
+                dummy_model.insert(
+                    "providers".into(),
+                    toml::Value::Table({
+                        let mut providers = toml::Table::new();
+                        providers.insert(
+                            "bad_credentials".into(),
+                            toml::Value::Table({
+                                let mut provider = toml::Table::new();
+                                provider.insert("type".into(), "dummy".into());
+                                provider.insert("model_name".into(), "bad_credentials".into());
+                                provider
+                            }),
+                        );
+                        providers
+                    }),
+                );
+                dummy_model.insert(
+                    "routing".into(),
+                    toml::Value::Array(vec![toml::Value::String("bad_credentials".into())]),
+                );
+                dummy_model
+            }),
+        );
+
+        let error = Config::load_from_toml(config.clone(), base_path.clone()).unwrap_err();
+        assert_eq!(
+            error,
+            Error::Config {
+                message: "Invalid Config: `functions.generate_draft.variants.generate_draft_dummy`: at least one provider in model `dummy` must have credentials"
+                    .to_string()
+            }
+        );
+
+        // Change the weight of the new variant to zero
+        let generate_draft = config["functions"]["generate_draft"]
+            .as_table_mut()
+            .unwrap();
+        let variants = generate_draft["variants"].as_table_mut().unwrap();
+        let dummy_variant = variants["generate_draft_dummy"].as_table_mut().unwrap();
+        dummy_variant.insert("weight".into(), 0.0.into());
+
+        // Now the test should pass because the variant with zero weight doesn't require credentials
+        Config::load_from_toml(config, base_path).expect("Config should load successfully");
     }
 
     /// Ensure that the config parsing fails when the `[functions]` section is missing
@@ -1417,12 +1513,18 @@ mod tests {
         description = "Get the weather for a given location"
         parameters = "fixtures/config/tools/get_temperature.json"
         "#;
+        env::set_var("OPENAI_API_KEY", "sk-something");
+        env::set_var("ANTHROPIC_API_KEY", "sk-something");
+        env::set_var("AZURE_API_KEY", "sk-something");
 
         toml::from_str(config_str).expect("Failed to parse sample config")
     }
 
     #[test]
     fn test_tensorzero_example_file() {
+        env::set_var("OPENAI_API_KEY", "sk-something");
+        env::set_var("ANTHROPIC_API_KEY", "sk-something");
+        env::set_var("AZURE_API_KEY", "sk-something");
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let config_path = format!("{}/../config/tensorzero.toml", manifest_dir);
         let config_pathbuf = PathBuf::from(&config_path);

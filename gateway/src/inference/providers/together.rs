@@ -132,6 +132,10 @@ impl InferenceProvider for TogetherProvider {
         };
         Ok((chunk, stream))
     }
+
+    fn has_credentials(&self) -> bool {
+        self.api_key.is_some()
+    }
 }
 
 fn map_openai_to_together_error(e: Error) -> Error {
