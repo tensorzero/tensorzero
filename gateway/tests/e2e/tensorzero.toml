@@ -507,7 +507,6 @@ max_tokens = 100
 type = "json"
 system_schema = "../../fixtures/config/functions/dynamic_json/system_schema.json"
 user_schema = "../../fixtures/config/functions/dynamic_json/user_schema.json"
-output_schema = "../../fixtures/config/functions/dynamic_json/output_schema.json"
 
 [functions.dynamic_json.variants.test]
 type = "chat_completion"

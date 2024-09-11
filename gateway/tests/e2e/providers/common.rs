@@ -6023,9 +6023,13 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.to_lowercase().contains("japan"));
-    assert!(raw_request.to_lowercase().contains("response"));
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));

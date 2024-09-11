@@ -1600,6 +1600,7 @@ mod tests {
                     model_inference_result.model_provider_name,
                     model_provider_name
                 );
+                assert_eq!(model_inference_result.raw_request, raw_request);
             }
             _ => panic!("Expected Json inference response"),
         }

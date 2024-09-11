@@ -44,6 +44,26 @@ impl PartialEq for JSONSchemaFromPath {
     }
 }
 
+impl Default for JSONSchemaFromPath {
+    fn default() -> Self {
+        // Create an empty JSON object
+        let empty_schema: serde_json::Value = serde_json::json!({});
+
+        // Leak the memory to create a 'static reference
+        let static_schema: &'static serde_json::Value = Box::leak(Box::new(empty_schema));
+
+        // Compile the schema
+        #[allow(clippy::expect_used)]
+        let compiled_schema =
+            JSONSchema::compile(static_schema).expect("Failed to compile empty schema");
+
+        Self {
+            compiled: Arc::new(compiled_schema),
+            value: static_schema,
+        }
+    }
+}
+
 impl JSONSchemaFromPath {
     /// Just instantiates the struct, does not load the schema
     /// You should call `load` to load the schema
@@ -121,7 +141,7 @@ impl DynamicJSONSchema {
         let schema_clone = schema.clone();
         let compilation_task = tokio::task::spawn_blocking(move || {
             JSONSchema::compile(&schema_clone)
-                .map_err(|e| Error::JsonSchema {
+                .map_err(|e| Error::DynamicJsonSchema {
                     message: e.to_string(),
                 })
                 .map(Arc::new)
@@ -141,7 +161,7 @@ impl DynamicJSONSchema {
         let compiled_schema = match self.compiled_schema.get() {
             Some(compiled_schema) => compiled_schema,
             None => {
-                return Err(Error::JsonSchema {
+                return Err(Error::DynamicJsonSchema {
                     message: "Schema compilation failed".to_string(),
                 })
             }
