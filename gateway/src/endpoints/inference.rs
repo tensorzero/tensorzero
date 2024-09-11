@@ -61,6 +61,8 @@ pub struct Params {
     // tool_choice: Option<ToolChoice>,
     // If true, the inference will use parallel tool calls
     // parallel_tool_calls: Option<bool>,
+    // If provided for a JSON inference, the inference will use the specified output schema instead of the
+    // configured one. We only lazily validate this schema.
     output_schema: Option<Value>,
 }
 

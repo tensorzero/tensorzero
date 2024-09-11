@@ -141,7 +141,7 @@ impl DynamicJSONSchema {
         let schema_clone = schema.clone();
         let compilation_task = tokio::task::spawn_blocking(move || {
             JSONSchema::compile(&schema_clone)
-                .map_err(|e| Error::JsonSchema {
+                .map_err(|e| Error::DynamicJsonSchema {
                     message: e.to_string(),
                 })
                 .map(Arc::new)
@@ -161,7 +161,7 @@ impl DynamicJSONSchema {
         let compiled_schema = match self.compiled_schema.get() {
             Some(compiled_schema) => compiled_schema,
             None => {
-                return Err(Error::JsonSchema {
+                return Err(Error::DynamicJsonSchema {
                     message: "Schema compilation failed".to_string(),
                 })
             }
