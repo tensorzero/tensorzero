@@ -9,7 +9,8 @@ use crate::error::Error;
 /// - CommentFeedback
 /// - DemonstrationFeedback
 /// - FloatMetricFeedback
-/// - Inference
+/// - ChatInference
+/// - JsonInference
 /// - ModelInference
 
 pub struct Migration0000<'a> {
@@ -37,7 +38,8 @@ impl<'a> Migration for Migration0000<'a> {
             "CommentFeedback",
             "DemonstrationFeedback",
             "FloatMetricFeedback",
-            "Inference",
+            "ChatInference",
+            "JsonInference",
             "ModelInference",
         ];
 

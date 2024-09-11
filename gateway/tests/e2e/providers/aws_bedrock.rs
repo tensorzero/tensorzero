@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::common::{
-    get_clickhouse, get_gateway_endpoint, select_inference_clickhouse,
+    get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
     select_model_inferences_clickhouse,
 };
 use crate::providers::common::{E2ETestProvider, E2ETestProviders};
@@ -87,7 +87,7 @@ async fn test_inference_with_explicit_region() {
     let clickhouse = get_clickhouse().await;
 
     // First, check Inference table
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();

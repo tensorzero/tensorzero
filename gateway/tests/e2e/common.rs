@@ -28,14 +28,30 @@ async fn clickhouse_flush_async_insert(clickhouse: &ClickHouseConnectionInfo) {
         .unwrap();
 }
 
-pub(crate) async fn select_inference_clickhouse(
+pub(crate) async fn select_chat_inference_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
 ) -> Option<Value> {
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
-        "SELECT * FROM Inference WHERE id = '{}' FORMAT JSONEachRow",
+        "SELECT * FROM ChatInference WHERE id = '{}' FORMAT JSONEachRow",
+        inference_id
+    );
+
+    let text = clickhouse_connection_info.run_query(query).await.unwrap();
+    let json: Value = serde_json::from_str(&text).ok()?;
+    Some(json)
+}
+
+pub(crate) async fn select_json_inference_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    inference_id: Uuid,
+) -> Option<Value> {
+    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+
+    let query = format!(
+        "SELECT * FROM JsonInference WHERE id = '{}' FORMAT JSONEachRow",
         inference_id
     );
 
