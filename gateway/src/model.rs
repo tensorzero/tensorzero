@@ -14,6 +14,7 @@ use crate::{
             aws_bedrock::AWSBedrockProvider,
             azure::AzureProvider,
             fireworks::FireworksProvider,
+            gcp_vertex_anthropic::GCPVertexAnthropicProvider,
             gcp_vertex_gemini::{GCPCredentials, GCPVertexGeminiProvider},
             mistral::MistralProvider,
             openai::OpenAIProvider,
@@ -112,6 +113,7 @@ pub enum ProviderConfig {
     AWSBedrock(AWSBedrockProvider),
     Azure(AzureProvider),
     Fireworks(FireworksProvider),
+    GCPVertexAnthropic(GCPVertexAnthropicProvider),
     GCPVertexGemini(GCPVertexGeminiProvider),
     Mistral(MistralProvider),
     OpenAI(OpenAIProvider),
@@ -146,6 +148,12 @@ impl<'de> Deserialize<'de> for ProviderConfig {
             Azure {
                 deployment_id: String,
                 endpoint: Url,
+            },
+            #[serde(rename = "gcp_vertex_anthropic")]
+            GCPVertexAnthropic {
+                model_id: String,
+                location: String,
+                project_id: String,
             },
             #[serde(rename = "gcp_vertex_gemini")]
             GCPVertexGemini {
@@ -215,6 +223,35 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 ProviderConfig::Fireworks(FireworksProvider {
                     model_name,
                     api_key: env::var("FIREWORKS_API_KEY").ok().map(SecretString::new),
+                })
+            }
+            ProviderConfigHelper::GCPVertexAnthropic {
+                model_id,
+                location,
+                project_id,
+            } => {
+                // If the environment variable is not set or is empty, we will have None as our credentials.
+                let credentials_path = env::var("GCP_VERTEX_CREDENTIALS_PATH")
+                    .ok()
+                    .filter(|s| !s.is_empty());
+                // If the environment variable is set and non-empty, we will load and validate (as much as possible)
+                // the credentials from the path. If this fails, we will throw an error and stop the startup.
+                let credentials = match credentials_path {
+                    Some(path) => Some(GCPCredentials::from_env(path.as_str()).map_err(|e| {
+                        serde::de::Error::custom(format!("Failed to load GCP credentials: {}", e))
+                    })?),
+                    None => None,
+                };
+                let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:rawPredict");
+                let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:streamRawPredict");
+                let audience = format!("https://{location}-aiplatform.googleapis.com/");
+
+                ProviderConfig::GCPVertexAnthropic(GCPVertexAnthropicProvider {
+                    request_url,
+                    streaming_request_url,
+                    audience,
+                    credentials,
+                    model_id,
                 })
             }
             ProviderConfigHelper::GCPVertexGemini {
@@ -293,6 +330,7 @@ impl InferenceProvider for ProviderConfig {
             ProviderConfig::AWSBedrock(provider) => provider.infer(request, client).await,
             ProviderConfig::Azure(provider) => provider.infer(request, client).await,
             ProviderConfig::Fireworks(provider) => provider.infer(request, client).await,
+            ProviderConfig::GCPVertexAnthropic(provider) => provider.infer(request, client).await,
             ProviderConfig::GCPVertexGemini(provider) => provider.infer(request, client).await,
             ProviderConfig::Mistral(provider) => provider.infer(request, client).await,
             ProviderConfig::OpenAI(provider) => provider.infer(request, client).await,
@@ -319,6 +357,9 @@ impl InferenceProvider for ProviderConfig {
             ProviderConfig::AWSBedrock(provider) => provider.infer_stream(request, client).await,
             ProviderConfig::Azure(provider) => provider.infer_stream(request, client).await,
             ProviderConfig::Fireworks(provider) => provider.infer_stream(request, client).await,
+            ProviderConfig::GCPVertexAnthropic(provider) => {
+                provider.infer_stream(request, client).await
+            }
             ProviderConfig::GCPVertexGemini(provider) => {
                 provider.infer_stream(request, client).await
             }
@@ -337,6 +378,7 @@ impl InferenceProvider for ProviderConfig {
             ProviderConfig::AWSBedrock(provider) => provider.has_credentials(),
             ProviderConfig::Azure(provider) => provider.has_credentials(),
             ProviderConfig::Fireworks(provider) => provider.has_credentials(),
+            ProviderConfig::GCPVertexAnthropic(provider) => provider.has_credentials(),
             ProviderConfig::GCPVertexGemini(provider) => provider.has_credentials(),
             ProviderConfig::Mistral(provider) => provider.has_credentials(),
             ProviderConfig::OpenAI(provider) => provider.has_credentials(),

@@ -48,7 +48,6 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         let res = http_client
             .post(&self.request_url)
             .bearer_auth(token)
-            .header("anthropic-version", ANTHROPIC_API_VERSION)
             .json(&request_body)
             .send()
             .await
