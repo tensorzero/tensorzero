@@ -14,7 +14,7 @@ use crate::{
             aws_bedrock::AWSBedrockProvider,
             azure::AzureProvider,
             fireworks::FireworksProvider,
-            gcp_vertex::{GCPCredentials, GCPVertexGeminiProvider},
+            gcp_vertex_gemini::{GCPCredentials, GCPVertexGeminiProvider},
             mistral::MistralProvider,
             openai::OpenAIProvider,
             provider_trait::InferenceProvider,

@@ -3,7 +3,7 @@ mod aws_bedrock;
 mod azure;
 mod common;
 mod fireworks;
-mod gcp_vertex;
+mod gcp_vertex_gemini;
 mod mistral;
 mod openai;
 mod together;

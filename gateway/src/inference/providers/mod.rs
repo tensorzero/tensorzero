@@ -6,7 +6,7 @@ pub mod common;
 #[cfg(any(test, feature = "e2e_tests"))]
 pub mod dummy;
 pub mod fireworks;
-pub mod gcp_vertex;
+pub mod gcp_vertex_gemini;
 pub mod mistral;
 pub mod openai;
 pub mod provider_trait;
