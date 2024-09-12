@@ -377,7 +377,7 @@ mod tests {
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::minijinja_util::TemplateConfig;
     use crate::tool::ToolCall;
-    use crate::variant::ChatCompletionConfig;
+    use crate::variant::chat_completion::ChatCompletionConfig;
 
     use super::*;
     use serde_json::json;
