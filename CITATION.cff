@@ -9,4 +9,7 @@ authors:
 repository-code: "https://github.com/tensorzero/tensorzero"
 url: "https://www.tensorzero.com/"
 license: Apache-2.0
-date-released: "2024-09-01"
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.13749006
+date-released: "2024-09-09"
