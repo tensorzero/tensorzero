@@ -100,7 +100,6 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         let event_source = http_client
             .post(&self.streaming_request_url)
             .bearer_auth(token)
-            .header("anthropic-version", ANTHROPIC_API_VERSION)
             .header("content-type", "application/json")
             .json(&request_body)
             .eventsource()
