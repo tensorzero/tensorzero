@@ -8,13 +8,13 @@ use url::Url;
 
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, stream_openai,
-    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseWithMetadata, StreamOptions,
+    OpenAIRequestMessage, OpenAIResponse, StreamOptions,
 };
 use super::provider_trait::InferenceProvider;
 use crate::error::Error;
 use crate::inference::types::{
-    Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
+    ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+    ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
 };
 
 #[derive(Debug)]
@@ -38,9 +38,6 @@ impl InferenceProvider for VLLMProvider {
             provider_name: "vLLM".to_string(),
         })?;
         let request_body = VLLMRequest::new(&self.model_name, request)?;
-        let raw_request = serde_json::to_string(&request_body).map_err(|e| Error::VLLMServer {
-            message: format!("Error serializing request: {e}"),
-        })?;
         let request_url = get_chat_url(Some(&self.api_base))?;
         let start_time = Instant::now();
         let res = http_client
@@ -63,10 +60,10 @@ impl InferenceProvider for VLLMProvider {
                     .map_err(|e| Error::VLLMServer {
                         message: format!("Error parsing response: {e}"),
                     })?;
-            Ok(OpenAIResponseWithMetadata {
+            Ok(VLLMResponseWithMetadata {
                 response: response_body,
                 latency,
-                raw_request,
+                request_body,
             }
             .try_into()
             .map_err(map_openai_to_vllm_error)?)
@@ -204,6 +201,63 @@ impl<'a> VLLMRequest<'a> {
             guided_json,
             seed: request.seed,
         })
+    }
+}
+
+struct VLLMResponseWithMetadata<'a> {
+    response: OpenAIResponse,
+    latency: Latency,
+    request_body: VLLMRequest<'a>,
+}
+
+impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
+    type Error = Error;
+    fn try_from(value: VLLMResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
+        let VLLMResponseWithMetadata {
+            mut response,
+            latency,
+            request_body,
+        } = value;
+        let raw_response = serde_json::to_string(&response).map_err(|e| Error::OpenAIServer {
+            message: format!("Error parsing response: {e}"),
+        })?;
+        if response.choices.len() != 1 {
+            return Err(Error::OpenAIServer {
+                message: format!(
+                    "Response has invalid number of choices: {}. Expected 1.",
+                    response.choices.len()
+                ),
+            });
+        }
+        let usage = response.usage.into();
+        let message = response
+            .choices
+            .pop()
+            .ok_or(Error::VLLMServer {
+                message: "Response has no choices (this should never happen)".to_string(),
+            })?
+            .message;
+        let mut content: Vec<ContentBlock> = Vec::new();
+        if let Some(text) = message.content {
+            content.push(text.into());
+        }
+        if let Some(tool_calls) = message.tool_calls {
+            for tool_call in tool_calls {
+                content.push(ContentBlock::ToolCall(tool_call.into()));
+            }
+        }
+        let raw_request =
+            serde_json::to_string(&request_body).map_err(|e| Error::FireworksServer {
+                message: format!("Error serializing request body as JSON: {e}"),
+            })?;
+
+        Ok(ProviderInferenceResponse::new(
+            content,
+            raw_request,
+            raw_response,
+            usage,
+            latency,
+        ))
     }
 }
 

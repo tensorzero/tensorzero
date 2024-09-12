@@ -116,6 +116,7 @@ impl InferenceProvider for AWSBedrockProvider {
             bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
         }
 
+        // We serialize here because the ConverseFluidBuilder type is not one you can import I guess
         let raw_request = serialize_aws_bedrock_struct(&bedrock_request)?;
 
         let start_time = Instant::now();

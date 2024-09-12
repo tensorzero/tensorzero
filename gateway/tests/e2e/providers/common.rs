@@ -407,6 +407,10 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.to_lowercase().contains("japan"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
@@ -602,6 +606,10 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.to_lowercase().contains("japan"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
 
@@ -785,6 +793,10 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.to_lowercase().contains("japan"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
@@ -993,6 +1005,10 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.to_lowercase().contains("japan"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
 
@@ -1224,6 +1240,10 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.to_lowercase().contains("tokyo"));
     assert!(raw_request.to_lowercase().contains("celsius"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
@@ -1492,8 +1512,12 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     assert_eq!(model_provider_name, provider.model_provider_name);
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.contains("get_temperature"));
     assert!(raw_request.to_lowercase().contains("tokyo"));
-    assert!(raw_request.to_lowercase().contains("celsius"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("get_temperature"));
@@ -1698,6 +1722,10 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.to_lowercase().contains("what is your name"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("mehta"));
@@ -1943,6 +1971,10 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.to_lowercase().contains("what is your name"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     // Check if raw_response is valid JSONL
@@ -2187,6 +2219,10 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.to_lowercase().contains("what is your name"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("get_temperature"));
@@ -2468,6 +2504,10 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.to_lowercase().contains("what is your name"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("get_temperature"));
@@ -2681,6 +2721,10 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.to_lowercase().contains("tokyo"));
     assert!(raw_request.to_lowercase().contains("celsius"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     assert!(result.get("raw_response").unwrap().as_str().is_some());
 
@@ -2931,6 +2975,10 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     assert!(raw_request
         .to_lowercase()
         .contains("what is the weather like in tokyo (in celsius)"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     // Check if raw_response is valid JSONL
@@ -3213,6 +3261,10 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.contains("self_destruct"));
     assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("self_destruct"));
@@ -3550,6 +3602,10 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.contains("self_destruct"));
     assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("self_destruct"));
@@ -3771,6 +3827,10 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.contains("get_humidity"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("get_humidity"));
@@ -4038,6 +4098,10 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.contains("get_humidity"));
     assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("get_humidity"));
@@ -4254,6 +4318,10 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.contains("get_temperature"));
     assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
@@ -4495,6 +4563,10 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.contains("get_temperature"));
     assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
 
@@ -4741,6 +4813,10 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.contains("get_temperature"));
     assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
@@ -5028,6 +5104,10 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.contains("get_temperature"));
     assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("get_temperature"));
@@ -5319,6 +5399,10 @@ pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.contains("get_temperature"));
     assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("get_temperature"));
@@ -5666,6 +5750,10 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     assert!(raw_request.to_lowercase().contains("get_humidity"));
     assert!(raw_request.to_lowercase().contains("tokyo"));
     assert!(raw_request.to_lowercase().contains("celsius"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("get_temperature"));
@@ -5854,6 +5942,10 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.to_lowercase().contains("japan"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
@@ -6030,6 +6122,10 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.to_lowercase().contains("japan"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
@@ -6238,6 +6334,10 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.to_lowercase().contains("japan"));
     assert!(raw_request.to_lowercase().contains("mehta"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
 
