@@ -179,7 +179,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             let response_with_latency = GCPVertexGeminiResponseWithMetadata {
                 response,
                 latency,
-                request_body,
+                request: request_body,
             };
             Ok(response_with_latency.try_into()?)
         } else {
@@ -775,7 +775,7 @@ struct GCPVertexGeminiResponse {
 struct GCPVertexGeminiResponseWithMetadata<'a> {
     response: GCPVertexGeminiResponse,
     latency: Latency,
-    request_body: GCPVertexGeminiRequest<'a>,
+    request: GCPVertexGeminiRequest<'a>,
 }
 
 impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -784,7 +784,7 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
         let GCPVertexGeminiResponseWithMetadata {
             response,
             latency,
-            request_body,
+            request: request_body,
         } = response;
         let raw_response =
             serde_json::to_string(&response).map_err(|e| Error::GCPVertexServer {
@@ -1362,7 +1362,7 @@ mod tests {
         let response_with_latency = GCPVertexGeminiResponseWithMetadata {
             response,
             latency: latency.clone(),
-            request_body,
+            request: request_body,
         };
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
@@ -1413,7 +1413,7 @@ mod tests {
         let response_with_latency = GCPVertexGeminiResponseWithMetadata {
             response,
             latency: latency.clone(),
-            request_body,
+            request: request_body,
         };
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
@@ -1488,7 +1488,7 @@ mod tests {
         let response_with_latency = GCPVertexGeminiResponseWithMetadata {
             response,
             latency: latency.clone(),
-            request_body,
+            request: request_body,
         };
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();

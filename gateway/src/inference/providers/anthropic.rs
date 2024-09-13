@@ -72,7 +72,7 @@ impl InferenceProvider for AnthropicProvider {
             let response_with_latency = AnthropicResponseWithMetadata {
                 response,
                 latency,
-                request_body,
+                request: request_body,
             };
             Ok(response_with_latency.try_into()?)
         } else {
@@ -546,7 +546,7 @@ struct AnthropicResponse {
 struct AnthropicResponseWithMetadata<'a> {
     response: AnthropicResponse,
     latency: Latency,
-    request_body: AnthropicRequestBody<'a>,
+    request: AnthropicRequestBody<'a>,
 }
 
 impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -555,7 +555,7 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
         let AnthropicResponseWithMetadata {
             response,
             latency,
-            request_body,
+            request: request_body,
         } = value;
 
         let raw_request =
@@ -1449,7 +1449,7 @@ mod tests {
         let body_with_latency = AnthropicResponseWithMetadata {
             response: anthropic_response_body.clone(),
             latency: latency.clone(),
-            request_body,
+            request: request_body,
         };
 
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
@@ -1497,7 +1497,7 @@ mod tests {
         let body_with_latency = AnthropicResponseWithMetadata {
             response: anthropic_response_body.clone(),
             latency: latency.clone(),
-            request_body,
+            request: request_body,
         };
 
         let inference_response: ProviderInferenceResponse = body_with_latency.try_into().unwrap();
@@ -1555,7 +1555,7 @@ mod tests {
         let body_with_latency = AnthropicResponseWithMetadata {
             response: anthropic_response_body.clone(),
             latency: latency.clone(),
-            request_body,
+            request: request_body,
         };
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
         assert_eq!(

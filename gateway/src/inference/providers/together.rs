@@ -76,7 +76,7 @@ impl InferenceProvider for TogetherProvider {
                 latency: Latency::NonStreaming {
                     response_time: start_time.elapsed(),
                 },
-                request_body,
+                request: request_body,
             }
             .try_into()
             .map_err(map_openai_to_together_error)?)
@@ -224,7 +224,7 @@ impl<'a> TogetherRequest<'a> {
 struct TogetherResponseWithMetadata<'a> {
     response: OpenAIResponse,
     latency: Latency,
-    request_body: TogetherRequest<'a>,
+    request: TogetherRequest<'a>,
 }
 
 impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -233,7 +233,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
         let TogetherResponseWithMetadata {
             mut response,
             latency,
-            request_body,
+            request: request_body,
         } = value;
         let raw_response = serde_json::to_string(&response).map_err(|e| Error::OpenAIServer {
             message: format!("Error parsing response: {e}"),

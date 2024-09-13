@@ -80,7 +80,7 @@ impl InferenceProvider for FireworksProvider {
             Ok(FireworksResponseWithMetadata {
                 response,
                 latency,
-                request_body,
+                request: request_body,
             }
             .try_into()
             .map_err(map_openai_to_fireworks_error)?)
@@ -245,7 +245,7 @@ impl<'a> From<OpenAITool<'a>> for FireworksTool<'a> {
 struct FireworksResponseWithMetadata<'a> {
     response: OpenAIResponse,
     latency: Latency,
-    request_body: FireworksRequest<'a>,
+    request: FireworksRequest<'a>,
 }
 
 impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -254,7 +254,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
         let FireworksResponseWithMetadata {
             mut response,
             latency,
-            request_body,
+            request: request_body,
         } = value;
         let raw_response = serde_json::to_string(&response).map_err(|e| Error::OpenAIServer {
             message: format!("Error parsing response: {e}"),

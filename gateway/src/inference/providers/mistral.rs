@@ -79,7 +79,7 @@ impl InferenceProvider for MistralProvider {
             MistralResponseWithMetadata {
                 response,
                 latency,
-                request_body,
+                request: request_body,
             }
             .try_into()
         } else {
@@ -392,7 +392,7 @@ struct MistralResponse {
 struct MistralResponseWithMetadata<'a> {
     response: MistralResponse,
     latency: Latency,
-    request_body: MistralRequest<'a>,
+    request: MistralRequest<'a>,
 }
 
 impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -401,7 +401,7 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
         let MistralResponseWithMetadata {
             mut response,
             latency,
-            request_body,
+            request: request_body,
         } = value;
         let raw_response = serde_json::to_string(&response).map_err(|e| Error::MistralServer {
             message: format!("Error parsing response: {e}"),
@@ -612,7 +612,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
-            request_body,
+            request: request_body,
         });
         assert!(result.is_ok());
         let inference_response = result.unwrap();
@@ -668,7 +668,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(110),
             },
-            request_body,
+            request: request_body,
         });
         assert!(result.is_ok());
         let inference_response = result.unwrap();
@@ -714,7 +714,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(120),
             },
-            request_body,
+            request: request_body,
         });
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), Error::MistralServer { .. }));
@@ -758,7 +758,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(130),
             },
-            request_body,
+            request: request_body,
         });
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), Error::MistralServer { .. }));

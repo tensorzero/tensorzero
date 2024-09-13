@@ -71,7 +71,7 @@ impl InferenceProvider for OpenAIProvider {
             Ok(OpenAIResponseWithMetadata {
                 response,
                 latency,
-                request_body,
+                request: request_body,
             }
             .try_into()?)
         } else {
@@ -604,7 +604,7 @@ pub(super) struct OpenAIResponse {
 struct OpenAIResponseWithMetadata<'a> {
     response: OpenAIResponse,
     latency: Latency,
-    request_body: OpenAIRequest<'a>,
+    request: OpenAIRequest<'a>,
 }
 
 impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -613,7 +613,7 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let OpenAIResponseWithMetadata {
             mut response,
             latency,
-            request_body,
+            request: request_body,
         } = value;
         let raw_response = serde_json::to_string(&response).map_err(|e| Error::OpenAIServer {
             message: format!("Error parsing response: {e}"),
@@ -1047,7 +1047,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
-            request_body,
+            request: request_body,
         });
         assert!(result.is_ok());
         let inference_response = result.unwrap();
@@ -1105,7 +1105,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(110),
             },
-            request_body,
+            request: request_body,
         });
         assert!(result.is_ok());
         let inference_response = result.unwrap();
@@ -1153,7 +1153,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(120),
             },
-            request_body,
+            request: request_body,
         });
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), Error::OpenAIServer { .. }));
@@ -1201,7 +1201,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(130),
             },
-            request_body,
+            request: request_body,
         });
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), Error::OpenAIServer { .. }));

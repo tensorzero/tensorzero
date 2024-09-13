@@ -63,7 +63,7 @@ impl InferenceProvider for VLLMProvider {
             Ok(VLLMResponseWithMetadata {
                 response: response_body,
                 latency,
-                request_body,
+                request: request_body,
             }
             .try_into()
             .map_err(map_openai_to_vllm_error)?)
@@ -207,7 +207,7 @@ impl<'a> VLLMRequest<'a> {
 struct VLLMResponseWithMetadata<'a> {
     response: OpenAIResponse,
     latency: Latency,
-    request_body: VLLMRequest<'a>,
+    request: VLLMRequest<'a>,
 }
 
 impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -216,7 +216,7 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let VLLMResponseWithMetadata {
             mut response,
             latency,
-            request_body,
+            request: request_body,
         } = value;
         let raw_response = serde_json::to_string(&response).map_err(|e| Error::OpenAIServer {
             message: format!("Error parsing response: {e}"),
