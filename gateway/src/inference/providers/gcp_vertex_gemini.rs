@@ -130,7 +130,7 @@ impl GCPCredentials {
     }
 
     // Get a signed JWT token for the given audience valid from the current time.
-    fn get_jwt_token(&self, audience: &str) -> Result<String, Error> {
+    pub fn get_jwt_token(&self, audience: &str) -> Result<String, Error> {
         let mut header = Header::new(Algorithm::RS256);
         header.kid = Some(self.private_key_id.clone());
         let claims = Claims::new(&self.client_email, &self.client_email, audience);
