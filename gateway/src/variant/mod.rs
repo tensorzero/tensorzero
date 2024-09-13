@@ -11,6 +11,7 @@ use crate::minijinja_util::TemplateConfig;
 use crate::tool::ToolCallConfig;
 use crate::{inference::types::InferenceResult, model::ModelConfig};
 pub mod chat_completion;
+pub mod rejection_sampling;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
