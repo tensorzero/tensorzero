@@ -2,7 +2,7 @@
 
 # TensorZero
 
-**TensorZero is an open-source platform that helps LLM applications graduate from API wrappers into defensible AI products**.
+**TensorZero is an open-source platform that helps LLM applications graduate from API wrappers into defensible AI products.**
 
 1. Integrate our model gateway
 2. Send metrics or feedback
