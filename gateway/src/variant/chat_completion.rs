@@ -234,6 +234,33 @@ impl Variant for ChatCompletionConfig {
             stream.map(move |chunk| chunk.map(|chunk| InferenceResultChunk::new(chunk, function)));
         Ok((first_chunk, Box::pin(stream), model_used_info))
     }
+
+    /// This function validates that the chat completion variant is correctly configured for the given function config.
+    /// In order to do this, we need to check:
+    ///  - For system, user, and assistant message types:
+    ///    - That the template here is provided if the schema is provided in the function.
+    ///    - If the template requires variables, the schema is provided.
+    ///  - That the model name is a valid model
+    fn validate(
+        &self,
+        function: &FunctionConfig,
+        models: &HashMap<String, ModelConfig>,
+        function_name: &str,
+        variant_name: &str,
+    ) -> Result<(), Error> {
+        // Check that the model name is a valid model
+        let model = models.get(&self.model_name).ok_or_else(|| Error::Config {
+            message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `model` must be a valid model name"),
+        })?;
+        if self.weight > 0.0 {
+            model.validate().map_err(|e| Error::Config {
+                message: format!(
+                    "Invalid Config: `functions.{function_name}.variants.{variant_name}`: {e}"
+                ),
+            })?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]

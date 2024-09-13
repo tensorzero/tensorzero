@@ -75,6 +75,14 @@ pub trait Variant {
         ),
         Error,
     >;
+
+    fn validate(
+        &self,
+        function: &FunctionConfig,
+        models: &HashMap<String, ModelConfig>,
+        function_name: &str,
+        variant_name: &str,
+    ) -> Result<(), Error>;
 }
 
 impl VariantConfig {
@@ -156,6 +164,20 @@ impl Variant for VariantConfig {
                         inference_params,
                     )
                     .await
+            }
+        }
+    }
+
+    fn validate(
+        &self,
+        function: &FunctionConfig,
+        models: &HashMap<String, ModelConfig>,
+        function_name: &str,
+        variant_name: &str,
+    ) -> Result<(), Error> {
+        match self {
+            VariantConfig::ChatCompletion(params) => {
+                params.validate(function, models, function_name, variant_name)
             }
         }
     }

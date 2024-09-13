@@ -12,7 +12,7 @@ use crate::tool::{
     ImplicitToolConfig, StaticToolConfig, ToolCallConfig, ToolChoice, ToolConfig,
     IMPLICIT_TOOL_NAME,
 };
-use crate::variant::VariantConfig;
+use crate::variant::{Variant, VariantConfig};
 
 #[derive(Debug, Default)]
 pub struct Config<'c> {
@@ -168,6 +168,7 @@ impl<'c> Config<'c> {
         for (function_name, function) in &self.functions {
             // Validate each variant
             for (variant_name, variant) in function.variants() {
+                variant.validate(function, &self.models)?;
                 // Ensure that the weight is non-negative
                 if variant.weight() < 0.0 {
                     return Err(Error::Config {
