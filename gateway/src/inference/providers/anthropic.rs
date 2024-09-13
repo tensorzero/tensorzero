@@ -45,10 +45,6 @@ impl InferenceProvider for AnthropicProvider {
             provider_name: "Anthropic".to_string(),
         })?;
         let request_body = AnthropicRequestBody::new(&self.model_name, request)?;
-        let raw_request =
-            serde_json::to_string(&request_body).map_err(|e| Error::AnthropicServer {
-                message: format!("Error serializing request body as JSON: {e}"),
-            })?;
         let start_time = Instant::now();
         let res = http_client
             .post(ANTHROPIC_BASE_URL.as_ref())
@@ -76,7 +72,7 @@ impl InferenceProvider for AnthropicProvider {
             let response_with_latency = AnthropicResponseWithMetadata {
                 response,
                 latency,
-                raw_request,
+                request: request_body,
             };
             Ok(response_with_latency.try_into()?)
         } else {
@@ -546,21 +542,26 @@ struct AnthropicResponse {
     usage: AnthropicUsage,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-struct AnthropicResponseWithMetadata {
+#[derive(Debug, PartialEq, Serialize)]
+struct AnthropicResponseWithMetadata<'a> {
     response: AnthropicResponse,
     latency: Latency,
-    raw_request: String,
+    request: AnthropicRequestBody<'a>,
 }
 
-impl TryFrom<AnthropicResponseWithMetadata> for ProviderInferenceResponse {
+impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceResponse {
     type Error = Error;
-    fn try_from(value: AnthropicResponseWithMetadata) -> Result<Self, Self::Error> {
+    fn try_from(value: AnthropicResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
         let AnthropicResponseWithMetadata {
             response,
             latency,
-            raw_request,
+            request: request_body,
         } = value;
+
+        let raw_request =
+            serde_json::to_string(&request_body).map_err(|e| Error::AnthropicServer {
+                message: format!("Error serializing request body as JSON: {e}"),
+            })?;
 
         let raw_response =
             serde_json::to_string(&response).map_err(|e| Error::AnthropicServer {
@@ -794,13 +795,11 @@ mod tests {
     use std::borrow::Cow;
 
     use super::*;
-
-    use serde_json::json;
-
     use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::tool::{DynamicToolConfig, ToolConfig, ToolResult};
+    use serde_json::json;
 
     #[test]
     fn test_try_from_tool_choice() {
@@ -1436,11 +1435,21 @@ mod tests {
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
         };
-        let raw_request = "raw request".to_string();
+        let request_body = AnthropicRequestBody {
+            model: "model-name",
+            messages: vec![],
+            max_tokens: 100,
+            stream: Some(false),
+            system: None,
+            temperature: None,
+            tool_choice: None,
+            tools: None,
+        };
+        let raw_request = serde_json::to_string(&request_body).unwrap();
         let body_with_latency = AnthropicResponseWithMetadata {
             response: anthropic_response_body.clone(),
             latency: latency.clone(),
-            raw_request: raw_request.clone(),
+            request: request_body,
         };
 
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
@@ -1474,10 +1483,21 @@ mod tests {
                 output_tokens: 50,
             },
         };
+        let request_body = AnthropicRequestBody {
+            model: "model-name",
+            messages: vec![],
+            max_tokens: 100,
+            stream: Some(false),
+            system: None,
+            temperature: None,
+            tool_choice: None,
+            tools: None,
+        };
+        let raw_request = serde_json::to_string(&request_body).unwrap();
         let body_with_latency = AnthropicResponseWithMetadata {
             response: anthropic_response_body.clone(),
             latency: latency.clone(),
-            raw_request: raw_request.clone(),
+            request: request_body,
         };
 
         let inference_response: ProviderInferenceResponse = body_with_latency.try_into().unwrap();
@@ -1521,10 +1541,21 @@ mod tests {
                 output_tokens: 50,
             },
         };
+        let request_body = AnthropicRequestBody {
+            model: "model-name",
+            messages: vec![],
+            max_tokens: 100,
+            stream: Some(false),
+            system: None,
+            temperature: None,
+            tool_choice: None,
+            tools: None,
+        };
+        let raw_request = serde_json::to_string(&request_body).unwrap();
         let body_with_latency = AnthropicResponseWithMetadata {
             response: anthropic_response_body.clone(),
             latency: latency.clone(),
-            raw_request: raw_request.clone(),
+            request: request_body,
         };
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
         assert_eq!(

@@ -139,6 +139,8 @@ async fn test_inference_with_explicit_region() {
     assert_eq!(model_provider_name, "aws-bedrock-us-east-1");
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.to_lowercase().contains("world!"));
+    // Check that raw_request is valid JSON
+    let _: Value = serde_json::from_str(raw_request).expect("raw_request should be valid JSON");
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     assert!(input_tokens > 5);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
