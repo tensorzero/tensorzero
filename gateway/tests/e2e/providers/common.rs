@@ -405,23 +405,12 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
-
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, content);
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("japan"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
@@ -610,23 +599,17 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, full_content);
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("japan"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
 
@@ -808,18 +791,12 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, content);
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("japan"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
@@ -1026,18 +1003,12 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, full_content);
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("japan"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
 
@@ -1261,39 +1232,18 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-    assert!(!output_clickhouse_model.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "tool_call")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-
-    assert!(content_block.get("id").unwrap().as_str().is_some());
-
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_temperature");
-
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 2);
-    let location = arguments.get("location").unwrap().as_str().unwrap();
-    assert_eq!(location.to_lowercase(), "tokyo");
-    let units = arguments.get("units").unwrap().as_str().unwrap();
-    assert!(units == "celsius");
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(raw_request.to_lowercase().contains("celsius"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
@@ -1556,39 +1506,18 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-    assert!(!output_clickhouse_model.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "tool_call")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-
-    assert!(content_block.get("id").unwrap().as_str().is_some());
-
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_temperature");
-
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 2);
-    let location = arguments.get("location").unwrap().as_str().unwrap();
-    assert_eq!(location.to_lowercase(), "tokyo");
-    let units = arguments.get("units").unwrap().as_str().unwrap();
-    assert!(units == "celsius");
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.contains("get_temperature"));
+    assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("get_temperature"));
@@ -1786,27 +1715,17 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-    assert!(!output_clickhouse_model
-        .iter()
-        .any(|block| block["type"] == "tool_call"));
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "text")
-        .unwrap();
-    let content_block_text = content_block.get("text").unwrap().as_str().unwrap();
-    assert!(content_block_text.to_lowercase().contains("mehta"));
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("what is your name"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("mehta"));
@@ -2045,33 +1964,17 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-
-    assert!(!output_clickhouse_model
-        .iter()
-        .any(|block| block["type"] == "tool_call"));
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "text")
-        .unwrap();
-    assert!(content_block
-        .get("text")
-        .unwrap()
-        .as_str()
-        .unwrap()
-        .to_lowercase()
-        .contains("mehta"));
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("what is your name"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     // Check if raw_response is valid JSONL
@@ -2309,40 +2212,17 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-    assert!(!output_clickhouse_model.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "tool_call")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-
-    assert!(content_block.get("id").unwrap().as_str().is_some());
-
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_temperature");
-
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 1 || arguments.len() == 2);
-    assert!(arguments.get("location").unwrap().as_str().is_some());
-    if arguments.len() == 2 {
-        let units = arguments.get("units").unwrap().as_str().unwrap();
-        assert!(units == "celsius" || units == "fahrenheit");
-    }
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("what is your name"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("get_temperature"));
@@ -2617,40 +2497,17 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-    assert!(!output_clickhouse_model.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "tool_call")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-
-    assert!(content_block.get("id").unwrap().as_str().is_some());
-
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_temperature");
-
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 1 || arguments.len() == 2);
-    assert!(arguments.get("location").unwrap().as_str().is_some());
-    if arguments.len() == 2 {
-        let units = arguments.get("units").unwrap().as_str().unwrap();
-        assert!(units == "celsius" || units == "fahrenheit");
-    }
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("what is your name"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("get_temperature"));
@@ -2856,26 +2713,18 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-    assert!(!output_clickhouse_model
-        .iter()
-        .any(|block| block["type"] == "tool_call"));
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "text")
-        .unwrap();
-    assert!(content_block.get("text").unwrap().as_str().is_some());
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(raw_request.to_lowercase().contains("celsius"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     assert!(result.get("raw_response").unwrap().as_str().is_some());
 
@@ -3117,27 +2966,19 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-
-    assert!(!output_clickhouse_model
-        .iter()
-        .any(|block| block["type"] == "tool_call"));
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "text")
-        .unwrap();
-    assert!(content_block.get("text").unwrap().as_str().is_some());
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request
+        .to_lowercase()
+        .contains("what is the weather like in tokyo (in celsius)"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     // Check if raw_response is valid JSONL
@@ -3412,36 +3253,18 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-    assert!(!output_clickhouse_model.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "tool_call")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-
-    assert!(content_block.get("id").unwrap().as_str().is_some());
-
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "self_destruct");
-
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 1);
-    assert!(arguments.get("fast").unwrap().as_bool().is_some());
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.contains("self_destruct"));
+    assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("self_destruct"));
@@ -3771,35 +3594,18 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-    assert!(!output_clickhouse_model.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "tool_call")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-
-    assert!(content_block.get("id").unwrap().as_str().is_some());
-
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "self_destruct");
-
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    let arguments = arguments.as_object().unwrap();
-    assert!(arguments.contains_key("fast"));
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.contains("self_destruct"));
+    assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("self_destruct"));
@@ -4014,36 +3820,17 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-    assert!(!output_clickhouse_model.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "tool_call")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-
-    assert!(content_block.get("id").unwrap().as_str().is_some());
-
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_humidity");
-
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 1);
-    assert!(arguments.get("location").unwrap().as_str().is_some());
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.contains("get_humidity"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("get_humidity"));
@@ -4303,36 +4090,18 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-    assert!(!output_clickhouse_model.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "tool_call")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-
-    assert!(content_block.get("id").unwrap().as_str().is_some());
-
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_humidity");
-
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 1);
-    assert!(arguments.get("location").unwrap().as_str().is_some());
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.contains("get_humidity"));
+    assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("get_humidity"));
@@ -4541,23 +4310,18 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, content);
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.contains("get_temperature"));
+    assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
@@ -4791,23 +4555,18 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, full_content);
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.contains("get_temperature"));
+    assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
 
@@ -5051,36 +4810,13 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-    assert!(!output_clickhouse_model.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "tool_call")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-
-    assert!(content_block.get("id").unwrap().as_str().is_some());
-
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_temperature");
-
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 2);
-    let location = arguments.get("location").unwrap().as_str().unwrap();
-    assert_eq!(location.to_lowercase(), "tokyo");
-    if arguments.len() == 2 {
-        let units = arguments.get("units").unwrap().as_str().unwrap();
-        assert!(units == "celsius");
-    }
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.contains("get_temperature"));
+    assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
@@ -5365,34 +5101,13 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-    assert!(!output_clickhouse_model.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "tool_call")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-
-    assert!(content_block.get("id").unwrap().as_str().is_some());
-
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_temperature");
-
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 2);
-    let location = arguments.get("location").unwrap().as_str().unwrap();
-    assert_eq!(location.to_lowercase(), "tokyo");
-    let units = arguments.get("units").unwrap().as_str().unwrap();
-    assert!(units == "celsius");
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.contains("get_temperature"));
+    assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("get_temperature"));
@@ -5681,38 +5396,17 @@ pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-    assert!(!output_clickhouse_model.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "tool_call")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-
-    assert!(content_block.get("id").unwrap().as_str().is_some());
-
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_temperature");
-
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 2);
-    let location = arguments.get("location").unwrap().as_str().unwrap();
-    assert_eq!(location.to_lowercase(), "tokyo");
-    let units = arguments.get("units").unwrap().as_str().unwrap();
-    assert!(units == "celsius");
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.contains("get_temperature"));
+    assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
-    assert!(raw_response.to_lowercase().contains("tokyo"));
     assert!(raw_response.contains("get_temperature"));
+    assert!(raw_response.to_lowercase().contains("tokyo"));
 
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     assert!(input_tokens > 0);
@@ -6051,52 +5745,15 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-
-    // Validate the `get_temperature` tool call
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["name"] == "get_temperature")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-
-    assert!(content_block.get("id").unwrap().as_str().is_some());
-
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_temperature");
-
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 2);
-    let location = arguments.get("location").unwrap().as_str().unwrap();
-    assert_eq!(location.to_lowercase(), "tokyo");
-    let units = arguments.get("units").unwrap().as_str().unwrap();
-    assert!(units == "celsius");
-
-    // Validate the `get_humidity` tool call
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["name"] == "get_humidity")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-
-    assert!(content_block.get("id").unwrap().as_str().is_some());
-
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 1);
-    let location = arguments.get("location").unwrap().as_str().unwrap();
-    assert_eq!(location.to_lowercase(), "tokyo");
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("get_temperature"));
+    assert!(raw_request.to_lowercase().contains("get_humidity"));
+    assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(raw_request.to_lowercase().contains("celsius"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("get_temperature"));
@@ -6278,23 +5935,17 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse = result.get("output").unwrap().as_str().unwrap();
-    assert!(output_clickhouse.to_lowercase().contains("tokyo"));
-    let output_clickhouse: Value = serde_json::from_str(output_clickhouse).unwrap();
-    let output_clickhouse = output_clickhouse.as_array().unwrap();
-    assert_eq!(output_clickhouse.len(), 1);
-    let content_block = output_clickhouse.first().unwrap();
-    // NB: we don't really check output because tool use varies greatly between providers (e.g. chat, implicit function)
-    assert!(content_block.get("type").unwrap().as_str().is_some());
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("japan"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
@@ -6464,23 +6115,17 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse = result.get("output").unwrap().as_str().unwrap();
-    assert!(output_clickhouse.to_lowercase().contains("tokyo"));
-    let output_clickhouse: Value = serde_json::from_str(output_clickhouse).unwrap();
-    let output_clickhouse = output_clickhouse.as_array().unwrap();
-    assert_eq!(output_clickhouse.len(), 1);
-    let content_block = output_clickhouse.first().unwrap();
-    // NB: we don't really check output because tool use varies greatly between providers (e.g. chat, implicit function)
-    assert!(content_block.get("type").unwrap().as_str().is_some());
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("japan"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
@@ -6681,23 +6326,18 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse = result.get("output").unwrap().as_str().unwrap();
-    assert!(output_clickhouse.to_lowercase().contains("tokyo"));
-    let output_clickhouse: Value = serde_json::from_str(output_clickhouse).unwrap();
-    let output_clickhouse = output_clickhouse.as_array().unwrap();
-    assert_eq!(output_clickhouse.len(), 1);
-    let content_block = output_clickhouse.first().unwrap();
-    // NB: we don't really check output because tool use varies greatly between providers (e.g. chat, implicit function)
-    assert!(content_block.get("type").unwrap().as_str().is_some());
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("japan"));
+    assert!(raw_request.to_lowercase().contains("mehta"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
 

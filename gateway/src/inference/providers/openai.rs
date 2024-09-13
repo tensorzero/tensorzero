@@ -68,7 +68,12 @@ impl InferenceProvider for OpenAIProvider {
             let latency = Latency::NonStreaming {
                 response_time: start_time.elapsed(),
             };
-            Ok(OpenAIResponseWithLatency { response, latency }.try_into()?)
+            Ok(OpenAIResponseWithMetadata {
+                response,
+                latency,
+                request: request_body,
+            }
+            .try_into()?)
         } else {
             handle_openai_error(
                 res.status(),
@@ -87,6 +92,7 @@ impl InferenceProvider for OpenAIProvider {
         (
             ProviderInferenceResponseChunk,
             ProviderInferenceResponseStream,
+            String,
         ),
         Error,
     > {
@@ -94,6 +100,10 @@ impl InferenceProvider for OpenAIProvider {
             provider_name: "OpenAI".to_string(),
         })?;
         let request_body = OpenAIRequest::new(&self.model_name, request);
+        let raw_request =
+            serde_json::to_string(&request_body).map_err(|e| Error::OpenAIServer {
+                message: format!("Error serializing request: {e}"),
+            })?;
         let request_url = get_chat_url(self.api_base.as_ref())?;
         let start_time = Instant::now();
         let event_source = http_client
@@ -118,7 +128,7 @@ impl InferenceProvider for OpenAIProvider {
                 })
             }
         };
-        Ok((chunk, stream))
+        Ok((chunk, stream, raw_request))
     }
 
     fn has_credentials(&self) -> bool {
@@ -531,7 +541,7 @@ impl<'a> OpenAIRequest<'a> {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-struct OpenAIUsage {
+pub(super) struct OpenAIUsage {
     prompt_tokens: u32,
     completion_tokens: u32,
     total_tokens: u32,
@@ -553,7 +563,7 @@ struct OpenAIResponseFunctionCall {
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-struct OpenAIResponseToolCall {
+pub(super) struct OpenAIResponseToolCall {
     id: String,
     r#type: OpenAIToolType,
     function: OpenAIResponseFunctionCall,
@@ -570,40 +580,42 @@ impl From<OpenAIResponseToolCall> for ToolCall {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct OpenAIResponseMessage {
+pub(super) struct OpenAIResponseMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
-    content: Option<String>,
+    pub(super) content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_calls: Option<Vec<OpenAIResponseToolCall>>,
+    pub(super) tool_calls: Option<Vec<OpenAIResponseToolCall>>,
 }
 
 // Leaving out logprobs and finish_reason for now
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-struct OpenAIResponseChoice {
-    index: u8,
-    message: OpenAIResponseMessage,
+pub(super) struct OpenAIResponseChoice {
+    pub(super) index: u8,
+    pub(super) message: OpenAIResponseMessage,
 }
 
 // Leaving out id, created, model, service_tier, system_fingerprint, object for now
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub(super) struct OpenAIResponse {
-    choices: Vec<OpenAIResponseChoice>,
-    usage: OpenAIUsage,
+    pub(super) choices: Vec<OpenAIResponseChoice>,
+    pub(super) usage: OpenAIUsage,
 }
 
-pub(super) struct OpenAIResponseWithLatency {
-    pub(super) response: OpenAIResponse,
-    pub(super) latency: Latency,
+struct OpenAIResponseWithMetadata<'a> {
+    response: OpenAIResponse,
+    latency: Latency,
+    request: OpenAIRequest<'a>,
 }
 
-impl TryFrom<OpenAIResponseWithLatency> for ProviderInferenceResponse {
+impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
     type Error = Error;
-    fn try_from(value: OpenAIResponseWithLatency) -> Result<Self, Self::Error> {
-        let OpenAIResponseWithLatency {
+    fn try_from(value: OpenAIResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
+        let OpenAIResponseWithMetadata {
             mut response,
             latency,
+            request: request_body,
         } = value;
-        let raw = serde_json::to_string(&response).map_err(|e| Error::OpenAIServer {
+        let raw_response = serde_json::to_string(&response).map_err(|e| Error::OpenAIServer {
             message: format!("Error parsing response: {e}"),
         })?;
         if response.choices.len() != 1 {
@@ -631,8 +643,17 @@ impl TryFrom<OpenAIResponseWithLatency> for ProviderInferenceResponse {
                 content.push(ContentBlock::ToolCall(tool_call.into()));
             }
         }
-
-        Ok(ProviderInferenceResponse::new(content, raw, usage, latency))
+        let raw_request =
+            serde_json::to_string(&request_body).map_err(|e| Error::OpenAIServer {
+                message: format!("Error serializing request body as JSON: {e}"),
+            })?;
+        Ok(ProviderInferenceResponse::new(
+            content,
+            raw_request,
+            raw_response,
+            usage,
+            latency,
+        ))
     }
 }
 
@@ -1007,11 +1028,26 @@ mod tests {
             },
         };
 
-        let result = ProviderInferenceResponse::try_from(OpenAIResponseWithLatency {
+        let request_body = OpenAIRequest {
+            messages: vec![],
+            model: "gpt-3.5-turbo",
+            temperature: Some(0.5),
+            max_tokens: Some(100),
+            seed: Some(69),
+            stream: false,
+            response_format: OpenAIResponseFormat::Text,
+            stream_options: None,
+            tools: None,
+            tool_choice: None,
+            parallel_tool_calls: None,
+        };
+        let raw_request = serde_json::to_string(&request_body).unwrap();
+        let result = ProviderInferenceResponse::try_from(OpenAIResponseWithMetadata {
             response: valid_response,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
+            request: request_body,
         });
         assert!(result.is_ok());
         let inference_response = result.unwrap();
@@ -1027,7 +1063,7 @@ mod tests {
                 response_time: Duration::from_millis(100)
             }
         );
-
+        assert_eq!(inference_response.raw_request, raw_request);
         // Test case 2: Valid response with tool calls
         let valid_response_with_tools = OpenAIResponse {
             choices: vec![OpenAIResponseChoice {
@@ -1050,12 +1086,26 @@ mod tests {
                 total_tokens: 40,
             },
         };
-
-        let result = ProviderInferenceResponse::try_from(OpenAIResponseWithLatency {
+        let request_body = OpenAIRequest {
+            messages: vec![],
+            model: "gpt-3.5-turbo",
+            temperature: Some(0.5),
+            max_tokens: Some(100),
+            seed: Some(69),
+            stream: false,
+            response_format: OpenAIResponseFormat::Text,
+            stream_options: None,
+            tools: None,
+            tool_choice: None,
+            parallel_tool_calls: None,
+        };
+        let raw_request = serde_json::to_string(&request_body).unwrap();
+        let result = ProviderInferenceResponse::try_from(OpenAIResponseWithMetadata {
             response: valid_response_with_tools,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(110),
             },
+            request: request_body,
         });
         assert!(result.is_ok());
         let inference_response = result.unwrap();
@@ -1075,7 +1125,7 @@ mod tests {
                 response_time: Duration::from_millis(110)
             }
         );
-
+        assert_eq!(inference_response.raw_request, raw_request);
         // Test case 3: Invalid response with no choices
         let invalid_response_no_choices = OpenAIResponse {
             choices: vec![],
@@ -1085,12 +1135,25 @@ mod tests {
                 total_tokens: 5,
             },
         };
-
-        let result = ProviderInferenceResponse::try_from(OpenAIResponseWithLatency {
+        let request_body = OpenAIRequest {
+            messages: vec![],
+            model: "gpt-3.5-turbo",
+            temperature: Some(0.5),
+            max_tokens: Some(100),
+            seed: Some(69),
+            stream: false,
+            response_format: OpenAIResponseFormat::Text,
+            stream_options: None,
+            tools: None,
+            tool_choice: None,
+            parallel_tool_calls: None,
+        };
+        let result = ProviderInferenceResponse::try_from(OpenAIResponseWithMetadata {
             response: invalid_response_no_choices,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(120),
             },
+            request: request_body,
         });
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), Error::OpenAIServer { .. }));
@@ -1120,11 +1183,25 @@ mod tests {
             },
         };
 
-        let result = ProviderInferenceResponse::try_from(OpenAIResponseWithLatency {
+        let request_body = OpenAIRequest {
+            messages: vec![],
+            model: "gpt-3.5-turbo",
+            temperature: Some(0.5),
+            max_tokens: Some(100),
+            seed: Some(69),
+            stream: false,
+            response_format: OpenAIResponseFormat::Text,
+            stream_options: None,
+            tools: None,
+            tool_choice: None,
+            parallel_tool_calls: None,
+        };
+        let result = ProviderInferenceResponse::try_from(OpenAIResponseWithMetadata {
             response: invalid_response_multiple_choices,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(130),
             },
+            request: request_body,
         });
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), Error::OpenAIServer { .. }));

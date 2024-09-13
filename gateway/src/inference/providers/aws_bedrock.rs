@@ -116,6 +116,9 @@ impl InferenceProvider for AWSBedrockProvider {
             bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
         }
 
+        // We serialize here because the ConverseFluidBuilder type is not one you can import I guess
+        let raw_request = serialize_aws_bedrock_struct(&bedrock_request)?;
+
         let start_time = Instant::now();
         let output = bedrock_request
             .send()
@@ -131,7 +134,12 @@ impl InferenceProvider for AWSBedrockProvider {
             response_time: start_time.elapsed(),
         };
 
-        ConverseOutputWithLatency { output, latency }.try_into()
+        ConverseOutputWithMetadata {
+            output,
+            latency,
+            raw_request,
+        }
+        .try_into()
     }
 
     async fn infer_stream<'a>(
@@ -142,6 +150,7 @@ impl InferenceProvider for AWSBedrockProvider {
         (
             ProviderInferenceResponseChunk,
             ProviderInferenceResponseStream,
+            String,
         ),
         Error,
     > {
@@ -195,6 +204,8 @@ impl InferenceProvider for AWSBedrockProvider {
             bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
         }
 
+        let raw_request = serialize_aws_bedrock_struct(&bedrock_request)?;
+
         let start_time = Instant::now();
         let stream = bedrock_request
             .send()
@@ -217,7 +228,7 @@ impl InferenceProvider for AWSBedrockProvider {
             }
         };
 
-        Ok((chunk, stream))
+        Ok((chunk, stream, raw_request))
     }
 
     fn has_credentials(&self) -> bool {
@@ -483,18 +494,23 @@ impl TryFrom<&RequestMessage> for Message {
     }
 }
 
-struct ConverseOutputWithLatency {
+struct ConverseOutputWithMetadata {
     output: ConverseOutput,
     latency: Latency,
+    raw_request: String,
 }
 
-impl TryFrom<ConverseOutputWithLatency> for ProviderInferenceResponse {
+impl TryFrom<ConverseOutputWithMetadata> for ProviderInferenceResponse {
     type Error = Error;
 
-    fn try_from(value: ConverseOutputWithLatency) -> Result<Self, Self::Error> {
-        let ConverseOutputWithLatency { output, latency } = value;
+    fn try_from(value: ConverseOutputWithMetadata) -> Result<Self, Self::Error> {
+        let ConverseOutputWithMetadata {
+            output,
+            latency,
+            raw_request,
+        } = value;
 
-        let raw = serialize_aws_bedrock_struct(&output)?;
+        let raw_response = serialize_aws_bedrock_struct(&output)?;
 
         let message = match output.output {
             Some(ConverseOutputType::Message(message)) => Some(message),
@@ -524,7 +540,13 @@ impl TryFrom<ConverseOutputWithLatency> for ProviderInferenceResponse {
                 message: "AWS Bedrock returned a message without usage information.".to_string(),
             })?;
 
-        Ok(ProviderInferenceResponse::new(content, raw, usage, latency))
+        Ok(ProviderInferenceResponse::new(
+            content,
+            raw_request,
+            raw_response,
+            usage,
+            latency,
+        ))
     }
 }
 

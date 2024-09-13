@@ -8,14 +8,14 @@ use url::Url;
 
 use crate::error::Error;
 use crate::inference::types::{
-    Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
+    ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+    ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
 };
 
 use super::openai::{
     handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
-    OpenAIRequestMessage, OpenAIResponseWithLatency, OpenAITool, OpenAIToolChoice,
-    OpenAIToolChoiceString, SpecificToolChoice,
+    OpenAIRequestMessage, OpenAIResponse, OpenAITool, OpenAIToolChoice, OpenAIToolChoiceString,
+    SpecificToolChoice,
 };
 use super::provider_trait::InferenceProvider;
 
@@ -62,9 +62,13 @@ impl InferenceProvider for AzureProvider {
                 message: format!("Error parsing JSON response: {e}: {response}"),
             })?;
 
-            Ok(OpenAIResponseWithLatency { response, latency }
-                .try_into()
-                .map_err(map_openai_to_azure_error)?)
+            Ok(AzureResponseWithMetadata {
+                response,
+                latency,
+                request: request_body,
+            }
+            .try_into()
+            .map_err(map_openai_to_azure_error)?)
         } else {
             handle_openai_error(
                 res.status(),
@@ -84,6 +88,7 @@ impl InferenceProvider for AzureProvider {
         (
             ProviderInferenceResponseChunk,
             ProviderInferenceResponseStream,
+            String,
         ),
         Error,
     > {
@@ -91,6 +96,9 @@ impl InferenceProvider for AzureProvider {
             provider_name: "Azure".to_string(),
         })?;
         let request_body = AzureRequest::new(request);
+        let raw_request = serde_json::to_string(&request_body).map_err(|e| Error::AzureServer {
+            message: format!("Error serializing request body as JSON: {e}"),
+        })?;
         let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id)?;
         let start_time = Instant::now();
         let event_source = http_client
@@ -115,7 +123,7 @@ impl InferenceProvider for AzureProvider {
                 })
             }
         };
-        Ok((chunk, stream))
+        Ok((chunk, stream, raw_request))
     }
 
     fn has_credentials(&self) -> bool {
@@ -242,6 +250,62 @@ impl<'a> AzureRequest<'a> {
             tools,
             tool_choice: tool_choice.map(AzureToolChoice::from),
         }
+    }
+}
+
+struct AzureResponseWithMetadata<'a> {
+    response: OpenAIResponse,
+    latency: Latency,
+    request: AzureRequest<'a>,
+}
+
+impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
+    type Error = Error;
+    fn try_from(value: AzureResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
+        let AzureResponseWithMetadata {
+            mut response,
+            latency,
+            request: request_body,
+        } = value;
+        let raw_response = serde_json::to_string(&response).map_err(|e| Error::OpenAIServer {
+            message: format!("Error parsing response: {e}"),
+        })?;
+        if response.choices.len() != 1 {
+            return Err(Error::OpenAIServer {
+                message: format!(
+                    "Response has invalid number of choices: {}. Expected 1.",
+                    response.choices.len()
+                ),
+            });
+        }
+        let usage = response.usage.into();
+        let message = response
+            .choices
+            .pop()
+            .ok_or(Error::OpenAIServer {
+                message: "Response has no choices (this should never happen)".to_string(),
+            })?
+            .message;
+        let mut content: Vec<ContentBlock> = Vec::new();
+        if let Some(text) = message.content {
+            content.push(text.into());
+        }
+        if let Some(tool_calls) = message.tool_calls {
+            for tool_call in tool_calls {
+                content.push(ContentBlock::ToolCall(tool_call.into()));
+            }
+        }
+        let raw_request = serde_json::to_string(&request_body).map_err(|e| Error::AzureServer {
+            message: format!("Error serializing request body as JSON: {e}"),
+        })?;
+
+        Ok(ProviderInferenceResponse::new(
+            content,
+            raw_request,
+            raw_response,
+            usage,
+            latency,
+        ))
     }
 }
 

@@ -69,7 +69,11 @@ impl InferenceProvider for AnthropicProvider {
                 message: format!("Error parsing JSON response: {e}: {response}"),
             })?;
 
-            let response_with_latency = AnthropicResponseWithLatency { response, latency };
+            let response_with_latency = AnthropicResponseWithMetadata {
+                response,
+                latency,
+                request: request_body,
+            };
             Ok(response_with_latency.try_into()?)
         } else {
             let response_code = res.status();
@@ -92,6 +96,7 @@ impl InferenceProvider for AnthropicProvider {
         (
             ProviderInferenceResponseChunk,
             ProviderInferenceResponseStream,
+            String,
         ),
         Error,
     > {
@@ -99,6 +104,10 @@ impl InferenceProvider for AnthropicProvider {
             provider_name: "Anthropic".to_string(),
         })?;
         let request_body = AnthropicRequestBody::new(&self.model_name, request)?;
+        let raw_request =
+            serde_json::to_string(&request_body).map_err(|e| Error::AnthropicServer {
+                message: format!("Error serializing request body as JSON: {e}"),
+            })?;
         let start_time = Instant::now();
         let event_source = http_client
             .post(ANTHROPIC_BASE_URL.as_ref())
@@ -120,7 +129,7 @@ impl InferenceProvider for AnthropicProvider {
                 })
             }
         };
-        Ok((chunk, stream))
+        Ok((chunk, stream, raw_request))
     }
 
     fn has_credentials(&self) -> bool {
@@ -533,16 +542,26 @@ struct AnthropicResponse {
     usage: AnthropicUsage,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-struct AnthropicResponseWithLatency {
+#[derive(Debug, PartialEq, Serialize)]
+struct AnthropicResponseWithMetadata<'a> {
     response: AnthropicResponse,
     latency: Latency,
+    request: AnthropicRequestBody<'a>,
 }
 
-impl TryFrom<AnthropicResponseWithLatency> for ProviderInferenceResponse {
+impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceResponse {
     type Error = Error;
-    fn try_from(value: AnthropicResponseWithLatency) -> Result<Self, Self::Error> {
-        let AnthropicResponseWithLatency { response, latency } = value;
+    fn try_from(value: AnthropicResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
+        let AnthropicResponseWithMetadata {
+            response,
+            latency,
+            request: request_body,
+        } = value;
+
+        let raw_request =
+            serde_json::to_string(&request_body).map_err(|e| Error::AnthropicServer {
+                message: format!("Error serializing request body as JSON: {e}"),
+            })?;
 
         let raw_response =
             serde_json::to_string(&response).map_err(|e| Error::AnthropicServer {
@@ -557,6 +576,7 @@ impl TryFrom<AnthropicResponseWithLatency> for ProviderInferenceResponse {
 
         Ok(ProviderInferenceResponse::new(
             content,
+            raw_request,
             raw_response,
             response.usage.into(),
             latency,
@@ -775,13 +795,11 @@ mod tests {
     use std::borrow::Cow;
 
     use super::*;
-
-    use serde_json::json;
-
     use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::tool::{DynamicToolConfig, ToolConfig, ToolResult};
+    use serde_json::json;
 
     #[test]
     fn test_try_from_tool_choice() {
@@ -1417,9 +1435,21 @@ mod tests {
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
         };
-        let body_with_latency = AnthropicResponseWithLatency {
+        let request_body = AnthropicRequestBody {
+            model: "model-name",
+            messages: vec![],
+            max_tokens: 100,
+            stream: Some(false),
+            system: None,
+            temperature: None,
+            tool_choice: None,
+            tools: None,
+        };
+        let raw_request = serde_json::to_string(&request_body).unwrap();
+        let body_with_latency = AnthropicResponseWithMetadata {
             response: anthropic_response_body.clone(),
             latency: latency.clone(),
+            request: request_body,
         };
 
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
@@ -1433,6 +1463,7 @@ mod tests {
         assert_eq!(inference_response.usage.input_tokens, 100);
         assert_eq!(inference_response.usage.output_tokens, 50);
         assert_eq!(inference_response.latency, latency);
+        assert_eq!(inference_response.raw_request, raw_request);
 
         // Test case 2: Tool call response
         let anthropic_response_body = AnthropicResponse {
@@ -1452,9 +1483,21 @@ mod tests {
                 output_tokens: 50,
             },
         };
-        let body_with_latency = AnthropicResponseWithLatency {
+        let request_body = AnthropicRequestBody {
+            model: "model-name",
+            messages: vec![],
+            max_tokens: 100,
+            stream: Some(false),
+            system: None,
+            temperature: None,
+            tool_choice: None,
+            tools: None,
+        };
+        let raw_request = serde_json::to_string(&request_body).unwrap();
+        let body_with_latency = AnthropicResponseWithMetadata {
             response: anthropic_response_body.clone(),
             latency: latency.clone(),
+            request: request_body,
         };
 
         let inference_response: ProviderInferenceResponse = body_with_latency.try_into().unwrap();
@@ -1473,6 +1516,7 @@ mod tests {
         assert_eq!(inference_response.usage.input_tokens, 100);
         assert_eq!(inference_response.usage.output_tokens, 50);
         assert_eq!(inference_response.latency, latency);
+        assert_eq!(inference_response.raw_request, raw_request);
 
         // Test case 3: Mixed response (text and tool call)
         let anthropic_response_body = AnthropicResponse {
@@ -1497,9 +1541,21 @@ mod tests {
                 output_tokens: 50,
             },
         };
-        let body_with_latency = AnthropicResponseWithLatency {
+        let request_body = AnthropicRequestBody {
+            model: "model-name",
+            messages: vec![],
+            max_tokens: 100,
+            stream: Some(false),
+            system: None,
+            temperature: None,
+            tool_choice: None,
+            tools: None,
+        };
+        let raw_request = serde_json::to_string(&request_body).unwrap();
+        let body_with_latency = AnthropicResponseWithMetadata {
             response: anthropic_response_body.clone(),
             latency: latency.clone(),
+            request: request_body,
         };
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
         assert_eq!(
@@ -1522,6 +1578,7 @@ mod tests {
         assert_eq!(inference_response.usage.input_tokens, 100);
         assert_eq!(inference_response.usage.output_tokens, 50);
         assert_eq!(inference_response.latency, latency);
+        assert_eq!(inference_response.raw_request, raw_request);
     }
 
     #[test]

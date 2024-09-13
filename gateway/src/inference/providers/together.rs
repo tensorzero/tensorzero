@@ -11,16 +11,15 @@ use url::Url;
 use crate::{
     error::Error,
     inference::types::{
-        Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
-        ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
+        ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+        ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     },
 };
 
 use super::{
     openai::{
         get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
-        stream_openai, OpenAIRequestMessage, OpenAIResponseWithLatency, OpenAITool,
-        OpenAIToolChoice,
+        stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAITool, OpenAIToolChoice,
     },
     provider_trait::InferenceProvider,
 };
@@ -72,11 +71,12 @@ impl InferenceProvider for TogetherProvider {
                 message: format!("Error parsing JSON response: {e}: {response}"),
             })?;
 
-            Ok(OpenAIResponseWithLatency {
+            Ok(TogetherResponseWithMetadata {
                 response,
                 latency: Latency::NonStreaming {
                     response_time: start_time.elapsed(),
                 },
+                request: request_body,
             }
             .try_into()
             .map_err(map_openai_to_together_error)?)
@@ -99,6 +99,7 @@ impl InferenceProvider for TogetherProvider {
         (
             ProviderInferenceResponseChunk,
             ProviderInferenceResponseStream,
+            String,
         ),
         Error,
     > {
@@ -106,6 +107,10 @@ impl InferenceProvider for TogetherProvider {
             provider_name: "Together".to_string(),
         })?;
         let request_body = TogetherRequest::new(&self.model_name, request);
+        let raw_request =
+            serde_json::to_string(&request_body).map_err(|e| Error::TogetherServer {
+                message: format!("Error serializing request: {e}"),
+            })?;
         let request_url = get_chat_url(Some(&TOGETHER_API_BASE))?;
         let start_time = Instant::now();
         let event_source = http_client
@@ -130,7 +135,7 @@ impl InferenceProvider for TogetherProvider {
                 })
             }
         };
-        Ok((chunk, stream))
+        Ok((chunk, stream, raw_request))
     }
 
     fn has_credentials(&self) -> bool {
@@ -213,6 +218,63 @@ impl<'a> TogetherRequest<'a> {
             tool_choice,
             parallel_tool_calls,
         }
+    }
+}
+
+struct TogetherResponseWithMetadata<'a> {
+    response: OpenAIResponse,
+    latency: Latency,
+    request: TogetherRequest<'a>,
+}
+
+impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse {
+    type Error = Error;
+    fn try_from(value: TogetherResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
+        let TogetherResponseWithMetadata {
+            mut response,
+            latency,
+            request: request_body,
+        } = value;
+        let raw_response = serde_json::to_string(&response).map_err(|e| Error::OpenAIServer {
+            message: format!("Error parsing response: {e}"),
+        })?;
+        if response.choices.len() != 1 {
+            return Err(Error::OpenAIServer {
+                message: format!(
+                    "Response has invalid number of choices: {}. Expected 1.",
+                    response.choices.len()
+                ),
+            });
+        }
+        let usage = response.usage.into();
+        let message = response
+            .choices
+            .pop()
+            .ok_or(Error::OpenAIServer {
+                message: "Response has no choices (this should never happen)".to_string(),
+            })?
+            .message;
+        let mut content: Vec<ContentBlock> = Vec::new();
+        if let Some(text) = message.content {
+            content.push(text.into());
+        }
+        if let Some(tool_calls) = message.tool_calls {
+            for tool_call in tool_calls {
+                content.push(ContentBlock::ToolCall(tool_call.into()));
+            }
+        }
+        let raw_request =
+            serde_json::to_string(&request_body).map_err(|e| Error::FireworksServer {
+                message: format!("Error serializing request body as JSON: {e}"),
+            })?;
+
+        Ok(ProviderInferenceResponse::new(
+            content,
+            raw_request,
+            raw_response,
+            usage,
+            latency,
+        ))
     }
 }
 

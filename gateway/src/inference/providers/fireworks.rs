@@ -10,15 +10,15 @@ use url::Url;
 use crate::{
     error::Error,
     inference::types::{
-        Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
-        ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
+        ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+        ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     },
 };
 
 use super::{
     openai::{
         get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
-        stream_openai, OpenAIFunction, OpenAIRequestMessage, OpenAIResponseWithLatency, OpenAITool,
+        stream_openai, OpenAIFunction, OpenAIRequestMessage, OpenAIResponse, OpenAITool,
         OpenAIToolChoice, OpenAIToolType,
     },
     provider_trait::InferenceProvider,
@@ -77,9 +77,13 @@ impl InferenceProvider for FireworksProvider {
                 message: format!("Error parsing JSON response: {e}: {response}"),
             })?;
 
-            Ok(OpenAIResponseWithLatency { response, latency }
-                .try_into()
-                .map_err(map_openai_to_fireworks_error)?)
+            Ok(FireworksResponseWithMetadata {
+                response,
+                latency,
+                request: request_body,
+            }
+            .try_into()
+            .map_err(map_openai_to_fireworks_error)?)
         } else {
             handle_openai_error(
                 res.status(),
@@ -99,6 +103,7 @@ impl InferenceProvider for FireworksProvider {
         (
             ProviderInferenceResponseChunk,
             ProviderInferenceResponseStream,
+            String,
         ),
         Error,
     > {
@@ -106,6 +111,10 @@ impl InferenceProvider for FireworksProvider {
             provider_name: "Fireworks".to_string(),
         })?;
         let request_body = FireworksRequest::new(&self.model_name, request);
+        let raw_request =
+            serde_json::to_string(&request_body).map_err(|e| Error::FireworksServer {
+                message: format!("Error serializing request body: {e}"),
+            })?;
         let request_url = get_chat_url(Some(&FIREWORKS_API_BASE))?;
         let start_time = Instant::now();
         let event_source = http_client
@@ -131,7 +140,7 @@ impl InferenceProvider for FireworksProvider {
                 })
             }
         };
-        Ok((chunk, stream))
+        Ok((chunk, stream, raw_request))
     }
 
     fn has_credentials(&self) -> bool {
@@ -230,6 +239,63 @@ impl<'a> From<OpenAITool<'a>> for FireworksTool<'a> {
             r#type: tool.r#type,
             function: tool.function,
         }
+    }
+}
+
+struct FireworksResponseWithMetadata<'a> {
+    response: OpenAIResponse,
+    latency: Latency,
+    request: FireworksRequest<'a>,
+}
+
+impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceResponse {
+    type Error = Error;
+    fn try_from(value: FireworksResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
+        let FireworksResponseWithMetadata {
+            mut response,
+            latency,
+            request: request_body,
+        } = value;
+        let raw_response = serde_json::to_string(&response).map_err(|e| Error::OpenAIServer {
+            message: format!("Error parsing response: {e}"),
+        })?;
+        if response.choices.len() != 1 {
+            return Err(Error::OpenAIServer {
+                message: format!(
+                    "Response has invalid number of choices: {}. Expected 1.",
+                    response.choices.len()
+                ),
+            });
+        }
+        let usage = response.usage.into();
+        let message = response
+            .choices
+            .pop()
+            .ok_or(Error::OpenAIServer {
+                message: "Response has no choices (this should never happen)".to_string(),
+            })?
+            .message;
+        let mut content: Vec<ContentBlock> = Vec::new();
+        if let Some(text) = message.content {
+            content.push(text.into());
+        }
+        if let Some(tool_calls) = message.tool_calls {
+            for tool_call in tool_calls {
+                content.push(ContentBlock::ToolCall(tool_call.into()));
+            }
+        }
+        let raw_request =
+            serde_json::to_string(&request_body).map_err(|e| Error::FireworksServer {
+                message: format!("Error serializing request body as JSON: {e}"),
+            })?;
+
+        Ok(ProviderInferenceResponse::new(
+            content,
+            raw_request,
+            raw_response,
+            usage,
+            latency,
+        ))
     }
 }
 
