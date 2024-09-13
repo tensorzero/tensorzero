@@ -10,8 +10,8 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::common::{
-    get_clickhouse, get_gateway_endpoint, select_inference_clickhouse,
-    select_model_inferences_clickhouse,
+    get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
+    select_json_inference_clickhouse, select_model_inferences_clickhouse,
 };
 
 #[tokio::test]
@@ -52,7 +52,7 @@ async fn e2e_test_inference_dryrun() {
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id).await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id).await;
     assert!(result.is_none()); // No inference should be written to ClickHouse when dryrun is true
 }
 
@@ -110,7 +110,7 @@ async fn e2e_test_inference_model_fallback() {
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
@@ -242,7 +242,7 @@ async fn e2e_test_tool_call() {
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
@@ -411,7 +411,7 @@ async fn e2e_test_tool_call_malformed() {
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
@@ -563,7 +563,7 @@ async fn e2e_test_inference_json_fail() {
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
@@ -673,7 +673,7 @@ async fn e2e_test_inference_json_success() {
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
@@ -799,7 +799,7 @@ async fn e2e_test_variant_failover() {
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
@@ -959,7 +959,7 @@ async fn e2e_test_streaming() {
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
@@ -1111,7 +1111,7 @@ async fn e2e_test_streaming_dryrun() {
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id.unwrap()).await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id.unwrap()).await;
     assert!(result.is_none()); // No inference should be written to ClickHouse when dryrun is true
 }
 
@@ -1203,7 +1203,7 @@ async fn e2e_test_tool_call_streaming() {
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
