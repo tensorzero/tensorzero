@@ -135,6 +135,9 @@ pub enum Error {
     ModelProvidersExhausted {
         provider_errors: HashMap<String, Error>,
     },
+    ModelValidation {
+        message: String,
+    },
     Observability {
         message: String,
     },
@@ -242,6 +245,7 @@ impl Error {
             Error::MistralClient { .. } => tracing::Level::WARN,
             Error::MistralServer { .. } => tracing::Level::ERROR,
             Error::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
+            Error::ModelValidation { .. } => tracing::Level::ERROR,
             Error::Observability { .. } => tracing::Level::ERROR,
             Error::OpenAIClient { .. } => tracing::Level::WARN,
             Error::OpenAIServer { .. } => tracing::Level::ERROR,
@@ -307,6 +311,7 @@ impl Error {
             Error::MistralClient { status_code, .. } => *status_code,
             Error::MistralServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::OpenAIClient { status_code, .. } => *status_code,
             Error::OpenAIServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -485,6 +490,9 @@ impl std::fmt::Display for Error {
                         .collect::<Vec<_>>()
                         .join(", ")
                 )
+            }
+            Error::ModelValidation { message } => {
+                write!(f, "Failed to validate model: {}", message)
             }
             Error::Observability { message } => {
                 write!(f, "{}", message)

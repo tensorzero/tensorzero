@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 
 use crate::error::Error;
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
-use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelConfig;
@@ -166,213 +165,16 @@ impl<'c> Config<'c> {
 
         // Validate each function
         for (function_name, function) in &self.functions {
+            function.validate(&self.tools, function_name)?;
             // Validate each variant
             for (variant_name, variant) in function.variants() {
-                variant.validate(function, &self.models)?;
-                // Ensure that the weight is non-negative
-                if variant.weight() < 0.0 {
-                    return Err(Error::Config {
-                        message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}.weight`: must be non-negative"),
-                    });
-                }
-
-                // Ensure that the variant type is correct
-                match function {
-                    FunctionConfig::Chat(function) => {
-                        // Check that the variant type matches the function type
-                        if !matches!(variant, VariantConfig::ChatCompletion(_)) {
-                            return Err(Error::Config {
-                                message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: variant type must be `chat_completion`"),
-                            });
-                        }
-
-                        // Check that system schema <=> system template
-                        match (&function.system_schema, &variant.system_template()) {
-                            (None, Some(system_template)) => {
-                                // If the template is specified but there is no schema, we need to check that the template has the required variables
-                                let system_template_name =
-                                    system_template.to_str().ok_or(Error::InvalidTemplatePath)?;
-
-                                if self
-                                    .templates
-                                    .template_needs_variables(system_template_name)?
-                                {
-                                    return Err(Error::Config {
-                                        message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `system_schema` is required when `system_template` is specified"),
-                                    });
-                                }
-                            }
-                            (Some(_), None) => {
-                                return Err(Error::Config {
-                                    message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `system_template` is required when `system_schema` is specified"),
-                                });
-                            }
-                            _ => {}
-                        }
-
-                        // Check that user schema <=> user template
-                        match (&function.user_schema, &variant.user_template()) {
-                            (None, Some(user_template)) => {
-                                // If the template is specified but there is no schema, we need to check that the template has the required variables
-                                let user_template_name =
-                                    user_template.to_str().ok_or(Error::InvalidTemplatePath)?;
-
-                                if self
-                                    .templates
-                                    .template_needs_variables(user_template_name)?
-                                {
-                                    return Err(Error::Config {
-                                        message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `user_schema` is required when `user_template` is specified"),
-                                    });
-                                }
-                            }
-                            (Some(_), None) => {
-                                return Err(Error::Config {
-                                    message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `user_template` is required when `user_schema` is specified"),
-                                });
-                            }
-                            _ => {}
-                        }
-
-                        // Check that assistant schema <=> assistant template
-                        match (&function.assistant_schema, &variant.assistant_template()) {
-                            (None, Some(assistant_template)) => {
-                                // If the template is specified but there is no schema, we need to check that the template has the required variables
-                                let assistant_template_name = assistant_template
-                                    .to_str()
-                                    .ok_or(Error::InvalidTemplatePath)?;
-
-                                if self
-                                    .templates
-                                    .template_needs_variables(assistant_template_name)?
-                                {
-                                    return Err(Error::Config {
-                                        message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `assistant_schema` is required when `assistant_template` is specified"),
-                                    });
-                                }
-                            }
-                            (Some(_), None) => {
-                                return Err(Error::Config {
-                                    message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `assistant_template` is required when `assistant_schema` is specified"),
-                                });
-                            }
-                            _ => {}
-                        }
-
-                        // Check that tools that are specified are present
-                        for tool in function.tools.iter() {
-                            self.get_tool(tool).map_err(|_| {
-                                Error::Config {
-                                    message: format!("Invalid Config: `functions.{function_name}.tools`: tool `{tool}` is not present in the config"),
-                                }
-                            })?;
-                        }
-                    }
-                    FunctionConfig::Json(function) => {
-                        // Check that the variant type matches the function type
-                        if !matches!(variant, VariantConfig::ChatCompletion(_)) {
-                            return Err(Error::Config {
-                                message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: variant type must be `chat_completion`"),
-                            });
-                        }
-
-                        // Check that system schema <=> system template
-                        match (&function.system_schema, &variant.system_template()) {
-                            (None, Some(system_template)) => {
-                                // If the template is specified but there is no schema, we need to check that the template has the required variables
-                                let system_template_name =
-                                    system_template.to_str().ok_or(Error::InvalidTemplatePath)?;
-
-                                if self
-                                    .templates
-                                    .template_needs_variables(system_template_name)?
-                                {
-                                    return Err(Error::Config {
-                                        message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `system_schema` is required when `system_template` is specified"),
-                                    });
-                                }
-                            }
-                            (Some(_), None) => {
-                                return Err(Error::Config {
-                                    message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `system_template` is required when `system_schema` is specified"),
-                                });
-                            }
-                            _ => {}
-                        }
-
-                        // Check that user schema <=> user template
-                        match (&function.user_schema, &variant.user_template()) {
-                            (None, Some(user_template)) => {
-                                // If the template is specified but there is no schema, we need to check that the template has the required variables
-                                let user_template_name =
-                                    user_template.to_str().ok_or(Error::InvalidTemplatePath)?;
-
-                                if self
-                                    .templates
-                                    .template_needs_variables(user_template_name)?
-                                {
-                                    return Err(Error::Config {
-                                        message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `user_schema` is required when `user_template` is specified"),
-                                    });
-                                }
-                            }
-                            (Some(_), None) => {
-                                return Err(Error::Config {
-                                    message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `user_template` is required when `user_schema` is specified"),
-                                });
-                            }
-                            _ => {}
-                        }
-
-                        // Check that assistant schema <=> assistant template
-                        match (&function.assistant_schema, &variant.assistant_template()) {
-                            (None, Some(assistant_template)) => {
-                                // If the template is specified but there is no schema, we need to check that the template has the required variables
-                                let assistant_template_name = assistant_template
-                                    .to_str()
-                                    .ok_or(Error::InvalidTemplatePath)?;
-
-                                if self
-                                    .templates
-                                    .template_needs_variables(assistant_template_name)?
-                                {
-                                    return Err(Error::Config {
-                                        message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `assistant_schema` is required when `assistant_template` is specified"),
-                                    });
-                                }
-                            }
-                            (Some(_), None) => {
-                                return Err(Error::Config {
-                                    message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `assistant_template` is required when `assistant_schema` is specified"),
-                                });
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-
-                // Validate variant-specific config
-                match variant {
-                    VariantConfig::ChatCompletion(params) => {
-                        let model_name = &params.model;
-                        // Ensure that the model exists
-                        let model = self.models.get(model_name).ok_or_else(|| Error::Config {
-                            message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `model` must be a valid model name"),
-                        })?;
-
-                        // If the variant has positive weight, ensure that at least one provider in the model has credentials
-                        if variant.weight() > 0.0
-                            && !model
-                                .providers
-                                .values()
-                                .any(|provider| provider.has_credentials())
-                        {
-                            return Err(Error::Config {
-                                message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: at least one provider in model `{model_name}` must have credentials"),
-                            });
-                        }
-                    }
-                }
+                variant.validate(
+                    function,
+                    &self.models,
+                    &self.templates,
+                    function_name,
+                    variant_name,
+                )?;
             }
         }
 
@@ -431,25 +233,15 @@ impl<'c> Config<'c> {
     /// The former path is used as the name of the template for retrival by variants later.
     pub fn get_templates<P: AsRef<Path>>(&self, base_path: P) -> HashMap<String, PathBuf> {
         let mut templates = HashMap::new();
-        let mut add_template = |path: &Option<PathBuf>| {
-            if let Some(ref path) = path {
-                templates.insert(
-                    // This `to_string_lossy`is there to handle OSes where paths
-                    // cannot be represented in UTF-8.
-                    path.to_string_lossy().to_string(),
-                    base_path.as_ref().join(path),
-                );
-            }
-        };
 
         for function in self.functions.values() {
             for variant in function.variants().values() {
-                match variant {
-                    VariantConfig::ChatCompletion(chat_config) => {
-                        add_template(&chat_config.system_template);
-                        add_template(&chat_config.user_template);
-                        add_template(&chat_config.assistant_template);
-                    }
+                let variant_template_paths = variant.get_all_template_paths();
+                for path in variant_template_paths {
+                    templates.insert(
+                        path.to_string_lossy().to_string(),
+                        base_path.as_ref().join(path),
+                    );
                 }
             }
         }
@@ -840,7 +632,7 @@ mod tests {
         assert_eq!(
             error,
             Error::Config {
-                message: "Invalid Config: `functions.generate_draft.variants.generate_draft_dummy`: at least one provider in model `dummy` must have credentials"
+                message: "Invalid Config: `functions.generate_draft.variants.generate_draft_dummy` failed model validation for dummy: Failed to validate model: No provider with credentials"
                     .to_string()
             }
         );
@@ -1055,181 +847,6 @@ mod tests {
         );
     }
 
-    /// Ensure that the config loading fails when the system schema does not exist
-    #[test]
-    fn test_config_system_schema_does_not_exist() {
-        let mut sample_config = get_sample_valid_config();
-        sample_config["functions"]["templates_with_variables_chat"]["system_schema"] =
-            "non_existent_file.json".into();
-        let base_path = PathBuf::new();
-        let result = Config::load_from_toml(sample_config, base_path);
-        assert_eq!(
-            result.unwrap_err(),
-            Error::JsonSchema {
-                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
-            }
-        );
-        let mut sample_config = get_sample_valid_config();
-        sample_config["functions"]["templates_with_variables_json"]["system_schema"] =
-            "non_existent_file.json".into();
-        let base_path = PathBuf::new();
-        let result = Config::load_from_toml(sample_config, base_path);
-        assert_eq!(
-            result.unwrap_err(),
-            Error::JsonSchema {
-                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
-            }
-        );
-    }
-
-    /// Ensure that the config loading fails when the user schema does not exist
-    #[test]
-    fn test_config_user_schema_does_not_exist() {
-        let mut sample_config = get_sample_valid_config();
-        sample_config["functions"]["templates_with_variables_chat"]["user_schema"] =
-            "non_existent_file.json".into();
-        let base_path = PathBuf::new();
-        let result = Config::load_from_toml(sample_config, base_path);
-        assert_eq!(
-            result.unwrap_err(),
-            Error::JsonSchema {
-                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
-            }
-        );
-        let mut sample_config = get_sample_valid_config();
-        sample_config["functions"]["templates_with_variables_json"]["user_schema"] =
-            "non_existent_file.json".into();
-        let base_path = PathBuf::new();
-        let result = Config::load_from_toml(sample_config, base_path);
-        assert_eq!(
-            result.unwrap_err(),
-            Error::JsonSchema {
-                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
-            }
-        );
-    }
-
-    /// Ensure that the config loading fails when the assistant schema does not exist
-    #[test]
-    fn test_config_assistant_schema_does_not_exist() {
-        let mut sample_config = get_sample_valid_config();
-        sample_config["functions"]["templates_with_variables_chat"]["assistant_schema"] =
-            "non_existent_file.json".into();
-        let base_path = PathBuf::new();
-        let result = Config::load_from_toml(sample_config, base_path);
-        assert_eq!(
-            result.unwrap_err(),
-            Error::JsonSchema {
-                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
-            }
-        );
-        let mut sample_config = get_sample_valid_config();
-        sample_config["functions"]["templates_with_variables_json"]["assistant_schema"] =
-            "non_existent_file.json".into();
-        let base_path = PathBuf::new();
-        let result = Config::load_from_toml(sample_config, base_path);
-        assert_eq!(
-            result.unwrap_err(),
-            Error::JsonSchema {
-                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
-            }
-        );
-    }
-
-    /// Ensure that the config loading fails when the system schema is missing but is needed
-    #[test]
-    fn test_config_system_schema_is_needed() {
-        let mut sample_config = get_sample_valid_config();
-        sample_config["functions"]["templates_with_variables_chat"]
-            .as_table_mut()
-            .unwrap()
-            .remove("system_schema");
-        let base_path = PathBuf::new();
-        let result = Config::load_from_toml(sample_config, base_path);
-        assert_eq!(
-            result.unwrap_err(),
-            Error::Config {
-                message: "Invalid Config: `functions.templates_with_variables_chat.variants.variant_with_variables`: `system_schema` is required when `system_template` is specified".to_string()
-            }
-        );
-        let mut sample_config = get_sample_valid_config();
-        sample_config["functions"]["templates_with_variables_json"]
-            .as_table_mut()
-            .unwrap()
-            .remove("system_schema");
-        let base_path = PathBuf::new();
-        let result = Config::load_from_toml(sample_config, base_path);
-        assert_eq!(
-            result.unwrap_err(),
-            Error::Config {
-                message: "Invalid Config: `functions.templates_with_variables_json.variants.variant_with_variables`: `system_schema` is required when `system_template` is specified".to_string()
-            }
-        );
-    }
-
-    /// Ensure that the config loading fails when the user schema is missing but is needed
-    #[test]
-    fn test_config_user_schema_is_needed() {
-        let mut sample_config = get_sample_valid_config();
-        sample_config["functions"]["templates_with_variables_chat"]
-            .as_table_mut()
-            .unwrap()
-            .remove("user_schema");
-        let base_path = PathBuf::new();
-        let result = Config::load_from_toml(sample_config, base_path);
-        assert_eq!(
-            result.unwrap_err(),
-            Error::Config {
-                message: "Invalid Config: `functions.templates_with_variables_chat.variants.variant_with_variables`: `user_schema` is required when `user_template` is specified".to_string()
-            }
-        );
-
-        let mut sample_config = get_sample_valid_config();
-        sample_config["functions"]["templates_with_variables_json"]
-            .as_table_mut()
-            .unwrap()
-            .remove("user_schema");
-        let base_path = PathBuf::new();
-        let result = Config::load_from_toml(sample_config, base_path);
-        assert_eq!(
-            result.unwrap_err(),
-            Error::Config {
-                message: "Invalid Config: `functions.templates_with_variables_json.variants.variant_with_variables`: `user_schema` is required when `user_template` is specified".to_string()
-            }
-        );
-    }
-
-    /// Ensure that the config loading fails when the assistant schema is missing but is needed
-    #[test]
-    fn test_config_assistant_schema_is_needed() {
-        let mut sample_config = get_sample_valid_config();
-        sample_config["functions"]["templates_with_variables_chat"]
-            .as_table_mut()
-            .unwrap()
-            .remove("assistant_schema");
-        let base_path = PathBuf::new();
-        let result = Config::load_from_toml(sample_config, base_path);
-        assert_eq!(
-            result.unwrap_err(),
-            Error::Config {
-                message: "Invalid Config: `functions.templates_with_variables_chat.variants.variant_with_variables`: `assistant_schema` is required when `assistant_template` is specified".to_string()
-            }
-        );
-        let mut sample_config = get_sample_valid_config();
-        sample_config["functions"]["templates_with_variables_json"]
-            .as_table_mut()
-            .unwrap()
-            .remove("assistant_schema");
-        let base_path = PathBuf::new();
-        let result = Config::load_from_toml(sample_config, base_path);
-        assert_eq!(
-            result.unwrap_err(),
-            Error::Config {
-                message: "Invalid Config: `functions.templates_with_variables_json.variants.variant_with_variables`: `assistant_schema` is required when `assistant_template` is specified".to_string()
-            }
-        );
-    }
-
     /// Ensure that the config validation fails when a function variant has a negative weight
     #[test]
     fn test_config_validate_function_variant_negative_weight() {
@@ -1241,7 +858,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `functions.generate_draft.variants.openai_promptA.weight`: must be non-negative".to_string()
+                message: "Invalid Config: `functions.generate_draft.variants.openai_promptA`: `weight` must be non-negative".to_string()
             }
         );
     }
@@ -1263,9 +880,9 @@ mod tests {
         );
     }
 
-    /// Ensure that the config validation fails when a variant has a model that does not exist in the models section
+    /// Ensure that the config validation fails when a function has a tool that does not exist in the tools section
     #[test]
-    fn test_config_validate_variant_nonexistent_tool() {
+    fn test_config_validate_function_nonexistent_tool() {
         let mut config = get_sample_valid_config();
         config["functions"]["generate_draft"]
             .as_table_mut()

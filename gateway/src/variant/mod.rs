@@ -1,6 +1,7 @@
 use reqwest::Client;
 use serde::Deserialize;
-use std::{collections::HashMap, path::PathBuf};
+use std::collections::HashMap;
+use std::path::PathBuf;
 
 use crate::endpoints::inference::InferenceParams;
 use crate::error::Error;
@@ -11,7 +12,7 @@ use crate::minijinja_util::TemplateConfig;
 use crate::tool::ToolCallConfig;
 use crate::{inference::types::InferenceResult, model::ModelConfig};
 pub mod chat_completion;
-pub mod rejection_sampling;
+// pub mod rejection_sampling;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
@@ -80,32 +81,18 @@ pub trait Variant {
         &self,
         function: &FunctionConfig,
         models: &HashMap<String, ModelConfig>,
+        templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,
     ) -> Result<(), Error>;
+
+    fn get_all_template_paths(&self) -> Vec<&PathBuf>;
 }
 
 impl VariantConfig {
     pub fn weight(&self) -> f64 {
         match self {
             VariantConfig::ChatCompletion(params) => params.weight,
-        }
-    }
-    pub fn system_template(&self) -> Option<&PathBuf> {
-        match self {
-            VariantConfig::ChatCompletion(params) => params.system_template.as_ref(),
-        }
-    }
-
-    pub fn user_template(&self) -> Option<&PathBuf> {
-        match self {
-            VariantConfig::ChatCompletion(params) => params.user_template.as_ref(),
-        }
-    }
-
-    pub fn assistant_template(&self) -> Option<&PathBuf> {
-        match self {
-            VariantConfig::ChatCompletion(params) => params.assistant_template.as_ref(),
         }
     }
 }
@@ -172,13 +159,20 @@ impl Variant for VariantConfig {
         &self,
         function: &FunctionConfig,
         models: &HashMap<String, ModelConfig>,
+        templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,
     ) -> Result<(), Error> {
         match self {
             VariantConfig::ChatCompletion(params) => {
-                params.validate(function, models, function_name, variant_name)
+                params.validate(function, models, templates, function_name, variant_name)
             }
+        }
+    }
+
+    fn get_all_template_paths(&self) -> Vec<&PathBuf> {
+        match self {
+            VariantConfig::ChatCompletion(params) => params.get_all_template_paths(),
         }
     }
 }

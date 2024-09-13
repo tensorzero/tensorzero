@@ -191,6 +191,45 @@ impl FunctionConfig {
             }
         }
     }
+
+    pub fn system_schema(&self) -> Option<&JSONSchemaFromPath> {
+        match self {
+            FunctionConfig::Chat(params) => params.system_schema.as_ref(),
+            FunctionConfig::Json(params) => params.system_schema.as_ref(),
+        }
+    }
+
+    pub fn user_schema(&self) -> Option<&JSONSchemaFromPath> {
+        match self {
+            FunctionConfig::Chat(params) => params.user_schema.as_ref(),
+            FunctionConfig::Json(params) => params.user_schema.as_ref(),
+        }
+    }
+
+    pub fn assistant_schema(&self) -> Option<&JSONSchemaFromPath> {
+        match self {
+            FunctionConfig::Chat(params) => params.assistant_schema.as_ref(),
+            FunctionConfig::Json(params) => params.assistant_schema.as_ref(),
+        }
+    }
+
+    pub fn validate(
+        &self,
+        static_tools: &HashMap<String, StaticToolConfig>,
+        function_name: &str,
+    ) -> Result<(), Error> {
+        match self {
+            FunctionConfig::Chat(params) => {
+                for tool in params.tools.iter() {
+                    static_tools.get(tool).ok_or(Error::Config {
+                        message: format!("Invalid Config: `functions.{function_name}.tools`: tool `{tool}` is not present in the config"),
+                    })?;
+                }
+                Ok(())
+            }
+            FunctionConfig::Json(_) => Ok(()),
+        }
+    }
 }
 
 /// Validate all input messages that contain text.

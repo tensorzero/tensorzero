@@ -113,8 +113,8 @@ impl ModelConfig {
             .values()
             .any(|provider| provider.has_credentials())
         {
-            return Err(Error::Config {
-                message: format!("Invalid Config: No provider with credentials"),
+            return Err(Error::ModelValidation {
+                message: "No provider with credentials".to_string(),
             });
         }
         Ok(())

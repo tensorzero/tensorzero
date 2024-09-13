@@ -14,6 +14,7 @@ use crate::inference::types::{
     InputMessageContent, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     ModelInferenceResponseWithMetadata, RequestMessage, Role,
 };
+use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
 use crate::tool::create_dynamic_implicit_tool_config;
 use crate::variant::JsonMode;
@@ -245,22 +246,101 @@ impl Variant for ChatCompletionConfig {
         &self,
         function: &FunctionConfig,
         models: &HashMap<String, ModelConfig>,
+        templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,
     ) -> Result<(), Error> {
         // Check that the model name is a valid model
-        let model = models.get(&self.model_name).ok_or_else(|| Error::Config {
+        if self.weight < 0.0 {
+            return Err(Error::Config {
+                message: format!(
+                    "Invalid Config: `functions.{function_name}.variants.{variant_name}`: `weight` must be non-negative"
+                ),
+            });
+        }
+        let model = models.get(&self.model).ok_or_else(|| Error::Config {
             message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `model` must be a valid model name"),
         })?;
         if self.weight > 0.0 {
             model.validate().map_err(|e| Error::Config {
                 message: format!(
-                    "Invalid Config: `functions.{function_name}.variants.{variant_name}`: {e}"
+                    "Invalid Config: `functions.{function_name}.variants.{variant_name}` failed model validation for {}: {e}",
+                    self.model
                 ),
             })?;
         }
+        validate_template_and_schema(
+            function.system_schema(),
+            self.system_template.as_ref(),
+            templates,
+        )
+        .map_err(|e| Error::Config {
+            message: format!(
+                "Invalid Config: `functions.{function_name}.variants.{variant_name}`: {e}"
+            ),
+        })?;
+        validate_template_and_schema(
+            function.user_schema(),
+            self.user_template.as_ref(),
+            templates,
+        )
+        .map_err(|e| Error::Config {
+            message: format!(
+                "Invalid Config: `functions.{function_name}.variants.{variant_name}`: {e}"
+            ),
+        })?;
+        validate_template_and_schema(
+            function.assistant_schema(),
+            self.assistant_template.as_ref(),
+            templates,
+        )
+        .map_err(|e| Error::Config {
+            message: format!(
+                "Invalid Config: `functions.{function_name}.variants.{variant_name}`: {e}"
+            ),
+        })?;
         Ok(())
     }
+
+    fn get_all_template_paths(&self) -> Vec<&PathBuf> {
+        let mut templates = Vec::new();
+        if let Some(system_template) = &self.system_template {
+            templates.push(system_template);
+        }
+        if let Some(user_template) = &self.user_template {
+            templates.push(user_template);
+        }
+        if let Some(assistant_template) = &self.assistant_template {
+            templates.push(assistant_template);
+        }
+        templates
+    }
+}
+
+pub fn validate_template_and_schema(
+    schema: Option<&JSONSchemaFromPath>,
+    template: Option<&PathBuf>,
+    templates: &TemplateConfig,
+) -> Result<(), Error> {
+    match (schema, template) {
+        (None, Some(template)) => {
+            let template_name = template.to_str().ok_or(Error::InvalidTemplatePath)?;
+            if templates.template_needs_variables(template_name)? {
+                return Err(Error::Config {
+                    message:
+                        "`schema` is required when `template` is specified and needs variables"
+                            .to_string(),
+                });
+            }
+        }
+        (Some(_), None) => {
+            return Err(Error::Config {
+                message: "`template` is required when `schema` is specified".to_string(),
+            });
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1525,5 +1605,68 @@ mod tests {
             model_request.output_schema,
             Some(&dynamic_output_schema_value)
         );
+    }
+
+    #[test]
+    fn test_validate_template_and_schema_both_none() {
+        let templates = get_test_template_config();
+        let result = validate_template_and_schema(None, None, &templates);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_template_and_schema_both_some() {
+        let templates = get_test_template_config();
+        let schema = JSONSchemaFromPath::new(
+            PathBuf::from("fixtures/config/functions/templates_with_variables/system_schema.json"),
+            PathBuf::new(),
+        )
+        .unwrap();
+        let template = PathBuf::from("test_validate_template_and_schema_both_some");
+        let result = validate_template_and_schema(Some(&schema), Some(&template), &templates);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_template_and_schema_template_no_needs_variables() {
+        let templates = get_test_template_config();
+        let template = PathBuf::from("system_filled");
+        let result = validate_template_and_schema(None, Some(&template), &templates);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_template_and_schema_template_needs_variables() {
+        let templates = get_test_template_config(); // Template needing variables
+        let template = PathBuf::from("greeting");
+        let result = validate_template_and_schema(None, Some(&template), &templates);
+        assert!(result.is_err());
+
+        if let Err(Error::Config { message }) = result {
+            assert_eq!(
+                message,
+                "`schema` is required when `template` is specified and needs variables"
+            );
+        } else {
+            panic!("Expected Error::Config");
+        }
+    }
+
+    #[test]
+    fn test_validate_template_and_schema_schema_some_template_none() {
+        let templates = get_test_template_config(); // Default TemplateConfig
+        let schema = JSONSchemaFromPath::new(
+            PathBuf::from("fixtures/config/functions/templates_with_variables/system_schema.json"),
+            PathBuf::new(),
+        )
+        .unwrap();
+        let result = validate_template_and_schema(Some(&schema), None, &templates);
+        assert!(result.is_err());
+
+        if let Err(Error::Config { message }) = result {
+            assert_eq!(message, "`template` is required when `schema` is specified");
+        } else {
+            panic!("Expected Error::Config");
+        }
     }
 }
