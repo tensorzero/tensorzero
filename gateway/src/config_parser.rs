@@ -973,6 +973,181 @@ mod tests {
         assert_eq!(templates.len(), 10);
     }
 
+    /// Ensure that the config loading fails when the system schema does not exist
+    #[test]
+    fn test_config_system_schema_does_not_exist() {
+        let mut sample_config = get_sample_valid_config();
+        sample_config["functions"]["templates_with_variables_chat"]["system_schema"] =
+            "non_existent_file.json".into();
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(sample_config, base_path);
+        assert_eq!(
+            result.unwrap_err(),
+            Error::JsonSchema {
+                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
+            }
+        );
+        let mut sample_config = get_sample_valid_config();
+        sample_config["functions"]["templates_with_variables_json"]["system_schema"] =
+            "non_existent_file.json".into();
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(sample_config, base_path);
+        assert_eq!(
+            result.unwrap_err(),
+            Error::JsonSchema {
+                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
+            }
+        );
+    }
+
+    /// Ensure that the config loading fails when the user schema does not exist
+    #[test]
+    fn test_config_user_schema_does_not_exist() {
+        let mut sample_config = get_sample_valid_config();
+        sample_config["functions"]["templates_with_variables_chat"]["user_schema"] =
+            "non_existent_file.json".into();
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(sample_config, base_path);
+        assert_eq!(
+            result.unwrap_err(),
+            Error::JsonSchema {
+                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
+            }
+        );
+        let mut sample_config = get_sample_valid_config();
+        sample_config["functions"]["templates_with_variables_json"]["user_schema"] =
+            "non_existent_file.json".into();
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(sample_config, base_path);
+        assert_eq!(
+            result.unwrap_err(),
+            Error::JsonSchema {
+                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
+            }
+        );
+    }
+
+    /// Ensure that the config loading fails when the assistant schema does not exist
+    #[test]
+    fn test_config_assistant_schema_does_not_exist() {
+        let mut sample_config = get_sample_valid_config();
+        sample_config["functions"]["templates_with_variables_chat"]["assistant_schema"] =
+            "non_existent_file.json".into();
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(sample_config, base_path);
+        assert_eq!(
+            result.unwrap_err(),
+            Error::JsonSchema {
+                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
+            }
+        );
+        let mut sample_config = get_sample_valid_config();
+        sample_config["functions"]["templates_with_variables_json"]["assistant_schema"] =
+            "non_existent_file.json".into();
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(sample_config, base_path);
+        assert_eq!(
+            result.unwrap_err(),
+            Error::JsonSchema {
+                message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
+            }
+        );
+    }
+
+    /// Ensure that the config loading fails when the system schema is missing but is needed
+    #[test]
+    fn test_config_system_schema_is_needed() {
+        let mut sample_config = get_sample_valid_config();
+        sample_config["functions"]["templates_with_variables_chat"]
+            .as_table_mut()
+            .unwrap()
+            .remove("system_schema");
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(sample_config, base_path);
+        assert_eq!(
+            result.unwrap_err(),
+            Error::Config {
+                message: "`functions.templates_with_variables_chat.variants.variant_with_variables.system_template`: Error in TensorZero config: schema is required when template is specified and needs variables".to_string()
+            }
+        );
+        let mut sample_config = get_sample_valid_config();
+        sample_config["functions"]["templates_with_variables_json"]
+            .as_table_mut()
+            .unwrap()
+            .remove("system_schema");
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(sample_config, base_path);
+        assert_eq!(
+            result.unwrap_err(),
+            Error::Config {
+                message: "`functions.templates_with_variables_json.variants.variant_with_variables.system_template`: Error in TensorZero config: schema is required when template is specified and needs variables".to_string()
+            }
+        );
+    }
+
+    /// Ensure that the config loading fails when the user schema is missing but is needed
+    #[test]
+    fn test_config_user_schema_is_needed() {
+        let mut sample_config = get_sample_valid_config();
+        sample_config["functions"]["templates_with_variables_chat"]
+            .as_table_mut()
+            .unwrap()
+            .remove("user_schema");
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(sample_config, base_path);
+        assert_eq!(
+            result.unwrap_err(),
+            Error::Config {
+                message: "`functions.templates_with_variables_chat.variants.variant_with_variables.user_template`: Error in TensorZero config: schema is required when template is specified and needs variables".to_string()
+            }
+        );
+
+        let mut sample_config = get_sample_valid_config();
+        sample_config["functions"]["templates_with_variables_json"]
+            .as_table_mut()
+            .unwrap()
+            .remove("user_schema");
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(sample_config, base_path);
+        assert_eq!(
+            result.unwrap_err(),
+            Error::Config {
+                message: "`functions.templates_with_variables_json.variants.variant_with_variables.user_template`: Error in TensorZero config: schema is required when template is specified and needs variables".to_string()
+            }
+        );
+    }
+
+    /// Ensure that the config loading fails when the assistant schema is missing but is needed
+    #[test]
+    fn test_config_assistant_schema_is_needed() {
+        let mut sample_config = get_sample_valid_config();
+        sample_config["functions"]["templates_with_variables_chat"]
+            .as_table_mut()
+            .unwrap()
+            .remove("assistant_schema");
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(sample_config, base_path);
+        assert_eq!(
+            result.unwrap_err(),
+            Error::Config {
+                message: "`functions.templates_with_variables_chat.variants.variant_with_variables.assistant_template`: Error in TensorZero config: schema is required when template is specified and needs variables".to_string()
+            }
+        );
+        let mut sample_config = get_sample_valid_config();
+        sample_config["functions"]["templates_with_variables_json"]
+            .as_table_mut()
+            .unwrap()
+            .remove("assistant_schema");
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(sample_config, base_path);
+        assert_eq!(
+            result.unwrap_err(),
+            Error::Config {
+                message: "`functions.templates_with_variables_json.variants.variant_with_variables.assistant_template`: Error in TensorZero config: schema is required when template is specified and needs variables".to_string()
+            }
+        );
+    }
+
     /// Get a sample valid config for testing
     fn get_sample_valid_config() -> toml::Table {
         let config_str = r#"

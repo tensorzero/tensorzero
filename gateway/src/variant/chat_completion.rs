@@ -276,7 +276,9 @@ impl Variant for ChatCompletionConfig {
             templates,
         )
         .map_err(|e| Error::Config {
-            message: format!("`functions.{function_name}.variants.{variant_name}`: {e}"),
+            message: format!(
+                "`functions.{function_name}.variants.{variant_name}.system_template`: {e}"
+            ),
         })?;
         validate_template_and_schema(
             function.user_schema(),
@@ -284,7 +286,9 @@ impl Variant for ChatCompletionConfig {
             templates,
         )
         .map_err(|e| Error::Config {
-            message: format!("`functions.{function_name}.variants.{variant_name}`: {e}"),
+            message: format!(
+                "`functions.{function_name}.variants.{variant_name}.user_template`: {e}"
+            ),
         })?;
         validate_template_and_schema(
             function.assistant_schema(),
@@ -292,7 +296,9 @@ impl Variant for ChatCompletionConfig {
             templates,
         )
         .map_err(|e| Error::Config {
-            message: format!("`functions.{function_name}.variants.{variant_name}`: {e}"),
+            message: format!(
+                "`functions.{function_name}.variants.{variant_name}.assistant_template`: {e}"
+            ),
         })?;
         Ok(())
     }
@@ -322,15 +328,14 @@ pub fn validate_template_and_schema(
             let template_name = template.to_str().ok_or(Error::InvalidTemplatePath)?;
             if templates.template_needs_variables(template_name)? {
                 return Err(Error::Config {
-                    message:
-                        "`schema` is required when `template` is specified and needs variables"
-                            .to_string(),
+                    message: "schema is required when template is specified and needs variables"
+                        .to_string(),
                 });
             }
         }
         (Some(_), None) => {
             return Err(Error::Config {
-                message: "`template` is required when `schema` is specified".to_string(),
+                message: "template is required when schema is specified".to_string(),
             });
         }
         _ => {}
@@ -1640,7 +1645,7 @@ mod tests {
         if let Err(Error::Config { message }) = result {
             assert_eq!(
                 message,
-                "`schema` is required when `template` is specified and needs variables"
+                "schema is required when template is specified and needs variables".to_string()
             );
         } else {
             panic!("Expected Error::Config");
@@ -1659,7 +1664,10 @@ mod tests {
         assert!(result.is_err());
 
         if let Err(Error::Config { message }) = result {
-            assert_eq!(message, "`template` is required when `schema` is specified");
+            assert_eq!(
+                message,
+                "template is required when schema is specified".to_string()
+            );
         } else {
             panic!("Expected Error::Config");
         }
