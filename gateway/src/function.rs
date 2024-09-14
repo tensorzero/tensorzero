@@ -222,7 +222,7 @@ impl FunctionConfig {
             FunctionConfig::Chat(params) => {
                 for tool in params.tools.iter() {
                     static_tools.get(tool).ok_or(Error::Config {
-                        message: format!("Invalid Config: `functions.{function_name}.tools`: tool `{tool}` is not present in the config"),
+                        message: format!("`functions.{function_name}.tools`: tool `{tool}` is not present in the config"),
                     })?;
                 }
                 Ok(())

@@ -255,17 +255,17 @@ impl Variant for ChatCompletionConfig {
         if self.weight < 0.0 {
             return Err(Error::Config {
                 message: format!(
-                    "Invalid Config: `functions.{function_name}.variants.{variant_name}`: `weight` must be non-negative"
+                    "`functions.{function_name}.variants.{variant_name}`: `weight` must be non-negative"
                 ),
             });
         }
         let model = models.get(&self.model).ok_or_else(|| Error::Config {
-            message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `model` must be a valid model name"),
+            message: format!("`functions.{function_name}.variants.{variant_name}`: `model` must be a valid model name"),
         })?;
         if self.weight > 0.0 {
             model.validate().map_err(|e| Error::Config {
                 message: format!(
-                    "Invalid Config: `functions.{function_name}.variants.{variant_name}` failed model validation for {}: {e}",
+                    "`functions.{function_name}.variants.{variant_name}` and model `{}`: {e}",
                     self.model
                 ),
             })?;
@@ -276,9 +276,7 @@ impl Variant for ChatCompletionConfig {
             templates,
         )
         .map_err(|e| Error::Config {
-            message: format!(
-                "Invalid Config: `functions.{function_name}.variants.{variant_name}`: {e}"
-            ),
+            message: format!("`functions.{function_name}.variants.{variant_name}`: {e}"),
         })?;
         validate_template_and_schema(
             function.user_schema(),
@@ -286,9 +284,7 @@ impl Variant for ChatCompletionConfig {
             templates,
         )
         .map_err(|e| Error::Config {
-            message: format!(
-                "Invalid Config: `functions.{function_name}.variants.{variant_name}`: {e}"
-            ),
+            message: format!("`functions.{function_name}.variants.{variant_name}`: {e}"),
         })?;
         validate_template_and_schema(
             function.assistant_schema(),
@@ -296,9 +292,7 @@ impl Variant for ChatCompletionConfig {
             templates,
         )
         .map_err(|e| Error::Config {
-            message: format!(
-                "Invalid Config: `functions.{function_name}.variants.{variant_name}`: {e}"
-            ),
+            message: format!("`functions.{function_name}.variants.{variant_name}`: {e}"),
         })?;
         Ok(())
     }

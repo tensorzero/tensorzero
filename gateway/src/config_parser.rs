@@ -131,9 +131,7 @@ impl<'c> Config<'c> {
             // Ensure that the model has at least one provider
             if model.routing.is_empty() {
                 return Err(Error::Config {
-                    message: format!(
-                        "Invalid Config: `models.{model_name}`: `routing` must not be empty"
-                    ),
+                    message: format!("`models.{model_name}`: `routing` must not be empty"),
                 });
             }
 
@@ -142,13 +140,15 @@ impl<'c> Config<'c> {
             for provider in &model.routing {
                 if !seen_providers.insert(provider) {
                     return Err(Error::Config {
-                        message: format!("Invalid Config: `models.{model_name}.routing`: duplicate entry `{provider}`"),
+                        message: format!(
+                            "`models.{model_name}.routing`: duplicate entry `{provider}`"
+                        ),
                     });
                 }
 
                 if !model.providers.contains_key(provider) {
                     return Err(Error::Config {
-                        message: format!("Invalid Config: `models.{model_name}`: `routing` contains entry `{provider}` that does not exist in `providers`"),
+                        message: format!("`models.{model_name}`: `routing` contains entry `{provider}` that does not exist in `providers`"),
                     });
                 }
             }
@@ -157,7 +157,7 @@ impl<'c> Config<'c> {
             for provider_name in model.providers.keys() {
                 if !seen_providers.contains(provider_name) {
                     return Err(Error::Config {
-                        message: format!("Invalid Config: `models.{model_name}`: Provider `{provider_name}` is not listed in `routing`"),
+                        message: format!("`models.{model_name}`: Provider `{provider_name}` is not listed in `routing`"),
                     });
                 }
             }
@@ -183,7 +183,7 @@ impl<'c> Config<'c> {
             if metric_name == "comment" || metric_name == "demonstration" {
                 return Err(Error::Config {
                     message: format!(
-                        "Invalid Config: Metric name '{}' is reserved and cannot be used",
+                        "Metric name '{}' is reserved and cannot be used",
                         metric_name
                     ),
                 });
@@ -303,7 +303,7 @@ impl TryFrom<toml::Table> for UninitializedConfig {
         match table.try_into() {
             Ok(config) => Ok(config),
             Err(e) => Err(Error::Config {
-                message: format!("Failed to parse config:\n{e}"),
+                message: format!("{e}"),
             }),
         }
     }
@@ -526,7 +526,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Failed to parse config:\ninvalid socket address syntax\nin `gateway.bind_address`\n".to_string()
+                message: "invalid socket address syntax\nin `gateway.bind_address`\n".to_string()
             }
         );
     }
@@ -543,7 +543,7 @@ mod tests {
         assert_eq!(
             Config::load_from_toml(config, base_path).unwrap_err(),
             Error::Config {
-                message: "Failed to parse config:\nmissing field `models`\n".to_string()
+                message: "missing field `models`\n".to_string()
             }
         );
     }
@@ -562,7 +562,8 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Failed to parse config:\nmissing field `providers`\nin `models.claude-3-haiku-20240307`\n".to_string()
+                message: "missing field `providers`\nin `models.claude-3-haiku-20240307`\n"
+                    .to_string()
             }
         );
     }
@@ -632,7 +633,7 @@ mod tests {
         assert_eq!(
             error,
             Error::Config {
-                message: "Invalid Config: `functions.generate_draft.variants.generate_draft_dummy` failed model validation for dummy: Failed to validate model: No provider with credentials"
+                message: "`functions.generate_draft.variants.generate_draft_dummy` and model `dummy`: Failed to validate model: No provider with credentials"
                     .to_string()
             }
         );
@@ -661,7 +662,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Failed to parse config:\nmissing field `functions`\n".to_string()
+                message: "missing field `functions`\n".to_string()
             }
         );
     }
@@ -680,9 +681,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message:
-                    "Failed to parse config:\nmissing field `variants`\nin `functions.generate_draft`\n"
-                        .to_string()
+                message: "missing field `variants`\nin `functions.generate_draft`\n".to_string()
             }
         );
     }
@@ -697,7 +696,7 @@ mod tests {
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Failed to parse config:\nunknown field `enable_agi`, expected one of"));
+            .contains("unknown field `enable_agi`, expected one of"));
     }
 
     /// Ensure that the config parsing fails when there are extra variables for models
@@ -713,7 +712,7 @@ mod tests {
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Failed to parse config:\nunknown field `enable_agi`, expected"));
+            .contains("unknown field `enable_agi`, expected"));
     }
 
     /// Ensure that the config parsing fails when there are extra variables for providers
@@ -729,7 +728,7 @@ mod tests {
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Failed to parse config:\nunknown field `enable_agi`, expected"));
+            .contains("unknown field `enable_agi`, expected"));
     }
 
     /// Ensure that the config parsing fails when there are extra variables for functions
@@ -745,7 +744,7 @@ mod tests {
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Failed to parse config:\nunknown field `enable_agi`, expected"));
+            .contains("unknown field `enable_agi`, expected"));
     }
 
     /// Ensure that the config parsing defaults properly for JSON functions with no output schema
@@ -781,7 +780,7 @@ mod tests {
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Failed to parse config:\nunknown field `enable_agi`, expected"));
+            .contains("unknown field `enable_agi`, expected"));
     }
 
     /// Ensure that the config parsing fails when there are extra variables for metrics
@@ -797,7 +796,7 @@ mod tests {
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Failed to parse config:\nunknown field `enable_agi`, expected"));
+            .contains("unknown field `enable_agi`, expected"));
     }
 
     /// Ensure that the config validation fails when a model has no providers in `routing`
@@ -810,8 +809,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `models.gpt-3.5-turbo`: `routing` must not be empty"
-                    .to_string()
+                message: "`models.gpt-3.5-turbo`: `routing` must not be empty".to_string()
             }
         );
     }
@@ -826,8 +824,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `models.gpt-3.5-turbo.routing`: duplicate entry `openai`"
-                    .to_string()
+                message: "`models.gpt-3.5-turbo.routing`: duplicate entry `openai`".to_string()
             }
         );
     }
@@ -841,8 +838,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `models.gpt-3.5-turbo`: `routing` contains entry `closedai` that does not exist in `providers`"
-                    .to_string()
+                message: "`models.gpt-3.5-turbo`: `routing` contains entry `closedai` that does not exist in `providers`".to_string()
             }
         );
     }
@@ -858,7 +854,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `functions.generate_draft.variants.openai_promptA`: `weight` must be non-negative".to_string()
+                message: "`functions.generate_draft.variants.openai_promptA`: `weight` must be non-negative".to_string()
             }
         );
     }
@@ -875,7 +871,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `functions.generate_draft.variants.openai_promptA`: `model` must be a valid model name".to_string()
+                message: "`functions.generate_draft.variants.openai_promptA`: `model` must be a valid model name".to_string()
             }
         );
     }
@@ -896,7 +892,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `functions.generate_draft.tools`: tool `non_existent_tool` is not present in the config".to_string()
+                message: "`functions.generate_draft.tools`: tool `non_existent_tool` is not present in the config".to_string()
             }
         );
     }
