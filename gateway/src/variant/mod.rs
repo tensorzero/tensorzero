@@ -20,6 +20,7 @@ pub mod rejection_sampling;
 #[serde(deny_unknown_fields)]
 pub enum VariantConfig {
     ChatCompletion(chat_completion::ChatCompletionConfig),
+    RejectionSampling(rejection_sampling::RejectionSamplingConfig),
 }
 
 /// This type is used to determine how to enforce JSON mode for a given variant.
@@ -94,6 +95,7 @@ impl VariantConfig {
     pub fn weight(&self) -> f64 {
         match self {
             VariantConfig::ChatCompletion(params) => params.weight,
+            VariantConfig::RejectionSampling(params) => params.weight,
         }
     }
 }
@@ -121,6 +123,14 @@ impl Variant for VariantConfig {
                     )
                     .await
             }
+            VariantConfig::RejectionSampling(params) => params.infer(
+                input,
+                models,
+                function,
+                inference_config,
+                client,
+                inference_params,
+            ),
         }
     }
 
@@ -153,6 +163,14 @@ impl Variant for VariantConfig {
                     )
                     .await
             }
+            VariantConfig::RejectionSampling(params) => params.infer_stream(
+                input,
+                models,
+                function,
+                inference_config,
+                client,
+                inference_params,
+            ),
         }
     }
 
@@ -168,12 +186,16 @@ impl Variant for VariantConfig {
             VariantConfig::ChatCompletion(params) => {
                 params.validate(function, models, templates, function_name, variant_name)
             }
+            VariantConfig::RejectionSampling(params) => {
+                params.validate(function, models, templates, function_name, variant_name)
+            }
         }
     }
 
     fn get_all_template_paths(&self) -> Vec<&PathBuf> {
         match self {
-            VariantConfig::ChatCompletion(params) => params.get_all_template_paths(),
+            VariantConfig::ChatCompletion(param) => params.get_all_template_paths(),
+            VariantConfig::RejectionSampling(params) => params.get_all_template_paths(),
         }
     }
 }
