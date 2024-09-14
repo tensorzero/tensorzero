@@ -46,7 +46,7 @@ It enables a **data & learning flywheel for LLMs** by unifying:
     <picture>
       <source media="(prefers-color-scheme: light)" srcset="https://github.com/user-attachments/assets/34a92c18-242e-4d76-a99c-861283de68a6">
       <source media="(prefers-color-scheme: dark)" srcset="https://github.com/user-attachments/assets/e8bc699b-6378-4c2a-9cc1-6d189025e270">
-      <img alt="TensorZero Flywheel" src="https://github.com/user-attachments/assets/34a92c18-242e-4d76-a99c-861283de68a6" width=80%>
+      <img alt="TensorZero Flywheel" src="https://github.com/user-attachments/assets/34a92c18-242e-4d76-a99c-861283de68a6" width=720>
     </picture>
   </a>
 </p>
@@ -66,7 +66,7 @@ Read more about our **[Vision & Roadmap](https://www.tensorzero.com/docs/vision-
 
 **Next steps?** The **[Quick Start (5min)](https://www.tensorzero.com/docs/gateway/quickstart)** and the **[Tutorial (30min)](https://www.tensorzero.com/docs/gateway/tutorial)** show it's easy to set up an LLM application with TensorZero. The tutorial teaches how to build a simple chatbot, an email copilot, a weather RAG system, and a structured data extraction pipeline.
 
-**Questions?** Join our **[Slack](https://www.tensorzero.com/slack)** or **[Discord](https://www.tensorzero.com/discord)** communities. We monitor them closely for questions, feedback, and more.
+**Questions?** Ask us on **[Slack](https://www.tensorzero.com/slack)** or **[Discord](https://www.tensorzero.com/discord)**.
 
 **Using TensorZero at work?** Email us at **[hello@tensorzero.com](mailto:hello@tensorzero.com)** to set up a Slack or Teams channel with your team (free).
 
