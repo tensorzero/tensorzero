@@ -176,7 +176,11 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             let response = serde_json::from_str(&response).map_err(|e| Error::GCPVertexServer {
                 message: format!("Error parsing JSON response: {e}: {response}"),
             })?;
-            let response_with_latency = GCPVertexGeminiResponseWithLatency { response, latency };
+            let response_with_latency = GCPVertexGeminiResponseWithMetadata {
+                response,
+                latency,
+                request: request_body,
+            };
             Ok(response_with_latency.try_into()?)
         } else {
             let response_code = res.status();
@@ -196,6 +200,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         (
             ProviderInferenceResponseChunk,
             ProviderInferenceResponseStream,
+            String,
         ),
         Error,
     > {
@@ -204,6 +209,10 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         })?;
         let request_body: GCPVertexGeminiRequest =
             GCPVertexGeminiRequest::new(request, &self.model_id)?;
+        let raw_request =
+            serde_json::to_string(&request_body).map_err(|e| Error::GCPVertexServer {
+                message: format!("Error serializing request: {e}"),
+            })?;
         let token = credentials.get_jwt_token(&self.audience)?;
         let start_time = Instant::now();
         let event_source = http_client
@@ -224,7 +233,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 })
             }
         };
-        Ok((chunk, stream))
+        Ok((chunk, stream, raw_request))
     }
 
     fn has_credentials(&self) -> bool {
@@ -763,18 +772,24 @@ struct GCPVertexGeminiResponse {
     usage_metadata: Option<GCPVertexGeminiUsageMetadata>,
 }
 
-struct GCPVertexGeminiResponseWithLatency {
+struct GCPVertexGeminiResponseWithMetadata<'a> {
     response: GCPVertexGeminiResponse,
     latency: Latency,
+    request: GCPVertexGeminiRequest<'a>,
 }
 
-impl TryFrom<GCPVertexGeminiResponseWithLatency> for ProviderInferenceResponse {
+impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
     type Error = Error;
-    fn try_from(response: GCPVertexGeminiResponseWithLatency) -> Result<Self, Self::Error> {
-        let GCPVertexGeminiResponseWithLatency { response, latency } = response;
-        let raw = serde_json::to_string(&response).map_err(|e| Error::GCPVertexServer {
-            message: format!("Error serializing response from GCP Vertex Gemini: {e}"),
-        })?;
+    fn try_from(response: GCPVertexGeminiResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
+        let GCPVertexGeminiResponseWithMetadata {
+            response,
+            latency,
+            request: request_body,
+        } = response;
+        let raw_response =
+            serde_json::to_string(&response).map_err(|e| Error::GCPVertexServer {
+                message: format!("Error serializing response from GCP Vertex Gemini: {e}"),
+            })?;
 
         // GCP Vertex Gemini response can contain multiple candidates and each of these can contain
         // multiple content parts. We will only use the first candidate but handle all parts of the response therein.
@@ -804,8 +819,18 @@ impl TryFrom<GCPVertexGeminiResponseWithLatency> for ProviderInferenceResponse {
                     .to_string(),
             })?
             .into();
+        let raw_request =
+            serde_json::to_string(&request_body).map_err(|e| Error::GCPVertexServer {
+                message: format!("Error serializing request: {e}"),
+            })?;
 
-        Ok(ProviderInferenceResponse::new(content, raw, usage, latency))
+        Ok(ProviderInferenceResponse::new(
+            content,
+            raw_request,
+            raw_response,
+            usage,
+            latency,
+        ))
     }
 }
 
@@ -1326,9 +1351,18 @@ mod tests {
         let latency = Latency::NonStreaming {
             response_time: Duration::from_secs(1),
         };
-        let response_with_latency = GCPVertexGeminiResponseWithLatency {
+        let request_body = GCPVertexGeminiRequest {
+            contents: vec![],
+            generation_config: None,
+            tools: None,
+            tool_config: None,
+            system_instruction: None,
+        };
+        let raw_request = serde_json::to_string(&request_body).unwrap();
+        let response_with_latency = GCPVertexGeminiResponseWithMetadata {
             response,
             latency: latency.clone(),
+            request: request_body,
         };
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
@@ -1344,7 +1378,7 @@ mod tests {
             }
         );
         assert_eq!(model_inference_response.latency, latency);
-
+        assert_eq!(model_inference_response.raw_request, raw_request);
         let text_part =
             GCPVertexGeminiResponseContentPart::Text("Here's the weather information:".to_string());
         let function_call_part =
@@ -1368,9 +1402,18 @@ mod tests {
         let latency = Latency::NonStreaming {
             response_time: Duration::from_secs(2),
         };
-        let response_with_latency = GCPVertexGeminiResponseWithLatency {
+        let request_body = GCPVertexGeminiRequest {
+            contents: vec![],
+            generation_config: None,
+            tools: None,
+            tool_config: None,
+            system_instruction: None,
+        };
+        let raw_request = serde_json::to_string(&request_body).unwrap();
+        let response_with_latency = GCPVertexGeminiResponseWithMetadata {
             response,
             latency: latency.clone(),
+            request: request_body,
         };
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
@@ -1396,6 +1439,7 @@ mod tests {
             }
         );
         assert_eq!(model_inference_response.latency, latency);
+        assert_eq!(model_inference_response.raw_request, raw_request);
 
         let text_part1 =
             GCPVertexGeminiResponseContentPart::Text("Here's the weather information:".to_string());
@@ -1433,12 +1477,22 @@ mod tests {
         let latency = Latency::NonStreaming {
             response_time: Duration::from_secs(3),
         };
-        let response_with_latency = GCPVertexGeminiResponseWithLatency {
+        let request_body = GCPVertexGeminiRequest {
+            contents: vec![],
+            generation_config: None,
+            tools: None,
+            tool_config: None,
+            system_instruction: None,
+        };
+        let raw_request = serde_json::to_string(&request_body).unwrap();
+        let response_with_latency = GCPVertexGeminiResponseWithMetadata {
             response,
             latency: latency.clone(),
+            request: request_body,
         };
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
+        assert_eq!(model_inference_response.raw_request, raw_request);
 
         if let [ContentBlock::Text(Text { text: text1 }), ContentBlock::ToolCall(tool_call1), ContentBlock::Text(Text { text: text2 }), ContentBlock::ToolCall(tool_call2)] =
             &model_inference_response.content[..]

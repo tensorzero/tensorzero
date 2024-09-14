@@ -1,8 +1,8 @@
 use futures::StreamExt;
 use gateway::inference::providers::dummy::{
     DUMMY_BAD_TOOL_RESPONSE, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
-    DUMMY_JSON_RESPONSE_RAW, DUMMY_STREAMING_RESPONSE, DUMMY_STREAMING_TOOL_RESPONSE,
-    DUMMY_TOOL_RESPONSE,
+    DUMMY_JSON_RESPONSE_RAW, DUMMY_RAW_REQUEST, DUMMY_STREAMING_RESPONSE,
+    DUMMY_STREAMING_TOOL_RESPONSE, DUMMY_TOOL_RESPONSE,
 };
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
@@ -10,8 +10,8 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::common::{
-    get_clickhouse, get_gateway_endpoint, select_inference_clickhouse,
-    select_model_inferences_clickhouse,
+    get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
+    select_json_inference_clickhouse, select_model_inferences_clickhouse,
 };
 
 #[tokio::test]
@@ -52,7 +52,7 @@ async fn e2e_test_inference_dryrun() {
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id).await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id).await;
     assert!(result.is_none()); // No inference should be written to ClickHouse when dryrun is true
 }
 
@@ -110,7 +110,7 @@ async fn e2e_test_inference_model_fallback() {
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
@@ -159,18 +159,6 @@ async fn e2e_test_inference_model_fallback() {
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input_result = result.get("input").unwrap().as_str().unwrap();
-    let input_result: Value = serde_json::from_str(input_result).unwrap();
-    assert_eq!(input_result, correct_input);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
-
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     assert_eq!(input_tokens, 10);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
@@ -181,6 +169,10 @@ async fn e2e_test_inference_model_fallback() {
     assert_eq!(
         result.get("raw_response").unwrap().as_str().unwrap(),
         DUMMY_INFER_RESPONSE_RAW
+    );
+    assert_eq!(
+        result.get("raw_request").unwrap().as_str().unwrap(),
+        DUMMY_RAW_REQUEST
     );
 }
 
@@ -250,7 +242,7 @@ async fn e2e_test_tool_call() {
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
@@ -337,24 +329,6 @@ async fn e2e_test_tool_call() {
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input_result = result.get("input").unwrap().as_str().unwrap();
-    let input_result: Value = serde_json::from_str(input_result).unwrap();
-    assert_eq!(input_result, correct_input);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-    // Check that the tool call is correctly stored (no parsing here)
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    assert_eq!(arguments, *DUMMY_TOOL_RESPONSE);
-    let id = content_block.get("id").unwrap().as_str().unwrap();
-    assert_eq!(id, "0");
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_temperature");
-
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     assert_eq!(input_tokens, 10);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
@@ -365,6 +339,10 @@ async fn e2e_test_tool_call() {
     assert_eq!(
         result.get("raw_response").unwrap().as_str().unwrap(),
         serde_json::to_string(&*DUMMY_TOOL_RESPONSE).unwrap()
+    );
+    assert_eq!(
+        result.get("raw_request").unwrap().as_str().unwrap(),
+        DUMMY_RAW_REQUEST
     );
 }
 
@@ -433,7 +411,7 @@ async fn e2e_test_tool_call_malformed() {
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
@@ -520,24 +498,6 @@ async fn e2e_test_tool_call_malformed() {
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input_result = result.get("input").unwrap().as_str().unwrap();
-    let input_result: Value = serde_json::from_str(input_result).unwrap();
-    assert_eq!(input_result, correct_input);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-    // Check that the tool call is correctly stored (no parsing here)
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    assert_eq!(arguments, *DUMMY_BAD_TOOL_RESPONSE);
-    let id = content_block.get("id").unwrap().as_str().unwrap();
-    assert_eq!(id, "0");
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_temperature");
-
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     assert_eq!(input_tokens, 10);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
@@ -546,6 +506,10 @@ async fn e2e_test_tool_call_malformed() {
     assert!(response_time_ms > 0);
     assert!(result.get("ttft_ms").unwrap().is_null());
     result.get("raw_response").unwrap().as_str().unwrap();
+    assert_eq!(
+        result.get("raw_request").unwrap().as_str().unwrap(),
+        DUMMY_RAW_REQUEST
+    );
 }
 
 /// This test checks the return type and clickhouse writes for a function with an output schema and
@@ -599,7 +563,7 @@ async fn e2e_test_inference_json_fail() {
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
@@ -639,18 +603,6 @@ async fn e2e_test_inference_json_fail() {
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input_result = result.get("input").unwrap().as_str().unwrap();
-    let input_result: Value = serde_json::from_str(input_result).unwrap();
-    assert_eq!(input_result, correct_input);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
-
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     assert_eq!(input_tokens, 10);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
@@ -661,6 +613,10 @@ async fn e2e_test_inference_json_fail() {
     assert_eq!(
         result.get("raw_response").unwrap().as_str().unwrap(),
         DUMMY_INFER_RESPONSE_RAW
+    );
+    assert_eq!(
+        result.get("raw_request").unwrap().as_str().unwrap(),
+        DUMMY_RAW_REQUEST
     );
 }
 
@@ -717,7 +673,7 @@ async fn e2e_test_inference_json_success() {
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
@@ -761,18 +717,6 @@ async fn e2e_test_inference_json_success() {
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input_result = result.get("input").unwrap().as_str().unwrap();
-    let input_result: Value = serde_json::from_str(input_result).unwrap();
-    assert_eq!(input_result, correct_input);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(content, "{\"answer\":\"Hello\"}");
-
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     assert_eq!(input_tokens, 10);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
@@ -783,6 +727,10 @@ async fn e2e_test_inference_json_success() {
     assert_eq!(
         result.get("raw_response").unwrap().as_str().unwrap(),
         DUMMY_JSON_RESPONSE_RAW
+    );
+    assert_eq!(
+        result.get("raw_request").unwrap().as_str().unwrap(),
+        DUMMY_RAW_REQUEST
     );
 }
 
@@ -851,7 +799,7 @@ async fn e2e_test_variant_failover() {
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
@@ -913,17 +861,6 @@ async fn e2e_test_variant_failover() {
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
 
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     assert_eq!(input_tokens, 10);
@@ -935,6 +872,10 @@ async fn e2e_test_variant_failover() {
     assert_eq!(
         result.get("raw_response").unwrap().as_str().unwrap(),
         DUMMY_INFER_RESPONSE_RAW
+    );
+    assert_eq!(
+        result.get("raw_request").unwrap().as_str().unwrap(),
+        DUMMY_RAW_REQUEST
     );
 }
 
@@ -1018,7 +959,7 @@ async fn e2e_test_streaming() {
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
@@ -1093,6 +1034,11 @@ async fn e2e_test_streaming() {
     assert!(response_time_ms > 0);
     let ttft = result.get("ttft_ms").unwrap().as_u64().unwrap();
     assert!(ttft > 0 && ttft <= response_time_ms);
+    result.get("raw_response").unwrap().as_str().unwrap();
+    assert_eq!(
+        result.get("raw_request").unwrap().as_str().unwrap(),
+        DUMMY_RAW_REQUEST
+    );
 }
 
 /// This test checks that streaming inference works as expected when dryrun is true.
@@ -1165,7 +1111,7 @@ async fn e2e_test_streaming_dryrun() {
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id.unwrap()).await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id.unwrap()).await;
     assert!(result.is_none()); // No inference should be written to ClickHouse when dryrun is true
 }
 
@@ -1257,7 +1203,7 @@ async fn e2e_test_tool_call_streaming() {
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
@@ -1344,24 +1290,6 @@ async fn e2e_test_tool_call_streaming() {
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input_result = result.get("input").unwrap().as_str().unwrap();
-    let input_result: Value = serde_json::from_str(input_result).unwrap();
-    assert_eq!(input_result, correct_input);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-    // Check that the tool call is correctly stored (no parsing here)
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    assert_eq!(arguments, *DUMMY_TOOL_RESPONSE);
-    let id = content_block.get("id").unwrap().as_str().unwrap();
-    assert_eq!(id, "0");
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_temperature");
-
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     assert_eq!(input_tokens, 10);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
@@ -1370,4 +1298,8 @@ async fn e2e_test_tool_call_streaming() {
     assert!(response_time_ms > 0);
     assert!(result.get("ttft_ms").unwrap().as_u64().unwrap() > 50);
     result.get("raw_response").unwrap().as_str().unwrap();
+    assert_eq!(
+        result.get("raw_request").unwrap().as_str().unwrap(),
+        DUMMY_RAW_REQUEST
+    );
 }

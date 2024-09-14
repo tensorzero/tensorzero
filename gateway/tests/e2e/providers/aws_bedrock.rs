@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::common::{
-    get_clickhouse, get_gateway_endpoint, select_inference_clickhouse,
+    get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
     select_model_inferences_clickhouse,
 };
 use crate::providers::common::{E2ETestProvider, E2ETestProviders};
@@ -87,7 +87,7 @@ async fn test_inference_with_explicit_region() {
     let clickhouse = get_clickhouse().await;
 
     // First, check Inference table
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
@@ -133,22 +133,14 @@ async fn test_inference_with_explicit_region() {
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, "claude-3-haiku-20240307-us-east-1");
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, "aws-bedrock-us-east-1");
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, content);
-
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("world!"));
+    // Check that raw_request is valid JSON
+    let _: Value = serde_json::from_str(raw_request).expect("raw_request should be valid JSON");
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     assert!(input_tokens > 5);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();

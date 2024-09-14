@@ -47,6 +47,7 @@ pub struct InferenceConfig<'a> {
 pub struct ModelUsedInfo<'a> {
     pub model_name: &'a str,
     pub model_provider_name: &'a str,
+    pub raw_request: String,
 }
 
 pub trait Variant {

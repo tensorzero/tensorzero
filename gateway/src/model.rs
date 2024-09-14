@@ -77,6 +77,7 @@ impl ModelConfig {
         (
             ProviderInferenceResponseChunk,
             ProviderInferenceResponseStream,
+            String,
             &'a str,
         ),
         Error,
@@ -95,8 +96,8 @@ impl ModelConfig {
                     for error in provider_errors.values() {
                         error.log();
                     }
-                    let (chunk, stream) = response;
-                    return Ok((chunk, stream, provider_name));
+                    let (chunk, stream, raw_request) = response;
+                    return Ok((chunk, stream, raw_request, provider_name));
                 }
                 Err(error) => {
                     provider_errors.insert(provider_name.to_string(), error);
@@ -363,6 +364,7 @@ impl InferenceProvider for ProviderConfig {
         (
             ProviderInferenceResponseChunk,
             ProviderInferenceResponseStream,
+            String,
         ),
         Error,
     > {
@@ -562,7 +564,7 @@ mod tests {
             routing: vec!["good_provider".to_string()],
             providers: HashMap::from([("good_provider".to_string(), good_provider_config)]),
         };
-        let (initial_chunk, stream, model_provider_name) = model_config
+        let (initial_chunk, stream, raw_request, model_provider_name) = model_config
             .infer_stream(&request, &Client::new())
             .await
             .unwrap();
@@ -573,6 +575,7 @@ mod tests {
                 id: "0".to_string(),
             })],
         );
+        assert_eq!(raw_request, "raw request");
         assert_eq!(model_provider_name, "good_provider");
         let mut collected_content: Vec<ContentBlockChunk> =
             vec![ContentBlockChunk::Text(TextChunk {
@@ -653,13 +656,14 @@ mod tests {
                 ("good_provider".to_string(), good_provider_config),
             ]),
         };
-        let (initial_chunk, stream, model_provider_name) = model_config
+        let (initial_chunk, stream, raw_request, model_provider_name) = model_config
             .infer_stream(&request, &Client::new())
             .await
             .unwrap();
         assert_eq!(model_provider_name, "good_provider");
         // Ensure that the error for the bad provider was logged, but the request worked nonetheless
         assert!(logs_contain("Error sending request to Dummy provider"));
+        assert_eq!(raw_request, "raw request");
 
         assert_eq!(
             initial_chunk.content,

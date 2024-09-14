@@ -7,8 +7,8 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::common::{
-    get_clickhouse, get_gateway_endpoint, select_inference_clickhouse,
-    select_model_inferences_clickhouse,
+    get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
+    select_json_inference_clickhouse, select_model_inferences_clickhouse,
 };
 
 #[derive(Clone, Debug)]
@@ -325,13 +325,13 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check if ClickHouse is ok - Inference Table
+    // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
-    println!("ClickHouse - Inference: {result:#?}");
+    println!("ClickHouse - ChatInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id = Uuid::parse_str(id).unwrap();
@@ -388,8 +388,6 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
-    let output_schema = result.get("output_schema").unwrap().as_str().unwrap();
-    assert!(output_schema.is_empty());
 
     // Check the ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -405,23 +403,12 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, provider.model_provider_name);
-
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, content);
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("japan"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
@@ -530,13 +517,13 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check ClickHouse - Inference Table
+    // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
-    println!("ClickHouse - Inference: {result:#?}");
+    println!("ClickHouse - ChatInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
@@ -593,8 +580,6 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
-    let output_schema = result.get("output_schema").unwrap().as_str().unwrap();
-    assert!(output_schema.is_empty());
 
     // Check ClickHouse - ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -610,23 +595,17 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, full_content);
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("japan"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
 
@@ -726,13 +705,13 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check if ClickHouse is ok - Inference Table
+    // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
-    println!("ClickHouse - Inference: {result:#?}");
+    println!("ClickHouse - ChatInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id = Uuid::parse_str(id).unwrap();
@@ -808,18 +787,12 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, content);
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("japan"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
@@ -942,13 +915,13 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check ClickHouse - Inference Table
+    // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
-    println!("ClickHouse - Inference: {result:#?}");
+    println!("ClickHouse - ChatInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
@@ -1009,8 +982,6 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
-    let output_schema = result.get("output_schema").unwrap().as_str().unwrap();
-    assert!(output_schema.is_empty());
 
     // Check ClickHouse - ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -1026,18 +997,12 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, full_content);
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("japan"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
 
@@ -1156,13 +1121,13 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check if ClickHouse is correct - Inference table
+    // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
-    println!("ClickHouse - Inference: {result:#?}");
+    println!("ClickHouse - ChatInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
@@ -1244,8 +1209,6 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
 
     let required = tool_parameters["required"].as_array().unwrap();
     assert!(required.contains(&json!("location")));
-    let output_schema = result.get("output_schema").unwrap().as_str().unwrap();
-    assert!(output_schema.is_empty());
 
     // Check if ClickHouse is correct - ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -1261,39 +1224,18 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-    assert!(!output_clickhouse_model.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "tool_call")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-
-    assert!(content_block.get("id").unwrap().as_str().is_some());
-
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_temperature");
-
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 2);
-    let location = arguments.get("location").unwrap().as_str().unwrap();
-    assert_eq!(location.to_lowercase(), "tokyo");
-    let units = arguments.get("units").unwrap().as_str().unwrap();
-    assert!(units == "celsius");
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(raw_request.to_lowercase().contains("celsius"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
@@ -1427,13 +1369,13 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check ClickHouse - Inference Table
+    // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
-    println!("ClickHouse - Inference: {result:#?}");
+    println!("ClickHouse - ChatInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
@@ -1539,8 +1481,6 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
 
     let required = tool_parameters["required"].as_array().unwrap();
     assert!(required.contains(&json!("location")));
-    let output_schema = result.get("output_schema").unwrap().as_str().unwrap();
-    assert!(output_schema.is_empty());
 
     // Check if ClickHouse is correct - ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -1556,39 +1496,18 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-    assert!(!output_clickhouse_model.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "tool_call")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-
-    assert!(content_block.get("id").unwrap().as_str().is_some());
-
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_temperature");
-
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 2);
-    let location = arguments.get("location").unwrap().as_str().unwrap();
-    assert_eq!(location.to_lowercase(), "tokyo");
-    let units = arguments.get("units").unwrap().as_str().unwrap();
-    assert!(units == "celsius");
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.contains("get_temperature"));
+    assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("get_temperature"));
@@ -1681,13 +1600,13 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check if ClickHouse is correct - Inference table
+    // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
-    println!("ClickHouse - Inference: {result:#?}");
+    println!("ClickHouse - ChatInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
@@ -1769,8 +1688,6 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
 
     let required = tool_parameters["required"].as_array().unwrap();
     assert!(required.contains(&json!("location")));
-    let output_schema = result.get("output_schema").unwrap().as_str().unwrap();
-    assert!(output_schema.is_empty());
 
     // Check if ClickHouse is correct - ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -1786,27 +1703,17 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-    assert!(!output_clickhouse_model
-        .iter()
-        .any(|block| block["type"] == "tool_call"));
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "text")
-        .unwrap();
-    let content_block_text = content_block.get("text").unwrap().as_str().unwrap();
-    assert!(content_block_text.to_lowercase().contains("mehta"));
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("what is your name"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("mehta"));
@@ -1926,13 +1833,13 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check ClickHouse - Inference Table
+    // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
-    println!("ClickHouse - Inference: {result:#?}");
+    println!("ClickHouse - ChatInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
@@ -2028,8 +1935,6 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
 
     let required = tool_parameters["required"].as_array().unwrap();
     assert!(required.contains(&json!("location")));
-    let output_schema = result.get("output_schema").unwrap().as_str().unwrap();
-    assert!(output_schema.is_empty());
 
     // Check if ClickHouse is correct - ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -2045,33 +1950,17 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-
-    assert!(!output_clickhouse_model
-        .iter()
-        .any(|block| block["type"] == "tool_call"));
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "text")
-        .unwrap();
-    assert!(content_block
-        .get("text")
-        .unwrap()
-        .as_str()
-        .unwrap()
-        .to_lowercase()
-        .contains("mehta"));
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("what is your name"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     // Check if raw_response is valid JSONL
@@ -2204,13 +2093,13 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check if ClickHouse is correct - Inference table
+    // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
-    println!("ClickHouse - Inference: {result:#?}");
+    println!("ClickHouse - ChatInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
@@ -2292,8 +2181,6 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
 
     let required = tool_parameters["required"].as_array().unwrap();
     assert!(required.contains(&json!("location")));
-    let output_schema = result.get("output_schema").unwrap().as_str().unwrap();
-    assert!(output_schema.is_empty());
 
     // Check if ClickHouse is correct - ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -2309,40 +2196,17 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-    assert!(!output_clickhouse_model.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "tool_call")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-
-    assert!(content_block.get("id").unwrap().as_str().is_some());
-
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_temperature");
-
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 1 || arguments.len() == 2);
-    assert!(arguments.get("location").unwrap().as_str().is_some());
-    if arguments.len() == 2 {
-        let units = arguments.get("units").unwrap().as_str().unwrap();
-        assert!(units == "celsius" || units == "fahrenheit");
-    }
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("what is your name"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("get_temperature"));
@@ -2488,13 +2352,13 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check ClickHouse - Inference Table
+    // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
-    println!("ClickHouse - Inference: {result:#?}");
+    println!("ClickHouse - ChatInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
@@ -2600,8 +2464,6 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
 
     let required = tool_parameters["required"].as_array().unwrap();
     assert!(required.contains(&json!("location")));
-    let output_schema = result.get("output_schema").unwrap().as_str().unwrap();
-    assert!(output_schema.is_empty());
 
     // Check if ClickHouse is correct - ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -2617,40 +2479,17 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-    assert!(!output_clickhouse_model.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "tool_call")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-
-    assert!(content_block.get("id").unwrap().as_str().is_some());
-
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_temperature");
-
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 1 || arguments.len() == 2);
-    assert!(arguments.get("location").unwrap().as_str().is_some());
-    if arguments.len() == 2 {
-        let units = arguments.get("units").unwrap().as_str().unwrap();
-        assert!(units == "celsius" || units == "fahrenheit");
-    }
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("what is your name"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("get_temperature"));
@@ -2751,13 +2590,13 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check if ClickHouse is correct - Inference table
+    // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
-    println!("ClickHouse - Inference: {result:#?}");
+    println!("ClickHouse - ChatInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
@@ -2839,8 +2678,6 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
 
     let required = tool_parameters["required"].as_array().unwrap();
     assert!(required.contains(&json!("location")));
-    let output_schema = result.get("output_schema").unwrap().as_str().unwrap();
-    assert!(output_schema.is_empty());
 
     // Check if ClickHouse is correct - ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -2856,26 +2693,18 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-    assert!(!output_clickhouse_model
-        .iter()
-        .any(|block| block["type"] == "tool_call"));
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "text")
-        .unwrap();
-    assert!(content_block.get("text").unwrap().as_str().is_some());
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(raw_request.to_lowercase().contains("celsius"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     assert!(result.get("raw_response").unwrap().as_str().is_some());
 
@@ -3001,13 +2830,13 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check ClickHouse - Inference Table
+    // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
-    println!("ClickHouse - Inference: {result:#?}");
+    println!("ClickHouse - ChatInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
@@ -3101,8 +2930,6 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     let required = tool_parameters["required"].as_array().unwrap();
     assert!(required.contains(&json!("location")));
 
-    let output_schema = result.get("output_schema").unwrap().as_str().unwrap();
-    assert!(output_schema.is_empty());
     // Check if ClickHouse is correct - ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
         .await
@@ -3117,27 +2944,19 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-
-    assert!(!output_clickhouse_model
-        .iter()
-        .any(|block| block["type"] == "tool_call"));
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "text")
-        .unwrap();
-    assert!(content_block.get("text").unwrap().as_str().is_some());
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request
+        .to_lowercase()
+        .contains("what is the weather like in tokyo (in celsius)"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     // Check if raw_response is valid JSONL
@@ -3276,13 +3095,13 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check if ClickHouse is correct - Inference table
+    // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
-    println!("ClickHouse - Inference: {result:#?}");
+    println!("ClickHouse - ChatInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
@@ -3395,8 +3214,6 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     let properties = tool_parameters["properties"].as_object().unwrap();
     println!("Properties: {properties:#?}");
     assert!(properties.get("fast").is_some());
-    let output_schema = result.get("output_schema").unwrap().as_str().unwrap();
-    assert!(output_schema.is_empty());
 
     // Check if ClickHouse is correct - ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -3412,36 +3229,18 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-    assert!(!output_clickhouse_model.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "tool_call")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-
-    assert!(content_block.get("id").unwrap().as_str().is_some());
-
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "self_destruct");
-
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 1);
-    assert!(arguments.get("fast").unwrap().as_bool().is_some());
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.contains("self_destruct"));
+    assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("self_destruct"));
@@ -3607,13 +3406,13 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check ClickHouse - Inference Table
+    // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
-    println!("ClickHouse - Inference: {result:#?}");
+    println!("ClickHouse - ChatInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
@@ -3754,8 +3553,6 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
 
     let properties = tool_parameters["properties"].as_object().unwrap();
     assert!(properties.contains_key("fast"));
-    let output_schema = result.get("output_schema").unwrap().as_str().unwrap();
-    assert!(output_schema.is_empty());
 
     // Check if ClickHouse is correct - ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -3771,35 +3568,18 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-    assert!(!output_clickhouse_model.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "tool_call")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-
-    assert!(content_block.get("id").unwrap().as_str().is_some());
-
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "self_destruct");
-
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    let arguments = arguments.as_object().unwrap();
-    assert!(arguments.contains_key("fast"));
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.contains("self_destruct"));
+    assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("self_destruct"));
@@ -3922,13 +3702,13 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check if ClickHouse is correct - Inference table
+    // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
-    println!("ClickHouse - Inference: {result:#?}");
+    println!("ClickHouse - ChatInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
@@ -3997,8 +3777,6 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     let properties = tool_parameters["properties"].as_object().unwrap();
     println!("Properties: {properties:#?}");
     assert!(properties.get("location").is_some());
-    let output_schema = result.get("output_schema").unwrap().as_str().unwrap();
-    assert!(output_schema.is_empty());
 
     // Check if ClickHouse is correct - ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -4014,36 +3792,17 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-    assert!(!output_clickhouse_model.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "tool_call")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-
-    assert!(content_block.get("id").unwrap().as_str().is_some());
-
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_humidity");
-
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 1);
-    assert!(arguments.get("location").unwrap().as_str().is_some());
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.contains("get_humidity"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("get_humidity"));
@@ -4186,13 +3945,13 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check ClickHouse - Inference Table
+    // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
-    println!("ClickHouse - Inference: {result:#?}");
+    println!("ClickHouse - ChatInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
@@ -4286,8 +4045,6 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
 
     let required = tool_parameters["required"].as_array().unwrap();
     assert!(required.contains(&json!("location")));
-    let output_schema = result.get("output_schema").unwrap().as_str().unwrap();
-    assert!(output_schema.is_empty());
 
     // Check if ClickHouse is correct - ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -4303,36 +4060,18 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-    assert!(!output_clickhouse_model.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "tool_call")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-
-    assert!(content_block.get("id").unwrap().as_str().is_some());
-
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_humidity");
-
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 1);
-    assert!(arguments.get("location").unwrap().as_str().is_some());
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.contains("get_humidity"));
+    assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("get_humidity"));
@@ -4441,13 +4180,13 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check if ClickHouse is ok - Inference Table
+    // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
-    println!("ClickHouse - Inference: {result:#?}");
+    println!("ClickHouse - ChatInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id = Uuid::parse_str(id).unwrap();
@@ -4524,8 +4263,6 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
-    let output_schema = result.get("output_schema").unwrap().as_str().unwrap();
-    assert!(output_schema.is_empty());
 
     // Check the ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -4541,23 +4278,18 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, content);
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.contains("get_temperature"));
+    assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
@@ -4689,13 +4421,13 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check ClickHouse - Inference Table
+    // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
-    println!("ClickHouse - Inference: {result:#?}");
+    println!("ClickHouse - ChatInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
@@ -4791,23 +4523,18 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let content_blocks: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(content_blocks.len(), 1);
-    let content_block = content_blocks.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, full_content);
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.contains("get_temperature"));
+    assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
 
@@ -4947,13 +4674,13 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check if ClickHouse is correct - Inference table
+    // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
-    println!("ClickHouse - Inference: {result:#?}");
+    println!("ClickHouse - ChatInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
@@ -5034,8 +4761,6 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
 
     let required = tool_parameters["required"].as_array().unwrap();
     assert!(required.contains(&json!("location")));
-    let output_schema = result.get("output_schema").unwrap().as_str().unwrap();
-    assert!(output_schema.is_empty());
 
     // Check if ClickHouse is correct - ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -5051,36 +4776,13 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-    assert!(!output_clickhouse_model.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "tool_call")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-
-    assert!(content_block.get("id").unwrap().as_str().is_some());
-
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_temperature");
-
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 2);
-    let location = arguments.get("location").unwrap().as_str().unwrap();
-    assert_eq!(location.to_lowercase(), "tokyo");
-    if arguments.len() == 2 {
-        let units = arguments.get("units").unwrap().as_str().unwrap();
-        assert!(units == "celsius");
-    }
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.contains("get_temperature"));
+    assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
@@ -5237,13 +4939,13 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check ClickHouse - Inference Table
+    // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
-    println!("ClickHouse - Inference: {result:#?}");
+    println!("ClickHouse - ChatInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
@@ -5348,8 +5050,6 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
 
     let required = tool_parameters["required"].as_array().unwrap();
     assert!(required.contains(&json!("location")));
-    let output_schema = result.get("output_schema").unwrap().as_str().unwrap();
-    assert!(output_schema.is_empty());
 
     // Check if ClickHouse is correct - ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -5365,34 +5065,13 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-    assert!(!output_clickhouse_model.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "tool_call")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-
-    assert!(content_block.get("id").unwrap().as_str().is_some());
-
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_temperature");
-
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 2);
-    let location = arguments.get("location").unwrap().as_str().unwrap();
-    assert_eq!(location.to_lowercase(), "tokyo");
-    let units = arguments.get("units").unwrap().as_str().unwrap();
-    assert!(units == "celsius");
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.contains("get_temperature"));
+    assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("get_temperature"));
@@ -5541,13 +5220,13 @@ pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check if ClickHouse is correct - Inference table
+    // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
-    println!("ClickHouse - Inference: {result:#?}");
+    println!("ClickHouse - ChatInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
@@ -5664,8 +5343,6 @@ pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2
 
     let required = tool_parameters["required"].as_array().unwrap();
     assert!(required.contains(&json!("location")));
-    let output_schema = result.get("output_schema").unwrap().as_str().unwrap();
-    assert!(output_schema.is_empty());
 
     // Check if ClickHouse is correct - ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -5681,38 +5358,17 @@ pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-    assert!(!output_clickhouse_model.is_empty()); // could be > 1 if the model returns text as well
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["type"] == "tool_call")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-
-    assert!(content_block.get("id").unwrap().as_str().is_some());
-
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_temperature");
-
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 2);
-    let location = arguments.get("location").unwrap().as_str().unwrap();
-    assert_eq!(location.to_lowercase(), "tokyo");
-    let units = arguments.get("units").unwrap().as_str().unwrap();
-    assert!(units == "celsius");
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.contains("get_temperature"));
+    assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
-    assert!(raw_response.to_lowercase().contains("tokyo"));
     assert!(raw_response.contains("get_temperature"));
+    assert!(raw_response.to_lowercase().contains("tokyo"));
 
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     assert!(input_tokens > 0);
@@ -5859,11 +5515,11 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
 
     // Check ClickHouse - Inference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
-    println!("ClickHouse - Inference: {result:#?}");
+    println!("ClickHouse - ChatInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
@@ -6034,8 +5690,6 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
 
     let required = tool_parameters["required"].as_array().unwrap();
     assert!(required.contains(&json!("location")));
-    let output_schema = result.get("output_schema").unwrap().as_str().unwrap();
-    assert!(output_schema.is_empty());
 
     // Check if ClickHouse is correct - ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -6051,52 +5705,15 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
-    let output_clickhouse_model = result.get("output").unwrap().as_str().unwrap();
-    let output_clickhouse_model: Vec<Value> =
-        serde_json::from_str(output_clickhouse_model).unwrap();
-
-    // Validate the `get_temperature` tool call
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["name"] == "get_temperature")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-
-    assert!(content_block.get("id").unwrap().as_str().is_some());
-
-    let name = content_block.get("name").unwrap().as_str().unwrap();
-    assert_eq!(name, "get_temperature");
-
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 2);
-    let location = arguments.get("location").unwrap().as_str().unwrap();
-    assert_eq!(location.to_lowercase(), "tokyo");
-    let units = arguments.get("units").unwrap().as_str().unwrap();
-    assert!(units == "celsius");
-
-    // Validate the `get_humidity` tool call
-    let content_block = output_clickhouse_model
-        .iter()
-        .find(|block| block["name"] == "get_humidity")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-
-    assert!(content_block.get("id").unwrap().as_str().is_some());
-
-    let arguments = content_block.get("arguments").unwrap().as_str().unwrap();
-    let arguments: Value = serde_json::from_str(arguments).unwrap();
-    let arguments = arguments.as_object().unwrap();
-    assert!(arguments.len() == 1);
-    let location = arguments.get("location").unwrap().as_str().unwrap();
-    assert_eq!(location.to_lowercase(), "tokyo");
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("get_temperature"));
+    assert!(raw_request.to_lowercase().contains("get_humidity"));
+    assert!(raw_request.to_lowercase().contains("tokyo"));
+    assert!(raw_request.to_lowercase().contains("celsius"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.contains("get_temperature"));
@@ -6190,13 +5807,13 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check if ClickHouse is ok - Inference Table
+    // Check if ClickHouse is ok - JsonInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
-    println!("ClickHouse - Inference: {result:#?}");
+    println!("ClickHouse - JsonInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id = Uuid::parse_str(id).unwrap();
@@ -6229,9 +5846,6 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
     let output_clickhouse: Value = serde_json::from_str(output_clickhouse).unwrap();
     let output_clickhouse = output_clickhouse.as_object().unwrap();
     assert_eq!(output_clickhouse, output);
-
-    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
-    assert!(tool_params.is_empty());
 
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
@@ -6278,23 +5892,17 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse = result.get("output").unwrap().as_str().unwrap();
-    assert!(output_clickhouse.to_lowercase().contains("tokyo"));
-    let output_clickhouse: Value = serde_json::from_str(output_clickhouse).unwrap();
-    let output_clickhouse = output_clickhouse.as_array().unwrap();
-    assert_eq!(output_clickhouse.len(), 1);
-    let content_block = output_clickhouse.first().unwrap();
-    // NB: we don't really check output because tool use varies greatly between providers (e.g. chat, implicit function)
-    assert!(content_block.get("type").unwrap().as_str().is_some());
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("japan"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
@@ -6386,13 +5994,13 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check if ClickHouse is ok - Inference Table
+    // Check if ClickHouse is ok - JsonInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
-    println!("ClickHouse - Inference: {result:#?}");
+    println!("ClickHouse - JsonInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id = Uuid::parse_str(id).unwrap();
@@ -6425,9 +6033,6 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
     let output_clickhouse: Value = serde_json::from_str(output_clickhouse).unwrap();
     let output_clickhouse = output_clickhouse.as_object().unwrap();
     assert_eq!(output_clickhouse, output);
-
-    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
-    assert!(tool_params.is_empty());
 
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
@@ -6464,23 +6069,17 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse = result.get("output").unwrap().as_str().unwrap();
-    assert!(output_clickhouse.to_lowercase().contains("tokyo"));
-    let output_clickhouse: Value = serde_json::from_str(output_clickhouse).unwrap();
-    let output_clickhouse = output_clickhouse.as_array().unwrap();
-    assert_eq!(output_clickhouse.len(), 1);
-    let content_block = output_clickhouse.first().unwrap();
-    // NB: we don't really check output because tool use varies greatly between providers (e.g. chat, implicit function)
-    assert!(content_block.get("type").unwrap().as_str().is_some());
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("japan"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
@@ -6587,13 +6186,13 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check ClickHouse - Inference Table
+    // Check ClickHouse - JsonInference Table
     let clickhouse = get_clickhouse().await;
-    let result = select_inference_clickhouse(&clickhouse, inference_id)
+    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
-    println!("ClickHouse - Inference: {result:#?}");
+    println!("ClickHouse - JsonInference: {result:#?}");
 
     let id = result.get("id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
@@ -6632,9 +6231,6 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     let full_content_parsed: Value = serde_json::from_str(&full_content).unwrap();
     let full_content_parsed = full_content_parsed.as_object().unwrap();
     assert_eq!(clickhouse_parsed, full_content_parsed);
-
-    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
-    assert!(tool_params.is_empty());
 
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
@@ -6681,23 +6277,18 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(input, correct_input);
-
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
-    let output_clickhouse = result.get("output").unwrap().as_str().unwrap();
-    assert!(output_clickhouse.to_lowercase().contains("tokyo"));
-    let output_clickhouse: Value = serde_json::from_str(output_clickhouse).unwrap();
-    let output_clickhouse = output_clickhouse.as_array().unwrap();
-    assert_eq!(output_clickhouse.len(), 1);
-    let content_block = output_clickhouse.first().unwrap();
-    // NB: we don't really check output because tool use varies greatly between providers (e.g. chat, implicit function)
-    assert!(content_block.get("type").unwrap().as_str().is_some());
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("japan"));
+    assert!(raw_request.to_lowercase().contains("mehta"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
 

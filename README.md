@@ -2,9 +2,18 @@
 
 # TensorZero
 
-**TensorZero builds open-source infrastructure for production-grade, scalable, and complex LLM systems.**
+**TensorZero is an open-source platform that helps LLM applications graduate from API wrappers into defensible AI products.**
 
-**Why use TensorZero?** It enables a **data & learning flywheel for LLM systems** by integrating inference, observability, optimization, and experimentation.
+1. Integrate our model gateway
+2. Send metrics or feedback
+3. Unlock compounding improvements in quality, cost, and latency
+
+It enables a **data & learning flywheel for LLMs** by unifying:
+
+- [x] **Inference:** one API for all LLMs, with <1ms P99 overhead
+- [x] **Observability:** inference & feedback → your database
+- [x] **Optimization:** better prompts, models, inference strategies
+- [x] **Experimentation:** built-in A/B testing, routing, fallbacks
 
 <p align="center">
   <b><a href="https://www.tensorzero.com/" target="_blank">Website</a></b>
@@ -55,7 +64,7 @@ Read more about our **[Vision & Roadmap](https://www.tensorzero.com/docs/vision-
 
 ## Get Started
 
-**Next steps?** The **[Quick Start](https://www.tensorzero.com/docs/gateway/quickstart)** and the **[Tutorial](https://www.tensorzero.com/docs/gateway/tutorial)** show it's easy to set up an LLM application with TensorZero. The tutorial teaches how to build a simple chatbot, an email copilot, a weather RAG system, and a structured data extraction pipeline.
+**Next steps?** The **[Quick Start (5min)](https://www.tensorzero.com/docs/gateway/quickstart)** and the **[Tutorial (30min)](https://www.tensorzero.com/docs/gateway/tutorial)** show it's easy to set up an LLM application with TensorZero. The tutorial teaches how to build a simple chatbot, an email copilot, a weather RAG system, and a structured data extraction pipeline.
 
 **Questions?** Join our **[Slack](https://www.tensorzero.com/slack)** or **[Discord](https://www.tensorzero.com/discord)** communities. We monitor them closely for questions, feedback, and more.
 

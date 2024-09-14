@@ -9,7 +9,8 @@ use crate::error::Error;
 /// - CommentFeedback
 /// - DemonstrationFeedback
 /// - FloatMetricFeedback
-/// - Inference
+/// - ChatInference
+/// - JsonInference
 /// - ModelInference
 
 pub struct Migration0000<'a> {
@@ -37,7 +38,8 @@ impl<'a> Migration for Migration0000<'a> {
             "CommentFeedback",
             "DemonstrationFeedback",
             "FloatMetricFeedback",
-            "Inference",
+            "ChatInference",
+            "JsonInference",
             "ModelInference",
         ];
 
@@ -123,9 +125,9 @@ impl<'a> Migration for Migration0000<'a> {
         "#;
         let _ = self.clickhouse.run_query(query.to_string()).await?;
 
-        // Create the `Inference` table
+        // Create the `ChatInference` table
         let query = r#"
-            CREATE TABLE IF NOT EXISTS Inference
+            CREATE TABLE IF NOT EXISTS ChatInference
             (
                 id UUID, -- must be a UUIDv7
                 function_name LowCardinality(String),
@@ -142,16 +144,35 @@ impl<'a> Migration for Migration0000<'a> {
         "#;
         let _ = self.clickhouse.run_query(query.to_string()).await?;
 
+        // Create the `JsonInference` table
+        let query = r#"
+            CREATE TABLE IF NOT EXISTS JsonInference
+            (
+                id UUID, -- must be a UUIDv7
+                function_name LowCardinality(String),
+                variant_name LowCardinality(String),
+                episode_id UUID, -- must be a UUIDv7
+                input String,
+                output String,
+                output_schema String,
+                inference_params String,
+                processing_time_ms UInt32,
+                timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id)
+            ) ENGINE = MergeTree()
+            ORDER BY (function_name, variant_name, episode_id);
+        "#;
+        let _ = self.clickhouse.run_query(query.to_string()).await?;
+
         // Create the `ModelInference` table
         let query = r#"
             CREATE TABLE IF NOT EXISTS ModelInference
             (
                 id UUID, -- must be a UUIDv7
                 inference_id UUID, -- must be a UUIDv7
-                input String,
-                -- Serialized content blocks as output by model
-                output String,
+                raw_request String,
                 raw_response String,
+                model_name LowCardinality(String),
+                model_provider_name LowCardinality(String),
                 input_tokens UInt32,
                 output_tokens UInt32,
                 response_time_ms UInt32,
