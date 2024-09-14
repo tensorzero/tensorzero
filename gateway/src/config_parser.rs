@@ -833,136 +833,6 @@ mod tests {
         );
     }
 
-    /// Ensure that the config validation fails when a function variant has a negative weight
-    #[test]
-    fn test_config_validate_function_variant_negative_weight() {
-        let mut config = get_sample_valid_config();
-        config["functions"]["generate_draft"]["variants"]["openai_promptA"]["weight"] =
-            toml::Value::Float(-1.0);
-        let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
-        assert_eq!(
-            result.unwrap_err(),
-            Error::Config {
-                message: "`functions.generate_draft.variants.openai_promptA`: `weight` must be non-negative".to_string()
-            }
-        );
-    }
-
-    /// Ensure that the config validation fails when a variant has a model that does not exist in the models section
-    #[test]
-    fn test_config_validate_variant_model_not_in_models() {
-        let mut config = get_sample_valid_config();
-        config["functions"]["generate_draft"]["variants"]["openai_promptA"]["model"] =
-            "non_existent_model".into();
-        let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
-
-        assert_eq!(
-            result.unwrap_err(),
-            Error::Config {
-                message: "`functions.generate_draft.variants.openai_promptA`: `model` must be a valid model name".to_string()
-            }
-        );
-    }
-
-    /// Ensure that the config validation fails when a function has a tool that does not exist in the tools section
-    #[test]
-    fn test_config_validate_function_nonexistent_tool() {
-        let mut config = get_sample_valid_config();
-        config["functions"]["generate_draft"]
-            .as_table_mut()
-            .unwrap()
-            .insert("tools".to_string(), toml::Value::Array(vec![]));
-        config["functions"]["generate_draft"]["tools"] =
-            toml::Value::Array(vec!["non_existent_tool".into()]);
-        let base_path = PathBuf::new();
-        let result = Config::load_from_toml(config, base_path);
-
-        assert_eq!(
-            result.unwrap_err(),
-            Error::Config {
-                message: "`functions.generate_draft.tools`: tool `non_existent_tool` is not present in the config".to_string()
-            }
-        );
-    }
-
-    /// Ensure that get_templates returns the correct templates
-    #[test]
-    fn test_get_all_templates() {
-        let config_table = get_sample_valid_config();
-        let config =
-            Config::load_from_toml(config_table, PathBuf::new()).expect("Failed to load config");
-
-        // Get all templates
-        let templates = config.get_templates(PathBuf::from("/base/path"));
-
-        // Check if all expected templates are present
-        assert_eq!(
-            templates.get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
-            ))
-        );
-        assert_eq!(
-            templates.get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
-            ))
-        );
-        assert_eq!(
-            templates.get("fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
-            ))
-        );
-        assert_eq!(
-            templates.get("fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
-            ))
-        );
-        assert_eq!(
-            templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"
-            ))
-        );
-        assert_eq!(
-            templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"
-            ))
-        );
-        assert_eq!(
-            templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"
-            ))
-        );
-        assert_eq!(
-            templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
-            ))
-        );
-        assert_eq!(
-            templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
-            ))
-        );
-        assert_eq!(
-            templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
-            ))
-        );
-
-        // Check the total number of templates
-        assert_eq!(templates.len(), 10);
-    }
-
     /// Ensure that the config loading fails when the system schema does not exist
     #[test]
     fn test_config_system_schema_does_not_exist() {
@@ -1136,6 +1006,136 @@ mod tests {
                 message: "`functions.templates_with_variables_json.variants.variant_with_variables.assistant_template`: Error in TensorZero config: schema is required when template is specified and needs variables".to_string()
             }
         );
+    }
+
+    /// Ensure that the config validation fails when a function variant has a negative weight
+    #[test]
+    fn test_config_validate_function_variant_negative_weight() {
+        let mut config = get_sample_valid_config();
+        config["functions"]["generate_draft"]["variants"]["openai_promptA"]["weight"] =
+            toml::Value::Float(-1.0);
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, base_path);
+        assert_eq!(
+            result.unwrap_err(),
+            Error::Config {
+                message: "`functions.generate_draft.variants.openai_promptA`: `weight` must be non-negative".to_string()
+            }
+        );
+    }
+
+    /// Ensure that the config validation fails when a variant has a model that does not exist in the models section
+    #[test]
+    fn test_config_validate_variant_model_not_in_models() {
+        let mut config = get_sample_valid_config();
+        config["functions"]["generate_draft"]["variants"]["openai_promptA"]["model"] =
+            "non_existent_model".into();
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, base_path);
+
+        assert_eq!(
+            result.unwrap_err(),
+            Error::Config {
+                message: "`functions.generate_draft.variants.openai_promptA`: `model` must be a valid model name".to_string()
+            }
+        );
+    }
+
+    /// Ensure that the config validation fails when a function has a tool that does not exist in the tools section
+    #[test]
+    fn test_config_validate_function_nonexistent_tool() {
+        let mut config = get_sample_valid_config();
+        config["functions"]["generate_draft"]
+            .as_table_mut()
+            .unwrap()
+            .insert("tools".to_string(), toml::Value::Array(vec![]));
+        config["functions"]["generate_draft"]["tools"] =
+            toml::Value::Array(vec!["non_existent_tool".into()]);
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, base_path);
+
+        assert_eq!(
+            result.unwrap_err(),
+            Error::Config {
+                message: "`functions.generate_draft.tools`: tool `non_existent_tool` is not present in the config".to_string()
+            }
+        );
+    }
+
+    /// Ensure that get_templates returns the correct templates
+    #[test]
+    fn test_get_all_templates() {
+        let config_table = get_sample_valid_config();
+        let config =
+            Config::load_from_toml(config_table, PathBuf::new()).expect("Failed to load config");
+
+        // Get all templates
+        let templates = config.get_templates(PathBuf::from("/base/path"));
+
+        // Check if all expected templates are present
+        assert_eq!(
+            templates.get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja"),
+            Some(&PathBuf::from(
+                "/base/path/fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
+            ))
+        );
+        assert_eq!(
+            templates.get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja"),
+            Some(&PathBuf::from(
+                "/base/path/fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
+            ))
+        );
+        assert_eq!(
+            templates.get("fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"),
+            Some(&PathBuf::from(
+                "/base/path/fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
+            ))
+        );
+        assert_eq!(
+            templates.get("fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"),
+            Some(&PathBuf::from(
+                "/base/path/fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
+            ))
+        );
+        assert_eq!(
+            templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"),
+            Some(&PathBuf::from(
+                "/base/path/fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"
+            ))
+        );
+        assert_eq!(
+            templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"),
+            Some(&PathBuf::from(
+                "/base/path/fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"
+            ))
+        );
+        assert_eq!(
+            templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"),
+            Some(&PathBuf::from(
+                "/base/path/fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"
+            ))
+        );
+        assert_eq!(
+            templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"),
+            Some(&PathBuf::from(
+                "/base/path/fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
+            ))
+        );
+        assert_eq!(
+            templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"),
+            Some(&PathBuf::from(
+                "/base/path/fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
+            ))
+        );
+        assert_eq!(
+            templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"),
+            Some(&PathBuf::from(
+                "/base/path/fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
+            ))
+        );
+
+        // Check the total number of templates
+        assert_eq!(templates.len(), 10);
     }
 
     /// Get a sample valid config for testing
