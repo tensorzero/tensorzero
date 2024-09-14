@@ -165,17 +165,7 @@ impl<'c> Config<'c> {
 
         // Validate each function
         for (function_name, function) in &self.functions {
-            function.validate(&self.tools, function_name)?;
-            // Validate each variant
-            for (variant_name, variant) in function.variants() {
-                variant.validate(
-                    function,
-                    &self.models,
-                    &self.templates,
-                    function_name,
-                    variant_name,
-                )?;
-            }
+            function.validate(&self.tools, &self.models, &self.templates, function_name)?;
         }
 
         // Ensure that no metrics are named "comment" or "demonstration"

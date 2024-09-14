@@ -9,8 +9,10 @@ use crate::inference::types::{
     JsonInferenceResult, ModelInferenceResponseWithMetadata, Role, Usage,
 };
 use crate::jsonschema_util::{JSONSchemaFromPath, JsonSchemaRef};
+use crate::minijinja_util::TemplateConfig;
+use crate::model::ModelConfig;
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
-use crate::variant::{InferenceConfig, VariantConfig};
+use crate::variant::{InferenceConfig, Variant, VariantConfig};
 
 #[derive(Debug)]
 pub enum FunctionConfig {
@@ -216,8 +218,14 @@ impl FunctionConfig {
     pub fn validate(
         &self,
         static_tools: &HashMap<String, StaticToolConfig>,
+        models: &HashMap<String, ModelConfig>,
+        templates: &TemplateConfig,
         function_name: &str,
     ) -> Result<(), Error> {
+        // Validate each variant
+        for (variant_name, variant) in self.variants() {
+            variant.validate(self, models, templates, function_name, variant_name)?;
+        }
         match self {
             FunctionConfig::Chat(params) => {
                 for tool in params.tools.iter() {
