@@ -123,14 +123,18 @@ impl Variant for VariantConfig {
                     )
                     .await
             }
-            VariantConfig::RejectionSampling(params) => params.infer(
-                input,
-                models,
-                function,
-                inference_config,
-                client,
-                inference_params,
-            ),
+            VariantConfig::RejectionSampling(params) => {
+                params
+                    .infer(
+                        input,
+                        models,
+                        function,
+                        inference_config,
+                        client,
+                        inference_params,
+                    )
+                    .await
+            }
         }
     }
 
@@ -163,14 +167,18 @@ impl Variant for VariantConfig {
                     )
                     .await
             }
-            VariantConfig::RejectionSampling(params) => params.infer_stream(
-                input,
-                models,
-                function,
-                inference_config,
-                client,
-                inference_params,
-            ),
+            VariantConfig::RejectionSampling(params) => {
+                params
+                    .infer_stream(
+                        input,
+                        models,
+                        function,
+                        inference_config,
+                        client,
+                        inference_params,
+                    )
+                    .await
+            }
         }
     }
 
@@ -194,7 +202,7 @@ impl Variant for VariantConfig {
 
     fn get_all_template_paths(&self) -> Vec<&PathBuf> {
         match self {
-            VariantConfig::ChatCompletion(param) => params.get_all_template_paths(),
+            VariantConfig::ChatCompletion(params) => params.get_all_template_paths(),
             VariantConfig::RejectionSampling(params) => params.get_all_template_paths(),
         }
     }

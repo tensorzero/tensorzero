@@ -41,7 +41,7 @@ pub struct ChatCompletionConfig {
 }
 
 impl ChatCompletionConfig {
-    fn prepare_request_message(
+    pub fn prepare_request_message(
         &self,
         templates: &TemplateConfig,
         message: &InputMessage,
@@ -79,7 +79,7 @@ impl ChatCompletionConfig {
         })
     }
 
-    fn prepare_system_message(
+    pub fn prepare_system_message(
         &self,
         templates: &TemplateConfig,
         system: Option<&Value>,

@@ -69,11 +69,14 @@ pub enum Error {
     GCPVertexServer {
         message: String,
     },
+    Inference {
+        message: String,
+    },
     InferenceClient {
         message: String,
     },
-    Inference {
-        message: String,
+    InferenceTimeout {
+        variant_name: String,
     },
     InputValidation {
         source: Box<Error>,
@@ -177,6 +180,9 @@ pub enum Error {
     TypeConversion {
         message: String,
     },
+    UnknownCandidate {
+        name: String,
+    },
     UnknownFunction {
         name: String,
     },
@@ -226,6 +232,7 @@ impl Error {
             Error::GCPVertexServer { .. } => tracing::Level::ERROR,
             Error::Inference { .. } => tracing::Level::ERROR,
             Error::InferenceClient { .. } => tracing::Level::ERROR,
+            Error::InferenceTimeout { .. } => tracing::Level::WARN,
             Error::InputValidation { .. } => tracing::Level::WARN,
             Error::InvalidBaseUrl { .. } => tracing::Level::ERROR,
             Error::InvalidEpisodeId { .. } => tracing::Level::WARN,
@@ -258,6 +265,7 @@ impl Error {
             Error::ToolNotFound { .. } => tracing::Level::WARN,
             Error::ToolNotLoaded { .. } => tracing::Level::ERROR,
             Error::TypeConversion { .. } => tracing::Level::ERROR,
+            Error::UnknownCandidate { .. } => tracing::Level::ERROR,
             Error::UnknownFunction { .. } => tracing::Level::WARN,
             Error::UnknownModel { .. } => tracing::Level::ERROR,
             Error::UnknownTool { .. } => tracing::Level::ERROR,
@@ -292,6 +300,7 @@ impl Error {
             Error::GCPVertexServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::Inference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InferenceClient { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::InferenceTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             Error::InvalidEpisodeId { .. } => StatusCode::BAD_REQUEST,
             Error::InputValidation { .. } => StatusCode::BAD_REQUEST,
             Error::InvalidBaseUrl { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -324,6 +333,7 @@ impl Error {
             Error::ToolNotFound { .. } => StatusCode::BAD_REQUEST,
             Error::ToolNotLoaded { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::TypeConversion { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::UnknownCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::UnknownFunction { .. } => StatusCode::NOT_FOUND,
             Error::UnknownModel { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::UnknownTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -420,6 +430,9 @@ impl std::fmt::Display for Error {
             }
             Error::Inference { message } => write!(f, "{}", message),
             Error::InferenceClient { message } => write!(f, "{}", message),
+            Error::InferenceTimeout { variant_name } => {
+                write!(f, "Inference timed out for variant: {}", variant_name)
+            }
             Error::InputValidation { source } => {
                 write!(f, "Input validation failed with messages: {}", source)
             }
@@ -526,6 +539,7 @@ impl std::fmt::Display for Error {
             }
             Error::ToolNotFound { name } => write!(f, "Tool not found: {}", name),
             Error::ToolNotLoaded { name } => write!(f, "Tool not loaded: {}", name),
+            Error::UnknownCandidate { name } => write!(f, "Unknown candidate variant: {}", name),
             Error::UnknownFunction { name } => write!(f, "Unknown function: {}", name),
             Error::UnknownModel { name } => write!(f, "Unknown model: {}", name),
             Error::UnknownTool { name } => write!(f, "Unknown tool: {}", name),
