@@ -1296,7 +1296,7 @@ mod tests {
         "#;
         env::set_var("OPENAI_API_KEY", "sk-something");
         env::set_var("ANTHROPIC_API_KEY", "sk-something");
-        env::set_var("AZURE_API_KEY", "sk-something");
+        env::set_var("AZURE_OPENAI_API_KEY", "sk-something");
 
         toml::from_str(config_str).expect("Failed to parse sample config")
     }
