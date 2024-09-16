@@ -108,14 +108,14 @@ impl ModelConfig {
     }
 
     pub fn validate(&self) -> Result<(), Error> {
-        // Ensure that at least one provider has credentials
+        // Ensure that all providers have credentials
         if !self
             .providers
             .values()
-            .any(|provider| provider.has_credentials())
+            .all(|provider| provider.has_credentials())
         {
             return Err(Error::ModelValidation {
-                message: "No provider with credentials".to_string(),
+                message: "At least one provider lacks credentials".to_string(),
             });
         }
         Ok(())

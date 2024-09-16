@@ -404,7 +404,7 @@ impl std::fmt::Display for Error {
                 write!(f, "Failed to run ClickHouse query: {}", message)
             }
             Error::Config { message } => {
-                write!(f, "Error in TensorZero config: {}", message)
+                write!(f, "{}", message)
             }
             Error::DynamicJsonSchema { message } => {
                 write!(

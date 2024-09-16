@@ -625,7 +625,7 @@ mod tests {
         assert_eq!(
             error,
             Error::Config {
-                message: "`functions.generate_draft.variants.generate_draft_dummy` and model `dummy`: Failed to validate model: No provider with credentials"
+                message: "`functions.generate_draft.variants.generate_draft_dummy` and model `dummy`: Failed to validate model: At least one provider lacks credentials"
                     .to_string()
             }
         );
@@ -929,7 +929,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "`functions.templates_with_variables_chat.variants.variant_with_variables.system_template`: Error in TensorZero config: schema is required when template is specified and needs variables".to_string()
+                message: "`functions.templates_with_variables_chat.variants.variant_with_variables.system_template`: schema is required when template is specified and needs variables".to_string()
             }
         );
         let mut sample_config = get_sample_valid_config();
@@ -942,7 +942,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "`functions.templates_with_variables_json.variants.variant_with_variables.system_template`: Error in TensorZero config: schema is required when template is specified and needs variables".to_string()
+                message: "`functions.templates_with_variables_json.variants.variant_with_variables.system_template`: schema is required when template is specified and needs variables".to_string()
             }
         );
     }
@@ -960,7 +960,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "`functions.templates_with_variables_chat.variants.variant_with_variables.user_template`: Error in TensorZero config: schema is required when template is specified and needs variables".to_string()
+                message: "`functions.templates_with_variables_chat.variants.variant_with_variables.user_template`: schema is required when template is specified and needs variables".to_string()
             }
         );
 
@@ -974,7 +974,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "`functions.templates_with_variables_json.variants.variant_with_variables.user_template`: Error in TensorZero config: schema is required when template is specified and needs variables".to_string()
+                message: "`functions.templates_with_variables_json.variants.variant_with_variables.user_template`: schema is required when template is specified and needs variables".to_string()
             }
         );
     }
@@ -992,7 +992,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "`functions.templates_with_variables_chat.variants.variant_with_variables.assistant_template`: Error in TensorZero config: schema is required when template is specified and needs variables".to_string()
+                message: "`functions.templates_with_variables_chat.variants.variant_with_variables.assistant_template`: schema is required when template is specified and needs variables".to_string()
             }
         );
         let mut sample_config = get_sample_valid_config();
@@ -1005,7 +1005,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "`functions.templates_with_variables_json.variants.variant_with_variables.assistant_template`: Error in TensorZero config: schema is required when template is specified and needs variables".to_string()
+                message: "`functions.templates_with_variables_json.variants.variant_with_variables.assistant_template`: schema is required when template is specified and needs variables".to_string()
             }
         );
     }

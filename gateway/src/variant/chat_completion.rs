@@ -243,6 +243,7 @@ impl Variant for ChatCompletionConfig {
     ///    - That the template here is provided if the schema is provided in the function.
     ///    - If the template requires variables, the schema is provided.
     ///  - That the model name is a valid model
+    ///  - That the weight is non-negative
     fn validate(
         &self,
         function: &FunctionConfig,
@@ -251,7 +252,7 @@ impl Variant for ChatCompletionConfig {
         function_name: &str,
         variant_name: &str,
     ) -> Result<(), Error> {
-        // Check that the model name is a valid model
+        // Validate that weight is non-negative
         if self.weight < 0.0 {
             return Err(Error::Config {
                 message: format!(
@@ -262,6 +263,8 @@ impl Variant for ChatCompletionConfig {
         let model = models.get(&self.model).ok_or_else(|| Error::Config {
             message: format!("`functions.{function_name}.variants.{variant_name}`: `model` must be a valid model name"),
         })?;
+
+        // If the variant has weight > 0.0, then we need to validate that the model is correctly configured
         if self.weight > 0.0 {
             model.validate().map_err(|e| Error::Config {
                 message: format!(
@@ -270,6 +273,8 @@ impl Variant for ChatCompletionConfig {
                 ),
             })?;
         }
+
+        // Validate the system template matches the system schema (best effort, we cannot check the variables comprehensively)
         validate_template_and_schema(
             function.system_schema(),
             self.system_template.as_ref(),
@@ -280,6 +285,8 @@ impl Variant for ChatCompletionConfig {
                 "`functions.{function_name}.variants.{variant_name}.system_template`: {e}"
             ),
         })?;
+
+        // Validate the user template matches the user schema (best effort, we cannot check the variables comprehensively)
         validate_template_and_schema(
             function.user_schema(),
             self.user_template.as_ref(),
@@ -290,6 +297,8 @@ impl Variant for ChatCompletionConfig {
                 "`functions.{function_name}.variants.{variant_name}.user_template`: {e}"
             ),
         })?;
+
+        // Validate the assistant template matches the assistant schema (best effort, we cannot check the variables comprehensively)
         validate_template_and_schema(
             function.assistant_schema(),
             self.assistant_template.as_ref(),
