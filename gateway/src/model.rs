@@ -106,6 +106,20 @@ impl ModelConfig {
         }
         Err(Error::ModelProvidersExhausted { provider_errors })
     }
+
+    pub fn validate(&self) -> Result<(), Error> {
+        // Ensure that all providers have credentials
+        if !self
+            .providers
+            .values()
+            .all(|provider| provider.has_credentials())
+        {
+            return Err(Error::ModelValidation {
+                message: "At least one provider lacks credentials".to_string(),
+            });
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug)]

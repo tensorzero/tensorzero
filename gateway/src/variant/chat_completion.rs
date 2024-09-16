@@ -14,21 +14,16 @@ use crate::inference::types::{
     InputMessageContent, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     ModelInferenceResponseWithMetadata, RequestMessage, Role,
 };
-use crate::jsonschema_util::DynamicJSONSchema;
+use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
-use crate::tool::{create_dynamic_implicit_tool_config, ToolCallConfig};
+use crate::tool::create_dynamic_implicit_tool_config;
+use crate::variant::JsonMode;
 use crate::{
     inference::types::{InferenceResult, InputMessage},
     model::ModelConfig,
 };
 
-#[derive(Debug, Deserialize)]
-#[serde(tag = "type")]
-#[serde(rename_all = "snake_case")]
-#[serde(deny_unknown_fields)]
-pub enum VariantConfig {
-    ChatCompletion(ChatCompletionConfig),
-}
+use super::{InferenceConfig, ModelUsedInfo, Variant};
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -43,147 +38,6 @@ pub struct ChatCompletionConfig {
     pub seed: Option<u32>,
     #[serde(default)]
     pub json_mode: JsonMode, // Only for JSON functions, not for chat functions
-}
-
-/// This type is used to determine how to enforce JSON mode for a given variant.
-/// Variants represent JSON mode in a slightly more abstract sense than ModelInferenceRequests, as
-/// we support coercing tool calls into JSON mode.
-/// This is represented as a tool config in the
-#[derive(Debug, Default, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum JsonMode {
-    Off,
-    #[default]
-    On,
-    Strict,
-    ImplicitTool,
-}
-
-/// Maps to the subset of Config that applies to the current inference request.
-/// It doesn't take into account inference-time overrides (e.g. dynamic tools).
-pub struct InferenceConfig<'a> {
-    pub tool_config: Option<ToolCallConfig>,
-    pub templates: &'a TemplateConfig<'a>,
-    pub dynamic_output_schema: Option<DynamicJSONSchema>,
-}
-
-pub struct ModelUsedInfo<'a> {
-    pub model_name: &'a str,
-    pub model_provider_name: &'a str,
-    pub raw_request: String,
-}
-
-pub trait Variant {
-    async fn infer<'a, 'request>(
-        &'a self,
-        input: &Input,
-        models: &'a HashMap<String, ModelConfig>,
-        function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
-        client: &'request Client,
-        inference_params: &mut InferenceParams,
-    ) -> Result<InferenceResult<'a>, Error>;
-
-    async fn infer_stream<'request>(
-        &'static self,
-        input: &Input,
-        models: &'static HashMap<String, ModelConfig>,
-        function: &'static FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
-        client: &'request Client,
-        inference_params: &mut InferenceParams,
-    ) -> Result<
-        (
-            InferenceResultChunk,
-            InferenceResultStream,
-            ModelUsedInfo<'static>,
-        ),
-        Error,
-    >;
-}
-
-impl VariantConfig {
-    pub fn weight(&self) -> f64 {
-        match self {
-            VariantConfig::ChatCompletion(params) => params.weight,
-        }
-    }
-    pub fn system_template(&self) -> Option<&PathBuf> {
-        match self {
-            VariantConfig::ChatCompletion(params) => params.system_template.as_ref(),
-        }
-    }
-
-    pub fn user_template(&self) -> Option<&PathBuf> {
-        match self {
-            VariantConfig::ChatCompletion(params) => params.user_template.as_ref(),
-        }
-    }
-
-    pub fn assistant_template(&self) -> Option<&PathBuf> {
-        match self {
-            VariantConfig::ChatCompletion(params) => params.assistant_template.as_ref(),
-        }
-    }
-}
-
-impl Variant for VariantConfig {
-    async fn infer<'a, 'request>(
-        &'a self,
-        input: &Input,
-        models: &'a HashMap<String, ModelConfig>,
-        function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
-        client: &'request Client,
-        inference_params: &mut InferenceParams,
-    ) -> Result<InferenceResult<'a>, Error> {
-        match self {
-            VariantConfig::ChatCompletion(params) => {
-                params
-                    .infer(
-                        input,
-                        models,
-                        function,
-                        inference_config,
-                        client,
-                        inference_params,
-                    )
-                    .await
-            }
-        }
-    }
-
-    async fn infer_stream<'request>(
-        &'static self,
-        input: &Input,
-        models: &'static HashMap<String, ModelConfig>,
-        function: &'static FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
-        client: &'request Client,
-        inference_params: &mut InferenceParams,
-    ) -> Result<
-        (
-            InferenceResultChunk,
-            InferenceResultStream,
-            ModelUsedInfo<'static>,
-        ),
-        Error,
-    > {
-        match self {
-            VariantConfig::ChatCompletion(params) => {
-                params
-                    .infer_stream(
-                        input,
-                        models,
-                        function,
-                        inference_config,
-                        client,
-                        inference_params,
-                    )
-                    .await
-            }
-        }
-    }
 }
 
 impl ChatCompletionConfig {
@@ -382,6 +236,120 @@ impl Variant for ChatCompletionConfig {
             stream.map(move |chunk| chunk.map(|chunk| InferenceResultChunk::new(chunk, function)));
         Ok((first_chunk, Box::pin(stream), model_used_info))
     }
+
+    /// This function validates that the chat completion variant is correctly configured for the given function config.
+    /// In order to do this, we need to check:
+    ///  - For system, user, and assistant message types:
+    ///    - That the template here is provided if the schema is provided in the function.
+    ///    - If the template requires variables, the schema is provided.
+    ///  - That the model name is a valid model
+    ///  - That the weight is non-negative
+    fn validate(
+        &self,
+        function: &FunctionConfig,
+        models: &HashMap<String, ModelConfig>,
+        templates: &TemplateConfig,
+        function_name: &str,
+        variant_name: &str,
+    ) -> Result<(), Error> {
+        // Validate that weight is non-negative
+        if self.weight < 0.0 {
+            return Err(Error::Config {
+                message: format!(
+                    "`functions.{function_name}.variants.{variant_name}`: `weight` must be non-negative"
+                ),
+            });
+        }
+        let model = models.get(&self.model).ok_or_else(|| Error::Config {
+            message: format!("`functions.{function_name}.variants.{variant_name}`: `model` must be a valid model name"),
+        })?;
+
+        // If the variant has weight > 0.0, then we need to validate that the model is correctly configured
+        if self.weight > 0.0 {
+            model.validate().map_err(|e| Error::Config {
+                message: format!(
+                    "`functions.{function_name}.variants.{variant_name}` and model `{}`: {e}",
+                    self.model
+                ),
+            })?;
+        }
+
+        // Validate the system template matches the system schema (best effort, we cannot check the variables comprehensively)
+        validate_template_and_schema(
+            function.system_schema(),
+            self.system_template.as_ref(),
+            templates,
+        )
+        .map_err(|e| Error::Config {
+            message: format!(
+                "`functions.{function_name}.variants.{variant_name}.system_template`: {e}"
+            ),
+        })?;
+
+        // Validate the user template matches the user schema (best effort, we cannot check the variables comprehensively)
+        validate_template_and_schema(
+            function.user_schema(),
+            self.user_template.as_ref(),
+            templates,
+        )
+        .map_err(|e| Error::Config {
+            message: format!(
+                "`functions.{function_name}.variants.{variant_name}.user_template`: {e}"
+            ),
+        })?;
+
+        // Validate the assistant template matches the assistant schema (best effort, we cannot check the variables comprehensively)
+        validate_template_and_schema(
+            function.assistant_schema(),
+            self.assistant_template.as_ref(),
+            templates,
+        )
+        .map_err(|e| Error::Config {
+            message: format!(
+                "`functions.{function_name}.variants.{variant_name}.assistant_template`: {e}"
+            ),
+        })?;
+        Ok(())
+    }
+
+    fn get_all_template_paths(&self) -> Vec<&PathBuf> {
+        let mut templates = Vec::new();
+        if let Some(system_template) = &self.system_template {
+            templates.push(system_template);
+        }
+        if let Some(user_template) = &self.user_template {
+            templates.push(user_template);
+        }
+        if let Some(assistant_template) = &self.assistant_template {
+            templates.push(assistant_template);
+        }
+        templates
+    }
+}
+
+pub fn validate_template_and_schema(
+    schema: Option<&JSONSchemaFromPath>,
+    template: Option<&PathBuf>,
+    templates: &TemplateConfig,
+) -> Result<(), Error> {
+    match (schema, template) {
+        (None, Some(template)) => {
+            let template_name = template.to_str().ok_or(Error::InvalidTemplatePath)?;
+            if templates.template_needs_variables(template_name)? {
+                return Err(Error::Config {
+                    message: "schema is required when template is specified and needs variables"
+                        .to_string(),
+                });
+            }
+        }
+        (Some(_), None) => {
+            return Err(Error::Config {
+                message: "template is required when schema is specified".to_string(),
+            });
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -396,10 +364,10 @@ mod tests {
     use crate::inference::providers::common::get_temperature_tool_config;
     use crate::inference::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
     use crate::inference::types::{ContentBlockOutput, Usage};
-    use crate::jsonschema_util::JSONSchemaFromPath;
+    use crate::jsonschema_util::{DynamicJSONSchema, JSONSchemaFromPath};
     use crate::minijinja_util::tests::get_test_template_config;
     use crate::model::ProviderConfig;
-    use crate::tool::ToolChoice;
+    use crate::tool::{ToolCallConfig, ToolChoice};
     use crate::{
         error::Error,
         inference::{
@@ -1646,5 +1614,71 @@ mod tests {
             model_request.output_schema,
             Some(&dynamic_output_schema_value)
         );
+    }
+
+    #[test]
+    fn test_validate_template_and_schema_both_none() {
+        let templates = get_test_template_config();
+        let result = validate_template_and_schema(None, None, &templates);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_template_and_schema_both_some() {
+        let templates = get_test_template_config();
+        let schema = JSONSchemaFromPath::new(
+            PathBuf::from("fixtures/config/functions/templates_with_variables/system_schema.json"),
+            PathBuf::new(),
+        )
+        .unwrap();
+        let template = PathBuf::from("test_validate_template_and_schema_both_some");
+        let result = validate_template_and_schema(Some(&schema), Some(&template), &templates);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_template_and_schema_template_no_needs_variables() {
+        let templates = get_test_template_config();
+        let template = PathBuf::from("system_filled");
+        let result = validate_template_and_schema(None, Some(&template), &templates);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_template_and_schema_template_needs_variables() {
+        let templates = get_test_template_config(); // Template needing variables
+        let template = PathBuf::from("greeting");
+        let result = validate_template_and_schema(None, Some(&template), &templates);
+        assert!(result.is_err());
+
+        if let Err(Error::Config { message }) = result {
+            assert_eq!(
+                message,
+                "schema is required when template is specified and needs variables".to_string()
+            );
+        } else {
+            panic!("Expected Error::Config");
+        }
+    }
+
+    #[test]
+    fn test_validate_template_and_schema_schema_some_template_none() {
+        let templates = get_test_template_config(); // Default TemplateConfig
+        let schema = JSONSchemaFromPath::new(
+            PathBuf::from("fixtures/config/functions/templates_with_variables/system_schema.json"),
+            PathBuf::new(),
+        )
+        .unwrap();
+        let result = validate_template_and_schema(Some(&schema), None, &templates);
+        assert!(result.is_err());
+
+        if let Err(Error::Config { message }) = result {
+            assert_eq!(
+                message,
+                "template is required when schema is specified".to_string()
+            );
+        } else {
+            panic!("Expected Error::Config");
+        }
     }
 }

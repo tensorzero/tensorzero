@@ -9,8 +9,10 @@ use crate::inference::types::{
     JsonInferenceResult, ModelInferenceResponseWithMetadata, Role, Usage,
 };
 use crate::jsonschema_util::{JSONSchemaFromPath, JsonSchemaRef};
+use crate::minijinja_util::TemplateConfig;
+use crate::model::ModelConfig;
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
-use crate::variant::{InferenceConfig, VariantConfig};
+use crate::variant::{InferenceConfig, Variant, VariantConfig};
 
 #[derive(Debug)]
 pub enum FunctionConfig {
@@ -189,6 +191,51 @@ impl FunctionConfig {
                     output_schema.value().clone(),
                 )))
             }
+        }
+    }
+
+    pub fn system_schema(&self) -> Option<&JSONSchemaFromPath> {
+        match self {
+            FunctionConfig::Chat(params) => params.system_schema.as_ref(),
+            FunctionConfig::Json(params) => params.system_schema.as_ref(),
+        }
+    }
+
+    pub fn user_schema(&self) -> Option<&JSONSchemaFromPath> {
+        match self {
+            FunctionConfig::Chat(params) => params.user_schema.as_ref(),
+            FunctionConfig::Json(params) => params.user_schema.as_ref(),
+        }
+    }
+
+    pub fn assistant_schema(&self) -> Option<&JSONSchemaFromPath> {
+        match self {
+            FunctionConfig::Chat(params) => params.assistant_schema.as_ref(),
+            FunctionConfig::Json(params) => params.assistant_schema.as_ref(),
+        }
+    }
+
+    pub fn validate(
+        &self,
+        static_tools: &HashMap<String, StaticToolConfig>,
+        models: &HashMap<String, ModelConfig>,
+        templates: &TemplateConfig,
+        function_name: &str,
+    ) -> Result<(), Error> {
+        // Validate each variant
+        for (variant_name, variant) in self.variants() {
+            variant.validate(self, models, templates, function_name, variant_name)?;
+        }
+        match self {
+            FunctionConfig::Chat(params) => {
+                for tool in params.tools.iter() {
+                    static_tools.get(tool).ok_or(Error::Config {
+                        message: format!("`functions.{function_name}.tools`: tool `{tool}` is not present in the config"),
+                    })?;
+                }
+                Ok(())
+            }
+            FunctionConfig::Json(_) => Ok(()),
         }
     }
 }
@@ -377,7 +424,7 @@ mod tests {
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::minijinja_util::TemplateConfig;
     use crate::tool::ToolCall;
-    use crate::variant::ChatCompletionConfig;
+    use crate::variant::chat_completion::ChatCompletionConfig;
 
     use super::*;
     use serde_json::json;

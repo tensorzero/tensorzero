@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 
 use crate::error::Error;
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
-use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelConfig;
@@ -12,7 +11,7 @@ use crate::tool::{
     ImplicitToolConfig, StaticToolConfig, ToolCallConfig, ToolChoice, ToolConfig,
     IMPLICIT_TOOL_NAME,
 };
-use crate::variant::VariantConfig;
+use crate::variant::{Variant, VariantConfig};
 
 #[derive(Debug, Default)]
 pub struct Config<'c> {
@@ -132,9 +131,7 @@ impl<'c> Config<'c> {
             // Ensure that the model has at least one provider
             if model.routing.is_empty() {
                 return Err(Error::Config {
-                    message: format!(
-                        "Invalid Config: `models.{model_name}`: `routing` must not be empty"
-                    ),
+                    message: format!("`models.{model_name}`: `routing` must not be empty"),
                 });
             }
 
@@ -143,13 +140,15 @@ impl<'c> Config<'c> {
             for provider in &model.routing {
                 if !seen_providers.insert(provider) {
                     return Err(Error::Config {
-                        message: format!("Invalid Config: `models.{model_name}.routing`: duplicate entry `{provider}`"),
+                        message: format!(
+                            "`models.{model_name}.routing`: duplicate entry `{provider}`"
+                        ),
                     });
                 }
 
                 if !model.providers.contains_key(provider) {
                     return Err(Error::Config {
-                        message: format!("Invalid Config: `models.{model_name}`: `routing` contains entry `{provider}` that does not exist in `providers`"),
+                        message: format!("`models.{model_name}`: `routing` contains entry `{provider}` that does not exist in `providers`"),
                     });
                 }
             }
@@ -158,7 +157,7 @@ impl<'c> Config<'c> {
             for provider_name in model.providers.keys() {
                 if !seen_providers.contains(provider_name) {
                     return Err(Error::Config {
-                        message: format!("Invalid Config: `models.{model_name}`: Provider `{provider_name}` is not listed in `routing`"),
+                        message: format!("`models.{model_name}`: Provider `{provider_name}` is not listed in `routing`"),
                     });
                 }
             }
@@ -166,213 +165,7 @@ impl<'c> Config<'c> {
 
         // Validate each function
         for (function_name, function) in &self.functions {
-            // Validate each variant
-            for (variant_name, variant) in function.variants() {
-                // Ensure that the weight is non-negative
-                if variant.weight() < 0.0 {
-                    return Err(Error::Config {
-                        message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}.weight`: must be non-negative"),
-                    });
-                }
-
-                // Ensure that the variant type is correct
-                match function {
-                    FunctionConfig::Chat(function) => {
-                        // Check that the variant type matches the function type
-                        if !matches!(variant, VariantConfig::ChatCompletion(_)) {
-                            return Err(Error::Config {
-                                message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: variant type must be `chat_completion`"),
-                            });
-                        }
-
-                        // Check that system schema <=> system template
-                        match (&function.system_schema, &variant.system_template()) {
-                            (None, Some(system_template)) => {
-                                // If the template is specified but there is no schema, we need to check that the template has the required variables
-                                let system_template_name =
-                                    system_template.to_str().ok_or(Error::InvalidTemplatePath)?;
-
-                                if self
-                                    .templates
-                                    .template_needs_variables(system_template_name)?
-                                {
-                                    return Err(Error::Config {
-                                        message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `system_schema` is required when `system_template` is specified"),
-                                    });
-                                }
-                            }
-                            (Some(_), None) => {
-                                return Err(Error::Config {
-                                    message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `system_template` is required when `system_schema` is specified"),
-                                });
-                            }
-                            _ => {}
-                        }
-
-                        // Check that user schema <=> user template
-                        match (&function.user_schema, &variant.user_template()) {
-                            (None, Some(user_template)) => {
-                                // If the template is specified but there is no schema, we need to check that the template has the required variables
-                                let user_template_name =
-                                    user_template.to_str().ok_or(Error::InvalidTemplatePath)?;
-
-                                if self
-                                    .templates
-                                    .template_needs_variables(user_template_name)?
-                                {
-                                    return Err(Error::Config {
-                                        message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `user_schema` is required when `user_template` is specified"),
-                                    });
-                                }
-                            }
-                            (Some(_), None) => {
-                                return Err(Error::Config {
-                                    message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `user_template` is required when `user_schema` is specified"),
-                                });
-                            }
-                            _ => {}
-                        }
-
-                        // Check that assistant schema <=> assistant template
-                        match (&function.assistant_schema, &variant.assistant_template()) {
-                            (None, Some(assistant_template)) => {
-                                // If the template is specified but there is no schema, we need to check that the template has the required variables
-                                let assistant_template_name = assistant_template
-                                    .to_str()
-                                    .ok_or(Error::InvalidTemplatePath)?;
-
-                                if self
-                                    .templates
-                                    .template_needs_variables(assistant_template_name)?
-                                {
-                                    return Err(Error::Config {
-                                        message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `assistant_schema` is required when `assistant_template` is specified"),
-                                    });
-                                }
-                            }
-                            (Some(_), None) => {
-                                return Err(Error::Config {
-                                    message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `assistant_template` is required when `assistant_schema` is specified"),
-                                });
-                            }
-                            _ => {}
-                        }
-
-                        // Check that tools that are specified are present
-                        for tool in function.tools.iter() {
-                            self.get_tool(tool).map_err(|_| {
-                                Error::Config {
-                                    message: format!("Invalid Config: `functions.{function_name}.tools`: tool `{tool}` is not present in the config"),
-                                }
-                            })?;
-                        }
-                    }
-                    FunctionConfig::Json(function) => {
-                        // Check that the variant type matches the function type
-                        if !matches!(variant, VariantConfig::ChatCompletion(_)) {
-                            return Err(Error::Config {
-                                message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: variant type must be `chat_completion`"),
-                            });
-                        }
-
-                        // Check that system schema <=> system template
-                        match (&function.system_schema, &variant.system_template()) {
-                            (None, Some(system_template)) => {
-                                // If the template is specified but there is no schema, we need to check that the template has the required variables
-                                let system_template_name =
-                                    system_template.to_str().ok_or(Error::InvalidTemplatePath)?;
-
-                                if self
-                                    .templates
-                                    .template_needs_variables(system_template_name)?
-                                {
-                                    return Err(Error::Config {
-                                        message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `system_schema` is required when `system_template` is specified"),
-                                    });
-                                }
-                            }
-                            (Some(_), None) => {
-                                return Err(Error::Config {
-                                    message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `system_template` is required when `system_schema` is specified"),
-                                });
-                            }
-                            _ => {}
-                        }
-
-                        // Check that user schema <=> user template
-                        match (&function.user_schema, &variant.user_template()) {
-                            (None, Some(user_template)) => {
-                                // If the template is specified but there is no schema, we need to check that the template has the required variables
-                                let user_template_name =
-                                    user_template.to_str().ok_or(Error::InvalidTemplatePath)?;
-
-                                if self
-                                    .templates
-                                    .template_needs_variables(user_template_name)?
-                                {
-                                    return Err(Error::Config {
-                                        message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `user_schema` is required when `user_template` is specified"),
-                                    });
-                                }
-                            }
-                            (Some(_), None) => {
-                                return Err(Error::Config {
-                                    message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `user_template` is required when `user_schema` is specified"),
-                                });
-                            }
-                            _ => {}
-                        }
-
-                        // Check that assistant schema <=> assistant template
-                        match (&function.assistant_schema, &variant.assistant_template()) {
-                            (None, Some(assistant_template)) => {
-                                // If the template is specified but there is no schema, we need to check that the template has the required variables
-                                let assistant_template_name = assistant_template
-                                    .to_str()
-                                    .ok_or(Error::InvalidTemplatePath)?;
-
-                                if self
-                                    .templates
-                                    .template_needs_variables(assistant_template_name)?
-                                {
-                                    return Err(Error::Config {
-                                        message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `assistant_schema` is required when `assistant_template` is specified"),
-                                    });
-                                }
-                            }
-                            (Some(_), None) => {
-                                return Err(Error::Config {
-                                    message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `assistant_template` is required when `assistant_schema` is specified"),
-                                });
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-
-                // Validate variant-specific config
-                match variant {
-                    VariantConfig::ChatCompletion(params) => {
-                        let model_name = &params.model;
-                        // Ensure that the model exists
-                        let model = self.models.get(model_name).ok_or_else(|| Error::Config {
-                            message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: `model` must be a valid model name"),
-                        })?;
-
-                        // If the variant has positive weight, ensure that at least one provider in the model has credentials
-                        if variant.weight() > 0.0
-                            && !model
-                                .providers
-                                .values()
-                                .any(|provider| provider.has_credentials())
-                        {
-                            return Err(Error::Config {
-                                message: format!("Invalid Config: `functions.{function_name}.variants.{variant_name}`: at least one provider in model `{model_name}` must have credentials"),
-                            });
-                        }
-                    }
-                }
-            }
+            function.validate(&self.tools, &self.models, &self.templates, function_name)?;
         }
 
         // Ensure that no metrics are named "comment" or "demonstration"
@@ -380,7 +173,7 @@ impl<'c> Config<'c> {
             if metric_name == "comment" || metric_name == "demonstration" {
                 return Err(Error::Config {
                     message: format!(
-                        "Invalid Config: Metric name '{}' is reserved and cannot be used",
+                        "Metric name '{}' is reserved and cannot be used",
                         metric_name
                     ),
                 });
@@ -430,25 +223,15 @@ impl<'c> Config<'c> {
     /// The former path is used as the name of the template for retrival by variants later.
     pub fn get_templates<P: AsRef<Path>>(&self, base_path: P) -> HashMap<String, PathBuf> {
         let mut templates = HashMap::new();
-        let mut add_template = |path: &Option<PathBuf>| {
-            if let Some(ref path) = path {
-                templates.insert(
-                    // This `to_string_lossy`is there to handle OSes where paths
-                    // cannot be represented in UTF-8.
-                    path.to_string_lossy().to_string(),
-                    base_path.as_ref().join(path),
-                );
-            }
-        };
 
         for function in self.functions.values() {
             for variant in function.variants().values() {
-                match variant {
-                    VariantConfig::ChatCompletion(chat_config) => {
-                        add_template(&chat_config.system_template);
-                        add_template(&chat_config.user_template);
-                        add_template(&chat_config.assistant_template);
-                    }
+                let variant_template_paths = variant.get_all_template_paths();
+                for path in variant_template_paths {
+                    templates.insert(
+                        path.to_string_lossy().to_string(),
+                        base_path.as_ref().join(path),
+                    );
                 }
             }
         }
@@ -510,7 +293,7 @@ impl TryFrom<toml::Table> for UninitializedConfig {
         match table.try_into() {
             Ok(config) => Ok(config),
             Err(e) => Err(Error::Config {
-                message: format!("Failed to parse config:\n{e}"),
+                message: format!("{e}"),
             }),
         }
     }
@@ -733,7 +516,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Failed to parse config:\ninvalid socket address syntax\nin `gateway.bind_address`\n".to_string()
+                message: "invalid socket address syntax\nin `gateway.bind_address`\n".to_string()
             }
         );
     }
@@ -750,7 +533,7 @@ mod tests {
         assert_eq!(
             Config::load_from_toml(config, base_path).unwrap_err(),
             Error::Config {
-                message: "Failed to parse config:\nmissing field `models`\n".to_string()
+                message: "missing field `models`\n".to_string()
             }
         );
     }
@@ -769,7 +552,8 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Failed to parse config:\nmissing field `providers`\nin `models.claude-3-haiku-20240307`\n".to_string()
+                message: "missing field `providers`\nin `models.claude-3-haiku-20240307`\n"
+                    .to_string()
             }
         );
     }
@@ -839,7 +623,7 @@ mod tests {
         assert_eq!(
             error,
             Error::Config {
-                message: "Invalid Config: `functions.generate_draft.variants.generate_draft_dummy`: at least one provider in model `dummy` must have credentials"
+                message: "`functions.generate_draft.variants.generate_draft_dummy` and model `dummy`: Failed to validate model: At least one provider lacks credentials"
                     .to_string()
             }
         );
@@ -868,7 +652,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Failed to parse config:\nmissing field `functions`\n".to_string()
+                message: "missing field `functions`\n".to_string()
             }
         );
     }
@@ -887,9 +671,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message:
-                    "Failed to parse config:\nmissing field `variants`\nin `functions.generate_draft`\n"
-                        .to_string()
+                message: "missing field `variants`\nin `functions.generate_draft`\n".to_string()
             }
         );
     }
@@ -904,7 +686,7 @@ mod tests {
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Failed to parse config:\nunknown field `enable_agi`, expected one of"));
+            .contains("unknown field `enable_agi`, expected one of"));
     }
 
     /// Ensure that the config parsing fails when there are extra variables for models
@@ -920,7 +702,7 @@ mod tests {
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Failed to parse config:\nunknown field `enable_agi`, expected"));
+            .contains("unknown field `enable_agi`, expected"));
     }
 
     /// Ensure that the config parsing fails when there are extra variables for providers
@@ -936,7 +718,7 @@ mod tests {
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Failed to parse config:\nunknown field `enable_agi`, expected"));
+            .contains("unknown field `enable_agi`, expected"));
     }
 
     /// Ensure that the config parsing fails when there are extra variables for functions
@@ -952,7 +734,7 @@ mod tests {
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Failed to parse config:\nunknown field `enable_agi`, expected"));
+            .contains("unknown field `enable_agi`, expected"));
     }
 
     /// Ensure that the config parsing defaults properly for JSON functions with no output schema
@@ -988,7 +770,7 @@ mod tests {
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Failed to parse config:\nunknown field `enable_agi`, expected"));
+            .contains("unknown field `enable_agi`, expected"));
     }
 
     /// Ensure that the config parsing fails when there are extra variables for metrics
@@ -1004,7 +786,7 @@ mod tests {
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Failed to parse config:\nunknown field `enable_agi`, expected"));
+            .contains("unknown field `enable_agi`, expected"));
     }
 
     /// Ensure that the config validation fails when a model has no providers in `routing`
@@ -1017,8 +799,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `models.gpt-3.5-turbo`: `routing` must not be empty"
-                    .to_string()
+                message: "`models.gpt-3.5-turbo`: `routing` must not be empty".to_string()
             }
         );
     }
@@ -1033,8 +814,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `models.gpt-3.5-turbo.routing`: duplicate entry `openai`"
-                    .to_string()
+                message: "`models.gpt-3.5-turbo.routing`: duplicate entry `openai`".to_string()
             }
         );
     }
@@ -1048,8 +828,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `models.gpt-3.5-turbo`: `routing` contains entry `closedai` that does not exist in `providers`"
-                    .to_string()
+                message: "`models.gpt-3.5-turbo`: `routing` contains entry `closedai` that does not exist in `providers`".to_string()
             }
         );
     }
@@ -1148,7 +927,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `functions.templates_with_variables_chat.variants.variant_with_variables`: `system_schema` is required when `system_template` is specified".to_string()
+                message: "`functions.templates_with_variables_chat.variants.variant_with_variables.system_template`: schema is required when template is specified and needs variables".to_string()
             }
         );
         let mut sample_config = get_sample_valid_config();
@@ -1161,7 +940,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `functions.templates_with_variables_json.variants.variant_with_variables`: `system_schema` is required when `system_template` is specified".to_string()
+                message: "`functions.templates_with_variables_json.variants.variant_with_variables.system_template`: schema is required when template is specified and needs variables".to_string()
             }
         );
     }
@@ -1179,7 +958,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `functions.templates_with_variables_chat.variants.variant_with_variables`: `user_schema` is required when `user_template` is specified".to_string()
+                message: "`functions.templates_with_variables_chat.variants.variant_with_variables.user_template`: schema is required when template is specified and needs variables".to_string()
             }
         );
 
@@ -1193,7 +972,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `functions.templates_with_variables_json.variants.variant_with_variables`: `user_schema` is required when `user_template` is specified".to_string()
+                message: "`functions.templates_with_variables_json.variants.variant_with_variables.user_template`: schema is required when template is specified and needs variables".to_string()
             }
         );
     }
@@ -1211,7 +990,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `functions.templates_with_variables_chat.variants.variant_with_variables`: `assistant_schema` is required when `assistant_template` is specified".to_string()
+                message: "`functions.templates_with_variables_chat.variants.variant_with_variables.assistant_template`: schema is required when template is specified and needs variables".to_string()
             }
         );
         let mut sample_config = get_sample_valid_config();
@@ -1224,7 +1003,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `functions.templates_with_variables_json.variants.variant_with_variables`: `assistant_schema` is required when `assistant_template` is specified".to_string()
+                message: "`functions.templates_with_variables_json.variants.variant_with_variables.assistant_template`: schema is required when template is specified and needs variables".to_string()
             }
         );
     }
@@ -1240,7 +1019,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `functions.generate_draft.variants.openai_promptA.weight`: must be non-negative".to_string()
+                message: "`functions.generate_draft.variants.openai_promptA`: `weight` must be non-negative".to_string()
             }
         );
     }
@@ -1257,14 +1036,14 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `functions.generate_draft.variants.openai_promptA`: `model` must be a valid model name".to_string()
+                message: "`functions.generate_draft.variants.openai_promptA`: `model` must be a valid model name".to_string()
             }
         );
     }
 
-    /// Ensure that the config validation fails when a variant has a model that does not exist in the models section
+    /// Ensure that the config validation fails when a function has a tool that does not exist in the tools section
     #[test]
-    fn test_config_validate_variant_nonexistent_tool() {
+    fn test_config_validate_function_nonexistent_tool() {
         let mut config = get_sample_valid_config();
         config["functions"]["generate_draft"]
             .as_table_mut()
@@ -1278,7 +1057,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::Config {
-                message: "Invalid Config: `functions.generate_draft.tools`: tool `non_existent_tool` is not present in the config".to_string()
+                message: "`functions.generate_draft.tools`: tool `non_existent_tool` is not present in the config".to_string()
             }
         );
     }
@@ -1515,7 +1294,7 @@ mod tests {
         "#;
         env::set_var("OPENAI_API_KEY", "sk-something");
         env::set_var("ANTHROPIC_API_KEY", "sk-something");
-        env::set_var("AZURE_API_KEY", "sk-something");
+        env::set_var("AZURE_OPENAI_API_KEY", "sk-something");
 
         toml::from_str(config_str).expect("Failed to parse sample config")
     }
@@ -1524,7 +1303,7 @@ mod tests {
     fn test_tensorzero_example_file() {
         env::set_var("OPENAI_API_KEY", "sk-something");
         env::set_var("ANTHROPIC_API_KEY", "sk-something");
-        env::set_var("AZURE_API_KEY", "sk-something");
+        env::set_var("AZURE_OPENAI_API_KEY", "sk-something");
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let config_path = format!("{}/../config/tensorzero.toml", manifest_dir);
         let config_pathbuf = PathBuf::from(&config_path);
