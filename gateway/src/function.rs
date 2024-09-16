@@ -3,6 +3,7 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use uuid::Uuid;
 
+use crate::endpoints::inference::InferenceParams;
 use crate::error::{Error, ResultExt};
 use crate::inference::types::{
     ChatInferenceResult, ContentBlock, InferenceResult, Input, InputMessageContent,
@@ -129,6 +130,7 @@ impl FunctionConfig {
         usage: Usage,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
         inference_config: &InferenceConfig<'request>,
+        inference_params: InferenceParams,
     ) -> Result<InferenceResult<'a>, Error> {
         match self {
             FunctionConfig::Chat(..) => Ok(InferenceResult::Chat(
@@ -138,6 +140,7 @@ impl FunctionConfig {
                     usage,
                     model_inference_results,
                     inference_config.tool_config.as_ref(),
+                    inference_params,
                 )
                 .await,
             )),
@@ -189,6 +192,7 @@ impl FunctionConfig {
                     usage,
                     model_inference_results,
                     output_schema.value().clone(),
+                    inference_params,
                 )))
             }
         }
@@ -1260,6 +1264,7 @@ mod tests {
                 usage.clone(),
                 vec![model_response.clone()],
                 &inference_config,
+                InferenceParams::default(),
             )
             .await
             .unwrap();
@@ -1305,6 +1310,7 @@ mod tests {
                 usage.clone(),
                 vec![model_response.clone()],
                 &inference_config,
+                InferenceParams::default(),
             )
             .await
             .unwrap();
@@ -1350,6 +1356,7 @@ mod tests {
                 usage.clone(),
                 vec![model_response.clone()],
                 &inference_config,
+                InferenceParams::default(),
             )
             .await
             .unwrap();
@@ -1396,6 +1403,7 @@ mod tests {
                 usage.clone(),
                 vec![model_response.clone()],
                 &inference_config,
+                InferenceParams::default(),
             )
             .await
             .unwrap();
@@ -1443,6 +1451,7 @@ mod tests {
                 usage.clone(),
                 vec![model_response.clone()],
                 &inference_config,
+                InferenceParams::default(),
             )
             .await
             .unwrap();
@@ -1487,6 +1496,7 @@ mod tests {
                 usage.clone(),
                 vec![model_response.clone()],
                 &inference_config,
+                InferenceParams::default(),
             )
             .await
             .unwrap_err();
@@ -1539,6 +1549,7 @@ mod tests {
                 usage.clone(),
                 vec![model_response.clone()],
                 &inference_config,
+                InferenceParams::default(),
             )
             .await
             .unwrap();
@@ -1581,6 +1592,7 @@ mod tests {
                 usage.clone(),
                 vec![model_response.clone()],
                 &inference_config,
+                InferenceParams::default(),
             )
             .await
             .unwrap();
@@ -1627,6 +1639,7 @@ mod tests {
                 usage.clone(),
                 vec![model_response.clone()],
                 &inference_config,
+                InferenceParams::default(),
             )
             .await
             .unwrap();
@@ -1674,6 +1687,7 @@ mod tests {
                 usage.clone(),
                 vec![model_response.clone()],
                 &inference_config,
+                InferenceParams::default(),
             )
             .await
             .unwrap();
@@ -1727,6 +1741,7 @@ mod tests {
                 usage.clone(),
                 vec![model_response.clone()],
                 &inference_config,
+                InferenceParams::default(),
             )
             .await
             .unwrap();

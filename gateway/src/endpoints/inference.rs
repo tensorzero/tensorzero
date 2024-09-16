@@ -157,7 +157,7 @@ pub async fn inference_handler(
             &episode_id,
         )?;
         // Will be edited by the variant as part of making the request so we must clone here
-        let mut variant_inference_params = params.params.clone();
+        let variant_inference_params = params.params.clone();
 
         if stream {
             let result = variant
@@ -167,7 +167,7 @@ pub async fn inference_handler(
                     function,
                     &inference_config,
                     &http_client,
-                    &mut variant_inference_params,
+                    variant_inference_params,
                 )
                 .await;
 
@@ -193,7 +193,7 @@ pub async fn inference_handler(
                 input: params.input.clone(),
                 dryrun,
                 start_time,
-                inference_params: variant_inference_params,
+                inference_params: model_used_info.inference_params,
                 model_name: model_used_info.model_name,
                 model_provider_name: model_used_info.model_provider_name,
                 raw_request: model_used_info.raw_request,
@@ -219,7 +219,7 @@ pub async fn inference_handler(
                     function,
                     &inference_config,
                     &http_client,
-                    &mut variant_inference_params,
+                    variant_inference_params,
                 )
                 .await;
 
@@ -243,7 +243,6 @@ pub async fn inference_handler(
                     variant_name: variant_name.to_string(),
                     episode_id,
                     tool_params: inference_config.tool_config,
-                    inference_params: variant_inference_params,
                     processing_time: start_time.elapsed(),
                 };
 
@@ -318,7 +317,7 @@ fn create_stream(
 
         if !metadata.dryrun {
             let inference_response: Result<InferenceResult, Error> =
-                collect_chunks(buffer, function, &inference_config, metadata.model_name, metadata.model_provider_name, metadata.raw_request).await;
+                collect_chunks(buffer, function, &inference_config, metadata.model_name, metadata.model_provider_name, metadata.raw_request, metadata.inference_params).await;
 
             let inference_response = inference_response.ok_or_log();
 
@@ -328,7 +327,6 @@ fn create_stream(
                     variant_name: metadata.variant_name,
                     episode_id: metadata.episode_id,
                     tool_params: inference_config.tool_config,
-                    inference_params: metadata.inference_params,
                     processing_time: metadata.start_time.elapsed(),
                 };
                 tokio::spawn(async move {
@@ -367,7 +365,6 @@ pub struct InferenceDatabaseInsertMetadata {
     pub variant_name: String,
     pub episode_id: Uuid,
     pub tool_params: Option<ToolCallConfig>,
-    pub inference_params: InferenceParams,
     pub processing_time: Duration,
 }
 
@@ -517,12 +514,12 @@ impl InferenceResponseChunk {
 
 /// InferenceParams is the top-level struct for inference parameters.
 /// We backfill these from the configs given in the variants used and ultimately write them to the database.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct InferenceParams {
     pub chat_completion: ChatCompletionInferenceParams,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct ChatCompletionInferenceParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f32>,
