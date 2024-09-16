@@ -481,6 +481,29 @@ mod tests {
             }
             _ => panic!("Expected a chat function"),
         }
+        // Check that the rejection sampling variant has multiple candidates
+        let function = config
+            .functions
+            .get("templates_with_variables_chat")
+            .unwrap();
+        match function {
+            FunctionConfig::Chat(chat_config) => {
+                if let Some(variant) = chat_config.variants.get("rejection_sampling") {
+                    match variant {
+                        VariantConfig::RejectionSampling(rejection_sampling_config) => {
+                            assert!(
+                                rejection_sampling_config.candidates.len() > 1,
+                                "Rejection sampling variant should have multiple candidates"
+                            );
+                        }
+                        _ => panic!("Expected a rejection sampling variant"),
+                    }
+                } else {
+                    panic!("Expected to find a rejection sampling variant");
+                }
+            }
+            _ => panic!("Expected a chat function"),
+        }
     }
 
     /// Ensure that the config parsing correctly handles the `gateway.bind_address` field
@@ -924,6 +947,11 @@ mod tests {
             .as_table_mut()
             .unwrap()
             .remove("system_schema");
+
+        sample_config["functions"]["templates_with_variables_chat"]["variants"]
+            .as_table_mut()
+            .unwrap()
+            .remove("rejection_sampling");
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(sample_config, base_path);
         assert_eq!(
@@ -955,6 +983,10 @@ mod tests {
             .as_table_mut()
             .unwrap()
             .remove("user_schema");
+        sample_config["functions"]["templates_with_variables_chat"]["variants"]
+            .as_table_mut()
+            .unwrap()
+            .remove("rejection_sampling");
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(sample_config, base_path);
         assert_eq!(
@@ -987,6 +1019,11 @@ mod tests {
             .as_table_mut()
             .unwrap()
             .remove("assistant_schema");
+
+        sample_config["functions"]["templates_with_variables_chat"]["variants"]
+            .as_table_mut()
+            .unwrap()
+            .remove("rejection_sampling");
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(sample_config, base_path);
         assert_eq!(
@@ -1006,6 +1043,31 @@ mod tests {
             result.unwrap_err(),
             Error::Config {
                 message: "`functions.templates_with_variables_json.variants.variant_with_variables.assistant_template`: schema is required when template is specified and needs variables".to_string()
+            }
+        );
+    }
+
+    /// Ensure that config loading fails when a nonexistent candidate is specified in a variant
+    #[test]
+    fn test_config_rejection_sampling_candidate_not_found() {
+        let mut sample_config = get_sample_valid_config();
+        sample_config["functions"]["templates_with_variables_chat"]["variants"]
+            .as_table_mut()
+            .unwrap()
+            .get_mut("rejection_sampling")
+            .unwrap()
+            .as_table_mut()
+            .unwrap()
+            .insert(
+                "candidates".into(),
+                toml::Value::Array(vec!["non_existent_candidate".into()]),
+            );
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(sample_config, base_path);
+        assert_eq!(
+            result.unwrap_err(),
+            Error::UnknownCandidate {
+                name: "non_existent_candidate".to_string()
             }
         );
     }
@@ -1241,6 +1303,17 @@ mod tests {
         [functions.templates_with_variables_chat.variants.variant_with_variables]
         type = "chat_completion"
         weight = 1.0
+        model = "gpt-3.5-turbo"
+        system_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
+        user_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
+        assistant_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
+
+        [functions.templates_with_variables_chat.variants.rejection_sampling]
+        type = "rejection_sampling"
+        weight = 1.0
+        candidates = ["variant_with_variables", "variant_with_variables"]
+
+        [functions.templates_with_variables_chat.variants.rejection_sampling.evaluator]
         model = "gpt-3.5-turbo"
         system_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
         user_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
