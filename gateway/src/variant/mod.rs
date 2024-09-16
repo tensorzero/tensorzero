@@ -48,6 +48,7 @@ pub struct ModelUsedInfo<'a> {
     pub model_name: &'a str,
     pub model_provider_name: &'a str,
     pub raw_request: String,
+    pub inference_params: InferenceParams,
 }
 
 pub trait Variant {
@@ -58,7 +59,7 @@ pub trait Variant {
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         client: &'request Client,
-        inference_params: &mut InferenceParams,
+        inference_params: InferenceParams,
     ) -> Result<InferenceResult<'a>, Error>;
 
     async fn infer_stream<'request>(
@@ -68,7 +69,7 @@ pub trait Variant {
         function: &'static FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         client: &'request Client,
-        inference_params: &mut InferenceParams,
+        inference_params: InferenceParams,
     ) -> Result<
         (
             InferenceResultChunk,
@@ -106,7 +107,7 @@ impl Variant for VariantConfig {
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         client: &'request Client,
-        inference_params: &mut InferenceParams,
+        inference_params: InferenceParams,
     ) -> Result<InferenceResult<'a>, Error> {
         match self {
             VariantConfig::ChatCompletion(params) => {
@@ -131,7 +132,7 @@ impl Variant for VariantConfig {
         function: &'static FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         client: &'request Client,
-        inference_params: &mut InferenceParams,
+        inference_params: InferenceParams,
     ) -> Result<
         (
             InferenceResultChunk,

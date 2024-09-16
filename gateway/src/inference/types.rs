@@ -215,6 +215,7 @@ pub struct ChatInferenceResult<'a> {
     pub content: Vec<ContentBlockOutput>,
     pub usage: Usage,
     pub model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
+    pub inference_params: InferenceParams,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -225,6 +226,7 @@ pub struct JsonInferenceResult<'a> {
     pub usage: Usage,
     pub model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
     pub output_schema: Value,
+    pub inference_params: InferenceParams,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -522,6 +524,7 @@ impl<'a> JsonInferenceResult<'a> {
         usage: Usage,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
         output_schema: Value,
+        inference_params: InferenceParams,
     ) -> Self {
         let output = JsonInferenceOutput { raw, parsed };
         Self {
@@ -531,6 +534,7 @@ impl<'a> JsonInferenceResult<'a> {
             usage,
             model_inference_results,
             output_schema,
+            inference_params,
         }
     }
 }
@@ -542,6 +546,7 @@ impl<'a> ChatInferenceResult<'a> {
         usage: Usage,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
         tool_config: Option<&ToolCallConfig>,
+        inference_params: InferenceParams,
     ) -> Self {
         #[allow(clippy::expect_used)]
         let created = SystemTime::now()
@@ -555,6 +560,7 @@ impl<'a> ChatInferenceResult<'a> {
             content,
             usage,
             model_inference_results,
+            inference_params,
         }
     }
 
@@ -603,7 +609,7 @@ impl ChatInferenceDatabaseInsert {
         let processing_time_ms = metadata.processing_time.as_millis() as u32;
 
         let tool_params = metadata.tool_params.map(ToolCallConfigDatabaseInsert::from);
-        let inference_params = metadata.inference_params;
+        let inference_params = chat_result.inference_params;
         let output = serde_json::to_string(&chat_result.content)
             .map_err(|e| Error::Serialization {
                 message: format!("Failed to serialize output: {}", e),
@@ -635,7 +641,7 @@ impl JsonInferenceDatabaseInsert {
     ) -> Self {
         let processing_time_ms = metadata.processing_time.as_millis() as u32;
 
-        let inference_params = metadata.inference_params;
+        let inference_params = json_result.inference_params;
 
         let output = serde_json::to_string(&json_result.output)
             .map_err(|e| Error::Serialization {
@@ -777,6 +783,7 @@ pub async fn collect_chunks<'a>(
     model_name: &'a str,
     model_provider_name: &'a str,
     raw_request: String,
+    inference_params: InferenceParams,
 ) -> Result<InferenceResult<'a>, Error> {
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
 
@@ -905,6 +912,7 @@ pub async fn collect_chunks<'a>(
             usage,
             vec![model_inference_result],
             inference_config,
+            inference_params,
         )
         .await
 }
@@ -980,6 +988,7 @@ mod tests {
             usage.clone(),
             model_inference_responses,
             None,
+            InferenceParams::default(),
         )
         .await;
         let output_content = ["Hello, world!".to_string().into()];
@@ -1021,6 +1030,7 @@ mod tests {
             usage.clone(),
             model_inference_responses,
             Some(&weather_tool_config),
+            InferenceParams::default(),
         )
         .await;
         assert_eq!(chat_inference_response.content.len(), 1);
@@ -1063,6 +1073,7 @@ mod tests {
             usage.clone(),
             model_inference_responses,
             Some(&weather_tool_config),
+            InferenceParams::default(),
         )
         .await;
         assert_eq!(chat_inference_response.content.len(), 1);
@@ -1105,6 +1116,7 @@ mod tests {
             usage.clone(),
             model_inference_responses,
             Some(&weather_tool_config),
+            InferenceParams::default(),
         )
         .await;
         assert_eq!(chat_inference_response.content.len(), 1);
@@ -1155,6 +1167,7 @@ mod tests {
             model_name,
             model_provider_name,
             raw_request.clone(),
+            InferenceParams::default(),
         )
         .await;
         assert_eq!(
@@ -1205,6 +1218,7 @@ mod tests {
             model_name,
             model_provider_name,
             raw_request.clone(),
+            InferenceParams::default(),
         )
         .await
         .unwrap();
@@ -1286,6 +1300,7 @@ mod tests {
             model_name,
             model_provider_name,
             raw_request.clone(),
+            InferenceParams::default(),
         )
         .await
         .unwrap();
@@ -1310,11 +1325,11 @@ mod tests {
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 let model_inference_result = json_result.model_inference_results.first().unwrap();
                 assert_eq!(model_inference_result.model_name, model_name);
-                assert_eq!(model_inference_result.raw_request, raw_request);
                 assert_eq!(
                     model_inference_result.model_provider_name,
                     model_provider_name
                 );
+                assert_eq!(model_inference_result.raw_request, raw_request);
             }
             _ => panic!("Expected Json inference response"),
         }
@@ -1351,6 +1366,7 @@ mod tests {
             model_name,
             model_provider_name,
             raw_request.clone(),
+            InferenceParams::default(),
         )
         .await;
         assert!(result.is_ok());
@@ -1413,6 +1429,7 @@ mod tests {
             model_name,
             model_provider_name,
             raw_request.clone(),
+            InferenceParams::default(),
         )
         .await;
         if let Ok(InferenceResult::Chat(chat_response)) = result {
@@ -1489,6 +1506,7 @@ mod tests {
             model_name,
             model_provider_name,
             raw_request.clone(),
+            InferenceParams::default(),
         )
         .await
         .unwrap();
@@ -1586,6 +1604,7 @@ mod tests {
             model_name,
             model_provider_name,
             raw_request.clone(),
+            InferenceParams::default(),
         )
         .await
         .unwrap();
