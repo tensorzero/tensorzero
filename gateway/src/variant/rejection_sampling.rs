@@ -11,7 +11,7 @@ use tokio::time::{timeout, Duration};
 
 use crate::inference::types::{
     ContentBlock, FunctionType, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-    ModelInferenceResponseWithMetadata, RequestMessage, Role,
+    ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::{
@@ -76,7 +76,7 @@ impl Variant for RejectionSamplingConfig {
                 inference_params,
             )
             .await?;
-        let best_candidate = self
+        Ok(self
             .select_best_candidate(
                 input,
                 models,
@@ -85,10 +85,7 @@ impl Variant for RejectionSamplingConfig {
                 inference_params,
                 candidate_inference_results,
             )
-            .await?;
-
-        // TODO(Viraj): do the bookkeeping for all ModelInferences and such
-        todo!()
+            .await?)
     }
 
     async fn infer_stream<'request>(
@@ -206,8 +203,8 @@ impl RejectionSamplingConfig {
         client: &'request Client,
         inference_params: &mut InferenceParams,
         candidates: Vec<InferenceResult<'a>>,
-    ) -> Result<ModelInferenceResponseWithMetadata<'a>, Error> {
-        let choice_idx = match inner_select_best_candidate(
+    ) -> Result<InferenceResult<'a>, Error> {
+        let (selection_idx, inference_result) = match inner_select_best_candidate(
             &self.evaluator,
             input,
             models,
@@ -218,28 +215,58 @@ impl RejectionSamplingConfig {
         )
         .await
         {
-            Ok(choice) => choice,
+            Ok(choice) => {
+                let (idx, inference_result) = choice;
+                (idx, Some(inference_result))
+            }
             Err(e) => {
                 e.log();
-                rand::thread_rng().gen_range(0..candidates.len())
+                let idx = rand::thread_rng().gen_range(0..candidates.len());
+                (idx, None)
             }
         };
 
-        todo!()
+        // Safely remove the selected candidate without panicking
+        let mut total_usage: Usage = candidates.iter().map(|c| c.usage()).sum();
+        let mut candidates = candidates;
+        let mut selected_candidate = if selection_idx < candidates.len() {
+            candidates.swap_remove(selection_idx)
+        } else {
+            return Err(Error::Inference {
+                message: "The index chosen by the evaluator is out of bounds (should never happen)"
+                    .to_string(),
+            });
+        };
+        if let Some(inference_result) = &inference_result {
+            total_usage.input_tokens += inference_result.usage.input_tokens;
+            total_usage.output_tokens += inference_result.usage.output_tokens;
+        }
+        for candidate in candidates {
+            selected_candidate
+                .mut_model_inference_results()
+                .extend(candidate.owned_model_inference_results());
+        }
+        if let Some(inference_result) = inference_result {
+            selected_candidate
+                .mut_model_inference_results()
+                .push(inference_result);
+        }
+
+        Ok(selected_candidate)
     }
 }
 
 /// Actually does the work of selecting the best candidate for rejection sampling.
 /// We factor this into a separate function so that we can gracefully handle any error here in the caller.
-async fn inner_select_best_candidate(
-    evaluator: &EvaluatorConfig,
-    input: &Input,
-    models: &HashMap<String, ModelConfig>,
-    inference_config: &InferenceConfig<'_>,
-    client: &Client,
-    inference_params: &mut InferenceParams,
-    candidates: &Vec<InferenceResult<'_>>,
-) -> Result<usize, Error> {
+async fn inner_select_best_candidate<'a, 'request>(
+    evaluator: &'a EvaluatorConfig,
+    input: &'request Input,
+    models: &'a HashMap<String, ModelConfig>,
+    inference_config: &'request InferenceConfig<'request>,
+    client: &'request Client,
+    inference_params: &'request mut InferenceParams,
+    candidates: &Vec<InferenceResult<'request>>,
+) -> Result<(usize, ModelInferenceResponseWithMetadata<'a>), Error> {
     let inference_request =
         evaluator.prepare_request(input, inference_config, candidates, inference_params)?;
     let model_config = models
@@ -250,7 +277,7 @@ async fn inner_select_best_candidate(
     let model_inference_response = model_config.infer(&inference_request, client).await?;
     let text_content = model_inference_response
         .content
-        .into_iter()
+        .iter()
         .find_map(|block| match block {
             ContentBlock::Text(text) => Some(text),
             _ => None,
@@ -274,7 +301,9 @@ async fn inner_select_best_candidate(
             message: "answer_choice is not a valid integer".to_string(),
             raw_output: text_content.text.clone(),
         })?;
-    Ok(answer_choice as usize)
+    let model_inference_result =
+        ModelInferenceResponseWithMetadata::new(model_inference_response, &evaluator.inner.model);
+    Ok((answer_choice as usize, model_inference_result))
 }
 
 impl EvaluatorConfig {

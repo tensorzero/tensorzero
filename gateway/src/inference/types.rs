@@ -513,7 +513,22 @@ impl<'a> InferenceResult<'a> {
             .collect()
     }
 
-    fn model_inference_results(&self) -> Vec<ModelInferenceResponseWithMetadata> {
+    pub fn usage(&self) -> &Usage {
+        match self {
+            InferenceResult::Chat(chat_result) => &chat_result.usage,
+            InferenceResult::Json(json_result) => &json_result.usage,
+        }
+    }
+    pub fn mut_model_inference_results(
+        &mut self,
+    ) -> &mut Vec<ModelInferenceResponseWithMetadata<'a>> {
+        match self {
+            InferenceResult::Chat(chat_result) => &mut chat_result.model_inference_results,
+            InferenceResult::Json(json_result) => &mut json_result.model_inference_results,
+        }
+    }
+
+    pub fn owned_model_inference_results(self) -> Vec<ModelInferenceResponseWithMetadata<'a>> {
         match self {
             InferenceResult::Chat(chat_result) => chat_result.model_inference_results,
             InferenceResult::Json(json_result) => json_result.model_inference_results,
@@ -940,6 +955,16 @@ impl From<&JsonMode> for ModelInferenceRequestJsonMode {
             JsonMode::ImplicitTool => ModelInferenceRequestJsonMode::Off,
             JsonMode::Off => ModelInferenceRequestJsonMode::Off,
         }
+    }
+}
+
+impl<'a> std::iter::Sum<&'a Usage> for Usage {
+    fn sum<I: Iterator<Item = &'a Usage>>(iter: I) -> Self {
+        iter.fold(Usage::default(), |mut acc, u| {
+            acc.input_tokens = acc.input_tokens.saturating_add(u.input_tokens);
+            acc.output_tokens = acc.output_tokens.saturating_add(u.output_tokens);
+            acc
+        })
     }
 }
 
