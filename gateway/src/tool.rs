@@ -247,7 +247,7 @@ impl ToolCallOutput {
 impl ToolCallConfig {
     #[cfg(test)]
     pub fn implicit_from_value(value: &Value) -> Self {
-        let parameters = JSONSchemaFromPath::from_value(value);
+        let parameters = JSONSchemaFromPath::from_value(value).unwrap();
         let implicit_tool_config = ToolConfig::Implicit(ImplicitToolConfig { parameters });
         Self {
             tools_available: vec![implicit_tool_config],
@@ -387,6 +387,7 @@ mod tests {
                 StaticToolConfig {
                     name: "get_temperature".to_string(),
                     description: "Get the current temperature in a given location".to_string(),
+                    #[allow(clippy::expect_used)]
                     parameters: JSONSchemaFromPath::from_value(&json!({
                     "type": "object",
                     "properties": {
@@ -394,7 +395,8 @@ mod tests {
                         "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]}
                     },
                         "required": ["location"]
-                    })),
+                    }))
+                    .expect("Failed to create schema for get_temperature"),
                     strict: true,
                 },
             );
@@ -404,6 +406,7 @@ mod tests {
                     name: "query_articles".to_string(),
                     description: "Query articles from a database based on given criteria"
                         .to_string(),
+                    #[allow(clippy::expect_used)]
                     parameters: JSONSchemaFromPath::from_value(&json!({
                         "type": "object",
                         "properties": {
@@ -412,7 +415,8 @@ mod tests {
                             "limit": {"type": "integer", "minimum": 1, "maximum": 100}
                         },
                         "required": ["keyword"]
-                    })),
+                    }))
+                    .expect("Failed to create schema for query_articles"),
                     strict: false,
                 },
             );

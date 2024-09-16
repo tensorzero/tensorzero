@@ -1,8 +1,7 @@
-use std::future::Future;
-use std::pin::Pin;
 use std::{collections::HashMap, path::PathBuf};
 
 use futures::future::join_all;
+use lazy_static::lazy_static;
 use rand::Rng;
 use reqwest::Client;
 use serde::Deserialize;
@@ -23,16 +22,20 @@ use crate::{
     model::ModelConfig,
     variant::chat_completion::ChatCompletionConfig,
 };
-use lazy_static::lazy_static;
 
 use super::{InferenceConfig, ModelUsedInfo, Variant};
 
 #[derive(Debug, Deserialize)]
 pub struct RejectionSamplingConfig {
     pub weight: f64,
-    pub timeout_s: Option<f64>,
+    #[serde(default = "default_timeout")]
+    pub timeout_s: f64,
     pub candidates: Vec<String>,
     pub evaluator: EvaluatorConfig,
+}
+
+fn default_timeout() -> f64 {
+    300.0
 }
 
 #[derive(Debug, Deserialize)]
@@ -43,6 +46,7 @@ pub struct EvaluatorConfig {
 
 lazy_static! {
     static ref EVALUATOR_OUTPUT_SCHEMA: JSONSchemaFromPath = {
+        #[allow(clippy::expect_used)]
         JSONSchemaFromPath::from_value(&json!({
             "type": "object",
             "properties": {
@@ -52,7 +56,7 @@ lazy_static! {
             "required": ["thinking", "answer_choice"],
             "additionalProperties": false
         }))
-        .unwrap()
+        .expect("Failed to create schema for evaluator output")
     };
 }
 
@@ -64,28 +68,19 @@ impl Variant for RejectionSamplingConfig {
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         client: &'request Client,
-        inference_params: &mut InferenceParams,
+        _inference_params: InferenceParams,
     ) -> Result<InferenceResult<'a>, Error> {
         let candidate_inference_results = self
-            .infer_candidates(
-                input,
-                models,
-                function,
-                inference_config,
-                client,
-                inference_params,
-            )
+            .infer_candidates(input, models, function, inference_config, client)
             .await?;
-        Ok(self
-            .select_best_candidate(
-                input,
-                models,
-                inference_config,
-                client,
-                inference_params,
-                candidate_inference_results,
-            )
-            .await?)
+        self.select_best_candidate(
+            input,
+            models,
+            inference_config,
+            client,
+            candidate_inference_results,
+        )
+        .await
     }
 
     async fn infer_stream<'request>(
@@ -95,7 +90,7 @@ impl Variant for RejectionSamplingConfig {
         _function: &'static FunctionConfig,
         _inference_config: &'request InferenceConfig<'request>,
         _client: &'request Client,
-        _inference_params: &mut InferenceParams,
+        _inference_params: InferenceParams,
     ) -> Result<
         (
             InferenceResultChunk,
@@ -104,9 +99,9 @@ impl Variant for RejectionSamplingConfig {
         ),
         Error,
     > {
-        return Err(Error::InvalidRequest {
+        Err(Error::InvalidRequest {
             message: "Rejection sampling variants do not support streaming inference.".to_string(),
-        });
+        })
     }
 
     fn validate(
@@ -117,11 +112,33 @@ impl Variant for RejectionSamplingConfig {
         function_name: &str,
         variant_name: &str,
     ) -> Result<(), Error> {
-        todo!()
+        // Validate each candidate variant
+        for candidate in &self.candidates {
+            let variant = function
+                .variants()
+                .get(candidate)
+                .ok_or(Error::UnknownCandidate {
+                    name: candidate.to_string(),
+                })?;
+            variant
+                .validate(function, models, templates, function_name, candidate)
+                .map_err(|e| Error::InvalidCandidate {
+                    variant_name: variant_name.to_string(),
+                    message: e.to_string(),
+                })?;
+        }
+        // Validate the evaluator variant
+        self.evaluator
+            .inner
+            .validate(function, models, templates, function_name, variant_name)?;
+        Ok(())
     }
 
+    // We do not return templates for the candidates, as they are required to be variants in the same function
+    // and will therefore also have the same templates.
+    // We only return templates for the evaluator variant.
     fn get_all_template_paths(&self) -> Vec<&PathBuf> {
-        todo!()
+        self.evaluator.inner.get_all_template_paths()
     }
 }
 
@@ -134,8 +151,8 @@ impl RejectionSamplingConfig {
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         client: &'request Client,
-        inference_params: &mut InferenceParams,
     ) -> Result<Vec<InferenceResult<'a>>, Error> {
+        // Get all the variants we are going to infer
         let candidate_variants = self
             .candidates
             .iter()
@@ -150,44 +167,54 @@ impl RejectionSamplingConfig {
                 Ok((candidate.to_string(), variant))
             })
             .collect::<Result<Vec<_>, _>>()?;
+
+        // Start the inference tasks (we keep the names around for logging)
         let mut inference_futures = Vec::new();
         for (candidate_name, candidate_variant) in &candidate_variants {
-            let future = candidate_variant.infer(
-                input,
-                models,
-                function,
-                inference_config,
-                client,
-                inference_params, // TODO(Viraj): Change the structure of inference_params to avoid mutable borrows
-            );
-
-            let future: Pin<Box<dyn Future<Output = Result<InferenceResult, Error>>>> =
-                if let Some(timeout_s) = self.timeout_s {
-                    Box::pin(async move {
-                        timeout(Duration::from_secs_f64(timeout_s), future)
-                            .await
-                            .map_err(|_| Error::InferenceTimeout {
-                                variant_name: candidate_name.clone(),
-                            })?
-                    })
-                } else {
-                    Box::pin(future)
-                };
-
-            inference_futures.push(future);
+            inference_futures.push((
+                candidate_name.clone(),
+                timeout(
+                    Duration::from_secs_f64(self.timeout_s),
+                    candidate_variant.infer(
+                        input,
+                        models,
+                        function,
+                        inference_config,
+                        client,
+                        InferenceParams::default(),
+                    ),
+                ),
+            ));
         }
 
-        let inference_results: Vec<_> = join_all(inference_futures).await.into_iter().collect();
-        let successful_results: Vec<InferenceResult> = inference_results
-            .into_iter()
-            .filter_map(|result| match result {
-                Ok(res) => Some(res),
-                Err(e) => {
-                    e.log();
-                    None
+        // Wait for all the inference tasks to complete
+        let inference_results: Vec<_> = join_all(
+            inference_futures
+                .into_iter()
+                .map(|(candidate_name, future)| async move { (candidate_name, future.await) }),
+        )
+        .await;
+
+        // Collect the successful results
+        let mut successful_results = Vec::new();
+        for (candidate_name, result) in inference_results {
+            match result {
+                Ok(inner_result) => match inner_result {
+                    Ok(res) => successful_results.push(res),
+                    Err(e) => {
+                        e.log();
+                    }
+                },
+                Err(_timeout_error) => {
+                    // Map the Tokio timeout error to our own TimeoutError type
+                    let mapped_timeout_error = Error::InferenceTimeout {
+                        variant_name: candidate_name.clone(),
+                    };
+                    // Log the mapped timeout error
+                    mapped_timeout_error.log();
                 }
-            })
-            .collect();
+            }
+        }
 
         Ok(successful_results)
     }
@@ -201,7 +228,6 @@ impl RejectionSamplingConfig {
         models: &'a HashMap<String, ModelConfig>,
         inference_config: &'request InferenceConfig<'request>,
         client: &'request Client,
-        inference_params: &mut InferenceParams,
         candidates: Vec<InferenceResult<'a>>,
     ) -> Result<InferenceResult<'a>, Error> {
         let (selection_idx, inference_result) = match inner_select_best_candidate(
@@ -210,7 +236,6 @@ impl RejectionSamplingConfig {
             models,
             inference_config,
             client,
-            inference_params,
             &candidates,
         )
         .await
@@ -264,11 +289,14 @@ async fn inner_select_best_candidate<'a, 'request>(
     models: &'a HashMap<String, ModelConfig>,
     inference_config: &'request InferenceConfig<'request>,
     client: &'request Client,
-    inference_params: &'request mut InferenceParams,
     candidates: &Vec<InferenceResult<'request>>,
 ) -> Result<(usize, ModelInferenceResponseWithMetadata<'a>), Error> {
-    let inference_request =
-        evaluator.prepare_request(input, inference_config, candidates, inference_params)?;
+    let inference_request = evaluator.prepare_request(
+        input,
+        inference_config,
+        candidates,
+        &mut InferenceParams::default(),
+    )?;
     let model_config = models
         .get(&evaluator.inner.model)
         .ok_or(Error::UnknownModel {
@@ -374,7 +402,7 @@ impl EvaluatorConfig {
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::Strict,
             function_type: FunctionType::Json,
-            output_schema: Some(&EVALUATOR_OUTPUT_SCHEMA.value),
+            output_schema: Some(EVALUATOR_OUTPUT_SCHEMA.value),
         })
     }
 }

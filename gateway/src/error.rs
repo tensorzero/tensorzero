@@ -84,6 +84,10 @@ pub enum Error {
     InvalidBaseUrl {
         message: String,
     },
+    InvalidCandidate {
+        variant_name: String,
+        message: String,
+    },
     InvalidEpisodeId {
         message: String,
     },
@@ -235,6 +239,7 @@ impl Error {
             Error::InferenceTimeout { .. } => tracing::Level::WARN,
             Error::InputValidation { .. } => tracing::Level::WARN,
             Error::InvalidBaseUrl { .. } => tracing::Level::ERROR,
+            Error::InvalidCandidate { .. } => tracing::Level::ERROR,
             Error::InvalidEpisodeId { .. } => tracing::Level::WARN,
             Error::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
             Error::InvalidMessage { .. } => tracing::Level::WARN,
@@ -304,6 +309,7 @@ impl Error {
             Error::InvalidEpisodeId { .. } => StatusCode::BAD_REQUEST,
             Error::InputValidation { .. } => StatusCode::BAD_REQUEST,
             Error::InvalidBaseUrl { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::InvalidCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
             Error::InvalidProviderConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -437,6 +443,16 @@ impl std::fmt::Display for Error {
                 write!(f, "Input validation failed with messages: {}", source)
             }
             Error::InvalidBaseUrl { message } => write!(f, "{}", message),
+            Error::InvalidCandidate {
+                variant_name,
+                message,
+            } => {
+                write!(
+                    f,
+                    "Invalid candidate variant as a component of variant {}: {}",
+                    variant_name, message
+                )
+            }
             Error::InvalidFunctionVariants { message } => write!(f, "{}", message),
             Error::InvalidEpisodeId { message } => write!(f, "Invalid Episode ID: {}", message),
             Error::InvalidMessage { message } => write!(f, "{}", message),
