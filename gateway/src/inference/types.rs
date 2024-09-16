@@ -512,6 +512,13 @@ impl<'a> InferenceResult<'a> {
             })
             .collect()
     }
+
+    fn model_inference_results(&self) -> Vec<ModelInferenceResponseWithMetadata> {
+        match self {
+            InferenceResult::Chat(chat_result) => chat_result.model_inference_results,
+            InferenceResult::Json(json_result) => json_result.model_inference_results,
+        }
+    }
 }
 
 impl<'a> JsonInferenceResult<'a> {

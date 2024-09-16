@@ -3,11 +3,17 @@ use std::pin::Pin;
 use std::{collections::HashMap, path::PathBuf};
 
 use futures::future::join_all;
+use rand::Rng;
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::time::{timeout, Duration};
 
+use crate::inference::types::{
+    ContentBlock, FunctionType, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+    ModelInferenceResponseWithMetadata, RequestMessage, Role,
+};
+use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::{
     endpoints::inference::InferenceParams,
     error::Error,
@@ -17,6 +23,7 @@ use crate::{
     model::ModelConfig,
     variant::chat_completion::ChatCompletionConfig,
 };
+use lazy_static::lazy_static;
 
 use super::{InferenceConfig, ModelUsedInfo, Variant};
 
@@ -32,6 +39,21 @@ pub struct RejectionSamplingConfig {
 pub struct EvaluatorConfig {
     #[serde(flatten)]
     inner: ChatCompletionConfig,
+}
+
+lazy_static! {
+    static ref EVALUATOR_OUTPUT_SCHEMA: JSONSchemaFromPath = {
+        JSONSchemaFromPath::from_value(&json!({
+            "type": "object",
+            "properties": {
+                "thinking": { "type": "string" },
+                "answer_choice": { "type": "integer" }
+            },
+            "required": ["thinking", "answer_choice"],
+            "additionalProperties": false
+        }))
+        .unwrap()
+    };
 }
 
 impl Variant for RejectionSamplingConfig {
@@ -54,17 +76,19 @@ impl Variant for RejectionSamplingConfig {
                 inference_params,
             )
             .await?;
-        Ok(self
+        let best_candidate = self
             .select_best_candidate(
                 input,
                 models,
-                function,
                 inference_config,
                 client,
                 inference_params,
                 candidate_inference_results,
             )
-            .await?)
+            .await?;
+
+        // TODO(Viraj): do the bookkeeping for all ModelInferences and such
+        todo!()
     }
 
     async fn infer_stream<'request>(
@@ -115,7 +139,6 @@ impl RejectionSamplingConfig {
         client: &'request Client,
         inference_params: &mut InferenceParams,
     ) -> Result<Vec<InferenceResult<'a>>, Error> {
-        // Start of Selection
         let candidate_variants = self
             .candidates
             .iter()
@@ -138,7 +161,7 @@ impl RejectionSamplingConfig {
                 function,
                 inference_config,
                 client,
-                inference_params, // TODO: Change the structure of inference_params to avoid mutable borrows
+                inference_params, // TODO(Viraj): Change the structure of inference_params to avoid mutable borrows
             );
 
             let future: Pin<Box<dyn Future<Output = Result<InferenceResult, Error>>>> =
@@ -172,30 +195,86 @@ impl RejectionSamplingConfig {
         Ok(successful_results)
     }
 
+    /// Gets the best candidate using the evaluator config.
+    /// If at any point the evaluator fails to return a valid response,
+    /// we randomly select one of the candidates.
     async fn select_best_candidate<'a, 'request>(
-        &self,
+        &'a self,
         input: &Input,
         models: &'a HashMap<String, ModelConfig>,
-        function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         client: &'request Client,
         inference_params: &mut InferenceParams,
         candidates: Vec<InferenceResult<'a>>,
-    ) -> Result<InferenceResult<'a>, Error> {
-        let system_message = self
-            .evaluator
-            .prepare_system_message(inference_config.templates, input.system.as_ref())?;
-        let mut messages = input
-            .messages
-            .iter()
-            .map(|message| {
-                self.evaluator
-                    .inner
-                    .prepare_request_message(inference_config.templates, message)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+    ) -> Result<ModelInferenceResponseWithMetadata<'a>, Error> {
+        let choice_idx = match inner_select_best_candidate(
+            &self.evaluator,
+            input,
+            models,
+            inference_config,
+            client,
+            inference_params,
+            &candidates,
+        )
+        .await
+        {
+            Ok(choice) => choice,
+            Err(e) => {
+                e.log();
+                rand::thread_rng().gen_range(0..candidates.len())
+            }
+        };
+
         todo!()
     }
+}
+
+/// Actually does the work of selecting the best candidate for rejection sampling.
+/// We factor this into a separate function so that we can gracefully handle any error here in the caller.
+async fn inner_select_best_candidate(
+    evaluator: &EvaluatorConfig,
+    input: &Input,
+    models: &HashMap<String, ModelConfig>,
+    inference_config: &InferenceConfig<'_>,
+    client: &Client,
+    inference_params: &mut InferenceParams,
+    candidates: &Vec<InferenceResult<'_>>,
+) -> Result<usize, Error> {
+    let inference_request =
+        evaluator.prepare_request(input, inference_config, candidates, inference_params)?;
+    let model_config = models
+        .get(&evaluator.inner.model)
+        .ok_or(Error::UnknownModel {
+            name: evaluator.inner.model.clone(),
+        })?;
+    let model_inference_response = model_config.infer(&inference_request, client).await?;
+    let text_content = model_inference_response
+        .content
+        .into_iter()
+        .find_map(|block| match block {
+            ContentBlock::Text(text) => Some(text),
+            _ => None,
+        })
+        .ok_or(Error::Inference {
+            message: "No valid content blocks found in evaluator response".to_string(),
+        })?;
+    let parsed_output =
+        serde_json::from_str::<Value>(&text_content.text).map_err(|e| Error::OutputParsing {
+            message: format!("Failed to parse output from evaluator response {}", e),
+            raw_output: text_content.text.clone(),
+        })?;
+    let answer_choice = parsed_output
+        .get("answer_choice")
+        .ok_or(Error::OutputParsing {
+            message: "Missing answer_choice in evaluator response".to_string(),
+            raw_output: text_content.text.clone(),
+        })?
+        .as_u64()
+        .ok_or(Error::OutputParsing {
+            message: "answer_choice is not a valid integer".to_string(),
+            raw_output: text_content.text.clone(),
+        })?;
+    Ok(answer_choice as usize)
 }
 
 impl EvaluatorConfig {
@@ -215,11 +294,74 @@ impl EvaluatorConfig {
     fn prepare_candidate_message(
         &self,
         templates: &TemplateConfig,
-        candidates: Vec<InferenceResult>,
-    ) -> Result<String, Error> {
+        candidates: &Vec<InferenceResult>,
+    ) -> Result<RequestMessage, Error> {
         let template_context = json!({
             "candidates": candidates,
         });
-        templates.template_message("rejection_sampling_evaluator_candidate", &template_context)
+        let message_text = templates
+            .template_message("rejection_sampling_evaluator_candidate", &template_context)?;
+        Ok(RequestMessage {
+            role: Role::User,
+            content: vec![message_text.into()],
+        })
+    }
+
+    fn prepare_request(
+        &self,
+        input: &Input,
+        inference_config: &InferenceConfig,
+        candidates: &Vec<InferenceResult>,
+        inference_params: &mut InferenceParams,
+    ) -> Result<ModelInferenceRequest, Error> {
+        let system =
+            Some(self.prepare_system_message(inference_config.templates, input.system.as_ref())?);
+        let messages = input
+            .messages
+            .iter()
+            .map(|message| {
+                self.inner
+                    .prepare_request_message(inference_config.templates, message)
+            })
+            .chain(std::iter::once(self.prepare_candidate_message(
+                inference_config.templates,
+                candidates,
+            )))
+            .collect::<Result<Vec<_>, _>>()?;
+        inference_params
+            .chat_completion
+            .backfill_with_variant_params(
+                self.inner.temperature,
+                self.inner.max_tokens,
+                self.inner.seed,
+            );
+        Ok(ModelInferenceRequest {
+            messages,
+            system,
+            tool_config: None,
+            temperature: inference_params.chat_completion.temperature,
+            max_tokens: inference_params.chat_completion.max_tokens,
+            seed: inference_params.chat_completion.seed,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Strict,
+            function_type: FunctionType::Json,
+            output_schema: Some(&EVALUATOR_OUTPUT_SCHEMA.value),
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_static_schema() {
+        // Also covers the fact that the lazy schema works
+        let instance = json!({
+            "thinking": "I am thinking",
+            "answer_choice": 0
+        });
+        let result = EVALUATOR_OUTPUT_SCHEMA.validate(&instance);
+        assert!(result.is_ok());
     }
 }
