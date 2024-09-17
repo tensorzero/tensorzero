@@ -141,6 +141,13 @@ routing = ["mistral"]
 type = "mistral"
 model_name = "open-mistral-nemo-2407"
 
+[models.o1-mini]
+routing = ["openai"]
+
+[models.o1-mini.providers.openai]
+type = "openai"
+model_name = "o1-mini"
+
 [models.test]
 routing = ["good"]
 
@@ -294,6 +301,12 @@ weight = 0
 model = "gpt-4o-mini-2024-07-18"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
+
+[functions.basic_test.variants.o1-mini]
+type = "chat_completion"
+weight = 0
+model = "o1-mini"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 [functions.basic_test.variants.together]
 type = "chat_completion"
