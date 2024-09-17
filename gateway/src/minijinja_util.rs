@@ -110,8 +110,7 @@ impl<'c> Default for TemplateConfig<'c> {
     }
 }
 
-const REJECTION_SAMPLING_EVALUATOR_SYSTEM: &str = r#"{% if inner_system_message %}
-You are an assistant tasked with re-ranking candidate answers to the following problem:
+const REJECTION_SAMPLING_EVALUATOR_SYSTEM: &str = r#"{% if inner_system_message is defined %}You are an assistant tasked with re-ranking candidate answers to the following problem:
 {{ inner_system_message }}
 
 {% else %}

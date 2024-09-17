@@ -230,6 +230,19 @@ impl RejectionSamplingConfig {
         client: &'request Client,
         candidates: Vec<InferenceResult<'a>>,
     ) -> Result<InferenceResult<'a>, Error> {
+        if candidates.is_empty() {
+            return Err(Error::Inference {
+                message: "No candidates to select from in rejection sampling".to_string(),
+            });
+        }
+        if candidates.len() == 1 {
+            let mut candidates = candidates;
+            return candidates.pop().ok_or_else(|| Error::Inference {
+                message: "Expected one candidate but found none".to_string(),
+            });
+        }
+        // If the evaluator fails, we randomly select one of the candidates
+        // As long as the evaluator returns an inference result, we want to include it in the observability
         let (selection_idx, inference_result) = match inner_select_best_candidate(
             &self.evaluator,
             input,
@@ -240,14 +253,13 @@ impl RejectionSamplingConfig {
         )
         .await
         {
-            Ok(choice) => {
-                let (idx, inference_result) = choice;
-                (idx, Some(inference_result))
-            }
+            Ok((idx_opt, inf_result)) => (
+                idx_opt.unwrap_or_else(|| rand::thread_rng().gen_range(0..candidates.len())),
+                Some(inf_result),
+            ),
             Err(e) => {
                 e.log();
-                let idx = rand::thread_rng().gen_range(0..candidates.len());
-                (idx, None)
+                (rand::thread_rng().gen_range(0..candidates.len()), None)
             }
         };
 
@@ -283,6 +295,7 @@ impl RejectionSamplingConfig {
 
 /// Actually does the work of selecting the best candidate for rejection sampling.
 /// We factor this into a separate function so that we can gracefully handle any error here in the caller.
+/// If a model inference actually occurs, we return None and the model inference
 async fn inner_select_best_candidate<'a, 'request>(
     evaluator: &'a EvaluatorConfig,
     input: &'request Input,
@@ -290,7 +303,7 @@ async fn inner_select_best_candidate<'a, 'request>(
     inference_config: &'request InferenceConfig<'request>,
     client: &'request Client,
     candidates: &Vec<InferenceResult<'request>>,
-) -> Result<(usize, ModelInferenceResponseWithMetadata<'a>), Error> {
+) -> Result<(Option<usize>, ModelInferenceResponseWithMetadata<'a>), Error> {
     let inference_request = evaluator.prepare_request(
         input,
         inference_config,
@@ -303,35 +316,43 @@ async fn inner_select_best_candidate<'a, 'request>(
             name: evaluator.inner.model.clone(),
         })?;
     let model_inference_response = model_config.infer(&inference_request, client).await?;
-    let text_content = model_inference_response
+    let model_inference_result =
+        ModelInferenceResponseWithMetadata::new(model_inference_response, &evaluator.inner.model);
+    let text_content = match model_inference_result
         .content
         .iter()
         .find_map(|block| match block {
             ContentBlock::Text(text) => Some(text),
             _ => None,
-        })
-        .ok_or(Error::Inference {
-            message: "No valid content blocks found in evaluator response".to_string(),
-        })?;
-    let parsed_output =
-        serde_json::from_str::<Value>(&text_content.text).map_err(|e| Error::OutputParsing {
-            message: format!("Failed to parse output from evaluator response {}", e),
-            raw_output: text_content.text.clone(),
-        })?;
-    let answer_choice = parsed_output
-        .get("answer_choice")
-        .ok_or(Error::OutputParsing {
-            message: "Missing answer_choice in evaluator response".to_string(),
-            raw_output: text_content.text.clone(),
-        })?
-        .as_u64()
-        .ok_or(Error::OutputParsing {
-            message: "answer_choice is not a valid integer".to_string(),
-            raw_output: text_content.text.clone(),
-        })?;
-    let model_inference_result =
-        ModelInferenceResponseWithMetadata::new(model_inference_response, &evaluator.inner.model);
-    Ok((answer_choice as usize, model_inference_result))
+        }) {
+        Some(text) => text,
+        None => return Ok((None, model_inference_result)),
+    };
+    let parsed_output = match serde_json::from_str::<Value>(&text_content.text) {
+        Ok(value) => value,
+        Err(_) => {
+            return Ok((None, model_inference_result));
+        }
+    };
+    let answer_choice = match parsed_output.get("answer_choice") {
+        Some(val) => match val.as_u64() {
+            Some(num) => num as usize,
+            None => return Ok((None, model_inference_result)),
+        },
+        None => return Ok((None, model_inference_result)),
+    };
+    if answer_choice >= candidates.len() {
+        let err = Error::Inference {
+            message: format!(
+                "The index chosen by the evaluator is out of bounds: {} >= {}",
+                answer_choice,
+                candidates.len()
+            ),
+        };
+        err.log();
+        return Ok((None, model_inference_result));
+    }
+    Ok((Some(answer_choice as usize), model_inference_result))
 }
 
 impl EvaluatorConfig {
@@ -353,11 +374,26 @@ impl EvaluatorConfig {
         templates: &TemplateConfig,
         candidates: &Vec<InferenceResult>,
     ) -> Result<RequestMessage, Error> {
+        let mut candidate_outputs = Vec::new();
+        for candidate in candidates {
+            match candidate {
+                InferenceResult::Chat(chat_result) => {
+                    candidate_outputs.push(serde_json::to_string(&chat_result.content).map_err(
+                        |e| Error::Inference {
+                            message: format!("Error converting chat result to string: {e}"),
+                        },
+                    )?);
+                }
+                InferenceResult::Json(json_result) => {
+                    candidate_outputs.push(json_result.output.raw.clone());
+                }
+            }
+        }
         let template_context = json!({
             "candidates": candidates,
         });
         let message_text = templates
-            .template_message("rejection_sampling_evaluator_candidate", &template_context)?;
+            .template_message("rejection_sampling_evaluator_candidates", &template_context)?;
         Ok(RequestMessage {
             role: Role::User,
             content: vec![message_text.into()],
@@ -409,6 +445,17 @@ impl EvaluatorConfig {
 
 #[cfg(test)]
 mod tests {
+    use uuid::Uuid;
+
+    use crate::{
+        inference::{
+            providers::dummy::DummyProvider,
+            types::{ChatInferenceResult, Latency},
+        },
+        minijinja_util::tests::get_test_template_config,
+        model::ProviderConfig,
+    };
+
     use super::*;
 
     #[test]
@@ -420,5 +467,523 @@ mod tests {
         });
         let result = EVALUATOR_OUTPUT_SCHEMA.validate(&instance);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_prepare_system_message() {
+        let templates = get_test_template_config();
+
+        // Test without templates, string message
+        let evaluator_config = EvaluatorConfig {
+            inner: ChatCompletionConfig {
+                model: "dummy".to_string(),
+                weight: 1.0,
+                ..Default::default()
+            },
+        };
+        let input_message = Value::String("You are a helpful assistant.".to_string());
+        let result = evaluator_config.prepare_system_message(&templates, Some(&input_message));
+        let prepared_message = result.unwrap();
+        let expected_message = templates
+            .template_message(
+                "rejection_sampling_evaluator_system",
+                &json!({"inner_system_message": "You are a helpful assistant."}),
+            )
+            .unwrap();
+        assert_eq!(prepared_message, expected_message);
+
+        // Test without templates, object message
+        let evaluator_config = EvaluatorConfig {
+            inner: ChatCompletionConfig {
+                model: "dummy".to_string(),
+                weight: 1.0,
+                ..Default::default()
+            },
+        };
+        let input_message = json!({"message": "You are a helpful assistant."});
+        let result = evaluator_config.prepare_system_message(&templates, Some(&input_message));
+        assert!(result.is_err());
+        let prepared_message = result.unwrap_err();
+        assert_eq!(
+        prepared_message,
+        Error::InvalidMessage { message: "System message content {\"message\":\"You are a helpful assistant.\"} is not a string but there is no variant template".to_string() }
+        );
+
+        // Test without templates, no message
+        let evaluator_config = EvaluatorConfig {
+            inner: ChatCompletionConfig {
+                model: "dummy".to_string(),
+                weight: 1.0,
+                ..Default::default()
+            },
+        };
+        let result = evaluator_config.prepare_system_message(&templates, None);
+        let expected_message = templates
+            .template_message("rejection_sampling_evaluator_system", &json!({}))
+            .unwrap();
+        assert!(result.is_ok());
+        let prepared_message = result.unwrap();
+        assert_eq!(prepared_message, expected_message);
+
+        // Test with templates that need new info
+        let system_template_name = "system";
+
+        let evaluator_config = EvaluatorConfig {
+            inner: ChatCompletionConfig {
+                model: "dummy".to_string(),
+                weight: 1.0,
+                system_template: Some(system_template_name.into()),
+                ..Default::default()
+            },
+        };
+
+        let input_message = serde_json::json!({"assistant_name": "ChatGPT"});
+        let result = evaluator_config.prepare_system_message(&templates, Some(&input_message));
+        assert!(result.is_ok());
+        let prepared_message = result.unwrap();
+        let inner_system_message = templates
+            .template_message(system_template_name, &json!({"assistant_name": "ChatGPT"}))
+            .unwrap();
+        let expected_message = templates
+            .template_message(
+                "rejection_sampling_evaluator_system",
+                &json!({"inner_system_message": inner_system_message}),
+            )
+            .unwrap();
+        assert_eq!(prepared_message, expected_message);
+
+        // Test with template that is complete as is (string)
+        let system_template_name = "system_filled";
+
+        let evaluator_config = EvaluatorConfig {
+            inner: ChatCompletionConfig {
+                model: "dummy".to_string(),
+                weight: 1.0,
+                system_template: Some(system_template_name.into()),
+                ..Default::default()
+            },
+        };
+
+        let result = evaluator_config.prepare_system_message(&templates, None);
+        assert!(result.is_ok());
+        let prepared_message = result.unwrap();
+        let inner_system_message = templates
+            .template_message(system_template_name, &json!({}))
+            .unwrap();
+        let expected_message = templates
+            .template_message(
+                "rejection_sampling_evaluator_system",
+                &json!({"inner_system_message": inner_system_message}),
+            )
+            .unwrap();
+        assert_eq!(prepared_message, expected_message);
+    }
+
+    #[tokio::test]
+    async fn test_prepare_candidate_message() {
+        let templates = get_test_template_config();
+
+        // Create an EvaluatorConfig
+        let evaluator_config = EvaluatorConfig {
+            inner: ChatCompletionConfig {
+                model: "dummy".to_string(),
+                weight: 1.0,
+                ..Default::default()
+            },
+        };
+
+        // Prepare some candidate InferenceResults
+        let model_inference_response = ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            created: 200u64,
+            content: vec!["Candidate answer 1".to_string().into()],
+            raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
+            raw_response: "{\"response\": \"Example response\"}".to_string(),
+            usage: Usage {
+                input_tokens: 50,
+                output_tokens: 100,
+            },
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_millis(500),
+            },
+            model_provider_name: "ExampleProvider",
+            model_name: "ExampleModel",
+        };
+
+        let candidate1 = InferenceResult::Chat(
+            ChatInferenceResult::new(
+                Uuid::now_v7(),
+                vec!["Candidate answer 1".to_string().into()],
+                Usage {
+                    input_tokens: 10,
+                    output_tokens: 20,
+                },
+                vec![model_inference_response],
+                None,
+                InferenceParams::default(),
+            )
+            .await,
+        );
+
+        let model_inference_response2 = ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            created: 201u64,
+            content: vec!["Candidate answer 2".to_string().into()],
+            raw_request: "{\"prompt\": \"Example prompt 2\"}".to_string(),
+            raw_response: "{\"response\": \"Example response 2\"}".to_string(),
+            usage: Usage {
+                input_tokens: 15,
+                output_tokens: 25,
+            },
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_millis(550),
+            },
+            model_provider_name: "ExampleProvider2",
+            model_name: "ExampleModel2",
+        };
+
+        let candidate2 = InferenceResult::Chat(
+            ChatInferenceResult::new(
+                Uuid::now_v7(),
+                vec!["Candidate answer 2".to_string().into()],
+                Usage {
+                    input_tokens: 15,
+                    output_tokens: 25,
+                },
+                vec![model_inference_response2],
+                None,
+                InferenceParams::default(),
+            )
+            .await,
+        );
+
+        let candidates = vec![candidate1, candidate2];
+
+        // Call prepare_candidate_message
+        let result = evaluator_config.prepare_candidate_message(&templates, &candidates);
+        assert!(result.is_ok());
+        let request_message = result.unwrap();
+
+        // Expected message
+        let template_context = json!({
+            "candidates": candidates,
+        });
+        let expected_message_text = templates
+            .template_message("rejection_sampling_evaluator_candidates", &template_context)
+            .unwrap();
+
+        // Now check that the request_message has the expected role and content
+        assert_eq!(request_message.role, Role::User);
+        assert_eq!(request_message.content, vec![expected_message_text.into()]);
+    }
+
+    #[tokio::test]
+    async fn test_select_best_candidate() {
+        // Set up evaluator with a provider that returns a valid answer_choice
+        let evaluator_config = EvaluatorConfig {
+            inner: ChatCompletionConfig {
+                model: "rejection_sampling_1".to_string(),
+                ..Default::default()
+            },
+        };
+        let rejection_sampling_variant = RejectionSamplingConfig {
+            weight: 1.0,
+            timeout_s: 10.0,
+            candidates: vec![],
+            evaluator: evaluator_config,
+        };
+
+        let templates = get_test_template_config();
+        // Prepare some candidate InferenceResults
+        let model_inference_response0 = ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            created: 200u64,
+            content: vec!["Candidate answer 0".to_string().into()],
+            raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
+            raw_response: "{\"response\": \"Example response\"}".to_string(),
+            usage: Usage {
+                input_tokens: 50,
+                output_tokens: 100,
+            },
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_millis(500),
+            },
+            model_provider_name: "ExampleProvider",
+            model_name: "ExampleModel",
+        };
+        let inference_id0 = Uuid::now_v7();
+        let candidate0 = InferenceResult::Chat(
+            ChatInferenceResult::new(
+                inference_id0,
+                vec!["Candidate answer 0".to_string().into()],
+                Usage {
+                    input_tokens: 10,
+                    output_tokens: 20,
+                },
+                vec![model_inference_response0],
+                None,
+                InferenceParams::default(),
+            )
+            .await,
+        );
+
+        let model_inference_response1 = ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            created: 201u64,
+            content: vec!["Candidate answer 1".to_string().into()],
+            raw_request: "{\"prompt\": \"Example prompt 1\"}".to_string(),
+            raw_response: "{\"response\": \"Example response 1\"}".to_string(),
+            usage: Usage {
+                input_tokens: 15,
+                output_tokens: 25,
+            },
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_millis(550),
+            },
+            model_provider_name: "ExampleProvider1",
+            model_name: "ExampleModel1",
+        };
+        let inference_id1 = Uuid::now_v7();
+        let candidate1 = InferenceResult::Chat(
+            ChatInferenceResult::new(
+                inference_id1,
+                vec!["Candidate answer 1".to_string().into()],
+                Usage {
+                    input_tokens: 15,
+                    output_tokens: 25,
+                },
+                vec![model_inference_response1],
+                None,
+                InferenceParams::default(),
+            )
+            .await,
+        );
+        let candidates = vec![candidate0, candidate1];
+        let models = HashMap::from([(
+            "rejection_sampling_1".to_string(),
+            ModelConfig {
+                routing: vec!["rejection_sampling_1".to_string()],
+                providers: HashMap::from([(
+                    "rejection_sampling_1".to_string(),
+                    ProviderConfig::Dummy(DummyProvider {
+                        model_name: "rejection_sampling_1".to_string(),
+                    }),
+                )]),
+            },
+        )]);
+        let client = Client::new();
+        let input = Input {
+            system: None,
+            messages: vec![],
+        };
+        let inference_config = InferenceConfig {
+            templates: &templates,
+            tool_config: None,
+            dynamic_output_schema: None,
+        };
+
+        let selected = rejection_sampling_variant
+            .select_best_candidate(
+                &input,
+                &models,
+                &inference_config,
+                &client,
+                candidates.clone(),
+            )
+            .await
+            .expect("Failed to select best candidate");
+
+        // Expect the second candidate to be selected (index 1)
+        // based on "answer": 1 in rejection_sampling_1
+        let expected_id = inference_id1;
+        let expected_usage = Usage {
+            input_tokens: 15,
+            output_tokens: 25,
+        };
+        let expected_content = vec!["Candidate answer 1".to_string().into()];
+        match selected {
+            InferenceResult::Chat(selected) => {
+                assert_eq!(selected.inference_id, expected_id);
+                assert_eq!(selected.usage, expected_usage);
+                assert_eq!(selected.content, expected_content);
+                assert_eq!(selected.model_inference_results.len(), 3);
+            }
+            _ => {
+                panic!("Expected a Chat inference result");
+            }
+        }
+        // Set up evaluator with a provider that fails
+        let evaluator_config = EvaluatorConfig {
+            inner: ChatCompletionConfig {
+                model: "error".to_string(),
+                ..Default::default()
+            },
+        };
+        let rejection_sampling_variant = RejectionSamplingConfig {
+            weight: 1.0,
+            timeout_s: 10.0,
+            candidates: vec![],
+            evaluator: evaluator_config,
+        };
+
+        let models = {
+            let mut map = HashMap::new();
+            map.insert(
+                "error".to_string(),
+                ModelConfig {
+                    routing: vec!["error".to_string()],
+                    providers: HashMap::from([(
+                        "error".to_string(),
+                        ProviderConfig::Dummy(DummyProvider {
+                            model_name: "error".to_string(),
+                        }),
+                    )]),
+                },
+            );
+            map
+        };
+        let client = Client::new();
+        let input = Input {
+            system: None,
+            messages: vec![],
+        };
+
+        let result = rejection_sampling_variant
+            .select_best_candidate(
+                &input,
+                &models,
+                &inference_config,
+                &client,
+                candidates.clone(),
+            )
+            .await;
+
+        // Expect an error and a random candidate to be selected
+        let choice = result.unwrap();
+        // We know that the model will fail, so there should only be two results
+        match choice {
+            InferenceResult::Chat(chat_choice) => {
+                assert!(chat_choice.model_inference_results.len() == 2);
+            }
+            _ => {
+                panic!("Expected a Chat inference result");
+            }
+        }
+        // Depending on implementation, you might check which candidate was selected
+
+        // Set up evaluator with a provider that returns invalid JSON
+        let evaluator_config = EvaluatorConfig {
+            inner: ChatCompletionConfig {
+                model: "regular".to_string(),
+                ..Default::default()
+            },
+        };
+        let rejection_sampling_variant = RejectionSamplingConfig {
+            weight: 1.0,
+            timeout_s: 10.0,
+            candidates: vec![],
+            evaluator: evaluator_config,
+        };
+
+        let models = {
+            let mut map = HashMap::new();
+            map.insert(
+                "regular".to_string(),
+                ModelConfig {
+                    routing: vec!["regular".to_string()],
+                    providers: HashMap::from([(
+                        "regular".to_string(),
+                        ProviderConfig::Dummy(DummyProvider {
+                            model_name: "regular".to_string(),
+                        }),
+                    )]),
+                },
+            );
+            map
+        };
+        let input = Input {
+            system: None,
+            messages: vec![],
+        };
+
+        let result = rejection_sampling_variant
+            .select_best_candidate(
+                &input,
+                &models,
+                &inference_config,
+                &client,
+                candidates.clone(),
+            )
+            .await;
+
+        let choice = result.unwrap();
+        match choice {
+            InferenceResult::Chat(chat_choice) => {
+                // Should return 3 results since model has been called 3 times
+                // But, it's a random choice, so we can't assert on the specific index
+                assert!(chat_choice.model_inference_results.len() == 3);
+            }
+            _ => {
+                panic!("Expected a Chat inference result");
+            }
+        }
+        // Test case: No answer choices (should return an error)
+        let empty_candidates = vec![];
+        let result = rejection_sampling_variant
+            .select_best_candidate(
+                &input,
+                &models,
+                &inference_config,
+                &client,
+                empty_candidates.clone(),
+            )
+            .await;
+        let err = result.unwrap_err();
+        assert_eq!(
+            err,
+            Error::Inference {
+                message: "No candidates to select from in rejection sampling".to_string()
+            }
+        );
+
+        // Test case: Index returned too large (should return an error)
+        let rejection_sampling_big_variant = RejectionSamplingConfig {
+            weight: 1.0,
+            timeout_s: 10.0,
+            candidates: vec![],
+            evaluator: EvaluatorConfig {
+                inner: ChatCompletionConfig {
+                    model: "rejection_sampling_big".to_string(),
+                    weight: 1.0,
+                    ..Default::default()
+                },
+            },
+        };
+
+        let mut big_models = HashMap::new();
+        big_models.insert(
+            "rejection_sampling_big".to_string(),
+            ModelConfig {
+                routing: vec!["rejection_sampling_big".to_string()],
+                providers: HashMap::from([(
+                    "rejection_sampling_big".to_string(),
+                    ProviderConfig::Dummy(DummyProvider {
+                        model_name: "rejection_sampling_big".to_string(),
+                    }),
+                )]),
+            },
+        );
+
+        let result_big = rejection_sampling_big_variant
+            .select_best_candidate(
+                &input,
+                &big_models,
+                &inference_config,
+                &client,
+                candidates.clone(),
+            )
+            .await;
+        // we gracefully handle the error and return a random candidate
+        let _result = result_big.unwrap();
     }
 }
