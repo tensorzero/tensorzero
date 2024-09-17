@@ -1,5 +1,6 @@
 use futures::stream::Stream;
 use futures::StreamExt;
+use lazy_static::lazy_static;
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
@@ -18,14 +19,12 @@ use crate::inference::types::{
     RequestMessage, Role, Text, TextChunk, Usage,
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
-use lazy_static::lazy_static;
 
 lazy_static! {
     static ref OPENAI_DEFAULT_BASE_URL: Url = {
         #[allow(clippy::expect_used)]
         Url::parse("https://api.openai.com/v1/").expect("Failed to parse OPENAI_DEFAULT_BASE_URL")
     };
-    static ref OPENAI_O1_MODELS: Vec<&'static str> = vec!["o1-preview", "o1-mini",];
 }
 
 #[derive(Debug)]
@@ -97,9 +96,9 @@ impl InferenceProvider for OpenAIProvider {
         ),
         Error,
     > {
-        if OPENAI_O1_MODELS.contains(&self.model_name.as_str()) {
+        if self.model_name.to_lowercase().starts_with("o1") {
             return Err(Error::InvalidRequest {
-                message: "o1 models do not support streaming".to_string(),
+                message: "The OpenAI o1 family of models does not support streaming.".to_string(),
             });
         }
         let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
@@ -524,7 +523,7 @@ impl<'a> OpenAIRequest<'a> {
         model: &'a str,
         request: &'a ModelInferenceRequest,
     ) -> Result<OpenAIRequest<'a>, Error> {
-        if OPENAI_O1_MODELS.contains(&model) {
+        if model.to_lowercase().starts_with("o1") {
             return OpenAIRequest::new_o1(model, request);
         }
         let response_format = Some(OpenAIResponseFormat::new(
@@ -572,7 +571,7 @@ impl<'a> OpenAIRequest<'a> {
         }
         if request.tool_config.is_some() {
             return Err(Error::InvalidRequest {
-                message: "O1 models do not support tools".to_string(),
+                message: "The OpenAI o1 family of models does not support tools.".to_string(),
             });
         }
         let tools = None;
@@ -1025,8 +1024,8 @@ mod tests {
         assert_eq!(openai_request.messages.len(), 1);
         assert_eq!(openai_request.temperature, None);
         assert_eq!(openai_request.max_tokens, None);
-        assert!(!openai_request.stream);
         assert_eq!(openai_request.seed, None);
+        assert!(!openai_request.stream);
         // Resolves to normal JSON mode since no schema is provided (this shouldn't really happen in practice)
         assert_eq!(
             openai_request.response_format,
@@ -1158,7 +1157,10 @@ mod tests {
         // Check that it returns an error
         assert!(openai_request_with_tools.is_err());
         if let Err(Error::InvalidRequest { message }) = openai_request_with_tools {
-            assert_eq!(message, "O1 models do not support tools".to_string());
+            assert_eq!(
+                message,
+                "The OpenAI o1 family of models does not support tools.".to_string()
+            );
         } else {
             panic!("Expected InvalidRequest error");
         }
