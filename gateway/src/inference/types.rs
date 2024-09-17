@@ -521,6 +521,7 @@ impl<'a> InferenceResult<'a> {
             InferenceResult::Json(json_result) => &json_result.usage,
         }
     }
+
     pub fn mut_model_inference_results(
         &mut self,
     ) -> &mut Vec<ModelInferenceResponseWithMetadata<'a>> {

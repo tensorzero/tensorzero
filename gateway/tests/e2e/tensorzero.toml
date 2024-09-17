@@ -953,7 +953,7 @@ model = "json"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 [functions.rejection_sampling.variants.rejection_sampling_variant]
-type = "rejection_sampling"
+type = "experimental_rejection_sampling"
 weight = 1
 candidates = ["variant0", "variant1"]
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"

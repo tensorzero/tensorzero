@@ -454,7 +454,7 @@ mod tests {
             .unwrap()
         {
             VariantConfig::ChatCompletion(chat_config) => &chat_config.json_mode,
-            _ => panic!("Expected a chat variant"),
+            _ => panic!("Expected a chat completion variant"),
         };
         assert_eq!(prompt_a_json_mode, &JsonMode::ImplicitTool);
 
@@ -467,7 +467,7 @@ mod tests {
             .unwrap()
         {
             VariantConfig::ChatCompletion(chat_config) => &chat_config.json_mode,
-            _ => panic!("Expected a chat variant"),
+            _ => panic!("Expected a chat completion variant"),
         };
         assert_eq!(prompt_b_json_mode, &JsonMode::On);
         // Check that the tool choice for get_weather is set to "specific" and the correct tool
@@ -1309,7 +1309,7 @@ mod tests {
         assistant_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
 
         [functions.templates_with_variables_chat.variants.rejection_sampling]
-        type = "rejection_sampling"
+        type = "experimental_rejection_sampling"
         weight = 1.0
         candidates = ["variant_with_variables", "variant_with_variables"]
 

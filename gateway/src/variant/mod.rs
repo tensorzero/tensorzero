@@ -20,6 +20,7 @@ pub mod rejection_sampling;
 #[serde(deny_unknown_fields)]
 pub enum VariantConfig {
     ChatCompletion(chat_completion::ChatCompletionConfig),
+    #[serde(rename = "experimental_rejection_sampling")]
     RejectionSampling(rejection_sampling::RejectionSamplingConfig),
 }
 

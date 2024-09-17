@@ -293,9 +293,18 @@ impl RejectionSamplingConfig {
     }
 }
 
-/// Actually does the work of selecting the best candidate for rejection sampling.
-/// We factor this into a separate function so that we can gracefully handle any error here in the caller.
-/// If a model inference actually occurs, we return None and the model inference
+/// Attempts to select the best candidate for rejection sampling.
+/// If this function returns an error or the index is None, we will randomly select one
+/// of the candidates in the outer function.
+/// If a model inference actually occurs, we return None and the model inference result instead of Err() so
+/// that we can still observe the model inference result in ClickHouse.
+///
+/// Here are the steps in the function:
+///  * Prepare the request for the evaluator variant.
+///  * Infer the request using the model specified in the evaluator config.
+///  * Parse the output of the evaluator.
+///  * Check if the index is out of bounds.
+///  * Return the index and the model inference result.
 async fn inner_select_best_candidate<'a, 'request>(
     evaluator: &'a EvaluatorConfig,
     input: &'request Input,
@@ -356,6 +365,11 @@ async fn inner_select_best_candidate<'a, 'request>(
 }
 
 impl EvaluatorConfig {
+    /// Prepares the system message for the evaluator variant.
+    /// We use the system_template of the evaluator variant to generate a system message as if we
+    /// were using the evaluator variant directly to solve the problem.
+    /// Then, we template that system message into a broader set of instructions that includes
+    /// information about what the evaluator will be asked to do (choose a candidate).
     fn prepare_system_message(
         &self,
         templates: &TemplateConfig,
@@ -366,9 +380,14 @@ impl EvaluatorConfig {
             Some(inner_system_message) => json!({"inner_system_message": inner_system_message}),
             None => json!({}),
         };
-        templates.template_message("rejection_sampling_evaluator_system", &template_context)
+        templates.template_message("t0:rejection_sampling_evaluator_system", &template_context)
     }
 
+    /// Prepares the final candidate message for the evaluator variant.
+    /// We include each candidate's output in the final message to the evaluator by templating
+    /// them into our hardcoded template.
+    /// For chat functions we serialize the content blocks to a string and for json functions
+    /// we use the raw output from the json field.
     fn prepare_candidate_message(
         &self,
         templates: &TemplateConfig,
@@ -392,14 +411,22 @@ impl EvaluatorConfig {
         let template_context = json!({
             "candidates": candidates,
         });
-        let message_text = templates
-            .template_message("rejection_sampling_evaluator_candidates", &template_context)?;
+        let message_text = templates.template_message(
+            "t0:rejection_sampling_evaluator_candidates",
+            &template_context,
+        )?;
         Ok(RequestMessage {
             role: Role::User,
             content: vec![message_text.into()],
         })
     }
 
+    /// Prepares the request for the evaluator variant.
+    /// We use the prepare_system_message and prepare_candidate_message functions to generate
+    /// the system and candidate messages for the evaluator which take candidate selection into account.
+    ///
+    /// We also enforce the output schema of the evalutator variant, which is used to force the model
+    /// to choose an answer choice that is valid.
     fn prepare_request(
         &self,
         input: &Input,
@@ -486,7 +513,7 @@ mod tests {
         let prepared_message = result.unwrap();
         let expected_message = templates
             .template_message(
-                "rejection_sampling_evaluator_system",
+                "t0:rejection_sampling_evaluator_system",
                 &json!({"inner_system_message": "You are a helpful assistant."}),
             )
             .unwrap();
@@ -519,7 +546,7 @@ mod tests {
         };
         let result = evaluator_config.prepare_system_message(&templates, None);
         let expected_message = templates
-            .template_message("rejection_sampling_evaluator_system", &json!({}))
+            .template_message("t0:rejection_sampling_evaluator_system", &json!({}))
             .unwrap();
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
@@ -546,7 +573,7 @@ mod tests {
             .unwrap();
         let expected_message = templates
             .template_message(
-                "rejection_sampling_evaluator_system",
+                "t0:rejection_sampling_evaluator_system",
                 &json!({"inner_system_message": inner_system_message}),
             )
             .unwrap();
@@ -572,7 +599,7 @@ mod tests {
             .unwrap();
         let expected_message = templates
             .template_message(
-                "rejection_sampling_evaluator_system",
+                "t0:rejection_sampling_evaluator_system",
                 &json!({"inner_system_message": inner_system_message}),
             )
             .unwrap();
@@ -669,7 +696,10 @@ mod tests {
             "candidates": candidates,
         });
         let expected_message_text = templates
-            .template_message("rejection_sampling_evaluator_candidates", &template_context)
+            .template_message(
+                "t0:rejection_sampling_evaluator_candidates",
+                &template_context,
+            )
             .unwrap();
 
         // Now check that the request_message has the expected role and content

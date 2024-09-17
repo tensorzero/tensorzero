@@ -84,20 +84,20 @@ impl<'c> TemplateConfig<'c> {
     pub fn add_hardcoded_templates(&mut self) -> Result<(), Error> {
         self.env
             .add_template(
-                "rejection_sampling_evaluator_system",
+                "t0:rejection_sampling_evaluator_system",
                 REJECTION_SAMPLING_EVALUATOR_SYSTEM,
             )
             .map_err(|e| Error::MiniJinjaTemplate {
-                template_name: "rejection_sampling_evaluator_system".to_string(),
+                template_name: "t0:rejection_sampling_evaluator_system".to_string(),
                 message: format!("Failed to add template: {}", e),
             })?;
         self.env
             .add_template(
-                "rejection_sampling_evaluator_candidates",
+                "t0:rejection_sampling_evaluator_candidates",
                 REJECTION_SAMPLING_EVALUATOR_CANDIDATES,
             )
             .map_err(|e| Error::MiniJinjaTemplate {
-                template_name: "rejection_sampling_evaluator_candidates".to_string(),
+                template_name: "t0:rejection_sampling_evaluator_candidates".to_string(),
                 message: format!("Failed to add template: {}", e),
             })?;
         Ok(())
@@ -110,13 +110,13 @@ impl<'c> Default for TemplateConfig<'c> {
     }
 }
 
-const REJECTION_SAMPLING_EVALUATOR_SYSTEM: &str = r#"{% if inner_system_message is defined %}You are an assistant tasked with re-ranking candidate answers to the following problem:
+const REJECTION_SAMPLING_EVALUATOR_SYSTEM: &str = r#"{%- if inner_system_message is defined -%}You are an assistant tasked with re-ranking candidate answers to the following problem:
 {{ inner_system_message }}
 
-{% else %}
+{%- else -%}
 You are an assistant tasked with re-ranking candidate answers to a problem.
 
-{% endif %}
+{%- endif -%}
 The messages below are the conversation history between the user and the assistant along with a final message giving a set of candidate responses.
 Please evaluate the following candidate responses and provide your reasoning along with the index of the best candidate in the following JSON format:
 {
@@ -124,11 +124,12 @@ Please evaluate the following candidate responses and provide your reasoning alo
     "best_candidate_index": int  // Range: 0 to n-1
 }"#;
 
-const REJECTION_SAMPLING_EVALUATOR_CANDIDATES: &str = r#"Here are the candidate answers:
+const REJECTION_SAMPLING_EVALUATOR_CANDIDATES: &str = r#"Here are the candidate answers (with the index and a row of ------ separating):
 
-{% for candidate in candidates %}
+{%- for candidate in candidates -%}
 {{ loop.index0 }}: {{ candidate }}
-{% endfor %}
+------
+{%- endfor -%}
 
 Please evaluate these candidates and provide the index of the best one."#;
 
