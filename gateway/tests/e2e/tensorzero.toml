@@ -187,6 +187,13 @@ routing = ["bad_tool"]
 type = "dummy"
 model_name = "bad_tool"
 
+[models.rejection_sampling_evaluator]
+routing = ["rejection_sampling_evaluator"]
+
+[models.rejection_sampling_evaluator.providers.rejection_sampling_evaluator]
+type = "dummy"
+model_name = "rejection_sampling_0"
+
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
@@ -915,6 +922,32 @@ weight = 1
 model = "gpt-4o-mini-2024-07-18"
 system_template = "../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
 max_tokens = 100
+
+[functions.rejection_sampling]
+type = "chat"
+system_schema = "../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.rejection_sampling.variants.variant0]
+type = "chat_completion"
+weight = 0
+model = "test"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.rejection_sampling.variants.variant1]
+type = "chat_completion"
+weight = 0
+model = "json"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.rejection_sampling.variants.rejection_sampling_variant]
+type = "rejection_sampling"
+weight = 1
+candidates = ["variant0", "variant1"]
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.rejection_sampling.variants.rejection_sampling_variant.evaluator]
+model = "rejection_sampling_evaluator"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │

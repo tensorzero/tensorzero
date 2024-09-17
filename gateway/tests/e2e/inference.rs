@@ -11,7 +11,8 @@ use uuid::Uuid;
 
 use crate::common::{
     get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
-    select_json_inference_clickhouse, select_model_inferences_clickhouse,
+    select_json_inference_clickhouse, select_model_inference_clickhouse,
+    select_model_inferences_clickhouse,
 };
 
 #[tokio::test]
@@ -150,7 +151,7 @@ async fn e2e_test_inference_model_fallback() {
     assert_eq!(variant_name, "test");
 
     // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
@@ -320,7 +321,7 @@ async fn e2e_test_tool_call() {
         .as_bool()
         .unwrap());
     // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
@@ -489,7 +490,7 @@ async fn e2e_test_tool_call_malformed() {
         .as_bool()
         .unwrap());
     // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
@@ -594,7 +595,7 @@ async fn e2e_test_inference_json_fail() {
     assert_eq!(variant_name, "test");
 
     // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
@@ -708,7 +709,7 @@ async fn e2e_test_inference_json_success() {
     assert_eq!(variant_name, "test");
 
     // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
@@ -855,7 +856,7 @@ async fn e2e_test_variant_failover() {
     assert!(chat_completion_inference_params.get("seed").is_none());
 
     // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
@@ -1023,7 +1024,7 @@ async fn e2e_test_streaming() {
     assert_eq!(seed, 420);
 
     // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
@@ -1281,7 +1282,7 @@ async fn e2e_test_tool_call_streaming() {
         .as_bool()
         .unwrap());
     // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
@@ -1305,12 +1306,16 @@ async fn e2e_test_tool_call_streaming() {
 }
 
 /// This test calls a function which currently uses rejection sampling.
+/// We call 3 dummy models, one that gives the usual good response, one that
+/// gives a JSON repsonse, and one that tells us to select the former.
+/// We check that the good response is selected and that the other responses are not
+/// but they get stored to the ModelInference table.
 #[tokio::test]
 async fn e2e_test_rejection_sampling() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
-        "function_name": "rejection_sampling_test",
+        "function_name": "rejection_sampling",
         "episode_id": episode_id,
         "input":{
             "system": {"assistant_name": "AskJeeves"},
@@ -1393,31 +1398,51 @@ async fn e2e_test_rejection_sampling() {
     assert_eq!(retrieved_episode_id, episode_id);
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, "test");
+    assert_eq!(variant_name, "rejection_sampling_variant");
 
     // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let results = select_model_inferences_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let _ = Uuid::parse_str(id).unwrap();
-    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    assert_eq!(inference_id_result, inference_id);
+    assert_eq!(results.len(), 3);
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
-    assert_eq!(input_tokens, 10);
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
-    assert_eq!(output_tokens, 10);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
-    assert_eq!(
-        result.get("raw_response").unwrap().as_str().unwrap(),
-        DUMMY_INFER_RESPONSE_RAW
-    );
-    assert_eq!(
-        result.get("raw_request").unwrap().as_str().unwrap(),
-        DUMMY_RAW_REQUEST
-    );
+    // Collect model names
+    let mut model_names = std::collections::HashSet::new();
+
+    for result in results {
+        let id = result.get("id").unwrap().as_str().unwrap();
+        let _ = Uuid::parse_str(id).unwrap();
+        let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+        let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+        assert_eq!(inference_id_result, inference_id);
+
+        // Collect model_name
+        let model_name = result.get("model_name").unwrap().as_str().unwrap();
+        model_names.insert(model_name.to_string());
+
+        // Check that all expected fields are present
+        assert!(result.get("model_provider_name").is_some());
+        assert!(result.get("raw_request").is_some());
+        assert!(result.get("raw_response").is_some());
+        assert!(result.get("input_tokens").is_some());
+        assert!(result.get("output_tokens").is_some());
+        assert!(result.get("response_time_ms").is_some());
+        assert!(result.get("ttft_ms").is_some());
+
+        let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+        assert_eq!(input_tokens, 10);
+        let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+        assert_eq!(output_tokens, 10);
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
+
+    // Check that all expected model names are present
+    let expected_model_names: std::collections::HashSet<String> =
+        ["rejection_sampling_evaluator", "json", "test"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+    assert_eq!(model_names, expected_model_names);
 }

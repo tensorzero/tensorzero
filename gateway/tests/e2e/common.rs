@@ -60,7 +60,7 @@ pub(crate) async fn select_json_inference_clickhouse(
     Some(json)
 }
 
-pub(crate) async fn select_model_inferences_clickhouse(
+pub(crate) async fn select_model_inference_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
 ) -> Option<Value> {
@@ -74,6 +74,30 @@ pub(crate) async fn select_model_inferences_clickhouse(
     let text = clickhouse_connection_info.run_query(query).await.unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
     Some(json)
+}
+
+pub(crate) async fn select_model_inferences_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    inference_id: Uuid,
+) -> Option<Vec<Value>> {
+    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+
+    let query = format!(
+        "SELECT * FROM ModelInference WHERE inference_id = '{}' FORMAT JSONEachRow",
+        inference_id
+    );
+
+    let text = clickhouse_connection_info.run_query(query).await.unwrap();
+    let json_rows: Vec<Value> = text
+        .lines()
+        .filter_map(|line| serde_json::from_str(line).ok())
+        .collect();
+
+    if json_rows.is_empty() {
+        None
+    } else {
+        Some(json_rows)
+    }
 }
 
 pub(crate) async fn select_feedback_clickhouse(
