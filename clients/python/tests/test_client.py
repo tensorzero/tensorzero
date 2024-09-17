@@ -26,6 +26,7 @@ from tensorzero import (
     ChatInferenceResponse,
     FeedbackResponse,
     JsonInferenceResponse,
+    TensorZeroGateway,
 )
 from tensorzero.types import TensorZeroError
 from uuid_extensions import uuid7
