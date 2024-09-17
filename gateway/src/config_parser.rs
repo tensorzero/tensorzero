@@ -481,25 +481,25 @@ mod tests {
             }
             _ => panic!("Expected a chat function"),
         }
-        // Check that the rejection sampling variant has multiple candidates
+        // Check that the best of n variant has multiple candidates
         let function = config
             .functions
             .get("templates_with_variables_chat")
             .unwrap();
         match function {
             FunctionConfig::Chat(chat_config) => {
-                if let Some(variant) = chat_config.variants.get("rejection_sampling") {
+                if let Some(variant) = chat_config.variants.get("best_of_n") {
                     match variant {
-                        VariantConfig::RejectionSampling(rejection_sampling_config) => {
+                        VariantConfig::BestOfN(best_of_n_config) => {
                             assert!(
-                                rejection_sampling_config.candidates.len() > 1,
-                                "Rejection sampling variant should have multiple candidates"
+                                best_of_n_config.candidates.len() > 1,
+                                "Best of n variant should have multiple candidates"
                             );
                         }
-                        _ => panic!("Expected a rejection sampling variant"),
+                        _ => panic!("Expected a best of n variant"),
                     }
                 } else {
-                    panic!("Expected to find a rejection sampling variant");
+                    panic!("Expected to find a best of n variant");
                 }
             }
             _ => panic!("Expected a chat function"),
@@ -951,7 +951,7 @@ mod tests {
         sample_config["functions"]["templates_with_variables_chat"]["variants"]
             .as_table_mut()
             .unwrap()
-            .remove("rejection_sampling");
+            .remove("best_of_n");
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(sample_config, base_path);
         assert_eq!(
@@ -986,7 +986,7 @@ mod tests {
         sample_config["functions"]["templates_with_variables_chat"]["variants"]
             .as_table_mut()
             .unwrap()
-            .remove("rejection_sampling");
+            .remove("best_of_n");
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(sample_config, base_path);
         assert_eq!(
@@ -1023,7 +1023,7 @@ mod tests {
         sample_config["functions"]["templates_with_variables_chat"]["variants"]
             .as_table_mut()
             .unwrap()
-            .remove("rejection_sampling");
+            .remove("best_of_n");
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(sample_config, base_path);
         assert_eq!(
@@ -1049,12 +1049,12 @@ mod tests {
 
     /// Ensure that config loading fails when a nonexistent candidate is specified in a variant
     #[test]
-    fn test_config_rejection_sampling_candidate_not_found() {
+    fn test_config_best_of_n_candidate_not_found() {
         let mut sample_config = get_sample_valid_config();
         sample_config["functions"]["templates_with_variables_chat"]["variants"]
             .as_table_mut()
             .unwrap()
-            .get_mut("rejection_sampling")
+            .get_mut("best_of_n")
             .unwrap()
             .as_table_mut()
             .unwrap()
@@ -1308,12 +1308,12 @@ mod tests {
         user_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
         assistant_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
 
-        [functions.templates_with_variables_chat.variants.rejection_sampling]
-        type = "experimental_rejection_sampling"
+        [functions.templates_with_variables_chat.variants.best_of_n]
+        type = "experimental_best_of_n"
         weight = 1.0
         candidates = ["variant_with_variables", "variant_with_variables"]
 
-        [functions.templates_with_variables_chat.variants.rejection_sampling.evaluator]
+        [functions.templates_with_variables_chat.variants.best_of_n.evaluator]
         model = "gpt-3.5-turbo"
         system_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
         user_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"

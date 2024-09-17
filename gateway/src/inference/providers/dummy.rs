@@ -105,13 +105,13 @@ impl InferenceProvider for DummyProvider {
                 id: "0".to_string(),
             })],
             "json" => vec![r#"{"answer":"Hello"}"#.to_string().into()],
-            "rejection_sampling_0" => {
+            "best_of_n_0" => {
                 vec![r#"{"thinking": "hmmm", "answer_choice": 0}"#.to_string().into()]
             }
-            "rejection_sampling_1" => {
+            "best_of_n_1" => {
                 vec![r#"{"thinking": "hmmm", "answer_choice": 1}"#.to_string().into()]
             }
-            "rejection_sampling_big" => {
+            "best_of_n_big" => {
                 vec![r#"{"thinking": "hmmm", "answer_choice": 100}"#.to_string().into()]
             }
             _ => vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()],
@@ -124,9 +124,9 @@ impl InferenceProvider for DummyProvider {
             "json" => DUMMY_JSON_RESPONSE_RAW.to_string(),
             #[allow(clippy::unwrap_used)]
             "bad_tool" => serde_json::to_string(&*DUMMY_BAD_TOOL_RESPONSE).unwrap(),
-            "rejection_sampling_0" => r#"{"thinking": "hmmm", "answer_choice": 0}"#.to_string(),
-            "rejection_sampling_1" => r#"{"thinking": "hmmm", "answer_choice": 1}"#.to_string(),
-            "rejection_sampling_big" => r#"{"thinking": "hmmm", "answer_choice": 100}"#.to_string(),
+            "best_of_n_0" => r#"{"thinking": "hmmm", "answer_choice": 0}"#.to_string(),
+            "best_of_n_1" => r#"{"thinking": "hmmm", "answer_choice": 1}"#.to_string(),
+            "best_of_n_big" => r#"{"thinking": "hmmm", "answer_choice": 100}"#.to_string(),
             _ => DUMMY_INFER_RESPONSE_RAW.to_string(),
         };
         let usage = DUMMY_INFER_USAGE.clone();

@@ -26,7 +26,7 @@ use crate::{
 use super::{InferenceConfig, ModelUsedInfo, Variant};
 
 #[derive(Debug, Deserialize)]
-pub struct RejectionSamplingConfig {
+pub struct BestOfNConfig {
     pub weight: f64,
     #[serde(default = "default_timeout")]
     pub timeout_s: f64,
@@ -60,7 +60,7 @@ lazy_static! {
     };
 }
 
-impl Variant for RejectionSamplingConfig {
+impl Variant for BestOfNConfig {
     async fn infer<'a, 'request>(
         &'a self,
         input: &Input,
@@ -100,7 +100,7 @@ impl Variant for RejectionSamplingConfig {
         Error,
     > {
         Err(Error::InvalidRequest {
-            message: "Rejection sampling variants do not support streaming inference.".to_string(),
+            message: "Best of n variants do not support streaming inference.".to_string(),
         })
     }
 
@@ -142,7 +142,7 @@ impl Variant for RejectionSamplingConfig {
     }
 }
 
-impl RejectionSamplingConfig {
+impl BestOfNConfig {
     /// Infer each candidate variant concurrently and return the results.
     async fn infer_candidates<'a, 'request>(
         &self,
@@ -232,7 +232,7 @@ impl RejectionSamplingConfig {
     ) -> Result<InferenceResult<'a>, Error> {
         if candidates.is_empty() {
             return Err(Error::Inference {
-                message: "No candidates to select from in rejection sampling".to_string(),
+                message: "No candidates to select from in best of n".to_string(),
             });
         }
         if candidates.len() == 1 {
@@ -293,7 +293,7 @@ impl RejectionSamplingConfig {
     }
 }
 
-/// Attempts to select the best candidate for rejection sampling.
+/// Attempts to select the best candidate for best of n.
 /// If this function returns an error or the index is None, we will randomly select one
 /// of the candidates in the outer function.
 /// If a model inference actually occurs, we return None and the model inference result instead of Err() so
@@ -380,7 +380,7 @@ impl EvaluatorConfig {
             Some(inner_system_message) => json!({"inner_system_message": inner_system_message}),
             None => json!({}),
         };
-        templates.template_message("t0:rejection_sampling_evaluator_system", &template_context)
+        templates.template_message("t0:best_of_n_evaluator_system", &template_context)
     }
 
     /// Prepares the final candidate message for the evaluator variant.
@@ -411,10 +411,8 @@ impl EvaluatorConfig {
         let template_context = json!({
             "candidates": candidates,
         });
-        let message_text = templates.template_message(
-            "t0:rejection_sampling_evaluator_candidates",
-            &template_context,
-        )?;
+        let message_text =
+            templates.template_message("t0:best_of_n_evaluator_candidates", &template_context)?;
         Ok(RequestMessage {
             role: Role::User,
             content: vec![message_text.into()],
@@ -513,7 +511,7 @@ mod tests {
         let prepared_message = result.unwrap();
         let expected_message = templates
             .template_message(
-                "t0:rejection_sampling_evaluator_system",
+                "t0:best_of_n_evaluator_system",
                 &json!({"inner_system_message": "You are a helpful assistant."}),
             )
             .unwrap();
@@ -546,7 +544,7 @@ mod tests {
         };
         let result = evaluator_config.prepare_system_message(&templates, None);
         let expected_message = templates
-            .template_message("t0:rejection_sampling_evaluator_system", &json!({}))
+            .template_message("t0:best_of_n_evaluator_system", &json!({}))
             .unwrap();
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
@@ -573,7 +571,7 @@ mod tests {
             .unwrap();
         let expected_message = templates
             .template_message(
-                "t0:rejection_sampling_evaluator_system",
+                "t0:best_of_n_evaluator_system",
                 &json!({"inner_system_message": inner_system_message}),
             )
             .unwrap();
@@ -599,7 +597,7 @@ mod tests {
             .unwrap();
         let expected_message = templates
             .template_message(
-                "t0:rejection_sampling_evaluator_system",
+                "t0:best_of_n_evaluator_system",
                 &json!({"inner_system_message": inner_system_message}),
             )
             .unwrap();
@@ -696,10 +694,7 @@ mod tests {
             "candidates": candidates,
         });
         let expected_message_text = templates
-            .template_message(
-                "t0:rejection_sampling_evaluator_candidates",
-                &template_context,
-            )
+            .template_message("t0:best_of_n_evaluator_candidates", &template_context)
             .unwrap();
 
         // Now check that the request_message has the expected role and content
@@ -712,11 +707,11 @@ mod tests {
         // Set up evaluator with a provider that returns a valid answer_choice
         let evaluator_config = EvaluatorConfig {
             inner: ChatCompletionConfig {
-                model: "rejection_sampling_1".to_string(),
+                model: "best_of_n_1".to_string(),
                 ..Default::default()
             },
         };
-        let rejection_sampling_variant = RejectionSamplingConfig {
+        let best_of_n_variant = BestOfNConfig {
             weight: 1.0,
             timeout_s: 10.0,
             candidates: vec![],
@@ -790,13 +785,13 @@ mod tests {
         );
         let candidates = vec![candidate0, candidate1];
         let models = HashMap::from([(
-            "rejection_sampling_1".to_string(),
+            "best_of_n_1".to_string(),
             ModelConfig {
-                routing: vec!["rejection_sampling_1".to_string()],
+                routing: vec!["best_of_n_1".to_string()],
                 providers: HashMap::from([(
-                    "rejection_sampling_1".to_string(),
+                    "best_of_n_1".to_string(),
                     ProviderConfig::Dummy(DummyProvider {
-                        model_name: "rejection_sampling_1".to_string(),
+                        model_name: "best_of_n_1".to_string(),
                     }),
                 )]),
             },
@@ -812,7 +807,7 @@ mod tests {
             dynamic_output_schema: None,
         };
 
-        let selected = rejection_sampling_variant
+        let selected = best_of_n_variant
             .select_best_candidate(
                 &input,
                 &models,
@@ -824,7 +819,7 @@ mod tests {
             .expect("Failed to select best candidate");
 
         // Expect the second candidate to be selected (index 1)
-        // based on "answer": 1 in rejection_sampling_1
+        // based on "answer": 1 in best_of_n_1
         let expected_id = inference_id1;
         let expected_usage = Usage {
             input_tokens: 15,
@@ -849,7 +844,7 @@ mod tests {
                 ..Default::default()
             },
         };
-        let rejection_sampling_variant = RejectionSamplingConfig {
+        let best_of_n_variant = BestOfNConfig {
             weight: 1.0,
             timeout_s: 10.0,
             candidates: vec![],
@@ -878,7 +873,7 @@ mod tests {
             messages: vec![],
         };
 
-        let result = rejection_sampling_variant
+        let result = best_of_n_variant
             .select_best_candidate(
                 &input,
                 &models,
@@ -908,7 +903,7 @@ mod tests {
                 ..Default::default()
             },
         };
-        let rejection_sampling_variant = RejectionSamplingConfig {
+        let best_of_n_variant = BestOfNConfig {
             weight: 1.0,
             timeout_s: 10.0,
             candidates: vec![],
@@ -936,7 +931,7 @@ mod tests {
             messages: vec![],
         };
 
-        let result = rejection_sampling_variant
+        let result = best_of_n_variant
             .select_best_candidate(
                 &input,
                 &models,
@@ -959,7 +954,7 @@ mod tests {
         }
         // Test case: No answer choices (should return an error)
         let empty_candidates = vec![];
-        let result = rejection_sampling_variant
+        let result = best_of_n_variant
             .select_best_candidate(
                 &input,
                 &models,
@@ -972,18 +967,18 @@ mod tests {
         assert_eq!(
             err,
             Error::Inference {
-                message: "No candidates to select from in rejection sampling".to_string()
+                message: "No candidates to select from in best of n".to_string()
             }
         );
 
         // Test case: Index returned too large (should return an error)
-        let rejection_sampling_big_variant = RejectionSamplingConfig {
+        let best_of_n_big_variant = BestOfNConfig {
             weight: 1.0,
             timeout_s: 10.0,
             candidates: vec![],
             evaluator: EvaluatorConfig {
                 inner: ChatCompletionConfig {
-                    model: "rejection_sampling_big".to_string(),
+                    model: "best_of_n_big".to_string(),
                     weight: 1.0,
                     ..Default::default()
                 },
@@ -992,19 +987,19 @@ mod tests {
 
         let mut big_models = HashMap::new();
         big_models.insert(
-            "rejection_sampling_big".to_string(),
+            "best_of_n_big".to_string(),
             ModelConfig {
-                routing: vec!["rejection_sampling_big".to_string()],
+                routing: vec!["best_of_n_big".to_string()],
                 providers: HashMap::from([(
-                    "rejection_sampling_big".to_string(),
+                    "best_of_n_big".to_string(),
                     ProviderConfig::Dummy(DummyProvider {
-                        model_name: "rejection_sampling_big".to_string(),
+                        model_name: "best_of_n_big".to_string(),
                     }),
                 )]),
             },
         );
 
-        let result_big = rejection_sampling_big_variant
+        let result_big = best_of_n_big_variant
             .select_best_candidate(
                 &input,
                 &big_models,

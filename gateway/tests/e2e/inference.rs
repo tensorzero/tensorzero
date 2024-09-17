@@ -1305,17 +1305,17 @@ async fn e2e_test_tool_call_streaming() {
     );
 }
 
-/// This test calls a function which currently uses rejection sampling.
+/// This test calls a function which currently uses best of n.
 /// We call 3 dummy models, one that gives the usual good response, one that
 /// gives a JSON repsonse, and one that tells us to select the former.
 /// We check that the good response is selected and that the other responses are not
 /// but they get stored to the ModelInference table.
 #[tokio::test]
-async fn e2e_test_rejection_sampling() {
+async fn e2e_test_best_of_n() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
-        "function_name": "rejection_sampling",
+        "function_name": "best_of_n",
         "episode_id": episode_id,
         "input":{
             "system": {"assistant_name": "AskJeeves"},
@@ -1398,7 +1398,7 @@ async fn e2e_test_rejection_sampling() {
     assert_eq!(retrieved_episode_id, episode_id);
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, "rejection_sampling_variant");
+    assert_eq!(variant_name, "best_of_n_variant");
 
     // Check the ModelInference Table
     let results = select_model_inferences_clickhouse(&clickhouse, inference_id)
@@ -1440,7 +1440,7 @@ async fn e2e_test_rejection_sampling() {
 
     // Check that all expected model names are present
     let expected_model_names: std::collections::HashSet<String> =
-        ["rejection_sampling_evaluator", "json", "test"]
+        ["best_of_n_evaluator", "json", "test"]
             .iter()
             .map(|s| s.to_string())
             .collect();
