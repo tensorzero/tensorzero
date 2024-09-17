@@ -1,10 +1,10 @@
 """
 TensorZero Client
 
-This module provides an asynchronous client for interacting with the TensorZero gateway.
+This module provides an synchronous and asynchronous clients for interacting with the TensorZero gateway.
 It includes functionality for making inference requests and sending feedback.
 
-The main class, AsyncTensorZeroGateway, offers methods for:
+The main classes, AsyncTensorZeroGateway and TensorZeroGateway, offer methods for:
 - Initializing the client with a base URL
 - Making inference requests (with optional streaming)
 - Sending feedback on episodes or inferences
@@ -14,6 +14,10 @@ Usage:
     async with TensorZero(base_url) as client:
         response = await client.inference(...)
         feedback = await client.feedback(...)
+
+    with TensorZero(base_url) as client:
+        response = client.inference(...)
+        feedback = client.feedback(...)
 """
 
 import json
@@ -361,8 +365,8 @@ class TensorZeroGateway:
         :yield: Parsed SSE events as dictionaries
         """
         for line in response.iter_lines():
-            if line.startswith(b"data: "):
-                data = line[6:].strip().decode()
+            if line.startswith("data: "):
+                data = line[6:].strip()
                 if data == "[DONE]":
                     break
                 try:
