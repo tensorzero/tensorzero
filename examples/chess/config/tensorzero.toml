@@ -1,0 +1,128 @@
+# TensorZero configuration file for the `haiku_hidden_preferences` example.
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  GENERAL                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[gateway]
+bind_address = "0.0.0.0:3000"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                   MODELS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[models."gpt-4o-2024-08-06"]
+routing = ["openai"]
+
+[models."gpt-4o-2024-08-06".providers.openai]
+type = "openai"
+model_name = "gpt-4o-2024-08-06"
+
+[models."gpt-4o-mini-2024-07-18"]
+routing = ["openai"]
+
+[models."gpt-4o-mini-2024-07-18".providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini-2024-07-18"
+
+[models."claude-3.5-sonnet-20240620"]
+routing = ["anthropic"]
+
+[models."claude-3.5-sonnet-20240620".providers.anthropic]
+type = "anthropic"
+model_name = "claude-3-5-sonnet-20240620"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.play_chess_fen]
+type = "json"
+user_schema = "functions/play_chess_fen/user_schema.json"
+output_schema = "functions/play_chess_fen/output_schema.json"
+
+[functions.play_chess_fen.variants.gpt-4o]
+weight = 1
+type = "chat_completion"
+model = "gpt-4o-2024-08-06"
+system_template = "functions/play_chess_fen/chess_prompt/system_template.minijinja"
+user_template = "functions/play_chess_fen/chess_prompt/user_template.minijinja"
+
+[functions.play_chess_pgn]
+type = "json"
+user_schema = "functions/play_chess_pgn/user_schema.json"
+output_schema = "functions/play_chess_pgn/output_schema.json"
+
+[functions.play_chess_pgn.variants.gpt-4o]
+weight = 1
+type = "chat_completion"
+model = "gpt-4o-2024-08-06"
+system_template = "functions/play_chess_pgn/chess_prompt/system_template.minijinja"
+user_template = "functions/play_chess_pgn/chess_prompt/user_template.minijinja"
+
+[functions.play_chess_pgn.variants.gpt-4o-mini]
+weight = 1
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18"
+system_template = "functions/play_chess_pgn/chess_prompt/system_template.minijinja"
+user_template = "functions/play_chess_pgn/chess_prompt/user_template.minijinja"
+
+[functions.play_chess_pgn.variants."claude-3.5-sonnet"]
+weight = 1
+type = "chat_completion"
+model = "claude-3.5-sonnet-20240620"
+system_template = "functions/play_chess_pgn/chess_prompt/system_template.minijinja"
+user_template = "functions/play_chess_pgn/chess_prompt/user_template.minijinja"
+json_mode = "implicit_tool"
+
+[functions.play_chess_board]
+type = "json"
+user_schema = "functions/play_chess_board/user_schema.json"
+output_schema = "functions/play_chess_board/output_schema.json"
+
+[functions.play_chess_board.variants.gpt-4o]
+weight = 1
+type = "chat_completion"
+model = "gpt-4o-2024-08-06"
+system_template = "functions/play_chess_board/chess_prompt/system_template.minijinja"
+user_template = "functions/play_chess_board/chess_prompt/user_template.minijinja"
+
+[functions.play_chess_board.variants.gpt-4o-mini]
+weight = 1
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18"
+system_template = "functions/play_chess_board/chess_prompt/system_template.minijinja"
+user_template = "functions/play_chess_board/chess_prompt/user_template.minijinja"
+
+[functions.play_chess_board.variants.gpt-4o-mini_best_of_5]
+weight = 1
+type = "experimental_best_of_n"
+candidates = [
+    "gpt-4o-mini",
+    "gpt-4o-mini",
+    "gpt-4o-mini",
+    "gpt-4o-mini",
+    "gpt-4o-mini",
+]
+[functions.play_chess_board.variants.gpt-4o-mini_best_of_5.evaluator]
+model = "gpt-4o-mini-2024-07-18"
+system_template = "functions/play_chess_board/chess_prompt/system_template.minijinja"
+user_template = "functions/play_chess_board/chess_prompt/user_template.minijinja"
+
+[functions.play_chess_board.variants."claude-3.5-sonnet"]
+weight = 1
+type = "chat_completion"
+model = "claude-3.5-sonnet-20240620"
+system_template = "functions/play_chess_board/chess_prompt/system_template.minijinja"
+user_template = "functions/play_chess_board/chess_prompt/user_template.minijinja"
+json_mode = "implicit_tool"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  METRICS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[metrics.score]
+# Should be 1 for win, 0 for loss, and 0.5 for draw
+type = "float"
+level = "episode"
+optimize = "max"

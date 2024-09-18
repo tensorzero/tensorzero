@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "FEN": {
+      "type": "string"
+    },
+    "legal_moves_san": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": ["FEN", "legal_moves_san"],
+  "additionalProperties": false
+}
