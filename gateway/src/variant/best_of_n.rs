@@ -335,20 +335,44 @@ async fn inner_select_best_candidate<'a, 'request>(
             _ => None,
         }) {
         Some(text) => text,
-        None => return Ok((None, model_inference_result)),
+        None => {
+            let err = Error::Inference {
+                message: "The evaluator did not return a text response".to_string(),
+            };
+            err.log();
+            return Ok((None, model_inference_result));
+        }
     };
     let parsed_output = match serde_json::from_str::<Value>(&text_content.text) {
         Ok(value) => value,
-        Err(_) => {
+        Err(e) => {
+            let err = Error::Inference {
+                message: format!("The evaluator did not return a valid JSON response: {e}"),
+            };
+            err.log();
             return Ok((None, model_inference_result));
         }
     };
     let answer_choice = match parsed_output.get("answer_choice") {
         Some(val) => match val.as_u64() {
             Some(num) => num as usize,
-            None => return Ok((None, model_inference_result)),
+            None => {
+                let err = Error::Inference {
+                    message: format!(
+                        "The evaluator did not return a valid integer answer choice: {val}"
+                    ),
+                };
+                err.log();
+                return Ok((None, model_inference_result));
+            }
         },
-        None => return Ok((None, model_inference_result)),
+        None => {
+            let err = Error::Inference {
+                message: format!("The evaluator returned a JSON response without an answer_choice field: {parsed_output}"),
+            };
+            err.log();
+            return Ok((None, model_inference_result));
+        }
     };
     if answer_choice >= candidates.len() {
         let err = Error::Inference {
@@ -374,11 +398,14 @@ impl EvaluatorConfig {
         &self,
         templates: &TemplateConfig,
         system: Option<&Value>,
+        max_index: usize,
     ) -> Result<String, Error> {
         let inner_system_message = self.inner.prepare_system_message(templates, system)?;
         let template_context = match inner_system_message {
-            Some(inner_system_message) => json!({"inner_system_message": inner_system_message}),
-            None => json!({}),
+            Some(inner_system_message) => {
+                json!({"inner_system_message": inner_system_message, "max_index": max_index})
+            }
+            None => json!({"max_index": max_index}),
         };
         templates.template_message("t0:best_of_n_evaluator_system", &template_context)
     }
@@ -432,8 +459,12 @@ impl EvaluatorConfig {
         candidates: &Vec<InferenceResult>,
         inference_params: &mut InferenceParams,
     ) -> Result<ModelInferenceRequest, Error> {
-        let system =
-            Some(self.prepare_system_message(inference_config.templates, input.system.as_ref())?);
+        let max_index = candidates.len() - 1;
+        let system = Some(self.prepare_system_message(
+            inference_config.templates,
+            input.system.as_ref(),
+            max_index,
+        )?);
         let messages = input
             .messages
             .iter()
@@ -507,12 +538,14 @@ mod tests {
             },
         };
         let input_message = Value::String("You are a helpful assistant.".to_string());
-        let result = evaluator_config.prepare_system_message(&templates, Some(&input_message));
+        let max_index = 2;
+        let result =
+            evaluator_config.prepare_system_message(&templates, Some(&input_message), max_index);
         let prepared_message = result.unwrap();
         let expected_message = templates
             .template_message(
                 "t0:best_of_n_evaluator_system",
-                &json!({"inner_system_message": "You are a helpful assistant."}),
+                &json!({"inner_system_message": "You are a helpful assistant.", "max_index": max_index}),
             )
             .unwrap();
         assert_eq!(prepared_message, expected_message);
@@ -526,7 +559,9 @@ mod tests {
             },
         };
         let input_message = json!({"message": "You are a helpful assistant."});
-        let result = evaluator_config.prepare_system_message(&templates, Some(&input_message));
+        let max_index = 3;
+        let result =
+            evaluator_config.prepare_system_message(&templates, Some(&input_message), max_index);
         assert!(result.is_err());
         let prepared_message = result.unwrap_err();
         assert_eq!(
@@ -542,9 +577,13 @@ mod tests {
                 ..Default::default()
             },
         };
-        let result = evaluator_config.prepare_system_message(&templates, None);
+        let max_index = 5;
+        let result = evaluator_config.prepare_system_message(&templates, None, max_index);
         let expected_message = templates
-            .template_message("t0:best_of_n_evaluator_system", &json!({}))
+            .template_message(
+                "t0:best_of_n_evaluator_system",
+                &json!({"max_index": max_index}),
+            )
             .unwrap();
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
@@ -562,17 +601,22 @@ mod tests {
             },
         };
 
+        let max_index = 6;
         let input_message = serde_json::json!({"assistant_name": "ChatGPT"});
-        let result = evaluator_config.prepare_system_message(&templates, Some(&input_message));
+        let result =
+            evaluator_config.prepare_system_message(&templates, Some(&input_message), max_index);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
         let inner_system_message = templates
-            .template_message(system_template_name, &json!({"assistant_name": "ChatGPT"}))
+            .template_message(
+                system_template_name,
+                &json!({"assistant_name": "ChatGPT", "max_index": max_index}),
+            )
             .unwrap();
         let expected_message = templates
             .template_message(
                 "t0:best_of_n_evaluator_system",
-                &json!({"inner_system_message": inner_system_message}),
+                &json!({"inner_system_message": inner_system_message, "max_index": max_index}),
             )
             .unwrap();
         assert_eq!(prepared_message, expected_message);
@@ -589,7 +633,8 @@ mod tests {
             },
         };
 
-        let result = evaluator_config.prepare_system_message(&templates, None);
+        let max_index = 10;
+        let result = evaluator_config.prepare_system_message(&templates, None, max_index);
         assert!(result.is_ok());
         let prepared_message = result.unwrap();
         let inner_system_message = templates
@@ -598,7 +643,7 @@ mod tests {
         let expected_message = templates
             .template_message(
                 "t0:best_of_n_evaluator_system",
-                &json!({"inner_system_message": inner_system_message}),
+                &json!({"inner_system_message": inner_system_message, "max_index": max_index}),
             )
             .unwrap();
         assert_eq!(prepared_message, expected_message);

@@ -118,7 +118,7 @@ The messages below are the conversation history between the user and the assista
 Please evaluate the following candidate responses and provide your reasoning along with the index of the best candidate in the following JSON format:
 {
     "thinking": "your reasoning here",
-    "best_candidate_index": int  // Range: 0 to n-1
+    "answer_choice": int  // Range: 0 to {{ max_index }}
 }"#;
 
 const BEST_OF_N_EVALUATOR_CANDIDATES: &str = r#"Here are the candidate answers (with the index and a row of ------ separating):
