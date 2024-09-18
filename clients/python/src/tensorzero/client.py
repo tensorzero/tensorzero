@@ -23,6 +23,7 @@ Usage:
 
 import json
 import logging
+from abc import ABC, abstractmethod
 from typing import Any, AsyncGenerator, Dict, Generator, List, Literal, Optional, Union
 from urllib.parse import urljoin
 from uuid import UUID
@@ -39,12 +40,12 @@ from .types import (
 )
 
 
-class BaseTensorZeroGateway:
+class BaseTensorZeroGateway(ABC):
     def __init__(self, base_url: str):
         self.base_url = base_url
         self.logger = logging.getLogger(__name__)
 
-    def prepare_inference_request(
+    def _prepare_inference_request(
         self,
         function_name: str,
         input: Dict[str, Any],
@@ -84,7 +85,7 @@ class BaseTensorZeroGateway:
             data["parallel_tool_calls"] = parallel_tool_calls
         return data
 
-    def prepare_feedback_request(
+    def _prepare_feedback_request(
         self,
         metric_name: str,
         value: Any,
@@ -109,6 +110,38 @@ class BaseTensorZeroGateway:
         if inference_id is not None:
             data["inference_id"] = str(inference_id)
         return data
+
+    @abstractmethod
+    def inference(
+        self,
+        *,
+        function_name: str,
+        input: Dict[str, Any],
+        episode_id: Optional[UUID] = None,
+        stream: Optional[bool] = None,
+        params: Optional[Dict[str, Any]] = None,
+        variant_name: Optional[str] = None,
+        dryrun: Optional[bool] = None,
+        allowed_tools: Optional[List[str]] = None,
+        additional_tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[
+            Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]
+        ] = None,
+        parallel_tool_calls: Optional[bool] = None,
+    ) -> Union[InferenceResponse, Generator[InferenceChunk, None, None]]:
+        pass
+
+    @abstractmethod
+    def feedback(
+        self,
+        *,
+        metric_name: str,
+        value: Any,
+        inference_id: Optional[UUID] = None,
+        episode_id: Optional[UUID] = None,
+        dryrun: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        pass
 
 
 class TensorZeroGateway(BaseTensorZeroGateway):
@@ -166,7 +199,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
                  If stream is true, returns an async generator that yields InferenceChunks as they come in.
         """
         url = urljoin(self.base_url, "inference")
-        data = self.prepare_inference_request(
+        data = self._prepare_inference_request(
             function_name,
             input,
             episode_id,
@@ -213,7 +246,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :return: {"feedback_id": str}
         """
         url = urljoin(self.base_url, "feedback")
-        data = self.prepare_feedback_request(
+        data = self._prepare_feedback_request(
             metric_name, value, inference_id, episode_id, dryrun
         )
         response = self.client.post(url, json=data)
@@ -312,7 +345,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
                  If stream is true, returns an async generator that yields InferenceChunks as they come in.
         """
         url = urljoin(self.base_url, "inference")
-        data = self.prepare_inference_request(
+        data = self._prepare_inference_request(
             function_name,
             input,
             episode_id,
@@ -359,7 +392,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :return: {"feedback_id": str}
         """
         url = urljoin(self.base_url, "feedback")
-        data = self.prepare_feedback_request(
+        data = self._prepare_feedback_request(
             metric_name, value, inference_id, episode_id, dryrun
         )
         response = await self.client.post(url, json=data)
