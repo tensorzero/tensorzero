@@ -522,6 +522,13 @@ impl<'a> InferenceResult<'a> {
         }
     }
 
+    pub fn set_usage(&mut self, usage: Usage) {
+        match self {
+            InferenceResult::Chat(chat_result) => chat_result.usage = usage,
+            InferenceResult::Json(json_result) => json_result.usage = usage,
+        }
+    }
+
     pub fn mut_model_inference_results(
         &mut self,
     ) -> &mut Vec<ModelInferenceResponseWithMetadata<'a>> {

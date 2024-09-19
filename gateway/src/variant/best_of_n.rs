@@ -278,6 +278,7 @@ impl BestOfNConfig {
             total_usage.input_tokens += inference_result.usage.input_tokens;
             total_usage.output_tokens += inference_result.usage.output_tokens;
         }
+        selected_candidate.set_usage(total_usage);
         for candidate in candidates {
             selected_candidate
                 .mut_model_inference_results()
@@ -1029,8 +1030,8 @@ mod tests {
         // based on "answer": 1 in best_of_n_1
         let expected_id = inference_id1;
         let expected_usage = Usage {
-            input_tokens: 15,
-            output_tokens: 25,
+            input_tokens: 35,
+            output_tokens: 55,
         };
         let expected_content = vec!["Candidate answer 1".to_string().into()];
         match selected {

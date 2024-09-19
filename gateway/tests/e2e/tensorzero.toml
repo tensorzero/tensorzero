@@ -180,6 +180,13 @@ routing = ["json"]
 type = "dummy"
 model_name = "json"
 
+[models.json_goodbye]
+routing = ["dummy"]
+
+[models.json_goodbye.providers.dummy]
+type = "dummy"
+model_name = "json_goodbye"
+
 [models.tool]
 routing = ["tool"]
 
@@ -959,6 +966,39 @@ candidates = ["variant0", "variant1"]
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 [functions.best_of_n.variants.best_of_n_variant.evaluator]
+model = "gemini-1.5-flash-001"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.best_of_n_json]
+type = "json"
+system_schema = "../../fixtures/config/functions/basic_test/system_schema.json"
+output_schema = "../../fixtures/config/functions/best_of_n_json/output_schema.json"
+
+[functions.best_of_n_json.variants.variant0]
+type = "chat_completion"
+weight = 0
+model = "test"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.best_of_n_json.variants.variant1]
+type = "chat_completion"
+weight = 0
+model = "json"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.best_of_n_json.variants.variant2]
+type = "chat_completion"
+weight = 0
+model = "json_goodbye"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.best_of_n_json.variants.best_of_n_variant]
+type = "experimental_best_of_n"
+weight = 1
+candidates = ["variant0", "variant1", "variant2"]
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.best_of_n_json.variants.best_of_n_variant.evaluator]
 model = "gemini-1.5-flash-001"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
