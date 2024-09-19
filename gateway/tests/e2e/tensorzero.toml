@@ -959,7 +959,7 @@ candidates = ["variant0", "variant1"]
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 [functions.best_of_n.variants.best_of_n_variant.evaluator]
-model = "best_of_n_evaluator"
+model = "gemini-1.5-flash-001"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐

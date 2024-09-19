@@ -1,4 +1,5 @@
 #![cfg(test)]
+mod best_of_n;
 mod clickhouse;
 mod common;
 mod feedback;
