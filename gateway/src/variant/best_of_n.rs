@@ -303,6 +303,7 @@ impl BestOfNConfig {
 ///  * Prepare the request for the evaluator variant.
 ///  * Infer the request using the model specified in the evaluator config.
 ///  * Parse the output of the evaluator.
+///  * Map the evaluator's index to the actual index in the original candidate list (prior to skipping any).
 ///  * Check if the index is out of bounds.
 ///  * Return the index and the model inference result.
 async fn inner_select_best_candidate<'a, 'request>(
