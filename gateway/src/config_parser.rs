@@ -1323,7 +1323,7 @@ mod tests {
         env::set_var("ANTHROPIC_API_KEY", "sk-something");
         env::set_var("AZURE_OPENAI_API_KEY", "sk-something");
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let config_path = format!("{}/../config/tensorzero.toml", manifest_dir);
+        let config_path = format!("{}/fixtures/config/tensorzero.toml", manifest_dir);
         let config_pathbuf = PathBuf::from(&config_path);
         let base_path = config_pathbuf
             .parent()
