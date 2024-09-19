@@ -108,8 +108,9 @@ impl<'c> Default for TemplateConfig<'c> {
 }
 
 const BEST_OF_N_EVALUATOR_SYSTEM: &str = r#"{%- if inner_system_message is defined -%}You are an assistant tasked with re-ranking candidate answers to the following problem:
+------
 {{ inner_system_message }}
-
+------
 {%- else -%}
 You are an assistant tasked with re-ranking candidate answers to a problem.
 
@@ -119,7 +120,11 @@ Please evaluate the following candidate responses and provide your reasoning alo
 {
     "thinking": "your reasoning here",
     "answer_choice": int  // Range: 0 to {{ max_index }}
-}"#;
+}
+In the "thinking" block:
+First, you should analyze each response itself against the conversation history and determine if it is a good response or not.
+Then you should think out loud about which is best and most faithful to instructions.
+In the "answer_choice" block: you should output the index of the best response."#;
 
 const BEST_OF_N_EVALUATOR_CANDIDATES: &str = r#"Here are the candidate answers (with the index and a row of ------ separating):
 {% for candidate in candidates -%}
