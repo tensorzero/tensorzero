@@ -28,6 +28,7 @@ use super::{InferenceConfig, ModelUsedInfo, Variant};
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ChatCompletionConfig {
+    #[serde(default)]
     pub weight: f64,
     pub model: String,
     pub system_template: Option<PathBuf>,
