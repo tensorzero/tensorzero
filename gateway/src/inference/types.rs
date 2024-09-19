@@ -25,6 +25,7 @@ use crate::{error::Error, variant::JsonMode};
 
 /// A request is made that contains an Input
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Input {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system: Option<Value>,
@@ -519,6 +520,13 @@ impl<'a> InferenceResult<'a> {
         match self {
             InferenceResult::Chat(chat_result) => &chat_result.usage,
             InferenceResult::Json(json_result) => &json_result.usage,
+        }
+    }
+
+    pub fn set_usage(&mut self, usage: Usage) {
+        match self {
+            InferenceResult::Chat(chat_result) => chat_result.usage = usage,
+            InferenceResult::Json(json_result) => json_result.usage = usage,
         }
     }
 

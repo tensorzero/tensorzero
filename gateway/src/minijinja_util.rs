@@ -113,7 +113,7 @@ const BEST_OF_N_EVALUATOR_SYSTEM: &str = r#"{%- if inner_system_message is defin
 {%- else -%}
 You are an assistant tasked with re-ranking candidate answers to a problem.
 
-{%- endif -%}
+{%- endif %}
 The messages below are the conversation history between the user and the assistant along with a final message giving a set of candidate responses.
 Please evaluate the following candidate responses and provide your reasoning along with the index of the best candidate in the following JSON format:
 {
@@ -122,12 +122,10 @@ Please evaluate the following candidate responses and provide your reasoning alo
 }"#;
 
 const BEST_OF_N_EVALUATOR_CANDIDATES: &str = r#"Here are the candidate answers (with the index and a row of ------ separating):
-
-{%- for candidate in candidates -%}
+{% for candidate in candidates -%}
 {{ loop.index0 }}: {{ candidate }}
 ------
-{%- endfor -%}
-
+{%- endfor %}
 Please evaluate these candidates and provide the index of the best one."#;
 
 #[cfg(test)]
