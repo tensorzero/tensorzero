@@ -311,9 +311,9 @@ async fn inner_select_best_candidate<'a, 'request>(
     models: &'a HashMap<String, ModelConfig>,
     inference_config: &'request InferenceConfig<'request>,
     client: &'request Client,
-    candidates: &Vec<InferenceResult<'request>>,
+    candidates: &[InferenceResult<'request>],
 ) -> Result<(Option<usize>, ModelInferenceResponseWithMetadata<'a>), Error> {
-    let inference_request = evaluator.prepare_request(
+    let (inference_request, skipped_indices) = evaluator.prepare_request(
         input,
         inference_config,
         candidates,
@@ -374,6 +374,8 @@ async fn inner_select_best_candidate<'a, 'request>(
             return Ok((None, model_inference_result));
         }
     };
+    // Map the evaluator's index to the actual index
+    let answer_choice = map_evaluator_to_actual_index(answer_choice, &skipped_indices);
     if answer_choice >= candidates.len() {
         let err = Error::Inference {
             message: format!(
@@ -411,55 +413,109 @@ impl EvaluatorConfig {
     }
 
     /// Prepares the final candidate message for the evaluator variant.
-    /// We include each candidate's output in the final message to the evaluator by templating
-    /// them into our hardcoded template.
-    /// For chat functions we serialize the content blocks to a string and for json functions
-    /// we use the raw output from the json field.
+    ///
+    /// This function constructs a `RequestMessage` that includes all valid candidate outputs
+    /// by templating them into a predefined evaluation template. It handles different types of
+    /// inference results:
+    ///
+    /// - **Chat Inference**: Serializes the content blocks to a JSON string.
+    /// - **JSON Inference**: Uses the raw JSON output if it contains correctly parsed data; otherwise,
+    ///   skips the candidate.
+    ///
+    /// Additionally, it tracks and returns the indices of any candidates that were skipped due
+    /// to missing or invalid parsed outputs. This allows the caller to be aware of which
+    /// candidates were not included in the evaluation message.
+    ///
+    /// # Parameters
+    ///
+    /// - `templates`: Reference to the `TemplateConfig` used for templating messages.
+    /// - `candidates`: A vector of `InferenceResult` instances representing the candidate outputs.
+    ///
+    /// # Returns
+    ///
+    /// On success, returns a tuple containing:
+    /// - `RequestMessage`: The templated message to be sent to the evaluator.
+    /// - `Vec<usize>`: A sorted vector of indices indicating which candidates were skipped.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `Error` if any of the candidate outputs fail to serialize or if templating fails.
     fn prepare_candidate_message(
         &self,
         templates: &TemplateConfig,
-        candidates: &Vec<InferenceResult>,
-    ) -> Result<RequestMessage, Error> {
+        candidates: &[InferenceResult],
+    ) -> Result<(RequestMessage, Vec<usize>), Error> {
         let mut candidate_outputs = Vec::new();
-        for candidate in candidates {
+        let mut skipped_indices = Vec::new();
+        for (i, candidate) in candidates.iter().enumerate() {
             match candidate {
                 InferenceResult::Chat(chat_result) => {
-                    candidate_outputs.push(serde_json::to_string(&chat_result.content).map_err(
-                        |e| Error::Inference {
-                            message: format!("Error converting chat result to string: {e}"),
-                        },
-                    )?);
+                    let serialized_content =
+                        serde_json::to_string(&chat_result.content).map_err(|e| {
+                            Error::Inference {
+                                message: format!("Error converting chat result to string: {e}"),
+                            }
+                        })?;
+                    candidate_outputs.push(serialized_content);
                 }
                 InferenceResult::Json(json_result) => {
-                    candidate_outputs.push(json_result.output.raw.clone());
+                    if json_result.output.parsed.is_some() {
+                        candidate_outputs.push(json_result.output.raw.clone());
+                    } else {
+                        // Skip if the JSON output is not correctly parsed
+                        skipped_indices.push(i);
+                    }
                 }
             }
         }
         let template_context = json!({
-            "candidates": candidates,
+            "candidates": candidate_outputs,
         });
         let message_text =
             templates.template_message("t0:best_of_n_evaluator_candidates", &template_context)?;
-        Ok(RequestMessage {
-            role: Role::User,
-            content: vec![message_text.into()],
-        })
+        Ok((
+            RequestMessage {
+                role: Role::User,
+                content: vec![message_text.into()],
+            },
+            skipped_indices,
+        ))
     }
 
     /// Prepares the request for the evaluator variant.
-    /// We use the prepare_system_message and prepare_candidate_message functions to generate
-    /// the system and candidate messages for the evaluator which take candidate selection into account.
+    /// We use the `prepare_system_message` and `prepare_candidate_message` functions to generate
+    /// the system and candidate messages for the evaluator, which take candidate selection into account.
     ///
-    /// We also enforce the output schema of the evalutator variant, which is used to force the model
-    /// to choose an answer choice that is valid.
+    /// Additionally, this function returns the indices of candidates that were skipped due to
+    /// serialization or parsing issues, allowing the caller to handle or log these skipped candidates as needed.
+    ///
+    /// # Returns
+    ///
+    /// On success, returns a tuple containing:
+    /// - `ModelInferenceRequest`: The request prepared for the model inference.
+    /// - `Vec<usize>`: A sorted vector of indices indicating which candidates were skipped.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `Error` if any of the candidate outputs fail to serialize or if templating fails.
     fn prepare_request(
         &self,
         input: &Input,
         inference_config: &InferenceConfig,
-        candidates: &Vec<InferenceResult>,
+        candidates: &[InferenceResult],
         inference_params: &mut InferenceParams,
-    ) -> Result<ModelInferenceRequest, Error> {
-        let max_index = candidates.len() - 1;
+    ) -> Result<(ModelInferenceRequest, Vec<usize>), Error> {
+        // Do this before we prepare the system message so we can use the correct max index in the system message
+        let (candidate_message, skipped_indices) =
+            self.prepare_candidate_message(inference_config.templates, candidates)?;
+        // Need to subtract the skipped indices from the total number of candidates to get the correct max index
+        let max_index = candidates
+            .len()
+            .checked_sub(skipped_indices.len())
+            .and_then(|len| len.checked_sub(1))
+            .ok_or_else(|| Error::Inference {
+                message: "No valid candidates available to prepare request.".to_string(),
+            })?;
         let system = Some(self.prepare_system_message(
             inference_config.templates,
             input.system.as_ref(),
@@ -472,10 +528,7 @@ impl EvaluatorConfig {
                 self.inner
                     .prepare_request_message(inference_config.templates, message)
             })
-            .chain(std::iter::once(self.prepare_candidate_message(
-                inference_config.templates,
-                candidates,
-            )))
+            .chain(std::iter::once(Ok(candidate_message)))
             .collect::<Result<Vec<_>, _>>()?;
         inference_params
             .chat_completion
@@ -484,19 +537,40 @@ impl EvaluatorConfig {
                 self.inner.max_tokens,
                 self.inner.seed,
             );
-        Ok(ModelInferenceRequest {
-            messages,
-            system,
-            tool_config: None,
-            temperature: inference_params.chat_completion.temperature,
-            max_tokens: inference_params.chat_completion.max_tokens,
-            seed: inference_params.chat_completion.seed,
-            stream: false,
-            json_mode: ModelInferenceRequestJsonMode::Strict,
-            function_type: FunctionType::Json,
-            output_schema: Some(EVALUATOR_OUTPUT_SCHEMA.value),
-        })
+        Ok((
+            ModelInferenceRequest {
+                messages,
+                system,
+                tool_config: None,
+                temperature: inference_params.chat_completion.temperature,
+                max_tokens: inference_params.chat_completion.max_tokens,
+                seed: inference_params.chat_completion.seed,
+                stream: false,
+                json_mode: ModelInferenceRequestJsonMode::Strict, // TODO (#338): Handle Anthropic models better here.
+                function_type: FunctionType::Json,
+                output_schema: Some(EVALUATOR_OUTPUT_SCHEMA.value),
+            },
+            skipped_indices,
+        ))
     }
+}
+
+/// Maps the evaluator's selected index to the actual index in the original candidate list.
+///
+/// # Parameters
+/// - `evaluator_idx`: The index selected by the evaluator from the filtered list.
+/// - `skipped_indices`: A sorted list of indices that were skipped.
+///
+/// # Returns
+/// - `usize`: The corresponding actual index in the original list.
+fn map_evaluator_to_actual_index(evaluator_idx: usize, skipped_indices: &[usize]) -> usize {
+    let mut actual_idx = evaluator_idx;
+    for &skipped in skipped_indices {
+        if skipped <= actual_idx {
+            actual_idx += 1;
+        }
+    }
+    actual_idx
 }
 
 #[cfg(test)]
@@ -506,7 +580,7 @@ mod tests {
     use crate::{
         inference::{
             providers::dummy::DummyProvider,
-            types::{ChatInferenceResult, Latency},
+            types::{ChatInferenceResult, JsonInferenceResult, Latency},
         },
         minijinja_util::tests::get_test_template_config,
         model::ProviderConfig,
@@ -732,17 +806,104 @@ mod tests {
         // Call prepare_candidate_message
         let result = evaluator_config.prepare_candidate_message(&templates, &candidates);
         assert!(result.is_ok());
-        let request_message = result.unwrap();
+        let (request_message, skipped_indices) = result.unwrap();
+        assert!(skipped_indices.is_empty());
 
-        // Expected message
-        let template_context = json!({
-            "candidates": candidates,
-        });
-        let expected_message_text = templates
-            .template_message("t0:best_of_n_evaluator_candidates", &template_context)
-            .unwrap();
-
+        let expected_message_text = "Here are the candidate answers (with the index and a row of ------ separating):\n0: [{\"type\":\"text\",\"text\":\"Candidate answer 1\"}]\n------1: [{\"type\":\"text\",\"text\":\"Candidate answer 2\"}]\n------\nPlease evaluate these candidates and provide the index of the best one.".to_string();
         // Now check that the request_message has the expected role and content
+        assert_eq!(request_message.role, Role::User);
+        assert_eq!(request_message.content, vec![expected_message_text.into()]);
+    }
+
+    #[tokio::test]
+    async fn test_prepare_candidate_message_json() {
+        let templates = get_test_template_config();
+
+        // Create an EvaluatorConfig
+        let evaluator_config = EvaluatorConfig {
+            inner: ChatCompletionConfig {
+                model: "dummy_json".to_string(),
+                weight: 1.0,
+                ..Default::default()
+            },
+        };
+
+        // Prepare some candidate InferenceResults - some valid, some malformed
+        let model_inference_response_valid = ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            created: 200u64,
+            content: vec!["{\"response\": \"Valid JSON response\"}".to_string().into()],
+            raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
+            raw_response: "{\"response\": \"Valid JSON response\"}".to_string(),
+            usage: Usage {
+                input_tokens: 50,
+                output_tokens: 100,
+            },
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_millis(500),
+            },
+            model_provider_name: "ExampleProvider",
+            model_name: "ExampleModel",
+        };
+
+        let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
+            Uuid::now_v7(),
+            "{\"response\": \"Valid JSON response\"}".to_string(),
+            Some(json!({"response": "Valid JSON response"})),
+            Usage {
+                input_tokens: 10,
+                output_tokens: 20,
+            },
+            vec![model_inference_response_valid],
+            json!({"type": "object", "properties": {"response": {"type": "string"}}}),
+            InferenceParams::default(),
+        ));
+
+        let model_inference_response_malformed = ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            created: 201u64,
+            content: vec!["{\"response\": \"Malformed JSON response\""
+                .to_string()
+                .into()], // missing closing brace
+            raw_request: "{\"prompt\": \"Example prompt 2\"}".to_string(),
+            raw_response: "{\"response\": \"Malformed JSON response\"".to_string(), // malformed
+            usage: Usage {
+                input_tokens: 15,
+                output_tokens: 25,
+            },
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_millis(550),
+            },
+            model_provider_name: "ExampleProvider2",
+            model_name: "ExampleModel2",
+        };
+
+        let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
+            Uuid::now_v7(),
+            "{\"oops: \"Malformed JSON response\"".to_string(),
+            None, // malformed
+            Usage {
+                input_tokens: 15,
+                output_tokens: 25,
+            },
+            vec![model_inference_response_malformed],
+            json!({"type": "object", "properties": {"response": {"type": "string"}}}),
+            InferenceParams::default(),
+        ));
+
+        let candidates = vec![candidate1, candidate2];
+
+        // Call prepare_candidate_message
+        let result = evaluator_config.prepare_candidate_message(&templates, &candidates);
+        assert!(result.is_ok());
+        let (request_message, skipped_indices) = result.unwrap();
+
+        // Expect skipped_indices to contain index 1
+        assert_eq!(skipped_indices, vec![1]);
+
+        let expected_message_text = "Here are the candidate answers (with the index and a row of ------ separating):\n0: {\"response\": \"Valid JSON response\"}\n------\nPlease evaluate these candidates and provide the index of the best one.".to_string();
+
+        // Check that the request_message has the expected role and content
         assert_eq!(request_message.role, Role::User);
         assert_eq!(request_message.content, vec![expected_message_text.into()]);
     }
@@ -1055,5 +1216,34 @@ mod tests {
             .await;
         // we gracefully handle the error and return a random candidate
         let _result = result_big.unwrap();
+    }
+
+    #[test]
+    fn test_map_evaluator_to_actual_index() {
+        // Case 1: No skipped indices
+        let skipped = vec![];
+        assert_eq!(map_evaluator_to_actual_index(0, &skipped), 0);
+        assert_eq!(map_evaluator_to_actual_index(1, &skipped), 1);
+
+        // Case 2: Skipped index before evaluator's choice
+        let skipped = vec![1];
+        assert_eq!(map_evaluator_to_actual_index(0, &skipped), 0);
+        assert_eq!(map_evaluator_to_actual_index(1, &skipped), 2);
+
+        // Case 3: Multiple skipped indices
+        let skipped = vec![1, 3];
+        assert_eq!(map_evaluator_to_actual_index(0, &skipped), 0);
+        assert_eq!(map_evaluator_to_actual_index(1, &skipped), 2);
+        assert_eq!(map_evaluator_to_actual_index(2, &skipped), 4);
+        assert_eq!(map_evaluator_to_actual_index(3, &skipped), 5);
+
+        // Case 4: All possible skipped
+        let skipped = vec![0, 1, 2, 3, 4];
+        assert_eq!(map_evaluator_to_actual_index(0, &skipped), 5);
+        assert_eq!(map_evaluator_to_actual_index(1, &skipped), 6);
+
+        // Case 5: Skipped indices out of range
+        let skipped = vec![10, 20];
+        assert_eq!(map_evaluator_to_actual_index(5, &skipped), 5);
     }
 }
