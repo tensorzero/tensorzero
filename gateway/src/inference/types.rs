@@ -25,6 +25,7 @@ use crate::{error::Error, variant::JsonMode};
 
 /// A request is made that contains an Input
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Input {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system: Option<Value>,
