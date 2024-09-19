@@ -1,16 +1,20 @@
 import asyncio
+import logging
+import random
 from abc import ABC, abstractmethod
+import json
 from copy import deepcopy
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import chess
 import chess.engine
 import chess.pgn
-import matplotlib.pyplot as plt
 import pandas as pd
 from chess.engine import UciProtocol
 from tensorzero import AsyncTensorZeroGateway
 from tqdm import trange
+
+logger = logging.getLogger(__name__)
 
 
 class AbstractPlayer(ABC):
@@ -25,8 +29,8 @@ class StockfishPlayer(AbstractPlayer):
 
     async def play(self, board: chess.Board) -> str:
         legal_moves_san = [board.san(move) for move in board.legal_moves]
-        print(legal_moves_san)
-        print(board)
+        logger.info(legal_moves_san)
+        logger.info(board)
         result = await self.player_engine.play(board, chess.engine.Limit(time=0.2))
         return board.san(result.move)
 
@@ -42,30 +46,36 @@ class TensorZeroPlayer(AbstractPlayer):
     async def play(self, board: chess.Board) -> str:
         legal_moves_san = [board.san(move) for move in board.legal_moves]
         # pgn = _get_pgn_from_board(board)
-        # print(f"pgn: {pgn}")
+        # logger.info(f"pgn: {pgn}")
 
-        result = await self.client.inference(
-            function_name="play_chess_board",
-            input={
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": {
-                            "board": str(board),
-                            "color": "white" if board.turn else "black",
-                            "legal_moves_san": legal_moves_san,
-                        },
-                    }
-                ]
-            },
-            variant_name=self.variant_name,
-            episode_id=self.episode_id,
-        )
+        try:
+            result = await self.client.inference(
+                function_name="play_chess_board",
+                input={
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": {
+                                "board": str(board),
+                                "color": "white" if board.turn else "black",
+                                "legal_moves_san": legal_moves_san,
+                            },
+                        }
+                    ]
+                },
+                variant_name=self.variant_name,
+                episode_id=self.episode_id,
+            )
+            thinking = result.output.parsed["thinking"]
+            logger.info(f"Player thinking: {thinking}")
+            move = result.output.parsed["move"]
+            logger.info(f"Player move: {move}")
+        except Exception as e:
+            logger.error(f"Error occurred: {e}")
+            logger.info("Choosing a random legal move as fallback.")
+            move = random.choice(legal_moves_san)
+            return move
         self.episode_id = result.episode_id
-        thinking = result.output.parsed["thinking"]
-        print(f"Player thinking: {thinking}")
-        move = result.output.parsed["move"]
-        print(f"Player move: {move}")
         return move
 
 
@@ -87,184 +97,227 @@ async def play_game(
     board = chess.Board()
     while not board.is_game_over():
         # Player's move (White)
-        print(board)
-        print()
+        logger.info(board)
+        logger.info("")
         # Evaluate the position
         info = await game_engine.analyse(board, chess.engine.Limit(time=0.1))
-        print(f"Evaluation: {info['score']}")
-        print()
+        logger.info(f"Evaluation: {info['score']}")
+        logger.info("")
         move = await player.play(deepcopy(board))
         board.push_san(move)
 
         if board.is_game_over():
             break
 
-        print(board)
-        print()
+        logger.info(board)
+        logger.info("")
         # Evaluate the position
         info = await game_engine.analyse(board, chess.engine.Limit(time=0.1))
-        print(f"Evaluation: {info['score']}")
-        print()
+        logger.info(f"Evaluation: {info['score']}")
+        logger.info("")
         # Game engine's move (Black)
         result = await game_engine.play(deepcopy(board), chess.engine.Limit(time=0.2))
         board.push(result.move)
-    print(board)
+    logger.info(board)
 
     outcome = board.outcome()
     if outcome is None or outcome.winner is None:
-        print("Game over! Draw.")
+        logger.info("Game over! Draw.")
     else:
         winner_name = "White" if outcome.winner else "Black"
-        print(f"Game over! {winner_name} wins.")
+        logger.info(f"Game over! {winner_name} wins.")
 
     # Quit the game engine
     await game_engine.quit()
 
 
-class PuzzleChecker:
-    def __init__(self, puzzle_data: dict):
-        self.puzzle_id = puzzle_data["PuzzleId"]
-        self.fen = puzzle_data["FEN"]
-        self.expected_moves = puzzle_data["Moves"].split()
-        self.rating = puzzle_data["Rating"]
-        self.rating_deviation = puzzle_data["RatingDeviation"]
-        self.popularity = puzzle_data["Popularity"]
-        self.nb_plays = puzzle_data["NbPlays"]
-        self.themes = puzzle_data["Themes"].split()
-        self.game_url = puzzle_data["GameUrl"]
+async def run_puzzle(
+    puzzle_data: Dict, player: AbstractPlayer, semaphore: asyncio.Semaphore
+) -> bool:
+    """
+    Runs a chess puzzle for the given player and checks if the player solves it correctly.
 
-    async def run_puzzle(self, player: AbstractPlayer) -> bool:
-        board = chess.Board(self.fen)
-        move_index = 0
-        total_moves = len(self.expected_moves)
+    Args:
+        puzzle_data (Dict): A dictionary containing puzzle details.
+        player (AbstractPlayer): An instance of a player that can make moves.
 
-        # Apply the first move before starting the puzzle
-        first_move = self.expected_moves[move_index]
-        try:
-            first_move_obj = board.parse_san(first_move)
-        except ValueError:
-            first_move_obj = chess.Move.from_uci(first_move)
-        board.push(first_move_obj)
-        print(f"Initial move applied: {first_move_obj}\n")
-        move_index = 1
+    Returns:
+        bool: True if the player solves the puzzle correctly, False otherwise.
+    """
+    # Extract puzzle details from puzzle_data
+    puzzle_id = puzzle_data.get("PuzzleId")
+    fen = puzzle_data.get("FEN")
+    expected_moves = puzzle_data.get("Moves", "").split()
 
-        # Determine player's color based on the updated position
-        player_color = board.turn  # True for White, False for Black
+    board = chess.Board(fen)
+    move_index = 0
+    total_moves = len(expected_moves)
 
-        while move_index < total_moves and not board.is_game_over():
-            if board.turn == player_color:
-                # Player's move
-                print(f"Puzzle ID: {self.puzzle_id}")
-                print(f"Current Board:\n{board}\n")
+    # Apply the first move before starting the puzzle
+    first_move = expected_moves[move_index]
+    first_move_obj = board.parse_san(first_move)
+    board.push(first_move_obj)
+    logger.info(f"Initial move applied: {first_move_obj}\n")
+    move_index = 1
+
+    # Determine player's color based on the updated position
+    player_color = board.turn  # True for White, False for Black
+
+    while move_index < total_moves and not board.is_game_over():
+        if board.turn == player_color:
+            # Player's move
+            logger.info(f"Puzzle ID: {puzzle_id}")
+            logger.info(f"Current Board:\n{board}\n")
+            logger.info(f"Player color: {'White' if player_color else 'Black'}")
+            async with semaphore:
                 player_move_san = await player.play(deepcopy(board))
-                expected_move = self.expected_moves[move_index]
+            expected_move = expected_moves[move_index]
 
-                try:
-                    player_move_obj = board.parse_san(player_move_san)
-                except ValueError:
-                    print(f"Invalid SAN move format: {player_move_san}")
-                    return False
+            try:
+                player_move_obj = board.parse_san(player_move_san)
+            except ValueError:
+                logger.info(f"Invalid SAN move format: {player_move_san}")
+                return False
 
-                try:
-                    expected_move_obj = board.parse_san(expected_move)
-                except ValueError:
-                    expected_move_obj = chess.Move.from_uci(expected_move)
-                if board.is_checkmate():
-                    print("Player has delivered a checkmate!")
-                    return True
+            try:
+                expected_move_obj = board.parse_san(expected_move)
+            except ValueError:
+                expected_move_obj = chess.Move.from_uci(expected_move)
 
-                if player_move_obj != expected_move_obj:
-                    print(
-                        f"Incorrect move at move {move_index + 1}: expected {expected_move}, got {player_move_san}"
-                    )
-                    return False
+            if board.is_checkmate():
+                logger.info("Player has delivered a checkmate!")
+                return True
 
-                board.push(player_move_obj)
-                print(f"Player moved: {player_move_obj}\n")
-            else:
-                # Opponent's move
-                expected_move = self.expected_moves[move_index]
-                try:
-                    opponent_move_obj = board.parse_san(expected_move)
-                except ValueError:
-                    opponent_move_obj = chess.Move.from_uci(expected_move)
+            if player_move_obj != expected_move_obj:
+                logger.info(
+                    f"Incorrect move at move {move_index + 1}: expected {expected_move}, got {player_move_san}"
+                )
+                return False
 
-                board.push(opponent_move_obj)
-                print(f"Opponent moved: {opponent_move_obj}\n")
-
-            move_index += 1
-
-        if move_index == total_moves:
-            print("Player successfully completed all expected moves in the puzzle!")
-            return True
+            board.push(player_move_obj)
+            logger.info(f"Player moved: {player_move_obj}\n")
         else:
-            print("Player failed to complete the puzzle as expected.")
-            return False
+            # Opponent's move
+            expected_move = expected_moves[move_index]
+            try:
+                opponent_move_obj = board.parse_san(expected_move)
+            except ValueError:
+                opponent_move_obj = chess.Move.from_uci(expected_move)
 
+            board.push(opponent_move_obj)
+            logger.info(f"Opponent moved: {opponent_move_obj}\n")
 
-def update_puzzle_elo(
-    current_elo: float, puzzle_elo: float, puzzle_number: int, success: bool
-) -> float:
-    expected_score = 1 / (1 + 10 ** ((puzzle_elo - current_elo) / 400))
-    k_factor = 40 if puzzle_number < 30 else 20
-    actual_score = 1 if success else 0
-    return current_elo + k_factor * (actual_score - expected_score)
+        move_index += 1
+
+    if move_index == total_moves:
+        logger.info("Player successfully completed all expected moves in the puzzle!")
+        return True
+    else:
+        logger.info("Player failed to complete the puzzle as expected.")
+        return False
 
 
 async def estimate_player_puzzle_elo(
-    player: AbstractPlayer, puzzle_df: pd.DataFrame, num_puzzles: int = 100
-) -> Tuple[float, List[float]]:
-    rating = 1500
-    rating_history = []
-    for i in trange(num_puzzles):
-        # Get a random puzzle within 20 points of the current rating
-        rating_range = (rating - 20, rating + 20)
-        eligible_puzzles = puzzle_df[
-            (puzzle_df["Rating"] >= rating_range[0])
-            & (puzzle_df["Rating"] <= rating_range[1])
-        ]
+    player: AbstractPlayer,
+    puzzle_df: pd.DataFrame,
+    variant_name: str,
+    semaphore: asyncio.Semaphore,
+) -> List[bool]:
+    successes = []
+    num_successes = 0
+    total_puzzles = len(puzzle_df)
+    progress_bar = trange(total_puzzles, desc=variant_name)
 
-        if eligible_puzzles.empty:
-            # If no puzzles in range, get the closest one
-            closest_puzzle = puzzle_df.iloc[
-                (puzzle_df["Rating"] - rating).abs().argsort()[:1]
-            ]
-        else:
-            closest_puzzle = eligible_puzzles.sample(n=1)
+    tasks = [
+        asyncio.create_task(run_puzzle(puzzle_df.iloc[i].to_dict(), player, semaphore))
+        for i in range(total_puzzles)
+    ]
 
-        random_puzzle = closest_puzzle.iloc[0].to_dict()
-
-        puzzle_checker = PuzzleChecker(random_puzzle)
-        print(f"Running puzzle {i+1} with rating {random_puzzle['Rating']}")
-        success = await puzzle_checker.run_puzzle(player)
-
-        rating = update_puzzle_elo(rating, random_puzzle["Rating"], i + 1, success)
-
-        print(
-            f"Puzzle {i+1} completed {'successfully' if success else 'unsuccessfully'}. New estimated Elo: {rating:.2f}"
+    for task in asyncio.as_completed(tasks):
+        success = await task
+        successes.append(success)
+        if success:
+            num_successes += 1
+        current = len(successes)
+        logger.info(
+            f"Puzzle {current} completed {'successfully' if success else 'unsuccessfully'}"
         )
-        rating_history.append(rating)
-    return rating, rating_history
+        p = num_successes / current
+        z = 1.96  # for 95% confidence
+        se = (p * (1 - p) / current) ** 0.5
+        ci_lower = max(0, p - z * se)
+        ci_upper = min(1, p + z * se)
+        progress_bar.update(1)
+        progress_bar.set_postfix(
+            {
+                "Success": f"{num_successes}/{current} CI: ({ci_lower:.2f}, {ci_upper:.2f})"
+            },
+            refresh=True,
+        )
+
+    progress_bar.close()
+    return successes
 
 
-async def main(game_elo: int = 1320) -> None:
+async def get_variant_rating_history(
+    client: AsyncTensorZeroGateway,
+    puzzle_df: pd.DataFrame,
+    variant_name: str,
+) -> List[bool]:
+    player = TensorZeroPlayer(client=client, variant_name=variant_name)
+    max_concurrent_requests = 10
+    semaphore = asyncio.Semaphore(max_concurrent_requests)
+    successes = await estimate_player_puzzle_elo(
+        player, puzzle_df, variant_name, semaphore
+    )
+    return successes
+
+
+async def main() -> None:
     # Initialize player engine
     # transport_player, player_engine = await chess.engine.popen_uci("stockfish")
     # player_elo = 1320
     # await player_engine.configure({"UCI_LimitStrength": True, "UCI_Elo": player_elo})
     # player = StockfishPlayer(player_engine=player_engine)
-    puzzle_df = pd.read_csv("data/lichess_popular_puzzles.csv")
-    async with AsyncTensorZeroGateway("http://localhost:3000") as client:
-        player = TensorZeroPlayer(client=client, variant_name="gpt-4o-mini_best_of_5")
-        estimated_elo, rating_history = await estimate_player_puzzle_elo(
-            player, puzzle_df
-        )
-    print(f"Estimated Elo: {estimated_elo:.2f}")
-    plt.plot(rating_history)
-    plt.xlabel("Puzzle Number")
-    plt.ylabel("Estimated Elo")
-    plt.title("Estimated Elo History")
-    plt.show()
+    variants_to_evaluate = [
+        "gpt-4o-mini",
+        "gpt-4o-mini_best_of_5",
+    ]
+    puzzle_df = pd.read_csv("data/lichess_easy_puzzles_test.csv")
+    puzzle_df = puzzle_df.head(1000)
+    async with AsyncTensorZeroGateway("http://localhost:3000", timeout=30.0) as client:
+        tasks = [
+            get_variant_rating_history(client, puzzle_df, variant)
+            for variant in variants_to_evaluate
+        ]
+        successes = await asyncio.gather(*tasks)
+        print("\n\n\n\n")
+
+        for variant, success in zip(variants_to_evaluate, successes):
+            num_successes = sum(success)
+            total_puzzles = len(success)
+            if total_puzzles > 0:
+                print(
+                    f"{variant}: {num_successes}/{total_puzzles} = {num_successes/total_puzzles:.2f}"
+                )
+                p = num_successes / total_puzzles
+                z = 1.96  # for 95% confidence
+                se = (p * (1 - p) / total_puzzles) ** 0.5
+                ci_lower = max(0, p - z * se)
+                ci_upper = min(1, p + z * se)
+                print(
+                    f"{variant} confidence interval: ({ci_lower:.2f}, {ci_upper:.2f})"
+                )
+    # Dump JSON of variant name to successes and total
+    variant_results = {
+        variant: {"successes": sum(success), "total": len(success)}
+        for variant, success in zip(variants_to_evaluate, successes)
+    }
+
+    with open("variant_results.json", "w") as f:
+        json.dump(variant_results, f, indent=4)
+
+    print("Results have been saved to variant_results.json")
     # Quit the player engine
     # await player_engine.quit()
 
