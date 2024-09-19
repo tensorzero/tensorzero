@@ -1,6 +1,6 @@
 from tensorzero import TensorZeroGateway
 
-result = TensorZeroGateway("http://localhost:3000").inference(
+response = TensorZeroGateway("http://localhost:3000").inference(
     function_name="generate_haiku",
     input={
         "messages": [
@@ -12,4 +12,4 @@ result = TensorZeroGateway("http://localhost:3000").inference(
     },
 )
 
-print(result)
+print(response)

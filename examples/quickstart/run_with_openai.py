@@ -1,6 +1,6 @@
 from openai import OpenAI
 
-result = OpenAI().chat.completions.create(
+response = OpenAI().chat.completions.create(
     model="gpt-4o-mini",
     messages=[
         {
@@ -10,4 +10,4 @@ result = OpenAI().chat.completions.create(
     ],
 )
 
-print(result)
+print(response)
