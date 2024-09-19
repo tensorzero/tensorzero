@@ -16,4 +16,3 @@ type = "chat"
 [functions.generate_haiku.variants.gpt_4o_mini]
 type = "chat_completion"
 model = "gpt_4o_mini"
-weight = 1
