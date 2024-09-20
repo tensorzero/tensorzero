@@ -1,16 +1,16 @@
 import asyncio
+import json
 import logging
 import random
 from abc import ABC, abstractmethod
-import json
 from copy import deepcopy
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import chess
 import chess.engine
 import chess.pgn
 import pandas as pd
-from chess.engine import UciProtocol
+from scipy.stats import binomtest
 from tensorzero import AsyncTensorZeroGateway
 from tqdm import trange
 
@@ -24,13 +24,25 @@ class AbstractPlayer(ABC):
 
 
 class StockfishPlayer(AbstractPlayer):
-    def __init__(self, player_engine: UciProtocol):
+    """
+    If you have [Stockfish](https://stockfishchess.org/) installed and want to see how a real chess engine performs, use this player instead.
+    """
+
+    async def __init__(self, player_elo: int):
+        assert player_elo >= 1320 and player_elo <= 3500
+        self.player_elo = player_elo
+        self.player_engine = None
+
+    async def _initialize(self):
+        _transport_player, player_engine = await chess.engine.popen_uci("stockfish")
+        await player_engine.configure(
+            {"UCI_LimitStrength": True, "UCI_Elo": self.player_elo}
+        )
         self.player_engine = player_engine
 
     async def play(self, board: chess.Board) -> str:
-        legal_moves_san = [board.san(move) for move in board.legal_moves]
-        logger.info(legal_moves_san)
-        logger.info(board)
+        if self.player_engine is None:
+            await self._initialize()
         result = await self.player_engine.play(board, chess.engine.Limit(time=0.2))
         return board.san(result.move)
 
@@ -45,8 +57,6 @@ class TensorZeroPlayer(AbstractPlayer):
 
     async def play(self, board: chess.Board) -> str:
         legal_moves_san = [board.san(move) for move in board.legal_moves]
-        # pgn = _get_pgn_from_board(board)
-        # logger.info(f"pgn: {pgn}")
 
         try:
             result = await self.client.inference(
@@ -77,58 +87,6 @@ class TensorZeroPlayer(AbstractPlayer):
             return move
         self.episode_id = result.episode_id
         return move
-
-
-def _get_pgn_from_board(board: chess.Board) -> str:
-    game = chess.pgn.Game.from_board(board)
-    exporter = chess.pgn.StringExporter(headers=False, variations=False, comments=False)
-    pgn_string = game.accept(exporter)
-    return pgn_string
-
-
-async def play_game(
-    player: AbstractPlayer,
-    game_elo: int,
-) -> None:
-    # Initialize game engine
-    transport_game, game_engine = await chess.engine.popen_uci("stockfish")
-    await game_engine.configure({"UCI_LimitStrength": True, "UCI_Elo": game_elo})
-
-    board = chess.Board()
-    while not board.is_game_over():
-        # Player's move (White)
-        logger.info(board)
-        logger.info("")
-        # Evaluate the position
-        info = await game_engine.analyse(board, chess.engine.Limit(time=0.1))
-        logger.info(f"Evaluation: {info['score']}")
-        logger.info("")
-        move = await player.play(deepcopy(board))
-        board.push_san(move)
-
-        if board.is_game_over():
-            break
-
-        logger.info(board)
-        logger.info("")
-        # Evaluate the position
-        info = await game_engine.analyse(board, chess.engine.Limit(time=0.1))
-        logger.info(f"Evaluation: {info['score']}")
-        logger.info("")
-        # Game engine's move (Black)
-        result = await game_engine.play(deepcopy(board), chess.engine.Limit(time=0.2))
-        board.push(result.move)
-    logger.info(board)
-
-    outcome = board.outcome()
-    if outcome is None or outcome.winner is None:
-        logger.info("Game over! Draw.")
-    else:
-        winner_name = "White" if outcome.winner else "Black"
-        logger.info(f"Game over! {winner_name} wins.")
-
-    # Quit the game engine
-    await game_engine.quit()
 
 
 async def run_puzzle(
@@ -163,6 +121,11 @@ async def run_puzzle(
     # Determine player's color based on the updated position
     player_color = board.turn  # True for White, False for Black
 
+    print(player_color)
+    print(board.fen())
+    print(board)
+    print(expected_moves)
+    exit()
     while move_index < total_moves and not board.is_game_over():
         if board.turn == player_color:
             # Player's move
@@ -217,6 +180,13 @@ async def run_puzzle(
         return False
 
 
+def proportion_ci(
+    successes: int, trials: int, confidence: float = 0.95
+) -> Tuple[float, float]:
+    low, high = binomtest(successes, trials).proportion_ci(confidence_level=confidence)
+    return low, high
+
+
 async def estimate_player_puzzle_elo(
     player: AbstractPlayer,
     puzzle_df: pd.DataFrame,
@@ -226,7 +196,7 @@ async def estimate_player_puzzle_elo(
     successes = []
     num_successes = 0
     total_puzzles = len(puzzle_df)
-    progress_bar = trange(total_puzzles, desc=variant_name)
+    progress_bar = trange(total_puzzles, desc=variant_name, disable=True)
 
     tasks = [
         asyncio.create_task(run_puzzle(puzzle_df.iloc[i].to_dict(), player, semaphore))
@@ -242,11 +212,7 @@ async def estimate_player_puzzle_elo(
         logger.info(
             f"Puzzle {current} completed {'successfully' if success else 'unsuccessfully'}"
         )
-        p = num_successes / current
-        z = 1.96  # for 95% confidence
-        se = (p * (1 - p) / current) ** 0.5
-        ci_lower = max(0, p - z * se)
-        ci_upper = min(1, p + z * se)
+        ci_lower, ci_upper = proportion_ci(num_successes, current)
         progress_bar.update(1)
         progress_bar.set_postfix(
             {
@@ -265,7 +231,7 @@ async def get_variant_rating_history(
     variant_name: str,
 ) -> List[bool]:
     player = TensorZeroPlayer(client=client, variant_name=variant_name)
-    max_concurrent_requests = 10
+    max_concurrent_requests = 1  # 0
     semaphore = asyncio.Semaphore(max_concurrent_requests)
     successes = await estimate_player_puzzle_elo(
         player, puzzle_df, variant_name, semaphore
@@ -275,9 +241,6 @@ async def get_variant_rating_history(
 
 async def main() -> None:
     # Initialize player engine
-    # transport_player, player_engine = await chess.engine.popen_uci("stockfish")
-    # player_elo = 1320
-    # await player_engine.configure({"UCI_LimitStrength": True, "UCI_Elo": player_elo})
     # player = StockfishPlayer(player_engine=player_engine)
     variants_to_evaluate = [
         "gpt-4o-mini",
@@ -300,11 +263,7 @@ async def main() -> None:
                 print(
                     f"{variant}: {num_successes}/{total_puzzles} = {num_successes/total_puzzles:.2f}"
                 )
-                p = num_successes / total_puzzles
-                z = 1.96  # for 95% confidence
-                se = (p * (1 - p) / total_puzzles) ** 0.5
-                ci_lower = max(0, p - z * se)
-                ci_upper = min(1, p + z * se)
+                ci_lower, ci_upper = proportion_ci(num_successes, total_puzzles)
                 print(
                     f"{variant} confidence interval: ({ci_lower:.2f}, {ci_upper:.2f})"
                 )
