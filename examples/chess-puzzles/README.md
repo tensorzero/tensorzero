@@ -85,4 +85,4 @@ See for yourself if you can get better performance than our `gpt-4o-mini_best_of
 
 You now have a ClickHouse database with a ton of trajectories of LLMs trying to solve chess puzzles.
 Consider our library of [recipes](https://github.com/tensorzero/tensorzero/tree/main/recipes) for ideas on how to use this dataset to improve further!
-Since this data ended up in ClickHouse, we also included a test set (use dryrun=True to avoid leaking it) to see how your variants perform on held-out data.
+Since this data ended up in ClickHouse, we also included a test set at `data/lichess_easy_puzzles_test.csv` (use dryrun=True to avoid leaking it) to evaluate variants on held-out data.
