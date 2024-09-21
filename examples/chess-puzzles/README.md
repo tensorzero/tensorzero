@@ -24,6 +24,7 @@ Give this puzzle a try!
 
 <details>
 <Summary>Click for the solution!</Summary>
+
 1. ... Qb1+
 2. Re1 Qe1#
 </details>
