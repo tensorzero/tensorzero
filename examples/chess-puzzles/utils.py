@@ -15,7 +15,7 @@ from scipy.stats import binomtest
 from tensorzero import AsyncTensorZeroGateway
 from tqdm import trange
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class AbstractPlayer(ABC):
@@ -83,13 +83,13 @@ class TensorZeroPlayer(AbstractPlayer):
                 episode_id=episode_id,
             )
             thinking = result.output.parsed["thinking"]
-            logger.info(f"Player thinking: {thinking}")
+            log.info(f"Player thinking: {thinking}")
             move = result.output.parsed["move"]
-            logger.info(f"Player move: {move}")
+            log.info(f"Player move: {move}")
             episode_id = result.episode_id
         except Exception as e:
-            logger.error(f"Error occurred: {e}")
-            logger.info("Choosing a random legal move as fallback.")
+            log.error(f"Error occurred: {e}")
+            log.info("Choosing a random legal move as fallback.")
             move = random.choice(legal_moves_san)
             return move, episode_id
         return move, episode_id
@@ -121,7 +121,7 @@ async def run_puzzle(
     first_move = expected_moves[move_index]
     first_move_obj = board.parse_san(first_move)
     board.push(first_move_obj)
-    logger.info(f"Initial move applied: {first_move_obj}\n")
+    log.info(f"Initial move applied: {first_move_obj}\n")
     move_index = 1
 
     # Determine player's color based on the updated position
@@ -130,9 +130,9 @@ async def run_puzzle(
     while move_index < total_moves and not board.is_game_over():
         if board.turn == player_color:
             # Player's move
-            logger.info(f"Puzzle ID: {puzzle_id}")
-            logger.info(f"Current Board:\n{board}\n")
-            logger.info(f"Player color: {'White' if player_color else 'Black'}")
+            log.info(f"Puzzle ID: {puzzle_id}")
+            log.info(f"Current Board:\n{board}\n")
+            log.info(f"Player color: {'White' if player_color else 'Black'}")
             async with semaphore:
                 player_move_san, episode_id = await player.play(
                     deepcopy(board), episode_id
@@ -142,7 +142,7 @@ async def run_puzzle(
             try:
                 player_move_obj = board.parse_san(player_move_san)
             except ValueError:
-                logger.info(f"Invalid SAN move format: {player_move_san}")
+                log.info(f"Invalid SAN move format: {player_move_san}")
                 return False, episode_id
 
             try:
@@ -151,17 +151,17 @@ async def run_puzzle(
                 expected_move_obj = chess.Move.from_uci(expected_move)
 
             if board.is_checkmate():
-                logger.info("Player has delivered a checkmate!")
+                log.info("Player has delivered a checkmate!")
                 return True, episode_id
 
             if player_move_obj != expected_move_obj:
-                logger.info(
+                log.info(
                     f"Incorrect move at move {move_index + 1}: expected {expected_move}, got {player_move_san}"
                 )
                 return False, episode_id
 
             board.push(player_move_obj)
-            logger.info(f"Player moved: {player_move_obj}\n")
+            log.info(f"Player moved: {player_move_obj}\n")
         else:
             # Opponent's move
             expected_move = expected_moves[move_index]
@@ -171,15 +171,15 @@ async def run_puzzle(
                 opponent_move_obj = chess.Move.from_uci(expected_move)
 
             board.push(opponent_move_obj)
-            logger.info(f"Opponent moved: {opponent_move_obj}\n")
+            log.info(f"Opponent moved: {opponent_move_obj}\n")
 
         move_index += 1
 
     if move_index == total_moves:
-        logger.info("Player successfully completed all expected moves in the puzzle!")
+        log.info("Player successfully completed all expected moves in the puzzle!")
         return True, episode_id
     else:
-        logger.info("Player failed to complete the puzzle as expected.")
+        log.info("Player failed to complete the puzzle as expected.")
         return False, episode_id
 
 
