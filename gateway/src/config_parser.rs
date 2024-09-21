@@ -503,6 +503,25 @@ mod tests {
                 }
             }
             _ => panic!("Expected a chat function"),
+        };
+        // To test that variant default weights work correctly,
+        // We check `functions.templates_with_variables_json.variants.variant_with_variables.weight`
+        // This variant's weight is unspecified, so it should default to 0
+        let json_function = config
+            .functions
+            .get("templates_with_variables_json")
+            .unwrap();
+        match json_function {
+            FunctionConfig::Json(json_config) => {
+                let variant = json_config.variants.get("variant_with_variables").unwrap();
+                match variant {
+                    VariantConfig::ChatCompletion(chat_config) => {
+                        assert_eq!(chat_config.weight, 0.0); // Default weight should be 0
+                    }
+                    _ => panic!("Expected a chat completion variant"),
+                }
+            }
+            _ => panic!("Expected a JSON function"),
         }
     }
 
@@ -1340,7 +1359,6 @@ mod tests {
 
         [functions.templates_with_variables_json.variants.variant_with_variables]
         type = "chat_completion"
-        weight = 1.0
         model = "gpt-3.5-turbo"
         system_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
         user_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
@@ -1380,7 +1398,7 @@ mod tests {
         env::set_var("ANTHROPIC_API_KEY", "sk-something");
         env::set_var("AZURE_OPENAI_API_KEY", "sk-something");
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let config_path = format!("{}/../config/tensorzero.toml", manifest_dir);
+        let config_path = format!("{}/fixtures/config/tensorzero.toml", manifest_dir);
         let config_pathbuf = PathBuf::from(&config_path);
         let base_path = config_pathbuf
             .parent()
