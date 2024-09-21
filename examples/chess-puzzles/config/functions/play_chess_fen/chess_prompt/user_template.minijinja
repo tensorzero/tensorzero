@@ -1,9 +1,0 @@
-The current board state in Forsyth-Edwards Notation (FEN) is:
-{{ FEN }}
-
-The legal moves are:
-{%- for move in legal_moves_san -%}
-- {{ move }}
-{%- endfor -%}
-
-What's your next move?

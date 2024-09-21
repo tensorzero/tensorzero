@@ -62,4 +62,26 @@ pip install -r requirements.txt
 
 ## Running the Example
 
-TODO
+You can run the example in the `chess_puzzles.ipynb` notebook.
+Make sure to install the dependencies in the `requirements.txt` file.
+It should not require any changes to run and will automatically connect to the TensorZero Gateway you started.
+
+The notebook will evaluate the performance of the default GPT-4o-mini variant on the test set of chess puzzles.
+If you look at the `tensorzero.toml` file, you'll see that we've defined a best-of-n variant type for the `play_chess_board` function.
+This means that we'll run 5 separate inference requests to the LLM, and use another LLM to select the best result. These are all instances of GPT-4o-mini.
+Without modifying the prompt or the model used, we can trade more tokens for a statistically significant improvement in performance (we saw ~15% relative improvement from 34% to 38% success rate).
+
+## Modifying the Prompt
+
+You might want to try diverse instructions for each LLM call.
+We've included several other prompt templates in the `config/functions/play_chess_board/chess_*` directories.
+We also can modify the `variant_name` variable to try out different best-of-n variants.
+You can mix and match these in the `tensorzero.toml` file to try out different configurations.
+We saw the diverse variant squeeze a few extra percentage points of performance from the same model & compute budget.
+See for yourself if you can get better performance than our `gpt-4o-mini_best_of_5_diverse` example!
+
+## Next Steps
+
+You now have a ClickHouse database with a ton of trajectories of LLMs trying to solve chess puzzles.
+Consider our library of [recipes](https://github.com/tensorzero/tensorzero/tree/main/recipes) for ideas on how to use this dataset to improve further!
+Since this data ended up in ClickHouse, we also included a test set (use dryrun=True to avoid leaking it) to see how your variants perform on held-out data.
