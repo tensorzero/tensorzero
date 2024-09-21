@@ -1,6 +1,6 @@
 # Example: LLMs solving chess puzzles
 
-One benefit of using TensorZero rather than calling LLMs directly is it was built to support inference strategies more sophisticated than just a single chat completion.
+TensorZero was built to support inference strategies more sophisticated than just a single chat completion.
 Today, we also support a best-of-n variant type which samples from several variants concurrently and uses another LLM call to select the best result.
 
 In this example, we'll show how you can drop in this experimental best-of-n variant type to spend additional compute budget for better performance on a challenging LLM benchmark.
