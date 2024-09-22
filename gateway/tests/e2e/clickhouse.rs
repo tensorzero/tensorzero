@@ -1,6 +1,9 @@
-use gateway::clickhouse::ClickHouseConnectionInfo;
 use gateway::clickhouse_migration_manager;
 use gateway::clickhouse_migration_manager::migrations::migration_0000::Migration0000;
+use gateway::{
+    clickhouse::ClickHouseConnectionInfo,
+    clickhouse_migration_manager::migrations::migration_0001::Migration0001,
+};
 use reqwest::Client;
 use serde_json::json;
 use tracing_test::traced_test;
@@ -31,10 +34,12 @@ async fn test_clickhouse_migration_manager() {
     #[traced_test]
     async fn first(clickhouse: &ClickHouseConnectionInfo) {
         // Run the migration manager for the first time... it should apply the migrations
-        clickhouse_migration_manager::run_migration(&Migration0000 { clickhouse })
-            .await
-            .unwrap();
+        let clean_start =
+            clickhouse_migration_manager::run_migration(&Migration0000 { clickhouse })
+                .await
+                .unwrap();
 
+        assert!(clean_start);
         assert!(logs_contain("Applying migration: Migration0000"));
         assert!(logs_contain("Migration succeeded: Migration0000"));
         assert!(!logs_contain("Failed to apply migration"));
@@ -45,20 +50,57 @@ async fn test_clickhouse_migration_manager() {
     #[traced_test]
     async fn second(clickhouse: &ClickHouseConnectionInfo) {
         // Run the migration manager again (it should've already been run above)... there should be no changes
-        clickhouse_migration_manager::run_migration(&Migration0000 { clickhouse })
-            .await
-            .unwrap();
+        let clean_start =
+            clickhouse_migration_manager::run_migration(&Migration0000 { clickhouse })
+                .await
+                .unwrap();
+        // We know that the first migration was run so clean start should be false
+        assert!(!clean_start);
+        clickhouse_migration_manager::run_migration(&Migration0001 {
+            clickhouse,
+            clean_start: true, // For testing purposes, we know there is no data to migrate and it is a clean start
+        })
+        .await
+        .unwrap();
+
         assert!(!logs_contain("Failed to apply migration"));
         assert!(!logs_contain("Failed migration success check"));
         assert!(!logs_contain("Failed to verify migration"));
 
         assert!(!logs_contain("Applying migration: Migration0000"));
         assert!(!logs_contain("Migration succeeded: Migration0000"));
+        assert!(logs_contain("Applying migration: Migration0001"));
+        assert!(logs_contain("Migration succeeded: Migration0001"));
     }
 
+    #[traced_test]
+    async fn third(clickhouse: &ClickHouseConnectionInfo) {
+        // Run the migration manager again (it should've already been run above)... there should be no changes
+        let clean_start =
+            clickhouse_migration_manager::run_migration(&Migration0000 { clickhouse })
+                .await
+                .unwrap();
+        // We know that the first migration was run so clean start should be false
+        assert!(!clean_start);
+        clickhouse_migration_manager::run_migration(&Migration0001 {
+            clickhouse,
+            clean_start: true, // For testing purposes, we know there is no data to migrate and it is a clean start
+        })
+        .await
+        .unwrap();
+
+        assert!(!logs_contain("Failed to apply migration"));
+        assert!(!logs_contain("Failed migration success check"));
+        assert!(!logs_contain("Failed to verify migration"));
+
+        assert!(!logs_contain("Applying migration: Migration0000"));
+        assert!(!logs_contain("Migration succeeded: Migration0000"));
+        assert!(!logs_contain("Applying migration: Migration0001"));
+        assert!(!logs_contain("Migration succeeded: Migration0001"));
+    }
     first(&clickhouse).await;
     second(&clickhouse).await;
-
+    third(&clickhouse).await;
     tracing::info!("Attempting to drop test database: {database}");
 
     clickhouse

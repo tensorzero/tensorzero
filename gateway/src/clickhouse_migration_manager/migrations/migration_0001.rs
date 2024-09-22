@@ -16,6 +16,7 @@ use crate::error::Error;
 
 pub struct Migration0001<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
+    pub clean_start: bool,
 }
 
 impl<'a> Migration for Migration0001<'a> {
@@ -34,7 +35,7 @@ impl<'a> Migration for Migration0001<'a> {
     async fn should_apply(&self) -> Result<bool, Error> {
         let database = self.clickhouse.database();
 
-        let tables = vec!["InferenceView"];
+        let tables = vec!["InferenceById"];
 
         for table in tables {
             let query = format!(
@@ -67,8 +68,12 @@ impl<'a> Migration for Migration0001<'a> {
         // Create the database if it doesn't exist
         self.clickhouse.create_database().await?;
 
-        // TODO: add "clean start mode" for when we're starting from scratch
-        let view_offset = Duration::from_secs(15);
+        // If there is no data, we don't need to wait for the view to catch up
+        let view_offset = if self.clean_start {
+            Duration::from_secs(0)
+        } else {
+            Duration::from_secs(15)
+        };
 
         let view_timestamp = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
