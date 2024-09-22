@@ -72,6 +72,10 @@ If you look at the `tensorzero.toml` file, you'll see that we've defined a best-
 This means that we'll run 5 separate inference requests to the LLM, and use another LLM to select the best result. These are all instances of GPT-4o-mini.
 Without modifying the prompt or the model used, we can trade more tokens for a statistically significant improvement in performance (we saw ~15% relative improvement from 34% to 38% success rate).
 
+Here are our results:
+
+![Results](img/variant_success_rates.png)
+
 ## Modifying the Prompt
 
 You might want to try diverse instructions for each LLM call.

@@ -165,10 +165,7 @@ async def run_puzzle(
         else:
             # Opponent's move
             expected_move = expected_moves[move_index]
-            try:
-                opponent_move_obj = board.parse_san(expected_move)
-            except ValueError:
-                opponent_move_obj = chess.Move.from_uci(expected_move)
+            opponent_move_obj = board.parse_san(expected_move)
 
             board.push(opponent_move_obj)
             log.info(f"Opponent moved: {opponent_move_obj}\n")
