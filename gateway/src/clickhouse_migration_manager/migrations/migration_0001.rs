@@ -106,6 +106,7 @@ impl<'a> Migration for Migration0001<'a> {
         "#;
         let _ = self.clickhouse.run_query(query.to_string()).await?;
 
+        // Insert the data from the original tables into the new table (we do this concurrently since it could theoretically take a long time)
         let insert_chat_inference = async {
             let query = r#"
                 INSERT INTO InferenceById
