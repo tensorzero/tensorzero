@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::clickhouse_migration_manager::migration_trait::Migration;
 use crate::error::Error;
@@ -65,6 +67,18 @@ impl<'a> Migration for Migration0001<'a> {
         // Create the database if it doesn't exist
         self.clickhouse.create_database().await?;
 
+        // TODO: add "clean start mode" for when we're starting from scratch
+        let view_offset = Duration::from_secs(15);
+
+        let view_timestamp = (std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| Error::ClickHouseMigration {
+                id: "0001".to_string(),
+                message: e.to_string(),
+            })?
+            + view_offset)
+            .as_secs();
+
         // Create the `InferencesById` table
         let query = r#"
             CREATE TABLE IF NOT EXISTS InferenceById
@@ -72,14 +86,16 @@ impl<'a> Migration for Migration0001<'a> {
                 id UUID, -- must be a UUIDv7
                 function_name LowCardinality(String),
                 variant_name LowCardinality(String),
-                episode_id UUID, -- must be a UUIDv7
+                episode_id UUID, -- must be a UUIDv7,
+                function_type Enum('chat' = 1, 'json' = 2)
             ) ENGINE = MergeTree()
             ORDER BY id;
         "#;
         let _ = self.clickhouse.run_query(query.to_string()).await?;
 
         // Create the materialized view for the `InferencesById` table from ChatInference
-        let query = r#"
+        let query = format!(
+            r#"
             CREATE MATERIALIZED VIEW ChatInferenceByIdView
             TO InferenceById
             AS
@@ -87,13 +103,18 @@ impl<'a> Migration for Migration0001<'a> {
                     id,
                     function_name,
                     variant_name,
-                    episode_id
-                FROM ChatInferences;
-        "#;
-        let _ = self.clickhouse.run_query(query.to_string()).await?;
+                    episode_id,
+                    'chat'
+                FROM ChatInference
+                WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}));
+            "#,
+            view_timestamp = view_timestamp
+        );
+        let _ = self.clickhouse.run_query(query).await?;
 
         // Create the materialized view for the `InferencesById` table from JsonInference
-        let query = r#"
+        let query = format!(
+            r#"
             CREATE MATERIALIZED VIEW JsonInferenceByIdView
             TO InferenceById
             AS
@@ -101,38 +122,50 @@ impl<'a> Migration for Migration0001<'a> {
                     id,
                     function_name,
                     variant_name,
-                    episode_id
-                FROM JsonInference;
-        "#;
-        let _ = self.clickhouse.run_query(query.to_string()).await?;
+                    episode_id,
+                    'json'
+                FROM JsonInference
+                WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}));
+        "#,
+            view_timestamp = view_timestamp
+        );
+        let _ = self.clickhouse.run_query(query).await?;
 
         // Insert the data from the original tables into the new table (we do this concurrently since it could theoretically take a long time)
         let insert_chat_inference = async {
-            let query = r#"
+            let query = format!(
+                r#"
                 INSERT INTO InferenceById
                 SELECT
                     id,
                     function_name,
                     variant_name,
-                    episode_id
+                    episode_id,
+                    'chat'
                 FROM ChatInference
-                WHERE UUIDv7ToDateTime(id) < now();
-            "#;
-            self.clickhouse.run_query(query.to_string()).await
+                WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
+            "#,
+                view_timestamp = view_timestamp
+            );
+            self.clickhouse.run_query(query).await
         };
 
         let insert_json_inference = async {
-            let query = r#"
+            let query = format!(
+                r#"
                 INSERT INTO InferenceById
                 SELECT
                     id,
                     function_name,
                     variant_name,
-                    episode_id
+                    episode_id,
+                    'json'
                 FROM JsonInference
-                WHERE UUIDv7ToDateTime(id) < now();
-            "#;
-            self.clickhouse.run_query(query.to_string()).await
+                WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
+            "#,
+                view_timestamp = view_timestamp
+            );
+            self.clickhouse.run_query(query).await
         };
 
         tokio::try_join!(insert_chat_inference, insert_json_inference)?;
@@ -141,15 +174,7 @@ impl<'a> Migration for Migration0001<'a> {
     }
 
     fn rollback_instructions(&self) -> String {
-        let database = self.clickhouse.database();
-
-        format!(
-            "\
-            **CAREFUL: THIS WILL DELETE ALL DATA**\n\
-            \n\
-            -- Drop the database\n\
-            DROP DATABASE IF EXISTS {database};\n\
-            \n\
+        "\
             -- Drop the materialized views\n\
             DROP MATERIALIZED VIEW IF EXISTS ChatInferenceByIdView;\n\
             DROP MATERIALIZED VIEW IF EXISTS JsonInferenceByIdView;\n\
@@ -157,7 +182,7 @@ impl<'a> Migration for Migration0001<'a> {
             -- Drop the table\n\
             DROP TABLE IF EXISTS InferenceById;\n\
             "
-        )
+        .to_string()
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)
