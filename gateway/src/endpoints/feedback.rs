@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use axum::extract::State;
 use axum::{debug_handler, Json};
 use metrics::counter;
@@ -11,7 +13,7 @@ use crate::error::Error;
 use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{parse_chat_output, ContentBlock, ContentBlockOutput, Text};
-use crate::tool::{DynamicToolParams, ToolCall, ToolCallConfig};
+use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCall, ToolCallConfig};
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Deserialize)]
@@ -224,7 +226,7 @@ async fn write_demonstration(
 ) -> Result<(), Error> {
     let function_name = get_function_name_from_inference_id(inference_id, &connection_info).await?;
     let function_config = config.get_function(&function_name)?;
-    let parsed_value = validate_parse_demonstration(function_config, config, &value).await?;
+    let parsed_value = validate_parse_demonstration(function_config, &config.tools, &value).await?;
     let payload = json!({"inference_id": inference_id, "value": parsed_value, "id": feedback_id});
     if !dryrun {
         connection_info
@@ -275,17 +277,44 @@ async fn write_boolean(
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
+struct DemonstrationToolCall {
+    name: String,
+    arguments: Value,
+}
+
+impl TryFrom<DemonstrationToolCall> for ToolCall {
+    type Error = Error;
+    fn try_from(value: DemonstrationToolCall) -> Result<Self, Self::Error> {
+        Ok(ToolCall {
+            name: value.name,
+            arguments: serde_json::to_string(&value.arguments).map_err(|e| {
+                Error::InvalidRequest {
+                    message: format!(
+                        "Failed to serialize demonstration tool call arguments: {}",
+                        e
+                    ),
+                }
+            })?,
+            id: "".to_string(),
+        })
+    }
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum DemonstrationContentBlock {
     Text(Text),
-    ToolCall(ToolCall),
+    ToolCall(DemonstrationToolCall),
 }
 
-impl From<DemonstrationContentBlock> for ContentBlock {
-    fn from(value: DemonstrationContentBlock) -> Self {
+impl TryFrom<DemonstrationContentBlock> for ContentBlock {
+    type Error = Error;
+    fn try_from(value: DemonstrationContentBlock) -> Result<Self, Self::Error> {
         match value {
-            DemonstrationContentBlock::Text(text) => ContentBlock::Text(text),
-            DemonstrationContentBlock::ToolCall(tool_call) => ContentBlock::ToolCall(tool_call),
+            DemonstrationContentBlock::Text(text) => Ok(ContentBlock::Text(text)),
+            DemonstrationContentBlock::ToolCall(tool_call) => {
+                Ok(ContentBlock::ToolCall(tool_call.try_into()?))
+            }
         }
     }
 }
@@ -308,12 +337,12 @@ async fn get_function_name_from_inference_id(
 }
 
 // Validates that the demonstration is correct.
-// For chat functions, ...
+// For chat functions, the value should be a string or a list of valid content blocks.
 // For json functions, the value is validated against the output schema. If it passes,
 // we construct the usual {"raw": str, "parsed": parsed_value} object, serialize it, and return it.
 async fn validate_parse_demonstration(
     function_config: &'static FunctionConfig,
-    config: &'static Config<'_>,
+    tools: &'static HashMap<String, StaticToolConfig>,
     value: &Value,
 ) -> Result<String, Error> {
     match function_config {
@@ -345,7 +374,7 @@ async fn validate_parse_demonstration(
                 &chat_config.tools,
                 &chat_config.tool_choice,
                 chat_config.parallel_tool_calls,
-                &config.tools,
+                tools,
                 DynamicToolParams {
                     allowed_tools: None,
                     additional_tools: None,
@@ -355,8 +384,8 @@ async fn validate_parse_demonstration(
             )?;
             let content_blocks: Vec<ContentBlock> = content_blocks
                 .into_iter()
-                .map(|block| block.into())
-                .collect();
+                .map(|block| block.try_into())
+                .collect::<Result<Vec<ContentBlock>, Error>>()?;
             let parsed_value = parse_chat_output(content_blocks, tool_config.as_ref()).await;
             for block in &parsed_value {
                 if let ContentBlockOutput::ToolCall(tool_call) = block {
@@ -385,10 +414,7 @@ async fn validate_parse_demonstration(
                 .output_schema
                 .validate(value)
                 .map_err(|e| Error::InvalidRequest {
-                    message: format!(
-                        "Demonstration does not fit function output schema {}: {}",
-                        json_config.output_schema.value, e
-                    ),
+                    message: format!("Demonstration does not fit function output schema: {}", e),
                 })?;
             let raw = serde_json::to_string(value).map_err(|e| Error::InvalidRequest {
                 message: format!("Failed to serialize demonstration to json: {}", e),
@@ -414,8 +440,11 @@ mod tests {
     use std::collections::HashMap;
 
     use crate::config_parser::{Config, GatewayConfig, MetricConfig, MetricConfigOptimize};
+    use crate::function::{FunctionConfigChat, FunctionConfigJson};
+    use crate::jsonschema_util::JSONSchemaFromPath;
     use crate::minijinja_util::TemplateConfig;
     use crate::testing::get_unit_test_app_state_data;
+    use crate::tool::{ToolCallOutput, ToolChoice};
 
     #[tokio::test]
     async fn test_get_feedback_metadata() {
@@ -796,5 +825,141 @@ mod tests {
             )
             .await;
         assert!(mock_data.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_validate_parse_demonstration() {
+        let weather_tool_config_static = StaticToolConfig {
+            name: "get_temperature".to_string(),
+            description: "Get the current temperature in a given location".to_string(),
+            parameters: JSONSchemaFromPath::from_value(&json!({
+                "type": "object",
+                "properties": {
+                    "location": {"type": "string"},
+                    "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]}
+                },
+                "required": ["location"]
+            })),
+            strict: false,
+        };
+        let tools = Box::leak(Box::new(HashMap::from([(
+            "get_temperature".to_string(),
+            weather_tool_config_static,
+        )])));
+        let function_config_chat_tools =
+            Box::leak(Box::new(FunctionConfig::Chat(FunctionConfigChat {
+                variants: HashMap::new(),
+                system_schema: None,
+                user_schema: None,
+                assistant_schema: None,
+                tools: vec!["get_temperature".to_string()],
+                tool_choice: ToolChoice::Auto,
+                parallel_tool_calls: false,
+            })));
+
+        // Case 1: a string passed to a chat function
+        let value = json!("Hello, world!");
+        let parsed_value = validate_parse_demonstration(function_config_chat_tools, tools, &value)
+            .await
+            .unwrap();
+        let expected_parsed_value = serde_json::to_string(&vec![ContentBlock::Text(Text {
+            text: "Hello, world!".to_string(),
+        })])
+        .unwrap();
+        assert_eq!(expected_parsed_value, parsed_value);
+
+        // Case 2: a tool call to get_temperature, which exists
+        let value = json!([{"type": "tool_call", "name": "get_temperature", "arguments": {"location": "London", "unit": "celsius"}}]
+        );
+        let parsed_value = validate_parse_demonstration(function_config_chat_tools, tools, &value)
+            .await
+            .unwrap();
+        let expected_parsed_value =
+            serde_json::to_string(&vec![ContentBlockOutput::ToolCall(ToolCallOutput {
+                id: "".to_string(),
+                name: Some("get_temperature".to_string()),
+                raw_name: "get_temperature".to_string(),
+                arguments: Some(json!({"location": "London", "unit": "celsius"})),
+                raw_arguments: serde_json::to_string(
+                    &json!({"location": "London", "unit": "celsius"}),
+                )
+                .unwrap(),
+            })])
+            .unwrap();
+        assert_eq!(expected_parsed_value, parsed_value);
+
+        // Case 3: a tool call to get_humidity, which does not exist
+        let value = json!([{"type": "tool_call", "name": "get_humidity", "arguments": {"location": "London", "unit": "celsius"}}]
+        );
+        let err = validate_parse_demonstration(function_config_chat_tools, tools, &value)
+            .await
+            .unwrap_err();
+        assert_eq!(
+            err,
+            Error::InvalidRequest {
+                message: "Demonstration contains invalid tool name".to_string(),
+            }
+        );
+
+        // Case 4: a tool call to get_temperature, which exists but has bad arguments (place instead of location)
+        let value = json!([{"type": "tool_call", "name": "get_temperature", "arguments": {"place": "London", "unit": "celsius"}}]
+        );
+        let err = validate_parse_demonstration(function_config_chat_tools, tools, &value)
+            .await
+            .unwrap_err();
+        assert_eq!(
+            err,
+            Error::InvalidRequest {
+                message: "Demonstration contains invalid tool call arguments".to_string(),
+            }
+        );
+
+        // Let's try a JSON function
+        let output_schema = json!({
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "age": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": ["name", "age"],
+          "additionalProperties": false
+        });
+        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
+        let output_schema = JSONSchemaFromPath::from_value(&output_schema);
+        let function_config = Box::leak(Box::new(FunctionConfig::Json(FunctionConfigJson {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            output_schema,
+            implicit_tool_call_config,
+        })));
+
+        // Case 5: a JSON function with correct output
+        let value = json!({
+            "name": "John",
+            "age": 30
+        });
+        let parsed_value = validate_parse_demonstration(function_config, tools, &value)
+            .await
+            .unwrap();
+        let expected_parsed_value = serde_json::to_string(&json!({
+            "raw": serde_json::to_string(&value).unwrap(),
+            "parsed": value
+        }))
+        .unwrap();
+        assert_eq!(expected_parsed_value, parsed_value);
+
+        // Case 6: a JSON function with incorrect output
+        let value = json!("Hello, world!");
+        validate_parse_demonstration(function_config, tools, &value)
+            .await
+            .unwrap_err();
     }
 }
