@@ -20,7 +20,7 @@ For example, here's a sample puzzle:
 
 _black to move_
 
-<p>
+</p>
 
 The puzzle consists of a sequence of moves that are "forced" on the player: the player and their opponent would each be significantly disadvantaged if they missed their next move.
 We can therefore evaluate an LLM by their exact match to the puzzle solution (or if they manage to achieve a checkmate).
