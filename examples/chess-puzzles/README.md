@@ -15,11 +15,9 @@ Each puzzle consists of a board position and a sequence of moves that solves it.
 For example, here's a sample puzzle:
 
 <p align="center">
-
 ![Chess Puzzle](img/puzzle.png)
-
+<br>
 _black to move_
-
 </p>
 
 The puzzle consists of a sequence of moves that are "forced" on the player: the player and their opponent would each be significantly disadvantaged if they missed their next move.
