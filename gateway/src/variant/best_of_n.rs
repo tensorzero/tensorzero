@@ -255,7 +255,7 @@ impl BestOfNConfig {
         {
             Ok((idx_opt, inf_result)) => (
                 idx_opt.unwrap_or_else(|| rand::thread_rng().gen_range(0..candidates.len())),
-                Some(inf_result),
+                inf_result,
             ),
             Err(e) => {
                 e.log();
@@ -314,13 +314,36 @@ async fn inner_select_best_candidate<'a, 'request>(
     inference_config: &'request InferenceConfig<'request>,
     client: &'request Client,
     candidates: &[InferenceResult<'request>],
-) -> Result<(Option<usize>, ModelInferenceResponseWithMetadata<'a>), Error> {
+) -> Result<
+    (
+        Option<usize>,
+        Option<ModelInferenceResponseWithMetadata<'a>>,
+    ),
+    Error,
+> {
     let (inference_request, skipped_indices) = evaluator.prepare_request(
         input,
         inference_config,
         candidates,
         &mut InferenceParams::default(),
     )?;
+    if skipped_indices.len() == candidates.len() {
+        return Err(Error::Inference {
+            message: "No valid candidates available to prepare request.".to_string(),
+        });
+    }
+    // If there is only one candidate that was not skipped, we return that one without running inference
+    if skipped_indices.len() == candidates.len() - 1 {
+        let selected_index = (0..candidates.len())
+            .find(|&i| !skipped_indices.contains(&i))
+            .ok_or(Error::Inference {
+                message:
+                    "No valid candidates available to prepare request (this should never happen)."
+                        .to_string(),
+            })?;
+        // Return the selected index and None for the model inference result
+        return Ok((Some(selected_index), None));
+    }
     let model_config = models
         .get(&evaluator.inner.model)
         .ok_or(Error::UnknownModel {
@@ -342,7 +365,7 @@ async fn inner_select_best_candidate<'a, 'request>(
                 message: "The evaluator did not return a text response".to_string(),
             };
             err.log();
-            return Ok((None, model_inference_result));
+            return Ok((None, Some(model_inference_result)));
         }
     };
     let parsed_output = match serde_json::from_str::<Value>(&text_content.text) {
@@ -352,7 +375,7 @@ async fn inner_select_best_candidate<'a, 'request>(
                 message: format!("The evaluator did not return a valid JSON response: {e}"),
             };
             err.log();
-            return Ok((None, model_inference_result));
+            return Ok((None, Some(model_inference_result)));
         }
     };
     let answer_choice = match parsed_output.get("answer_choice") {
@@ -365,7 +388,7 @@ async fn inner_select_best_candidate<'a, 'request>(
                     ),
                 };
                 err.log();
-                return Ok((None, model_inference_result));
+                return Ok((None, Some(model_inference_result)));
             }
         },
         None => {
@@ -373,7 +396,7 @@ async fn inner_select_best_candidate<'a, 'request>(
                 message: format!("The evaluator returned a JSON response without an answer_choice field: {parsed_output}"),
             };
             err.log();
-            return Ok((None, model_inference_result));
+            return Ok((None, Some(model_inference_result)));
         }
     };
     // Map the evaluator's index to the actual index
@@ -387,9 +410,9 @@ async fn inner_select_best_candidate<'a, 'request>(
             ),
         };
         err.log();
-        return Ok((None, model_inference_result));
+        return Ok((None, Some(model_inference_result)));
     }
-    Ok((Some(answer_choice as usize), model_inference_result))
+    Ok((Some(answer_choice as usize), Some(model_inference_result)))
 }
 
 impl EvaluatorConfig {

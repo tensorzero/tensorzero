@@ -20,7 +20,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
     let payload = json!({
         "function_name": "best_of_n",
         "episode_id": episode_id,
-        "input":{
+        "input": {
             "system": {"assistant_name": "AskJeeves"},
             "messages": [
                 {
@@ -212,7 +212,7 @@ async fn e2e_test_best_of_n_json_real_judge() {
             "messages": [
                 {
                     "role": "user",
-                    "content": "What's the first word in the typical output of ones first program. Answer as a json object with a single field 'answer' containing the string."
+                    "content": "What's the first word in the typical output of one's first program. Answer as a json object with a single field 'answer' containing the string."
                 }
             ]},
         "stream": false,
