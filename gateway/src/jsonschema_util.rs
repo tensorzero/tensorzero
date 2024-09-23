@@ -87,15 +87,16 @@ impl JSONSchemaFromPath {
         Ok(Self { compiled, value })
     }
 
-    // NOTE: This function is used only for tests
-    pub fn from_value(value: &serde_json::Value) -> Self {
+    // NOTE: This function is to be used only for tests and constants
+    pub fn from_value(value: &serde_json::Value) -> Result<Self, Error> {
         let schema_boxed: &'static serde_json::Value = Box::leak(Box::new(value.clone()));
-        #[allow(clippy::unwrap_used)]
-        let compiled_schema = JSONSchema::compile(schema_boxed).unwrap();
-        Self {
+        let compiled_schema = JSONSchema::compile(schema_boxed).map_err(|e| Error::JsonSchema {
+            message: format!("Failed to compile JSON Schema: {}", e),
+        })?;
+        Ok(Self {
             compiled: Arc::new(compiled_schema),
             value: schema_boxed,
-        }
+        })
     }
 
     pub fn validate(&self, instance: &serde_json::Value) -> Result<(), Error> {

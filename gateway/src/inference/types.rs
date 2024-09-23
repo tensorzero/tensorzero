@@ -515,6 +515,36 @@ impl<'a> InferenceResult<'a> {
             })
             .collect()
     }
+
+    pub fn usage(&self) -> &Usage {
+        match self {
+            InferenceResult::Chat(chat_result) => &chat_result.usage,
+            InferenceResult::Json(json_result) => &json_result.usage,
+        }
+    }
+
+    pub fn set_usage(&mut self, usage: Usage) {
+        match self {
+            InferenceResult::Chat(chat_result) => chat_result.usage = usage,
+            InferenceResult::Json(json_result) => json_result.usage = usage,
+        }
+    }
+
+    pub fn mut_model_inference_results(
+        &mut self,
+    ) -> &mut Vec<ModelInferenceResponseWithMetadata<'a>> {
+        match self {
+            InferenceResult::Chat(chat_result) => &mut chat_result.model_inference_results,
+            InferenceResult::Json(json_result) => &mut json_result.model_inference_results,
+        }
+    }
+
+    pub fn owned_model_inference_results(self) -> Vec<ModelInferenceResponseWithMetadata<'a>> {
+        match self {
+            InferenceResult::Chat(chat_result) => chat_result.model_inference_results,
+            InferenceResult::Json(json_result) => json_result.model_inference_results,
+        }
+    }
 }
 
 impl<'a> JsonInferenceResult<'a> {
@@ -945,6 +975,16 @@ impl From<&JsonMode> for ModelInferenceRequestJsonMode {
     }
 }
 
+impl<'a> std::iter::Sum<&'a Usage> for Usage {
+    fn sum<I: Iterator<Item = &'a Usage>>(iter: I) -> Self {
+        iter.fold(Usage::default(), |mut acc, u| {
+            acc.input_tokens = acc.input_tokens.saturating_add(u.input_tokens);
+            acc.output_tokens = acc.output_tokens.saturating_add(u.output_tokens);
+            acc
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::Instant;
@@ -1259,7 +1299,7 @@ mod tests {
             "required": ["name", "age"]
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = JSONSchemaFromPath::from_value(&output_schema);
+        let output_schema = JSONSchemaFromPath::from_value(&output_schema).unwrap();
         let function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
@@ -1465,7 +1505,7 @@ mod tests {
             "required": ["name", "age"]
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = JSONSchemaFromPath::from_value(&output_schema);
+        let output_schema = JSONSchemaFromPath::from_value(&output_schema).unwrap();
         let function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
@@ -1550,7 +1590,7 @@ mod tests {
             "required": ["name"]
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&static_output_schema);
-        let output_schema = JSONSchemaFromPath::from_value(&static_output_schema);
+        let output_schema = JSONSchemaFromPath::from_value(&static_output_schema).unwrap();
         let function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,

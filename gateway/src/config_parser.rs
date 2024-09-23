@@ -454,6 +454,7 @@ mod tests {
             .unwrap()
         {
             VariantConfig::ChatCompletion(chat_config) => &chat_config.json_mode,
+            _ => panic!("Expected a chat completion variant"),
         };
         assert_eq!(prompt_a_json_mode, &JsonMode::ImplicitTool);
 
@@ -466,6 +467,7 @@ mod tests {
             .unwrap()
         {
             VariantConfig::ChatCompletion(chat_config) => &chat_config.json_mode,
+            _ => panic!("Expected a chat completion variant"),
         };
         assert_eq!(prompt_b_json_mode, &JsonMode::On);
         // Check that the tool choice for get_weather is set to "specific" and the correct tool
@@ -476,6 +478,29 @@ mod tests {
                     chat_config.tool_choice,
                     ToolChoice::Specific("get_temperature".to_string())
                 );
+            }
+            _ => panic!("Expected a chat function"),
+        }
+        // Check that the best of n variant has multiple candidates
+        let function = config
+            .functions
+            .get("templates_with_variables_chat")
+            .unwrap();
+        match function {
+            FunctionConfig::Chat(chat_config) => {
+                if let Some(variant) = chat_config.variants.get("best_of_n") {
+                    match variant {
+                        VariantConfig::BestOfN(best_of_n_config) => {
+                            assert!(
+                                best_of_n_config.candidates.len() > 1,
+                                "Best of n variant should have multiple candidates"
+                            );
+                        }
+                        _ => panic!("Expected a best of n variant"),
+                    }
+                } else {
+                    panic!("Expected to find a best of n variant");
+                }
             }
             _ => panic!("Expected a chat function"),
         }
@@ -494,6 +519,7 @@ mod tests {
                     VariantConfig::ChatCompletion(chat_config) => {
                         assert_eq!(chat_config.weight, 0.0); // Default weight should be 0
                     }
+                    _ => panic!("Expected a chat completion variant"),
                 }
             }
             _ => panic!("Expected a JSON function"),
@@ -941,6 +967,11 @@ mod tests {
             .as_table_mut()
             .unwrap()
             .remove("system_schema");
+
+        sample_config["functions"]["templates_with_variables_chat"]["variants"]
+            .as_table_mut()
+            .unwrap()
+            .remove("best_of_n");
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(sample_config, base_path);
         assert_eq!(
@@ -972,6 +1003,10 @@ mod tests {
             .as_table_mut()
             .unwrap()
             .remove("user_schema");
+        sample_config["functions"]["templates_with_variables_chat"]["variants"]
+            .as_table_mut()
+            .unwrap()
+            .remove("best_of_n");
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(sample_config, base_path);
         assert_eq!(
@@ -1004,6 +1039,11 @@ mod tests {
             .as_table_mut()
             .unwrap()
             .remove("assistant_schema");
+
+        sample_config["functions"]["templates_with_variables_chat"]["variants"]
+            .as_table_mut()
+            .unwrap()
+            .remove("best_of_n");
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(sample_config, base_path);
         assert_eq!(
@@ -1023,6 +1063,31 @@ mod tests {
             result.unwrap_err(),
             Error::Config {
                 message: "`functions.templates_with_variables_json.variants.variant_with_variables.assistant_template`: schema is required when template is specified and needs variables".to_string()
+            }
+        );
+    }
+
+    /// Ensure that config loading fails when a nonexistent candidate is specified in a variant
+    #[test]
+    fn test_config_best_of_n_candidate_not_found() {
+        let mut sample_config = get_sample_valid_config();
+        sample_config["functions"]["templates_with_variables_chat"]["variants"]
+            .as_table_mut()
+            .unwrap()
+            .get_mut("best_of_n")
+            .unwrap()
+            .as_table_mut()
+            .unwrap()
+            .insert(
+                "candidates".into(),
+                toml::Value::Array(vec!["non_existent_candidate".into()]),
+            );
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(sample_config, base_path);
+        assert_eq!(
+            result.unwrap_err(),
+            Error::UnknownCandidate {
+                name: "non_existent_candidate".to_string()
             }
         );
     }
@@ -1258,6 +1323,17 @@ mod tests {
         [functions.templates_with_variables_chat.variants.variant_with_variables]
         type = "chat_completion"
         weight = 1.0
+        model = "gpt-3.5-turbo"
+        system_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
+        user_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
+        assistant_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
+
+        [functions.templates_with_variables_chat.variants.best_of_n]
+        type = "experimental_best_of_n"
+        weight = 1.0
+        candidates = ["variant_with_variables", "variant_with_variables"]
+
+        [functions.templates_with_variables_chat.variants.best_of_n.evaluator]
         model = "gpt-3.5-turbo"
         system_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
         user_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
