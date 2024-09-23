@@ -402,7 +402,7 @@ impl OpenAIResponseFormat {
             ModelInferenceRequestJsonMode::Off => OpenAIResponseFormat::Text,
             ModelInferenceRequestJsonMode::Strict => match output_schema {
                 Some(schema) => {
-                    let json_schema = json!({"name": "response", "schema": schema.clone()});
+                    let json_schema = json!({"name": "response", "strict": true, "schema": schema});
                     OpenAIResponseFormat::JsonSchema { json_schema }
                 }
                 None => OpenAIResponseFormat::JsonObject,
@@ -1067,7 +1067,7 @@ mod tests {
         assert_eq!(openai_request.max_tokens, None);
         assert_eq!(openai_request.seed, None);
         assert!(!openai_request.stream);
-        let expected_schema = serde_json::json!({"name": "response", "schema": {}});
+        let expected_schema = serde_json::json!({"name": "response", "strict": true, "schema": {}});
         assert_eq!(
             openai_request.response_format,
             Some(OpenAIResponseFormat::JsonSchema {
@@ -1695,6 +1695,7 @@ mod tests {
             OpenAIResponseFormat::JsonSchema { json_schema } => {
                 assert_eq!(json_schema["schema"], schema);
                 assert_eq!(json_schema["name"], "response");
+                assert_eq!(json_schema["strict"], true);
             }
             _ => panic!("Expected JsonSchema format"),
         }
