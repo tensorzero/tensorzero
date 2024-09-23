@@ -14,16 +14,19 @@ We pulled a large dataset of [Lichess](https://lichess.org) chess puzzles from [
 Each puzzle consists of a board position and a sequence of moves that solves it.
 For example, here's a sample puzzle:
 
-![Chess Puzzle](img/puzzle.png)
+<center>
 
-(black to move)
+![Chess Puzzle](img/puzzle.png)
+_black to move_
+
+<center>
 
 The puzzle consists of a sequence of moves that are "forced" on the player: the player and their opponent would each be significantly disadvantaged if they missed their next move.
 We can therefore evaluate an LLM by their exact match to the puzzle solution (or if they manage to achieve a checkmate).
 Give this puzzle a try!
 
 <details>
-<Summary>Click for the solution!</Summary>
+<summary>**Solution**</summary>
 
 1. ... Qb1+
 2. Re1 Qe1#
