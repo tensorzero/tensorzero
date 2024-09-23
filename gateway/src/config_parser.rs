@@ -503,7 +503,8 @@ mod tests {
                 }
             }
             _ => panic!("Expected a chat function"),
-        };
+        }
+
         // To test that variant default weights work correctly,
         // We check `functions.templates_with_variables_json.variants.variant_with_variables.weight`
         // This variant's weight is unspecified, so it should default to 0
