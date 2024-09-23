@@ -136,6 +136,9 @@ impl<'a> Migration for Migration0001<'a> {
         );
         let _ = self.clickhouse.run_query(query).await?;
 
+        // Sleep for the duration specified by view_offset to allow the materialized views to catch up
+        tokio::time::sleep(view_offset).await;
+
         // Insert the data from the original tables into the new table (we do this concurrently since it could theoretically take a long time)
         let insert_chat_inference = async {
             let query = format!(
