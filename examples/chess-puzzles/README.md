@@ -1,4 +1,4 @@
-# Example: LLMs solving chess puzzles
+# Example: LLMs Solving Chess Puzzles
 
 TensorZero was built to support inference strategies more sophisticated than just a single chat completion.
 Today, we also support a best-of-n variant type which samples from several variants concurrently and uses another LLM call to select the best result.
@@ -17,6 +17,7 @@ For example, here's a sample puzzle:
 <center>
 
 ![Chess Puzzle](img/puzzle.png)
+
 _black to move_
 
 <center>
@@ -30,6 +31,7 @@ Give this puzzle a try!
 
 1. ... Qb1+
 2. Re1 Qe1#
+
 </details>
 
 ## Setup
