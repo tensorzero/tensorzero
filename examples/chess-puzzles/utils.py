@@ -1,19 +1,16 @@
 import asyncio
-import json
 import logging
 import random
 from abc import ABC, abstractmethod
 from copy import deepcopy
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 from uuid import UUID
 
 import chess
 import chess.engine
 import chess.pgn
-import pandas as pd
 from scipy.stats import binomtest
 from tensorzero import AsyncTensorZeroGateway
-from tqdm import trange
 
 log = logging.getLogger(__name__)
 
