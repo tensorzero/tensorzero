@@ -9,6 +9,6 @@ The move should be in standard algebraic notation (SAN).
 
 You should write your output in the following JSON format (this is an example):
 {
-    "thinking": "let's expand the board state .... hmm, I see that there's a possibility for a pin.... etc etc",
+    "thinking": "Let's expand the board state ... Hmm, I see that there's a possibility for a pin.... etc.",
     "move": "Nf3"
 }

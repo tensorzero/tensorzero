@@ -89,6 +89,7 @@ We also can modify the `variant_name` variable to try out different best-of-n va
 You can mix and match these in the `tensorzero.toml` file to try out different configurations.
 We saw the diverse variant squeeze a few extra percentage points of performance from the same model and compute budget.
 See for yourself if you can get better performance than our `gpt-4o-mini_best_of_5_diverse` example!
+For example, you could try mixing candidates that use different LLMs.
 
 ## Next Steps
 

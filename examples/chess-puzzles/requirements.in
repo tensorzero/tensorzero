@@ -1,7 +1,8 @@
 chess
+ipykernel
+matplotlib
 numpy
 pandas
-matplotlib
 scipy
 tensorzero
 tqdm
