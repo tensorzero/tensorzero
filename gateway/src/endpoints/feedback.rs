@@ -327,7 +327,7 @@ async fn get_function_name_from_inference_id(
         "SELECT function_name FROM InferenceById WHERE id = '{}'",
         inference_id
     );
-    let function_name = connection_info.run_query(query).await?;
+    let function_name = connection_info.run_query(query).await?.trim().to_string();
     if function_name.is_empty() {
         return Err(Error::InvalidRequest {
             message: "Inference ID does not exist".to_string(),
