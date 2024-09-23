@@ -1,19 +1,16 @@
 import asyncio
-import json
 import logging
 import random
 from abc import ABC, abstractmethod
 from copy import deepcopy
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 from uuid import UUID
 
 import chess
 import chess.engine
 import chess.pgn
-import pandas as pd
 from scipy.stats import binomtest
 from tensorzero import AsyncTensorZeroGateway
-from tqdm import trange
 
 log = logging.getLogger(__name__)
 
@@ -52,47 +49,47 @@ class StockfishPlayer(AbstractPlayer):
         return board.san(result.move), None
 
 
-class TensorZeroPlayer(AbstractPlayer):
-    def __init__(
-        self, client: AsyncTensorZeroGateway, variant_name: Optional[str] = None
-    ):
-        self.client = client
-        self.variant_name = variant_name
+# class TensorZeroPlayer(AbstractPlayer):
+#     def __init__(
+#         self, client: AsyncTensorZeroGateway, variant_name: Optional[str] = None
+#     ):
+#         self.client = client
+#         self.variant_name = variant_name
 
-    async def play(
-        self, board: chess.Board, episode_id: Optional[UUID] = None
-    ) -> Tuple[str, Optional[UUID]]:
-        legal_moves_san = [board.san(move) for move in board.legal_moves]
+#     async def play(
+#         self, board: chess.Board, episode_id: Optional[UUID] = None
+#     ) -> Tuple[str, Optional[UUID]]:
+#         legal_moves_san = [board.san(move) for move in board.legal_moves]
 
-        try:
-            result = await self.client.inference(
-                function_name="play_chess_board",
-                input={
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": {
-                                "board": str(board),
-                                "color": "white" if board.turn else "black",
-                                "legal_moves_san": legal_moves_san,
-                            },
-                        }
-                    ]
-                },
-                variant_name=self.variant_name,
-                episode_id=episode_id,
-            )
-            thinking = result.output.parsed["thinking"]
-            log.info(f"Player thinking: {thinking}")
-            move = result.output.parsed["move"]
-            log.info(f"Player move: {move}")
-            episode_id = result.episode_id
-        except Exception as e:
-            log.error(f"Error occurred: {e}")
-            log.info("Choosing a random legal move as fallback.")
-            move = random.choice(legal_moves_san)
-            return move, episode_id
-        return move, episode_id
+#         try:
+#             result = await self.client.inference(
+#                 function_name="play_chess_board",
+#                 input={
+#                     "messages": [
+#                         {
+#                             "role": "user",
+#                             "content": {
+#                                 "board": str(board),
+#                                 "color": "white" if board.turn else "black",
+#                                 "legal_moves_san": legal_moves_san,
+#                             },
+#                         }
+#                     ]
+#                 },
+#                 variant_name=self.variant_name,
+#                 episode_id=episode_id,
+#             )
+#             thinking = result.output.parsed["thinking"]
+#             log.info(f"Player thinking: {thinking}")
+#             move = result.output.parsed["move"]
+#             log.info(f"Player move: {move}")
+#             episode_id = result.episode_id
+#         except Exception as e:
+#             log.error(f"Error occurred: {e}")
+#             log.info("Choosing a random legal move as fallback.")
+#             move = random.choice(legal_moves_san)
+#             return move, episode_id
+#         return move, episode_id
 
 
 async def run_puzzle(

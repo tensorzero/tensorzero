@@ -44,4 +44,4 @@ jobs:
         run: |
           python -m pip install ruff
           ruff format --check .
-          ruff check --output-format=github --select I .
+          ruff check --output-format=github --extend-select I .
