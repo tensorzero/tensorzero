@@ -42,7 +42,7 @@ pub struct ChatCompletionConfig {
 }
 
 impl ChatCompletionConfig {
-    fn prepare_request_message(
+    pub fn prepare_request_message(
         &self,
         templates: &TemplateConfig,
         message: &InputMessage,
@@ -80,7 +80,7 @@ impl ChatCompletionConfig {
         })
     }
 
-    fn prepare_system_message(
+    pub fn prepare_system_message(
         &self,
         templates: &TemplateConfig,
         system: Option<&Value>,
@@ -984,7 +984,7 @@ mod tests {
             "additionalProperties": false
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = JSONSchemaFromPath::from_value(&output_schema);
+        let output_schema = JSONSchemaFromPath::from_value(&output_schema).unwrap();
         let json_function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             assistant_schema: None,
@@ -1100,7 +1100,8 @@ mod tests {
         });
         let implicit_tool_call_config =
             ToolCallConfig::implicit_from_value(&hardcoded_output_schema);
-        let hardcoded_output_schema = JSONSchemaFromPath::from_value(&hardcoded_output_schema);
+        let hardcoded_output_schema =
+            JSONSchemaFromPath::from_value(&hardcoded_output_schema).unwrap();
         let json_function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             assistant_schema: None,
@@ -1186,7 +1187,8 @@ mod tests {
         });
         let implicit_tool_call_config =
             ToolCallConfig::implicit_from_value(&hardcoded_output_schema);
-        let hardcoded_output_schema = JSONSchemaFromPath::from_value(&hardcoded_output_schema);
+        let hardcoded_output_schema =
+            JSONSchemaFromPath::from_value(&hardcoded_output_schema).unwrap();
         let json_function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             assistant_schema: None,
@@ -1543,7 +1545,7 @@ mod tests {
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
-            output_schema: JSONSchemaFromPath::from_value(&output_schema_value),
+            output_schema: JSONSchemaFromPath::from_value(&output_schema_value).unwrap(),
             implicit_tool_call_config: ToolCallConfig {
                 tools_available: vec![],
                 tool_choice: ToolChoice::Auto,

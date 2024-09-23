@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::common::{
     get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
-    select_json_inference_clickhouse, select_model_inferences_clickhouse,
+    select_json_inference_clickhouse, select_model_inference_clickhouse,
 };
 
 #[derive(Clone, Debug)]
@@ -390,7 +390,7 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     assert!(processing_time_ms > 0);
 
     // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
@@ -582,7 +582,7 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     assert!(processing_time_ms > 0);
 
     // Check ClickHouse - ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
@@ -774,7 +774,7 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
     assert!(processing_time_ms > 0);
 
     // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
@@ -984,7 +984,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     assert!(processing_time_ms > 0);
 
     // Check ClickHouse - ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
@@ -1211,7 +1211,7 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
     assert!(required.contains(&json!("location")));
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
@@ -1483,7 +1483,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     assert!(required.contains(&json!("location")));
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
@@ -1690,7 +1690,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
     assert!(required.contains(&json!("location")));
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
@@ -1937,7 +1937,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     assert!(required.contains(&json!("location")));
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
@@ -2183,7 +2183,7 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     assert!(required.contains(&json!("location")));
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
@@ -2466,7 +2466,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     assert!(required.contains(&json!("location")));
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
@@ -2680,7 +2680,7 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     assert!(required.contains(&json!("location")));
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
@@ -2931,7 +2931,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     assert!(required.contains(&json!("location")));
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
@@ -3216,7 +3216,7 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     assert!(properties.get("fast").is_some());
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
@@ -3555,7 +3555,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     assert!(properties.contains_key("fast"));
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
@@ -3779,7 +3779,7 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     assert!(properties.get("location").is_some());
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
@@ -4047,7 +4047,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     assert!(required.contains(&json!("location")));
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
@@ -4265,7 +4265,7 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
     assert!(processing_time_ms > 0);
 
     // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
@@ -4510,7 +4510,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     assert!(processing_time_ms > 0);
 
     // Check ClickHouse - ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
@@ -4763,7 +4763,7 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
     assert!(required.contains(&json!("location")));
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
@@ -5052,7 +5052,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     assert!(required.contains(&json!("location")));
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
@@ -5345,7 +5345,7 @@ pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2
     assert!(required.contains(&json!("location")));
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
@@ -5692,7 +5692,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     assert!(required.contains(&json!("location")));
 
     // Check if ClickHouse is correct - ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
@@ -5879,7 +5879,7 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
     assert_eq!(retrieved_output_schema, expected_output_schema);
 
     // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
@@ -6056,7 +6056,7 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
     assert_eq!(retrieved_output_schema, output_schema);
 
     // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 
@@ -6264,7 +6264,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     assert_eq!(retrieved_output_schema, expected_output_schema);
 
     // Check ClickHouse - ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
 

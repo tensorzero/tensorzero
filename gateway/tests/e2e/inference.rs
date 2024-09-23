@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::common::{
     get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
-    select_json_inference_clickhouse, select_model_inferences_clickhouse,
+    select_json_inference_clickhouse, select_model_inference_clickhouse,
 };
 
 #[tokio::test]
@@ -150,7 +150,7 @@ async fn e2e_test_inference_model_fallback() {
     assert_eq!(variant_name, "test");
 
     // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
@@ -320,7 +320,7 @@ async fn e2e_test_tool_call() {
         .as_bool()
         .unwrap());
     // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
@@ -489,7 +489,7 @@ async fn e2e_test_tool_call_malformed() {
         .as_bool()
         .unwrap());
     // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
@@ -594,7 +594,7 @@ async fn e2e_test_inference_json_fail() {
     assert_eq!(variant_name, "test");
 
     // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
@@ -708,7 +708,7 @@ async fn e2e_test_inference_json_success() {
     assert_eq!(variant_name, "test");
 
     // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();
@@ -855,7 +855,7 @@ async fn e2e_test_variant_failover() {
     assert!(chat_completion_inference_params.get("seed").is_none());
 
     // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
@@ -1023,7 +1023,7 @@ async fn e2e_test_streaming() {
     assert_eq!(seed, 420);
 
     // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
@@ -1281,7 +1281,7 @@ async fn e2e_test_tool_call_streaming() {
         .as_bool()
         .unwrap());
     // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let id = result.get("id").unwrap().as_str().unwrap();

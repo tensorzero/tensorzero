@@ -777,7 +777,7 @@ mod tests {
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
-            output_schema: JSONSchemaFromPath::from_value(&json!({})),
+            output_schema: JSONSchemaFromPath::from_value(&json!({})).unwrap(),
             implicit_tool_call_config,
         };
         let function_config = FunctionConfig::Json(tool_config);
@@ -836,7 +836,7 @@ mod tests {
             system_schema: Some(system_schema),
             user_schema: None,
             assistant_schema: None,
-            output_schema: JSONSchemaFromPath::from_value(&output_schema),
+            output_schema: JSONSchemaFromPath::from_value(&output_schema).unwrap(),
             implicit_tool_call_config,
         };
         let function_config = FunctionConfig::Json(tool_config);
@@ -897,7 +897,7 @@ mod tests {
             system_schema: None,
             user_schema: Some(user_schema),
             assistant_schema: None,
-            output_schema: JSONSchemaFromPath::from_value(&output_schema),
+            output_schema: JSONSchemaFromPath::from_value(&output_schema).unwrap(),
             implicit_tool_call_config,
         };
         let function_config = FunctionConfig::Json(tool_config);
@@ -957,7 +957,7 @@ mod tests {
             system_schema: None,
             user_schema: None,
             assistant_schema: Some(assistant_schema),
-            output_schema: JSONSchemaFromPath::from_value(&output_schema),
+            output_schema: JSONSchemaFromPath::from_value(&output_schema).unwrap(),
             implicit_tool_call_config,
         };
         let function_config = FunctionConfig::Json(tool_config);
@@ -1018,7 +1018,7 @@ mod tests {
             system_schema: Some(system_schema),
             user_schema: Some(user_schema),
             assistant_schema: Some(assistant_schema),
-            output_schema: JSONSchemaFromPath::from_value(&output_schema),
+            output_schema: JSONSchemaFromPath::from_value(&output_schema).unwrap(),
             implicit_tool_call_config,
         };
         let function_config = FunctionConfig::Json(tool_config);
@@ -1220,7 +1220,7 @@ mod tests {
           "additionalProperties": false
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = JSONSchemaFromPath::from_value(&output_schema);
+        let output_schema = JSONSchemaFromPath::from_value(&output_schema).unwrap();
         let function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
@@ -1705,7 +1705,7 @@ mod tests {
         // Test with an empty output schema
         let output_schema = json!({});
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = JSONSchemaFromPath::from_value(&output_schema);
+        let output_schema = JSONSchemaFromPath::from_value(&output_schema).unwrap();
         let function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
