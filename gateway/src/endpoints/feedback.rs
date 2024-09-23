@@ -839,7 +839,8 @@ mod tests {
                     "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]}
                 },
                 "required": ["location"]
-            })),
+            }))
+            .unwrap(),
             strict: false,
         };
         let tools = Box::leak(Box::new(HashMap::from([(
@@ -931,7 +932,7 @@ mod tests {
           "additionalProperties": false
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = JSONSchemaFromPath::from_value(&output_schema);
+        let output_schema = JSONSchemaFromPath::from_value(&output_schema).unwrap();
         let function_config = Box::leak(Box::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
