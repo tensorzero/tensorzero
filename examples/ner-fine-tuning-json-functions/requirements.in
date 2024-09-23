@@ -3,5 +3,5 @@ ipykernel
 notebook
 pandas
 tenacity
-tensorzero @ ../../clients/python-asyncio
+tensorzero
 tqdm

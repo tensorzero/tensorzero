@@ -253,7 +253,7 @@ stack-data==0.6.3
     # via ipython
 tenacity==9.0.0
     # via -r requirements.in
-../../clients/python-asyncio
+tensorzero==2024.9.2
     # via -r requirements.in
 terminado==0.18.1
     # via
