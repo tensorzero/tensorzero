@@ -67,7 +67,7 @@ pub enum Role {
 /// which should contain all information needed by a ModelProvider to perform the
 /// inference that is called for.
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Text {
     pub text: String,
 }
@@ -554,7 +554,7 @@ impl<'a> ChatInferenceResult<'a> {
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards")
             .as_secs();
-        let content = Self::parse_output(raw_content, tool_config).await;
+        let content = parse_chat_output(raw_content, tool_config).await;
         Self {
             inference_id,
             created,
@@ -564,41 +564,41 @@ impl<'a> ChatInferenceResult<'a> {
             inference_params,
         }
     }
+}
 
-    async fn parse_output(
-        content: Vec<ContentBlock>,
-        tool_config: Option<&ToolCallConfig>,
-    ) -> Vec<ContentBlockOutput> {
-        if content.is_empty() {
-            Error::Inference {
-                message: "No content blocks in inference result".to_string(),
-            }
-            .log();
+pub async fn parse_chat_output(
+    content: Vec<ContentBlock>,
+    tool_config: Option<&ToolCallConfig>,
+) -> Vec<ContentBlockOutput> {
+    if content.is_empty() {
+        Error::Inference {
+            message: "No content blocks in inference result".to_string(),
         }
-
-        let mut output = Vec::new();
-        for content in content.into_iter() {
-            match content {
-                ContentBlock::Text(text) => {
-                    output.push(ContentBlockOutput::Text(text));
-                }
-                ContentBlock::ToolCall(tool_call) => {
-                    // Parse the tool call arguments
-                    let tool_call_output = ToolCallOutput::new(tool_call, tool_config).await;
-                    output.push(ContentBlockOutput::ToolCall(tool_call_output));
-                }
-                ContentBlock::ToolResult(tool_result) => {
-                    Error::OutputParsing {
-                        message: "Tool results are not supported in output for Chat functions"
-                            .to_string(),
-                        raw_output: serde_json::to_string(&tool_result).unwrap_or_default(),
-                    }
-                    .log();
-                }
-            }
-        }
-        output
+        .log();
     }
+
+    let mut output = Vec::new();
+    for content in content.into_iter() {
+        match content {
+            ContentBlock::Text(text) => {
+                output.push(ContentBlockOutput::Text(text));
+            }
+            ContentBlock::ToolCall(tool_call) => {
+                // Parse the tool call arguments
+                let tool_call_output = ToolCallOutput::new(tool_call, tool_config).await;
+                output.push(ContentBlockOutput::ToolCall(tool_call_output));
+            }
+            ContentBlock::ToolResult(tool_result) => {
+                Error::OutputParsing {
+                    message: "Tool results are not supported in output for Chat functions"
+                        .to_string(),
+                    raw_output: serde_json::to_string(&tool_result).unwrap_or_default(),
+                }
+                .log();
+            }
+        }
+    }
+    output
 }
 
 impl ChatInferenceDatabaseInsert {
