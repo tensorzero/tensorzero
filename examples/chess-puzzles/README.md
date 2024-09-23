@@ -27,7 +27,7 @@ We can therefore evaluate an LLM by their exact match to the puzzle solution (or
 Give this puzzle a try!
 
 <details>
-<summary>**Solution**</summary>
+<summary><b>Solution</b></summary>
 
 1. ... Qb1+
 2. Re1 Qe1#
