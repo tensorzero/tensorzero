@@ -2,24 +2,14 @@ use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::clickhouse_migration_manager::migration_trait::Migration;
 use crate::error::Error;
 
-/// This migration is used to set up the ClickHouse database to efficiently validate
-/// the type of demonstrations.
-/// To do this, we need to be able to efficiently query what function was called for a
-/// particular inference ID.
-///
-/// As the original table was not set up to index on inference ID we instead need to create
-/// a materialized view that is indexed by inference ID and maps to the function_name that was used.
-/// Since we also would like to be able to get the original row from the inference ID we will keep the function_name,
-/// variant_name and episode_id in the materialized view so that we can use them to query the original table.
-
+/// This migration is used to set up the ClickHouse database to store examples
+/// for dynamic in-context learning.
 pub struct Migration0002<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
 
 impl<'a> Migration for Migration0002<'a> {
     /// Check if you can connect to the database
-    /// Then check if the two inference tables exist as the sources for the materialized views
-    /// If all of this is OK, then we can apply the migration
     async fn can_apply(&self) -> Result<(), Error> {
         self.clickhouse
             .health()
