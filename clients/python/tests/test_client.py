@@ -17,6 +17,7 @@ uv run pytest
 ```
 """
 
+from time import sleep
 from uuid import UUID
 
 import pytest
@@ -316,8 +317,20 @@ async def test_async_feedback(async_client):
     )
     assert isinstance(result, FeedbackResponse)
 
+    # For demonstrations, we validate that the format is correct and the inference exists.
+    result = await async_client.inference(
+        function_name="basic_test",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+    )
+    # Wait for the inference to be created in ClickHouse
+    sleep(1)
     result = await async_client.feedback(
-        metric_name="demonstration", value="hi how are you", inference_id=uuid7()
+        metric_name="demonstration",
+        value="hi how are you",
+        inference_id=result.inference_id,
     )
     assert isinstance(result, FeedbackResponse)
 
@@ -624,9 +637,20 @@ def test_sync_feedback(sync_client):
         metric_name="task_success", value=True, inference_id=uuid7()
     )
     assert isinstance(result, FeedbackResponse)
+    result = sync_client.inference(
+        function_name="basic_test",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+    )
+    # Wait for the inference to be created in ClickHouse
+    sleep(1)
 
     result = sync_client.feedback(
-        metric_name="demonstration", value="hi how are you", inference_id=uuid7()
+        metric_name="demonstration",
+        value="hi how are you",
+        inference_id=result.inference_id,
     )
     assert isinstance(result, FeedbackResponse)
 
