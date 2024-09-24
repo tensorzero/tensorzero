@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::common::{
     get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
-    select_model_inferences_clickhouse,
+    select_model_inference_clickhouse,
 };
 use crate::providers::common::{E2ETestProvider, E2ETestProviders};
 
@@ -127,7 +127,7 @@ async fn test_inference_with_explicit_region() {
     assert!(processing_time_ms > 0);
 
     // Check the ModelInference Table
-    let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();

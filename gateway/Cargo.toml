@@ -36,6 +36,7 @@ metrics = "0.23.0"
 metrics-exporter-prometheus = { version = "0.15.3", features = ["http-listener"], default-features = false }
 mimalloc = "0.1.43"
 minijinja = { version = "2.1.0", features = ["loader"] }
+rand = "0.8.5"
 reqwest = { version = "0.12.5", features = ["json", "rustls-tls"], default-features = false }
 reqwest-eventsource = "0.6.0"
 secrecy = "0.8.0"
