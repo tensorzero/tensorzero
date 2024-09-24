@@ -1,4 +1,5 @@
 use reqwest::Client;
+use serde_json::Value;
 use std::collections::HashMap;
 
 use crate::common::get_gateway_endpoint;
@@ -387,16 +388,40 @@ async fn test_prometheus_metrics_feedback_demonstration() {
     // This test could be flaky if another test sends a demonstration feedback at the same time.
     // Unlike metrics, demonstrations are global, so there is no way to isolate this test at the moment.
     // If this becomes flaky, we should make sure this test runs sequentially with other tests.
+    let client = Client::new();
+
+    // Run inference (standard, no dryrun) to get an inference_id
+    let inference_payload = serde_json::json!({
+        "function_name": "basic_test",
+        "input": {
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [{"role": "user", "content": "Hello, world!"}]
+        },
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(response.status().is_success());
+
+    let response_json = response.json::<Value>().await.unwrap();
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    // Sleep for 1 second to allow metrics to update
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     let prometheus_metric_name =
         "request_count{endpoint=\"feedback\",metric_name=\"demonstration\"}";
-    let client = Client::new();
 
     let request_count_before = get_metric_u32(&client, prometheus_metric_name).await;
 
     // Send feedback for demonstration
     let feedback_payload = serde_json::json!({
-        "inference_id": uuid::Uuid::now_v7(),
+        "inference_id": inference_id,
         "metric_name": "demonstration",
         "value": "Megumin is a powerful arch-wizard with a dramatic flare and extremely vicious competitive side.",
     });
@@ -407,7 +432,6 @@ async fn test_prometheus_metrics_feedback_demonstration() {
         .send()
         .await
         .unwrap();
-
     assert!(response.status().is_success());
 
     // Sleep for 1 second to allow metrics to update
@@ -424,7 +448,7 @@ async fn test_prometheus_metrics_feedback_demonstration() {
 
     // Send feedback for demonstration (dryrun)
     let feedback_payload = serde_json::json!({
-        "inference_id": uuid::Uuid::now_v7(),
+        "inference_id": inference_id,
         "metric_name": "comment",
         "value": "Splendid!",
         "dryrun": true,

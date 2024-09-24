@@ -5,7 +5,7 @@ use serde_json::json;
 
 lazy_static! {
     /// These are useful for tests which don't need mutable tools.
-    static ref WEATHER_TOOL_CONFIG_STATIC: StaticToolConfig = StaticToolConfig {
+    pub static ref WEATHER_TOOL_CONFIG_STATIC: StaticToolConfig = StaticToolConfig {
         name: "get_temperature".to_string(),
         description: "Get the current temperature in a given location".to_string(),
         parameters: JSONSchemaFromPath::from_value(&json!({
@@ -25,7 +25,7 @@ lazy_static! {
         tool_choice: ToolChoice::Specific("get_temperature".to_string()),
         parallel_tool_calls: false,
     };
-    static ref QUERY_TOOL_CONFIG: StaticToolConfig = StaticToolConfig {
+    pub static ref QUERY_TOOL_CONFIG_STATIC: StaticToolConfig = StaticToolConfig {
         name: "query_articles".to_string(),
         description: "Query articles from Wikipedia".to_string(),
         parameters: JSONSchemaFromPath::from_value(&json!({
@@ -38,12 +38,12 @@ lazy_static! {
         })).unwrap(),
         strict: true,
     };
-    pub static ref QUERY_TOOL: ToolConfig = ToolConfig::Static(&QUERY_TOOL_CONFIG);
+    pub static ref QUERY_TOOL: ToolConfig = ToolConfig::Static(&QUERY_TOOL_CONFIG_STATIC);
     pub static ref ANY_TOOL_CHOICE: ToolChoice = ToolChoice::Required;
     pub static ref MULTI_TOOL_CONFIG: ToolCallConfig = ToolCallConfig {
         tools_available: vec![
             ToolConfig::Static(&WEATHER_TOOL_CONFIG_STATIC),
-            ToolConfig::Static(&QUERY_TOOL_CONFIG)
+            ToolConfig::Static(&QUERY_TOOL_CONFIG_STATIC)
         ],
         tool_choice: ToolChoice::Required,
         parallel_tool_calls: true,
