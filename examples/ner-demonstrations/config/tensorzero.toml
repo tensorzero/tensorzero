@@ -40,12 +40,6 @@ model = "gpt-4o-mini-2024-07-18"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
 json_mode = "strict"
 
-[functions.extract_entities.variants."ft:gpt-4o-mini-2024-07-18:tensorzero::AAlldmrk"]
-type = "chat_completion"
-weight = 1
-model = "ft:gpt-4o-mini-2024-07-18:tensorzero::AAlldmrk"
-system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
-
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │

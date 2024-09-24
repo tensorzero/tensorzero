@@ -81,3 +81,7 @@ docker compose up
 
 You can then re-run the test set evaluation in the `conll.ipynb` notebook to see how the new variants perform.
 You should see a clear improvement over the baseline.
+
+We used 100 demonstrations to fine-tune the GPT-4o mini model and achieved a significant improvement in performance as shown in the plot below.
+
+![fine-tuned-performance](./img/example-performance.png)

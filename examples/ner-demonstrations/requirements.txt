@@ -143,7 +143,9 @@ markupsafe==2.1.5
     #   jinja2
     #   nbconvert
 matplotlib==3.9.2
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   neatplot
 matplotlib-inline==0.1.7
     # via
     #   ipykernel
@@ -159,6 +161,8 @@ nbformat==5.10.4
     #   jupyter-server
     #   nbclient
     #   nbconvert
+neatplot==0.1.0
+    # via -r requirements.in
 nest-asyncio==1.6.0
     # via ipykernel
 notebook==7.2.2
@@ -172,6 +176,7 @@ numpy==2.1.1
     #   -r requirements.in
     #   contourpy
     #   matplotlib
+    #   neatplot
     #   pandas
     #   scipy
 overrides==7.7.0

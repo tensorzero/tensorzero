@@ -1,6 +1,7 @@
 clickhouse-connect
 ipykernel
 matplotlib
+neatplot
 notebook
 numpy
 pandas
