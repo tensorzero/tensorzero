@@ -5,9 +5,16 @@ use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::Error;
 use migration_trait::Migration;
 use migrations::migration_0000::Migration0000;
+use migrations::migration_0001::Migration0001;
 
 pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
-    run_migration(&Migration0000 { clickhouse }).await?;
+    // If the first migration needs to run, we are starting from scratch and don't need to wait for data to migrate
+    let clean_start = run_migration(&Migration0000 { clickhouse }).await?;
+    run_migration(&Migration0001 {
+        clickhouse,
+        clean_start,
+    })
+    .await?;
     // NOTE:
     // When we add more migrations, we need to add a test that applies them in a cumulative (N^2) way.
     //
@@ -24,7 +31,10 @@ pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     Ok(())
 }
 
-pub async fn run_migration(migration: &impl Migration) -> Result<(), Error> {
+/// Returns Err(e) if the migration fails to apply.
+/// Returns Ok(false) if the migration should not apply.
+/// Returns Ok(true) if the migration succeeds.
+pub async fn run_migration(migration: &impl Migration) -> Result<bool, Error> {
     migration.can_apply().await?;
 
     if migration.should_apply().await? {
@@ -47,12 +57,17 @@ pub async fn run_migration(migration: &impl Migration) -> Result<(), Error> {
         match migration.has_succeeded().await {
             Ok(true) => {
                 tracing::info!("Migration succeeded: {migration_name}");
+                return Ok(true);
             }
             Ok(false) => {
                 tracing::error!(
                     "Failed migration success check: {migration_name}\n\n===== Rollback Instructions =====\n\n{}",
                     migration.rollback_instructions()
                 );
+                return Err(Error::ClickHouseMigration {
+                    id: migration_name.to_string(),
+                    message: "Migration success check failed".to_string(),
+                });
             }
             Err(e) => {
                 tracing::error!(
@@ -64,7 +79,7 @@ pub async fn run_migration(migration: &impl Migration) -> Result<(), Error> {
         }
     }
 
-    Ok(())
+    Ok(false)
 }
 
 mod tests {
@@ -245,7 +260,7 @@ mod tests {
         };
 
         // First check that the method fails
-        assert!(run_migration(&mock_migration).await.is_ok());
+        assert!(run_migration(&mock_migration).await.is_err());
 
         // Check that we called every method
         assert!(mock_migration
