@@ -1,4 +1,4 @@
-# TensorZero configuration file for the `ner-fine-tuning-json-functions` example.
+# TensorZero configuration file for the `ner-demonstrations` example.
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  GENERAL                                   │
@@ -27,12 +27,10 @@ type = "json"
 output_schema = "functions/extract_entities/output_schema.json"
 
 [functions.extract_entities.variants.gpt4o_mini_initial_prompt]
-weight = 1
 type = "chat_completion"
 model = "gpt-4o-mini-2024-07-18"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
 json_mode = "strict"
-
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │

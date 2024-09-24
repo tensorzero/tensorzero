@@ -1,4 +1,4 @@
-# Example: Fine-Tuning TensorZero JSON Functions for Named Entity Recognition using Demonstrations (CoNLL++)
+# Example: Fine-Tuning TensorZero JSON Functions for Named Entity Recognition Using Demonstrations (CoNLL++)
 
 ## Background
 
@@ -13,7 +13,7 @@ We provide the output schema to TensorZero at `config/functions/extract_entities
 In our problem setting, we consider any output that fails to validate against the schema to be incorrect.
 
 We'll show that using a handful of demonstrations to fine-tune an LLM can lead to a significant improvement in performance.
-Using the notebook in `recipes/supervised_fine_tuning/demonstrations/openai.ipynb`, we can fine-tune a GPT-4o mini model to achieve ~80% accuracy on the CoNLL++ dataset compared to ~10% for the base model.
+Using the notebook in `recipes/supervised_fine_tuning/demonstrations/openai.ipynb`, we can fine-tune a GPT-4o mini model to achieve ~75% accuracy on the CoNLL++ dataset compared to ~10% for the base model.
 
 ## Setup
 
@@ -22,9 +22,8 @@ Using the notebook in `recipes/supervised_fine_tuning/demonstrations/openai.ipyn
 We've written TensorZero configuration files to accomplish this example and have provided them in the `config` directory.
 See `tensorzero.toml` for the main configuration details.
 
-To get started, create a `.env` file with your OpenAI API key (`OPENAI_API_KEY`) and Fireworks API key (`FIREWORKS_API_KEY`) and run the following command.
+To get started, create a `.env` file with your OpenAI API key (`OPENAI_API_KEY`) and run the following command.
 Docker Compose will launch the TensorZero Gateway and a test ClickHouse database.
-Set `CLICKHOUSE_URL=http://localhost:8123/tensorzero` in the shell your notebook will run in.
 
 ```bash
 docker compose up
@@ -49,6 +48,8 @@ pip install -r requirements.txt
 
 ## Running the Example
 
+Set `CLICKHOUSE_URL=http://localhost:8123/tensorzero` in the shell your notebook will run in.
+
 You can run the example in the `conll.ipynb` notebook.
 Make sure to install the dependencies in the `requirements.txt` file.
 It should not require any changes to run and will automatically connect to the TensorZero Gateway you started.
@@ -64,7 +65,7 @@ This inference is performed with a variant specified and `dryrun` set to `true` 
 
 At this point, your ClickHouse database will include inferences in a structured format along with demonstrations of the correct output (training data).
 You can now use TensorZero recipes to learn from this experience to produce better variants of the NER system.
-Since the initial performance of GPT-4o mini is not very good (I saw ~10% exact match accuracy), we'll need to use the `recipes/supervised_fine_tuning/demonstrations/openai.ipynb` notebook to fine-tune a GPT-4o mini model to achieve ~80% accuracy on the CoNLL++ dataset.
+Since the initial performance of GPT-4o mini is not very good (I saw ~10% exact match accuracy), we'll need to use the `recipes/supervised_fine_tuning/demonstrations/openai.ipynb` notebook to fine-tune a GPT-4o Mini model to achieve ~75% accuracy on the CoNLL++ dataset.
 At the conclusion of that notebook you should see a few blocks to add to `tensorzero.toml` to update the system to use the new model and the corresponding variant.
 Even with ~100 examples, we see a significant improvement in performance over the base model.
 You can experiment with other recipes,models, prompts you think might be better, or combinations thereof by editing the configuration.
