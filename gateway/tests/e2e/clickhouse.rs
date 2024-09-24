@@ -11,8 +11,7 @@ use uuid::Uuid;
 
 use crate::common::{get_clickhouse, CLICKHOUSE_URL};
 
-#[tokio::test]
-async fn test_clickhouse_migration_manager() {
+fn get_clean_clickhouse() -> ClickHouseConnectionInfo {
     let database = format!(
         "tensorzero_e2e_tests_migration_manager_{}",
         Uuid::now_v7().simple()
@@ -21,12 +20,16 @@ async fn test_clickhouse_migration_manager() {
     clickhouse_url.set_path("");
     clickhouse_url.set_query(Some(format!("database={}", database).as_str()));
 
-    let clickhouse = ClickHouseConnectionInfo::Production {
+    ClickHouseConnectionInfo::Production {
         database_url: clickhouse_url,
         database: database.clone(),
         client: Client::new(),
-    };
+    }
+}
 
+#[tokio::test]
+async fn test_clickhouse_migration_manager() {
+    let clickhouse = get_clean_clickhouse();
     // NOTE:
     // We need to split the test into two sub-functions so we can reset `traced_test`'s subscriber between each call.
     // Otherwise, `logs_contain` will return true if the first call triggers a log message that the second call shouldn't trigger.
@@ -101,6 +104,7 @@ async fn test_clickhouse_migration_manager() {
     first(&clickhouse).await;
     second(&clickhouse).await;
     third(&clickhouse).await;
+    let database = clickhouse.database();
     tracing::info!("Attempting to drop test database: {database}");
 
     clickhouse
@@ -122,4 +126,18 @@ async fn test_bad_clickhouse_write() {
     assert!(err
         .to_string()
         .contains("Unknown field found while parsing JSONEachRow format: name"));
+}
+
+#[tokio::test]
+async fn test_clean_clickhouse_start() {
+    let clickhouse = get_clean_clickhouse();
+    let start = std::time::Instant::now();
+    clickhouse_migration_manager::run(&clickhouse)
+        .await
+        .unwrap();
+    let duration = start.elapsed();
+    assert!(
+        duration < std::time::Duration::from_secs(10),
+        "Migrations took longer than 10 seconds: {duration:?}"
+    );
 }

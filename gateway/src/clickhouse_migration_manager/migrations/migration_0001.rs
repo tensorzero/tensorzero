@@ -21,6 +21,8 @@ pub struct Migration0001<'a> {
 
 impl<'a> Migration for Migration0001<'a> {
     /// Check if you can connect to the database
+    /// Then check if the two inference tables exist as the sources for the materialized views
+    /// If all of this is OK, then we can apply the migration
     async fn can_apply(&self) -> Result<(), Error> {
         self.clickhouse
             .health()
@@ -28,22 +30,18 @@ impl<'a> Migration for Migration0001<'a> {
             .map_err(|e| Error::ClickHouseMigration {
                 id: "0001".to_string(),
                 message: e.to_string(),
-            })
-    }
-
-    /// Check if the tables exist
-    async fn should_apply(&self) -> Result<bool, Error> {
+            })?;
         let database = self.clickhouse.database();
 
-        let tables = vec!["InferenceById"];
+        let tables = vec!["ChatInference", "JsonInference"];
 
         for table in tables {
             let query = format!(
                 r#"SELECT EXISTS(
-                    SELECT 1
-                    FROM system.tables
-                    WHERE database = '{database}' AND name = '{table}'
-                )"#
+                        SELECT 1
+                        FROM system.tables
+                        WHERE database = '{database}' AND name = '{table}'
+                    )"#
             );
 
             match self.clickhouse.run_query(query).await {
@@ -55,8 +53,41 @@ impl<'a> Migration for Migration0001<'a> {
                 }
                 Ok(response) => {
                     if response.trim() != "1" {
-                        return Ok(true);
+                        return Err(Error::ClickHouseMigration {
+                            id: "0001".to_string(),
+                            message: format!("Table {} does not exist", table),
+                        });
                     }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check if the migration has already been applied
+    /// This should be equivalent to checking if `InferenceById` exists
+    async fn should_apply(&self) -> Result<bool, Error> {
+        let database = self.clickhouse.database();
+
+        let query = format!(
+            r#"SELECT EXISTS(
+                SELECT 1
+                FROM system.tables
+                WHERE database = '{database}' AND name = 'InferenceById'
+            )"#
+        );
+
+        match self.clickhouse.run_query(query).await {
+            Err(e) => {
+                return Err(Error::ClickHouseMigration {
+                    id: "0001".to_string(),
+                    message: e.to_string(),
+                })
+            }
+            Ok(response) => {
+                if response.trim() != "1" {
+                    return Ok(true);
                 }
             }
         }
@@ -65,9 +96,6 @@ impl<'a> Migration for Migration0001<'a> {
     }
 
     async fn apply(&self) -> Result<(), Error> {
-        // Create the database if it doesn't exist
-        self.clickhouse.create_database().await?;
-
         // If there is no data, we don't need to wait for the view to catch up
         let view_offset = if self.clean_start {
             Duration::from_secs(0)

@@ -366,7 +366,8 @@ async fn validate_parse_demonstration(
                     .collect::<Result<Vec<DemonstrationContentBlock>, Error>>()?,
                 _ => {
                     return Err(Error::InvalidRequest {
-                        message: "Demonstration must be a string".to_string(),
+                        message: "Demonstration must be a string or an array of content blocks"
+                            .to_string(),
                     });
                 }
             };
@@ -375,6 +376,7 @@ async fn validate_parse_demonstration(
                 &chat_config.tool_choice,
                 chat_config.parallel_tool_calls,
                 tools,
+                // TODO (#348): Eventually we should allow dynamic tools here as well.
                 DynamicToolParams {
                     allowed_tools: None,
                     additional_tools: None,
@@ -410,6 +412,7 @@ async fn validate_parse_demonstration(
         }
         FunctionConfig::Json(json_config) => {
             // For json functions, the value should be a valid json object.
+            // TODO (#348): Eventually we should allow dynamic output_schema here as well.
             json_config
                 .output_schema
                 .validate(value)

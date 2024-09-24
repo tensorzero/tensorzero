@@ -9,7 +9,7 @@ use migrations::migration_0001::Migration0001;
 
 pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     // If the first migration needs to run, we are starting from scratch and don't need to wait for data to migrate
-    let clean_start = !run_migration(&Migration0000 { clickhouse }).await?;
+    let clean_start = run_migration(&Migration0000 { clickhouse }).await?;
     run_migration(&Migration0001 {
         clickhouse,
         clean_start,
