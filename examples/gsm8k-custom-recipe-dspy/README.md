@@ -5,6 +5,9 @@ But you can also easily create your own recipes and workflows!
 
 This example shows how to optimize a TensorZero function using an arbitrary tool — here, [DSPy](https://github.com/stanfordnlp/dspy).
 
+As a bonus, we also include configuration for using our experimental best-of-n variant type to improve performance -- try evaluating the variants named `gpt-35-turbo-baseline` and `gpt-35-turbo-best-of-5` in the notebook!
+The latter makes five parallel calls to GPT 3.5 Turbo and a sixth to choose the best answer. It improves performance from ~60% to ~70% without any data or labels at the cost of increased latency and token usage.
+
 ## Background
 
 The GSM8K [dataset](https://github.com/openai/grade-school-math), introduced in a [paper](https://arxiv.org/abs/2110.14168) from OpenAI, is a collection of ~8,000 grade school math word problems and their solutions.
