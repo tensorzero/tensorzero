@@ -9,13 +9,13 @@ model_name = "gpt-4o-mini"
 # ... but this time our function and variant include a schema and a template.
 [functions.generate_haiku_with_topic]
 type = "chat"
-user_schema = "functions/generate_haiku_with_topic/user_schema.json" # relative path
+user_schema = "functions/generate_haiku_with_topic/user_schema.json" # relative to tensorzero.toml
 # system_schema = "..."
 # assistant_schema = "..."
 
 [functions.generate_haiku_with_topic.variants.gpt_4o_mini]
 type = "chat_completion"
 model = "gpt_4o_mini"
-user_template = "functions/generate_haiku_with_topic/gpt_4o_mini/user_template.minijinja" # relative path
+user_template = "functions/generate_haiku_with_topic/gpt_4o_mini/user_template.minijinja" # relative to tensorzero.toml
 # system_template = "..."
 # assistant_template = "..."
