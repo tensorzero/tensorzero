@@ -1,0 +1,19 @@
+# A model is a specific LLM (e.g. GPT-4o Mini)...
+[models.gpt_4o_mini]
+routing = ["openai"]
+
+# ... and a provider is an API endpoint that serves it (e.g. OpenAI, Azure).
+# (You can define multiple providers per model to enable fallbacks for high availability.)
+[models.gpt_4o_mini.providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini"
+
+# A function is the interface for the task we're tackling (e.g. generating a haiku)...
+[functions.generate_haiku]
+type = "chat"
+
+# ... and a variant is one of many implementations to achieve it (a choice of model, prompt templates, parameters, etc.).
+# Since we only have one variant for this function, the gateway will always select it.
+[functions.generate_haiku.variants.gpt_4o_mini]
+type = "chat_completion"
+model = "gpt_4o_mini"

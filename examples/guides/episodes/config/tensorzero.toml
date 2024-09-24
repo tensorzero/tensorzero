@@ -1,0 +1,20 @@
+[models.gpt_4o_mini]
+routing = ["openai"]
+
+[models.gpt_4o_mini.providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini"
+
+[functions.generate_haiku]
+type = "chat"
+
+[functions.generate_haiku.variants.gpt_4o_mini]
+type = "chat_completion"
+model = "gpt_4o_mini"
+
+[functions.analyze_haiku]
+type = "chat"
+
+[functions.analyze_haiku.variants.gpt_4o_mini]
+type = "chat_completion"
+model = "gpt_4o_mini"
