@@ -18,6 +18,13 @@ routing = ["together"]
 type = "together"
 model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
 
+[models.gpt-35-turbo]
+routing = ["openai"]
+
+[models.gpt-35-turbo.providers.openai]
+type = "openai"
+model_name = "gpt-3.5-turbo"
+
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
@@ -32,6 +39,29 @@ type = "chat_completion"
 model = "llama3.1-8b-instruct"
 system_template = "functions/solve_math_problem/llama-8b-baseline/system.minijinja"
 user_template = "functions/solve_math_problem/llama-8b-baseline/user.minijinja"
+
+[functions.solve_math_problem.variants.gpt-35-turbo-baseline]
+weight = 1
+type = "chat_completion"
+model = "gpt-35-turbo"
+system_template = "functions/solve_math_problem/gpt-35-turbo-baseline/system.minijinja"
+user_template = "functions/solve_math_problem/gpt-35-turbo-baseline/user.minijinja"
+
+[functions.solve_math_problem.variants.gpt-35-turbo-best-of-5]
+type = "experimental_best_of_n"
+weight = 1
+candidates = [
+    "gpt-35-turbo-baseline",
+    "gpt-35-turbo-baseline",
+    "gpt-35-turbo-baseline",
+    "gpt-35-turbo-baseline",
+    "gpt-35-turbo-baseline",
+]
+
+[functions.solve_math_problem.variants.gpt-35-turbo-best-of-5.evaluator]
+model = "gpt-35-turbo"
+system_template = "functions/solve_math_problem/gpt-35-turbo-baseline/system.minijinja"
+user_template = "functions/solve_math_problem/gpt-35-turbo-baseline/user.minijinja"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │

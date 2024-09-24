@@ -1,0 +1,111 @@
+# TensorZero configuration file for the `haiku_hidden_preferences` example.
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  GENERAL                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[gateway]
+bind_address = "0.0.0.0:3000"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                   MODELS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+
+[models."gpt-4o-mini"]
+routing = ["openai"]
+
+[models."gpt-4o-mini".providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini-2024-07-18"
+
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.play_chess_board]
+type = "json"
+user_schema = "functions/play_chess_board/user_schema.json"
+output_schema = "functions/play_chess_board/output_schema.json"
+
+[functions.play_chess_board.variants.gpt-4o-mini]
+weight = 1
+temperature = 1.05
+type = "chat_completion"
+model = "gpt-4o-mini"
+system_template = "functions/play_chess_board/chess_prompt/system_template.minijinja"
+user_template = "functions/play_chess_board/chess_prompt/user_template.minijinja"
+
+[functions.play_chess_board.variants.gpt-4o-mini_best_of_5]
+weight = 1
+type = "experimental_best_of_n"
+candidates = [
+    "gpt-4o-mini",
+    "gpt-4o-mini",
+    "gpt-4o-mini",
+    "gpt-4o-mini",
+    "gpt-4o-mini",
+]
+
+[functions.play_chess_board.variants.gpt-4o-mini_best_of_5.evaluator]
+model = "gpt-4o-mini"
+system_template = "functions/play_chess_board/chess_prompt/system_template.minijinja"
+user_template = "functions/play_chess_board/chess_prompt/user_template.minijinja"
+
+[functions.play_chess_board.variants.gpt-4o-mini_prompt_1]
+weight = 1
+temperature = 1.05
+type = "chat_completion"
+model = "gpt-4o-mini"
+system_template = "functions/play_chess_board/chess_prompt_1/system_template.minijinja"
+user_template = "functions/play_chess_board/chess_prompt_1/user_template.minijinja"
+
+[functions.play_chess_board.variants.gpt-4o-mini_prompt_2]
+weight = 1
+temperature = 1.05
+type = "chat_completion"
+model = "gpt-4o-mini"
+system_template = "functions/play_chess_board/chess_prompt_2/system_template.minijinja"
+user_template = "functions/play_chess_board/chess_prompt_2/user_template.minijinja"
+
+[functions.play_chess_board.variants.gpt-4o-mini_prompt_3]
+weight = 1
+temperature = 1.05
+type = "chat_completion"
+model = "gpt-4o-mini"
+system_template = "functions/play_chess_board/chess_prompt_3/system_template.minijinja"
+user_template = "functions/play_chess_board/chess_prompt_3/user_template.minijinja"
+
+[functions.play_chess_board.variants.gpt-4o-mini_prompt_4]
+weight = 1
+temperature = 1.05
+type = "chat_completion"
+model = "gpt-4o-mini"
+system_template = "functions/play_chess_board/chess_prompt_4/system_template.minijinja"
+user_template = "functions/play_chess_board/chess_prompt_4/user_template.minijinja"
+
+[functions.play_chess_board.variants.gpt-4o-mini_best_of_5_diverse]
+weight = 1
+type = "experimental_best_of_n"
+candidates = [
+    "gpt-4o-mini",
+    "gpt-4o-mini_prompt_1",
+    "gpt-4o-mini_prompt_2",
+    "gpt-4o-mini_prompt_3",
+    "gpt-4o-mini_prompt_4",
+]
+
+[functions.play_chess_board.variants.gpt-4o-mini_best_of_5_diverse.evaluator]
+model = "gpt-4o-mini"
+system_template = "functions/play_chess_board/chess_evaluator/system_template.minijinja"
+user_template = "functions/play_chess_board/chess_evaluator/user_template.minijinja"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  METRICS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[metrics.puzzle_success]
+type = "boolean"
+level = "episode"
+optimize = "max"
