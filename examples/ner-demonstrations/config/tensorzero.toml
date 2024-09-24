@@ -1,0 +1,67 @@
+# TensorZero configuration file for the `ner-fine-tuning-json-functions` example.
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  GENERAL                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[gateway]
+bind_address = "0.0.0.0:3000"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                   MODELS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[models."gpt-4o-mini-2024-07-18"]
+routing = ["openai"]
+
+[models."gpt-4o-mini-2024-07-18".providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini-2024-07-18"
+
+[models."ft:gpt-4o-mini-2024-07-18:tensorzero::AAlldmrk"]
+routing = ["openai"]
+
+[models."ft:gpt-4o-mini-2024-07-18:tensorzero::AAlldmrk".providers.openai]
+type = "openai"
+model_name = "ft:gpt-4o-mini-2024-07-18:tensorzero::AAlldmrk"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.extract_entities]
+type = "json"
+output_schema = "functions/extract_entities/output_schema.json"
+
+[functions.extract_entities.variants.gpt4o_mini_initial_prompt]
+weight = 1
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18"
+system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+json_mode = "strict"
+
+[functions.extract_entities.variants."ft:gpt-4o-mini-2024-07-18:tensorzero::AAlldmrk"]
+type = "chat_completion"
+weight = 1
+model = "ft:gpt-4o-mini-2024-07-18:tensorzero::AAlldmrk"
+system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  METRICS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[metrics.exact_match]
+type = "boolean"
+level = "inference"
+optimize = "max"
+
+[metrics.jaccard_similarity]
+type = "float"
+level = "inference"
+optimize = "max"
+
+[metrics.valid_json]
+type = "boolean"
+level = "inference"
+optimize = "max"

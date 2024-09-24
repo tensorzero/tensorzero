@@ -1,0 +1,10 @@
+clickhouse-connect
+ipykernel
+matplotlib
+notebook
+numpy
+pandas
+scipy
+tenacity
+tensorzero
+tqdm
