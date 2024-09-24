@@ -22,10 +22,6 @@ debugpy==1.8.5
     # via ipykernel
 decorator==5.1.1
     # via ipython
-exceptiongroup==1.2.2
-    # via
-    #   anyio
-    #   ipython
 executing==2.1.0
     # via stack-data
 fonttools==4.54.0
@@ -55,11 +51,15 @@ jupyter-core==5.7.2
 kiwisolver==1.4.7
     # via matplotlib
 matplotlib==3.9.2
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   neatplot
 matplotlib-inline==0.1.7
     # via
     #   ipykernel
     #   ipython
+neatplot==0.1.0
+    # via -r requirements.in
 nest-asyncio==1.6.0
     # via ipykernel
 numpy==2.1.1
@@ -67,6 +67,7 @@ numpy==2.1.1
     #   -r requirements.in
     #   contourpy
     #   matplotlib
+    #   neatplot
     #   pandas
     #   scipy
 packaging==24.1
@@ -134,10 +135,6 @@ traitlets==5.14.3
     #   jupyter-client
     #   jupyter-core
     #   matplotlib-inline
-typing-extensions==4.12.2
-    # via
-    #   anyio
-    #   ipython
 tzdata==2024.2
     # via pandas
 wcwidth==0.2.13
