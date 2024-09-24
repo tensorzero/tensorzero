@@ -18,13 +18,6 @@ routing = ["openai"]
 type = "openai"
 model_name = "gpt-4o-mini-2024-07-18"
 
-[models."ft:gpt-4o-mini-2024-07-18:tensorzero::AAlldmrk"]
-routing = ["openai"]
-
-[models."ft:gpt-4o-mini-2024-07-18:tensorzero::AAlldmrk".providers.openai]
-type = "openai"
-model_name = "ft:gpt-4o-mini-2024-07-18:tensorzero::AAlldmrk"
-
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
