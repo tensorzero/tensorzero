@@ -19,7 +19,7 @@ with TensorZeroGateway("http://localhost:3000") as client:
     # When we don't provide an episode_id, the gateway will generate a new one for us
     episode_id = haiku_response.episode_id
 
-    # In a production application, we'd first validate the response
+    # In a production application, we'd first validate the response to ensure the model returned the correct fields
     haiku = haiku_response.content[0].text
 
     analysis_response = client.inference(
