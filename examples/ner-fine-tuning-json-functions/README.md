@@ -65,7 +65,7 @@ At this point, your ClickHouse database will include inferences in a structured 
 You can now use TensorZero recipes to learn from this experience to produce better variants of the NER system.
 You might notice that the best performing LLM is GPT-4o from OpenAI (not surprising!).
 
-However, we offer a recipe in `recipes/supervised_fine_tuning/fireworks/` that can be used with very small amounts of data to fine-tune a Llama-3.1 8B model to achieve superior performance to GPT-4o at a fraction of the cost and latency!
+However, we offer a recipe in `recipes/supervised_fine_tuning/metrics/fireworks/` that can be used with very small amounts of data to fine-tune a Llama-3.1 8B model to achieve superior performance to GPT-4o at a fraction of the cost and latency!
 At the conclusion of that notebook you should see a few blocks to add to `tensorzero.toml` to update the system to use the new model and the corresponding variant.
 
 You can also easily experiment with other recipes,models, prompts you think might be better, or combinations thereof by editing the configuration.
