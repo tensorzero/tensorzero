@@ -21,7 +21,7 @@ impl<'a> Migration for Migration0002<'a> {
     }
 
     /// Check if the migration has already been applied
-    /// This should be equivalent to checking if `InferenceById` exists
+    /// This should be equivalent to checking if `DiclExample` exists
     async fn should_apply(&self) -> Result<bool, Error> {
         let database = self.clickhouse.database();
 
