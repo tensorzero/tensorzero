@@ -6,7 +6,7 @@ use crate::error::Error;
 use migration_trait::Migration;
 use migrations::migration_0000::Migration0000;
 use migrations::migration_0001::Migration0001;
-
+use migrations::migration_0002::Migration0002;
 pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     // If the first migration needs to run, we are starting from scratch and don't need to wait for data to migrate
     let clean_start = run_migration(&Migration0000 { clickhouse }).await?;
@@ -15,6 +15,7 @@ pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
         clean_start,
     })
     .await?;
+    run_migration(&Migration0002 { clickhouse }).await?;
     // NOTE:
     // When we add more migrations, we need to add a test that applies them in a cumulative (N^2) way.
     //
