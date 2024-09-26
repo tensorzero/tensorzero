@@ -464,6 +464,7 @@ mod tests {
         let config = Config {
             gateway: GatewayConfig::default(),
             models: HashMap::new(),
+            embedding_models: HashMap::new(),
             metrics,
             functions: HashMap::new(),
             tools: HashMap::new(),
@@ -579,6 +580,7 @@ mod tests {
         let config = Config {
             gateway: GatewayConfig::default(),
             models: HashMap::new(),
+            embedding_models: HashMap::new(),
             metrics,
             functions: HashMap::new(),
             tools: HashMap::new(),
@@ -609,6 +611,7 @@ mod tests {
         let config = Box::leak(Box::new(Config {
             gateway: GatewayConfig::default(),
             models: HashMap::new(),
+            embedding_models: HashMap::new(),
             metrics: HashMap::new(),
             functions: HashMap::new(),
             tools: HashMap::new(),
@@ -697,6 +700,7 @@ mod tests {
         let config = Box::leak(Box::new(Config {
             gateway: GatewayConfig::default(),
             models: HashMap::new(),
+            embedding_models: HashMap::new(),
             metrics,
             functions: HashMap::new(),
             tools: HashMap::new(),
@@ -763,6 +767,7 @@ mod tests {
         let config = Box::leak(Box::new(Config {
             gateway: GatewayConfig::default(),
             models: HashMap::new(),
+            embedding_models: HashMap::new(),
             metrics,
             functions: HashMap::new(),
             tools: HashMap::new(),

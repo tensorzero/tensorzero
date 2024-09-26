@@ -8,7 +8,7 @@ use crate::{error::Error, inference::providers::openai::OpenAIProvider, model::P
 #[derive(Debug, Deserialize)]
 pub struct EmbeddingModelConfig {
     pub routing: Vec<String>,
-    pub providers: HashMap<String, ProviderConfig>,
+    pub providers: HashMap<String, EmbeddingProviderConfig>,
 }
 
 #[derive(Debug, PartialEq)]
