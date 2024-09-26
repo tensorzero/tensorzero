@@ -221,3 +221,60 @@ async fn test_embedding_request() {
         _ => panic!("Latency should be non-streaming"),
     }
 }
+
+#[tokio::test]
+async fn test_embedding_sanity_check() {
+    let provider_config_serialized = r#"
+    type = "openai"
+    model_name = "text-embedding-3-small"
+    "#;
+    let provider_config: EmbeddingProviderConfig = toml::from_str(provider_config_serialized)
+        .expect("Failed to deserialize EmbeddingProviderConfig");
+    let client = Client::new();
+    let embedding_request_a = EmbeddingRequest {
+        input: "Joe Biden is the president of the United States".to_string(),
+    };
+
+    let embedding_request_b = EmbeddingRequest {
+        input: "Kamala Harris is the vice president of the United States".to_string(),
+    };
+
+    let embedding_request_c = EmbeddingRequest {
+        input: "My favorite systems programming language is Rust".to_string(),
+    };
+
+    // Compute all 3 embeddings concurrently
+    let (response_a, response_b, response_c) = tokio::join!(
+        provider_config.embed(&embedding_request_a, &client),
+        provider_config.embed(&embedding_request_b, &client),
+        provider_config.embed(&embedding_request_c, &client)
+    );
+
+    // Unwrap the results
+    let response_a = response_a.expect("Failed to get embedding for request A");
+    let response_b = response_b.expect("Failed to get embedding for request B");
+    let response_c = response_c.expect("Failed to get embedding for request C");
+
+    // Calculate cosine similarities
+    let similarity_ab = cosine_similarity(&response_a.embedding, &response_b.embedding);
+    let similarity_ac = cosine_similarity(&response_a.embedding, &response_c.embedding);
+    let similarity_bc = cosine_similarity(&response_b.embedding, &response_c.embedding);
+
+    // Assert that semantically similar sentences have higher similarity (with a margin of 0.3)
+    // We empirically determined this by staring at it (no science to it)
+    assert!(
+        similarity_ab - similarity_ac > 0.3,
+        "Similarity between A and B should be higher than between A and C"
+    );
+    assert!(
+        similarity_ab - similarity_bc > 0.3,
+        "Similarity between A and B should be higher than between B and C"
+    );
+}
+
+fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+    let dot_product: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+    let magnitude_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let magnitude_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+    dot_product / (magnitude_a * magnitude_b)
+}
