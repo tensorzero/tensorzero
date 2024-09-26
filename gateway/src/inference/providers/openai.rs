@@ -153,6 +153,7 @@ impl EmbeddingProvider for OpenAIProvider {
         })?;
         let request_body = OpenAIEmbeddingRequest::new(&self.model_name, &request.input);
         let request_url = get_embedding_url(self.api_base.as_ref())?;
+        let start_time = Instant::now();
         let res = client
             .post(request_url)
             .header("Content-Type", "application/json")
@@ -172,8 +173,16 @@ impl EmbeddingProvider for OpenAIProvider {
                 serde_json::from_str(&response).map_err(|e| Error::OpenAIServer {
                     message: format!("Error parsing JSON response: {e}: {response}"),
                 })?;
+            let latency = Latency::NonStreaming {
+                response_time: start_time.elapsed(),
+            };
 
-            Ok(response.try_into()?)
+            Ok(OpenAIEmbeddingResponseWithMetadata {
+                response,
+                latency,
+                request: request_body,
+            }
+            .try_into()?)
         } else {
             Err(handle_openai_error(
                 res.status(),
@@ -658,6 +667,7 @@ impl<'a> OpenAIRequest<'a> {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub(super) struct OpenAIUsage {
     prompt_tokens: u32,
+    #[serde(default)]
     completion_tokens: u32,
     total_tokens: u32,
 }
@@ -892,20 +902,37 @@ impl<'a> OpenAIEmbeddingRequest<'a> {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct OpenAIEmbeddingResponse {
     data: Vec<OpenAIEmbeddingData>,
-    // TODO: catch usage, etc
+    usage: OpenAIUsage,
 }
 
-#[derive(Debug, Deserialize)]
+struct OpenAIEmbeddingResponseWithMetadata<'a> {
+    response: OpenAIEmbeddingResponse,
+    latency: Latency,
+    request: OpenAIEmbeddingRequest<'a>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 struct OpenAIEmbeddingData {
     embedding: Vec<f32>,
 }
 
-impl TryFrom<OpenAIEmbeddingResponse> for EmbeddingResponse {
+impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingResponse {
     type Error = Error;
-    fn try_from(response: OpenAIEmbeddingResponse) -> Result<Self, Self::Error> {
+    fn try_from(response: OpenAIEmbeddingResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
+        let OpenAIEmbeddingResponseWithMetadata {
+            response,
+            latency,
+            request,
+        } = response;
+        let raw_request = serde_json::to_string(&request).map_err(|e| Error::OpenAIServer {
+            message: format!("Error serializing request body as JSON: {e}"),
+        })?;
+        let raw_response = serde_json::to_string(&response).map_err(|e| Error::OpenAIServer {
+            message: format!("Error parsing response from OpenAI: {e}"),
+        })?;
         if response.data.len() != 1 {
             return Err(Error::OpenAIServer {
                 message: "Expected exactly one embedding in response".to_string(),
@@ -919,7 +946,14 @@ impl TryFrom<OpenAIEmbeddingResponse> for EmbeddingResponse {
                 message: "Expected exactly one embedding in response".to_string(),
             })?
             .embedding;
-        Ok(EmbeddingResponse { embedding })
+
+        Ok(EmbeddingResponse::new(
+            embedding,
+            raw_request,
+            raw_response,
+            response.usage.into(),
+            latency,
+        ))
     }
 }
 

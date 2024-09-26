@@ -2,8 +2,16 @@ use std::{collections::HashMap, future::Future};
 
 use reqwest::Client;
 use serde::Deserialize;
+use uuid::Uuid;
 
-use crate::{error::Error, inference::providers::openai::OpenAIProvider, model::ProviderConfig};
+use crate::{
+    error::Error,
+    inference::{
+        providers::openai::OpenAIProvider,
+        types::{current_timestamp, Latency, Usage},
+    },
+    model::ProviderConfig,
+};
 
 #[derive(Debug, Deserialize)]
 pub struct EmbeddingModelConfig {
@@ -18,7 +26,13 @@ pub struct EmbeddingRequest {
 
 #[derive(Debug, PartialEq)]
 pub struct EmbeddingResponse {
+    pub id: Uuid,
     pub embedding: Vec<f32>,
+    pub created: u64,
+    pub raw_request: String,
+    pub raw_response: String,
+    pub usage: Usage,
+    pub latency: Latency,
 }
 
 pub trait EmbeddingProvider {
@@ -61,6 +75,26 @@ impl EmbeddingProvider for EmbeddingProviderConfig {
     ) -> impl Future<Output = Result<EmbeddingResponse, Error>> + Send {
         match self {
             EmbeddingProviderConfig::OpenAI(provider) => provider.embed(request, client),
+        }
+    }
+}
+
+impl EmbeddingResponse {
+    pub fn new(
+        embedding: Vec<f32>,
+        raw_request: String,
+        raw_response: String,
+        usage: Usage,
+        latency: Latency,
+    ) -> Self {
+        Self {
+            id: Uuid::now_v7(),
+            embedding,
+            created: current_timestamp(),
+            raw_request,
+            raw_response,
+            usage,
+            latency,
         }
     }
 }
