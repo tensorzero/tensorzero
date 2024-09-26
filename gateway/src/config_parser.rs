@@ -530,7 +530,6 @@ mod tests {
             _ => panic!("Expected a JSON function"),
         }
 
-        assert!(!config.embedding_models.is_empty());
         assert_eq!(config.embedding_models.len(), 1);
 
         let embedding_model = config
