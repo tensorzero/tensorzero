@@ -1,4 +1,7 @@
-use gateway::embeddings::{EmbeddingProvider, EmbeddingProviderConfig, EmbeddingRequest};
+use gateway::{
+    embeddings::{EmbeddingProvider, EmbeddingProviderConfig, EmbeddingRequest},
+    inference::types::Latency,
+};
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use uuid::Uuid;
@@ -181,4 +184,40 @@ async fn test_embedding_request() {
     };
     let response = provider_config.embed(&request, &client).await.unwrap();
     assert_eq!(response.embedding.len(), 1536);
+    // Calculate the L2 norm of the embedding
+    let norm: f32 = response
+        .embedding
+        .iter()
+        .map(|&x| x.powi(2))
+        .sum::<f32>()
+        .sqrt();
+
+    // Assert that the norm is approximately 1 (allowing for small floating-point errors)
+    assert!(
+        (norm - 1.0).abs() < 1e-6,
+        "The L2 norm of the embedding should be 1, but it is {}",
+        norm
+    );
+    // Check that the timestamp in created is within 1 second of the current time
+    let created = response.created;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_secs() as i64;
+    assert!(
+        (created as i64 - now).abs() <= 1,
+        "The created timestamp should be within 1 second of the current time, but it is {}",
+        created
+    );
+    let _parsed_raw_response: Value = serde_json::from_str(&response.raw_response).unwrap();
+    let _parsed_raw_request: Value = serde_json::from_str(&response.raw_request).unwrap();
+    // Hardcoded since the input is 5 tokens
+    assert_eq!(response.usage.input_tokens, 5);
+    assert_eq!(response.usage.output_tokens, 0);
+    match response.latency {
+        Latency::NonStreaming { response_time } => {
+            assert!(response_time.as_millis() > 100);
+        }
+        _ => panic!("Latency should be non-streaming"),
+    }
 }
