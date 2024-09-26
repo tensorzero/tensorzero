@@ -11,6 +11,7 @@ use tokio::time::Instant;
 use url::Url;
 use uuid::Uuid;
 
+use crate::embeddings::{EmbeddingProvider, EmbeddingRequest, EmbeddingResponse};
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
@@ -75,12 +76,12 @@ impl InferenceProvider for OpenAIProvider {
             }
             .try_into()?)
         } else {
-            handle_openai_error(
+            Err(handle_openai_error(
                 res.status(),
                 &res.text().await.map_err(|e| Error::OpenAIServer {
                     message: format!("Error parsing error response: {e}"),
                 })?,
-            )
+            ))
         }
     }
 
@@ -141,6 +142,49 @@ impl InferenceProvider for OpenAIProvider {
     }
 }
 
+impl EmbeddingProvider for OpenAIProvider {
+    async fn embed(
+        &self,
+        request: &EmbeddingRequest,
+        client: &reqwest::Client,
+    ) -> Result<EmbeddingResponse, Error> {
+        let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
+            provider_name: "OpenAI".to_string(),
+        })?;
+        let request_body = OpenAIEmbeddingRequest::new(&self.model_name, &request.input);
+        let request_url = get_embedding_url(self.api_base.as_ref())?;
+        let res = client
+            .post(request_url)
+            .header("Content-Type", "application/json")
+            .bearer_auth(api_key.expose_secret())
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| Error::InferenceClient {
+                message: format!("Error sending request to OpenAI: {e}"),
+            })?;
+        if res.status().is_success() {
+            let response = res.text().await.map_err(|e| Error::OpenAIServer {
+                message: format!("Error parsing text response: {e}"),
+            })?;
+
+            let response: OpenAIEmbeddingResponse =
+                serde_json::from_str(&response).map_err(|e| Error::OpenAIServer {
+                    message: format!("Error parsing JSON response: {e}: {response}"),
+                })?;
+
+            Ok(response.try_into()?)
+        } else {
+            Err(handle_openai_error(
+                res.status(),
+                &res.text().await.map_err(|e| Error::OpenAIServer {
+                    message: format!("Error parsing error response: {e}"),
+                })?,
+            ))
+        }
+    }
+}
+
 pub fn stream_openai(
     mut event_source: EventSource,
     start_time: Instant,
@@ -196,21 +240,29 @@ pub(super) fn get_chat_url(base_url: Option<&Url>) -> Result<Url, Error> {
         })
 }
 
-pub(super) fn handle_openai_error(
-    response_code: StatusCode,
-    response_body: &str,
-) -> Result<ProviderInferenceResponse, Error> {
+fn get_embedding_url(base_url: Option<&Url>) -> Result<Url, Error> {
+    let base_url = base_url.unwrap_or(&OPENAI_DEFAULT_BASE_URL);
+    let mut url = base_url.clone();
+    if !url.path().ends_with('/') {
+        url.set_path(&format!("{}/", url.path()));
+    }
+    url.join("embeddings").map_err(|e| Error::InvalidBaseUrl {
+        message: e.to_string(),
+    })
+}
+
+pub(super) fn handle_openai_error(response_code: StatusCode, response_body: &str) -> Error {
     match response_code {
         StatusCode::BAD_REQUEST
         | StatusCode::UNAUTHORIZED
         | StatusCode::FORBIDDEN
-        | StatusCode::TOO_MANY_REQUESTS => Err(Error::OpenAIClient {
+        | StatusCode::TOO_MANY_REQUESTS => Error::OpenAIClient {
             message: response_body.to_string(),
             status_code: response_code,
-        }),
-        _ => Err(Error::OpenAIServer {
+        },
+        _ => Error::OpenAIServer {
             message: response_body.to_string(),
-        }),
+        },
     }
 }
 
@@ -828,6 +880,49 @@ fn openai_to_tensorzero_chunk(
     ))
 }
 
+#[derive(Debug, Serialize)]
+struct OpenAIEmbeddingRequest<'a> {
+    model: &'a str,
+    input: &'a str,
+}
+
+impl<'a> OpenAIEmbeddingRequest<'a> {
+    fn new(model: &'a str, input: &'a str) -> Self {
+        Self { model, input }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIEmbeddingResponse {
+    data: Vec<OpenAIEmbeddingData>,
+    // TODO: catch usage, etc
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIEmbeddingData {
+    embedding: Vec<f32>,
+}
+
+impl TryFrom<OpenAIEmbeddingResponse> for EmbeddingResponse {
+    type Error = Error;
+    fn try_from(response: OpenAIEmbeddingResponse) -> Result<Self, Self::Error> {
+        if response.data.len() != 1 {
+            return Err(Error::OpenAIServer {
+                message: "Expected exactly one embedding in response".to_string(),
+            });
+        }
+        let embedding = response
+            .data
+            .into_iter()
+            .next()
+            .ok_or(Error::OpenAIServer {
+                message: "Expected exactly one embedding in response".to_string(),
+            })?
+            .embedding;
+        Ok(EmbeddingResponse { embedding })
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -884,11 +979,11 @@ mod tests {
 
         // Test unauthorized error
         let unauthorized = handle_openai_error(StatusCode::UNAUTHORIZED, "Unauthorized access");
-        assert!(matches!(unauthorized, Err(Error::OpenAIClient { .. })));
-        if let Err(Error::OpenAIClient {
+        assert!(matches!(unauthorized, Error::OpenAIClient { .. }));
+        if let Error::OpenAIClient {
             message,
             status_code,
-        }) = unauthorized
+        } = unauthorized
         {
             assert_eq!(message, "Unauthorized access");
             assert_eq!(status_code, StatusCode::UNAUTHORIZED);
@@ -896,11 +991,11 @@ mod tests {
 
         // Test forbidden error
         let forbidden = handle_openai_error(StatusCode::FORBIDDEN, "Forbidden access");
-        assert!(matches!(forbidden, Err(Error::OpenAIClient { .. })));
-        if let Err(Error::OpenAIClient {
+        assert!(matches!(forbidden, Error::OpenAIClient { .. }));
+        if let Error::OpenAIClient {
             message,
             status_code,
-        }) = forbidden
+        } = forbidden
         {
             assert_eq!(message, "Forbidden access");
             assert_eq!(status_code, StatusCode::FORBIDDEN);
@@ -908,11 +1003,11 @@ mod tests {
 
         // Test rate limit error
         let rate_limit = handle_openai_error(StatusCode::TOO_MANY_REQUESTS, "Rate limit exceeded");
-        assert!(matches!(rate_limit, Err(Error::OpenAIClient { .. })));
-        if let Err(Error::OpenAIClient {
+        assert!(matches!(rate_limit, Error::OpenAIClient { .. }));
+        if let Error::OpenAIClient {
             message,
             status_code,
-        }) = rate_limit
+        } = rate_limit
         {
             assert_eq!(message, "Rate limit exceeded");
             assert_eq!(status_code, StatusCode::TOO_MANY_REQUESTS);
@@ -920,8 +1015,8 @@ mod tests {
 
         // Test server error
         let server_error = handle_openai_error(StatusCode::INTERNAL_SERVER_ERROR, "Server error");
-        assert!(matches!(server_error, Err(Error::OpenAIServer { .. })));
-        if let Err(Error::OpenAIServer { message }) = server_error {
+        assert!(matches!(server_error, Error::OpenAIServer { .. }));
+        if let Error::OpenAIServer { message } = server_error {
             assert_eq!(message, "Server error");
         }
     }
