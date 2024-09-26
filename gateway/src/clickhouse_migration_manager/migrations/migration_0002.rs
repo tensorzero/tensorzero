@@ -21,7 +21,7 @@ impl<'a> Migration for Migration0002<'a> {
     }
 
     /// Check if the migration has already been applied
-    /// This should be equivalent to checking if `DiclExample` exists
+    /// This should be equivalent to checking if `DynamicInContextLearningExample` exists
     async fn should_apply(&self) -> Result<bool, Error> {
         let database = self.clickhouse.database();
 
@@ -29,7 +29,7 @@ impl<'a> Migration for Migration0002<'a> {
             r#"SELECT EXISTS(
                 SELECT 1
                 FROM system.tables
-                WHERE database = '{database}' AND name = 'DiclExample'
+                WHERE database = '{database}' AND name = 'DynamicInContextLearningExample'
             )"#
         );
 
@@ -51,9 +51,9 @@ impl<'a> Migration for Migration0002<'a> {
     }
 
     async fn apply(&self) -> Result<(), Error> {
-        // Create the `DiclExample` table
+        // Create the `DynamicInContextLearningExample` table
         let query = r#"
-            CREATE TABLE IF NOT EXISTS DiclExample
+            CREATE TABLE IF NOT EXISTS DynamicInContextLearningExample
             (
                 id UUID, -- must be a UUIDv7
                 function_name LowCardinality(String),
@@ -72,7 +72,7 @@ impl<'a> Migration for Migration0002<'a> {
     fn rollback_instructions(&self) -> String {
         "\
             -- Drop the table\n\
-            DROP TABLE IF EXISTS DiclExample;\n\
+            DROP TABLE IF EXISTS DynamicInContextLearningExample;\n\
             \n\
             "
         .to_string()
