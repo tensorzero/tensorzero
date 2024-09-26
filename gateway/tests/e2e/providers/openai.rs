@@ -1,3 +1,4 @@
+use gateway::embeddings::{EmbeddingProvider, EmbeddingProviderConfig, EmbeddingRequest};
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use uuid::Uuid;
@@ -159,4 +160,25 @@ async fn test_o1_mini_inference() {
     assert!(result.get("ttft_ms").unwrap().is_null());
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     let _raw_response_json: Value = serde_json::from_str(raw_response).unwrap();
+}
+
+#[tokio::test]
+async fn test_embedding_request() {
+    let provider_config_serialized = r#"
+    type = "openai"
+    model_name = "text-embedding-3-small"
+    "#;
+    let provider_config: EmbeddingProviderConfig = toml::from_str(provider_config_serialized)
+        .expect("Failed to deserialize EmbeddingProviderConfig");
+    assert!(matches!(
+        provider_config,
+        EmbeddingProviderConfig::OpenAI(_)
+    ));
+
+    let client = Client::new();
+    let request = EmbeddingRequest {
+        input: "This is a test input".to_string(),
+    };
+    let response = provider_config.embed(&request, &client).await.unwrap();
+    assert_eq!(response.embedding.len(), 1536);
 }
