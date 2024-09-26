@@ -13,6 +13,7 @@ use crate::tool::ToolCallConfig;
 use crate::{inference::types::InferenceResult, model::ModelConfig};
 pub mod best_of_n;
 pub mod chat_completion;
+pub mod dicl;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
