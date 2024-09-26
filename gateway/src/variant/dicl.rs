@@ -39,6 +39,13 @@ impl Variant for DiclConfig {
         client: &'request Client,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
+        let serialized_input = serde_json::to_string(&input).map_err(|e| Error::Serialization {
+            message: format!(
+                "Error in serializing Input in dynamic in-context learning variant: {}",
+                e
+            ),
+        })?;
+
         todo!()
     }
 
@@ -75,4 +82,8 @@ impl Variant for DiclConfig {
     fn get_all_template_paths(&self) -> Vec<&PathBuf> {
         todo!()
     }
+}
+
+impl DiclConfig {
+    fn retrieve_relevant_examples(&self, serialized_input: &str) -> Result<Vec<String>, Error> {}
 }

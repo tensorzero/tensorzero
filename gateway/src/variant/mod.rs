@@ -44,6 +44,7 @@ pub enum JsonMode {
 pub struct InferenceConfig<'a> {
     pub tool_config: Option<ToolCallConfig>,
     pub templates: &'a TemplateConfig<'a>,
+
     pub dynamic_output_schema: Option<DynamicJSONSchema>,
 }
 
