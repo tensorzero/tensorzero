@@ -1052,7 +1052,8 @@ mod tests {
             templates: &templates,
             tool_config: None,
             dynamic_output_schema: None,
-            embedding_models: &HashMap::new(),
+            function_name: "".to_string(),
+            variant_name: "".to_string(),
         };
 
         let selected = best_of_n_variant

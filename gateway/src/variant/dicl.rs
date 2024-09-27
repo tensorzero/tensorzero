@@ -211,14 +211,14 @@ impl Variant for DiclConfig {
 struct ChatExample {
     input: Input,
     output: Vec<ContentBlockOutput>,
-    distance: f32,
+    // distance: f32,
 }
 
 #[derive(Debug, Deserialize)]
 struct JsonExample {
     input: Input,
     output: JsonInferenceOutput,
-    distance: f32,
+    // distance: f32,
 }
 
 #[derive(Debug, Deserialize)]

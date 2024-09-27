@@ -229,8 +229,9 @@ impl EmbeddingProviderResponse {
 
 #[cfg(test)]
 mod tests {
-    #[tokio::test]
-    async fn test_embedding_fallbacks() {
-        todo!()
-    }
+    // TODO(Viraj): this
+    // #[tokio::test]
+    // async fn test_embedding_fallbacks() {
+    //     todo!()
+    // }
 }

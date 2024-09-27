@@ -1215,7 +1215,8 @@ mod tests {
         let inference_config = InferenceConfig {
             tool_config: Some(tool_config),
             templates: &TemplateConfig::default(),
-            embedding_models: &HashMap::new(),
+            function_name: "".to_string(),
+            variant_name: "".to_string(),
             dynamic_output_schema: None,
         };
         let chunks = vec![];
@@ -1639,7 +1640,8 @@ mod tests {
         }));
         let inference_config = InferenceConfig {
             tool_config: None,
-            embedding_models: &HashMap::new(),
+            function_name: "".to_string(),
+            variant_name: "".to_string(),
             templates: &TemplateConfig::default(),
             dynamic_output_schema: Some(dynamic_output_schema),
         };

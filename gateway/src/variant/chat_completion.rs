@@ -330,6 +330,7 @@ mod tests {
     use super::*;
 
     use futures::StreamExt;
+    use reqwest::Client;
     use serde_json::{json, Value};
 
     use crate::clickhouse::ClickHouseConnectionInfo;
@@ -337,7 +338,7 @@ mod tests {
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::providers::common::get_temperature_tool_config;
     use crate::inference::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
-    use crate::inference::types::{ContentBlockOutput, Usage};
+    use crate::inference::types::{ContentBlockOutput, ModelInferenceRequestJsonMode, Usage};
     use crate::jsonschema_util::{DynamicJSONSchema, JSONSchemaFromPath};
     use crate::minijinja_util::tests::get_test_template_config;
     use crate::model::ProviderConfig;
@@ -709,14 +710,19 @@ mod tests {
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
-            embedding_models: &HashMap::new(),
+            function_name: "".to_string(),
+            variant_name: "".to_string(),
             dynamic_output_schema: None,
         };
         let models = HashMap::new();
+        let inference_models = InferenceModels {
+            models: &models,
+            embedding_models: &HashMap::new(),
+        };
         let result = chat_completion_config
             .infer(
                 &input,
-                &models,
+                &inference_models,
                 &function_config,
                 &inference_config,
                 &clients,
@@ -743,16 +749,21 @@ mod tests {
             messages,
         };
         let models = HashMap::from([("invalid_model".to_string(), text_model_config)]);
+        let inference_models = InferenceModels {
+            models: &models,
+            embedding_models: &HashMap::new(),
+        };
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
-            embedding_models: &HashMap::new(),
+            function_name: "".to_string(),
+            variant_name: "".to_string(),
             dynamic_output_schema: None,
         };
         let result = chat_completion_config
             .infer(
                 &input,
-                &models,
+                &inference_models,
                 &function_config,
                 &inference_config,
                 &clients,
@@ -772,16 +783,21 @@ mod tests {
         };
         let inference_params = InferenceParams::default();
         let models = HashMap::from([("error".to_string(), error_model_config)]);
+        let inference_models = InferenceModels {
+            models: &models,
+            embedding_models: &HashMap::new(),
+        };
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
-            embedding_models: &HashMap::new(),
+            function_name: "".to_string(),
+            variant_name: "".to_string(),
             dynamic_output_schema: None,
         };
         let result = chat_completion_config
             .infer(
                 &input,
-                &models,
+                &inference_models,
                 &function_config,
                 &inference_config,
                 &clients,
@@ -818,16 +834,21 @@ mod tests {
             providers: HashMap::from([("good_provider".to_string(), good_provider_config)]),
         };
         let models = HashMap::from([("good".to_string(), text_model_config)]);
+        let inference_models = InferenceModels {
+            models: &models,
+            embedding_models: &HashMap::new(),
+        };
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
-            embedding_models: &HashMap::new(),
+            function_name: "".to_string(),
+            variant_name: "".to_string(),
             dynamic_output_schema: None,
         };
         let result = chat_completion_config
             .infer(
                 &input,
-                &models,
+                &inference_models,
                 &function_config,
                 &inference_config,
                 &clients,
@@ -882,17 +903,22 @@ mod tests {
             }],
         };
         let models = HashMap::from([("tool".to_string(), tool_model_config)]);
+        let inference_models = InferenceModels {
+            models: &models,
+            embedding_models: &HashMap::new(),
+        };
         let weather_tool_config = get_temperature_tool_config();
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: Some(weather_tool_config),
-            embedding_models: &HashMap::new(),
+            function_name: "".to_string(),
+            variant_name: "".to_string(),
             dynamic_output_schema: None,
         };
         let result = chat_completion_config
             .infer(
                 &input,
-                &models,
+                &inference_models,
                 &function_config,
                 &inference_config,
                 &clients,
@@ -965,14 +991,15 @@ mod tests {
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
-            embedding_models: &HashMap::new(),
+            function_name: "".to_string(),
+            variant_name: "".to_string(),
             dynamic_output_schema: None,
         };
         let inference_params = InferenceParams::default();
         let result = chat_completion_config
             .infer(
                 &input,
-                &models,
+                &inference_models,
                 &json_function_config,
                 &inference_config,
                 &clients,
@@ -1010,10 +1037,15 @@ mod tests {
         // Test case 6: JSON output was supposed to happen and it did
         let inference_params = InferenceParams::default();
         let models = HashMap::from([("json".to_string(), json_model_config)]);
+        let inference_models = InferenceModels {
+            models: &models,
+            embedding_models: &HashMap::new(),
+        };
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
-            embedding_models: &HashMap::new(),
+            function_name: "".to_string(),
+            variant_name: "".to_string(),
             dynamic_output_schema: None,
         };
         let chat_completion_config = ChatCompletionConfig {
@@ -1026,7 +1058,7 @@ mod tests {
         let result = chat_completion_config
             .infer(
                 &input,
-                &models,
+                &inference_models,
                 &json_function_config,
                 &inference_config,
                 &clients,
@@ -1101,7 +1133,8 @@ mod tests {
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
-            embedding_models: &HashMap::new(),
+            function_name: "".to_string(),
+            variant_name: "".to_string(),
             dynamic_output_schema: Some(output_schema),
         };
         let chat_completion_config = ChatCompletionConfig {
@@ -1114,7 +1147,7 @@ mod tests {
         let result = chat_completion_config
             .infer(
                 &input,
-                &models,
+                &inference_models,
                 &json_function_config,
                 &inference_config,
                 &clients,
@@ -1183,7 +1216,8 @@ mod tests {
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
-            embedding_models: &HashMap::new(),
+            function_name: "".to_string(),
+            variant_name: "".to_string(),
             dynamic_output_schema: Some(output_schema),
         };
         let chat_completion_config = ChatCompletionConfig {
@@ -1199,7 +1233,7 @@ mod tests {
         let result = chat_completion_config
             .infer(
                 &input,
-                &models,
+                &inference_models,
                 &json_function_config,
                 &inference_config,
                 &clients,
@@ -1295,16 +1329,22 @@ mod tests {
             "error".to_string(),
             error_model_config,
         )])));
+        let embedding_models = Box::leak(Box::new(HashMap::new()));
+        let inference_models = InferenceModels {
+            models,
+            embedding_models,
+        };
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
-            embedding_models: &HashMap::new(),
+            function_name: "".to_string(),
+            variant_name: "".to_string(),
             dynamic_output_schema: None,
         };
         let result = chat_completion_config
             .infer_stream(
                 &input,
-                models,
+                &inference_models,
                 function_config,
                 &inference_config,
                 &clients,
@@ -1337,16 +1377,21 @@ mod tests {
             "good".to_string(),
             text_model_config,
         )])));
+        let inference_models = InferenceModels {
+            models,
+            embedding_models,
+        };
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
-            embedding_models: &HashMap::new(),
+            function_name: "".to_string(),
+            variant_name: "".to_string(),
             dynamic_output_schema: None,
         };
         let (first_chunk, mut stream, models_used) = chat_completion_config
             .infer_stream(
                 &input,
-                models,
+                &inference_models,
                 function_config,
                 &inference_config,
                 &clients,
@@ -1429,9 +1474,10 @@ mod tests {
         });
         let mut inference_params = InferenceParams::default();
         let inference_config = InferenceConfig {
-            embedding_models: &HashMap::new(),
             templates: &templates,
             tool_config: None,
+            function_name: "".to_string(),
+            variant_name: "".to_string(),
             dynamic_output_schema: None,
         };
         let model_request = chat_completion_config
@@ -1537,7 +1583,8 @@ mod tests {
             templates: &templates,
             tool_config: None,
             dynamic_output_schema: None,
-            embedding_models: &HashMap::new(),
+            function_name: "".to_string(),
+            variant_name: "".to_string(),
         };
         let mut inference_params = InferenceParams::default();
         let model_request = chat_completion_config
@@ -1621,7 +1668,8 @@ mod tests {
             templates: &templates,
             tool_config: None,
             dynamic_output_schema: Some(dynamic_output_schema),
-            embedding_models: &HashMap::new(),
+            function_name: "".to_string(),
+            variant_name: "".to_string(),
         };
         let model_request = chat_completion_config
             .prepare_request(
