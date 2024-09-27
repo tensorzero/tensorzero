@@ -6174,8 +6174,8 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     let inference_id = inference_id.unwrap();
     assert!(full_content.to_lowercase().contains("tokyo"));
 
-    // NB: Azure and Together don't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") || provider.variant_name.contains("together") {
+    // NB: Azure doesn't support input/output tokens during streaming
+    if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
     } else {
@@ -6300,8 +6300,8 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
 
-    // NB: Azure and Together don't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") || provider.variant_name.contains("together") {
+    // NB: Azure doesn't support input/output tokens during streaming
+    if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
     } else {
