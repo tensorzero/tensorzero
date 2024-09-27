@@ -62,7 +62,7 @@ This is because the haiku writer has no knowledge of the critic's idiosyncratic 
 
 At this point, your ClickHouse database will include inferences in a structured format along with feedback on how they went.
 You can now use TensorZero recipes to learn from this experience to produce better variants of the haiku writer.
-We recommend starting with supervised fine-tuning of a custom OpenAI model using the notebook in `recipes/supervised_fine_tuning/openai.ipynb`.
+We recommend starting with supervised fine-tuning of a custom OpenAI model using the notebook in `recipes/supervised_fine_tuning/metrics/openai.ipynb`.
 Each recipe should print some additional elements to add to the `tensorzero.toml` file.
 
 You can also easily experiment with other models, prompts you think might be better, or combinations thereof by editing the configuration.

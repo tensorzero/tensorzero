@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "person": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "organization": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "location": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "miscellaneous": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": ["person", "organization", "location", "miscellaneous"],
+  "additionalProperties": false
+}
