@@ -209,8 +209,16 @@ async fn test_embedding_request() {
         "The created timestamp should be within 1 second of the current time, but it is {}",
         created
     );
-    let _parsed_raw_response: Value = serde_json::from_str(&response.raw_response).unwrap();
-    let _parsed_raw_request: Value = serde_json::from_str(&response.raw_request).unwrap();
+    let parsed_raw_response: Value = serde_json::from_str(&response.raw_response).unwrap();
+    assert!(
+        !parsed_raw_response.is_null(),
+        "Parsed raw response should not be null"
+    );
+    let parsed_raw_request: Value = serde_json::from_str(&response.raw_request).unwrap();
+    assert!(
+        !parsed_raw_request.is_null(),
+        "Parsed raw request should not be null"
+    );
     // Hardcoded since the input is 5 tokens
     assert_eq!(response.usage.input_tokens, 5);
     assert_eq!(response.usage.output_tokens, 0);
