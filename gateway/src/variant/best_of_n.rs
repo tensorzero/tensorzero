@@ -8,7 +8,8 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::time::{timeout, Duration};
 
-use crate::endpoints::inference::InferenceClients;
+use crate::embeddings::EmbeddingModelConfig;
+use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::inference::types::{
     ContentBlock, FunctionType, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
@@ -66,18 +67,18 @@ impl Variant for BestOfNConfig {
     async fn infer<'a, 'request>(
         &'a self,
         input: &Input,
-        models: &'a HashMap<String, ModelConfig>,
+        models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<InferenceResult<'a>, Error> {
         let candidate_inference_results = self
-            .infer_candidates(input, models, function, inference_config, clients)
+            .infer_candidates(input, &models, function, inference_config, clients)
             .await?;
         self.select_best_candidate(
             input,
-            models,
+            &models.models,
             inference_config,
             clients.http_client,
             candidate_inference_results,
@@ -88,7 +89,7 @@ impl Variant for BestOfNConfig {
     async fn infer_stream<'request>(
         &'static self,
         _input: &Input,
-        _models: &'static HashMap<String, ModelConfig>,
+        _models: &'request InferenceModels<'static>,
         _function: &'static FunctionConfig,
         _inference_config: &'request InferenceConfig<'request>,
         _clients: &'request InferenceClients<'request>,
@@ -110,6 +111,7 @@ impl Variant for BestOfNConfig {
         &self,
         function: &FunctionConfig,
         models: &HashMap<String, ModelConfig>,
+        embedding_models: &HashMap<String, EmbeddingModelConfig>,
         templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,
@@ -123,16 +125,28 @@ impl Variant for BestOfNConfig {
                     name: candidate.to_string(),
                 })?;
             variant
-                .validate(function, models, templates, function_name, candidate)
+                .validate(
+                    function,
+                    models,
+                    embedding_models,
+                    templates,
+                    function_name,
+                    candidate,
+                )
                 .map_err(|e| Error::InvalidCandidate {
                     variant_name: variant_name.to_string(),
                     message: e.to_string(),
                 })?;
         }
         // Validate the evaluator variant
-        self.evaluator
-            .inner
-            .validate(function, models, templates, function_name, variant_name)?;
+        self.evaluator.inner.validate(
+            function,
+            models,
+            embedding_models,
+            templates,
+            function_name,
+            variant_name,
+        )?;
         Ok(())
     }
 
@@ -149,7 +163,7 @@ impl BestOfNConfig {
     async fn infer_candidates<'a, 'request>(
         &self,
         input: &Input,
-        models: &'a HashMap<String, ModelConfig>,
+        models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
@@ -179,7 +193,7 @@ impl BestOfNConfig {
                     Duration::from_secs_f64(self.timeout_s),
                     candidate_variant.infer(
                         input,
-                        models,
+                        &models,
                         function,
                         inference_config,
                         clients,

@@ -1,29 +1,27 @@
-use futures::StreamExt;
-use reqwest::Client;
 use serde::Deserialize;
 use serde_json::Value;
-use std::borrow::Cow;
 use std::{collections::HashMap, path::PathBuf};
-use uuid::Uuid;
 
-use crate::endpoints::inference::{InferenceClients, InferenceParams};
+use crate::embeddings::EmbeddingModelConfig;
+use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
 use crate::error::Error;
 use crate::function::FunctionConfig;
 use crate::inference::types::{
-    ContentBlock, FunctionType, InferenceResultChunk, InferenceResultStream, Input,
-    InputMessageContent, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-    ModelInferenceResponseWithMetadata, RequestMessage, Role,
+    ContentBlock, InferenceResultChunk, InferenceResultStream, Input, InputMessageContent,
+    ModelInferenceRequest, RequestMessage, Role,
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
-use crate::tool::create_dynamic_implicit_tool_config;
 use crate::variant::JsonMode;
 use crate::{
     inference::types::{InferenceResult, InputMessage},
     model::ModelConfig,
 };
 
-use super::{prepare_model_inference_request, InferenceConfig, ModelUsedInfo, Variant};
+use super::{
+    infer_model_request, infer_model_request_stream, prepare_model_inference_request,
+    InferenceConfig, ModelUsedInfo, Variant,
+};
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -106,14 +104,17 @@ impl ChatCompletionConfig {
         }})
     }
 
-    fn prepare_request<'a>(
-        &self,
+    fn prepare_request<'a, 'request>(
+        &'a self,
         input: &Input,
         function: &'a FunctionConfig,
-        inference_config: &'a InferenceConfig<'a>,
+        inference_config: &'request InferenceConfig<'request>,
         stream: bool,
         inference_params: &mut InferenceParams,
-    ) -> Result<ModelInferenceRequest<'a>, Error> {
+    ) -> Result<ModelInferenceRequest<'request>, Error>
+    where
+        'a: 'request,
+    {
         let messages = input
             .messages
             .iter()
@@ -141,7 +142,7 @@ impl Variant for ChatCompletionConfig {
     async fn infer<'a, 'request>(
         &'a self,
         input: &Input,
-        models: &'a HashMap<String, ModelConfig>,
+        models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
@@ -155,34 +156,25 @@ impl Variant for ChatCompletionConfig {
             false,
             &mut inference_params,
         )?;
-        let model_config = models.get(&self.model).ok_or(Error::UnknownModel {
+        let model_config = models.models.get(&self.model).ok_or(Error::UnknownModel {
             name: self.model.clone(),
         })?;
-        let model_inference_response = model_config.infer(&request, clients.http_client).await?;
-        let model_inference_result =
-            ModelInferenceResponseWithMetadata::new(model_inference_response, &self.model);
-
-        let inference_id = Uuid::now_v7();
-
-        let raw_content = model_inference_result.content.clone();
-        let usage = model_inference_result.usage.clone();
-        let model_inference_results = vec![model_inference_result];
-        function
-            .prepare_response(
-                inference_id,
-                raw_content,
-                usage,
-                model_inference_results,
-                inference_config,
-                inference_params,
-            )
-            .await
+        infer_model_request(
+            request,
+            &self.model,
+            model_config,
+            function,
+            inference_config,
+            clients,
+            inference_params,
+        )
+        .await
     }
 
     async fn infer_stream<'request>(
         &'static self,
         input: &Input,
-        models: &'static HashMap<String, ModelConfig>,
+        models: &'request InferenceModels<'static>,
         function: &'static FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
@@ -203,22 +195,18 @@ impl Variant for ChatCompletionConfig {
             true,
             &mut inference_params,
         )?;
-        let model_config = models.get(&self.model).ok_or(Error::UnknownModel {
+        let model_config = models.models.get(&self.model).ok_or(Error::UnknownModel {
             name: self.model.clone(),
         })?;
-        let (first_chunk, stream, raw_request, model_provider_name) = model_config
-            .infer_stream(&request, clients.http_client)
-            .await?;
-        let model_used_info = ModelUsedInfo {
-            model_name: &self.model,
-            model_provider_name,
-            raw_request,
+        infer_model_request_stream(
+            request,
+            &self.model,
+            model_config,
+            function,
+            clients,
             inference_params,
-        };
-        let first_chunk = InferenceResultChunk::new(first_chunk, function);
-        let stream =
-            stream.map(move |chunk| chunk.map(|chunk| InferenceResultChunk::new(chunk, function)));
-        Ok((first_chunk, Box::pin(stream), model_used_info))
+        )
+        .await
     }
 
     /// This function validates that the chat completion variant is correctly configured for the given function config.
@@ -232,6 +220,7 @@ impl Variant for ChatCompletionConfig {
         &self,
         function: &FunctionConfig,
         models: &HashMap<String, ModelConfig>,
+        _embedding_models: &HashMap<String, EmbeddingModelConfig>,
         templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,

@@ -1,16 +1,14 @@
 use serde::de::{Deserializer, Error as SerdeError};
-use std::borrow::Cow;
 use std::fs;
-use std::iter::once;
 use std::{collections::HashMap, path::PathBuf};
 
-use reqwest::Client;
 use serde::Deserialize;
 
+use crate::embeddings::EmbeddingResponseWithMetadata;
+use crate::endpoints::inference::InferenceModels;
 use crate::inference::types::{ModelInferenceRequest, RequestMessage, Role};
 use crate::{
-    clickhouse::ClickHouseConnectionInfo,
-    embeddings::{EmbeddingModelConfig, EmbeddingRequest, EmbeddingResponse},
+    embeddings::{EmbeddingModelConfig, EmbeddingRequest},
     endpoints::inference::{InferenceClients, InferenceParams},
     error::Error,
     function::FunctionConfig,
@@ -22,7 +20,10 @@ use crate::{
     model::ModelConfig,
 };
 
-use super::{prepare_model_inference_request, InferenceConfig, JsonMode, ModelUsedInfo, Variant};
+use super::{
+    infer_model_request, infer_model_request_stream, prepare_model_inference_request,
+    InferenceConfig, JsonMode, ModelUsedInfo, Variant,
+};
 
 #[derive(Debug, Default)]
 pub struct DiclConfig {
@@ -41,7 +42,7 @@ impl Variant for DiclConfig {
     async fn infer<'a, 'request>(
         &'a self,
         input: &Input,
-        models: &'a HashMap<String, ModelConfig>,
+        models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
@@ -55,10 +56,11 @@ impl Variant for DiclConfig {
             ),
         })?;
 
+        // TODO (Viraj): get the embedding response into observability
         let (relevant_examples, embedding_response) = self
             .retrieve_relevant_examples(
                 serialized_input,
-                &inference_config.embedding_models,
+                &models.embedding_models,
                 clients,
                 &inference_config.function_name,
                 &inference_config.variant_name,
@@ -72,14 +74,29 @@ impl Variant for DiclConfig {
             false,
             &mut inference_params,
         )?;
-
-        todo!()
+        let model_config = models.models.get(&self.model).ok_or(Error::UnknownModel {
+            name: self.model.clone(),
+        })?;
+        let mut inference_response = infer_model_request(
+            model_inference_request,
+            &self.model,
+            model_config,
+            function,
+            inference_config,
+            clients,
+            inference_params,
+        )
+        .await?;
+        inference_response
+            .mut_model_inference_results()
+            .push(embedding_response.into());
+        Ok(inference_response)
     }
 
     async fn infer_stream<'request>(
         &'static self,
         input: &Input,
-        models: &'static HashMap<String, ModelConfig>,
+        models: &'request InferenceModels<'static>,
         function: &'static FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
@@ -92,22 +109,101 @@ impl Variant for DiclConfig {
         ),
         Error,
     > {
-        todo!()
+        let mut inference_params = inference_params;
+        let serialized_input = serde_json::to_string(&input).map_err(|e| Error::Serialization {
+            message: format!(
+                "Error in serializing Input in dynamic in-context learning variant: {}",
+                e
+            ),
+        })?;
+
+        // TODO (Viraj): get the embedding response into observability
+        let (relevant_examples, embedding_response) = self
+            .retrieve_relevant_examples(
+                serialized_input,
+                &models.embedding_models,
+                clients,
+                &inference_config.function_name,
+                &inference_config.variant_name,
+            )
+            .await?;
+        let request = self.prepare_request(
+            &input,
+            &relevant_examples,
+            function,
+            inference_config,
+            true,
+            &mut inference_params,
+        )?;
+        let model_config = models.models.get(&self.model).ok_or(Error::UnknownModel {
+            name: self.model.clone(),
+        })?;
+        let (inference_result_chunk, inference_result_stream, mut model_used_info) =
+            infer_model_request_stream(
+                request,
+                &self.model,
+                model_config,
+                function,
+                clients,
+                inference_params,
+            )
+            .await?;
+        model_used_info
+            .previous_model_inference_results
+            .push(embedding_response.into());
+        Ok((
+            inference_result_chunk,
+            inference_result_stream,
+            model_used_info,
+        ))
     }
 
     fn validate(
         &self,
-        function: &FunctionConfig,
+        _function: &FunctionConfig,
         models: &HashMap<String, ModelConfig>,
-        templates: &TemplateConfig,
+        embedding_models: &HashMap<String, EmbeddingModelConfig>,
+        _templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,
     ) -> Result<(), Error> {
-        todo!()
+        // TODO (#360): Add the clickhouse connection to this interface
+        // Run a count() query on the DynamicInContextLearningExample table
+        // WHERE function_name = function_name and variant_name = variant_name
+        // Make sure that the count is positive
+
+        // Validate that weight is non-negative
+        if self.weight < 0.0 {
+            return Err(Error::Config {
+                message: format!(
+                "`functions.{function_name}.variants.{variant_name}`: `weight` must be non-negative"
+            ),
+            });
+        }
+        // Validate that the generation model and embedding model are valid
+        let model = models.get(&self.model).ok_or_else(|| Error::Config {
+            message: format!("`functions.{function_name}.variants.{variant_name}`: `model` must be a valid model name"),
+        })?;
+        let embedding_model = embedding_models.get(&self.embedding_model).ok_or_else(|| Error::Config {
+            message: format!("`functions.{function_name}.variants.{variant_name}`: `embedding_model` must be a valid embedding model name"),
+        })?;
+        model.validate().map_err(|e| Error::Config {
+            message: format!(
+                "`functions.{function_name}.variants.{variant_name}` and model `{}`: {e}",
+                self.model
+            ),
+        })?;
+        embedding_model.validate().map_err(|e| Error::Config {
+            message: format!(
+                "`functions.{function_name}.variants.{variant_name}` and embedding model `{}`: {e}",
+                self.embedding_model
+            ),
+        })?;
+        Ok(())
     }
 
     fn get_all_template_paths(&self) -> Vec<&PathBuf> {
-        todo!()
+        vec![]
     }
 }
 
@@ -133,14 +229,14 @@ enum Example {
 }
 
 impl DiclConfig {
-    async fn retrieve_relevant_examples(
-        &self,
+    async fn retrieve_relevant_examples<'a>(
+        &'a self,
         serialized_input: String,
-        embedding_models: &HashMap<String, EmbeddingModelConfig>,
+        embedding_models: &'a HashMap<String, EmbeddingModelConfig>,
         clients: &InferenceClients<'_>,
         function_name: &str,
         variant_name: &str,
-    ) -> Result<(Vec<Example>, EmbeddingResponse), Error> {
+    ) -> Result<(Vec<Example>, EmbeddingResponseWithMetadata<'a>), Error> {
         let embedding_model =
             embedding_models
                 .get(&self.embedding_model)
@@ -153,9 +249,11 @@ impl DiclConfig {
         let embedding_reponse = embedding_model
             .embed(&embedding_request, &clients.http_client)
             .await?;
+        let embedding_response_with_metadata =
+            EmbeddingResponseWithMetadata::new(embedding_reponse, &self.embedding_model);
         let formatted_embedding = format!(
             "[{}]",
-            embedding_reponse
+            embedding_response_with_metadata
                 .embedding
                 .iter()
                 .map(|&x| x.to_string())
@@ -179,7 +277,7 @@ impl DiclConfig {
             .map_err(|e| Error::Serialization {
                 message: format!("Failed to parse examples: {}", e),
             })?;
-        Ok((examples, embedding_reponse))
+        Ok((examples, embedding_response_with_metadata))
     }
 
     /// Serialize an example into a pair of RequestMessages
@@ -235,15 +333,18 @@ impl DiclConfig {
         })
     }
 
-    fn prepare_request<'a>(
-        &self,
+    fn prepare_request<'a, 'request>(
+        &'a self,
         input: &Input,
         examples: &[Example],
         function: &'a FunctionConfig,
-        inference_config: &'a InferenceConfig<'a>,
+        inference_config: &'request InferenceConfig<'request>,
         stream: bool,
         inference_params: &mut InferenceParams,
-    ) -> Result<ModelInferenceRequest<'a>, Error> {
+    ) -> Result<ModelInferenceRequest<'request>, Error>
+    where
+        'a: 'request,
+    {
         let messages = examples
             .iter()
             .map(|example| self.prepare_message(example))

@@ -26,6 +26,8 @@ use crate::inference::types::{
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
+use super::provider_trait::HasCredentials;
+
 // NB: If you add `Clone` someday, you'll need to wrap client in Arc
 #[derive(Debug)]
 pub struct AWSBedrockProvider {
@@ -230,7 +232,9 @@ impl InferenceProvider for AWSBedrockProvider {
 
         Ok((chunk, stream, raw_request))
     }
+}
 
+impl HasCredentials for AWSBedrockProvider {
     fn has_credentials(&self) -> bool {
         // TODO (#313): Actually check if the AWS Bedrock client is configured with credentials
         true

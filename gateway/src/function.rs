@@ -3,6 +3,7 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use uuid::Uuid;
 
+use crate::embeddings::EmbeddingModelConfig;
 use crate::endpoints::inference::InferenceParams;
 use crate::error::{Error, ResultExt};
 use crate::inference::types::{
@@ -223,12 +224,20 @@ impl FunctionConfig {
         &self,
         static_tools: &HashMap<String, StaticToolConfig>,
         models: &HashMap<String, ModelConfig>,
+        embedding_models: &HashMap<String, EmbeddingModelConfig>,
         templates: &TemplateConfig,
         function_name: &str,
     ) -> Result<(), Error> {
         // Validate each variant
         for (variant_name, variant) in self.variants() {
-            variant.validate(self, models, templates, function_name, variant_name)?;
+            variant.validate(
+                self,
+                models,
+                embedding_models,
+                templates,
+                function_name,
+                variant_name,
+            )?;
         }
         match self {
             FunctionConfig::Chat(params) => {

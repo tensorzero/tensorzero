@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
-use super::provider_trait::InferenceProvider;
+use super::provider_trait::{HasCredentials, InferenceProvider};
 
 use crate::error::Error;
 use crate::inference::types::{
@@ -241,7 +241,9 @@ impl InferenceProvider for DummyProvider {
             DUMMY_RAW_REQUEST.to_string(),
         ))
     }
+}
 
+impl HasCredentials for DummyProvider {
     fn has_credentials(&self) -> bool {
         self.model_name != "bad_credentials"
     }

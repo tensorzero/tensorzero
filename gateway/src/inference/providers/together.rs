@@ -21,7 +21,7 @@ use super::{
         get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
         stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAITool, OpenAIToolChoice,
     },
-    provider_trait::InferenceProvider,
+    provider_trait::{HasCredentials, InferenceProvider},
 };
 
 lazy_static! {
@@ -136,7 +136,9 @@ impl InferenceProvider for TogetherProvider {
         };
         Ok((chunk, stream, raw_request))
     }
+}
 
+impl HasCredentials for TogetherProvider {
     fn has_credentials(&self) -> bool {
         self.api_key.is_some()
     }

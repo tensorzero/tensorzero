@@ -168,7 +168,13 @@ impl<'c> Config<'c> {
 
         // Validate each function
         for (function_name, function) in &self.functions {
-            function.validate(&self.tools, &self.models, &self.templates, function_name)?;
+            function.validate(
+                &self.tools,
+                &self.models,
+                &self.embedding_models,
+                &self.templates,
+                function_name,
+            )?;
         }
 
         // Ensure that no metrics are named "comment" or "demonstration"
