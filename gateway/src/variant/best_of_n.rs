@@ -8,6 +8,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::time::{timeout, Duration};
 
+use crate::endpoints::inference::InferenceClients;
 use crate::inference::types::{
     ContentBlock, FunctionType, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
@@ -27,6 +28,7 @@ use super::{InferenceConfig, ModelUsedInfo, Variant};
 
 #[derive(Debug, Deserialize)]
 pub struct BestOfNConfig {
+    #[serde(default)]
     pub weight: f64,
     #[serde(default = "default_timeout")]
     pub timeout_s: f64,
@@ -67,17 +69,17 @@ impl Variant for BestOfNConfig {
         models: &'a HashMap<String, ModelConfig>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
-        client: &'request Client,
+        clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<InferenceResult<'a>, Error> {
         let candidate_inference_results = self
-            .infer_candidates(input, models, function, inference_config, client)
+            .infer_candidates(input, models, function, inference_config, clients)
             .await?;
         self.select_best_candidate(
             input,
             models,
             inference_config,
-            client,
+            clients.http_client,
             candidate_inference_results,
         )
         .await
@@ -89,7 +91,7 @@ impl Variant for BestOfNConfig {
         _models: &'static HashMap<String, ModelConfig>,
         _function: &'static FunctionConfig,
         _inference_config: &'request InferenceConfig<'request>,
-        _client: &'request Client,
+        _clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<
         (
@@ -150,7 +152,7 @@ impl BestOfNConfig {
         models: &'a HashMap<String, ModelConfig>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
-        client: &'request Client,
+        clients: &'request InferenceClients<'request>,
     ) -> Result<Vec<InferenceResult<'a>>, Error> {
         // Get all the variants we are going to infer
         let candidate_variants = self
@@ -180,7 +182,7 @@ impl BestOfNConfig {
                         models,
                         function,
                         inference_config,
-                        client,
+                        clients,
                         InferenceParams::default(),
                     ),
                 ),
@@ -1036,6 +1038,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             dynamic_output_schema: None,
+            embedding_models: &HashMap::new(),
         };
 
         let selected = best_of_n_variant

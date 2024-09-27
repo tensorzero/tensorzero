@@ -81,7 +81,7 @@ pub enum ContentBlock {
     ToolResult(ToolResult),
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlockOutput {
     Text(Text),
@@ -89,7 +89,7 @@ pub enum ContentBlockOutput {
 }
 
 /// A RequestMessage is a message sent to a model
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct RequestMessage {
     pub role: Role,
     pub content: Vec<ContentBlock>,
@@ -230,7 +230,7 @@ pub struct JsonInferenceResult<'a> {
     pub inference_params: InferenceParams,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct JsonInferenceOutput {
     pub raw: String,
     pub parsed: Option<Value>,
@@ -784,6 +784,27 @@ impl From<ProviderInferenceResponseChunk> for ChatInferenceResultChunk {
     }
 }
 
+impl From<ToolCallOutput> for ToolCall {
+    fn from(output: ToolCallOutput) -> Self {
+        Self {
+            id: output.id,
+            name: output.raw_name,
+            arguments: output.raw_arguments,
+        }
+    }
+}
+
+impl From<ContentBlockOutput> for ContentBlock {
+    fn from(output: ContentBlockOutput) -> Self {
+        match output {
+            ContentBlockOutput::Text(text) => ContentBlock::Text(text),
+            ContentBlockOutput::ToolCall(tool_call_output) => {
+                ContentBlock::ToolCall(tool_call_output.into())
+            }
+        }
+    }
+}
+
 /// We use best-effort to reconstruct the raw response for JSON functions
 /// They might either return a ToolCallChunk or a TextChunk
 /// We take the string from either of these (from the last block if there are multiple)
@@ -1194,6 +1215,7 @@ mod tests {
         let inference_config = InferenceConfig {
             tool_config: Some(tool_config),
             templates: &TemplateConfig::default(),
+            embedding_models: &HashMap::new(),
             dynamic_output_schema: None,
         };
         let chunks = vec![];
@@ -1617,6 +1639,7 @@ mod tests {
         }));
         let inference_config = InferenceConfig {
             tool_config: None,
+            embedding_models: &HashMap::new(),
             templates: &TemplateConfig::default(),
             dynamic_output_schema: Some(dynamic_output_schema),
         };

@@ -1254,6 +1254,7 @@ mod tests {
         };
         let inference_config = InferenceConfig {
             tool_config: None,
+            embedding_models: &HashMap::new(),
             templates: &TemplateConfig::default(),
             dynamic_output_schema: None,
         };
@@ -1518,6 +1519,7 @@ mod tests {
         }));
         let inference_config = InferenceConfig {
             tool_config: None,
+            embedding_models: &HashMap::new(),
             templates: &TemplateConfig::default(),
             dynamic_output_schema: Some(dynamic_output_schema),
         };

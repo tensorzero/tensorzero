@@ -6,7 +6,7 @@ use std::borrow::Cow;
 use std::{collections::HashMap, path::PathBuf};
 use uuid::Uuid;
 
-use crate::endpoints::inference::InferenceParams;
+use crate::endpoints::inference::{InferenceClients, InferenceParams};
 use crate::error::Error;
 use crate::function::FunctionConfig;
 use crate::inference::types::{
@@ -23,7 +23,7 @@ use crate::{
     model::ModelConfig,
 };
 
-use super::{InferenceConfig, ModelUsedInfo, Variant};
+use super::{prepare_model_inference_request, InferenceConfig, ModelUsedInfo, Variant};
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -125,47 +125,15 @@ impl ChatCompletionConfig {
         inference_params
             .chat_completion
             .backfill_with_variant_params(self.temperature, self.max_tokens, self.seed);
-        Ok(match function {
-            FunctionConfig::Chat(_) => ModelInferenceRequest {
-                messages,
-                system,
-                tool_config: inference_config.tool_config.as_ref().map(Cow::Borrowed),
-                temperature: inference_params.chat_completion.temperature,
-                max_tokens: inference_params.chat_completion.max_tokens,
-                seed: inference_params.chat_completion.seed,
-                stream,
-                json_mode: ModelInferenceRequestJsonMode::Off,
-                function_type: FunctionType::Chat,
-                output_schema: None,
-            },
-            FunctionConfig::Json(json_config) => {
-                let tool_config = match self.json_mode {
-                    JsonMode::ImplicitTool => match &inference_config.dynamic_output_schema {
-                        Some(schema) => Some(Cow::Owned(create_dynamic_implicit_tool_config(
-                            schema.value.clone(),
-                        ))),
-                        None => Some(Cow::Borrowed(&json_config.implicit_tool_call_config)),
-                    },
-                    _ => None,
-                };
-                let output_schema = match &inference_config.dynamic_output_schema {
-                    Some(schema) => Some(&schema.value),
-                    None => Some(json_config.output_schema.value),
-                };
-                ModelInferenceRequest {
-                    messages,
-                    system,
-                    tool_config,
-                    temperature: inference_params.chat_completion.temperature,
-                    max_tokens: inference_params.chat_completion.max_tokens,
-                    seed: inference_params.chat_completion.seed,
-                    stream,
-                    json_mode: (&self.json_mode).into(),
-                    function_type: FunctionType::Json,
-                    output_schema,
-                }
-            }
-        })
+        prepare_model_inference_request(
+            messages,
+            system,
+            function,
+            inference_config,
+            stream,
+            inference_params,
+            &self.json_mode,
+        )
     }
 }
 
@@ -176,7 +144,7 @@ impl Variant for ChatCompletionConfig {
         models: &'a HashMap<String, ModelConfig>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
-        client: &'request Client,
+        clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult<'a>, Error> {
         let mut inference_params = inference_params;
@@ -190,7 +158,7 @@ impl Variant for ChatCompletionConfig {
         let model_config = models.get(&self.model).ok_or(Error::UnknownModel {
             name: self.model.clone(),
         })?;
-        let model_inference_response = model_config.infer(&request, client).await?;
+        let model_inference_response = model_config.infer(&request, clients.http_client).await?;
         let model_inference_result =
             ModelInferenceResponseWithMetadata::new(model_inference_response, &self.model);
 
@@ -217,7 +185,7 @@ impl Variant for ChatCompletionConfig {
         models: &'static HashMap<String, ModelConfig>,
         function: &'static FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
-        client: &'request Client,
+        clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<
         (
@@ -238,8 +206,9 @@ impl Variant for ChatCompletionConfig {
         let model_config = models.get(&self.model).ok_or(Error::UnknownModel {
             name: self.model.clone(),
         })?;
-        let (first_chunk, stream, raw_request, model_provider_name) =
-            model_config.infer_stream(&request, client).await?;
+        let (first_chunk, stream, raw_request, model_provider_name) = model_config
+            .infer_stream(&request, clients.http_client)
+            .await?;
         let model_used_info = ModelUsedInfo {
             model_name: &self.model,
             model_provider_name,
@@ -374,6 +343,7 @@ mod tests {
     use futures::StreamExt;
     use serde_json::{json, Value};
 
+    use crate::clickhouse::ClickHouseConnectionInfo;
     use crate::endpoints::inference::ChatCompletionInferenceParams;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::providers::common::get_temperature_tool_config;
@@ -685,6 +655,11 @@ mod tests {
     #[tokio::test]
     async fn test_infer_chat_completion() {
         let client = Client::new();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clients = InferenceClients {
+            http_client: &client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+        };
         let templates = get_test_template_config();
         let system_template_name = "system";
         let user_template_name = "greeting_with_age";
@@ -745,6 +720,7 @@ mod tests {
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
+            embedding_models: &HashMap::new(),
             dynamic_output_schema: None,
         };
         let models = HashMap::new();
@@ -754,7 +730,7 @@ mod tests {
                 &models,
                 &function_config,
                 &inference_config,
-                &client,
+                &clients,
                 inference_params,
             )
             .await
@@ -781,6 +757,7 @@ mod tests {
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
+            embedding_models: &HashMap::new(),
             dynamic_output_schema: None,
         };
         let result = chat_completion_config
@@ -789,7 +766,7 @@ mod tests {
                 &models,
                 &function_config,
                 &inference_config,
-                &client,
+                &clients,
                 inference_params,
             )
             .await
@@ -809,6 +786,7 @@ mod tests {
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
+            embedding_models: &HashMap::new(),
             dynamic_output_schema: None,
         };
         let result = chat_completion_config
@@ -817,7 +795,7 @@ mod tests {
                 &models,
                 &function_config,
                 &inference_config,
-                &client,
+                &clients,
                 inference_params,
             )
             .await
@@ -854,6 +832,7 @@ mod tests {
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
+            embedding_models: &HashMap::new(),
             dynamic_output_schema: None,
         };
         let result = chat_completion_config
@@ -862,7 +841,7 @@ mod tests {
                 &models,
                 &function_config,
                 &inference_config,
-                &client,
+                &clients,
                 inference_params.clone(),
             )
             .await
@@ -918,6 +897,7 @@ mod tests {
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: Some(weather_tool_config),
+            embedding_models: &HashMap::new(),
             dynamic_output_schema: None,
         };
         let result = chat_completion_config
@@ -926,7 +906,7 @@ mod tests {
                 &models,
                 &function_config,
                 &inference_config,
-                &client,
+                &clients,
                 inference_params.clone(),
             )
             .await
@@ -996,6 +976,7 @@ mod tests {
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
+            embedding_models: &HashMap::new(),
             dynamic_output_schema: None,
         };
         let inference_params = InferenceParams::default();
@@ -1005,7 +986,7 @@ mod tests {
                 &models,
                 &json_function_config,
                 &inference_config,
-                &client,
+                &clients,
                 inference_params.clone(),
             )
             .await
@@ -1043,6 +1024,7 @@ mod tests {
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
+            embedding_models: &HashMap::new(),
             dynamic_output_schema: None,
         };
         let chat_completion_config = ChatCompletionConfig {
@@ -1058,7 +1040,7 @@ mod tests {
                 &models,
                 &json_function_config,
                 &inference_config,
-                &client,
+                &clients,
                 inference_params.clone(),
             )
             .await
@@ -1130,6 +1112,7 @@ mod tests {
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
+            embedding_models: &HashMap::new(),
             dynamic_output_schema: Some(output_schema),
         };
         let chat_completion_config = ChatCompletionConfig {
@@ -1145,7 +1128,7 @@ mod tests {
                 &models,
                 &json_function_config,
                 &inference_config,
-                &client,
+                &clients,
                 inference_params.clone(),
             )
             .await
@@ -1211,6 +1194,7 @@ mod tests {
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
+            embedding_models: &HashMap::new(),
             dynamic_output_schema: Some(output_schema),
         };
         let chat_completion_config = ChatCompletionConfig {
@@ -1229,7 +1213,7 @@ mod tests {
                 &models,
                 &json_function_config,
                 &inference_config,
-                &client,
+                &clients,
                 inference_params.clone(),
             )
             .await
@@ -1270,6 +1254,11 @@ mod tests {
     #[tokio::test]
     async fn test_infer_chat_completion_stream() {
         let client = Client::new();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clients = InferenceClients {
+            http_client: &client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+        };
         let templates = get_test_template_config();
         let function_config = Box::leak(Box::new(FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
@@ -1320,6 +1309,7 @@ mod tests {
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
+            embedding_models: &HashMap::new(),
             dynamic_output_schema: None,
         };
         let result = chat_completion_config
@@ -1328,7 +1318,7 @@ mod tests {
                 models,
                 function_config,
                 &inference_config,
-                &client,
+                &clients,
                 inference_params.clone(),
             )
             .await;
@@ -1361,6 +1351,7 @@ mod tests {
         let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
+            embedding_models: &HashMap::new(),
             dynamic_output_schema: None,
         };
         let (first_chunk, mut stream, models_used) = chat_completion_config
@@ -1369,7 +1360,7 @@ mod tests {
                 models,
                 function_config,
                 &inference_config,
-                &client,
+                &clients,
                 inference_params.clone(),
             )
             .await
@@ -1449,6 +1440,7 @@ mod tests {
         });
         let mut inference_params = InferenceParams::default();
         let inference_config = InferenceConfig {
+            embedding_models: &HashMap::new(),
             templates: &templates,
             tool_config: None,
             dynamic_output_schema: None,
@@ -1556,6 +1548,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             dynamic_output_schema: None,
+            embedding_models: &HashMap::new(),
         };
         let mut inference_params = InferenceParams::default();
         let model_request = chat_completion_config
@@ -1639,6 +1632,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             dynamic_output_schema: Some(dynamic_output_schema),
+            embedding_models: &HashMap::new(),
         };
         let model_request = chat_completion_config
             .prepare_request(

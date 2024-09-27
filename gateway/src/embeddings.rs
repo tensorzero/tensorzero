@@ -19,6 +19,37 @@ pub struct EmbeddingModelConfig {
     pub providers: HashMap<String, EmbeddingProviderConfig>,
 }
 
+impl EmbeddingModelConfig {
+    pub async fn embed(
+        &self,
+        request: &EmbeddingRequest,
+        client: &Client,
+    ) -> Result<EmbeddingResponse, Error> {
+        let mut provider_errors: HashMap<String, Error> = HashMap::new();
+        for provider_name in &self.routing {
+            let provider_config =
+                self.providers
+                    .get(provider_name)
+                    .ok_or(Error::ProviderNotFound {
+                        provider_name: provider_name.clone(),
+                    })?;
+            let response = provider_config.embed(request, client).await;
+            match response {
+                Ok(response) => {
+                    for error in provider_errors.values() {
+                        error.log();
+                    }
+                    return Ok(response);
+                }
+                Err(error) => {
+                    provider_errors.insert(provider_name.to_string(), error);
+                }
+            }
+        }
+        Err(Error::ModelProvidersExhausted { provider_errors })
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct EmbeddingRequest {
     pub input: String,
@@ -96,5 +127,13 @@ impl EmbeddingResponse {
             usage,
             latency,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[tokio::test]
+    async fn test_embedding_fallbacks() {
+        todo!()
     }
 }

@@ -80,6 +80,10 @@ struct InferenceMetadata<'a> {
     pub raw_request: String,
 }
 
+pub struct InferenceClients<'a> {
+    pub http_client: &'a reqwest::Client,
+    pub clickhouse_connection_info: &'a ClickHouseConnectionInfo,
+}
 /// A handler for the inference endpoint
 #[debug_handler(state = AppStateData)]
 pub async fn inference_handler(
@@ -143,10 +147,18 @@ pub async fn inference_handler(
 
     // Keep track of which variants failed
     let mut variant_errors = std::collections::HashMap::new();
-    let inference_config = InferenceConfig {
+    let mut inference_config = InferenceConfig {
+        function_name: params.function_name.clone(),
+        variant_name: "".to_string(),
         templates: &config.templates,
         tool_config,
+        embedding_models: &config.embedding_models,
         dynamic_output_schema: params.output_schema.map(DynamicJSONSchema::new),
+    };
+
+    let inference_clients = InferenceClients {
+        http_client: &http_client,
+        clickhouse_connection_info: &clickhouse_connection_info,
     };
     // Keep sampling variants until one succeeds
     while !candidate_variant_names.is_empty() {
@@ -158,7 +170,7 @@ pub async fn inference_handler(
         )?;
         // Will be edited by the variant as part of making the request so we must clone here
         let variant_inference_params = params.params.clone();
-
+        inference_config.variant_name = variant_name.to_string();
         if stream {
             let result = variant
                 .infer_stream(
@@ -166,7 +178,7 @@ pub async fn inference_handler(
                     &config.models,
                     function,
                     &inference_config,
-                    &http_client,
+                    &inference_clients,
                     variant_inference_params,
                 )
                 .await;
@@ -218,7 +230,7 @@ pub async fn inference_handler(
                     &config.models,
                     function,
                     &inference_config,
-                    &http_client,
+                    &inference_clients,
                     variant_inference_params,
                 )
                 .await;
