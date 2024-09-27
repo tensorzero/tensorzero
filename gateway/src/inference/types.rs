@@ -705,7 +705,7 @@ impl JsonInferenceDatabaseInsert {
 }
 
 // Function to get the current timestamp in seconds
-fn current_timestamp() -> u64 {
+pub fn current_timestamp() -> u64 {
     #[allow(clippy::expect_used)]
     SystemTime::now()
         .duration_since(UNIX_EPOCH)

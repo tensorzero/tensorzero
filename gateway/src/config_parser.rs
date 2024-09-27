@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use crate::embeddings::EmbeddingModelConfig;
 use crate::error::Error;
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::jsonschema_util::JSONSchemaFromPath;
@@ -17,9 +18,10 @@ use crate::variant::{Variant, VariantConfig};
 pub struct Config<'c> {
     pub gateway: GatewayConfig,
     pub models: HashMap<String, ModelConfig>, // model name => model config
-    pub functions: HashMap<String, FunctionConfig>, // function name => function config
-    pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
-    pub tools: HashMap<String, StaticToolConfig>, // tool name => tool config
+    pub embedding_models: HashMap<String, EmbeddingModelConfig>, // embedding model name => embedding model config
+    pub functions: HashMap<String, FunctionConfig>,              // function name => function config
+    pub metrics: HashMap<String, MetricConfig>,                  // metric name => metric config
+    pub tools: HashMap<String, StaticToolConfig>,                // tool name => tool config
     pub templates: TemplateConfig<'c>,
 }
 
@@ -108,6 +110,7 @@ impl<'c> Config<'c> {
         let mut config = Config {
             gateway,
             models: config.models,
+            embedding_models: config.embedding_models,
             functions,
             metrics: config.metrics,
             tools,
@@ -251,6 +254,8 @@ impl<'c> Config<'c> {
 struct UninitializedConfig {
     pub gateway: Option<GatewayConfig>,
     pub models: HashMap<String, ModelConfig>, // model name => model config
+    #[serde(default)]
+    pub embedding_models: HashMap<String, EmbeddingModelConfig>, // embedding model name => embedding model config
     pub functions: HashMap<String, UninitializedFunctionConfig>, // function name => function config
     #[serde(default)]
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
@@ -428,7 +433,7 @@ mod tests {
 
     use std::env;
 
-    use crate::variant::JsonMode;
+    use crate::{embeddings::EmbeddingProviderConfig, variant::JsonMode};
 
     /// Ensure that the sample valid config can be parsed without panicking
     #[test]
@@ -523,6 +528,21 @@ mod tests {
                 }
             }
             _ => panic!("Expected a JSON function"),
+        }
+
+        assert_eq!(config.embedding_models.len(), 1);
+
+        let embedding_model = config
+            .embedding_models
+            .get("text-embedding-3-small")
+            .unwrap();
+        assert_eq!(embedding_model.routing, vec!["openai"]);
+        assert_eq!(embedding_model.providers.len(), 1);
+        let provider = embedding_model.providers.get("openai").unwrap();
+        match provider {
+            EmbeddingProviderConfig::OpenAI(openai_config) => {
+                assert_eq!(openai_config.model_name, "text-embedding-3-small");
+            }
         }
     }
 
@@ -1254,6 +1274,17 @@ mod tests {
         [models.claude-3-haiku-20240307.providers.anthropic]
         type = "anthropic"
         model_name = "claude-3-haiku-20240307"
+
+        # ┌────────────────────────────────────────────────────────────────────────────┐
+        # │                              EMBEDDING MODELS                              │
+        # └────────────────────────────────────────────────────────────────────────────┘
+
+        [embedding_models.text-embedding-3-small]
+        routing = ["openai"]
+
+        [embedding_models.text-embedding-3-small.providers.openai]
+        type = "openai"
+        model_name = "text-embedding-3-small"
 
         # ┌────────────────────────────────────────────────────────────────────────────┐
         # │                                 FUNCTIONS                                  │

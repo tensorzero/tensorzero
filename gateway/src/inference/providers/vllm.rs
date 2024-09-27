@@ -68,13 +68,12 @@ impl InferenceProvider for VLLMProvider {
             .try_into()
             .map_err(map_openai_to_vllm_error)?)
         } else {
-            handle_openai_error(
+            Err(map_openai_to_vllm_error(handle_openai_error(
                 res.status(),
                 &res.text().await.map_err(|e| Error::VLLMServer {
                     message: format!("Error parsing error response: {e}"),
                 })?,
-            )
-            .map_err(map_openai_to_vllm_error)
+            )))
         }
     }
 
