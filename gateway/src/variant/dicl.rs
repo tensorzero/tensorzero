@@ -56,7 +56,6 @@ impl Variant for DiclConfig {
             ),
         })?;
 
-        // TODO (Viraj): get the embedding response into observability
         let (relevant_examples, embedding_response) = self
             .retrieve_relevant_examples(
                 serialized_input,
@@ -117,7 +116,6 @@ impl Variant for DiclConfig {
             ),
         })?;
 
-        // TODO (Viraj): get the embedding response into observability
         let (relevant_examples, embedding_response) = self
             .retrieve_relevant_examples(
                 serialized_input,
