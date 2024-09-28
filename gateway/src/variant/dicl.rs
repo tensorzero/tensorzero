@@ -411,3 +411,158 @@ impl<'de> Deserialize<'de> for DiclConfig {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::inference::types::*;
+    use crate::tool::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_prepare_message() {
+        // Create an instance of DiclConfig (assuming default implementation is available)
+        let dicl_config = DiclConfig::default();
+
+        // ---------- Test with ChatExample ----------
+
+        // Mock Input data
+        let input_data = Input {
+            system: Some(json!({"type": "system", "content": "System message"})),
+            messages: vec![
+                InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text {
+                        value: json!("Hello, assistant!"),
+                    }],
+                },
+                InputMessage {
+                    role: Role::Assistant,
+                    content: vec![InputMessageContent::Text {
+                        value: json!("Hello, user!"),
+                    }],
+                },
+            ],
+        };
+
+        // Mock Output data for ChatExample
+        let chat_output = vec![
+            ContentBlockOutput::Text(Text {
+                text: "This is a test response.".to_string(),
+            }),
+            ContentBlockOutput::ToolCall(ToolCallOutput {
+                id: "tool_call_1".to_string(),
+                raw_name: "search_tool".to_string(),
+                raw_arguments: "{\"query\": \"rust programming\"}".to_string(),
+                name: Some("search_tool".to_string()),
+                arguments: Some(json!({"query": "rust programming"})),
+            }),
+        ];
+
+        let chat_example = Example::Chat(ChatExample {
+            input: input_data.clone(),
+            output: chat_output.clone(),
+        });
+
+        let chat_messages = dicl_config.prepare_message(&chat_example).unwrap();
+
+        assert_eq!(chat_messages.len(), 2);
+
+        // First message should be from User with serialized input
+        let serialized_input = serde_json::to_string(&input_data).unwrap();
+        assert_eq!(chat_messages[0].role, Role::User);
+        assert_eq!(
+            chat_messages[0].content,
+            vec![ContentBlock::Text(Text {
+                text: serialized_input.clone()
+            })]
+        );
+
+        // Second message should be from Assistant with content blocks
+        let expected_content: Vec<ContentBlock> =
+            chat_output.into_iter().map(|x| x.into()).collect();
+
+        assert_eq!(chat_messages[1].role, Role::Assistant);
+        assert_eq!(chat_messages[1].content, expected_content);
+
+        // ---------- Test with JsonExample ----------
+
+        // Mock Output data for JsonExample
+        let json_output = JsonInferenceOutput {
+            raw: "{\"result\": \"success\"}".to_string(),
+            parsed: Some(json!({"result": "success"})),
+        };
+
+        let json_example = Example::Json(JsonExample {
+            input: input_data.clone(),
+            output: json_output.clone(),
+        });
+
+        let json_messages = dicl_config.prepare_message(&json_example).unwrap();
+
+        // Assertions for JsonExample
+        assert_eq!(json_messages.len(), 2);
+
+        // First message should be from User with serialized input
+        assert_eq!(json_messages[0].role, Role::User);
+        assert_eq!(
+            json_messages[0].content,
+            vec![ContentBlock::Text(Text {
+                text: serialized_input
+            })]
+        );
+
+        // Second message should be from Assistant with raw JSON output as text
+        let expected_content = vec![ContentBlock::Text(Text {
+            text: json_output.raw.clone(),
+        })];
+
+        assert_eq!(json_messages[1].role, Role::Assistant);
+        assert_eq!(json_messages[1].content, expected_content);
+    }
+
+    #[test]
+    fn test_prepare_input_message() {
+        // Create an instance of DiclConfig (assuming default implementation is available)
+        let dicl_config = DiclConfig::default();
+
+        // Mock Input data
+        let input_data = Input {
+            system: Some(json!({"type": "system", "content": "System message"})),
+            messages: vec![
+                InputMessage {
+                    role: Role::User,
+                    content: vec![
+                        InputMessageContent::Text {
+                            value: json!("Hello, assistant!"),
+                        },
+                        InputMessageContent::ToolCall(ToolCall {
+                            id: "tool_call_1".to_string(),
+                            name: "search_tool".to_string(),
+                            arguments: "{\"query\": \"rust programming\"}".to_string(),
+                        }),
+                    ],
+                },
+                InputMessage {
+                    role: Role::Assistant,
+                    content: vec![InputMessageContent::Text {
+                        value: json!("Here are the search results for rust programming."),
+                    }],
+                },
+            ],
+        };
+
+        // Call the prepare_input_message function
+        let request_message = dicl_config.prepare_input_message(&input_data).unwrap();
+
+        // The role should be User
+        assert_eq!(request_message.role, Role::User);
+
+        // The content should contain the serialized Input as a Text ContentBlock
+        let expected_serialized_input = serde_json::to_string(&input_data).unwrap();
+        let expected_content = vec![ContentBlock::Text(Text {
+            text: expected_serialized_input.clone(),
+        })];
+        assert_eq!(request_message.content, expected_content);
+    }
+}
