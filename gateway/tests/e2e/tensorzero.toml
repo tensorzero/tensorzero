@@ -208,6 +208,14 @@ routing = ["best_of_n_evaluator"]
 type = "dummy"
 model_name = "best_of_n_0"
 
+[embedding_models.text-embedding-3-small]
+routing = ["openai"]
+
+[embedding_models.text-embedding-3-small.providers.openai]
+type = "openai"
+model_name = "text-embedding-3-small"
+
+
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
@@ -312,6 +320,20 @@ max_tokens = 100
 type = "chat_completion"
 model = "microsoft/Phi-3.5-mini-instruct"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.dicl]
+type = "experimental_dynamic_in_context_learning"
+model = "gpt-4o-mini-2024-07-18"
+embedding_model = "text-embedding-3-small"
+k = 3
+max_tokens = 100
+
+[functions.basic_test.variants.empty_dicl]
+type = "experimental_dynamic_in_context_learning"
+model = "gpt-4o-mini-2024-07-18"
+embedding_model = "text-embedding-3-small"
+k = 3
 max_tokens = 100
 
 [functions.model_fallback_test]

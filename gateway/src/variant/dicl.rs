@@ -205,25 +205,34 @@ impl Variant for DiclConfig {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 struct ChatExample {
     input: Input,
     output: Vec<ContentBlockOutput>,
-    // distance: f32,
+    // distance: Option<f32>, // Include if needed
 }
 
-#[derive(Debug, Deserialize)]
+// Start of Selection
+#[derive(Debug, Deserialize, PartialEq)]
 struct JsonExample {
     input: Input,
     output: JsonInferenceOutput,
-    // distance: f32,
+    // distance: Option<f32>, // Include if needed
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 #[serde(untagged)]
 enum Example {
     Chat(ChatExample),
     Json(JsonExample),
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct RawExample {
+    input: String,
+    output: String,
+    // Include `distance` if you need it later
+    // distance: f32,
 }
 
 impl DiclConfig {
@@ -260,21 +269,35 @@ impl DiclConfig {
         );
         let query = format!(
             r#"SELECT input, output, cosineDistance(embedding, {}) as distance
-               FROM DynamicInContextLearningExample
-               WHERE function_name='{}' AND variant_name='{}'
-               ORDER BY distance ASC
-               LIMIT {}
-               FORMAT JSONEachRow"#,
+                   FROM DynamicInContextLearningExample
+                   WHERE function_name='{}' AND variant_name='{}'
+                   ORDER BY distance ASC
+                   LIMIT {}
+                   FORMAT JSONEachRow"#,
             formatted_embedding, function_name, variant_name, self.k
         );
         let result = clients.clickhouse_connection_info.run_query(query).await?;
-        let examples: Vec<Example> = result
+
+        // Parse each line into RawExample
+        let raw_examples: Vec<RawExample> = result
             .lines()
-            .map(serde_json::from_str::<Example>)
+            .map(serde_json::from_str::<RawExample>)
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| Error::Serialization {
-                message: format!("Failed to parse examples: {}", e),
+                message: format!("Failed to parse raw examples: {}", e),
             })?;
+
+        // Convert RawExamples into Examples
+        let examples = parse_raw_examples(raw_examples)?;
+
+        if examples.len() != self.k as usize {
+            tracing::warn!(
+                "Dynamic in-context learning retrieved {} examples, expected {}",
+                examples.len(),
+                self.k
+            );
+        }
+
         Ok((examples, embedding_response_with_metadata))
     }
 
@@ -365,6 +388,39 @@ impl DiclConfig {
             &self.json_mode,
         )
     }
+}
+
+// Since the `input` and `output` fields in the ClickHouse table are of type String,
+// we need to parse them into the appropriate types before using them and cannot rely
+// on Deserialize to do it for us.
+fn parse_raw_examples(raw_examples: Vec<RawExample>) -> Result<Vec<Example>, Error> {
+    let mut examples = Vec::new();
+    for raw_example in raw_examples {
+        // Parse the `input` string into `Input`
+        let input: Input =
+            serde_json::from_str(&raw_example.input).map_err(|e| Error::Serialization {
+                message: format!("Failed to parse `input`: {}", e),
+            })?;
+
+        // Try parsing `output` as `Vec<ContentBlockOutput>` (for ChatExample)
+        if let Ok(output) = serde_json::from_str::<Vec<ContentBlockOutput>>(&raw_example.output) {
+            examples.push(Example::Chat(ChatExample { input, output }));
+            continue;
+        }
+
+        // Try parsing `output` as `JsonInferenceOutput` (for JsonExample)
+        if let Ok(output) = serde_json::from_str::<JsonInferenceOutput>(&raw_example.output) {
+            examples.push(Example::Json(JsonExample { input, output }));
+            continue;
+        }
+
+        // If neither parsing succeeded, return an error
+        return Err(Error::Serialization {
+            message: "Failed to parse `output` into known formats".to_string(),
+        });
+    }
+
+    Ok(examples)
 }
 
 impl<'de> Deserialize<'de> for DiclConfig {
@@ -564,5 +620,122 @@ mod tests {
             text: expected_serialized_input.clone(),
         })];
         assert_eq!(request_message.content, expected_content);
+    }
+
+    #[test]
+    fn test_parse_raw_examples() {
+        // Define sample raw examples with serialized Input and Output
+        let raw_examples = vec![
+            RawExample {
+                input: serde_json::to_string(&Input {
+                    system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                    messages: vec![InputMessage {
+                        role: Role::User,
+                        content: vec![InputMessageContent::Text {
+                            value: json!("What is the boiling point of water?"),
+                        }],
+                    }],
+                })
+                .unwrap(),
+                output: serde_json::to_string(&vec![ContentBlockOutput::Text(Text {
+                    text: "100 degrees Celsius".to_string(),
+                })])
+                .unwrap(),
+            },
+            RawExample {
+                input: serde_json::to_string(&Input {
+                    system: Some(json!({"assistant_name": "Pinocchio"})),
+                    messages: vec![InputMessage {
+                        role: Role::User,
+                        content: vec![InputMessageContent::Text {
+                            value: json!("What is the capital city of Japan?"),
+                        }],
+                    }],
+                })
+                .unwrap(),
+                output: serde_json::to_string(&vec![ContentBlockOutput::Text(Text {
+                    text: "Osaka (nose grows 4 inches)".to_string(),
+                })])
+                .unwrap(),
+            },
+        ];
+
+        // Parse the raw examples
+        let parsed_examples =
+            parse_raw_examples(raw_examples.clone()).expect("Failed to parse raw examples");
+
+        // Define the expected examples
+        let expected_examples = vec![
+            Example::Chat(ChatExample {
+                input: serde_json::from_str(&raw_examples[0].input).unwrap(),
+                output: serde_json::from_str(&raw_examples[0].output).unwrap(),
+            }),
+            Example::Chat(ChatExample {
+                input: serde_json::from_str(&raw_examples[1].input).unwrap(),
+                output: serde_json::from_str(&raw_examples[1].output).unwrap(),
+            }),
+        ];
+
+        // Assert that the parsed examples match the expected examples
+        assert_eq!(parsed_examples, expected_examples);
+
+        // Test that we can parse a JSON example too
+        let json_raw_examples = vec![
+            RawExample {
+                input: serde_json::to_string(&Input {
+                    system: Some(json!({"assistant_name": "JsonTester"})),
+                    messages: vec![InputMessage {
+                        role: Role::User,
+                        content: vec![InputMessageContent::Text {
+                            value: json!("Provide a sample JSON response."),
+                        }],
+                    }],
+                })
+                .unwrap(),
+                output: serde_json::to_string(&JsonInferenceOutput {
+                    raw: "{\"status\": \"success\", \"data\": {\"id\": 1}}".to_string(),
+                    parsed: Some(json!({
+                        "status": "success",
+                        "data": {
+                            "id": 1
+                        }
+                    })),
+                })
+                .unwrap(),
+            },
+            RawExample {
+                input: serde_json::to_string(&Input {
+                    system: Some(json!({"assistant_name": "JsonTester"})),
+                    messages: vec![InputMessage {
+                        role: Role::User,
+                        content: vec![InputMessageContent::Text {
+                            value: json!("Provide another JSON response."),
+                        }],
+                    }],
+                })
+                .unwrap(),
+                output: serde_json::to_string(&JsonInferenceOutput {
+                    raw: "{\"result\": [1, 2, 3], \"status\": \"ok\"}".to_string(),
+                    parsed: Some(json!({
+                        "result": [1, 2, 3],
+                        "status": "ok"
+                    })),
+                })
+                .unwrap(),
+            },
+        ];
+
+        // Parse the JSON raw examples
+        let parsed_json_examples = parse_raw_examples(json_raw_examples.clone())
+            .expect("Failed to parse JSON raw examples");
+
+        // Assert that all parsed JSON examples have 'parsed' as Some
+        for example in parsed_json_examples {
+            if let Example::Json(json_example) = example {
+                assert!(json_example.output.parsed.is_some(), "Parsed field is None");
+            } else {
+                panic!("Expected JsonExample");
+            }
+        }
     }
 }

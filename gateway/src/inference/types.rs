@@ -24,7 +24,7 @@ use crate::{error::Error, variant::JsonMode};
 /// Most of them are defined below.
 
 /// A request is made that contains an Input
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Input {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -35,14 +35,14 @@ pub struct Input {
 
 /// InputMessage and Role are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct InputMessage {
     pub role: Role,
     pub content: Vec<InputMessageContent>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InputMessageContent {
     Text { value: Value },
@@ -230,7 +230,7 @@ pub struct JsonInferenceResult<'a> {
     pub inference_params: InferenceParams,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct JsonInferenceOutput {
     pub raw: String,
     pub parsed: Option<Value>,
@@ -346,7 +346,7 @@ impl From<String> for InputMessageContent {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "e2e_tests"))]
 impl From<String> for ContentBlockOutput {
     fn from(text: String) -> Self {
         ContentBlockOutput::Text(Text { text })
