@@ -60,14 +60,14 @@ impl Variant for DiclConfig {
         let (relevant_examples, embedding_response) = self
             .retrieve_relevant_examples(
                 serialized_input,
-                &models.embedding_models,
+                models.embedding_models,
                 clients,
                 &inference_config.function_name,
                 &inference_config.variant_name,
             )
             .await?;
         let model_inference_request = self.prepare_request(
-            &input,
+            input,
             &relevant_examples,
             function,
             inference_config,
@@ -121,14 +121,14 @@ impl Variant for DiclConfig {
         let (relevant_examples, embedding_response) = self
             .retrieve_relevant_examples(
                 serialized_input,
-                &models.embedding_models,
+                models.embedding_models,
                 clients,
                 &inference_config.function_name,
                 &inference_config.variant_name,
             )
             .await?;
         let request = self.prepare_request(
-            &input,
+            input,
             &relevant_examples,
             function,
             inference_config,
@@ -247,7 +247,7 @@ impl DiclConfig {
             input: serialized_input.to_string(),
         };
         let embedding_reponse = embedding_model
-            .embed(&embedding_request, &clients.http_client)
+            .embed(&embedding_request, clients.http_client)
             .await?;
         let embedding_response_with_metadata =
             EmbeddingResponseWithMetadata::new(embedding_reponse, &self.embedding_model);
@@ -272,7 +272,7 @@ impl DiclConfig {
         let result = clients.clickhouse_connection_info.run_query(query).await?;
         let examples: Vec<Example> = result
             .lines()
-            .map(|line| serde_json::from_str::<Example>(line))
+            .map(serde_json::from_str::<Example>)
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| Error::Serialization {
                 message: format!("Failed to parse examples: {}", e),

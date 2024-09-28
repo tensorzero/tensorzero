@@ -549,6 +549,7 @@ mod tests {
             EmbeddingProviderConfig::OpenAI(openai_config) => {
                 assert_eq!(openai_config.model_name, "text-embedding-3-small");
             }
+            _ => panic!("Expected an OpenAI provider"),
         }
     }
 

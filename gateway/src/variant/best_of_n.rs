@@ -74,11 +74,11 @@ impl Variant for BestOfNConfig {
         _inference_params: InferenceParams,
     ) -> Result<InferenceResult<'a>, Error> {
         let candidate_inference_results = self
-            .infer_candidates(input, &models, function, inference_config, clients)
+            .infer_candidates(input, models, function, inference_config, clients)
             .await?;
         self.select_best_candidate(
             input,
-            &models.models,
+            models.models,
             inference_config,
             clients.http_client,
             candidate_inference_results,
@@ -193,7 +193,7 @@ impl BestOfNConfig {
                     Duration::from_secs_f64(self.timeout_s),
                     candidate_variant.infer(
                         input,
-                        &models,
+                        models,
                         function,
                         inference_config,
                         clients,

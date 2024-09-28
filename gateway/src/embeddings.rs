@@ -1,17 +1,20 @@
 use std::{collections::HashMap, future::Future};
 
-use reqwest::Client;
-use serde::Deserialize;
-use uuid::Uuid;
-
 use crate::{
     error::Error,
     inference::{
-        providers::{openai::OpenAIProvider, provider_trait::HasCredentials},
+        providers::openai::OpenAIProvider,
+        providers::provider_trait::HasCredentials,
         types::{current_timestamp, Latency, ModelInferenceResponseWithMetadata, Usage},
     },
     model::ProviderConfig,
 };
+use reqwest::Client;
+use serde::Deserialize;
+use uuid::Uuid;
+
+#[cfg(any(test, feature = "e2e_tests"))]
+use crate::inference::providers::dummy::DummyProvider;
 
 #[derive(Debug, Deserialize)]
 pub struct EmbeddingModelConfig {
@@ -166,6 +169,8 @@ pub trait EmbeddingProvider: HasCredentials {
 #[derive(Debug)]
 pub enum EmbeddingProviderConfig {
     OpenAI(OpenAIProvider),
+    #[cfg(any(test, feature = "e2e_tests"))]
+    Dummy(DummyProvider),
 }
 
 impl<'de> Deserialize<'de> for EmbeddingProviderConfig {
@@ -191,18 +196,22 @@ impl HasCredentials for EmbeddingProviderConfig {
     fn has_credentials(&self) -> bool {
         match self {
             EmbeddingProviderConfig::OpenAI(provider) => provider.has_credentials(),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            EmbeddingProviderConfig::Dummy(provider) => provider.has_credentials(),
         }
     }
 }
 
 impl EmbeddingProvider for EmbeddingProviderConfig {
-    fn embed(
+    async fn embed(
         &self,
         request: &EmbeddingRequest,
         client: &Client,
-    ) -> impl Future<Output = Result<EmbeddingProviderResponse, Error>> + Send {
+    ) -> Result<EmbeddingProviderResponse, Error> {
         match self {
-            EmbeddingProviderConfig::OpenAI(provider) => provider.embed(request, client),
+            EmbeddingProviderConfig::OpenAI(provider) => provider.embed(request, client).await,
+            #[cfg(any(test, feature = "e2e_tests"))]
+            EmbeddingProviderConfig::Dummy(provider) => provider.embed(request, client).await,
         }
     }
 }
@@ -229,9 +238,32 @@ impl EmbeddingProviderResponse {
 
 #[cfg(test)]
 mod tests {
-    // TODO(Viraj): this
-    // #[tokio::test]
-    // async fn test_embedding_fallbacks() {
-    //     todo!()
-    // }
+    use tracing_test::traced_test;
+
+    use super::*;
+
+    #[traced_test]
+    #[tokio::test]
+    async fn test_embedding_fallbacks() {
+        let bad_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
+            model_name: "error".to_string(),
+        });
+        let good_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
+            model_name: "good".to_string(),
+        });
+        let fallback_embedding_model = EmbeddingModelConfig {
+            routing: vec!["error".to_string(), "good".to_string()],
+            providers: HashMap::from([
+                ("error".to_string(), bad_provider),
+                ("good".to_string(), good_provider),
+            ]),
+        };
+        let request = EmbeddingRequest {
+            input: "Hello, world!".to_string(),
+        };
+        let client = Client::new();
+        let response = fallback_embedding_model.embed(&request, &client).await;
+        assert!(response.is_ok());
+        assert!(logs_contain("Error sending request to Dummy provider."))
+    }
 }

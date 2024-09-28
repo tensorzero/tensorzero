@@ -7,10 +7,12 @@ use uuid::Uuid;
 
 use super::provider_trait::{HasCredentials, InferenceProvider};
 
+use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
 use crate::error::Error;
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, ProviderInferenceResponseStream, Usage,
+    current_timestamp, ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest,
+    ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
+    Usage,
 };
 use crate::tool::{ToolCall, ToolCallChunk};
 
@@ -246,5 +248,37 @@ impl InferenceProvider for DummyProvider {
 impl HasCredentials for DummyProvider {
     fn has_credentials(&self) -> bool {
         self.model_name != "bad_credentials"
+    }
+}
+
+impl EmbeddingProvider for DummyProvider {
+    async fn embed(
+        &self,
+        _request: &EmbeddingRequest,
+        _http_client: &reqwest::Client,
+    ) -> Result<EmbeddingProviderResponse, Error> {
+        if self.model_name == "error" {
+            return Err(Error::InferenceClient {
+                message: "Error sending request to Dummy provider.".to_string(),
+            });
+        }
+        let id = Uuid::now_v7();
+        let created = current_timestamp();
+        let embedding = vec![0.0; 1536];
+        let raw_request = DUMMY_RAW_REQUEST.to_string();
+        let raw_response = DUMMY_RAW_REQUEST.to_string();
+        let usage = DUMMY_INFER_USAGE.clone();
+        let latency = Latency::NonStreaming {
+            response_time: Duration::from_millis(100),
+        };
+        Ok(EmbeddingProviderResponse {
+            id,
+            embedding,
+            created,
+            raw_request,
+            raw_response,
+            usage,
+            latency,
+        })
     }
 }
