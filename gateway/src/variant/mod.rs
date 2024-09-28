@@ -395,8 +395,11 @@ mod tests {
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::providers::dummy::{
         DummyProvider, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_USAGE, DUMMY_JSON_RESPONSE_RAW,
+        DUMMY_STREAMING_RESPONSE,
     };
-    use crate::inference::types::{ModelInferenceRequestJsonMode, RequestMessage, Role};
+    use crate::inference::types::{
+        ContentBlockChunk, ModelInferenceRequestJsonMode, RequestMessage, Role,
+    };
     use crate::jsonschema_util::JSONSchemaFromPath;
     use crate::minijinja_util::tests::get_test_template_config;
     use crate::model::ProviderConfig;
@@ -803,5 +806,123 @@ mod tests {
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(matches!(error, Error::ModelProvidersExhausted { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_infer_model_request_stream() {
+        // Set up the HTTP client and ClickHouse connection info
+        let client = reqwest::Client::new();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clients = InferenceClients {
+            http_client: &client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+        };
+
+        // Create a dummy function config (chat completion)
+        let function_config = Box::leak(Box::new(FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            tools: vec![],
+            tool_choice: crate::tool::ToolChoice::Auto,
+            parallel_tool_calls: false,
+        })));
+
+        // Create an input message
+        let messages = vec![RequestMessage {
+            role: Role::User,
+            content: vec!["Hello, how are you?".to_string().into()],
+        }];
+        let system = Some("You are a helpful assistant.".to_string());
+
+        // Create a dummy model config with a provider
+        let dummy_provider_config = ProviderConfig::Dummy(DummyProvider {
+            model_name: "good".to_string(),
+        });
+
+        let model_config = Box::leak(Box::new(ModelConfig {
+            routing: vec!["good_provider".to_string()],
+            providers: HashMap::from([("good_provider".to_string(), dummy_provider_config)]),
+        }));
+
+        // Prepare the model inference request
+        let request = ModelInferenceRequest {
+            messages,
+            system,
+            temperature: Some(0.7),
+            max_tokens: Some(50),
+            stream: true,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            output_schema: None,
+            seed: None,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+        };
+
+        // Initialize inference parameters
+        let inference_params = InferenceParams::default();
+
+        // Call infer_model_request_stream
+        let result = infer_model_request_stream(
+            request,
+            "good_model",
+            model_config,
+            function_config,
+            &clients,
+            inference_params.clone(),
+        )
+        .await;
+
+        // Assert that the result is OK
+        assert!(result.is_ok());
+
+        // Unwrap the result
+        let (first_chunk, mut stream, model_used_info) = result.unwrap();
+
+        // Check the first chunk
+        if let InferenceResultChunk::Chat(chat_chunk) = first_chunk {
+            assert_eq!(chat_chunk.content.len(), 1);
+            if let ContentBlockChunk::Text(text_chunk) = &chat_chunk.content[0] {
+                assert_eq!(text_chunk.text, DUMMY_STREAMING_RESPONSE[0]);
+            } else {
+                panic!("Expected text chunk in first inference result chunk.");
+            }
+        } else {
+            panic!("Expected chat inference result chunk.");
+        }
+
+        // Verify the model used information
+        assert_eq!(model_used_info.model_name, "good_model");
+        assert_eq!(model_used_info.model_provider_name, "good_provider");
+        assert_eq!(model_used_info.inference_params, inference_params);
+
+        // Iterate over the stream and collect the remaining chunks
+        let mut received_text = String::new();
+        while let Some(chunk_result) = stream.next().await {
+            let chunk = chunk_result.expect("Stream chunk should be OK.");
+
+            if let InferenceResultChunk::Chat(chat_chunk) = chunk {
+                for content_block in chat_chunk.content {
+                    if let ContentBlockChunk::Text(text_chunk) = content_block {
+                        received_text.push_str(&text_chunk.text);
+                    }
+                }
+            } else if let Some(usage) = chunk.usage() {
+                // Verify the usage information
+                assert_eq!(usage.input_tokens, 10);
+                assert_eq!(usage.output_tokens, DUMMY_STREAMING_RESPONSE.len() as u32);
+            } else {
+                panic!("Unexpected inference result chunk.");
+            }
+        }
+
+        // Combine the first chunk's text with the received text
+        let mut full_response = DUMMY_STREAMING_RESPONSE[0].to_string();
+        full_response.push_str(&received_text);
+
+        // Verify the full response
+        let expected_response: String = DUMMY_STREAMING_RESPONSE.iter().cloned().collect();
+        assert_eq!(full_response, expected_response);
     }
 }
