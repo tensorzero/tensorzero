@@ -266,4 +266,38 @@ mod tests {
         assert!(response.is_ok());
         assert!(logs_contain("Error sending request to Dummy provider."))
     }
+
+    #[test]
+    fn test_validate() {
+        let bad_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
+            model_name: "error".to_string(),
+        });
+        let good_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
+            model_name: "good".to_string(),
+        });
+        let fallback_embedding_model = EmbeddingModelConfig {
+            routing: vec!["error".to_string(), "good".to_string()],
+            providers: HashMap::from([
+                ("error".to_string(), bad_provider),
+                ("good".to_string(), good_provider),
+            ]),
+        };
+        assert!(fallback_embedding_model.validate().is_ok());
+
+        // If at least one provider has bad credentials, the validation should fail
+        let bad_credential_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
+            model_name: "bad_credentials".to_string(),
+        });
+        let good_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
+            model_name: "good".to_string(),
+        });
+        let bad_credential_embedding_model = EmbeddingModelConfig {
+            routing: vec!["bad_credentials".to_string(), "good".to_string()],
+            providers: HashMap::from([
+                ("bad_credentials".to_string(), bad_credential_provider),
+                ("good".to_string(), good_provider),
+            ]),
+        };
+        assert!(bad_credential_embedding_model.validate().is_err());
+    }
 }
