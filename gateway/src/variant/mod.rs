@@ -381,3 +381,213 @@ async fn infer_model_request_stream<'request>(
         stream.map(move |chunk| chunk.map(|chunk| InferenceResultChunk::new(chunk, function)));
     Ok((first_chunk, Box::pin(stream), model_used_info))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::endpoints::inference::ChatCompletionInferenceParams;
+    use crate::function::{FunctionConfigChat, FunctionConfigJson};
+    use crate::inference::types::{ModelInferenceRequestJsonMode, RequestMessage, Role};
+    use crate::jsonschema_util::JSONSchemaFromPath;
+    use crate::minijinja_util::tests::get_test_template_config;
+    use crate::tool::{ToolCallConfig, ToolChoice};
+    use serde_json::json;
+    use std::collections::HashMap;
+
+    #[tokio::test]
+    async fn test_prepare_model_inference_request() {
+        // Setup common variables
+        let templates = get_test_template_config();
+        let stream = false;
+
+        // Define a dummy tool config for testing
+        let tool_config = ToolCallConfig {
+            tools_available: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: false,
+        };
+
+        // Create a sample inference config
+        let inference_config = InferenceConfig {
+            templates: &templates,
+            tool_config: Some(tool_config.clone()),
+            function_name: "test_function".to_string(),
+            variant_name: "test_variant".to_string(),
+            dynamic_output_schema: None,
+        };
+
+        // Define common inference parameters
+        let inference_params = InferenceParams {
+            chat_completion: ChatCompletionInferenceParams {
+                temperature: Some(0.7),
+                max_tokens: Some(50),
+                seed: Some(42),
+            },
+        };
+
+        // Prepare sample messages and system prompt
+        let messages = vec![
+            RequestMessage {
+                role: Role::User,
+                content: vec!["Hello, how are you?".to_string().into()],
+            },
+            RequestMessage {
+                role: Role::Assistant,
+                content: vec!["I'm fine, thank you!".to_string().into()],
+            },
+        ];
+        let system = Some("You are a helpful assistant.".to_string());
+
+        // Test case 1: FunctionConfig::Chat with JsonMode::Off
+        let function_config_chat = FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: false,
+        });
+        let json_mode = JsonMode::Off;
+
+        let result = prepare_model_inference_request(
+            messages.clone(),
+            system.clone(),
+            &function_config_chat,
+            &inference_config,
+            stream,
+            &inference_params,
+            &json_mode,
+        )
+        .unwrap();
+
+        assert_eq!(result.messages.len(), 2);
+        assert_eq!(result.system, system);
+        assert_eq!(result.tool_config, Some(Cow::Borrowed(&tool_config)));
+        assert_eq!(result.temperature, Some(0.7));
+        assert_eq!(result.max_tokens, Some(50));
+        assert_eq!(result.seed, Some(42));
+        assert_eq!(result.stream, stream);
+        assert_eq!(result.json_mode, ModelInferenceRequestJsonMode::Off);
+        assert_eq!(result.function_type, FunctionType::Chat);
+        assert_eq!(result.output_schema, None);
+
+        // Test case 2: FunctionConfig::Json with JsonMode::On and static output schema
+        let output_schema_value = json!({
+            "type": "object",
+            "properties": {
+                "answer": { "type": "string" }
+            },
+            "required": ["answer"],
+        });
+        let output_schema = JSONSchemaFromPath::from_value(&output_schema_value).unwrap();
+        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema_value);
+
+        let function_config_json = FunctionConfig::Json(FunctionConfigJson {
+            variants: HashMap::new(),
+            assistant_schema: None,
+            system_schema: None,
+            user_schema: None,
+            output_schema: output_schema.clone(),
+            implicit_tool_call_config: implicit_tool_call_config.clone(),
+        });
+
+        let json_mode = JsonMode::On;
+
+        let result = prepare_model_inference_request(
+            messages.clone(),
+            system.clone(),
+            &function_config_json,
+            &inference_config,
+            stream,
+            &inference_params,
+            &json_mode,
+        )
+        .unwrap();
+
+        assert_eq!(result.messages.len(), 2);
+        assert_eq!(result.system, system.clone());
+        assert_eq!(result.tool_config, None);
+        assert_eq!(result.temperature, Some(0.7));
+        assert_eq!(result.max_tokens, Some(50));
+        assert_eq!(result.seed, Some(42));
+        assert_eq!(result.stream, stream);
+        assert_eq!(result.json_mode, ModelInferenceRequestJsonMode::On);
+        assert_eq!(result.function_type, FunctionType::Json);
+        assert_eq!(result.output_schema, Some(&output_schema_value));
+
+        // Test case 3: FunctionConfig::Json with JsonMode::ImplicitTool and dynamic output schema
+        let dynamic_output_schema_value = json!({
+            "type": "object",
+            "properties": {
+                "result": { "type": "string" }
+            },
+            "required": ["result"],
+        });
+        let dynamic_output_schema = DynamicJSONSchema::new(dynamic_output_schema_value.clone());
+        let inference_config_dynamic = InferenceConfig {
+            templates: &templates,
+            tool_config: Some(tool_config.clone()),
+            function_name: "test_function".to_string(),
+            variant_name: "test_variant".to_string(),
+            dynamic_output_schema: Some(dynamic_output_schema.clone()),
+        };
+
+        let json_mode = JsonMode::ImplicitTool;
+
+        let result = prepare_model_inference_request(
+            messages.clone(),
+            system.clone(),
+            &function_config_json,
+            &inference_config_dynamic,
+            stream,
+            &inference_params,
+            &json_mode,
+        )
+        .unwrap();
+
+        assert_eq!(
+            result.tool_config,
+            Some(Cow::Owned(create_dynamic_implicit_tool_config(
+                dynamic_output_schema_value.clone(),
+            )))
+        );
+        assert_eq!(result.output_schema, Some(&dynamic_output_schema_value));
+
+        // Test case 4: FunctionConfig::Json with JsonMode::Strict
+        let json_mode = JsonMode::Strict;
+
+        let result = prepare_model_inference_request(
+            messages.clone(),
+            system.clone(),
+            &function_config_json,
+            &inference_config,
+            stream,
+            &inference_params,
+            &json_mode,
+        )
+        .unwrap();
+
+        assert_eq!(result.tool_config, None);
+        assert_eq!(result.output_schema, Some(&output_schema_value));
+        assert_eq!(result.json_mode, ModelInferenceRequestJsonMode::Strict);
+
+        // Test case 5: FunctionConfig::Json with JsonMode::Off (should still set output_schema)
+        let json_mode = JsonMode::Off;
+
+        let result = prepare_model_inference_request(
+            messages,
+            system,
+            &function_config_json,
+            &inference_config,
+            stream,
+            &inference_params,
+            &json_mode,
+        )
+        .unwrap();
+
+        assert_eq!(result.tool_config, None);
+        assert_eq!(result.output_schema, Some(&output_schema_value));
+        assert_eq!(result.json_mode, ModelInferenceRequestJsonMode::Off);
+    }
+}
