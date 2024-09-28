@@ -104,17 +104,14 @@ impl ChatCompletionConfig {
         }})
     }
 
-    fn prepare_request<'a, 'request>(
+    fn prepare_request<'a>(
         &'a self,
         input: &Input,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
+        inference_config: &'a InferenceConfig<'a>,
         stream: bool,
         inference_params: &mut InferenceParams,
-    ) -> Result<ModelInferenceRequest<'request>, Error>
-    where
-        'a: 'request,
-    {
+    ) -> Result<ModelInferenceRequest<'a>, Error> {
         let messages = input
             .messages
             .iter()
