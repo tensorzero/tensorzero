@@ -323,6 +323,11 @@ where
     })
 }
 
+/// If you are in a variant and you want to make an inference request to a model,
+/// use this function unless you are calling another variant's `infer` function
+///
+/// Takes a ModelInferenceRequest and makes an inference request to the model.
+/// The model_name is only for bookkeeping and is not used by the model itself.
 async fn infer_model_request<'a, 'request>(
     request: ModelInferenceRequest<'request>,
     model_name: &'a str,
@@ -385,12 +390,18 @@ async fn infer_model_request_stream<'request>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::clickhouse::ClickHouseConnectionInfo;
     use crate::endpoints::inference::ChatCompletionInferenceParams;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
+    use crate::inference::providers::dummy::{
+        DummyProvider, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_USAGE, DUMMY_JSON_RESPONSE_RAW,
+    };
     use crate::inference::types::{ModelInferenceRequestJsonMode, RequestMessage, Role};
     use crate::jsonschema_util::JSONSchemaFromPath;
     use crate::minijinja_util::tests::get_test_template_config;
+    use crate::model::ProviderConfig;
     use crate::tool::{ToolCallConfig, ToolChoice};
+    use reqwest::Client;
     use serde_json::json;
     use std::collections::HashMap;
 
@@ -589,5 +600,208 @@ mod tests {
         assert_eq!(result.tool_config, None);
         assert_eq!(result.output_schema, Some(&output_schema_value));
         assert_eq!(result.json_mode, ModelInferenceRequestJsonMode::Off);
+    }
+
+    #[tokio::test]
+    async fn test_infer_model_request() {
+        // Setup common variables
+        let client = Client::new();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clients = InferenceClients {
+            http_client: &client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+        };
+        let templates = get_test_template_config();
+        let inference_params = InferenceParams::default();
+        let inference_config = InferenceConfig {
+            templates: &templates,
+            tool_config: None,
+            function_name: "test_function".to_string(),
+            variant_name: "test_variant".to_string(),
+            dynamic_output_schema: None,
+        };
+
+        // Test case 1: Successful inference with ChatCompletionConfig and FunctionConfigChat
+        let model_name = "dummy_chat_model";
+        let function_config_chat = FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: false,
+        });
+
+        let request_messages = vec![RequestMessage {
+            role: Role::User,
+            content: vec!["Hello, how are you?".to_string().into()],
+        }];
+
+        let model_request = ModelInferenceRequest {
+            messages: request_messages.clone(),
+            system: None,
+            temperature: Some(0.7),
+            max_tokens: Some(100),
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            output_schema: None,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+        };
+
+        // Create a dummy provider config with the desired model name
+        let dummy_provider_config = ProviderConfig::Dummy(DummyProvider {
+            model_name: model_name.to_string(),
+        });
+
+        // Create a model config with the dummy provider
+        let model_config = ModelConfig {
+            routing: vec![model_name.to_string()],
+            providers: HashMap::from([(model_name.to_string(), dummy_provider_config)]),
+        };
+
+        let result = infer_model_request(
+            model_request.clone(),
+            model_name,
+            &model_config,
+            &function_config_chat,
+            &inference_config,
+            &clients,
+            inference_params.clone(),
+        )
+        .await;
+
+        let inference_result = result.unwrap();
+        match inference_result {
+            InferenceResult::Chat(chat_result) => {
+                // The DummyProvider returns DUMMY_INFER_RESPONSE_CONTENT by default
+                let expected_content = vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()];
+                assert_eq!(chat_result.content, expected_content);
+                assert_eq!(chat_result.usage, DUMMY_INFER_USAGE.clone());
+                assert_eq!(chat_result.model_inference_results.len(), 1);
+                assert_eq!(
+                    chat_result.model_inference_results[0].model_name,
+                    model_name
+                );
+                // Need to recreate to make this ContentBlock rather than ContentBlockOutput
+                let expected_content = vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()];
+                assert_eq!(
+                    chat_result.model_inference_results[0].content,
+                    expected_content
+                );
+            }
+            _ => panic!("Expected Chat inference result"),
+        }
+
+        // Test case 2: Successful inference with FunctionConfigJson
+        let model_name_json = "json";
+        let function_config_json = FunctionConfig::Json(FunctionConfigJson {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            output_schema: JSONSchemaFromPath::from_value(&json!({
+                "type": "object",
+                "properties": {
+                    "answer": { "type": "string" }
+                },
+                "required": ["answer"]
+            }))
+            .unwrap(),
+            implicit_tool_call_config: crate::tool::ToolCallConfig {
+                tools_available: vec![],
+                tool_choice: ToolChoice::Auto,
+                parallel_tool_calls: false,
+            },
+        });
+        let output_schema = json!({
+            "type": "object",
+            "properties": {
+                "answer": { "type": "string" }
+            },
+            "required": ["answer"]
+        });
+
+        let model_request_json = ModelInferenceRequest {
+            messages: request_messages.clone(),
+            system: None,
+            temperature: Some(0.7),
+            max_tokens: Some(100),
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::On,
+            output_schema: Some(&output_schema),
+            tool_config: None,
+            function_type: FunctionType::Json,
+        };
+
+        // Create a dummy provider config with model_name "json" to trigger JSON response
+        let dummy_provider_config_json = ProviderConfig::Dummy(DummyProvider {
+            model_name: model_name_json.to_string(),
+        });
+
+        let model_config_json = ModelConfig {
+            routing: vec![model_name_json.to_string()],
+            providers: HashMap::from([(model_name_json.to_string(), dummy_provider_config_json)]),
+        };
+
+        let result = infer_model_request(
+            model_request_json.clone(),
+            model_name_json,
+            &model_config_json,
+            &function_config_json,
+            &inference_config,
+            &clients,
+            inference_params.clone(),
+        )
+        .await;
+
+        let inference_result = result.unwrap();
+        match inference_result {
+            InferenceResult::Json(json_result) => {
+                let expected_raw_output = DUMMY_JSON_RESPONSE_RAW.to_string();
+                assert_eq!(json_result.output.raw, expected_raw_output);
+                assert_eq!(json_result.output.parsed, Some(json!({"answer": "Hello"})));
+                assert_eq!(json_result.usage, DUMMY_INFER_USAGE.clone());
+                assert_eq!(json_result.model_inference_results.len(), 1);
+                assert_eq!(
+                    json_result.model_inference_results[0].model_name,
+                    model_name_json
+                );
+                assert_eq!(
+                    json_result.model_inference_results[0].content,
+                    vec![expected_raw_output.into()]
+                );
+            }
+            _ => panic!("Expected Json inference result"),
+        }
+
+        // Test case 3: Model inference failure
+        let error_model_name = "error";
+        let error_provider_config = ProviderConfig::Dummy(DummyProvider {
+            model_name: error_model_name.to_string(),
+        });
+
+        let error_model_config = ModelConfig {
+            routing: vec![error_model_name.to_string()],
+            providers: HashMap::from([(error_model_name.to_string(), error_provider_config)]),
+        };
+
+        let result = infer_model_request(
+            model_request.clone(),
+            error_model_name,
+            &error_model_config,
+            &function_config_chat,
+            &inference_config,
+            &clients,
+            inference_params.clone(),
+        )
+        .await;
+
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(matches!(error, Error::ModelProvidersExhausted { .. }));
     }
 }
