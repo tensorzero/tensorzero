@@ -6,12 +6,14 @@ use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::borrow::Cow;
 use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
 use uuid::Uuid;
 
 use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
+use crate::endpoints::inference::InferenceApiKeys;
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
@@ -38,14 +40,12 @@ pub struct OpenAIProvider {
 }
 
 impl InferenceProvider for OpenAIProvider {
-    async fn infer<'a>(
+    async fn _infer<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
+        api_key: Cow<'a, SecretString>,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
-            provider_name: "OpenAI".to_string(),
-        })?;
         let request_body = OpenAIRequest::new(&self.model_name, request)?;
         let request_url = get_chat_url(self.api_base.as_ref())?;
         let start_time = Instant::now();
@@ -87,10 +87,11 @@ impl InferenceProvider for OpenAIProvider {
         }
     }
 
-    async fn infer_stream<'a>(
+    async fn _infer_stream<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
+        api_key: Cow<'a, SecretString>,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -104,9 +105,6 @@ impl InferenceProvider for OpenAIProvider {
                 message: "The OpenAI o1 family of models does not support streaming.".to_string(),
             });
         }
-        let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
-            provider_name: "OpenAI".to_string(),
-        })?;
         let request_body = OpenAIRequest::new(&self.model_name, request)?;
         let raw_request =
             serde_json::to_string(&request_body).map_err(|e| Error::OpenAIServer {
@@ -195,6 +193,22 @@ impl EmbeddingProvider for OpenAIProvider {
 impl HasCredentials for OpenAIProvider {
     fn has_credentials(&self) -> bool {
         self.api_key.is_some()
+    }
+
+    fn get_api_key<'a>(
+        &'a self,
+        api_keys: &'a InferenceApiKeys,
+    ) -> Result<Cow<'a, SecretString>, Error> {
+        match &api_keys.openai_api_key {
+            Some(key) => Ok(Cow::Borrowed(key)),
+            None => self
+                .api_key
+                .as_ref()
+                .map(Cow::Borrowed)
+                .ok_or(Error::ApiKeyMissing {
+                    provider_name: "OpenAI".to_string(),
+                }),
+        }
     }
 }
 

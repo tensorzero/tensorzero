@@ -12,11 +12,15 @@ use aws_sdk_bedrockruntime::types::{
 use aws_smithy_types::error::display::DisplayErrorContext;
 use aws_types::region::Region;
 use futures::{Stream, StreamExt};
+use lazy_static::lazy_static;
 use reqwest::StatusCode;
+use secrecy::SecretString;
+use std::borrow::Cow;
 use std::time::Duration;
 use tokio::time::Instant;
 use uuid::Uuid;
 
+use crate::endpoints::inference::InferenceApiKeys;
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
@@ -61,10 +65,11 @@ impl AWSBedrockProvider {
 }
 
 impl InferenceProvider for AWSBedrockProvider {
-    async fn infer<'a>(
+    async fn _infer<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
+        _api_key: Cow<'a, SecretString>,
     ) -> Result<ProviderInferenceResponse, Error> {
         // TODO (#55): add support for guardrails and additional fields
 
@@ -144,10 +149,11 @@ impl InferenceProvider for AWSBedrockProvider {
         .try_into()
     }
 
-    async fn infer_stream<'a>(
+    async fn _infer_stream<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
+        _api_key: Cow<'a, SecretString>,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -234,10 +240,21 @@ impl InferenceProvider for AWSBedrockProvider {
     }
 }
 
+lazy_static! {
+    static ref EMPTY_SECRET: SecretString = SecretString::from(String::new());
+}
+
 impl HasCredentials for AWSBedrockProvider {
     fn has_credentials(&self) -> bool {
         // TODO (#313): Actually check if the AWS Bedrock client is configured with credentials
         true
+    }
+
+    fn get_api_key<'a>(
+        &'a self,
+        _api_keys: &'a InferenceApiKeys,
+    ) -> Result<Cow<'a, SecretString>, Error> {
+        Ok(Cow::Borrowed(&EMPTY_SECRET))
     }
 }
 

@@ -1,6 +1,8 @@
+use std::borrow::Cow;
 use std::time::Duration;
 
 use lazy_static::lazy_static;
+use secrecy::SecretString;
 use serde_json::{json, Value};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
@@ -8,6 +10,7 @@ use uuid::Uuid;
 use super::provider_trait::{HasCredentials, InferenceProvider};
 
 use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
+use crate::endpoints::inference::InferenceApiKeys;
 use crate::error::Error;
 use crate::inference::types::{
     current_timestamp, ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest,
@@ -78,10 +81,11 @@ pub static DUMMY_STREAMING_TOOL_RESPONSE: [&str; 5] = [
 pub static DUMMY_RAW_REQUEST: &str = "raw request";
 
 impl InferenceProvider for DummyProvider {
-    async fn infer<'a>(
+    async fn _infer<'a>(
         &'a self,
         _request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
+        _api_key: Cow<'a, SecretString>,
     ) -> Result<ProviderInferenceResponse, Error> {
         if self.model_name == "error" {
             return Err(Error::InferenceClient {
@@ -150,10 +154,11 @@ impl InferenceProvider for DummyProvider {
         })
     }
 
-    async fn infer_stream<'a>(
+    async fn _infer_stream<'a>(
         &'a self,
         _request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
+        _api_key: Cow<'a, SecretString>,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -244,10 +249,20 @@ impl InferenceProvider for DummyProvider {
         ))
     }
 }
+lazy_static! {
+    static ref EMPTY_SECRET: SecretString = SecretString::from(String::new());
+}
 
 impl HasCredentials for DummyProvider {
     fn has_credentials(&self) -> bool {
         self.model_name != "bad_credentials"
+    }
+
+    fn get_api_key<'a>(
+        &'a self,
+        _api_keys: &'a InferenceApiKeys,
+    ) -> Result<Cow<'a, SecretString>, Error> {
+        Ok(Cow::Borrowed(&EMPTY_SECRET))
     }
 }
 

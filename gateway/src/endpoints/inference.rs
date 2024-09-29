@@ -5,6 +5,7 @@ use axum::response::{IntoResponse, Response};
 use axum::{debug_handler, Json};
 use futures::stream::Stream;
 use metrics::counter;
+use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -67,6 +68,7 @@ pub struct Params {
     // If provided for a JSON inference, the inference will use the specified output schema instead of the
     // configured one. We only lazily validate this schema.
     output_schema: Option<Value>,
+    api_keys: InferenceApiKeys,
 }
 
 #[derive(Clone, Debug)]
@@ -82,6 +84,18 @@ struct InferenceMetadata<'a> {
     pub model_provider_name: &'a str,
     pub raw_request: String,
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct InferenceApiKeys {
+    pub anthropic_api_key: Option<SecretString>,
+    pub azure_openai_api_key: Option<SecretString>,
+    pub fireworks_api_key: Option<SecretString>,
+    pub gcp_vertex_api_key: Option<SecretString>,
+    pub mistral_api_key: Option<SecretString>,
+    pub openai_api_key: Option<SecretString>,
+    pub together_api_key: Option<SecretString>,
+    pub vllm_api_key: Option<SecretString>,
 }
 
 /// A handler for the inference endpoint
@@ -158,6 +172,7 @@ pub async fn inference_handler(
     let inference_clients = InferenceClients {
         http_client: &http_client,
         clickhouse_connection_info: &clickhouse_connection_info,
+        api_keys: &params.api_keys,
     };
 
     let inference_models = InferenceModels {
@@ -535,9 +550,11 @@ impl InferenceResponseChunk {
 pub struct InferenceClients<'a> {
     pub http_client: &'a reqwest::Client,
     pub clickhouse_connection_info: &'a ClickHouseConnectionInfo,
+    pub api_keys: &'a InferenceApiKeys,
 }
 
 // Carryall struct for models used in inference
+#[derive(Debug)]
 pub struct InferenceModels<'a> {
     pub models: &'a HashMap<String, ModelConfig>,
     pub embedding_models: &'a HashMap<String, EmbeddingModelConfig>,

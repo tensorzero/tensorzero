@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use futures::{StreamExt, TryStreamExt};
 use reqwest::StatusCode;
 use reqwest_eventsource::RequestBuilderExt;
@@ -6,6 +8,7 @@ use serde::Serialize;
 use tokio::time::Instant;
 use url::Url;
 
+use crate::endpoints::inference::InferenceApiKeys;
 use crate::error::Error;
 use crate::inference::types::{
     ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
@@ -27,14 +30,12 @@ pub struct AzureProvider {
 }
 
 impl InferenceProvider for AzureProvider {
-    async fn infer<'a>(
+    async fn _infer<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
+        api_key: Cow<'a, SecretString>,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
-            provider_name: "Azure".to_string(),
-        })?;
         let request_body = AzureRequest::new(request);
         let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id)?;
         let start_time = Instant::now();
@@ -79,10 +80,11 @@ impl InferenceProvider for AzureProvider {
         }
     }
 
-    async fn infer_stream<'a>(
+    async fn _infer_stream<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
+        api_key: Cow<'a, SecretString>,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -91,9 +93,6 @@ impl InferenceProvider for AzureProvider {
         ),
         Error,
     > {
-        let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
-            provider_name: "Azure".to_string(),
-        })?;
         let request_body = AzureRequest::new(request);
         let raw_request = serde_json::to_string(&request_body).map_err(|e| Error::AzureServer {
             message: format!("Error serializing request body as JSON: {e}"),
@@ -129,6 +128,22 @@ impl InferenceProvider for AzureProvider {
 impl HasCredentials for AzureProvider {
     fn has_credentials(&self) -> bool {
         self.api_key.is_some()
+    }
+
+    fn get_api_key<'a>(
+        &'a self,
+        api_keys: &'a InferenceApiKeys,
+    ) -> Result<Cow<'a, SecretString>, Error> {
+        match &api_keys.azure_openai_api_key {
+            Some(key) => Ok(Cow::Borrowed(key)),
+            None => self
+                .api_key
+                .as_ref()
+                .map(Cow::Borrowed)
+                .ok_or(Error::ApiKeyMissing {
+                    provider_name: "Azure".to_string(),
+                }),
+        }
     }
 }
 

@@ -1,14 +1,17 @@
+use std::borrow::Cow;
 use std::time::Duration;
 
 use futures::{Stream, StreamExt};
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::time::Instant;
 use uuid::Uuid;
 
+use crate::endpoints::inference::InferenceApiKeys;
 use crate::error::{Error, ResultExt};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
@@ -146,21 +149,18 @@ impl GCPCredentials {
 
 impl InferenceProvider for GCPVertexGeminiProvider {
     /// GCP Vertex Gemini non-streaming API request
-    async fn infer<'a>(
+    async fn _infer<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
+        api_key: Cow<'a, SecretString>,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let credentials = self.credentials.as_ref().ok_or(Error::ApiKeyMissing {
-            provider_name: "GCP Vertex Gemini".to_string(),
-        })?;
         let request_body: GCPVertexGeminiRequest =
             GCPVertexGeminiRequest::new(request, &self.model_id)?;
-        let token = credentials.get_jwt_token(&self.audience)?;
         let start_time = Instant::now();
         let res = http_client
             .post(&self.request_url)
-            .bearer_auth(token)
+            .bearer_auth(api_key.expose_secret())
             .json(&request_body)
             .send()
             .await
@@ -194,10 +194,11 @@ impl InferenceProvider for GCPVertexGeminiProvider {
     }
 
     /// GCP Vertex Gemini streaming API request
-    async fn infer_stream<'a>(
+    async fn _infer_stream<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
+        api_key: Cow<'a, SecretString>,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -206,20 +207,16 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         ),
         Error,
     > {
-        let credentials = self.credentials.as_ref().ok_or(Error::ApiKeyMissing {
-            provider_name: "GCP Vertex Gemini".to_string(),
-        })?;
         let request_body: GCPVertexGeminiRequest =
             GCPVertexGeminiRequest::new(request, &self.model_id)?;
         let raw_request =
             serde_json::to_string(&request_body).map_err(|e| Error::GCPVertexServer {
                 message: format!("Error serializing request: {e}"),
             })?;
-        let token = credentials.get_jwt_token(&self.audience)?;
         let start_time = Instant::now();
         let event_source = http_client
             .post(&self.streaming_request_url)
-            .bearer_auth(token)
+            .bearer_auth(api_key.expose_secret())
             .json(&request_body)
             .eventsource()
             .map_err(|e| Error::InferenceClient {
@@ -242,6 +239,22 @@ impl InferenceProvider for GCPVertexGeminiProvider {
 impl HasCredentials for GCPVertexGeminiProvider {
     fn has_credentials(&self) -> bool {
         self.credentials.is_some()
+    }
+
+    fn get_api_key<'a>(
+        &'a self,
+        api_keys: &'a InferenceApiKeys,
+    ) -> Result<Cow<'a, SecretString>, Error> {
+        match &api_keys.gcp_vertex_api_key {
+            Some(key) => Ok(Cow::Borrowed(key)),
+            None => {
+                let credentials = self.credentials.as_ref().ok_or(Error::ApiKeyMissing {
+                    provider_name: "GCP Vertex Gemini".to_string(),
+                })?;
+                let token = SecretString::from(credentials.get_jwt_token(&self.audience)?);
+                Ok(Cow::Owned(token))
+            }
+        }
     }
 }
 

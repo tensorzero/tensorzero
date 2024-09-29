@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use futures::{StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
 use reqwest_eventsource::RequestBuilderExt;
@@ -8,6 +10,7 @@ use tokio::time::Instant;
 use url::Url;
 
 use crate::{
+    endpoints::inference::InferenceApiKeys,
     error::Error,
     inference::types::{
         ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
@@ -44,14 +47,12 @@ pub struct FireworksProvider {
 /// - Fireworks allows you to auto-truncate requests that have too many tokens
 ///   (there are 2 ways to do it, we have the default of auto-truncation to the max window size)
 impl InferenceProvider for FireworksProvider {
-    async fn infer<'a>(
+    async fn _infer<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
+        api_key: Cow<'a, SecretString>,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
-            provider_name: "Fireworks".to_string(),
-        })?;
         let request_body = FireworksRequest::new(&self.model_name, request);
         let request_url = get_chat_url(Some(&FIREWORKS_API_BASE))?;
         let start_time = Instant::now();
@@ -94,10 +95,11 @@ impl InferenceProvider for FireworksProvider {
         }
     }
 
-    async fn infer_stream<'a>(
+    async fn _infer_stream<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
+        api_key: Cow<'a, SecretString>,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -106,9 +108,6 @@ impl InferenceProvider for FireworksProvider {
         ),
         Error,
     > {
-        let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
-            provider_name: "Fireworks".to_string(),
-        })?;
         let request_body = FireworksRequest::new(&self.model_name, request);
         let raw_request =
             serde_json::to_string(&request_body).map_err(|e| Error::FireworksServer {
@@ -146,6 +145,21 @@ impl InferenceProvider for FireworksProvider {
 impl HasCredentials for FireworksProvider {
     fn has_credentials(&self) -> bool {
         self.api_key.is_some()
+    }
+    fn get_api_key<'a>(
+        &'a self,
+        api_keys: &'a InferenceApiKeys,
+    ) -> Result<Cow<'a, SecretString>, Error> {
+        match &api_keys.fireworks_api_key {
+            Some(key) => Ok(Cow::Borrowed(key)),
+            None => self
+                .api_key
+                .as_ref()
+                .map(Cow::Borrowed)
+                .ok_or(Error::ApiKeyMissing {
+                    provider_name: "Fireworks".to_string(),
+                }),
+        }
     }
 }
 

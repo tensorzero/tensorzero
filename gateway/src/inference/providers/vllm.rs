@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use futures::{StreamExt, TryStreamExt};
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
@@ -11,6 +13,7 @@ use super::openai::{
     OpenAIRequestMessage, OpenAIResponse, StreamOptions,
 };
 use super::provider_trait::{HasCredentials, InferenceProvider};
+use crate::endpoints::inference::InferenceApiKeys;
 use crate::error::Error;
 use crate::inference::types::{
     ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
@@ -29,14 +32,12 @@ pub struct VLLMProvider {
 /// - vLLM only supports a specific tool and nothing else (and the implementation varies among LLMs)
 ///   **Today, we can't support tools** so we are leaving it as an open issue (#169).
 impl InferenceProvider for VLLMProvider {
-    async fn infer<'a>(
+    async fn _infer<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
+        api_key: Cow<'a, SecretString>,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
-            provider_name: "vLLM".to_string(),
-        })?;
         let request_body = VLLMRequest::new(&self.model_name, request)?;
         let request_url = get_chat_url(Some(&self.api_base))?;
         let start_time = Instant::now();
@@ -77,10 +78,11 @@ impl InferenceProvider for VLLMProvider {
         }
     }
 
-    async fn infer_stream<'a>(
+    async fn _infer_stream<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
+        api_key: Cow<'a, SecretString>,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -89,9 +91,6 @@ impl InferenceProvider for VLLMProvider {
         ),
         Error,
     > {
-        let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
-            provider_name: "vLLM".to_string(),
-        })?;
         let request_body = VLLMRequest::new(&self.model_name, request)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| Error::VLLMServer {
             message: format!("Error serializing request: {e}"),
@@ -127,6 +126,22 @@ impl InferenceProvider for VLLMProvider {
 impl HasCredentials for VLLMProvider {
     fn has_credentials(&self) -> bool {
         self.api_key.is_some()
+    }
+
+    fn get_api_key<'a>(
+        &'a self,
+        api_keys: &'a InferenceApiKeys,
+    ) -> Result<Cow<'a, SecretString>, Error> {
+        match &api_keys.vllm_api_key {
+            Some(key) => Ok(Cow::Borrowed(key)),
+            None => self
+                .api_key
+                .as_ref()
+                .map(Cow::Borrowed)
+                .ok_or(Error::ApiKeyMissing {
+                    provider_name: "VLLM".to_string(),
+                }),
+        }
     }
 }
 

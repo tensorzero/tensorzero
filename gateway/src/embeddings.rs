@@ -1,15 +1,16 @@
-use std::{collections::HashMap, future::Future};
+use std::{borrow::Cow, collections::HashMap, future::Future};
 
 use crate::{
+    endpoints::inference::InferenceApiKeys,
     error::Error,
     inference::{
-        providers::openai::OpenAIProvider,
-        providers::provider_trait::HasCredentials,
+        providers::{openai::OpenAIProvider, provider_trait::HasCredentials},
         types::{current_timestamp, Latency, ModelInferenceResponseWithMetadata, Usage},
     },
     model::ProviderConfig,
 };
 use reqwest::Client;
+use secrecy::SecretString;
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -198,6 +199,17 @@ impl HasCredentials for EmbeddingProviderConfig {
             EmbeddingProviderConfig::OpenAI(provider) => provider.has_credentials(),
             #[cfg(any(test, feature = "e2e_tests"))]
             EmbeddingProviderConfig::Dummy(provider) => provider.has_credentials(),
+        }
+    }
+
+    fn get_api_key<'a>(
+        &'a self,
+        api_keys: &'a InferenceApiKeys,
+    ) -> Result<Cow<'a, SecretString>, Error> {
+        match self {
+            EmbeddingProviderConfig::OpenAI(provider) => provider.get_api_key(api_keys),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            EmbeddingProviderConfig::Dummy(provider) => provider.get_api_key(api_keys),
         }
     }
 }
