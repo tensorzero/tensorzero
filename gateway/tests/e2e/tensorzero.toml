@@ -549,6 +549,14 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "implicit_tool"
 max_tokens = 100
 
+[functions.json_success.variants.dicl]
+type = "experimental_dynamic_in_context_learning"
+model = "gpt-4o-mini-2024-07-18"
+system_instructions = "../../fixtures/config/functions/json_success/prompt/system_instructions.txt"
+embedding_model = "text-embedding-3-small"
+k = 3
+max_tokens = 100
+
 [functions.dynamic_json]
 type = "json"
 system_schema = "../../fixtures/config/functions/dynamic_json/system_schema.json"

@@ -21,15 +21,10 @@ pub mod best_of_n;
 pub mod chat_completion;
 pub mod dicl;
 
-#[derive(Debug, Deserialize)]
-#[serde(tag = "type")]
-#[serde(rename_all = "snake_case")]
-#[serde(deny_unknown_fields)]
+#[derive(Debug)]
 pub enum VariantConfig {
     ChatCompletion(chat_completion::ChatCompletionConfig),
-    #[serde(rename = "experimental_best_of_n")]
     BestOfN(best_of_n::BestOfNConfig),
-    #[serde(rename = "experimental_dynamic_in_context_learning")]
     Dicl(dicl::DiclConfig),
 }
 

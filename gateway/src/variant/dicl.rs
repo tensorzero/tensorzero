@@ -1,5 +1,5 @@
-use serde::de::{Deserializer, Error as SerdeError};
 use std::fs;
+use std::path::Path;
 use std::{collections::HashMap, path::PathBuf};
 
 use serde::Deserialize;
@@ -35,6 +35,21 @@ pub struct DiclConfig {
     pub temperature: Option<f32>,
     pub max_tokens: Option<u32>,
     pub seed: Option<u32>,
+    pub json_mode: JsonMode,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UninitializedDiclConfig {
+    #[serde(default)]
+    pub weight: f64,
+    pub embedding_model: String,
+    pub k: u32, // k as in k-nearest neighbors
+    pub model: String,
+    pub system_instructions: Option<PathBuf>,
+    pub temperature: Option<f32>,
+    pub max_tokens: Option<u32>,
+    pub seed: Option<u32>,
+    #[serde(default)]
     pub json_mode: JsonMode,
 }
 
@@ -423,47 +438,28 @@ fn parse_raw_examples(raw_examples: Vec<RawExample>) -> Result<Vec<Example>, Err
     Ok(examples)
 }
 
-impl<'de> Deserialize<'de> for DiclConfig {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        struct DiclConfigHelper {
-            #[serde(default)]
-            pub weight: f64,
-            pub embedding_model: String,
-            pub k: u32, // k as in k-nearest neighbors
-            pub model: String,
-            pub system_instructions: Option<PathBuf>,
-            pub temperature: Option<f32>,
-            pub max_tokens: Option<u32>,
-            pub seed: Option<u32>,
-            #[serde(default)]
-            pub json_mode: JsonMode,
-        }
-
-        let helper = DiclConfigHelper::deserialize(deserializer)?;
-
-        let system_instructions = match helper.system_instructions {
+impl UninitializedDiclConfig {
+    pub fn load<P: AsRef<Path>>(self, base_path: P) -> Result<DiclConfig, Error> {
+        let system_instructions = match self.system_instructions {
             Some(path) => {
-                let contents = fs::read_to_string(&path).map_err(SerdeError::custom)?;
-                // TODO: Replace the placeholder with actual template formatting
-                format!("Template formatted with contents: {}", contents)
+                let path = base_path.as_ref().join(path);
+                fs::read_to_string(path).map_err(|e| Error::Config {
+                    message: format!("Failed to read system instructions: {}", e),
+                })?
             }
-            None => "Default system instructions".to_string(),
+            None => "You are tasked with learning by induction and then solving a problem below. You will be shown several examples of inputs followed by outputs. Then, in the same format you will be given one last set of inputs. Your job is to use the provided examples to inform your response to the last set of inputs. ".to_string(),
         };
 
         Ok(DiclConfig {
-            weight: helper.weight,
-            embedding_model: helper.embedding_model,
-            k: helper.k,
-            model: helper.model,
+            weight: self.weight,
+            embedding_model: self.embedding_model,
+            k: self.k,
+            model: self.model,
             system_instructions,
-            temperature: helper.temperature,
-            max_tokens: helper.max_tokens,
-            seed: helper.seed,
-            json_mode: helper.json_mode,
+            temperature: self.temperature,
+            max_tokens: self.max_tokens,
+            seed: self.seed,
+            json_mode: self.json_mode,
         })
     }
 }
