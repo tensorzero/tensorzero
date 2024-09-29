@@ -782,4 +782,63 @@ mod tests {
         }
         assert_eq!(collected_content_str, DUMMY_STREAMING_RESPONSE.join(""));
     }
+
+    #[tokio::test]
+    async fn test_dynamic_api_keys() {
+        let provider_config = ProviderConfig::Dummy(DummyProvider {
+            model_name: "test_key".to_string(),
+        });
+        let model_config = ModelConfig {
+            routing: vec!["model".to_string()],
+            providers: HashMap::from([("model".to_string(), provider_config)]),
+        };
+        let tool_config = ToolCallConfig {
+            tools_available: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: false,
+        };
+        let api_keys = InferenceApiKeys::default();
+
+        // Try inferring the good model only
+        let request = ModelInferenceRequest {
+            messages: vec![],
+            system: None,
+            tool_config: Some(Cow::Borrowed(&tool_config)),
+            temperature: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+        let error = model_config
+            .infer(&request, &Client::new(), &api_keys)
+            .await
+            .unwrap_err();
+        assert_eq!(
+            error,
+            Error::ModelProvidersExhausted {
+                provider_errors: HashMap::from([(
+                    "model".to_string(),
+                    Error::InferenceClient {
+                        message: "Invalid API key for Dummy provider".to_string()
+                    }
+                )])
+            }
+        );
+
+        let api_keys = InferenceApiKeys {
+            dummy_api_key: Some(SecretString::from("good_key".to_string())),
+            ..Default::default()
+        };
+        let response = model_config
+            .infer(&request, &Client::new(), &api_keys)
+            .await
+            .unwrap();
+        assert_eq!(
+            response.content,
+            vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()]
+        );
+    }
 }

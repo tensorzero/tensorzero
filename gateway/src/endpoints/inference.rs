@@ -96,6 +96,8 @@ pub struct InferenceApiKeys {
     pub openai_api_key: Option<SecretString>,
     pub together_api_key: Option<SecretString>,
     pub vllm_api_key: Option<SecretString>,
+    #[cfg(any(test, feature = "e2e_tests"))]
+    pub dummy_api_key: Option<SecretString>,
 }
 
 /// A handler for the inference endpoint

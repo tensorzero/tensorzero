@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::time::Duration;
 
 use lazy_static::lazy_static;
-use secrecy::SecretString;
+use secrecy::{ExposeSecret, SecretString};
 use serde_json::{json, Value};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
@@ -85,11 +85,16 @@ impl InferenceProvider for DummyProvider {
         &'a self,
         _request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
-        _api_key: Cow<'a, SecretString>,
+        api_key: Cow<'a, SecretString>,
     ) -> Result<ProviderInferenceResponse, Error> {
         if self.model_name == "error" {
             return Err(Error::InferenceClient {
                 message: "Error sending request to Dummy provider.".to_string(),
+            });
+        }
+        if self.model_name == "test_key" && api_key.expose_secret() != "good_key" {
+            return Err(Error::InferenceClient {
+                message: "Invalid API key for Dummy provider".to_string(),
             });
         }
         let id = Uuid::now_v7();
@@ -260,9 +265,12 @@ impl HasCredentials for DummyProvider {
 
     fn get_api_key<'a>(
         &'a self,
-        _api_keys: &'a InferenceApiKeys,
+        api_keys: &'a InferenceApiKeys,
     ) -> Result<Cow<'a, SecretString>, Error> {
-        Ok(Cow::Borrowed(&EMPTY_SECRET))
+        match &api_keys.dummy_api_key {
+            Some(key) => Ok(Cow::Borrowed(key)),
+            None => Ok(Cow::Borrowed(&EMPTY_SECRET)),
+        }
     }
 }
 
