@@ -24,7 +24,7 @@ use crate::{error::Error, variant::JsonMode};
 /// Most of them are defined below.
 
 /// A request is made that contains an Input
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Input {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -35,14 +35,14 @@ pub struct Input {
 
 /// InputMessage and Role are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct InputMessage {
     pub role: Role,
     pub content: Vec<InputMessageContent>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InputMessageContent {
     Text { value: Value },
@@ -81,7 +81,7 @@ pub enum ContentBlock {
     ToolResult(ToolResult),
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlockOutput {
     Text(Text),
@@ -89,7 +89,7 @@ pub enum ContentBlockOutput {
 }
 
 /// A RequestMessage is a message sent to a model
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct RequestMessage {
     pub role: Role,
     pub content: Vec<ContentBlock>,
@@ -230,7 +230,7 @@ pub struct JsonInferenceResult<'a> {
     pub inference_params: InferenceParams,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct JsonInferenceOutput {
     pub raw: String,
     pub parsed: Option<Value>,
@@ -346,7 +346,7 @@ impl From<String> for InputMessageContent {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "e2e_tests"))]
 impl From<String> for ContentBlockOutput {
     fn from(text: String) -> Self {
         ContentBlockOutput::Text(Text { text })
@@ -705,7 +705,7 @@ impl JsonInferenceDatabaseInsert {
 }
 
 // Function to get the current timestamp in seconds
-fn current_timestamp() -> u64 {
+pub fn current_timestamp() -> u64 {
     #[allow(clippy::expect_used)]
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -780,6 +780,27 @@ impl From<ProviderInferenceResponseChunk> for ChatInferenceResultChunk {
             usage: chunk.usage,
             latency: chunk.latency,
             raw_response: chunk.raw_response,
+        }
+    }
+}
+
+impl From<ToolCallOutput> for ToolCall {
+    fn from(output: ToolCallOutput) -> Self {
+        Self {
+            id: output.id,
+            name: output.raw_name,
+            arguments: output.raw_arguments,
+        }
+    }
+}
+
+impl From<ContentBlockOutput> for ContentBlock {
+    fn from(output: ContentBlockOutput) -> Self {
+        match output {
+            ContentBlockOutput::Text(text) => ContentBlock::Text(text),
+            ContentBlockOutput::ToolCall(tool_call_output) => {
+                ContentBlock::ToolCall(tool_call_output.into())
+            }
         }
     }
 }
@@ -1194,6 +1215,8 @@ mod tests {
         let inference_config = InferenceConfig {
             tool_config: Some(tool_config),
             templates: &TemplateConfig::default(),
+            function_name: "".to_string(),
+            variant_name: "".to_string(),
             dynamic_output_schema: None,
         };
         let chunks = vec![];
@@ -1617,6 +1640,8 @@ mod tests {
         }));
         let inference_config = InferenceConfig {
             tool_config: None,
+            function_name: "".to_string(),
+            variant_name: "".to_string(),
             templates: &TemplateConfig::default(),
             dynamic_output_schema: Some(dynamic_output_schema),
         };

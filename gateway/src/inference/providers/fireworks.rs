@@ -21,7 +21,7 @@ use super::{
         stream_openai, OpenAIFunction, OpenAIRequestMessage, OpenAIResponse, OpenAITool,
         OpenAIToolChoice, OpenAIToolType,
     },
-    provider_trait::InferenceProvider,
+    provider_trait::{HasCredentials, InferenceProvider},
 };
 
 lazy_static! {
@@ -85,13 +85,12 @@ impl InferenceProvider for FireworksProvider {
             .try_into()
             .map_err(map_openai_to_fireworks_error)?)
         } else {
-            handle_openai_error(
+            Err(map_openai_to_fireworks_error(handle_openai_error(
                 res.status(),
                 &res.text().await.map_err(|e| Error::FireworksServer {
                     message: format!("Error parsing error response: {e}"),
                 })?,
-            )
-            .map_err(map_openai_to_fireworks_error)
+            )))
         }
     }
 
@@ -142,7 +141,9 @@ impl InferenceProvider for FireworksProvider {
         };
         Ok((chunk, stream, raw_request))
     }
+}
 
+impl HasCredentials for FireworksProvider {
     fn has_credentials(&self) -> bool {
         self.api_key.is_some()
     }

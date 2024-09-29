@@ -26,7 +26,7 @@ use super::{
         get_chat_url, prepare_openai_messages, OpenAIFunction, OpenAIRequestMessage, OpenAITool,
         OpenAIToolType,
     },
-    provider_trait::InferenceProvider,
+    provider_trait::{HasCredentials, InferenceProvider},
 };
 
 lazy_static! {
@@ -137,7 +137,9 @@ impl InferenceProvider for MistralProvider {
         };
         Ok((chunk, stream, raw_request))
     }
+}
 
+impl HasCredentials for MistralProvider {
     fn has_credentials(&self) -> bool {
         self.api_key.is_some()
     }

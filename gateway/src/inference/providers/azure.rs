@@ -17,7 +17,7 @@ use super::openai::{
     OpenAIRequestMessage, OpenAIResponse, OpenAITool, OpenAIToolChoice, OpenAIToolChoiceString,
     SpecificToolChoice,
 };
-use super::provider_trait::InferenceProvider;
+use super::provider_trait::{HasCredentials, InferenceProvider};
 
 #[derive(Debug)]
 pub struct AzureProvider {
@@ -70,13 +70,12 @@ impl InferenceProvider for AzureProvider {
             .try_into()
             .map_err(map_openai_to_azure_error)?)
         } else {
-            handle_openai_error(
+            Err(map_openai_to_azure_error(handle_openai_error(
                 res.status(),
                 &res.text().await.map_err(|e| Error::AzureServer {
                     message: format!("Error parsing error response: {e}"),
                 })?,
-            )
-            .map_err(map_openai_to_azure_error)
+            )))
         }
     }
 
@@ -125,7 +124,9 @@ impl InferenceProvider for AzureProvider {
         };
         Ok((chunk, stream, raw_request))
     }
+}
 
+impl HasCredentials for AzureProvider {
     fn has_credentials(&self) -> bool {
         self.api_key.is_some()
     }

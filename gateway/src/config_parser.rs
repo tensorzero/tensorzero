@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use crate::embeddings::EmbeddingModelConfig;
 use crate::error::Error;
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::jsonschema_util::JSONSchemaFromPath;
@@ -11,15 +12,19 @@ use crate::tool::{
     ImplicitToolConfig, StaticToolConfig, ToolCallConfig, ToolChoice, ToolConfig,
     IMPLICIT_TOOL_NAME,
 };
+use crate::variant::best_of_n::BestOfNConfig;
+use crate::variant::chat_completion::ChatCompletionConfig;
+use crate::variant::dicl::UninitializedDiclConfig;
 use crate::variant::{Variant, VariantConfig};
 
 #[derive(Debug, Default)]
 pub struct Config<'c> {
     pub gateway: GatewayConfig,
     pub models: HashMap<String, ModelConfig>, // model name => model config
-    pub functions: HashMap<String, FunctionConfig>, // function name => function config
-    pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
-    pub tools: HashMap<String, StaticToolConfig>, // tool name => tool config
+    pub embedding_models: HashMap<String, EmbeddingModelConfig>, // embedding model name => embedding model config
+    pub functions: HashMap<String, FunctionConfig>,              // function name => function config
+    pub metrics: HashMap<String, MetricConfig>,                  // metric name => metric config
+    pub tools: HashMap<String, StaticToolConfig>,                // tool name => tool config
     pub templates: TemplateConfig<'c>,
 }
 
@@ -108,6 +113,7 @@ impl<'c> Config<'c> {
         let mut config = Config {
             gateway,
             models: config.models,
+            embedding_models: config.embedding_models,
             functions,
             metrics: config.metrics,
             tools,
@@ -165,7 +171,13 @@ impl<'c> Config<'c> {
 
         // Validate each function
         for (function_name, function) in &self.functions {
-            function.validate(&self.tools, &self.models, &self.templates, function_name)?;
+            function.validate(
+                &self.tools,
+                &self.models,
+                &self.embedding_models,
+                &self.templates,
+                function_name,
+            )?;
         }
 
         // Ensure that no metrics are named "comment" or "demonstration"
@@ -251,6 +263,8 @@ impl<'c> Config<'c> {
 struct UninitializedConfig {
     pub gateway: Option<GatewayConfig>,
     pub models: HashMap<String, ModelConfig>, // model name => model config
+    #[serde(default)]
+    pub embedding_models: HashMap<String, EmbeddingModelConfig>, // embedding model name => embedding model config
     pub functions: HashMap<String, UninitializedFunctionConfig>, // function name => function config
     #[serde(default)]
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
@@ -311,7 +325,7 @@ enum UninitializedFunctionConfig {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedFunctionConfigChat {
-    variants: HashMap<String, VariantConfig>, // variant name => variant config
+    variants: HashMap<String, UninitializedVariantConfig>, // variant name => variant config
     system_schema: Option<PathBuf>,
     user_schema: Option<PathBuf>,
     assistant_schema: Option<PathBuf>,
@@ -326,7 +340,7 @@ struct UninitializedFunctionConfigChat {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedFunctionConfigJson {
-    variants: HashMap<String, VariantConfig>, // variant name => variant config
+    variants: HashMap<String, UninitializedVariantConfig>, // variant name => variant config
     system_schema: Option<PathBuf>,
     user_schema: Option<PathBuf>,
     assistant_schema: Option<PathBuf>,
@@ -349,8 +363,13 @@ impl UninitializedFunctionConfig {
                     .assistant_schema
                     .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
                     .transpose()?;
+                let variants = params
+                    .variants
+                    .into_iter()
+                    .map(|(name, variant)| variant.load(&base_path).map(|v| (name, v)))
+                    .collect::<Result<HashMap<_, _>, Error>>()?;
                 Ok(FunctionConfig::Chat(FunctionConfigChat {
-                    variants: params.variants,
+                    variants,
                     system_schema,
                     user_schema,
                     assistant_schema,
@@ -384,14 +403,45 @@ impl UninitializedFunctionConfig {
                     tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
                     parallel_tool_calls: false,
                 };
+                let variants = params
+                    .variants
+                    .into_iter()
+                    .map(|(name, variant)| variant.load(&base_path).map(|v| (name, v)))
+                    .collect::<Result<HashMap<_, _>, Error>>()?;
                 Ok(FunctionConfig::Json(FunctionConfigJson {
-                    variants: params.variants,
+                    variants,
                     system_schema,
                     user_schema,
                     assistant_schema,
                     output_schema,
                     implicit_tool_call_config,
                 }))
+            }
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
+pub enum UninitializedVariantConfig {
+    ChatCompletion(ChatCompletionConfig),
+    #[serde(rename = "experimental_best_of_n")]
+    BestOfN(BestOfNConfig),
+    #[serde(rename = "experimental_dynamic_in_context_learning")]
+    Dicl(UninitializedDiclConfig),
+}
+
+impl UninitializedVariantConfig {
+    pub fn load<P: AsRef<Path>>(self, base_path: P) -> Result<VariantConfig, Error> {
+        match self {
+            UninitializedVariantConfig::ChatCompletion(params) => {
+                Ok(VariantConfig::ChatCompletion(params))
+            }
+            UninitializedVariantConfig::BestOfN(params) => Ok(VariantConfig::BestOfN(params)),
+            UninitializedVariantConfig::Dicl(params) => {
+                Ok(VariantConfig::Dicl(params.load(base_path)?))
             }
         }
     }
@@ -428,7 +478,7 @@ mod tests {
 
     use std::env;
 
-    use crate::variant::JsonMode;
+    use crate::{embeddings::EmbeddingProviderConfig, variant::JsonMode};
 
     /// Ensure that the sample valid config can be parsed without panicking
     #[test]
@@ -523,6 +573,22 @@ mod tests {
                 }
             }
             _ => panic!("Expected a JSON function"),
+        }
+
+        assert_eq!(config.embedding_models.len(), 1);
+
+        let embedding_model = config
+            .embedding_models
+            .get("text-embedding-3-small")
+            .unwrap();
+        assert_eq!(embedding_model.routing, vec!["openai"]);
+        assert_eq!(embedding_model.providers.len(), 1);
+        let provider = embedding_model.providers.get("openai").unwrap();
+        match provider {
+            EmbeddingProviderConfig::OpenAI(openai_config) => {
+                assert_eq!(openai_config.model_name, "text-embedding-3-small");
+            }
+            _ => panic!("Expected an OpenAI provider"),
         }
     }
 
@@ -1254,6 +1320,17 @@ mod tests {
         [models.claude-3-haiku-20240307.providers.anthropic]
         type = "anthropic"
         model_name = "claude-3-haiku-20240307"
+
+        # ┌────────────────────────────────────────────────────────────────────────────┐
+        # │                              EMBEDDING MODELS                              │
+        # └────────────────────────────────────────────────────────────────────────────┘
+
+        [embedding_models.text-embedding-3-small]
+        routing = ["openai"]
+
+        [embedding_models.text-embedding-3-small.providers.openai]
+        type = "openai"
+        model_name = "text-embedding-3-small"
 
         # ┌────────────────────────────────────────────────────────────────────────────┐
         # │                                 FUNCTIONS                                  │
