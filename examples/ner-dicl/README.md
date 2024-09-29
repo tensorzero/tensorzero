@@ -1,4 +1,4 @@
-# Example: Fine-Tuning TensorZero JSON Functions for Named Entity Recognition Using Demonstrations (CoNLL++)
+# Example: Improving TensorZero JSON Functions for Named Entity Recognition Using Dynamic In-Context Learning (CoNLL++)
 
 ## Background
 
@@ -12,8 +12,11 @@ Each example in the dataset includes a short segment of text and instructs the m
 We provide the output schema to TensorZero at `config/functions/extract_entities/output_schema.json`.
 In our problem setting, we consider any output that fails to validate against the schema to be incorrect.
 
-We'll show that using a handful of demonstrations to fine-tune an LLM can lead to a significant improvement in performance.
-Using the notebook in `recipes/supervised_fine_tuning/demonstrations/openai.ipynb`, we can fine-tune a GPT-4o mini model to achieve ~75% accuracy on the CoNLL++ dataset compared to ~10% for the base model.
+We'll show that using dynamic in-context learning (DICL) to improve the performance of a TensorZero JSON function is a very efficient way to learn from a small number of examples.
+This technique first prepares a vector store of example inputs and outputs that worked well as well as embeddings of the input.
+At inference time, the new input is embedded and compared to the examples in the vector store using cosine similarity.
+We query a set of nearest neighbors and use them as examples to prompt the model with demonstrations of good behavior.
+We then run the JSON function on the input and evaluate the output.
 
 ## Setup
 
@@ -54,7 +57,7 @@ You can run the example in the `conll.ipynb` notebook.
 Make sure to install the dependencies in the `requirements.txt` file.
 It should not require any changes to run and will automatically connect to the TensorZero Gateway you started.
 
-The notebook will first attempt to solve the NER task using the `extract_entities` JSON function and randomly sample either GPT-4o or vanilla Llama 3.1 8B to do it with.
+The notebook will first attempt to solve the NER task using the `extract_entities` JSON function with GPT-4o mini.
 After this is done, we evaluate the output using both an exact match metric and Jaccard similarity.
 We provide feedback in each of these metrics to TensorZero to learn from the results.
 
@@ -63,11 +66,11 @@ This inference is performed with a variant specified and `dryrun` set to `true` 
 
 ## Improving the NER System
 
-At this point, your ClickHouse database will include inferences in a structured format along with demonstrations of the correct output (training data).
+At this point, your ClickHouse database will include inferences in a structured format along with feedback from the exact match and Jaccard similarity metrics.
 You can now use TensorZero recipes to learn from this experience to produce better variants of the NER system.
-Since the initial performance of GPT-4o mini is not very good (I saw ~10% exact match accuracy), we'll need to use the `recipes/supervised_fine_tuning/demonstrations/openai.ipynb` notebook to fine-tune a GPT-4o Mini model to achieve ~75% accuracy on the CoNLL++ dataset.
+Since the initial performance of GPT-4o mini is not very good (I saw ~8% exact match accuracy), we'll use the DICL recipe to improve the performance of the model.
 At the conclusion of that notebook you should see a few blocks to add to `tensorzero.toml` to update the system to use the new model and the corresponding variant.
-Even with ~100 examples, we see a significant improvement in performance over the base model.
+Even with ~80 good examples and k=10 for retrieval, we see a significant improvement in performance over the base model.
 You can experiment with other recipes,models, prompts you think might be better, or combinations thereof by editing the configuration.
 You can also experiment with how many demonstrations to include in the fine-tuning process.
 See how few examples you need to get a serious performance boost!
@@ -83,6 +86,6 @@ docker compose up
 You can then re-run the test set evaluation in the `conll.ipynb` notebook to see how the new variants perform.
 You should see a clear improvement over the baseline.
 
-We used 100 demonstrations to fine-tune the GPT-4o mini model and achieved a significant improvement in performance as shown in the plot below.
+![DICL Performance Improvement](img/example_dicl_performance.png)
 
-![fine-tuned-performance](./img/example-performance.png)
+This image illustrates the significant boost in performance that can be obtained by applying the DICL recipe to improve the NER system.

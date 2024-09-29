@@ -18,6 +18,13 @@ routing = ["openai"]
 type = "openai"
 model_name = "gpt-4o-mini-2024-07-18"
 
+[embedding_models.text-embedding-3-small]
+routing = ["openai"]
+
+[embedding_models.text-embedding-3-small.providers.openai]
+type = "openai"
+model_name = "text-embedding-3-small"
+
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
@@ -32,15 +39,13 @@ model = "gpt-4o-mini-2024-07-18"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
 json_mode = "strict"
 
-[functions.extract_entities_no_schema]
-type = "json"
-output_schema = "functions/extract_entities/output_schema.json"
-
-[functions.extract_entities_no_schema.variants.initial_prompt_gpt4o_mini]
+[functions.extract_entities.variants.exact_match_dicl]
+weight = 1
+type = "experimental_dynamic_in_context_learning"
+embedding_model = "text-embedding-3-small"
 model = "gpt-4o-mini-2024-07-18"
-type = "chat_completion"
-system_template = "functions/extract_entities_no_schema/initial_prompt/system_instructions.txt"
-
+k = 10
+json_mode = "strict"
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
