@@ -68,6 +68,7 @@ pub struct Params {
     // If provided for a JSON inference, the inference will use the specified output schema instead of the
     // configured one. We only lazily validate this schema.
     output_schema: Option<Value>,
+    #[serde(default)]
     api_keys: InferenceApiKeys,
 }
 

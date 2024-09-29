@@ -1303,3 +1303,161 @@ async fn e2e_test_tool_call_streaming() {
         DUMMY_RAW_REQUEST
     );
 }
+
+#[tokio::test]
+pub async fn e2e_test_dynamic_api_key() {
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": "test_dynamic_api_key",
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the capital city of Japan?"
+                }
+            ]},
+        "stream": false,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    // Check that the API response is an error since we didn't provide the right key
+    // TODO(#362): Refactor errors so that this can be a BAD_REQUEST
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    let response_json = response.json::<Value>().await.unwrap();
+    let error_message = response_json.get("error").unwrap().as_str().unwrap();
+    assert!(error_message.contains("Invalid API key for Dummy provider"));
+
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": "test_dynamic_api_key",
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the capital city of Japan?"
+                }
+            ]},
+        "stream": false,
+        "api_keys": {
+            "dummy_api_key": "good_key"
+        }
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+    assert_eq!(episode_id_response, episode_id);
+
+    let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, "test_dynamic_api_key");
+
+    let content = response_json.get("content").unwrap().as_array().unwrap();
+    assert_eq!(content.len(), 1);
+    let content_block = content.first().unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
+
+    let usage = response_json.get("usage").unwrap();
+    let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
+    assert!(input_tokens > 0);
+    let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
+    assert!(output_tokens > 0);
+
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check if ClickHouse is ok - ChatInference Table
+    let clickhouse = get_clickhouse().await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id = Uuid::parse_str(id).unwrap();
+    assert_eq!(id, inference_id);
+
+    let function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(function_name, payload["function_name"]);
+
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, "test_dynamic_api_key");
+
+    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+    assert_eq!(retrieved_episode_id, episode_id);
+
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let correct_input = json!({
+        "system": {"assistant_name": "Dr. Mehta"},
+        "messages": [
+            {
+                "role": "user",
+                "content": [{"type": "text", "value": "What is the capital city of Japan?"}]
+            }
+        ]
+    });
+    assert_eq!(input, correct_input);
+
+    let content_blocks = result.get("output").unwrap().as_str().unwrap();
+    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    assert_eq!(content_blocks.len(), 1);
+    let content_block = content_blocks.first().unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(clickhouse_content, content);
+
+    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
+    assert!(tool_params.is_empty());
+
+    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
+    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    let inference_params = inference_params.get("chat_completion").unwrap();
+    assert_eq!(
+        inference_params
+            .get("temperature")
+            .unwrap()
+            .as_f64()
+            .unwrap(),
+        1.0
+    );
+    assert_eq!(inference_params.get("seed").unwrap().as_u64().unwrap(), 69);
+    assert_eq!(
+        inference_params
+            .get("max_tokens")
+            .unwrap()
+            .as_u64()
+            .unwrap(),
+        100
+    );
+    // It's not necessary to check ModelInference table given how many other places we do that
+}

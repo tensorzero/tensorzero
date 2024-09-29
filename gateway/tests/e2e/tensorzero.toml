@@ -208,6 +208,13 @@ routing = ["best_of_n_evaluator"]
 type = "dummy"
 model_name = "best_of_n_0"
 
+[models.test_key]
+routing = ["dummy"]
+
+[models.test_key.providers.dummy]
+type = "dummy"
+model_name = "test_key"
+
 [embedding_models.text-embedding-3-small]
 routing = ["openai"]
 
@@ -228,6 +235,14 @@ system_schema = "../../fixtures/config/functions/basic_test/system_schema.json"
 type = "chat_completion"
 weight = 1
 model = "test"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+temperature = 1.0
+max_tokens = 100
+seed = 69
+
+[functions.basic_test.variants.test_dynamic_api_key]
+type = "chat_completion"
+model = "test_key"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 temperature = 1.0
 max_tokens = 100
