@@ -1,12 +1,3 @@
-# TensorZero configuration file for the `ner-demonstrations` example.
-
-# ┌────────────────────────────────────────────────────────────────────────────┐
-# │                                  GENERAL                                   │
-# └────────────────────────────────────────────────────────────────────────────┘
-
-[gateway]
-bind_address = "0.0.0.0:3000"
-
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                   MODELS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
@@ -33,19 +24,23 @@ model_name = "text-embedding-3-small"
 type = "json"
 output_schema = "functions/extract_entities/output_schema.json"
 
-[functions.extract_entities.variants.gpt4o_mini_initial_prompt]
+[functions.extract_entities.variants.baseline]
 type = "chat_completion"
 model = "gpt-4o-mini-2024-07-18"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
 json_mode = "strict"
 
-[functions.extract_entities.variants.exact_match_dicl]
-weight = 1
-type = "experimental_dynamic_in_context_learning"
-embedding_model = "text-embedding-3-small"
-model = "gpt-4o-mini-2024-07-18"
-k = 10
-json_mode = "strict"
+# [functions.extract_entities.variants.dicl]
+# type = "experimental_dynamic_in_context_learning"
+# embedding_model = "text-embedding-3-small"
+# model = "gpt-4o-mini-2024-07-18"
+# k = 10
+# system_instructions = "functions/extract_entities/initial_prompt/system_template.minijinja"
+# json_mode = "strict"
+# weight = 1
+
+# Tip: DICL variants support additional parameters like system instructions or strict JSON mode.
+
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘

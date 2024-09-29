@@ -1,4 +1,5 @@
 clickhouse_connect
+ipykernel
 openai
 pandas
 toml

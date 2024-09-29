@@ -2,9 +2,11 @@
 
 ## Background
 
-Named Entity Recognition (NER) is the process of identifying and categorizing named entities in text into predefined categories such as person, organization, location, and date. NER is a fundamental task in natural language processing (NLP) and is widely used in various applications such as information extraction, question answering, and machine translation.
+Named Entity Recognition (NER) is the process of identifying and categorizing named entities in text into predefined categories such as person, organization, location, and date.
+NER is a fundamental task in natural language processing (NLP) and is widely used in various applications such as information extraction, question answering, and machine translation.
 
-Once upon a time, this was done using rule-based systems or special-purpose models. In light of progress in foundation models, most would use an LLM to address this task today, especially given recent advancements in structured decoding and JSON mode offerings from most inference providers.
+Once upon a time, this was done using rule-based systems or special-purpose models.
+In light of progress in foundation models, most would use an LLM to address this task today, especially given recent advancements in structured decoding and JSON mode offerings from most inference providers.
 
 Here, we present a stylized example of a NER system that uses TensorZero JSON functions to decode named entities from text.
 We build off of the [CoNLL++ dataset](https://arxiv.org/abs/1909.01441v1) and [work](https://predibase.com/blog/lorax-outlines-better-json-extraction-with-structured-generation-and-lora) from Predibase for the problem setting.
@@ -68,7 +70,7 @@ This inference is performed with a variant specified and `dryrun` set to `true` 
 
 At this point, your ClickHouse database will include inferences in a structured format along with feedback from the exact match and Jaccard similarity metrics.
 You can now use TensorZero recipes to learn from this experience to produce better variants of the NER system.
-Since the initial performance of GPT-4o mini is not very good (I saw ~8% exact match accuracy), we'll use the DICL recipe to improve the performance of the model.
+Since the initial performance of GPT-4o mini is not very good (we saw ~7% exact match accuracy), we'll use the DICL recipe to improve the performance of the model.
 At the conclusion of that notebook you should see a few blocks to add to `tensorzero.toml` to update the system to use the new model and the corresponding variant.
 Even with ~80 good examples and k=10 for retrieval, we see a significant improvement in performance over the base model.
 You can experiment with other recipes,models, prompts you think might be better, or combinations thereof by editing the configuration.
