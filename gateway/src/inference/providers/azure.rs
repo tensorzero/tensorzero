@@ -17,7 +17,7 @@ use super::openai::{
     OpenAIRequestMessage, OpenAIResponse, OpenAITool, OpenAIToolChoice, OpenAIToolChoiceString,
     SpecificToolChoice,
 };
-use super::provider_trait::InferenceProvider;
+use super::provider_trait::{HasCredentials, InferenceProvider};
 
 #[derive(Debug)]
 pub struct AzureProvider {
@@ -124,7 +124,9 @@ impl InferenceProvider for AzureProvider {
         };
         Ok((chunk, stream, raw_request))
     }
+}
 
+impl HasCredentials for AzureProvider {
     fn has_credentials(&self) -> bool {
         self.api_key.is_some()
     }

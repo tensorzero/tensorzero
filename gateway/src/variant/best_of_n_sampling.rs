@@ -8,6 +8,8 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::time::{timeout, Duration};
 
+use crate::embeddings::EmbeddingModelConfig;
+use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::inference::types::{
     ContentBlock, FunctionType, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
@@ -27,6 +29,7 @@ use super::{InferenceConfig, ModelUsedInfo, Variant};
 
 #[derive(Debug, Deserialize)]
 pub struct BestOfNSamplingConfig {
+    #[serde(default)]
     pub weight: f64,
     #[serde(default = "default_timeout")]
     pub timeout_s: f64,
@@ -64,20 +67,20 @@ impl Variant for BestOfNSamplingConfig {
     async fn infer<'a, 'request>(
         &'a self,
         input: &Input,
-        models: &'a HashMap<String, ModelConfig>,
+        models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
-        client: &'request Client,
+        clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<InferenceResult<'a>, Error> {
         let candidate_inference_results = self
-            .infer_candidates(input, models, function, inference_config, client)
+            .infer_candidates(input, models, function, inference_config, clients)
             .await?;
         self.select_best_candidate(
             input,
-            models,
+            models.models,
             inference_config,
-            client,
+            clients.http_client,
             candidate_inference_results,
         )
         .await
@@ -86,10 +89,10 @@ impl Variant for BestOfNSamplingConfig {
     async fn infer_stream<'request>(
         &'static self,
         _input: &Input,
-        _models: &'static HashMap<String, ModelConfig>,
+        _models: &'request InferenceModels<'static>,
         _function: &'static FunctionConfig,
         _inference_config: &'request InferenceConfig<'request>,
-        _client: &'request Client,
+        _clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<
         (
@@ -108,6 +111,7 @@ impl Variant for BestOfNSamplingConfig {
         &self,
         function: &FunctionConfig,
         models: &HashMap<String, ModelConfig>,
+        embedding_models: &HashMap<String, EmbeddingModelConfig>,
         templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,
@@ -121,16 +125,28 @@ impl Variant for BestOfNSamplingConfig {
                     name: candidate.to_string(),
                 })?;
             variant
-                .validate(function, models, templates, function_name, candidate)
+                .validate(
+                    function,
+                    models,
+                    embedding_models,
+                    templates,
+                    function_name,
+                    candidate,
+                )
                 .map_err(|e| Error::InvalidCandidate {
                     variant_name: variant_name.to_string(),
                     message: e.to_string(),
                 })?;
         }
         // Validate the evaluator variant
-        self.evaluator
-            .inner
-            .validate(function, models, templates, function_name, variant_name)?;
+        self.evaluator.inner.validate(
+            function,
+            models,
+            embedding_models,
+            templates,
+            function_name,
+            variant_name,
+        )?;
         Ok(())
     }
 
@@ -147,10 +163,10 @@ impl BestOfNSamplingConfig {
     async fn infer_candidates<'a, 'request>(
         &self,
         input: &Input,
-        models: &'a HashMap<String, ModelConfig>,
+        models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'request>,
-        client: &'request Client,
+        clients: &'request InferenceClients<'request>,
     ) -> Result<Vec<InferenceResult<'a>>, Error> {
         // Get all the variants we are going to infer
         let candidate_variants = self
@@ -180,7 +196,7 @@ impl BestOfNSamplingConfig {
                         models,
                         function,
                         inference_config,
-                        client,
+                        clients,
                         InferenceParams::default(),
                     ),
                 ),
@@ -1036,6 +1052,8 @@ mod tests {
             templates: &templates,
             tool_config: None,
             dynamic_output_schema: None,
+            function_name: "".to_string(),
+            variant_name: "".to_string(),
         };
 
         let selected = best_of_n_variant

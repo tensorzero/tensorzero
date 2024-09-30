@@ -88,6 +88,10 @@ We are working on a series of **complete runnable examples** illustrating Tensor
 >
 > This example showcases how best-of-N sampling can significantly enhance an LLM's chess-playing abilities by selecting the most promising moves from multiple generated options.
 
+> **[Improving Data Extraction (NER) with Dynamic In-Context Learning](https://github.com/tensorzero/tensorzero/tree/main/examples/ner-dicl)**
+>
+> This example demonstrates how Dynamic In-Context Learning (DICL) can enhance Named Entity Recognition (NER) performance by leveraging relevant historical examples to improve data extraction accuracy and consistency without having to fine-tune a model.
+
 > **[Improving Math Reasoning with a Custom Recipe for Automated Prompt Engineering (DSPy)](https://github.com/tensorzero/tensorzero/tree/main/examples/gsm8k-custom-recipe-dspy)**
 >
 > TensorZero provides a number of pre-built optimization recipes covering common LLM engineering workflows.

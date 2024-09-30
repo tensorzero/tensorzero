@@ -19,6 +19,8 @@ use crate::inference::types::{
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
+use super::provider_trait::HasCredentials;
+
 lazy_static! {
     static ref ANTHROPIC_BASE_URL: Url = {
         #[allow(clippy::expect_used)]
@@ -131,7 +133,9 @@ impl InferenceProvider for AnthropicProvider {
         };
         Ok((chunk, stream, raw_request))
     }
+}
 
+impl HasCredentials for AnthropicProvider {
     fn has_credentials(&self) -> bool {
         self.api_key.is_some()
     }
