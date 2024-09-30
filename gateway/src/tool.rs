@@ -70,7 +70,7 @@ pub struct DynamicImplicitToolConfig {
 /// Contains all information required to tell an LLM what tools it can call
 /// and what sorts of tool calls (parallel, none, etc) it is allowed to respond with.
 /// Most inference providers can convert this into their desired tool format.
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ToolCallConfig {
     pub tools_available: Vec<ToolConfig>,
     pub tool_choice: ToolChoice,
