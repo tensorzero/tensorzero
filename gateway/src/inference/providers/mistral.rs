@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{borrow::Cow, time::Duration};
 
 use futures::stream::Stream;
 use futures::StreamExt;
@@ -23,8 +23,8 @@ use crate::{
 
 use super::{
     openai::{
-        get_chat_url, prepare_openai_messages, OpenAIFunction, OpenAIRequestMessage, OpenAITool,
-        OpenAIToolType,
+        get_chat_url, tensorzero_to_openai_messages, OpenAIFunction, OpenAIRequestMessage,
+        OpenAISystemRequestMessage, OpenAITool, OpenAIToolType,
     },
     provider_trait::{HasCredentials, InferenceProvider},
 };
@@ -203,6 +203,28 @@ pub fn stream_mistral(
     }
 }
 
+pub(super) fn prepare_mistral_messages<'a>(
+    request: &'a ModelInferenceRequest,
+) -> Vec<OpenAIRequestMessage<'a>> {
+    let mut messages: Vec<OpenAIRequestMessage> = request
+        .messages
+        .iter()
+        .flat_map(tensorzero_to_openai_messages)
+        .collect();
+    if let Some(system_msg) = tensorzero_to_mistral_system_message(request.system.as_deref()) {
+        messages.insert(0, system_msg);
+    }
+    messages
+}
+
+fn tensorzero_to_mistral_system_message(system: Option<&str>) -> Option<OpenAIRequestMessage<'_>> {
+    system.map(|instructions| {
+        OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+            content: Cow::Borrowed(instructions),
+        })
+    })
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "type")]
@@ -314,7 +336,7 @@ impl<'a> MistralRequest<'a> {
             }
             ModelInferenceRequestJsonMode::Off => None,
         };
-        let messages = prepare_openai_messages(request);
+        let messages = prepare_mistral_messages(request);
         let (tools, tool_choice) = prepare_mistral_tools(request)?;
 
         Ok(MistralRequest {
