@@ -2,63 +2,42 @@
 # │                                   MODELS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-[models."llama3.1-8b-instruct"]
-routing = ["together"]
-
-[models."llama3.1-8b-instruct".providers.together]
-type = "together"
-model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
-
-[models.gpt-35-turbo]
+[models."gpt-4o-mini-2024-07-18"]
 routing = ["openai"]
 
-[models.gpt-35-turbo.providers.openai]
+[models."gpt-4o-mini-2024-07-18".providers.openai]
 type = "openai"
-model_name = "gpt-3.5-turbo"
+model_name = "gpt-4o-mini-2024-07-18"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-[functions.solve_math_problem]
-type = "chat"
-user_schema = "functions/solve_math_problem/user_schema.json"
+[functions.extract_entities]
+type = "json"
+output_schema = "functions/extract_entities/output_schema.json"
 
-[functions.solve_math_problem.variants.llama-8b-baseline]
-weight = 1
+[functions.extract_entities.variants.gpt4o_mini_initial_prompt]
 type = "chat_completion"
-model = "llama3.1-8b-instruct"
-system_template = "functions/solve_math_problem/llama-8b-baseline/system.minijinja"
-user_template = "functions/solve_math_problem/llama-8b-baseline/user.minijinja"
-
-[functions.solve_math_problem.variants.gpt-35-turbo-baseline]
-weight = 1
-type = "chat_completion"
-model = "gpt-35-turbo"
-system_template = "functions/solve_math_problem/gpt-35-turbo-baseline/system.minijinja"
-user_template = "functions/solve_math_problem/gpt-35-turbo-baseline/user.minijinja"
-
-[functions.solve_math_problem.variants.gpt-35-turbo-best-of-5]
-type = "experimental_best_of_n_sampling"
-weight = 1
-candidates = [
-    "gpt-35-turbo-baseline",
-    "gpt-35-turbo-baseline",
-    "gpt-35-turbo-baseline",
-    "gpt-35-turbo-baseline",
-    "gpt-35-turbo-baseline",
-]
-
-[functions.solve_math_problem.variants.gpt-35-turbo-best-of-5.evaluator]
-model = "gpt-35-turbo"
-system_template = "functions/solve_math_problem/gpt-35-turbo-baseline/system.minijinja"
-user_template = "functions/solve_math_problem/gpt-35-turbo-baseline/user.minijinja"
+model = "gpt-4o-mini-2024-07-18"
+system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+json_mode = "strict"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-[metrics.correct]
+[metrics.exact_match]
+type = "boolean"
+level = "inference"
+optimize = "max"
+
+[metrics.jaccard_similarity]
+type = "float"
+level = "inference"
+optimize = "max"
+
+[metrics.valid_json]
 type = "boolean"
 level = "inference"
 optimize = "max"

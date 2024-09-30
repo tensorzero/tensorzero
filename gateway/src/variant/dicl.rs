@@ -25,6 +25,10 @@ use super::{
     InferenceConfig, JsonMode, ModelUsedInfo, Variant,
 };
 
+/// The primary configuration for the Dicl variant
+/// We need a helper to deserialize the config because it relies on
+/// a path to a file for system instructions and we need to use the
+/// load() step to get the fully qualified path.
 #[derive(Debug, Default)]
 pub struct DiclConfig {
     pub weight: f64,
@@ -63,23 +67,22 @@ impl Variant for DiclConfig {
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
+        // So this can be mutably borrowed by the prepare_request function
         let mut inference_params = inference_params;
-        let serialized_input = serde_json::to_string(&input).map_err(|e| Error::Serialization {
-            message: format!(
-                "Error in serializing Input in dynamic in-context learning variant: {}",
-                e
-            ),
-        })?;
 
+        // Embed the input and grab the relevant examples from the database
         let (relevant_examples, embedding_response) = self
             .retrieve_relevant_examples(
-                serialized_input,
+                input,
                 models.embedding_models,
                 clients,
                 &inference_config.function_name,
                 &inference_config.variant_name,
+                function,
             )
             .await?;
+
+        // Prepare the request for the model
         let model_inference_request = self.prepare_request(
             input,
             &relevant_examples,
@@ -88,9 +91,12 @@ impl Variant for DiclConfig {
             false,
             &mut inference_params,
         )?;
+
         let model_config = models.models.get(&self.model).ok_or(Error::UnknownModel {
             name: self.model.clone(),
         })?;
+
+        // Actually run the inference
         let mut inference_response = infer_model_request(
             model_inference_request,
             &self.model,
@@ -101,6 +107,8 @@ impl Variant for DiclConfig {
             inference_params,
         )
         .await?;
+
+        // Add the embedding to the model inference results
         inference_response
             .mut_model_inference_results()
             .push(embedding_response.into());
@@ -123,23 +131,22 @@ impl Variant for DiclConfig {
         ),
         Error,
     > {
+        // So this can be mutably borrowed by the prepare_request function
         let mut inference_params = inference_params;
-        let serialized_input = serde_json::to_string(&input).map_err(|e| Error::Serialization {
-            message: format!(
-                "Error in serializing Input in dynamic in-context learning variant: {}",
-                e
-            ),
-        })?;
 
+        // Embed the input and grab the relevant examples from the database
         let (relevant_examples, embedding_response) = self
             .retrieve_relevant_examples(
-                serialized_input,
+                input,
                 models.embedding_models,
                 clients,
                 &inference_config.function_name,
                 &inference_config.variant_name,
+                function,
             )
             .await?;
+
+        // Prepare the request for the model
         let request = self.prepare_request(
             input,
             &relevant_examples,
@@ -148,9 +155,12 @@ impl Variant for DiclConfig {
             true,
             &mut inference_params,
         )?;
+
         let model_config = models.models.get(&self.model).ok_or(Error::UnknownModel {
             name: self.model.clone(),
         })?;
+
+        // Actually run the inference
         let (inference_result_chunk, inference_result_stream, mut model_used_info) =
             infer_model_request_stream(
                 request,
@@ -161,6 +171,8 @@ impl Variant for DiclConfig {
                 inference_params,
             )
             .await?;
+
+        // Add the embedding to the model inference results
         model_used_info
             .previous_model_inference_results
             .push(embedding_response.into());
@@ -224,15 +236,12 @@ impl Variant for DiclConfig {
 struct ChatExample {
     input: Input,
     output: Vec<ContentBlockOutput>,
-    // distance: Option<f32>, // Include if needed
 }
 
-// Start of Selection
 #[derive(Debug, Deserialize, PartialEq)]
 struct JsonExample {
     input: Input,
     output: JsonInferenceOutput,
-    // distance: Option<f32>, // Include if needed
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -246,33 +255,47 @@ enum Example {
 struct RawExample {
     input: String,
     output: String,
-    // Include `distance` if you need it later
-    // distance: f32,
 }
 
 impl DiclConfig {
     async fn retrieve_relevant_examples<'a>(
         &'a self,
-        serialized_input: String,
+        input: &Input,
         embedding_models: &'a HashMap<String, EmbeddingModelConfig>,
         clients: &InferenceClients<'_>,
         function_name: &str,
         variant_name: &str,
+        function: &FunctionConfig,
     ) -> Result<(Vec<Example>, EmbeddingResponseWithMetadata<'a>), Error> {
+        // Serialize the input so that it can be embedded
+        let serialized_input = serde_json::to_string(&input).map_err(|e| Error::Serialization {
+            message: format!(
+                "Error in serializing Input in dynamic in-context learning variant: {}",
+                e
+            ),
+        })?;
+
         let embedding_model =
             embedding_models
                 .get(&self.embedding_model)
                 .ok_or(Error::Inference {
                     message: format!("Embedding model {} not found", self.embedding_model),
                 })?;
+
         let embedding_request = EmbeddingRequest {
             input: serialized_input.to_string(),
         };
+
+        // Embed the input via an API request
         let embedding_reponse = embedding_model
             .embed(&embedding_request, clients.http_client)
             .await?;
+
+        // Wrap the embedding in a response with metadata
         let embedding_response_with_metadata =
             EmbeddingResponseWithMetadata::new(embedding_reponse, &self.embedding_model);
+
+        // Format the embedding as a string for ClickHouse
         let formatted_embedding = format!(
             "[{}]",
             embedding_response_with_metadata
@@ -291,9 +314,11 @@ impl DiclConfig {
                    FORMAT JSONEachRow"#,
             formatted_embedding, function_name, variant_name, self.k
         );
+
+        // Run the query on the ClickHouse database to find nearest neighbors
         let result = clients.clickhouse_connection_info.run_query(query).await?;
 
-        // Parse each line into RawExample
+        // Parse each line into RawExample (since we will have some serialized JSON strings inside it)
         let raw_examples: Vec<RawExample> = result
             .lines()
             .map(serde_json::from_str::<RawExample>)
@@ -302,8 +327,8 @@ impl DiclConfig {
                 message: format!("Failed to parse raw examples: {}", e),
             })?;
 
-        // Convert RawExamples into Examples
-        let examples = parse_raw_examples(raw_examples)?;
+        // Convert RawExamples into Examples (parses those serialized JSON strings)
+        let examples = parse_raw_examples(raw_examples, function)?;
 
         if examples.len() != self.k as usize {
             tracing::warn!(
@@ -327,6 +352,8 @@ impl DiclConfig {
             Example::Chat(chat_example) => chat_example.input.clone(),
             Example::Json(json_example) => json_example.input.clone(),
         };
+
+        // Push the input as a user message
         messages.push(RequestMessage {
             role: Role::User,
             content: vec![serde_json::to_string(&input)
@@ -338,6 +365,8 @@ impl DiclConfig {
                 })?
                 .into()],
         });
+
+        // Prepare the output
         let content: Vec<ContentBlock> = match example {
             Example::Chat(chat_example) => chat_example
                 .output
@@ -347,6 +376,8 @@ impl DiclConfig {
                 .collect(),
             Example::Json(json_example) => vec![json_example.output.raw.clone().into()],
         };
+
+        // Push the output as an assistant message
         messages.push(RequestMessage {
             role: Role::Assistant,
             content,
@@ -389,10 +420,13 @@ impl DiclConfig {
             .flatten()
             .chain(std::iter::once(self.prepare_input_message(input)?))
             .collect::<Vec<_>>();
+
         let system = Some(self.system_instructions.clone());
+
         inference_params
             .chat_completion
             .backfill_with_variant_params(self.temperature, self.max_tokens, self.seed);
+
         prepare_model_inference_request(
             messages,
             system,
@@ -408,7 +442,10 @@ impl DiclConfig {
 // Since the `input` and `output` fields in the ClickHouse table are of type String,
 // we need to parse them into the appropriate types before using them and cannot rely
 // on Deserialize to do it for us.
-fn parse_raw_examples(raw_examples: Vec<RawExample>) -> Result<Vec<Example>, Error> {
+fn parse_raw_examples(
+    raw_examples: Vec<RawExample>,
+    function: &FunctionConfig,
+) -> Result<Vec<Example>, Error> {
     let mut examples = Vec::new();
     for raw_example in raw_examples {
         // Parse the `input` string into `Input`
@@ -417,28 +454,39 @@ fn parse_raw_examples(raw_examples: Vec<RawExample>) -> Result<Vec<Example>, Err
                 message: format!("Failed to parse `input`: {}", e),
             })?;
 
-        // Try parsing `output` as `Vec<ContentBlockOutput>` (for ChatExample)
-        if let Ok(output) = serde_json::from_str::<Vec<ContentBlockOutput>>(&raw_example.output) {
-            examples.push(Example::Chat(ChatExample { input, output }));
-            continue;
+        match function {
+            FunctionConfig::Chat(_) => {
+                // Try parsing `output` as `Vec<ContentBlockOutput>` (for ChatExample)
+                let output = serde_json::from_str::<Vec<ContentBlockOutput>>(&raw_example.output)
+                    .map_err(|e| Error::Serialization {
+                    message: format!(
+                        "Failed to parse `output` in example `{:?}`: {}",
+                        raw_example, e
+                    ),
+                })?;
+                examples.push(Example::Chat(ChatExample { input, output }));
+            }
+            FunctionConfig::Json(_) => {
+                // Try parsing `output` as `JsonInferenceOutput` (for JsonExample)
+                let output = serde_json::from_str::<JsonInferenceOutput>(&raw_example.output)
+                    .map_err(|e| Error::Serialization {
+                        message: format!(
+                            "Failed to parse `output` in example `{:?}`: {}",
+                            raw_example, e
+                        ),
+                    })?;
+                examples.push(Example::Json(JsonExample { input, output }));
+            }
         }
-
-        // Try parsing `output` as `JsonInferenceOutput` (for JsonExample)
-        if let Ok(output) = serde_json::from_str::<JsonInferenceOutput>(&raw_example.output) {
-            examples.push(Example::Json(JsonExample { input, output }));
-            continue;
-        }
-
-        // If neither parsing succeeded, return an error
-        return Err(Error::Serialization {
-            message: "Failed to parse `output` into known formats".to_string(),
-        });
     }
 
     Ok(examples)
 }
 
 impl UninitializedDiclConfig {
+    /// Since the system instructions are optional and may be a path to a file,
+    /// we need to load them here so that we can use the base_path to resolve
+    /// any relative paths.
     pub fn load<P: AsRef<Path>>(self, base_path: P) -> Result<DiclConfig, Error> {
         let system_instructions = match self.system_instructions {
             Some(path) => {
@@ -467,8 +515,11 @@ impl UninitializedDiclConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::inference::types::*;
-    use crate::tool::*;
+    use crate::{
+        function::{FunctionConfigChat, FunctionConfigJson},
+        inference::types::{InputMessage, InputMessageContent, Role, Text},
+        tool::{ToolCall, ToolCallOutput},
+    };
     use serde_json::json;
 
     #[test]
@@ -656,9 +707,12 @@ mod tests {
             },
         ];
 
+        let function = FunctionConfig::Chat(FunctionConfigChat {
+            ..Default::default()
+        });
         // Parse the raw examples
-        let parsed_examples =
-            parse_raw_examples(raw_examples.clone()).expect("Failed to parse raw examples");
+        let parsed_examples = parse_raw_examples(raw_examples.clone(), &function)
+            .expect("Failed to parse raw examples");
 
         // Define the expected examples
         let expected_examples = vec![
@@ -720,9 +774,12 @@ mod tests {
                 .unwrap(),
             },
         ];
+        let json_function = FunctionConfig::Json(FunctionConfigJson {
+            ..Default::default()
+        });
 
         // Parse the JSON raw examples
-        let parsed_json_examples = parse_raw_examples(json_raw_examples.clone())
+        let parsed_json_examples = parse_raw_examples(json_raw_examples.clone(), &json_function)
             .expect("Failed to parse JSON raw examples");
 
         // Assert that all parsed JSON examples have 'parsed' as Some

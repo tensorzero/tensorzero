@@ -4,7 +4,8 @@ use crate::{
     endpoints::inference::InferenceApiKeys,
     error::Error,
     inference::{
-        providers::{openai::OpenAIProvider, provider_trait::HasCredentials},
+        providers::openai::OpenAIProvider,
+        providers::provider_trait::HasCredentials,
         types::{current_timestamp, Latency, ModelInferenceResponseWithMetadata, Usage},
     },
     model::ProviderConfig,

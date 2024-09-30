@@ -17,14 +17,15 @@ use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::tool::{create_dynamic_implicit_tool_config, ToolCallConfig};
 use crate::{inference::types::InferenceResult, model::ModelConfig};
-pub mod best_of_n;
+
+pub mod best_of_n_sampling;
 pub mod chat_completion;
 pub mod dicl;
 
 #[derive(Debug)]
 pub enum VariantConfig {
     ChatCompletion(chat_completion::ChatCompletionConfig),
-    BestOfN(best_of_n::BestOfNConfig),
+    BestOfNSampling(best_of_n_sampling::BestOfNSamplingConfig),
     Dicl(dicl::DiclConfig),
 }
 
@@ -105,7 +106,7 @@ impl VariantConfig {
     pub fn weight(&self) -> f64 {
         match self {
             VariantConfig::ChatCompletion(params) => params.weight,
-            VariantConfig::BestOfN(params) => params.weight,
+            VariantConfig::BestOfNSampling(params) => params.weight,
             VariantConfig::Dicl(params) => params.weight,
         }
     }
@@ -134,7 +135,7 @@ impl Variant for VariantConfig {
                     )
                     .await
             }
-            VariantConfig::BestOfN(params) => {
+            VariantConfig::BestOfNSampling(params) => {
                 params
                     .infer(
                         input,
@@ -190,7 +191,7 @@ impl Variant for VariantConfig {
                     )
                     .await
             }
-            VariantConfig::BestOfN(params) => {
+            VariantConfig::BestOfNSampling(params) => {
                 params
                     .infer_stream(
                         input,
@@ -235,7 +236,7 @@ impl Variant for VariantConfig {
                 function_name,
                 variant_name,
             ),
-            VariantConfig::BestOfN(params) => params.validate(
+            VariantConfig::BestOfNSampling(params) => params.validate(
                 function,
                 models,
                 embedding_models,
@@ -257,7 +258,7 @@ impl Variant for VariantConfig {
     fn get_all_template_paths(&self) -> Vec<&PathBuf> {
         match self {
             VariantConfig::ChatCompletion(params) => params.get_all_template_paths(),
-            VariantConfig::BestOfN(params) => params.get_all_template_paths(),
+            VariantConfig::BestOfNSampling(params) => params.get_all_template_paths(),
             VariantConfig::Dicl(params) => params.get_all_template_paths(),
         }
     }

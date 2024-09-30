@@ -934,7 +934,7 @@ model = "json"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 [functions.best_of_n.variants.best_of_n_variant]
-type = "experimental_best_of_n"
+type = "experimental_best_of_n_sampling"
 weight = 1
 candidates = ["variant0", "variant1"]
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
@@ -967,7 +967,7 @@ model = "json_goodbye"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 [functions.best_of_n_json.variants.best_of_n_variant]
-type = "experimental_best_of_n"
+type = "experimental_best_of_n_sampling"
 weight = 1
 candidates = ["variant0", "variant1", "variant2"]
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"

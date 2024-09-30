@@ -21,7 +21,7 @@ use crate::common::{
 };
 
 #[tokio::test]
-pub async fn test_empty_dicl_inference_request() {
+pub async fn test_dicl_inference_request_no_examples() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -128,7 +128,6 @@ pub async fn test_empty_dicl_inference_request() {
     assert!(tool_params.is_empty());
 
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    println!("inference_params: {}", inference_params);
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
@@ -491,7 +490,6 @@ pub async fn test_dicl_inference_request() {
     assert!(tool_params.is_empty());
 
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    println!("inference_params: {}", inference_params);
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
@@ -719,7 +717,6 @@ pub async fn test_dicl_inference_request() {
     assert!(tool_params.is_empty());
 
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    println!("inference_params: {}", inference_params);
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
@@ -1028,7 +1025,6 @@ async fn test_dicl_json_request() {
     assert_eq!(clickhouse_answer, answer);
 
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    println!("inference_params: {}", inference_params);
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());

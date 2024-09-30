@@ -33,7 +33,7 @@ pub struct FunctionConfigChat {
     pub parallel_tool_calls: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct FunctionConfigJson {
     pub variants: HashMap<String, VariantConfig>, // variant name => variant config
     pub system_schema: Option<JSONSchemaFromPath>,

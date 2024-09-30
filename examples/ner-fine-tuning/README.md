@@ -1,4 +1,4 @@
-# Example: Fine-Tuning TensorZero JSON Functions for Named Entity Recognition Using Demonstrations (CoNLL++)
+# Example: Improving Data Extraction (NER) by Fine-Tuning a Llama 3 Model
 
 ## Background
 
@@ -12,8 +12,7 @@ Each example in the dataset includes a short segment of text and instructs the m
 We provide the output schema to TensorZero at `config/functions/extract_entities/output_schema.json`.
 In our problem setting, we consider any output that fails to validate against the schema to be incorrect.
 
-We'll show that using a handful of demonstrations to fine-tune an LLM can lead to a significant improvement in performance.
-Using the notebook in `recipes/supervised_fine_tuning/demonstrations/openai.ipynb`, we can fine-tune a GPT-4o mini model to achieve ~75% accuracy on the CoNLL++ dataset compared to ~10% for the base model.
+We'll show that an optimized Llama 3.1 8B model can be trained to outperform GPT-4o on this task using a small amount of training data, and served by Fireworks at a fraction of the cost and latency.
 
 ## Setup
 
@@ -22,8 +21,9 @@ Using the notebook in `recipes/supervised_fine_tuning/demonstrations/openai.ipyn
 We've written TensorZero configuration files to accomplish this example and have provided them in the `config` directory.
 See `tensorzero.toml` for the main configuration details.
 
-To get started, create a `.env` file with your OpenAI API key (`OPENAI_API_KEY`) and run the following command.
+To get started, create a `.env` file with your OpenAI API key (`OPENAI_API_KEY`) and Fireworks API key (`FIREWORKS_API_KEY`) and run the following command.
 Docker Compose will launch the TensorZero Gateway and a test ClickHouse database.
+Set `CLICKHOUSE_URL=http://localhost:8123/tensorzero` in the shell your notebook will run in.
 
 ```bash
 docker compose up
@@ -48,8 +48,6 @@ pip install -r requirements.txt
 
 ## Running the Example
 
-Set `CLICKHOUSE_URL=http://localhost:8123/tensorzero` in the shell your notebook will run in.
-
 You can run the example in the `conll.ipynb` notebook.
 Make sure to install the dependencies in the `requirements.txt` file.
 It should not require any changes to run and will automatically connect to the TensorZero Gateway you started.
@@ -63,14 +61,14 @@ This inference is performed with a variant specified and `dryrun` set to `true` 
 
 ## Improving the NER System
 
-At this point, your ClickHouse database will include inferences in a structured format along with demonstrations of the correct output (training data).
+At this point, your ClickHouse database will include inferences in a structured format along with feedback on how they went.
 You can now use TensorZero recipes to learn from this experience to produce better variants of the NER system.
-Since the initial performance of GPT-4o mini is not very good (I saw ~10% exact match accuracy), we'll need to use the `recipes/supervised_fine_tuning/demonstrations/openai.ipynb` notebook to fine-tune a GPT-4o Mini model to achieve ~75% accuracy on the CoNLL++ dataset.
+You might notice that the best performing LLM is GPT-4o from OpenAI (not surprising!).
+
+However, we offer a recipe in `recipes/supervised_fine_tuning/metrics/fireworks/` that can be used with very small amounts of data to fine-tune a Llama-3.1 8B model to achieve superior performance to GPT-4o at a fraction of the cost and latency!
 At the conclusion of that notebook you should see a few blocks to add to `tensorzero.toml` to update the system to use the new model and the corresponding variant.
-Even with ~100 examples, we see a significant improvement in performance over the base model.
-You can experiment with other recipes,models, prompts you think might be better, or combinations thereof by editing the configuration.
-You can also experiment with how many demonstrations to include in the fine-tuning process.
-See how few examples you need to get a serious performance boost!
+
+You can also easily experiment with other recipes,models, prompts you think might be better, or combinations thereof by editing the configuration.
 
 ## Experimenting with Improved Variants
 
@@ -81,8 +79,5 @@ docker compose up
 ```
 
 You can then re-run the test set evaluation in the `conll.ipynb` notebook to see how the new variants perform.
-You should see a clear improvement over the baseline.
 
-We used 100 demonstrations to fine-tune the GPT-4o mini model and achieved a significant improvement in performance as shown in the plot below.
-
-![fine-tuned-performance](./img/example-performance.png)
+From a single fine-tune we see the Llama-3.1 8B model greatly outperform GPT-4o on this task with just 100-200 examples!
