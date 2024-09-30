@@ -1,4 +1,4 @@
-# Example: LLMs Solving Chess Puzzles
+# Example: Improving LLM Chess Ability with Best-of-N Sampling
 
 TensorZero was built to support inference strategies more sophisticated than just a single chat completion.
 Today, we also support a best-of-n variant type which samples from several variants concurrently and uses another LLM call to select the best result.

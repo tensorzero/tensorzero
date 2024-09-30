@@ -29,7 +29,7 @@ It enables a **data & learning flywheel for LLMs** by unifying:
   <br>
   <b><a href="https://www.tensorzero.com/docs/gateway/quickstart" target="_blank">Quick Start (5min)</a></b>
   ·
-  <b><a href="https://www.tensorzero.com/docs/gateway/tutorial" target="_blank">Tutorial (30min)</a></b>
+  <b><a href="https://www.tensorzero.com/docs/gateway/tutorial" target="_blank">Comprehensive Tutorial</a></b>
   ·
   <b><a href="https://www.tensorzero.com/docs/gateway/deployment" target="_blank">Deployment Guide</a></b>
   ·
@@ -53,7 +53,7 @@ It enables a **data & learning flywheel for LLMs** by unifying:
 <br>
 
 1. The **[TensorZero Gateway](https://www.tensorzero.com/docs/gateway/)** is a high-performance model gateway written in Rust 🦀 that provides a unified API interface for all major LLM providers, allowing for seamless cross-platform integration and fallbacks.
-2. It handles structured schema-based inference with &lt;1ms P99 latency overhead (see **[Benchmarks](https://www.tensorzero.com/docs/gateway/benchmarks)**) and built-in observability and experimentation (and soon, inference-time optimizations).
+2. It handles structured schema-based inference with &lt;1ms P99 latency overhead (see **[Benchmarks](https://www.tensorzero.com/docs/gateway/benchmarks)**) and built-in observability, experimentation, and **[inference-time optimizations](https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations)**.
 3. It also collects downstream metrics and feedback associated with these inferences, with first-class support for multi-step LLM systems.
 4. Everything is stored in a ClickHouse data warehouse that you control for real-time, scalable, and developer-friendly analytics.
 5. Over time, **[TensorZero Recipes](https://www.tensorzero.com/docs/recipes)** leverage this structured dataset to optimize your prompts and models: run pre-built recipes for common workflows like fine-tuning, or create your own with complete flexibility using any language and platform.
@@ -64,7 +64,7 @@ Read more about our **[Vision & Roadmap](https://www.tensorzero.com/docs/vision-
 
 ## Get Started
 
-**Next steps?** The **[Quick Start (5min)](https://www.tensorzero.com/docs/gateway/quickstart)** and the **[Tutorial (30min)](https://www.tensorzero.com/docs/gateway/tutorial)** show it's easy to set up an LLM application with TensorZero. The tutorial teaches how to build a simple chatbot, an email copilot, a weather RAG system, and a structured data extraction pipeline.
+**Next steps?** The [Quick Start](https://www.tensorzero.com/docs/gateway/quickstart) shows it's easy to set up an LLM application with TensorZero. If you want to dive deeper, the [Tutorial](https://www.tensorzero.com/docs/gateway/tutorial) teaches how to build a simple chatbot, an email copilot, a weather RAG system, and a structured data extraction pipeline.
 
 **Questions?** Ask us on **[Slack](https://www.tensorzero.com/slack)** or **[Discord](https://www.tensorzero.com/discord)**.
 
@@ -80,15 +80,19 @@ We are working on a series of **complete runnable examples** illustrating Tensor
 > You'll see TensorZero's "data flywheel in a box" in action: better variants leads to better data, and better data leads to better variants.
 > You'll see progress by fine-tuning the LLM multiple times.
 
-> **[Fine-Tuning TensorZero JSON Functions for Named Entity Recognition (CoNLL++)](https://github.com/tensorzero/tensorzero/tree/main/examples/ner-fine-tuning-json-functions)**
+> **[Improving Data Extraction (NER) by Fine-Tuning a Llama 3 Model](https://github.com/tensorzero/tensorzero/tree/main/examples/ner-fine-tuning)**
 >
-> This example shows that an optimized Llama 3.1 8B model can be trained to outperform GPT-4o on an NER task using a small amount of training data, and served by Fireworks at a fraction of the cost and latency.
+> This example shows that an optimized Llama 3.1 8B model can be trained to outperform GPT-4o on a Named Entity Recognition (NER) task using a small amount of training data, and served by Fireworks at a fraction of the cost and latency.
+
+> **[Improving LLM Chess Ability with Best-of-N Sampling](https://github.com/tensorzero/tensorzero/tree/main/examples/chess-puzzles-best-of-n-sampling/)**
+>
+> This example showcases how best-of-N sampling can significantly enhance an LLM's chess-playing abilities by selecting the most promising moves from multiple generated options.
 
 > **[Improving Data Extraction (NER) with Dynamic In-Context Learning](https://github.com/tensorzero/tensorzero/tree/main/examples/ner-dicl)**
 >
 > This example demonstrates how Dynamic In-Context Learning (DICL) can enhance Named Entity Recognition (NER) performance by leveraging relevant historical examples to improve data extraction accuracy and consistency without having to fine-tune a model.
 
-> **[Automated Prompt Engineering for Math Reasoning (GSM8K) with a Custom Recipe (DSPy)](https://github.com/tensorzero/tensorzero/tree/main/examples/gsm8k-custom-recipe-dspy)**
+> **[Improving Math Reasoning with a Custom Recipe for Automated Prompt Engineering (DSPy)](https://github.com/tensorzero/tensorzero/tree/main/examples/gsm8k-custom-recipe-dspy)**
 >
 > TensorZero provides a number of pre-built optimization recipes covering common LLM engineering workflows.
 > But you can also easily create your own recipes and workflows!
