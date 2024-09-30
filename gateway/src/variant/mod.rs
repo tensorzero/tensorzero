@@ -11,7 +11,7 @@ use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::tool::ToolCallConfig;
 use crate::{inference::types::InferenceResult, model::ModelConfig};
-pub mod best_of_n;
+pub mod best_of_n_sampling;
 pub mod chat_completion;
 
 #[derive(Debug, Deserialize)]
@@ -20,8 +20,8 @@ pub mod chat_completion;
 #[serde(deny_unknown_fields)]
 pub enum VariantConfig {
     ChatCompletion(chat_completion::ChatCompletionConfig),
-    #[serde(rename = "experimental_best_of_n")]
-    BestOfN(best_of_n::BestOfNConfig),
+    #[serde(rename = "experimental_best_of_n_sampling")]
+    BestOfNSampling(best_of_n_sampling::BestOfNSamplingConfig),
 }
 
 /// This type is used to determine how to enforce JSON mode for a given variant.
@@ -97,7 +97,7 @@ impl VariantConfig {
     pub fn weight(&self) -> f64 {
         match self {
             VariantConfig::ChatCompletion(params) => params.weight,
-            VariantConfig::BestOfN(params) => params.weight,
+            VariantConfig::BestOfNSampling(params) => params.weight,
         }
     }
 }
@@ -125,7 +125,7 @@ impl Variant for VariantConfig {
                     )
                     .await
             }
-            VariantConfig::BestOfN(params) => {
+            VariantConfig::BestOfNSampling(params) => {
                 params
                     .infer(
                         input,
@@ -169,7 +169,7 @@ impl Variant for VariantConfig {
                     )
                     .await
             }
-            VariantConfig::BestOfN(params) => {
+            VariantConfig::BestOfNSampling(params) => {
                 params
                     .infer_stream(
                         input,
@@ -196,7 +196,7 @@ impl Variant for VariantConfig {
             VariantConfig::ChatCompletion(params) => {
                 params.validate(function, models, templates, function_name, variant_name)
             }
-            VariantConfig::BestOfN(params) => {
+            VariantConfig::BestOfNSampling(params) => {
                 params.validate(function, models, templates, function_name, variant_name)
             }
         }
@@ -205,7 +205,7 @@ impl Variant for VariantConfig {
     fn get_all_template_paths(&self) -> Vec<&PathBuf> {
         match self {
             VariantConfig::ChatCompletion(params) => params.get_all_template_paths(),
-            VariantConfig::BestOfN(params) => params.get_all_template_paths(),
+            VariantConfig::BestOfNSampling(params) => params.get_all_template_paths(),
         }
     }
 }

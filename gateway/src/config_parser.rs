@@ -495,7 +495,7 @@ mod tests {
             FunctionConfig::Chat(chat_config) => {
                 if let Some(variant) = chat_config.variants.get("best_of_n") {
                     match variant {
-                        VariantConfig::BestOfN(best_of_n_config) => {
+                        VariantConfig::BestOfNSampling(best_of_n_config) => {
                             assert!(
                                 best_of_n_config.candidates.len() > 1,
                                 "Best of n variant should have multiple candidates"
@@ -1360,7 +1360,7 @@ mod tests {
         assistant_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
 
         [functions.templates_with_variables_chat.variants.best_of_n]
-        type = "experimental_best_of_n"
+        type = "experimental_best_of_n_sampling"
         weight = 1.0
         candidates = ["variant_with_variables", "variant_with_variables"]
 

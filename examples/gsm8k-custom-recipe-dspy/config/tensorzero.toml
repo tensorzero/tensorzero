@@ -48,7 +48,7 @@ system_template = "functions/solve_math_problem/gpt-35-turbo-baseline/system.min
 user_template = "functions/solve_math_problem/gpt-35-turbo-baseline/user.minijinja"
 
 [functions.solve_math_problem.variants.gpt-35-turbo-best-of-5]
-type = "experimental_best_of_n"
+type = "experimental_best_of_n_sampling"
 weight = 1
 candidates = [
     "gpt-35-turbo-baseline",

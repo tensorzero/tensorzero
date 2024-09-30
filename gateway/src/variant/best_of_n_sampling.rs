@@ -26,7 +26,7 @@ use crate::{
 use super::{InferenceConfig, ModelUsedInfo, Variant};
 
 #[derive(Debug, Deserialize)]
-pub struct BestOfNConfig {
+pub struct BestOfNSamplingConfig {
     pub weight: f64,
     #[serde(default = "default_timeout")]
     pub timeout_s: f64,
@@ -60,7 +60,7 @@ lazy_static! {
     };
 }
 
-impl Variant for BestOfNConfig {
+impl Variant for BestOfNSamplingConfig {
     async fn infer<'a, 'request>(
         &'a self,
         input: &Input,
@@ -142,7 +142,7 @@ impl Variant for BestOfNConfig {
     }
 }
 
-impl BestOfNConfig {
+impl BestOfNSamplingConfig {
     /// Infer each candidate variant concurrently and return the results.
     async fn infer_candidates<'a, 'request>(
         &self,
@@ -942,7 +942,7 @@ mod tests {
                 ..Default::default()
             },
         };
-        let best_of_n_variant = BestOfNConfig {
+        let best_of_n_variant = BestOfNSamplingConfig {
             weight: 1.0,
             timeout_s: 10.0,
             candidates: vec![],
@@ -1075,7 +1075,7 @@ mod tests {
                 ..Default::default()
             },
         };
-        let best_of_n_variant = BestOfNConfig {
+        let best_of_n_variant = BestOfNSamplingConfig {
             weight: 1.0,
             timeout_s: 10.0,
             candidates: vec![],
@@ -1134,7 +1134,7 @@ mod tests {
                 ..Default::default()
             },
         };
-        let best_of_n_variant = BestOfNConfig {
+        let best_of_n_variant = BestOfNSamplingConfig {
             weight: 1.0,
             timeout_s: 10.0,
             candidates: vec![],
@@ -1203,7 +1203,7 @@ mod tests {
         );
 
         // Test case: Index returned too large (should return an error)
-        let best_of_n_big_variant = BestOfNConfig {
+        let best_of_n_big_variant = BestOfNSamplingConfig {
             weight: 1.0,
             timeout_s: 10.0,
             candidates: vec![],

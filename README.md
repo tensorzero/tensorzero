@@ -53,7 +53,7 @@ It enables a **data & learning flywheel for LLMs** by unifying:
 <br>
 
 1. The **[TensorZero Gateway](https://www.tensorzero.com/docs/gateway/)** is a high-performance model gateway written in Rust 🦀 that provides a unified API interface for all major LLM providers, allowing for seamless cross-platform integration and fallbacks.
-2. It handles structured schema-based inference with &lt;1ms P99 latency overhead (see **[Benchmarks](https://www.tensorzero.com/docs/gateway/benchmarks)**) and built-in observability and experimentation (and soon, inference-time optimizations).
+2. It handles structured schema-based inference with &lt;1ms P99 latency overhead (see **[Benchmarks](https://www.tensorzero.com/docs/gateway/benchmarks)**) and built-in observability and experimentation, and inference-time optimizations.
 3. It also collects downstream metrics and feedback associated with these inferences, with first-class support for multi-step LLM systems.
 4. Everything is stored in a ClickHouse data warehouse that you control for real-time, scalable, and developer-friendly analytics.
 5. Over time, **[TensorZero Recipes](https://www.tensorzero.com/docs/recipes)** leverage this structured dataset to optimize your prompts and models: run pre-built recipes for common workflows like fine-tuning, or create your own with complete flexibility using any language and platform.
@@ -83,6 +83,10 @@ We are working on a series of **complete runnable examples** illustrating Tensor
 > **[Fine-Tuning TensorZero JSON Functions for Named Entity Recognition (CoNLL++)](https://github.com/tensorzero/tensorzero/tree/main/examples/ner-fine-tuning-json-functions)**
 >
 > This example shows that an optimized Llama 3.1 8B model can be trained to outperform GPT-4o on an NER task using a small amount of training data, and served by Fireworks at a fraction of the cost and latency.
+
+> **[Improving LLM Chess Ability with Best-of-N Sampling](https://github.com/tensorzero/tensorzero/tree/main/examples/chess-puzzles-best-of-n-sampling/)**
+>
+> This example showcases how Best-of-N sampling can significantly enhance an LLM's chess-playing abilities by selecting the most promising moves from multiple generated options.
 
 > **[Automated Prompt Engineering for Math Reasoning (GSM8K) with a Custom Recipe (DSPy)](https://github.com/tensorzero/tensorzero/tree/main/examples/gsm8k-custom-recipe-dspy)**
 >
