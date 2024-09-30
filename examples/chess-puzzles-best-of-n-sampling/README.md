@@ -73,7 +73,7 @@ The notebook will evaluate the performance of the default `gpt-4o-mini` variant 
 If you look at the `tensorzero.toml` file, you'll see that we've defined a best-of-n variant type for the `play_chess_board` function.
 This means that we'll run 5 separate inference requests to the LLM, and use another LLM to select the best result.
 These are all instances of the `gpt-4o-mini` variant.
-Without modifying the prompt or the model used, we can trade more tokens for a statistically significant improvement in performance (we saw ~10% relative improvement from 36% to 39% success rate with no prompt changes and further improvement to 41% with small variations to the prompt as in the section below).
+Without modifying the prompt or the model used, we can trade more tokens for a statistically significant improvement in performance (we saw ~10% relative improvement from 35% to 39% success rate with no prompt changes and further improvement to 41% with small variations to the prompt as in the section below).
 
 Here are our results:
 
