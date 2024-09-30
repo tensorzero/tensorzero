@@ -6,6 +6,7 @@ use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::borrow::Cow;
 use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
@@ -281,12 +282,12 @@ pub(super) fn handle_openai_error(response_code: StatusCode, response_body: &str
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(super) struct OpenAISystemRequestMessage<'a> {
-    content: &'a str,
+    content: Cow<'a, str>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(super) struct OpenAIUserRequestMessage<'a> {
-    content: &'a str, // NOTE: this could be an array including images and stuff according to API spec (not supported yet)
+    content: Cow<'a, str>, // NOTE: this could be an array including images and stuff according to API spec (not supported yet)
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -347,7 +348,9 @@ pub(super) fn prepare_openai_messages<'a>(
         .iter()
         .flat_map(tensorzero_to_openai_messages)
         .collect();
-    if let Some(system_msg) = tensorzero_to_openai_system_message(request.system.as_deref()) {
+    if let Some(system_msg) =
+        tensorzero_to_openai_system_message(request.system.as_deref(), &request.json_mode)
+    {
         messages.insert(0, system_msg);
     }
     messages
@@ -382,11 +385,30 @@ pub(super) fn prepare_openai_tools<'a>(
     }
 }
 
-fn tensorzero_to_openai_system_message(system: Option<&str>) -> Option<OpenAIRequestMessage<'_>> {
+fn tensorzero_to_openai_system_message<'a>(
+    system: Option<&'a str>,
+    json_mode: &ModelInferenceRequestJsonMode,
+) -> Option<OpenAIRequestMessage<'a>> {
     system.map(|instructions| {
-        OpenAIRequestMessage::System(OpenAISystemRequestMessage {
-            content: instructions,
-        })
+        match json_mode {
+            ModelInferenceRequestJsonMode::On => {
+                let lowercase_instructions = instructions.to_lowercase();
+                if lowercase_instructions.contains("json") {
+                    OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+                        content: Cow::Borrowed(instructions),
+                    })
+                } else {
+                    let formatted_instructions = format!("{} Respond using JSON.", instructions);
+                    OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+                        content: Cow::Owned(formatted_instructions),
+                    })
+                }
+            }
+            // If JSON mode is either off or strict, we don't need to do anything special
+            _ => OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+                content: Cow::Borrowed(instructions),
+            }),
+        }
     })
 }
 
@@ -398,7 +420,7 @@ fn tensorzero_to_openai_messages(message: &RequestMessage) -> Vec<OpenAIRequestM
             ContentBlock::Text(Text { text }) => match message.role {
                 Role::User => {
                     messages.push(OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                        content: text,
+                        content: Cow::Borrowed(text),
                     }));
                 }
                 Role::Assistant => {
