@@ -88,7 +88,7 @@ We are working on a series of **complete runnable examples** illustrating Tensor
 >
 > This example showcases how Best-of-N sampling can significantly enhance an LLM's chess-playing abilities by selecting the most promising moves from multiple generated options.
 
-> **[Automated Prompt Engineering for Math Reasoning (GSM8K) with a Custom Recipe (DSPy)](https://github.com/tensorzero/tensorzero/tree/main/examples/gsm8k-custom-recipe-dspy)**
+> **[Improving Math Reasoning with a Custom Recipe for Automated Prompt Engineering (DSPy)](https://github.com/tensorzero/tensorzero/tree/main/examples/gsm8k-custom-recipe-dspy)**
 >
 > TensorZero provides a number of pre-built optimization recipes covering common LLM engineering workflows.
 > But you can also easily create your own recipes and workflows!
