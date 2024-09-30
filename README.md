@@ -53,7 +53,7 @@ It enables a **data & learning flywheel for LLMs** by unifying:
 <br>
 
 1. The **[TensorZero Gateway](https://www.tensorzero.com/docs/gateway/)** is a high-performance model gateway written in Rust 🦀 that provides a unified API interface for all major LLM providers, allowing for seamless cross-platform integration and fallbacks.
-2. It handles structured schema-based inference with &lt;1ms P99 latency overhead (see **[Benchmarks](https://www.tensorzero.com/docs/gateway/benchmarks)**) and built-in observability and experimentation, and inference-time optimizations.
+2. It handles structured schema-based inference with &lt;1ms P99 latency overhead (see **[Benchmarks](https://www.tensorzero.com/docs/gateway/benchmarks)**) and built-in observability, experimentation, and **[inference-time optimizations](https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations)**.
 3. It also collects downstream metrics and feedback associated with these inferences, with first-class support for multi-step LLM systems.
 4. Everything is stored in a ClickHouse data warehouse that you control for real-time, scalable, and developer-friendly analytics.
 5. Over time, **[TensorZero Recipes](https://www.tensorzero.com/docs/recipes)** leverage this structured dataset to optimize your prompts and models: run pre-built recipes for common workflows like fine-tuning, or create your own with complete flexibility using any language and platform.
