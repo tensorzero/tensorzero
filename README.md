@@ -29,7 +29,7 @@ It enables a **data & learning flywheel for LLMs** by unifying:
   <br>
   <b><a href="https://www.tensorzero.com/docs/gateway/quickstart" target="_blank">Quick Start (5min)</a></b>
   ·
-  <b><a href="https://www.tensorzero.com/docs/gateway/tutorial" target="_blank">Tutorial (30min)</a></b>
+  <b><a href="https://www.tensorzero.com/docs/gateway/tutorial" target="_blank">Comprehensive Tutorial</a></b>
   ·
   <b><a href="https://www.tensorzero.com/docs/gateway/deployment" target="_blank">Deployment Guide</a></b>
   ·
@@ -64,7 +64,7 @@ Read more about our **[Vision & Roadmap](https://www.tensorzero.com/docs/vision-
 
 ## Get Started
 
-**Next steps?** The **[Quick Start (5min)](https://www.tensorzero.com/docs/gateway/quickstart)** and the **[Tutorial (30min)](https://www.tensorzero.com/docs/gateway/tutorial)** show it's easy to set up an LLM application with TensorZero. The tutorial teaches how to build a simple chatbot, an email copilot, a weather RAG system, and a structured data extraction pipeline.
+**Next steps?** The [Quick Start](https://www.tensorzero.com/docs/gateway/quickstart) shows it's easy to set up an LLM application with TensorZero. If you want to dive deeper, the [Tutorial](https://www.tensorzero.com/docs/gateway/tutorial) teaches how to build a simple chatbot, an email copilot, a weather RAG system, and a structured data extraction pipeline.
 
 **Questions?** Ask us on **[Slack](https://www.tensorzero.com/slack)** or **[Discord](https://www.tensorzero.com/discord)**.
 
