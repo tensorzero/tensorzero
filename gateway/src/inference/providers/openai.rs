@@ -11,7 +11,7 @@ use tokio::time::Instant;
 use url::Url;
 use uuid::Uuid;
 
-use crate::embeddings::{EmbeddingProvider, EmbeddingRequest, EmbeddingResponse};
+use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
@@ -20,6 +20,8 @@ use crate::inference::types::{
     RequestMessage, Role, Text, TextChunk, Usage,
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
+
+use super::provider_trait::HasCredentials;
 
 lazy_static! {
     static ref OPENAI_DEFAULT_BASE_URL: Url = {
@@ -136,10 +138,6 @@ impl InferenceProvider for OpenAIProvider {
         };
         Ok((chunk, stream, raw_request))
     }
-
-    fn has_credentials(&self) -> bool {
-        self.api_key.is_some()
-    }
 }
 
 impl EmbeddingProvider for OpenAIProvider {
@@ -147,7 +145,7 @@ impl EmbeddingProvider for OpenAIProvider {
         &self,
         request: &EmbeddingRequest,
         client: &reqwest::Client,
-    ) -> Result<EmbeddingResponse, Error> {
+    ) -> Result<EmbeddingProviderResponse, Error> {
         let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
             provider_name: "OpenAI".to_string(),
         })?;
@@ -191,6 +189,12 @@ impl EmbeddingProvider for OpenAIProvider {
                 })?,
             ))
         }
+    }
+}
+
+impl HasCredentials for OpenAIProvider {
+    fn has_credentials(&self) -> bool {
+        self.api_key.is_some()
     }
 }
 
@@ -919,7 +923,7 @@ struct OpenAIEmbeddingData {
     embedding: Vec<f32>,
 }
 
-impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingResponse {
+impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderResponse {
     type Error = Error;
     fn try_from(response: OpenAIEmbeddingResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
         let OpenAIEmbeddingResponseWithMetadata {
@@ -947,7 +951,7 @@ impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingResponse 
             })?
             .embedding;
 
-        Ok(EmbeddingResponse::new(
+        Ok(EmbeddingProviderResponse::new(
             embedding,
             raw_request,
             raw_response,

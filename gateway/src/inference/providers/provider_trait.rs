@@ -6,7 +6,11 @@ use crate::inference::types::ProviderInferenceResponseStream;
 use futures::Future;
 use reqwest::Client;
 
-pub trait InferenceProvider {
+pub trait HasCredentials {
+    fn has_credentials(&self) -> bool;
+}
+
+pub trait InferenceProvider: HasCredentials {
     fn infer<'a>(
         &'a self,
         request: &'a ModelInferenceRequest,
@@ -28,6 +32,4 @@ pub trait InferenceProvider {
         >,
     > + Send
            + 'a;
-
-    fn has_credentials(&self) -> bool;
 }

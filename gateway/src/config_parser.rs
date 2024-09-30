@@ -12,6 +12,9 @@ use crate::tool::{
     ImplicitToolConfig, StaticToolConfig, ToolCallConfig, ToolChoice, ToolConfig,
     IMPLICIT_TOOL_NAME,
 };
+use crate::variant::best_of_n::BestOfNConfig;
+use crate::variant::chat_completion::ChatCompletionConfig;
+use crate::variant::dicl::UninitializedDiclConfig;
 use crate::variant::{Variant, VariantConfig};
 
 #[derive(Debug, Default)]
@@ -168,7 +171,13 @@ impl<'c> Config<'c> {
 
         // Validate each function
         for (function_name, function) in &self.functions {
-            function.validate(&self.tools, &self.models, &self.templates, function_name)?;
+            function.validate(
+                &self.tools,
+                &self.models,
+                &self.embedding_models,
+                &self.templates,
+                function_name,
+            )?;
         }
 
         // Ensure that no metrics are named "comment" or "demonstration"
@@ -316,7 +325,7 @@ enum UninitializedFunctionConfig {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedFunctionConfigChat {
-    variants: HashMap<String, VariantConfig>, // variant name => variant config
+    variants: HashMap<String, UninitializedVariantConfig>, // variant name => variant config
     system_schema: Option<PathBuf>,
     user_schema: Option<PathBuf>,
     assistant_schema: Option<PathBuf>,
@@ -331,7 +340,7 @@ struct UninitializedFunctionConfigChat {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedFunctionConfigJson {
-    variants: HashMap<String, VariantConfig>, // variant name => variant config
+    variants: HashMap<String, UninitializedVariantConfig>, // variant name => variant config
     system_schema: Option<PathBuf>,
     user_schema: Option<PathBuf>,
     assistant_schema: Option<PathBuf>,
@@ -354,8 +363,13 @@ impl UninitializedFunctionConfig {
                     .assistant_schema
                     .map(|path| JSONSchemaFromPath::new(path, base_path.as_ref()))
                     .transpose()?;
+                let variants = params
+                    .variants
+                    .into_iter()
+                    .map(|(name, variant)| variant.load(&base_path).map(|v| (name, v)))
+                    .collect::<Result<HashMap<_, _>, Error>>()?;
                 Ok(FunctionConfig::Chat(FunctionConfigChat {
-                    variants: params.variants,
+                    variants,
                     system_schema,
                     user_schema,
                     assistant_schema,
@@ -389,14 +403,45 @@ impl UninitializedFunctionConfig {
                     tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
                     parallel_tool_calls: false,
                 };
+                let variants = params
+                    .variants
+                    .into_iter()
+                    .map(|(name, variant)| variant.load(&base_path).map(|v| (name, v)))
+                    .collect::<Result<HashMap<_, _>, Error>>()?;
                 Ok(FunctionConfig::Json(FunctionConfigJson {
-                    variants: params.variants,
+                    variants,
                     system_schema,
                     user_schema,
                     assistant_schema,
                     output_schema,
                     implicit_tool_call_config,
                 }))
+            }
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
+pub enum UninitializedVariantConfig {
+    ChatCompletion(ChatCompletionConfig),
+    #[serde(rename = "experimental_best_of_n")]
+    BestOfN(BestOfNConfig),
+    #[serde(rename = "experimental_dynamic_in_context_learning")]
+    Dicl(UninitializedDiclConfig),
+}
+
+impl UninitializedVariantConfig {
+    pub fn load<P: AsRef<Path>>(self, base_path: P) -> Result<VariantConfig, Error> {
+        match self {
+            UninitializedVariantConfig::ChatCompletion(params) => {
+                Ok(VariantConfig::ChatCompletion(params))
+            }
+            UninitializedVariantConfig::BestOfN(params) => Ok(VariantConfig::BestOfN(params)),
+            UninitializedVariantConfig::Dicl(params) => {
+                Ok(VariantConfig::Dicl(params.load(base_path)?))
             }
         }
     }
@@ -543,6 +588,7 @@ mod tests {
             EmbeddingProviderConfig::OpenAI(openai_config) => {
                 assert_eq!(openai_config.model_name, "text-embedding-3-small");
             }
+            _ => panic!("Expected an OpenAI provider"),
         }
     }
 

@@ -10,7 +10,7 @@ use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, stream_openai,
     OpenAIRequestMessage, OpenAIResponse, StreamOptions,
 };
-use super::provider_trait::InferenceProvider;
+use super::provider_trait::{HasCredentials, InferenceProvider};
 use crate::error::Error;
 use crate::inference::types::{
     ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
@@ -122,7 +122,9 @@ impl InferenceProvider for VLLMProvider {
         };
         Ok((chunk, stream, raw_request))
     }
+}
 
+impl HasCredentials for VLLMProvider {
     fn has_credentials(&self) -> bool {
         self.api_key.is_some()
     }

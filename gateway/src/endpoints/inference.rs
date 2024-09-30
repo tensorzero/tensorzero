@@ -7,12 +7,14 @@ use futures::stream::Stream;
 use metrics::counter;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::Instant;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::embeddings::EmbeddingModelConfig;
 use crate::error::{Error, ResultExt};
 use crate::function::sample_variant;
 use crate::function::FunctionConfig;
@@ -20,9 +22,10 @@ use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
     collect_chunks, ChatInferenceDatabaseInsert, ContentBlockChunk, ContentBlockOutput,
     InferenceResult, InferenceResultChunk, InferenceResultStream, Input,
-    JsonInferenceDatabaseInsert, JsonInferenceOutput, Usage,
+    JsonInferenceDatabaseInsert, JsonInferenceOutput, ModelInferenceResponseWithMetadata, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
+use crate::model::ModelConfig;
 use crate::tool::{DynamicToolParams, ToolCallConfig};
 use crate::uuid_util::validate_episode_id;
 use crate::variant::{InferenceConfig, Variant};
@@ -78,6 +81,7 @@ struct InferenceMetadata<'a> {
     pub model_name: &'a str,
     pub model_provider_name: &'a str,
     pub raw_request: String,
+    pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
 }
 
 /// A handler for the inference endpoint
@@ -143,10 +147,22 @@ pub async fn inference_handler(
 
     // Keep track of which variants failed
     let mut variant_errors = std::collections::HashMap::new();
-    let inference_config = InferenceConfig {
+    let mut inference_config = InferenceConfig {
+        function_name: params.function_name.clone(),
+        variant_name: "".to_string(),
         templates: &config.templates,
         tool_config,
         dynamic_output_schema: params.output_schema.map(DynamicJSONSchema::new),
+    };
+
+    let inference_clients = InferenceClients {
+        http_client: &http_client,
+        clickhouse_connection_info: &clickhouse_connection_info,
+    };
+
+    let inference_models = InferenceModels {
+        models: &config.models,
+        embedding_models: &config.embedding_models,
     };
     // Keep sampling variants until one succeeds
     while !candidate_variant_names.is_empty() {
@@ -158,15 +174,15 @@ pub async fn inference_handler(
         )?;
         // Will be edited by the variant as part of making the request so we must clone here
         let variant_inference_params = params.params.clone();
-
+        inference_config.variant_name = variant_name.to_string();
         if stream {
             let result = variant
                 .infer_stream(
                     &params.input,
-                    &config.models,
+                    &inference_models,
                     function,
                     &inference_config,
-                    &http_client,
+                    &inference_clients,
                     variant_inference_params,
                 )
                 .await;
@@ -197,6 +213,7 @@ pub async fn inference_handler(
                 model_name: model_used_info.model_name,
                 model_provider_name: model_used_info.model_provider_name,
                 raw_request: model_used_info.raw_request,
+                previous_model_inference_results: model_used_info.previous_model_inference_results,
             };
 
             let stream = create_stream(
@@ -215,10 +232,10 @@ pub async fn inference_handler(
             let result = variant
                 .infer(
                     &params.input,
-                    &config.models,
+                    &inference_models,
                     function,
                     &inference_config,
-                    &http_client,
+                    &inference_clients,
                     variant_inference_params,
                 )
                 .await;
@@ -322,6 +339,8 @@ fn create_stream(
             let inference_response = inference_response.ok_or_log();
 
             if let Some(inference_response) = inference_response {
+                let mut inference_response = inference_response;
+                inference_response.mut_model_inference_results().extend(metadata.previous_model_inference_results);
                 let write_metadata = InferenceDatabaseInsertMetadata {
                     function_name: metadata.function_name,
                     variant_name: metadata.variant_name,
@@ -512,6 +531,18 @@ impl InferenceResponseChunk {
     }
 }
 
+// Carryall struct for clients used in inference
+pub struct InferenceClients<'a> {
+    pub http_client: &'a reqwest::Client,
+    pub clickhouse_connection_info: &'a ClickHouseConnectionInfo,
+}
+
+// Carryall struct for models used in inference
+pub struct InferenceModels<'a> {
+    pub models: &'a HashMap<String, ModelConfig>,
+    pub embedding_models: &'a HashMap<String, EmbeddingModelConfig>,
+}
+
 /// InferenceParams is the top-level struct for inference parameters.
 /// We backfill these from the configs given in the variants used and ultimately write them to the database.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -588,6 +619,7 @@ mod tests {
             model_name: "test_model",
             model_provider_name: "test_provider",
             raw_request: raw_request.clone(),
+            previous_model_inference_results: vec![],
         };
 
         let result = prepare_event(&inference_metadata, chunk);
@@ -619,6 +651,7 @@ mod tests {
             model_name: "test_model",
             model_provider_name: "test_provider",
             raw_request: raw_request.clone(),
+            previous_model_inference_results: vec![],
         };
 
         let result = prepare_event(&inference_metadata, chunk);

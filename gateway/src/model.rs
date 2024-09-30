@@ -18,7 +18,7 @@ use crate::{
             gcp_vertex_gemini::{GCPCredentials, GCPVertexGeminiProvider},
             mistral::MistralProvider,
             openai::OpenAIProvider,
-            provider_trait::InferenceProvider,
+            provider_trait::{HasCredentials, InferenceProvider},
             together::TogetherProvider,
             vllm::VLLMProvider,
         },
@@ -387,7 +387,9 @@ impl InferenceProvider for ProviderConfig {
             ProviderConfig::Dummy(provider) => provider.infer_stream(request, client).await,
         }
     }
+}
 
+impl HasCredentials for ProviderConfig {
     fn has_credentials(&self) -> bool {
         match self {
             ProviderConfig::Anthropic(provider) => provider.has_credentials(),

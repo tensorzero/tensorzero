@@ -18,6 +18,8 @@ use crate::inference::types::{
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
+use super::provider_trait::HasCredentials;
+
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
 
@@ -127,7 +129,9 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         };
         Ok((chunk, stream, raw_request))
     }
+}
 
+impl HasCredentials for GCPVertexAnthropicProvider {
     fn has_credentials(&self) -> bool {
         self.credentials.is_some()
     }

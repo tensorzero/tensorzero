@@ -3,6 +3,7 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use uuid::Uuid;
 
+use crate::embeddings::EmbeddingModelConfig;
 use crate::endpoints::inference::InferenceParams;
 use crate::error::{Error, ResultExt};
 use crate::inference::types::{
@@ -32,7 +33,7 @@ pub struct FunctionConfigChat {
     pub parallel_tool_calls: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct FunctionConfigJson {
     pub variants: HashMap<String, VariantConfig>, // variant name => variant config
     pub system_schema: Option<JSONSchemaFromPath>,
@@ -223,12 +224,20 @@ impl FunctionConfig {
         &self,
         static_tools: &HashMap<String, StaticToolConfig>,
         models: &HashMap<String, ModelConfig>,
+        embedding_models: &HashMap<String, EmbeddingModelConfig>,
         templates: &TemplateConfig,
         function_name: &str,
     ) -> Result<(), Error> {
         // Validate each variant
         for (variant_name, variant) in self.variants() {
-            variant.validate(self, models, templates, function_name, variant_name)?;
+            variant.validate(
+                self,
+                models,
+                embedding_models,
+                templates,
+                function_name,
+                variant_name,
+            )?;
         }
         match self {
             FunctionConfig::Chat(params) => {
@@ -1254,6 +1263,8 @@ mod tests {
         };
         let inference_config = InferenceConfig {
             tool_config: None,
+            function_name: "".to_string(),
+            variant_name: "".to_string(),
             templates: &TemplateConfig::default(),
             dynamic_output_schema: None,
         };
@@ -1518,6 +1529,8 @@ mod tests {
         }));
         let inference_config = InferenceConfig {
             tool_config: None,
+            function_name: "".to_string(),
+            variant_name: "".to_string(),
             templates: &TemplateConfig::default(),
             dynamic_output_schema: Some(dynamic_output_schema),
         };
