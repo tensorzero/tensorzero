@@ -21,8 +21,9 @@ use crate::{
 
 use super::{
     openai::{
-        get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
-        stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAITool, OpenAIToolChoice,
+        get_chat_url, handle_openai_error, prepare_openai_tools, stream_openai,
+        tensorzero_to_openai_messages, OpenAIRequestMessage, OpenAIResponse,
+        OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice,
     },
     provider_trait::{HasCredentials, InferenceProvider},
 };
@@ -220,7 +221,7 @@ impl<'a> TogetherRequest<'a> {
             }
             ModelInferenceRequestJsonMode::Off => None,
         };
-        let messages = prepare_openai_messages(request);
+        let messages = prepare_together_messages(request);
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
         TogetherRequest {
             messages,
@@ -235,6 +236,28 @@ impl<'a> TogetherRequest<'a> {
             parallel_tool_calls,
         }
     }
+}
+
+pub(super) fn prepare_together_messages<'a>(
+    request: &'a ModelInferenceRequest,
+) -> Vec<OpenAIRequestMessage<'a>> {
+    let mut messages: Vec<OpenAIRequestMessage> = request
+        .messages
+        .iter()
+        .flat_map(tensorzero_to_openai_messages)
+        .collect();
+    if let Some(system_msg) = tensorzero_to_together_system_message(request.system.as_deref()) {
+        messages.insert(0, system_msg);
+    }
+    messages
+}
+
+fn tensorzero_to_together_system_message(system: Option<&str>) -> Option<OpenAIRequestMessage<'_>> {
+    system.map(|instructions| {
+        OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+            content: Cow::Borrowed(instructions),
+        })
+    })
 }
 
 struct TogetherResponseWithMetadata<'a> {

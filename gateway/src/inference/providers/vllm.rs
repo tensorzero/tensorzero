@@ -9,8 +9,8 @@ use tokio::time::Instant;
 use url::Url;
 
 use super::openai::{
-    get_chat_url, handle_openai_error, prepare_openai_messages, stream_openai,
-    OpenAIRequestMessage, OpenAIResponse, StreamOptions,
+    get_chat_url, handle_openai_error, stream_openai, tensorzero_to_openai_messages,
+    OpenAIRequestMessage, OpenAIResponse, OpenAISystemRequestMessage, StreamOptions,
 };
 use super::provider_trait::{HasCredentials, InferenceProvider};
 use crate::endpoints::inference::InferenceApiKeys;
@@ -198,7 +198,7 @@ impl<'a> VLLMRequest<'a> {
             }),
             false => None,
         };
-        let messages = prepare_openai_messages(request);
+        let messages = prepare_vllm_messages(request);
         // TODO (#169): Implement tool calling.
         if request.tool_config.is_some() {
             return Err(Error::VLLMClient {
@@ -275,6 +275,28 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
             latency,
         ))
     }
+}
+
+pub(super) fn prepare_vllm_messages<'a>(
+    request: &'a ModelInferenceRequest,
+) -> Vec<OpenAIRequestMessage<'a>> {
+    let mut messages: Vec<OpenAIRequestMessage> = request
+        .messages
+        .iter()
+        .flat_map(tensorzero_to_openai_messages)
+        .collect();
+    if let Some(system_msg) = tensorzero_to_vllm_system_message(request.system.as_deref()) {
+        messages.insert(0, system_msg);
+    }
+    messages
+}
+
+fn tensorzero_to_vllm_system_message(system: Option<&str>) -> Option<OpenAIRequestMessage<'_>> {
+    system.map(|instructions| {
+        OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+            content: Cow::Borrowed(instructions),
+        })
+    })
 }
 
 #[cfg(test)]
