@@ -410,21 +410,20 @@ fn tensorzero_to_openai_system_message<'a>(
     messages: &[OpenAIRequestMessage<'a>],
 ) -> Option<OpenAIRequestMessage<'a>> {
     match system {
-        Some(instructions) => {
+        Some(system) => {
             match json_mode {
                 ModelInferenceRequestJsonMode::On => {
                     if messages.iter().any(|msg| {
                         msg.content()
                             .map(|c| c.to_lowercase().contains("json"))
                             .unwrap_or(false)
-                    }) || instructions.to_lowercase().contains("json")
+                    }) || system.to_lowercase().contains("json")
                     {
                         OpenAIRequestMessage::System(OpenAISystemRequestMessage {
-                            content: Cow::Borrowed(instructions),
+                            content: Cow::Borrowed(system),
                         })
                     } else {
-                        let formatted_instructions =
-                            format!("{} Respond using JSON.", instructions);
+                        let formatted_instructions = format!("Respond using JSON.\n\n{system}");
                         OpenAIRequestMessage::System(OpenAISystemRequestMessage {
                             content: Cow::Owned(formatted_instructions),
                         })
@@ -433,7 +432,7 @@ fn tensorzero_to_openai_system_message<'a>(
 
                 // If JSON mode is either off or strict, we don't need to do anything special
                 _ => OpenAIRequestMessage::System(OpenAISystemRequestMessage {
-                    content: Cow::Borrowed(instructions),
+                    content: Cow::Borrowed(system),
                 }),
             }
             .into()
@@ -1954,7 +1953,7 @@ mod tests {
                 tool_calls: None,
             }),
         ];
-        let expected_content = "System instructions Respond using JSON.".to_string();
+        let expected_content = "Respond using JSON.\n\nSystem instructions".to_string();
         let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
             content: Cow::Owned(expected_content),
         }));
@@ -1998,13 +1997,13 @@ mod tests {
         assert_eq!(result, expected);
 
         // Test Case 6: system contains "json", json_mode is On
-        let system = Some("System instructions. Respond using JSON.");
+        let system = Some("Respond using JSON.\n\nSystem instructions");
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![OpenAIRequestMessage::User(OpenAIUserRequestMessage {
             content: Cow::Borrowed("Hello, how are you?"),
         })];
         let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
-            content: Cow::Borrowed("System instructions. Respond using JSON."),
+            content: Cow::Borrowed("Respond using JSON.\n\nSystem instructions"),
         }));
         let result = tensorzero_to_openai_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
