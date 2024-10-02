@@ -47,7 +47,7 @@ pub struct FireworksProvider {
 /// - Fireworks allows you to auto-truncate requests that have too many tokens
 ///   (there are 2 ways to do it, we have the default of auto-truncation to the max window size)
 impl InferenceProvider for FireworksProvider {
-    async fn _infer<'a>(
+    async fn infer<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
@@ -95,7 +95,7 @@ impl InferenceProvider for FireworksProvider {
         }
     }
 
-    async fn _infer_stream<'a>(
+    async fn infer_stream<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,

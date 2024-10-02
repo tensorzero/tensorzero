@@ -341,85 +341,6 @@ impl<'de> Deserialize<'de> for ProviderConfig {
     }
 }
 
-impl InferenceProvider for ProviderConfig {
-    async fn _infer<'a>(
-        &'a self,
-        request: &'a ModelInferenceRequest<'a>,
-        client: &'a Client,
-        api_key: Cow<'a, SecretString>,
-    ) -> Result<ProviderInferenceResponse, Error> {
-        match self {
-            ProviderConfig::Anthropic(provider) => provider._infer(request, client, api_key).await,
-            ProviderConfig::AWSBedrock(provider) => provider._infer(request, client, api_key).await,
-            ProviderConfig::Azure(provider) => provider._infer(request, client, api_key).await,
-            ProviderConfig::Fireworks(provider) => provider._infer(request, client, api_key).await,
-            ProviderConfig::GCPVertexAnthropic(provider) => {
-                provider._infer(request, client, api_key).await
-            }
-            ProviderConfig::GCPVertexGemini(provider) => {
-                provider._infer(request, client, api_key).await
-            }
-            ProviderConfig::Mistral(provider) => provider._infer(request, client, api_key).await,
-            ProviderConfig::OpenAI(provider) => provider._infer(request, client, api_key).await,
-            ProviderConfig::Together(provider) => provider._infer(request, client, api_key).await,
-            ProviderConfig::VLLM(provider) => provider._infer(request, client, api_key).await,
-            #[cfg(any(test, feature = "e2e_tests"))]
-            ProviderConfig::Dummy(provider) => provider._infer(request, client, api_key).await,
-        }
-    }
-
-    async fn _infer_stream<'a>(
-        &'a self,
-        request: &'a ModelInferenceRequest<'a>,
-        client: &'a Client,
-        api_key: Cow<'a, SecretString>,
-    ) -> Result<
-        (
-            ProviderInferenceResponseChunk,
-            ProviderInferenceResponseStream,
-            String,
-        ),
-        Error,
-    > {
-        match self {
-            ProviderConfig::Anthropic(provider) => {
-                provider._infer_stream(request, client, api_key).await
-            }
-            ProviderConfig::AWSBedrock(provider) => {
-                provider._infer_stream(request, client, api_key).await
-            }
-            ProviderConfig::Azure(provider) => {
-                provider._infer_stream(request, client, api_key).await
-            }
-            ProviderConfig::Fireworks(provider) => {
-                provider._infer_stream(request, client, api_key).await
-            }
-            ProviderConfig::GCPVertexAnthropic(provider) => {
-                provider._infer_stream(request, client, api_key).await
-            }
-            ProviderConfig::GCPVertexGemini(provider) => {
-                provider._infer_stream(request, client, api_key).await
-            }
-            ProviderConfig::Mistral(provider) => {
-                provider._infer_stream(request, client, api_key).await
-            }
-            ProviderConfig::OpenAI(provider) => {
-                provider._infer_stream(request, client, api_key).await
-            }
-            ProviderConfig::Together(provider) => {
-                provider._infer_stream(request, client, api_key).await
-            }
-            ProviderConfig::VLLM(provider) => {
-                provider._infer_stream(request, client, api_key).await
-            }
-            #[cfg(any(test, feature = "e2e_tests"))]
-            ProviderConfig::Dummy(provider) => {
-                provider._infer_stream(request, client, api_key).await
-            }
-        }
-    }
-}
-
 impl ProviderConfig {
     async fn infer(
         &self,
@@ -428,7 +349,24 @@ impl ProviderConfig {
         api_keys: &InferenceApiKeys,
     ) -> Result<ProviderInferenceResponse, Error> {
         let api_key = self.get_api_key(api_keys)?;
-        self._infer(request, client, api_key).await
+        match self {
+            ProviderConfig::Anthropic(provider) => provider.infer(request, client, api_key).await,
+            ProviderConfig::AWSBedrock(provider) => provider.infer(request, client, api_key).await,
+            ProviderConfig::Azure(provider) => provider.infer(request, client, api_key).await,
+            ProviderConfig::Fireworks(provider) => provider.infer(request, client, api_key).await,
+            ProviderConfig::GCPVertexAnthropic(provider) => {
+                provider.infer(request, client, api_key).await
+            }
+            ProviderConfig::GCPVertexGemini(provider) => {
+                provider.infer(request, client, api_key).await
+            }
+            ProviderConfig::Mistral(provider) => provider.infer(request, client, api_key).await,
+            ProviderConfig::OpenAI(provider) => provider.infer(request, client, api_key).await,
+            ProviderConfig::Together(provider) => provider.infer(request, client, api_key).await,
+            ProviderConfig::VLLM(provider) => provider.infer(request, client, api_key).await,
+            #[cfg(any(test, feature = "e2e_tests"))]
+            ProviderConfig::Dummy(provider) => provider.infer(request, client, api_key).await,
+        }
     }
 
     async fn infer_stream(
@@ -445,7 +383,40 @@ impl ProviderConfig {
         Error,
     > {
         let api_key = self.get_api_key(api_keys)?;
-        self._infer_stream(request, client, api_key).await
+        match self {
+            ProviderConfig::Anthropic(provider) => {
+                provider.infer_stream(request, client, api_key).await
+            }
+            ProviderConfig::AWSBedrock(provider) => {
+                provider.infer_stream(request, client, api_key).await
+            }
+            ProviderConfig::Azure(provider) => {
+                provider.infer_stream(request, client, api_key).await
+            }
+            ProviderConfig::Fireworks(provider) => {
+                provider.infer_stream(request, client, api_key).await
+            }
+            ProviderConfig::GCPVertexAnthropic(provider) => {
+                provider.infer_stream(request, client, api_key).await
+            }
+            ProviderConfig::GCPVertexGemini(provider) => {
+                provider.infer_stream(request, client, api_key).await
+            }
+            ProviderConfig::Mistral(provider) => {
+                provider.infer_stream(request, client, api_key).await
+            }
+            ProviderConfig::OpenAI(provider) => {
+                provider.infer_stream(request, client, api_key).await
+            }
+            ProviderConfig::Together(provider) => {
+                provider.infer_stream(request, client, api_key).await
+            }
+            ProviderConfig::VLLM(provider) => provider.infer_stream(request, client, api_key).await,
+            #[cfg(any(test, feature = "e2e_tests"))]
+            ProviderConfig::Dummy(provider) => {
+                provider.infer_stream(request, client, api_key).await
+            }
+        }
     }
 }
 

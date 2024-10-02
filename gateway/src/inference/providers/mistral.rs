@@ -44,7 +44,7 @@ pub struct MistralProvider {
 }
 
 impl InferenceProvider for MistralProvider {
-    async fn _infer<'a>(
+    async fn infer<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
@@ -91,7 +91,7 @@ impl InferenceProvider for MistralProvider {
         }
     }
 
-    async fn _infer_stream<'a>(
+    async fn infer_stream<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,

@@ -18,14 +18,14 @@ pub trait HasCredentials {
 }
 
 pub trait InferenceProvider: HasCredentials {
-    fn _infer<'a>(
+    fn infer<'a>(
         &'a self,
         request: &'a ModelInferenceRequest,
         client: &'a Client,
         api_key: Cow<'a, SecretString>,
     ) -> impl Future<Output = Result<ProviderInferenceResponse, Error>> + Send + 'a;
 
-    fn _infer_stream<'a>(
+    fn infer_stream<'a>(
         &'a self,
         request: &'a ModelInferenceRequest,
         client: &'a Client,

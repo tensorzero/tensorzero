@@ -43,7 +43,7 @@ pub struct TogetherProvider {
 // TODO (#80): Add support for Llama 3.1 function calling as discussed [here](https://docs.together.ai/docs/llama-3-function-calling)
 
 impl InferenceProvider for TogetherProvider {
-    async fn _infer<'a>(
+    async fn infer<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
@@ -91,7 +91,7 @@ impl InferenceProvider for TogetherProvider {
         }
     }
 
-    async fn _infer_stream<'a>(
+    async fn infer_stream<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,

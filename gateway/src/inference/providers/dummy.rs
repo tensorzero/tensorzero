@@ -81,7 +81,7 @@ pub static DUMMY_STREAMING_TOOL_RESPONSE: [&str; 5] = [
 pub static DUMMY_RAW_REQUEST: &str = "raw request";
 
 impl InferenceProvider for DummyProvider {
-    async fn _infer<'a>(
+    async fn infer<'a>(
         &'a self,
         _request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
@@ -159,7 +159,7 @@ impl InferenceProvider for DummyProvider {
         })
     }
 
-    async fn _infer_stream<'a>(
+    async fn infer_stream<'a>(
         &'a self,
         _request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,

@@ -32,7 +32,7 @@ pub struct VLLMProvider {
 /// - vLLM only supports a specific tool and nothing else (and the implementation varies among LLMs)
 ///   **Today, we can't support tools** so we are leaving it as an open issue (#169).
 impl InferenceProvider for VLLMProvider {
-    async fn _infer<'a>(
+    async fn infer<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
@@ -78,7 +78,7 @@ impl InferenceProvider for VLLMProvider {
         }
     }
 
-    async fn _infer_stream<'a>(
+    async fn infer_stream<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
