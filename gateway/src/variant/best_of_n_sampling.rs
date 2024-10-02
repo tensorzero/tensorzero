@@ -365,7 +365,7 @@ async fn inner_select_best_candidate<'a, 'request>(
             name: evaluator.inner.model.clone(),
         })?;
     let model_inference_response = model_config
-        .infer(&inference_request, clients.http_client, clients.api_keys)
+        .infer(&inference_request, clients.http_client, clients.credentials)
         .await?;
     let model_inference_result =
         ModelInferenceResponseWithMetadata::new(model_inference_response, &evaluator.inner.model);
@@ -622,7 +622,7 @@ mod tests {
 
     use crate::{
         clickhouse::ClickHouseConnectionInfo,
-        endpoints::inference::InferenceApiKeys,
+        endpoints::inference::InferenceCredentials,
         inference::{
             providers::dummy::DummyProvider,
             types::{ChatInferenceResult, JsonInferenceResult, Latency},
@@ -1049,11 +1049,11 @@ mod tests {
         )]);
         let client = Client::new();
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
-        let api_keys = InferenceApiKeys::default();
+        let api_keys = InferenceCredentials::default();
         let inference_clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
-            api_keys: &api_keys,
+            credentials: &api_keys,
         };
         let input = Input {
             system: None,

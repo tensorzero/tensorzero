@@ -5,18 +5,19 @@ use lazy_static::lazy_static;
 use reqwest::StatusCode;
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::time::Instant;
 use url::Url;
 
 use crate::{
-    endpoints::inference::InferenceApiKeys,
+    endpoints::inference::InferenceCredentials,
     error::Error,
     inference::types::{
         ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
         ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     },
+    model::ProviderCredentials,
 };
 
 use super::{
@@ -41,6 +42,11 @@ pub struct TogetherProvider {
     pub api_key: Option<SecretString>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct TogetherCredentials<'a> {
+    pub api_key: Cow<'a, SecretString>,
+}
+
 // TODO (#80): Add support for Llama 3.1 function calling as discussed [here](https://docs.together.ai/docs/llama-3-function-calling)
 
 impl InferenceProvider for TogetherProvider {
@@ -48,10 +54,18 @@ impl InferenceProvider for TogetherProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: Cow<'a, SecretString>,
+        api_key: ProviderCredentials<'a>,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = TogetherRequest::new(&self.model_name, request);
         let request_url = get_chat_url(Some(&TOGETHER_API_BASE))?;
+        let api_key = match &api_key {
+            ProviderCredentials::Together(credentials) => &credentials.api_key,
+            _ => {
+                return Err(Error::BadCredentialsPreInference {
+                    provider_name: "Together".to_string(),
+                })
+            }
+        };
         let start_time = Instant::now();
         let res = http_client
             .post(request_url)
@@ -96,7 +110,7 @@ impl InferenceProvider for TogetherProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: Cow<'a, SecretString>,
+        api_key: ProviderCredentials<'a>,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -110,6 +124,14 @@ impl InferenceProvider for TogetherProvider {
             serde_json::to_string(&request_body).map_err(|e| Error::TogetherServer {
                 message: format!("Error serializing request: {e}"),
             })?;
+        let api_key = match &api_key {
+            ProviderCredentials::Together(credentials) => &credentials.api_key,
+            _ => {
+                return Err(Error::BadCredentialsPreInference {
+                    provider_name: "Together".to_string(),
+                })
+            }
+        };
         let request_url = get_chat_url(Some(&TOGETHER_API_BASE))?;
         let start_time = Instant::now();
         let event_source = http_client
@@ -143,16 +165,20 @@ impl HasCredentials for TogetherProvider {
         self.api_key.is_some()
     }
 
-    fn get_api_key<'a>(
+    fn get_credentials<'a>(
         &'a self,
-        api_keys: &'a InferenceApiKeys,
-    ) -> Result<Cow<'a, SecretString>, Error> {
-        match &api_keys.together_api_key {
-            Some(key) => Ok(Cow::Borrowed(key)),
+        api_keys: &'a InferenceCredentials,
+    ) -> Result<ProviderCredentials<'a>, Error> {
+        match &api_keys.together {
+            Some(credentials) => Ok(ProviderCredentials::Together(Cow::Borrowed(credentials))),
             None => self
                 .api_key
                 .as_ref()
-                .map(Cow::Borrowed)
+                .map(|api_key| {
+                    ProviderCredentials::Together(Cow::Owned(TogetherCredentials {
+                        api_key: Cow::Borrowed(api_key),
+                    }))
+                })
                 .ok_or(Error::ApiKeyMissing {
                     provider_name: "Together".to_string(),
                 }),

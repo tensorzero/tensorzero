@@ -36,6 +36,9 @@ pub enum Error {
     AzureServer {
         message: String,
     },
+    BadCredentialsPreInference {
+        provider_name: String,
+    },
     ChannelWrite {
         message: String,
     },
@@ -224,6 +227,7 @@ impl Error {
             Error::AWSBedrockServer { .. } => tracing::Level::ERROR,
             Error::AzureClient { .. } => tracing::Level::WARN,
             Error::AzureServer { .. } => tracing::Level::ERROR,
+            Error::BadCredentialsPreInference { .. } => tracing::Level::ERROR,
             Error::ChannelWrite { .. } => tracing::Level::ERROR,
             Error::ClickHouseMigration { .. } => tracing::Level::ERROR,
             Error::ClickHouseQuery { .. } => tracing::Level::ERROR,
@@ -293,6 +297,7 @@ impl Error {
             Error::AWSBedrockServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::AzureClient { status_code, .. } => *status_code,
             Error::AzureServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::BadCredentialsPreInference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ClickHouseQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -399,6 +404,13 @@ impl std::fmt::Display for Error {
             }
             Error::AzureServer { message } => {
                 write!(f, "Error from Azure server: {}", message)
+            }
+            Error::BadCredentialsPreInference { provider_name } => {
+                write!(
+                    f,
+                    "Bad credentials at inference time for provider: {}. This should never happen.",
+                    provider_name
+                )
             }
             Error::ChannelWrite { message } => {
                 write!(f, "Error writing to channel: {}", message)

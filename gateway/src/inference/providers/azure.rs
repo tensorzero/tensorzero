@@ -4,16 +4,17 @@ use futures::{StreamExt, TryStreamExt};
 use reqwest::StatusCode;
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::time::Instant;
 use url::Url;
 
-use crate::endpoints::inference::InferenceApiKeys;
+use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
 use crate::inference::types::{
     ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
 };
+use crate::model::ProviderCredentials;
 
 use super::openai::{
     handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
@@ -29,16 +30,29 @@ pub struct AzureProvider {
     pub api_key: Option<SecretString>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct AzureCredentials<'a> {
+    pub api_key: Cow<'a, SecretString>,
+}
+
 impl InferenceProvider for AzureProvider {
     async fn infer<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: Cow<'a, SecretString>,
+        api_key: ProviderCredentials<'a>,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = AzureRequest::new(request);
         let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id)?;
         let start_time = Instant::now();
+        let api_key = match &api_key {
+            ProviderCredentials::Azure(credentials) => &credentials.api_key,
+            _ => {
+                return Err(Error::BadCredentialsPreInference {
+                    provider_name: "Azure".to_string(),
+                })
+            }
+        };
         let res = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
@@ -84,7 +98,7 @@ impl InferenceProvider for AzureProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: Cow<'a, SecretString>,
+        api_key: ProviderCredentials<'a>,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -98,6 +112,14 @@ impl InferenceProvider for AzureProvider {
             message: format!("Error serializing request body as JSON: {e}"),
         })?;
         let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id)?;
+        let api_key = match &api_key {
+            ProviderCredentials::Azure(credentials) => &credentials.api_key,
+            _ => {
+                return Err(Error::BadCredentialsPreInference {
+                    provider_name: "Azure".to_string(),
+                })
+            }
+        };
         let start_time = Instant::now();
         let event_source = http_client
             .post(request_url)
@@ -130,16 +152,20 @@ impl HasCredentials for AzureProvider {
         self.api_key.is_some()
     }
 
-    fn get_api_key<'a>(
+    fn get_credentials<'a>(
         &'a self,
-        api_keys: &'a InferenceApiKeys,
-    ) -> Result<Cow<'a, SecretString>, Error> {
-        match &api_keys.azure_openai_api_key {
-            Some(key) => Ok(Cow::Borrowed(key)),
+        api_keys: &'a InferenceCredentials,
+    ) -> Result<ProviderCredentials<'a>, Error> {
+        match &api_keys.azure {
+            Some(credentials) => Ok(ProviderCredentials::Azure(Cow::Borrowed(credentials))),
             None => self
                 .api_key
                 .as_ref()
-                .map(Cow::Borrowed)
+                .map(|api_key| {
+                    ProviderCredentials::Azure(Cow::Owned(AzureCredentials {
+                        api_key: Cow::Borrowed(api_key),
+                    }))
+                })
                 .ok_or(Error::ApiKeyMissing {
                     provider_name: "Azure".to_string(),
                 }),

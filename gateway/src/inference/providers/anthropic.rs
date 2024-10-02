@@ -11,7 +11,7 @@ use tokio::time::Instant;
 use url::Url;
 use uuid::Uuid;
 
-use crate::endpoints::inference::InferenceApiKeys;
+use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{ContentBlock, ContentBlockChunk, Latency, Role, Text};
@@ -19,6 +19,7 @@ use crate::inference::types::{
     ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream, RequestMessage, TextChunk, Usage,
 };
+use crate::model::ProviderCredentials;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::provider_trait::HasCredentials;
@@ -38,15 +39,28 @@ pub struct AnthropicProvider {
     pub api_key: Option<SecretString>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct AnthropicCredentials<'a> {
+    pub api_key: Cow<'a, SecretString>,
+}
+
 impl InferenceProvider for AnthropicProvider {
     /// Anthropic non-streaming API request
     async fn infer<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: Cow<'a, SecretString>,
+        api_key: ProviderCredentials<'a>,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = AnthropicRequestBody::new(&self.model_name, request)?;
+        let api_key = match &api_key {
+            ProviderCredentials::Anthropic(credentials) => &credentials.api_key,
+            _ => {
+                return Err(Error::BadCredentialsPreInference {
+                    provider_name: "Anthropic".to_string(),
+                })
+            }
+        };
         let start_time = Instant::now();
         let res = http_client
             .post(ANTHROPIC_BASE_URL.as_ref())
@@ -94,7 +108,7 @@ impl InferenceProvider for AnthropicProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: Cow<'a, SecretString>,
+        api_key: ProviderCredentials<'a>,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -109,6 +123,14 @@ impl InferenceProvider for AnthropicProvider {
                 message: format!("Error serializing request body as JSON: {e}"),
             })?;
         let start_time = Instant::now();
+        let api_key = match &api_key {
+            ProviderCredentials::Anthropic(credentials) => &credentials.api_key,
+            _ => {
+                return Err(Error::BadCredentialsPreInference {
+                    provider_name: "Anthropic".to_string(),
+                })
+            }
+        };
         let event_source = http_client
             .post(ANTHROPIC_BASE_URL.as_ref())
             .header("anthropic-version", ANTHROPIC_API_VERSION)
@@ -138,16 +160,20 @@ impl HasCredentials for AnthropicProvider {
         self.api_key.is_some()
     }
 
-    fn get_api_key<'a>(
+    fn get_credentials<'a>(
         &'a self,
-        api_keys: &'a InferenceApiKeys,
-    ) -> Result<Cow<'a, SecretString>, Error> {
-        match &api_keys.anthropic_api_key {
-            Some(key) => Ok(Cow::Borrowed(key)),
+        api_keys: &'a InferenceCredentials,
+    ) -> Result<ProviderCredentials<'a>, Error> {
+        match &api_keys.anthropic {
+            Some(credentials) => Ok(ProviderCredentials::Anthropic(Cow::Borrowed(credentials))),
             None => self
                 .api_key
                 .as_ref()
-                .map(Cow::Borrowed)
+                .map(|api_key| {
+                    ProviderCredentials::Anthropic(Cow::Owned(AnthropicCredentials {
+                        api_key: Cow::Borrowed(api_key),
+                    }))
+                })
                 .ok_or(Error::ApiKeyMissing {
                     provider_name: "Anthropic".to_string(),
                 }),

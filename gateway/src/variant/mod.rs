@@ -334,7 +334,7 @@ async fn infer_model_request<'a, 'request>(
     inference_params: InferenceParams,
 ) -> Result<InferenceResult<'a>, Error> {
     let model_inference_response = model_config
-        .infer(&request, clients.http_client, clients.api_keys)
+        .infer(&request, clients.http_client, clients.credentials)
         .await?;
     let model_inference_result =
         ModelInferenceResponseWithMetadata::new(model_inference_response, model_name);
@@ -370,7 +370,7 @@ async fn infer_model_request_stream<'request>(
     Error,
 > {
     let (first_chunk, stream, raw_request, model_provider_name) = model_config
-        .infer_stream(&request, clients.http_client, clients.api_keys)
+        .infer_stream(&request, clients.http_client, clients.credentials)
         .await?;
     let model_used_info = ModelUsedInfo {
         model_name,
@@ -389,7 +389,7 @@ async fn infer_model_request_stream<'request>(
 mod tests {
     use super::*;
     use crate::clickhouse::ClickHouseConnectionInfo;
-    use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceApiKeys};
+    use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceCredentials};
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::providers::dummy::{
         DummyProvider, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_USAGE, DUMMY_JSON_RESPONSE_RAW,
@@ -606,13 +606,13 @@ mod tests {
     #[tokio::test]
     async fn test_infer_model_request() {
         // Setup common variables
-        let api_keys = InferenceApiKeys::default();
+        let api_keys = InferenceCredentials::default();
         let client = Client::new();
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
         let clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
-            api_keys: &api_keys,
+            credentials: &api_keys,
         };
         let templates = get_test_template_config();
         let inference_params = InferenceParams::default();
@@ -813,11 +813,11 @@ mod tests {
         // Set up the HTTP client and ClickHouse connection info
         let client = reqwest::Client::new();
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
-        let api_keys = InferenceApiKeys::default();
+        let api_keys = InferenceCredentials::default();
         let clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
-            api_keys: &api_keys,
+            credentials: &api_keys,
         };
 
         // Create a dummy function config (chat completion)

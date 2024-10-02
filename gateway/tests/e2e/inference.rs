@@ -1351,8 +1351,8 @@ pub async fn e2e_test_dynamic_api_key() {
                 }
             ]},
         "stream": false,
-        "api_keys": {
-            "dummy_api_key": "good_key"
+        "credentials": {
+            "dummy": {"api_key": "good_key"}
         }
     });
 

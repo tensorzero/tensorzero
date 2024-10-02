@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use futures::{StreamExt, TryStreamExt};
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::time::Instant;
 use url::Url;
@@ -13,18 +13,24 @@ use super::openai::{
     OpenAIRequestMessage, OpenAIResponse, OpenAISystemRequestMessage, StreamOptions,
 };
 use super::provider_trait::{HasCredentials, InferenceProvider};
-use crate::endpoints::inference::InferenceApiKeys;
+use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
 use crate::inference::types::{
     ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
 };
+use crate::model::ProviderCredentials;
 
 #[derive(Debug)]
 pub struct VLLMProvider {
     pub model_name: String,
     pub api_key: Option<SecretString>,
     pub api_base: Url,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct VLLMCredentials<'a> {
+    pub api_key: Cow<'a, SecretString>,
 }
 
 /// Key differences between vLLM and OpenAI inference:
@@ -36,11 +42,19 @@ impl InferenceProvider for VLLMProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: Cow<'a, SecretString>,
+        api_key: ProviderCredentials<'a>,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = VLLMRequest::new(&self.model_name, request)?;
         let request_url = get_chat_url(Some(&self.api_base))?;
         let start_time = Instant::now();
+        let api_key = match &api_key {
+            ProviderCredentials::VLLM(credentials) => &credentials.api_key,
+            _ => {
+                return Err(Error::ApiKeyMissing {
+                    provider_name: "vLLM".to_string(),
+                })
+            }
+        };
         let res = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
@@ -82,7 +96,7 @@ impl InferenceProvider for VLLMProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: Cow<'a, SecretString>,
+        api_key: ProviderCredentials<'a>,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -95,6 +109,14 @@ impl InferenceProvider for VLLMProvider {
         let raw_request = serde_json::to_string(&request_body).map_err(|e| Error::VLLMServer {
             message: format!("Error serializing request: {e}"),
         })?;
+        let api_key = match &api_key {
+            ProviderCredentials::VLLM(credentials) => &credentials.api_key,
+            _ => {
+                return Err(Error::BadCredentialsPreInference {
+                    provider_name: "vLLM".to_string(),
+                })
+            }
+        };
         let request_url = get_chat_url(Some(&self.api_base))?;
         let start_time = Instant::now();
         let event_source = http_client
@@ -128,18 +150,22 @@ impl HasCredentials for VLLMProvider {
         self.api_key.is_some()
     }
 
-    fn get_api_key<'a>(
+    fn get_credentials<'a>(
         &'a self,
-        api_keys: &'a InferenceApiKeys,
-    ) -> Result<Cow<'a, SecretString>, Error> {
-        match &api_keys.vllm_api_key {
-            Some(key) => Ok(Cow::Borrowed(key)),
+        api_keys: &'a InferenceCredentials,
+    ) -> Result<ProviderCredentials<'a>, Error> {
+        match &api_keys.vllm {
+            Some(credentials) => Ok(ProviderCredentials::VLLM(Cow::Borrowed(credentials))),
             None => self
                 .api_key
                 .as_ref()
-                .map(Cow::Borrowed)
+                .map(|api_key| {
+                    ProviderCredentials::VLLM(Cow::Owned(VLLMCredentials {
+                        api_key: Cow::Borrowed(api_key),
+                    }))
+                })
                 .ok_or(Error::ApiKeyMissing {
-                    provider_name: "VLLM".to_string(),
+                    provider_name: "vLLM".to_string(),
                 }),
         }
     }

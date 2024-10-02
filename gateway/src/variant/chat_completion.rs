@@ -331,7 +331,7 @@ mod tests {
     use serde_json::{json, Value};
 
     use crate::clickhouse::ClickHouseConnectionInfo;
-    use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceApiKeys};
+    use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceCredentials};
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::providers::common::get_temperature_tool_config;
     use crate::inference::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
@@ -643,11 +643,11 @@ mod tests {
     async fn test_infer_chat_completion() {
         let client = Client::new();
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
-        let api_keys = InferenceApiKeys::default();
+        let api_keys = InferenceCredentials::default();
         let clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
-            api_keys: &api_keys,
+            credentials: &api_keys,
         };
         let templates = get_test_template_config();
         let system_template_name = "system";
@@ -1277,11 +1277,11 @@ mod tests {
     async fn test_infer_chat_completion_stream() {
         let client = Client::new();
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
-        let api_keys = InferenceApiKeys::default();
+        let api_keys = InferenceCredentials::default();
         let clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
-            api_keys: &api_keys,
+            credentials: &api_keys,
         };
         let templates = get_test_template_config();
         let function_config = Box::leak(Box::new(FunctionConfig::Chat(FunctionConfigChat {

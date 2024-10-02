@@ -4,18 +4,19 @@ use futures::{StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::time::Instant;
 use url::Url;
 
 use crate::{
-    endpoints::inference::InferenceApiKeys,
+    endpoints::inference::InferenceCredentials,
     error::Error,
     inference::types::{
         ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
         ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     },
+    model::ProviderCredentials,
 };
 
 use super::{
@@ -41,6 +42,11 @@ pub struct FireworksProvider {
     pub api_key: Option<SecretString>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct FireworksCredentials<'a> {
+    pub api_key: Cow<'a, SecretString>,
+}
+
 /// Key differences between Fireworks and OpenAI inference:
 /// - Fireworks allows you to specify output format in JSON mode
 /// - Fireworks automatically returns usage in streaming inference, we don't have to ask for it
@@ -51,11 +57,19 @@ impl InferenceProvider for FireworksProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: Cow<'a, SecretString>,
+        api_key: ProviderCredentials<'a>,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = FireworksRequest::new(&self.model_name, request);
         let request_url = get_chat_url(Some(&FIREWORKS_API_BASE))?;
         let start_time = Instant::now();
+        let api_key = match &api_key {
+            ProviderCredentials::Fireworks(credentials) => &credentials.api_key,
+            _ => {
+                return Err(Error::BadCredentialsPreInference {
+                    provider_name: "Fireworks".to_string(),
+                })
+            }
+        };
         let res = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
@@ -99,7 +113,7 @@ impl InferenceProvider for FireworksProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: Cow<'a, SecretString>,
+        api_key: ProviderCredentials<'a>,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -114,6 +128,14 @@ impl InferenceProvider for FireworksProvider {
                 message: format!("Error serializing request body: {e}"),
             })?;
         let request_url = get_chat_url(Some(&FIREWORKS_API_BASE))?;
+        let api_key = match &api_key {
+            ProviderCredentials::Fireworks(credentials) => &credentials.api_key,
+            _ => {
+                return Err(Error::BadCredentialsPreInference {
+                    provider_name: "Fireworks".to_string(),
+                })
+            }
+        };
         let start_time = Instant::now();
         let event_source = http_client
             .post(request_url)
@@ -146,16 +168,20 @@ impl HasCredentials for FireworksProvider {
     fn has_credentials(&self) -> bool {
         self.api_key.is_some()
     }
-    fn get_api_key<'a>(
+    fn get_credentials<'a>(
         &'a self,
-        api_keys: &'a InferenceApiKeys,
-    ) -> Result<Cow<'a, SecretString>, Error> {
-        match &api_keys.fireworks_api_key {
-            Some(key) => Ok(Cow::Borrowed(key)),
+        api_keys: &'a InferenceCredentials,
+    ) -> Result<ProviderCredentials<'a>, Error> {
+        match &api_keys.fireworks {
+            Some(credentials) => Ok(ProviderCredentials::Fireworks(Cow::Borrowed(credentials))),
             None => self
                 .api_key
                 .as_ref()
-                .map(Cow::Borrowed)
+                .map(|api_key| {
+                    ProviderCredentials::Fireworks(Cow::Owned(FireworksCredentials {
+                        api_key: Cow::Borrowed(api_key),
+                    }))
+                })
                 .ok_or(Error::ApiKeyMissing {
                     provider_name: "Fireworks".to_string(),
                 }),

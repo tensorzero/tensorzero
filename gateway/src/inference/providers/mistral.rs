@@ -12,13 +12,14 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
-    endpoints::inference::InferenceApiKeys,
+    endpoints::inference::InferenceCredentials,
     error::Error,
     inference::types::{
         ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest,
         ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
         ProviderInferenceResponseStream, TextChunk, Usage,
     },
+    model::ProviderCredentials,
     tool::{ToolCall, ToolCallChunk, ToolChoice},
 };
 
@@ -43,15 +44,28 @@ pub struct MistralProvider {
     pub api_key: Option<SecretString>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct MistralCredentials<'a> {
+    pub api_key: Cow<'a, SecretString>,
+}
+
 impl InferenceProvider for MistralProvider {
     async fn infer<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: Cow<'a, SecretString>,
+        api_key: ProviderCredentials<'a>,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = MistralRequest::new(&self.model_name, request)?;
         let request_url = get_chat_url(Some(&MISTRAL_API_BASE))?;
+        let api_key = match &api_key {
+            ProviderCredentials::Mistral(credentials) => &credentials.api_key,
+            _ => {
+                return Err(Error::BadCredentialsPreInference {
+                    provider_name: "Mistral".to_string(),
+                })
+            }
+        };
         let start_time = Instant::now();
         let res = http_client
             .post(request_url)
@@ -95,7 +109,7 @@ impl InferenceProvider for MistralProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: Cow<'a, SecretString>,
+        api_key: ProviderCredentials<'a>,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -110,6 +124,14 @@ impl InferenceProvider for MistralProvider {
                 message: format!("Error serializing request: {e}"),
             })?;
         let request_url = get_chat_url(Some(&MISTRAL_API_BASE))?;
+        let api_key = match &api_key {
+            ProviderCredentials::Mistral(credentials) => &credentials.api_key,
+            _ => {
+                return Err(Error::BadCredentialsPreInference {
+                    provider_name: "Mistral".to_string(),
+                })
+            }
+        };
         let start_time = Instant::now();
         let event_source = http_client
             .post(request_url)
@@ -141,16 +163,20 @@ impl HasCredentials for MistralProvider {
         self.api_key.is_some()
     }
 
-    fn get_api_key<'a>(
+    fn get_credentials<'a>(
         &'a self,
-        api_keys: &'a InferenceApiKeys,
-    ) -> Result<Cow<'a, SecretString>, Error> {
-        match &api_keys.mistral_api_key {
-            Some(key) => Ok(Cow::Borrowed(key)),
+        api_keys: &'a InferenceCredentials,
+    ) -> Result<ProviderCredentials<'a>, Error> {
+        match &api_keys.mistral {
+            Some(credentials) => Ok(ProviderCredentials::Mistral(Cow::Borrowed(credentials))),
             None => self
                 .api_key
                 .as_ref()
-                .map(Cow::Borrowed)
+                .map(|api_key| {
+                    ProviderCredentials::Mistral(Cow::Owned(MistralCredentials {
+                        api_key: Cow::Borrowed(api_key),
+                    }))
+                })
                 .ok_or(Error::ApiKeyMissing {
                     provider_name: "Mistral".to_string(),
                 }),

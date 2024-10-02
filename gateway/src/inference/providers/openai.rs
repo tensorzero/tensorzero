@@ -13,7 +13,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
-use crate::endpoints::inference::InferenceApiKeys;
+use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
@@ -21,6 +21,7 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     RequestMessage, Role, Text, TextChunk, Usage,
 };
+use crate::model::ProviderCredentials;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::provider_trait::HasCredentials;
@@ -39,15 +40,28 @@ pub struct OpenAIProvider {
     pub api_key: Option<SecretString>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct OpenAICredentials<'a> {
+    pub api_key: Cow<'a, SecretString>,
+}
+
 impl InferenceProvider for OpenAIProvider {
     async fn infer<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: Cow<'a, SecretString>,
+        api_key: ProviderCredentials<'a>,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = OpenAIRequest::new(&self.model_name, request)?;
         let request_url = get_chat_url(self.api_base.as_ref())?;
+        let api_key = match &api_key {
+            ProviderCredentials::OpenAI(credentials) => &credentials.api_key,
+            _ => {
+                return Err(Error::BadCredentialsPreInference {
+                    provider_name: "OpenAI".to_string(),
+                })
+            }
+        };
         let start_time = Instant::now();
         let res = http_client
             .post(request_url)
@@ -91,7 +105,7 @@ impl InferenceProvider for OpenAIProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: Cow<'a, SecretString>,
+        api_key: ProviderCredentials<'a>,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -111,6 +125,14 @@ impl InferenceProvider for OpenAIProvider {
                 message: format!("Error serializing request: {e}"),
             })?;
         let request_url = get_chat_url(self.api_base.as_ref())?;
+        let api_key = match &api_key {
+            ProviderCredentials::OpenAI(credentials) => &credentials.api_key,
+            _ => {
+                return Err(Error::BadCredentialsPreInference {
+                    provider_name: "OpenAI".to_string(),
+                })
+            }
+        };
         let start_time = Instant::now();
         let event_source = http_client
             .post(request_url)
@@ -195,16 +217,20 @@ impl HasCredentials for OpenAIProvider {
         self.api_key.is_some()
     }
 
-    fn get_api_key<'a>(
+    fn get_credentials<'a>(
         &'a self,
-        api_keys: &'a InferenceApiKeys,
-    ) -> Result<Cow<'a, SecretString>, Error> {
-        match &api_keys.openai_api_key {
-            Some(key) => Ok(Cow::Borrowed(key)),
+        api_keys: &'a InferenceCredentials,
+    ) -> Result<ProviderCredentials<'a>, Error> {
+        match &api_keys.openai {
+            Some(credentials) => Ok(ProviderCredentials::OpenAI(Cow::Borrowed(credentials))),
             None => self
                 .api_key
                 .as_ref()
-                .map(Cow::Borrowed)
+                .map(|api_key| {
+                    ProviderCredentials::OpenAI(Cow::Owned(OpenAICredentials {
+                        api_key: Cow::Borrowed(api_key),
+                    }))
+                })
                 .ok_or(Error::ApiKeyMissing {
                     provider_name: "OpenAI".to_string(),
                 }),

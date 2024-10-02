@@ -10,7 +10,7 @@ use serde_json::Value;
 use tokio::time::Instant;
 use uuid::Uuid;
 
-use crate::endpoints::inference::InferenceApiKeys;
+use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
 use crate::inference::providers::gcp_vertex_gemini::GCPCredentials;
 use crate::inference::providers::provider_trait::InferenceProvider;
@@ -19,6 +19,7 @@ use crate::inference::types::{
     ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream, RequestMessage, Usage,
 };
+use crate::model::ProviderCredentials;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::provider_trait::HasCredentials;
@@ -35,6 +36,12 @@ pub struct GCPVertexAnthropicProvider {
     pub model_id: String,
 }
 
+/// For use at runtime, not the static credentials we use at startup
+#[derive(Clone, Debug, Deserialize)]
+pub struct GCPVertexAnthropicCredentials {
+    pub token: SecretString,
+}
+
 const ANTHROPIC_API_VERSION: &str = "vertex-2023-10-16";
 
 impl InferenceProvider for GCPVertexAnthropicProvider {
@@ -43,10 +50,17 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: Cow<'a, SecretString>,
+        api_key: ProviderCredentials<'a>,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = GCPVertexAnthropicRequestBody::new(request)?;
-
+        let api_key = match &api_key {
+            ProviderCredentials::GCPVertexAnthropic(credentials) => &credentials.token,
+            _ => {
+                return Err(Error::BadCredentialsPreInference {
+                    provider_name: "GCP Vertex Anthropic".to_string(),
+                })
+            }
+        };
         let start_time = Instant::now();
         let res = http_client
             .post(&self.request_url)
@@ -91,7 +105,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: Cow<'a, SecretString>,
+        api_key: ProviderCredentials<'a>,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -105,6 +119,14 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             serde_json::to_string(&request_body).map_err(|e| Error::AnthropicServer {
                 message: format!("Error serializing request body as JSON: {e}"),
             })?;
+        let api_key = match &api_key {
+            ProviderCredentials::GCPVertexAnthropic(credentials) => &credentials.token,
+            _ => {
+                return Err(Error::BadCredentialsPreInference {
+                    provider_name: "GCP Vertex Anthropic".to_string(),
+                })
+            }
+        };
         let start_time = Instant::now();
         let event_source = http_client
             .post(&self.streaming_request_url)
@@ -134,18 +156,22 @@ impl HasCredentials for GCPVertexAnthropicProvider {
         self.credentials.is_some()
     }
 
-    fn get_api_key<'a>(
+    fn get_credentials<'a>(
         &'a self,
-        api_keys: &'a InferenceApiKeys,
-    ) -> Result<Cow<'a, SecretString>, Error> {
-        match &api_keys.gcp_vertex_api_key {
-            Some(key) => Ok(Cow::Borrowed(key)),
+        api_keys: &'a InferenceCredentials,
+    ) -> Result<ProviderCredentials<'a>, Error> {
+        match &api_keys.gcp_vertex_anthropic {
+            Some(credentials) => Ok(ProviderCredentials::GCPVertexAnthropic(Cow::Borrowed(
+                credentials,
+            ))),
             None => {
                 let credentials = self.credentials.as_ref().ok_or(Error::ApiKeyMissing {
                     provider_name: "GCP Vertex Anthropic".to_string(),
                 })?;
                 let token = SecretString::from(credentials.get_jwt_token(&self.audience)?);
-                Ok(Cow::Owned(token))
+                Ok(ProviderCredentials::GCPVertexAnthropic(Cow::Owned(
+                    GCPVertexAnthropicCredentials { token },
+                )))
             }
         }
     }

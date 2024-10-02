@@ -15,12 +15,11 @@ use futures::{Stream, StreamExt};
 use lazy_static::lazy_static;
 use reqwest::StatusCode;
 use secrecy::SecretString;
-use std::borrow::Cow;
 use std::time::Duration;
 use tokio::time::Instant;
 use uuid::Uuid;
 
-use crate::endpoints::inference::InferenceApiKeys;
+use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
@@ -28,6 +27,7 @@ use crate::inference::types::{
     ProviderInferenceResponseChunk, ProviderInferenceResponseStream, RequestMessage, Role, Text,
     TextChunk, Usage,
 };
+use crate::model::ProviderCredentials;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::provider_trait::HasCredentials;
@@ -69,7 +69,7 @@ impl InferenceProvider for AWSBedrockProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
-        _api_key: Cow<'a, SecretString>,
+        _api_key: ProviderCredentials<'a>,
     ) -> Result<ProviderInferenceResponse, Error> {
         // TODO (#55): add support for guardrails and additional fields
 
@@ -153,7 +153,7 @@ impl InferenceProvider for AWSBedrockProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
-        _api_key: Cow<'a, SecretString>,
+        _api_key: ProviderCredentials<'a>,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -250,11 +250,11 @@ impl HasCredentials for AWSBedrockProvider {
         true
     }
 
-    fn get_api_key<'a>(
+    fn get_credentials<'a>(
         &'a self,
-        _api_keys: &'a InferenceApiKeys,
-    ) -> Result<Cow<'a, SecretString>, Error> {
-        Ok(Cow::Borrowed(&EMPTY_SECRET))
+        _api_keys: &'a InferenceCredentials,
+    ) -> Result<ProviderCredentials<'a>, Error> {
+        Ok(ProviderCredentials::AWSBedrock)
     }
 }
 

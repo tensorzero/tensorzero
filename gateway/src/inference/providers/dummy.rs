@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use lazy_static::lazy_static;
 use secrecy::{ExposeSecret, SecretString};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
@@ -10,18 +11,24 @@ use uuid::Uuid;
 use super::provider_trait::{HasCredentials, InferenceProvider};
 
 use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
-use crate::endpoints::inference::InferenceApiKeys;
+use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
 use crate::inference::types::{
     current_timestamp, ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     Usage,
 };
+use crate::model::ProviderCredentials;
 use crate::tool::{ToolCall, ToolCallChunk};
 
 #[derive(Debug)]
 pub struct DummyProvider {
     pub model_name: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct DummyCredentials<'a> {
+    pub api_key: Cow<'a, SecretString>,
 }
 
 pub static DUMMY_INFER_RESPONSE_CONTENT: &str = "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.";
@@ -85,13 +92,21 @@ impl InferenceProvider for DummyProvider {
         &'a self,
         _request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
-        api_key: Cow<'a, SecretString>,
+        api_key: ProviderCredentials<'a>,
     ) -> Result<ProviderInferenceResponse, Error> {
         if self.model_name == "error" {
             return Err(Error::InferenceClient {
                 message: "Error sending request to Dummy provider.".to_string(),
             });
         }
+        let api_key = match &api_key {
+            ProviderCredentials::Dummy(credentials) => &credentials.api_key,
+            _ => {
+                return Err(Error::BadCredentialsPreInference {
+                    provider_name: "Dummy".to_string(),
+                })
+            }
+        };
         if self.model_name == "test_key" && api_key.expose_secret() != "good_key" {
             return Err(Error::InferenceClient {
                 message: "Invalid API key for Dummy provider".to_string(),
@@ -163,7 +178,7 @@ impl InferenceProvider for DummyProvider {
         &'a self,
         _request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
-        _api_key: Cow<'a, SecretString>,
+        _api_key: ProviderCredentials<'a>,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -263,13 +278,15 @@ impl HasCredentials for DummyProvider {
         self.model_name != "bad_credentials"
     }
 
-    fn get_api_key<'a>(
+    fn get_credentials<'a>(
         &'a self,
-        api_keys: &'a InferenceApiKeys,
-    ) -> Result<Cow<'a, SecretString>, Error> {
-        match &api_keys.dummy_api_key {
-            Some(key) => Ok(Cow::Borrowed(key)),
-            None => Ok(Cow::Borrowed(&EMPTY_SECRET)),
+        api_keys: &'a InferenceCredentials,
+    ) -> Result<ProviderCredentials<'a>, Error> {
+        match &api_keys.dummy {
+            Some(credentials) => Ok(ProviderCredentials::Dummy(Cow::Borrowed(credentials))),
+            None => Ok(ProviderCredentials::Dummy(Cow::Owned(DummyCredentials {
+                api_key: Cow::Borrowed(&EMPTY_SECRET),
+            }))),
         }
     }
 }

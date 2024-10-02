@@ -4,10 +4,21 @@ use std::env;
 use std::{borrow::Cow, collections::HashMap};
 use url::Url;
 
+use crate::inference::providers::anthropic::AnthropicCredentials;
+use crate::inference::providers::azure::AzureCredentials;
+#[cfg(any(test, feature = "e2e_tests"))]
+use crate::inference::providers::dummy::DummyCredentials;
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::inference::providers::dummy::DummyProvider;
+use crate::inference::providers::fireworks::FireworksCredentials;
+use crate::inference::providers::gcp_vertex_anthropic::GCPVertexAnthropicCredentials;
+use crate::inference::providers::gcp_vertex_gemini::GCPVertexGeminiCredentials;
+use crate::inference::providers::mistral::MistralCredentials;
+use crate::inference::providers::openai::OpenAICredentials;
+use crate::inference::providers::together::TogetherCredentials;
+use crate::inference::providers::vllm::VLLMCredentials;
 use crate::{
-    endpoints::inference::InferenceApiKeys,
+    endpoints::inference::InferenceCredentials,
     error::Error,
     inference::{
         providers::{
@@ -43,7 +54,7 @@ impl ModelConfig {
         &'a self,
         request: &'request ModelInferenceRequest<'request>,
         client: &'request Client,
-        api_keys: &'request InferenceApiKeys,
+        api_keys: &'request InferenceCredentials<'request>,
     ) -> Result<ModelInferenceResponse<'a>, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
@@ -75,7 +86,7 @@ impl ModelConfig {
         &'a self,
         request: &'request ModelInferenceRequest<'request>,
         client: &'request Client,
-        api_keys: &'request InferenceApiKeys,
+        api_keys: &'request InferenceCredentials<'request>,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -141,6 +152,22 @@ pub enum ProviderConfig {
     VLLM(VLLMProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
+}
+
+#[derive(Debug)]
+pub enum ProviderCredentials<'a> {
+    Anthropic(Cow<'a, AnthropicCredentials<'a>>),
+    AWSBedrock,
+    Azure(Cow<'a, AzureCredentials<'a>>),
+    #[cfg(any(test, feature = "e2e_tests"))]
+    Dummy(Cow<'a, DummyCredentials<'a>>),
+    Fireworks(Cow<'a, FireworksCredentials<'a>>),
+    GCPVertexAnthropic(Cow<'a, GCPVertexAnthropicCredentials>),
+    GCPVertexGemini(Cow<'a, GCPVertexGeminiCredentials>),
+    Mistral(Cow<'a, MistralCredentials<'a>>),
+    OpenAI(Cow<'a, OpenAICredentials<'a>>),
+    Together(Cow<'a, TogetherCredentials<'a>>),
+    VLLM(Cow<'a, VLLMCredentials<'a>>),
 }
 
 impl<'de> Deserialize<'de> for ProviderConfig {
@@ -346,9 +373,9 @@ impl ProviderConfig {
         &self,
         request: &ModelInferenceRequest<'_>,
         client: &Client,
-        api_keys: &InferenceApiKeys,
+        api_keys: &InferenceCredentials<'_>,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let api_key = self.get_api_key(api_keys)?;
+        let api_key = self.get_credentials(api_keys)?;
         match self {
             ProviderConfig::Anthropic(provider) => provider.infer(request, client, api_key).await,
             ProviderConfig::AWSBedrock(provider) => provider.infer(request, client, api_key).await,
@@ -373,7 +400,7 @@ impl ProviderConfig {
         &self,
         request: &ModelInferenceRequest<'_>,
         client: &Client,
-        api_keys: &InferenceApiKeys,
+        api_keys: &InferenceCredentials<'_>,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -382,7 +409,7 @@ impl ProviderConfig {
         ),
         Error,
     > {
-        let api_key = self.get_api_key(api_keys)?;
+        let api_key = self.get_credentials(api_keys)?;
         match self {
             ProviderConfig::Anthropic(provider) => {
                 provider.infer_stream(request, client, api_key).await
@@ -438,23 +465,23 @@ impl HasCredentials for ProviderConfig {
         }
     }
 
-    fn get_api_key<'a>(
+    fn get_credentials<'a>(
         &'a self,
-        api_keys: &'a InferenceApiKeys,
-    ) -> Result<Cow<'a, SecretString>, Error> {
+        api_keys: &'a InferenceCredentials,
+    ) -> Result<ProviderCredentials<'a>, Error> {
         match self {
-            ProviderConfig::Anthropic(provider) => provider.get_api_key(api_keys),
-            ProviderConfig::AWSBedrock(provider) => provider.get_api_key(api_keys),
-            ProviderConfig::Azure(provider) => provider.get_api_key(api_keys),
-            ProviderConfig::Fireworks(provider) => provider.get_api_key(api_keys),
-            ProviderConfig::GCPVertexAnthropic(provider) => provider.get_api_key(api_keys),
-            ProviderConfig::GCPVertexGemini(provider) => provider.get_api_key(api_keys),
-            ProviderConfig::Mistral(provider) => provider.get_api_key(api_keys),
-            ProviderConfig::OpenAI(provider) => provider.get_api_key(api_keys),
-            ProviderConfig::Together(provider) => provider.get_api_key(api_keys),
-            ProviderConfig::VLLM(provider) => provider.get_api_key(api_keys),
+            ProviderConfig::Anthropic(provider) => provider.get_credentials(api_keys),
+            ProviderConfig::AWSBedrock(provider) => provider.get_credentials(api_keys),
+            ProviderConfig::Azure(provider) => provider.get_credentials(api_keys),
+            ProviderConfig::Fireworks(provider) => provider.get_credentials(api_keys),
+            ProviderConfig::GCPVertexAnthropic(provider) => provider.get_credentials(api_keys),
+            ProviderConfig::GCPVertexGemini(provider) => provider.get_credentials(api_keys),
+            ProviderConfig::Mistral(provider) => provider.get_credentials(api_keys),
+            ProviderConfig::OpenAI(provider) => provider.get_credentials(api_keys),
+            ProviderConfig::Together(provider) => provider.get_credentials(api_keys),
+            ProviderConfig::VLLM(provider) => provider.get_credentials(api_keys),
             #[cfg(any(test, feature = "e2e_tests"))]
-            ProviderConfig::Dummy(provider) => provider.get_api_key(api_keys),
+            ProviderConfig::Dummy(provider) => provider.get_credentials(api_keys),
         }
     }
 }
@@ -465,8 +492,8 @@ mod tests {
 
     use crate::inference::{
         providers::dummy::{
-            DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW, DUMMY_INFER_USAGE,
-            DUMMY_STREAMING_RESPONSE,
+            DummyCredentials, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
+            DUMMY_INFER_USAGE, DUMMY_STREAMING_RESPONSE,
         },
         types::{ContentBlockChunk, FunctionType, ModelInferenceRequestJsonMode, TextChunk},
     };
@@ -493,7 +520,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: false,
         };
-        let api_keys = InferenceApiKeys::default();
+        let api_keys = InferenceCredentials::default();
 
         // Try inferring the good model only
         let request = ModelInferenceRequest {
@@ -556,7 +583,7 @@ mod tests {
         let bad_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "error".to_string(),
         });
-        let api_keys = InferenceApiKeys::default();
+        let api_keys = InferenceCredentials::default();
         // Try inferring the good model only
         let request = ModelInferenceRequest {
             messages: vec![],
@@ -605,7 +632,7 @@ mod tests {
         let bad_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "error".to_string(),
         });
-        let api_keys = InferenceApiKeys::default();
+        let api_keys = InferenceCredentials::default();
         let request = ModelInferenceRequest {
             messages: vec![],
             system: None,
@@ -696,7 +723,7 @@ mod tests {
         let bad_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "error".to_string(),
         });
-        let api_keys = InferenceApiKeys::default();
+        let api_keys = InferenceCredentials::default();
         let request = ModelInferenceRequest {
             messages: vec![],
             system: None,
@@ -768,7 +795,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: false,
         };
-        let api_keys = InferenceApiKeys::default();
+        let api_keys = InferenceCredentials::default();
 
         // Try inferring the good model only
         let request = ModelInferenceRequest {
@@ -799,8 +826,10 @@ mod tests {
             }
         );
 
-        let api_keys = InferenceApiKeys {
-            dummy_api_key: Some(SecretString::from("good_key".to_string())),
+        let api_keys = InferenceCredentials {
+            dummy: Some(DummyCredentials {
+                api_key: Cow::Owned(SecretString::from("good_key".to_string())),
+            }),
             ..Default::default()
         };
         let response = model_config
