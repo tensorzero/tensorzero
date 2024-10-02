@@ -20,7 +20,7 @@ type = "json"
 user_schema = "functions/play_chess_board/user_schema.json"
 output_schema = "functions/play_chess_board/output_schema.json"
 
-[functions.play_chess_board.variants.gpt-4o-mini]
+[functions.play_chess_board.variants.baseline]
 weight = 1
 temperature = 1.05
 type = "chat_completion"
@@ -28,66 +28,61 @@ model = "gpt-4o-mini"
 system_template = "functions/play_chess_board/chess_prompt/system_template.minijinja"
 user_template = "functions/play_chess_board/chess_prompt/user_template.minijinja"
 
-[functions.play_chess_board.variants.gpt-4o-mini_best_of_5]
+[functions.play_chess_board.variants.best_of_5]
 weight = 1
 type = "experimental_best_of_n_sampling"
 candidates = [
-    "gpt-4o-mini",
-    "gpt-4o-mini",
-    "gpt-4o-mini",
-    "gpt-4o-mini",
-    "gpt-4o-mini",
+    "baseline",
+    "baseline",
+    "baseline",
+    "baseline",
+    "baseline",
 ]
 
-[functions.play_chess_board.variants.gpt-4o-mini_best_of_5.evaluator]
+[functions.play_chess_board.variants.best_of_5.evaluator]
 model = "gpt-4o-mini"
 system_template = "functions/play_chess_board/chess_prompt/system_template.minijinja"
 user_template = "functions/play_chess_board/chess_prompt/user_template.minijinja"
 
-[functions.play_chess_board.variants.gpt-4o-mini_prompt_1]
-weight = 1
+[functions.play_chess_board.variants.alternative_prompt_1]
 temperature = 1.05
 type = "chat_completion"
 model = "gpt-4o-mini"
 system_template = "functions/play_chess_board/chess_prompt_1/system_template.minijinja"
 user_template = "functions/play_chess_board/chess_prompt_1/user_template.minijinja"
 
-[functions.play_chess_board.variants.gpt-4o-mini_prompt_2]
-weight = 1
+[functions.play_chess_board.variants.alternative_prompt_2]
 temperature = 1.05
 type = "chat_completion"
 model = "gpt-4o-mini"
 system_template = "functions/play_chess_board/chess_prompt_2/system_template.minijinja"
 user_template = "functions/play_chess_board/chess_prompt_2/user_template.minijinja"
 
-[functions.play_chess_board.variants.gpt-4o-mini_prompt_3]
-weight = 1
+[functions.play_chess_board.variants.alternative_prompt_3]
 temperature = 1.05
 type = "chat_completion"
 model = "gpt-4o-mini"
 system_template = "functions/play_chess_board/chess_prompt_3/system_template.minijinja"
 user_template = "functions/play_chess_board/chess_prompt_3/user_template.minijinja"
 
-[functions.play_chess_board.variants.gpt-4o-mini_prompt_4]
-weight = 1
+[functions.play_chess_board.variants.alternative_prompt_4]
 temperature = 1.05
 type = "chat_completion"
 model = "gpt-4o-mini"
 system_template = "functions/play_chess_board/chess_prompt_4/system_template.minijinja"
 user_template = "functions/play_chess_board/chess_prompt_4/user_template.minijinja"
 
-[functions.play_chess_board.variants.gpt-4o-mini_best_of_5_diverse]
-weight = 1
+[functions.play_chess_board.variants.best_of_5_diverse_prompts]
 type = "experimental_best_of_n_sampling"
 candidates = [
-    "gpt-4o-mini",
-    "gpt-4o-mini_prompt_1",
-    "gpt-4o-mini_prompt_2",
-    "gpt-4o-mini_prompt_3",
-    "gpt-4o-mini_prompt_4",
+    "baseline",
+    "alternative_prompt_1",
+    "alternative_prompt_2",
+    "alternative_prompt_3",
+    "alternative_prompt_4",
 ]
 
-[functions.play_chess_board.variants.gpt-4o-mini_best_of_5_diverse.evaluator]
+[functions.play_chess_board.variants.best_of_5_diverse_prompts.evaluator]
 model = "gpt-4o-mini"
 system_template = "functions/play_chess_board/chess_evaluator/system_template.minijinja"
 user_template = "functions/play_chess_board/chess_evaluator/user_template.minijinja"
