@@ -334,7 +334,7 @@ mod tests {
             max_tokens: Some(100),
             stream: false,
             seed: Some(69),
-            json_mode: ModelInferenceRequestJsonMode::On,
+            json_mode: ModelInferenceRequestJsonMode::Off,
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
@@ -343,6 +343,46 @@ mod tests {
         let azure_request = AzureRequest::new(&request_with_tools);
 
         assert_eq!(azure_request.messages.len(), 1);
+        assert_eq!(azure_request.temperature, Some(0.5));
+        assert_eq!(azure_request.max_tokens, Some(100));
+        assert!(!azure_request.stream);
+        assert_eq!(azure_request.seed, Some(69));
+        assert_eq!(azure_request.response_format, AzureResponseFormat::Text);
+        assert!(azure_request.tools.is_some());
+        let tools = azure_request.tools.as_ref().unwrap();
+        assert_eq!(tools.len(), 1);
+
+        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
+        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        assert_eq!(
+            azure_request.tool_choice,
+            Some(AzureToolChoice::Specific(SpecificToolChoice {
+                r#type: OpenAIToolType::Function,
+                function: SpecificToolFunction {
+                    name: WEATHER_TOOL.name(),
+                }
+            }))
+        );
+
+        let request_with_tools = ModelInferenceRequest {
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: Some(0.5),
+            max_tokens: Some(100),
+            stream: false,
+            seed: Some(69),
+            json_mode: ModelInferenceRequestJsonMode::On,
+            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            function_type: FunctionType::Json,
+            output_schema: None,
+        };
+
+        let azure_request = AzureRequest::new(&request_with_tools);
+
+        assert_eq!(azure_request.messages.len(), 2);
         assert_eq!(azure_request.temperature, Some(0.5));
         assert_eq!(azure_request.max_tokens, Some(100));
         assert!(!azure_request.stream);

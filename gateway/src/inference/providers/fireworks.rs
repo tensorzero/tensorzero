@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use futures::{StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
 use reqwest_eventsource::RequestBuilderExt;
@@ -17,9 +19,9 @@ use crate::{
 
 use super::{
     openai::{
-        get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
-        stream_openai, OpenAIFunction, OpenAIRequestMessage, OpenAIResponse, OpenAITool,
-        OpenAIToolChoice, OpenAIToolType,
+        get_chat_url, handle_openai_error, prepare_openai_tools, stream_openai,
+        tensorzero_to_openai_messages, OpenAIFunction, OpenAIRequestMessage, OpenAIResponse,
+        OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice, OpenAIToolType,
     },
     provider_trait::{HasCredentials, InferenceProvider},
 };
@@ -211,7 +213,7 @@ impl<'a> FireworksRequest<'a> {
             }
             ModelInferenceRequestJsonMode::Off => None,
         };
-        let messages = prepare_openai_messages(request);
+        let messages = prepare_fireworks_messages(request);
         let (tools, tool_choice, _) = prepare_openai_tools(request);
         let tools = tools.map(|t| t.into_iter().map(|tool| tool.into()).collect());
 
@@ -226,6 +228,30 @@ impl<'a> FireworksRequest<'a> {
             tool_choice,
         }
     }
+}
+
+fn prepare_fireworks_messages<'a>(
+    request: &'a ModelInferenceRequest,
+) -> Vec<OpenAIRequestMessage<'a>> {
+    let mut messages: Vec<OpenAIRequestMessage> = request
+        .messages
+        .iter()
+        .flat_map(tensorzero_to_openai_messages)
+        .collect();
+    if let Some(system_msg) = tensorzero_to_fireworks_system_message(request.system.as_deref()) {
+        messages.insert(0, system_msg);
+    }
+    messages
+}
+
+fn tensorzero_to_fireworks_system_message(
+    system: Option<&str>,
+) -> Option<OpenAIRequestMessage<'_>> {
+    system.map(|instructions| {
+        OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+            content: Cow::Borrowed(instructions),
+        })
+    })
 }
 
 #[derive(Debug, PartialEq, Serialize)]
