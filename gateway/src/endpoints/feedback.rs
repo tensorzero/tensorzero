@@ -211,7 +211,9 @@ async fn write_comment(
         "id": feedback_id
     });
     if !dryrun {
-        connection_info.write(&payload, "CommentFeedback").await?;
+        tokio::spawn(async move {
+            write_feedback(connection_info, payload, "CommentFeedback").await;
+        });
     }
     Ok(())
 }
@@ -229,9 +231,9 @@ async fn write_demonstration(
     let parsed_value = validate_parse_demonstration(function_config, &config.tools, &value).await?;
     let payload = json!({"inference_id": inference_id, "value": parsed_value, "id": feedback_id});
     if !dryrun {
-        connection_info
-            .write(&payload, "DemonstrationFeedback")
-            .await?;
+        tokio::spawn(async move {
+            write_feedback(connection_info, payload, "DemonstrationFeedback").await;
+        });
     }
     Ok(())
 }
@@ -249,9 +251,9 @@ async fn write_float(
     })?;
     let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id});
     if !dryrun {
-        connection_info
-            .write(&payload, "FloatMetricFeedback")
-            .await?;
+        tokio::spawn(async move {
+            write_feedback(connection_info, payload, "FloatMetricFeedback").await;
+        });
     }
     Ok(())
 }
@@ -269,11 +271,22 @@ async fn write_boolean(
     })?;
     let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id});
     if !dryrun {
-        connection_info
-            .write(&payload, "BooleanMetricFeedback")
-            .await?;
+        tokio::spawn(async move {
+            write_feedback(connection_info, payload, "BooleanMetricFeedback").await;
+        });
     }
     Ok(())
+}
+
+async fn write_feedback(
+    connection_info: ClickHouseConnectionInfo,
+    payload: Value,
+    table_name: &str,
+) {
+    match connection_info.write(&payload, table_name).await {
+        Ok(_) => (),
+        Err(e) => e.log(),
+    }
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -441,6 +454,7 @@ async fn validate_parse_demonstration(
 mod tests {
     use super::*;
     use std::collections::HashMap;
+    use tokio::time::{sleep, Duration};
 
     use crate::config_parser::{Config, GatewayConfig, MetricConfig, MetricConfigOptimize};
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
@@ -633,6 +647,7 @@ mod tests {
         let response_json = response.unwrap();
         let feedback_id = response_json.get("feedback_id").unwrap();
         assert!(feedback_id.is_string());
+        sleep(Duration::from_millis(200)).await;
 
         // Check that the feedback was written
         let mock_data = app_state_data
@@ -741,6 +756,7 @@ mod tests {
         let feedback_id = response_json.get("feedback_id").unwrap();
         assert!(feedback_id.is_string());
 
+        sleep(Duration::from_millis(200)).await;
         // Check that the feedback was written
         let mock_data = app_state_data
             .clickhouse_connection_info
@@ -790,6 +806,7 @@ mod tests {
         let feedback_id = response_json.get("feedback_id").unwrap();
         assert!(feedback_id.is_string());
 
+        sleep(Duration::from_millis(200)).await;
         // Check that the feedback was written
         let mock_data = app_state_data
             .clickhouse_connection_info
@@ -822,6 +839,7 @@ mod tests {
         let response_json = response.unwrap();
         let feedback_id = response_json.get("feedback_id").unwrap();
         assert!(feedback_id.is_string());
+        sleep(Duration::from_millis(200)).await;
 
         // Check that the feedback was not written
         let mock_data = app_state_data

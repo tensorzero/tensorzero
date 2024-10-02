@@ -1,6 +1,7 @@
 use gateway::inference::types::{ContentBlockOutput, JsonInferenceOutput, Text};
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
+use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
 use crate::common::{get_clickhouse, get_gateway_endpoint, select_feedback_clickhouse};
@@ -22,6 +23,7 @@ async fn e2e_test_comment_feedback() {
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
+    sleep(Duration::from_millis(200)).await;
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
@@ -54,6 +56,7 @@ async fn e2e_test_comment_feedback() {
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
+    sleep(Duration::from_millis(200)).await;
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
@@ -116,6 +119,7 @@ async fn e2e_test_demonstration_feedback() {
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
+    sleep(Duration::from_millis(200)).await;
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
@@ -215,6 +219,7 @@ async fn e2e_test_demonstration_feedback_json() {
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
+    sleep(Duration::from_millis(200)).await;
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
@@ -313,6 +318,7 @@ async fn e2e_test_demonstration_feedback_tool() {
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
+    sleep(Duration::from_millis(200)).await;
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
@@ -390,11 +396,11 @@ async fn e2e_test_demonstration_feedback_tool() {
         .send()
         .await
         .unwrap();
-    // assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
+    sleep(Duration::from_millis(200)).await;
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
@@ -430,6 +436,7 @@ async fn e2e_test_float_feedback() {
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
+    sleep(Duration::from_millis(200)).await;
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
@@ -496,6 +503,7 @@ async fn e2e_test_float_feedback() {
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
+    sleep(Duration::from_millis(200)).await;
 
     // Check ClickHouse
     let result = select_feedback_clickhouse(&clickhouse, "FloatMetricFeedback", feedback_id)
@@ -530,6 +538,7 @@ async fn e2e_test_boolean_feedback() {
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
+    sleep(Duration::from_millis(200)).await;
 
     // Check ClickHouse
     let clickhouse = get_clickhouse().await;
@@ -596,6 +605,7 @@ async fn e2e_test_boolean_feedback() {
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
+    sleep(Duration::from_millis(200)).await;
 
     // Check ClickHouse
     let result = select_feedback_clickhouse(&clickhouse, "BooleanMetricFeedback", feedback_id)
