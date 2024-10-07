@@ -267,18 +267,24 @@ impl HasCredentials for GCPVertexGeminiProvider {
         &'a self,
         api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderCredentials<'a>, Error> {
-        match &api_keys.gcp_vertex_gemini {
-            Some(credentials) => Ok(ProviderCredentials::GCPVertexGemini(Cow::Borrowed(
-                credentials,
-            ))),
-            None => {
-                let credentials = self.credentials.as_ref().ok_or(Error::ApiKeyMissing {
+        if let Some(credentials) = &self.credentials {
+            if api_keys.gcp_vertex_gemini.is_some() {
+                return Err(Error::UnexpectedDynamicCredentials {
                     provider_name: "GCP Vertex Gemini".to_string(),
-                })?;
-                let token = SecretString::from(credentials.get_jwt_token(&self.audience)?);
-                Ok(ProviderCredentials::GCPVertexGemini(Cow::Owned(
-                    GCPVertexGeminiCredentials { token },
-                )))
+                });
+            }
+            let token = SecretString::from(credentials.get_jwt_token(&self.audience)?);
+            return Ok(ProviderCredentials::GCPVertexGemini(Cow::Owned(
+                GCPVertexGeminiCredentials { token },
+            )));
+        } else {
+            match &api_keys.gcp_vertex_gemini {
+                Some(credentials) => Ok(ProviderCredentials::GCPVertexGemini(Cow::Borrowed(
+                    credentials,
+                ))),
+                None => Err(Error::ApiKeyMissing {
+                    provider_name: "GCP Vertex Gemini".to_string(),
+                }),
             }
         }
     }

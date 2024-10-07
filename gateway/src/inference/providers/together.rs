@@ -169,19 +169,24 @@ impl HasCredentials for TogetherProvider {
         &'a self,
         api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderCredentials<'a>, Error> {
-        match &api_keys.together {
-            Some(credentials) => Ok(ProviderCredentials::Together(Cow::Borrowed(credentials))),
-            None => self
-                .api_key
-                .as_ref()
-                .map(|api_key| {
-                    ProviderCredentials::Together(Cow::Owned(TogetherCredentials {
-                        api_key: Cow::Borrowed(api_key),
-                    }))
-                })
-                .ok_or(Error::ApiKeyMissing {
+        if let Some(api_key) = &self.api_key {
+            if api_keys.together.is_some() {
+                return Err(Error::UnexpectedDynamicCredentials {
+                    provider_name: "Together".to_string(),
+                });
+            }
+            return Ok(ProviderCredentials::Together(Cow::Owned(
+                TogetherCredentials {
+                    api_key: Cow::Borrowed(api_key),
+                },
+            )));
+        } else {
+            match &api_keys.together {
+                Some(credentials) => Ok(ProviderCredentials::Together(Cow::Borrowed(credentials))),
+                None => Err(Error::ApiKeyMissing {
                     provider_name: "Together".to_string(),
                 }),
+            }
         }
     }
 }

@@ -935,7 +935,6 @@ mod tests {
         };
         let api_keys = InferenceCredentials::default();
 
-        // Try inferring the good model only
         let request = ModelInferenceRequest {
             messages: vec![],
             system: None,
@@ -959,6 +958,71 @@ mod tests {
                     "model".to_string(),
                     Error::InferenceClient {
                         message: "Invalid API key for Dummy provider".to_string()
+                    }
+                )])
+            }
+        );
+
+        let api_keys = InferenceCredentials {
+            dummy: Some(DummyCredentials {
+                api_key: Cow::Owned(SecretString::from("good_key".to_string())),
+            }),
+            ..Default::default()
+        };
+        let response = model_config
+            .infer(&request, &Client::new(), &api_keys)
+            .await
+            .unwrap_err();
+        assert_eq!(
+            response,
+            Error::ModelProvidersExhausted {
+                provider_errors: HashMap::from([(
+                    "model".to_string(),
+                    Error::UnexpectedDynamicCredentials {
+                        provider_name: "Dummy".to_string(),
+                    }
+                )])
+            }
+        );
+
+        let provider_config = ProviderConfig::Dummy(DummyProvider {
+            model_name: "test_key".to_string(),
+            dynamic_credentials: true,
+        });
+        let model_config = ModelConfig {
+            routing: vec!["model".to_string()],
+            providers: HashMap::from([("model".to_string(), provider_config)]),
+        };
+        let tool_config = ToolCallConfig {
+            tools_available: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: false,
+        };
+        let api_keys = InferenceCredentials::default();
+
+        let request = ModelInferenceRequest {
+            messages: vec![],
+            system: None,
+            tool_config: Some(Cow::Borrowed(&tool_config)),
+            temperature: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+        let error = model_config
+            .infer(&request, &Client::new(), &api_keys)
+            .await
+            .unwrap_err();
+        assert_eq!(
+            error,
+            Error::ModelProvidersExhausted {
+                provider_errors: HashMap::from([(
+                    "model".to_string(),
+                    Error::ApiKeyMissing {
+                        provider_name: "Dummy".to_string()
                     }
                 )])
             }

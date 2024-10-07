@@ -12,9 +12,7 @@ use aws_sdk_bedrockruntime::types::{
 use aws_smithy_types::error::display::DisplayErrorContext;
 use aws_types::region::Region;
 use futures::{Stream, StreamExt};
-use lazy_static::lazy_static;
 use reqwest::StatusCode;
-use secrecy::SecretString;
 use std::time::Duration;
 use tokio::time::Instant;
 use uuid::Uuid;
@@ -238,10 +236,6 @@ impl InferenceProvider for AWSBedrockProvider {
 
         Ok((chunk, stream, raw_request))
     }
-}
-
-lazy_static! {
-    static ref EMPTY_SECRET: SecretString = SecretString::from(String::new());
 }
 
 impl HasCredentials for AWSBedrockProvider {

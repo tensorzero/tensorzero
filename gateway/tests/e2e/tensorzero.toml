@@ -213,6 +213,7 @@ routing = ["dummy"]
 
 [models.test_key.providers.dummy]
 type = "dummy"
+dynamic_credentials = true
 model_name = "test_key"
 
 [embedding_models.text-embedding-3-small]

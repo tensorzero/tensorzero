@@ -161,18 +161,24 @@ impl HasCredentials for GCPVertexAnthropicProvider {
         &'a self,
         api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderCredentials<'a>, Error> {
-        match &api_keys.gcp_vertex_anthropic {
-            Some(credentials) => Ok(ProviderCredentials::GCPVertexAnthropic(Cow::Borrowed(
-                credentials,
-            ))),
-            None => {
-                let credentials = self.credentials.as_ref().ok_or(Error::ApiKeyMissing {
+        if let Some(credentials) = &self.credentials {
+            if api_keys.gcp_vertex_anthropic.is_some() {
+                return Err(Error::UnexpectedDynamicCredentials {
                     provider_name: "GCP Vertex Anthropic".to_string(),
-                })?;
-                let token = SecretString::from(credentials.get_jwt_token(&self.audience)?);
-                Ok(ProviderCredentials::GCPVertexAnthropic(Cow::Owned(
-                    GCPVertexAnthropicCredentials { token },
-                )))
+                });
+            }
+            let token = SecretString::from(credentials.get_jwt_token(&self.audience)?);
+            return Ok(ProviderCredentials::GCPVertexAnthropic(Cow::Owned(
+                GCPVertexAnthropicCredentials { token },
+            )));
+        } else {
+            match &api_keys.gcp_vertex_anthropic {
+                Some(credentials) => Ok(ProviderCredentials::GCPVertexAnthropic(Cow::Borrowed(
+                    credentials,
+                ))),
+                None => Err(Error::ApiKeyMissing {
+                    provider_name: "GCP Vertex Anthropic".to_string(),
+                }),
             }
         }
     }
