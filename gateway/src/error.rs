@@ -413,7 +413,7 @@ impl std::fmt::Display for Error {
             Error::BadCredentialsPreInference { provider_name } => {
                 write!(
                     f,
-                    "Bad credentials at inference time for provider: {}. This should never happen.",
+                    "Bad credentials at inference time for provider: {}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new",
                     provider_name
                 )
             }

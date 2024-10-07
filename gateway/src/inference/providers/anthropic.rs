@@ -468,7 +468,7 @@ fn prepare_messages(messages: Vec<AnthropicMessage>) -> Result<Vec<AnthropicMess
                 if role == this_role {
                     let mut last_message =
                         consolidated_messages.pop().ok_or(Error::InvalidRequest {
-                            message: "Last message is missing (this should never happen)"
+                            message: "Last message is missing (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
                                 .to_string(),
                         })?;
                     last_message.content.extend(message.content);

@@ -353,7 +353,7 @@ async fn inner_select_best_candidate<'a, 'request>(
             .find(|&i| !skipped_indices.contains(&i))
             .ok_or(Error::Inference {
                 message:
-                    "No valid candidates available to prepare request (this should never happen)."
+                    "No valid candidates available to prepare request (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
                         .to_string(),
             })?;
         // Return the selected index and None for the model inference result

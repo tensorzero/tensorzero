@@ -600,7 +600,7 @@ impl TryFrom<&ToolConfig> for Tool {
             .build()
             .map_err(|_| Error::AWSBedrockClient {
                 status_code: StatusCode::INTERNAL_SERVER_ERROR,
-                message: "Error configuring AWS Bedrock tool choice (this should never happen)"
+                message: "Error configuring AWS Bedrock tool choice (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
                     .to_string(),
             })?;
 
@@ -630,7 +630,7 @@ impl TryFrom<ToolChoice> for AWSBedrockToolChoice {
                     .map_err(|_| Error::AWSBedrockClient {
                         status_code: StatusCode::INTERNAL_SERVER_ERROR,
                         message:
-                            "Error configuring AWS Bedrock tool choice (this should never happen)"
+                            "Error configuring AWS Bedrock tool choice (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
                                 .to_string(),
                     })?,
             )),

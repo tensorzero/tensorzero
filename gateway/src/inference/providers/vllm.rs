@@ -278,7 +278,7 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
             .choices
             .pop()
             .ok_or(Error::VLLMServer {
-                message: "Response has no choices (this should never happen)".to_string(),
+                message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
             })?
             .message;
         let mut content: Vec<ContentBlock> = Vec::new();
