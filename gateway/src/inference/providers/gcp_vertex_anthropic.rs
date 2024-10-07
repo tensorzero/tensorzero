@@ -34,6 +34,7 @@ pub struct GCPVertexAnthropicProvider {
     pub audience: String,
     pub credentials: Option<GCPCredentials>,
     pub model_id: String,
+    pub dynamic_credentials: bool,
 }
 
 /// For use at runtime, not the static credentials we use at startup

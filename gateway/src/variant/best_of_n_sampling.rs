@@ -1043,6 +1043,7 @@ mod tests {
                     "best_of_n_1".to_string(),
                     ProviderConfig::Dummy(DummyProvider {
                         model_name: "best_of_n_1".to_string(),
+                        ..Default::default()
                     }),
                 )]),
             },
@@ -1121,6 +1122,7 @@ mod tests {
                         "error".to_string(),
                         ProviderConfig::Dummy(DummyProvider {
                             model_name: "error".to_string(),
+                            ..Default::default()
                         }),
                     )]),
                 },
@@ -1179,6 +1181,7 @@ mod tests {
                         "regular".to_string(),
                         ProviderConfig::Dummy(DummyProvider {
                             model_name: "regular".to_string(),
+                            ..Default::default()
                         }),
                     )]),
                 },
@@ -1253,6 +1256,7 @@ mod tests {
                     "best_of_n_big".to_string(),
                     ProviderConfig::Dummy(DummyProvider {
                         model_name: "best_of_n_big".to_string(),
+                        ..Default::default()
                     }),
                 )]),
             },

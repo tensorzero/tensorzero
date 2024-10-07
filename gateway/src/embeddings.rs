@@ -259,9 +259,11 @@ mod tests {
     async fn test_embedding_fallbacks() {
         let bad_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
             model_name: "error".to_string(),
+            ..Default::default()
         });
         let good_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
             model_name: "good".to_string(),
+            ..Default::default()
         });
         let fallback_embedding_model = EmbeddingModelConfig {
             routing: vec!["error".to_string(), "good".to_string()],
@@ -283,9 +285,11 @@ mod tests {
     fn test_validate() {
         let bad_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
             model_name: "error".to_string(),
+            ..Default::default()
         });
         let good_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
             model_name: "good".to_string(),
+            ..Default::default()
         });
         let fallback_embedding_model = EmbeddingModelConfig {
             routing: vec!["error".to_string(), "good".to_string()],
@@ -299,9 +303,11 @@ mod tests {
         // If at least one provider has bad credentials, the validation should fail
         let bad_credential_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
             model_name: "bad_credentials".to_string(),
+            ..Default::default()
         });
         let good_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
             model_name: "good".to_string(),
+            ..Default::default()
         });
         let bad_credential_embedding_model = EmbeddingModelConfig {
             routing: vec!["bad_credentials".to_string(), "good".to_string()],

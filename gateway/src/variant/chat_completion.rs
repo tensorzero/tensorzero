@@ -670,12 +670,15 @@ mod tests {
         });
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".to_string(),
+            ..Default::default()
         });
         let error_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "error".to_string(),
+            ..Default::default()
         });
         let json_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "json".to_string(),
+            ..Default::default()
         });
         let text_model_config = ModelConfig {
             routing: vec!["good".to_string()],
@@ -687,6 +690,7 @@ mod tests {
         };
         let tool_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "tool".to_string(),
+            ..Default::default()
         });
         let tool_model_config = ModelConfig {
             routing: vec!["tool_provider".to_string()],
@@ -827,6 +831,7 @@ mod tests {
         };
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".to_string(),
+            ..Default::default()
         });
         let text_model_config = ModelConfig {
             routing: vec!["good_provider".to_string()],
@@ -1297,9 +1302,11 @@ mod tests {
         let user_template_name = "greeting_with_age";
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".to_string(),
+            ..Default::default()
         });
         let error_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "error".to_string(),
+            ..Default::default()
         });
         let text_model_config = ModelConfig {
             routing: vec!["good_provider".to_string()],

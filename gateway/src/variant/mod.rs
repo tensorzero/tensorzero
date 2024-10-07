@@ -657,6 +657,7 @@ mod tests {
         // Create a dummy provider config with the desired model name
         let dummy_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: model_name.to_string(),
+            ..Default::default()
         });
 
         // Create a model config with the dummy provider
@@ -743,6 +744,7 @@ mod tests {
         // Create a dummy provider config with model_name "json" to trigger JSON response
         let dummy_provider_config_json = ProviderConfig::Dummy(DummyProvider {
             model_name: model_name_json.to_string(),
+            ..Default::default()
         });
 
         let model_config_json = ModelConfig {
@@ -785,6 +787,7 @@ mod tests {
         let error_model_name = "error";
         let error_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: error_model_name.to_string(),
+            ..Default::default()
         });
 
         let error_model_config = ModelConfig {
@@ -841,6 +844,7 @@ mod tests {
         // Create a dummy model config with a provider
         let dummy_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".to_string(),
+            ..Default::default()
         });
 
         let model_config = Box::leak(Box::new(ModelConfig {

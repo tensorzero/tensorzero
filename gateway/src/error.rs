@@ -187,6 +187,9 @@ pub enum Error {
     TypeConversion {
         message: String,
     },
+    UnexpectedDynamicCredentials {
+        provider_name: String,
+    },
     UnknownCandidate {
         name: String,
     },
@@ -274,6 +277,7 @@ impl Error {
             Error::ToolNotFound { .. } => tracing::Level::WARN,
             Error::ToolNotLoaded { .. } => tracing::Level::ERROR,
             Error::TypeConversion { .. } => tracing::Level::ERROR,
+            Error::UnexpectedDynamicCredentials { .. } => tracing::Level::WARN,
             Error::UnknownCandidate { .. } => tracing::Level::ERROR,
             Error::UnknownFunction { .. } => tracing::Level::WARN,
             Error::UnknownModel { .. } => tracing::Level::ERROR,
@@ -345,6 +349,7 @@ impl Error {
             Error::ToolNotLoaded { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::TypeConversion { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::UnknownCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::UnexpectedDynamicCredentials { .. } => StatusCode::BAD_REQUEST,
             Error::UnknownFunction { .. } => StatusCode::NOT_FOUND,
             Error::UnknownModel { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::UnknownTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -567,6 +572,13 @@ impl std::fmt::Display for Error {
             }
             Error::ToolNotFound { name } => write!(f, "Tool not found: {}", name),
             Error::ToolNotLoaded { name } => write!(f, "Tool not loaded: {}", name),
+            Error::UnexpectedDynamicCredentials { provider_name } => {
+                write!(
+                    f,
+                    "Unexpected dynamic credentials for model provider: {}. Please enable the `dynamic_credentials` flag in config if appropriate.",
+                    provider_name
+                )
+            }
             Error::UnknownCandidate { name } => write!(f, "Unknown candidate variant: {}", name),
             Error::UnknownFunction { name } => write!(f, "Unknown function: {}", name),
             Error::UnknownModel { name } => write!(f, "Unknown model: {}", name),

@@ -21,9 +21,10 @@ use crate::inference::types::{
 use crate::model::ProviderCredentials;
 use crate::tool::{ToolCall, ToolCallChunk};
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct DummyProvider {
     pub model_name: String,
+    pub dynamic_credentials: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]
