@@ -219,10 +219,10 @@ impl HasCredentials for OpenAIProvider {
 
     fn get_credentials<'a>(
         &'a self,
-        api_keys: &'a InferenceCredentials,
+        credentials: &'a InferenceCredentials,
     ) -> Result<ProviderCredentials<'a>, Error> {
         if let Some(api_key) = &self.api_key {
-            if api_keys.openai.is_some() {
+            if credentials.openai.is_some() {
                 return Err(Error::UnexpectedDynamicCredentials {
                     provider_name: "OpenAI".to_string(),
                 });
@@ -231,7 +231,7 @@ impl HasCredentials for OpenAIProvider {
                 api_key: Cow::Borrowed(api_key),
             })));
         } else {
-            match &api_keys.openai {
+            match &credentials.openai {
                 Some(credentials) => Ok(ProviderCredentials::OpenAI(Cow::Borrowed(credentials))),
                 None => Err(Error::ApiKeyMissing {
                     provider_name: "OpenAI".to_string(),

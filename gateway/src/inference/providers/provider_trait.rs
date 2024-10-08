@@ -12,7 +12,7 @@ pub trait HasCredentials {
     fn has_credentials(&self) -> bool;
     fn get_credentials<'a>(
         &'a self,
-        api_keys: &'a InferenceCredentials,
+        credentials: &'a InferenceCredentials,
     ) -> Result<ProviderCredentials<'a>, Error>;
 }
 

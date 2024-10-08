@@ -165,10 +165,10 @@ impl HasCredentials for MistralProvider {
 
     fn get_credentials<'a>(
         &'a self,
-        api_keys: &'a InferenceCredentials,
+        credentials: &'a InferenceCredentials,
     ) -> Result<ProviderCredentials<'a>, Error> {
         if let Some(api_key) = &self.api_key {
-            if api_keys.mistral.is_some() {
+            if credentials.mistral.is_some() {
                 return Err(Error::UnexpectedDynamicCredentials {
                     provider_name: "Mistral".to_string(),
                 });
@@ -179,7 +179,7 @@ impl HasCredentials for MistralProvider {
                 },
             )));
         } else {
-            match &api_keys.mistral {
+            match &credentials.mistral {
                 Some(credentials) => Ok(ProviderCredentials::Mistral(Cow::Borrowed(credentials))),
                 None => Err(Error::ApiKeyMissing {
                     provider_name: "Mistral".to_string(),

@@ -151,10 +151,10 @@ impl HasCredentials for VLLMProvider {
     }
     fn get_credentials<'a>(
         &'a self,
-        api_keys: &'a InferenceCredentials,
+        credentials: &'a InferenceCredentials,
     ) -> Result<ProviderCredentials<'a>, Error> {
         if let Some(api_key) = &self.api_key {
-            if api_keys.vllm.is_some() {
+            if credentials.vllm.is_some() {
                 return Err(Error::UnexpectedDynamicCredentials {
                     provider_name: "vLLM".to_string(),
                 });
@@ -163,7 +163,7 @@ impl HasCredentials for VLLMProvider {
                 api_key: Cow::Borrowed(api_key),
             })));
         } else {
-            match &api_keys.vllm {
+            match &credentials.vllm {
                 Some(credentials) => Ok(ProviderCredentials::VLLM(Cow::Borrowed(credentials))),
                 None => Err(Error::ApiKeyMissing {
                     provider_name: "vLLM".to_string(),

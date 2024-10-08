@@ -281,18 +281,17 @@ impl HasCredentials for DummyProvider {
 
     fn get_credentials<'a>(
         &'a self,
-        api_keys: &'a InferenceCredentials,
+        credentials: &'a InferenceCredentials,
     ) -> Result<ProviderCredentials<'a>, Error> {
-        // TODO: figure this out for testing
         if self.dynamic_credentials {
-            match &api_keys.dummy {
+            match &credentials.dummy {
                 Some(credentials) => Ok(ProviderCredentials::Dummy(Cow::Borrowed(credentials))),
                 None => Err(Error::ApiKeyMissing {
                     provider_name: "Dummy".to_string(),
                 }),
             }
         } else {
-            match &api_keys.dummy {
+            match &credentials.dummy {
                 Some(_credentials) => Err(Error::UnexpectedDynamicCredentials {
                     provider_name: "Dummy".to_string(),
                 }),

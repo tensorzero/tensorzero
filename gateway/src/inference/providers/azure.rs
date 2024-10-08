@@ -154,10 +154,10 @@ impl HasCredentials for AzureProvider {
 
     fn get_credentials<'a>(
         &'a self,
-        api_keys: &'a InferenceCredentials,
+        credentials: &'a InferenceCredentials,
     ) -> Result<ProviderCredentials<'a>, Error> {
         if let Some(api_key) = &self.api_key {
-            if api_keys.azure.is_some() {
+            if credentials.azure.is_some() {
                 return Err(Error::UnexpectedDynamicCredentials {
                     provider_name: "Azure".to_string(),
                 });
@@ -166,7 +166,7 @@ impl HasCredentials for AzureProvider {
                 api_key: Cow::Borrowed(api_key),
             })));
         } else {
-            match &api_keys.azure {
+            match &credentials.azure {
                 Some(credentials) => Ok(ProviderCredentials::Azure(Cow::Borrowed(credentials))),
                 None => Err(Error::ApiKeyMissing {
                     provider_name: "Azure".to_string(),

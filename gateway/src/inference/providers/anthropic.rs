@@ -162,10 +162,10 @@ impl HasCredentials for AnthropicProvider {
 
     fn get_credentials<'a>(
         &'a self,
-        api_keys: &'a InferenceCredentials,
+        credentials: &'a InferenceCredentials,
     ) -> Result<ProviderCredentials<'a>, Error> {
         if let Some(api_key) = &self.api_key {
-            if api_keys.anthropic.is_some() {
+            if credentials.anthropic.is_some() {
                 return Err(Error::UnexpectedDynamicCredentials {
                     provider_name: "Anthropic".to_string(),
                 });
@@ -176,7 +176,7 @@ impl HasCredentials for AnthropicProvider {
                 },
             )));
         } else {
-            match &api_keys.anthropic {
+            match &credentials.anthropic {
                 Some(credentials) => Ok(ProviderCredentials::Anthropic(Cow::Borrowed(credentials))),
                 None => Err(Error::ApiKeyMissing {
                     provider_name: "Anthropic".to_string(),

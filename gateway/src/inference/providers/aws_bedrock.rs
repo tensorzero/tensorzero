@@ -246,7 +246,7 @@ impl HasCredentials for AWSBedrockProvider {
 
     fn get_credentials<'a>(
         &'a self,
-        _api_keys: &'a InferenceCredentials,
+        _credentials: &'a InferenceCredentials,
     ) -> Result<ProviderCredentials<'a>, Error> {
         Ok(ProviderCredentials::AWSBedrock)
     }

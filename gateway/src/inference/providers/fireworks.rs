@@ -171,10 +171,10 @@ impl HasCredentials for FireworksProvider {
 
     fn get_credentials<'a>(
         &'a self,
-        api_keys: &'a InferenceCredentials,
+        credentials: &'a InferenceCredentials,
     ) -> Result<ProviderCredentials<'a>, Error> {
         if let Some(api_key) = &self.api_key {
-            if api_keys.fireworks.is_some() {
+            if credentials.fireworks.is_some() {
                 return Err(Error::UnexpectedDynamicCredentials {
                     provider_name: "Fireworks".to_string(),
                 });
@@ -185,7 +185,7 @@ impl HasCredentials for FireworksProvider {
                 },
             )));
         } else {
-            match &api_keys.fireworks {
+            match &credentials.fireworks {
                 Some(credentials) => Ok(ProviderCredentials::Fireworks(Cow::Borrowed(credentials))),
                 None => Err(Error::ApiKeyMissing {
                     provider_name: "Fireworks".to_string(),
