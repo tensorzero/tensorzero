@@ -68,7 +68,6 @@ class BaseTensorZeroGateway(ABC):
                     item.to_dict() if hasattr(item, "to_dict") else item
                     for item in message["content"]
                 ]
-        print(input)
 
         data = {
             "function_name": function_name,
