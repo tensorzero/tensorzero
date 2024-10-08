@@ -1951,4 +1951,61 @@ mod tests {
             "https://api.anthropic.com/v1/messages"
         );
     }
+
+    #[test]
+    fn test_get_credentials() {
+        let provider_no_credentials = AnthropicProvider {
+            api_key: None,
+            model_name: "claude-3-haiku-20240307".to_string(),
+        };
+        let credentials = InferenceCredentials::default();
+        let result = provider_no_credentials
+            .get_credentials(&credentials)
+            .unwrap_err();
+        assert_eq!(
+            result,
+            Error::ApiKeyMissing {
+                provider_name: "Anthropic".to_string(),
+            }
+        );
+        let credentials = InferenceCredentials {
+            anthropic: Some(AnthropicCredentials {
+                api_key: Cow::Owned(SecretString::from("test_api_key".to_string())),
+            }),
+            ..Default::default()
+        };
+        let result = provider_no_credentials
+            .get_credentials(&credentials)
+            .unwrap();
+        match result {
+            ProviderCredentials::Anthropic(creds) => {
+                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
+            }
+            _ => panic!("Expected Anthropic credentials"),
+        }
+
+        let provider_with_credentials = AnthropicProvider {
+            api_key: Some(SecretString::from("test_api_key".to_string())),
+            model_name: "claude-3-haiku-20240307".to_string(),
+        };
+        let result = provider_with_credentials
+            .get_credentials(&credentials)
+            .unwrap_err();
+        assert_eq!(
+            result,
+            Error::UnexpectedDynamicCredentials {
+                provider_name: "Anthropic".to_string(),
+            }
+        );
+        let credentials = InferenceCredentials::default();
+        let result = provider_with_credentials
+            .get_credentials(&credentials)
+            .unwrap();
+        match result {
+            ProviderCredentials::Anthropic(creds) => {
+                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
+            }
+            _ => panic!("Expected Anthropic credentials"),
+        }
+    }
 }

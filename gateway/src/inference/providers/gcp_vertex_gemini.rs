@@ -51,9 +51,9 @@ pub struct GCPVertexGeminiCredentials {
 /// key. The way this works is that there are "claims" about who is making the request and we sign those claims using the key.
 #[derive(Clone)]
 pub struct GCPCredentials {
-    private_key_id: String,
-    private_key: EncodingKey,
-    client_email: String,
+    pub private_key_id: String,
+    pub private_key: EncodingKey,
+    pub client_email: String,
 }
 
 impl std::fmt::Debug for GCPCredentials {
@@ -1748,5 +1748,41 @@ mod tests {
         });
         let processed_schema_recursive = process_output_schema(&output_schema_recursive).unwrap();
         assert_eq!(processed_schema_recursive, expected_processed_schema);
+    }
+
+    #[test]
+    fn test_get_credentials() {
+        let provider_no_credentials = GCPVertexGeminiProvider {
+            request_url: "https://example.com".to_string(),
+            streaming_request_url: "https://example.com/stream".to_string(),
+            audience: "audience".to_string(),
+            credentials: None,
+            model_id: "model_id".to_string(),
+        };
+        let credentials = InferenceCredentials::default();
+        let result = provider_no_credentials
+            .get_credentials(&credentials)
+            .unwrap_err();
+        assert_eq!(
+            result,
+            Error::ApiKeyMissing {
+                provider_name: "GCP Vertex Gemini".to_string(),
+            }
+        );
+        let credentials = InferenceCredentials {
+            gcp_vertex_gemini: Some(GCPVertexGeminiCredentials {
+                token: SecretString::from("test_api_key".to_string()),
+            }),
+            ..Default::default()
+        };
+        let result = provider_no_credentials
+            .get_credentials(&credentials)
+            .unwrap();
+        match result {
+            ProviderCredentials::GCPVertexGemini(creds) => {
+                assert_eq!(creds.token.expose_secret(), "test_api_key".to_string());
+            }
+            _ => panic!("Expected GCP Vertex Gemini credentials"),
+        }
     }
 }

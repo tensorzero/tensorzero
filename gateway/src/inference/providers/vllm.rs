@@ -402,4 +402,63 @@ mod tests {
             .to_string()
             .contains("TensorZero does not support tool use with vLLM"));
     }
+
+    #[test]
+    fn test_get_credentials() {
+        let provider_no_credentials = VLLMProvider {
+            api_key: None,
+            api_base: Url::parse("https://example.com").unwrap(),
+            model_name: "llama-v3-8b".to_string(),
+        };
+        let credentials = InferenceCredentials::default();
+        let result = provider_no_credentials
+            .get_credentials(&credentials)
+            .unwrap_err();
+        assert_eq!(
+            result,
+            Error::ApiKeyMissing {
+                provider_name: "vLLM".to_string(),
+            }
+        );
+        let credentials = InferenceCredentials {
+            vllm: Some(VLLMCredentials {
+                api_key: Cow::Owned(SecretString::from("test_api_key".to_string())),
+            }),
+            ..Default::default()
+        };
+        let result = provider_no_credentials
+            .get_credentials(&credentials)
+            .unwrap();
+        match result {
+            ProviderCredentials::VLLM(creds) => {
+                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
+            }
+            _ => panic!("Expected vLLM credentials"),
+        }
+
+        let provider_with_credentials = VLLMProvider {
+            api_key: Some(SecretString::from("test_api_key".to_string())),
+            api_base: Url::parse("https://example.com").unwrap(),
+            model_name: "llama-v3-8b".to_string(),
+        };
+        let result = provider_with_credentials
+            .get_credentials(&credentials)
+            .unwrap_err();
+        assert_eq!(
+            result,
+            Error::UnexpectedDynamicCredentials {
+                provider_name: "vLLM".to_string(),
+            }
+        );
+        let credentials = InferenceCredentials::default();
+        let result = provider_with_credentials
+            .get_credentials(&credentials)
+            .unwrap();
+        match result {
+            ProviderCredentials::VLLM(creds) => {
+                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
+            }
+            _ => panic!("Expected vLLM credentials"),
+        }
+    }
 }

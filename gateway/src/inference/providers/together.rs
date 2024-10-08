@@ -407,4 +407,61 @@ mod tests {
     fn test_together_api_base() {
         assert_eq!(TOGETHER_API_BASE.as_str(), "https://api.together.xyz/v1");
     }
+
+    #[test]
+    fn test_get_credentials() {
+        let provider_no_credentials = TogetherProvider {
+            api_key: None,
+            model_name: "togethercomputer/llama-v3-8b".to_string(),
+        };
+        let credentials = InferenceCredentials::default();
+        let result = provider_no_credentials
+            .get_credentials(&credentials)
+            .unwrap_err();
+        assert_eq!(
+            result,
+            Error::ApiKeyMissing {
+                provider_name: "Together".to_string(),
+            }
+        );
+        let credentials = InferenceCredentials {
+            together: Some(TogetherCredentials {
+                api_key: Cow::Owned(SecretString::from("test_api_key".to_string())),
+            }),
+            ..Default::default()
+        };
+        let result = provider_no_credentials
+            .get_credentials(&credentials)
+            .unwrap();
+        match result {
+            ProviderCredentials::Together(creds) => {
+                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
+            }
+            _ => panic!("Expected Together credentials"),
+        }
+
+        let provider_with_credentials = TogetherProvider {
+            api_key: Some(SecretString::from("test_api_key".to_string())),
+            model_name: "togethercomputer/llama-v3-8b".to_string(),
+        };
+        let result = provider_with_credentials
+            .get_credentials(&credentials)
+            .unwrap_err();
+        assert_eq!(
+            result,
+            Error::UnexpectedDynamicCredentials {
+                provider_name: "Together".to_string(),
+            }
+        );
+        let credentials = InferenceCredentials::default();
+        let result = provider_with_credentials
+            .get_credentials(&credentials)
+            .unwrap();
+        match result {
+            ProviderCredentials::Together(creds) => {
+                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
+            }
+            _ => panic!("Expected Together credentials"),
+        }
+    }
 }

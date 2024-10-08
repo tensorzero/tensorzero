@@ -884,4 +884,61 @@ mod tests {
     fn test_mistral_api_base() {
         assert_eq!(MISTRAL_API_BASE.as_str(), "https://api.mistral.ai/v1/");
     }
+
+    #[test]
+    fn test_get_credentials() {
+        let provider_no_credentials = MistralProvider {
+            api_key: None,
+            model_name: "mistral-7b".to_string(),
+        };
+        let credentials = InferenceCredentials::default();
+        let result = provider_no_credentials
+            .get_credentials(&credentials)
+            .unwrap_err();
+        assert_eq!(
+            result,
+            Error::ApiKeyMissing {
+                provider_name: "Mistral".to_string(),
+            }
+        );
+        let credentials = InferenceCredentials {
+            mistral: Some(MistralCredentials {
+                api_key: Cow::Owned(SecretString::from("test_api_key".to_string())),
+            }),
+            ..Default::default()
+        };
+        let result = provider_no_credentials
+            .get_credentials(&credentials)
+            .unwrap();
+        match result {
+            ProviderCredentials::Mistral(creds) => {
+                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
+            }
+            _ => panic!("Expected Mistral credentials"),
+        }
+
+        let provider_with_credentials = MistralProvider {
+            api_key: Some(SecretString::from("test_api_key".to_string())),
+            model_name: "mistral-7b".to_string(),
+        };
+        let result = provider_with_credentials
+            .get_credentials(&credentials)
+            .unwrap_err();
+        assert_eq!(
+            result,
+            Error::UnexpectedDynamicCredentials {
+                provider_name: "Mistral".to_string(),
+            }
+        );
+        let credentials = InferenceCredentials::default();
+        let result = provider_with_credentials
+            .get_credentials(&credentials)
+            .unwrap();
+        match result {
+            ProviderCredentials::Mistral(creds) => {
+                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
+            }
+            _ => panic!("Expected Mistral credentials"),
+        }
+    }
 }

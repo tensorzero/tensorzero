@@ -204,12 +204,12 @@ impl HasCredentials for EmbeddingProviderConfig {
 
     fn get_credentials<'a>(
         &'a self,
-        api_keys: &'a InferenceCredentials,
+        credentials: &'a InferenceCredentials,
     ) -> Result<ProviderCredentials<'a>, Error> {
         match self {
-            EmbeddingProviderConfig::OpenAI(provider) => provider.get_credentials(api_keys),
+            EmbeddingProviderConfig::OpenAI(provider) => provider.get_credentials(credentials),
             #[cfg(any(test, feature = "e2e_tests"))]
-            EmbeddingProviderConfig::Dummy(provider) => provider.get_credentials(api_keys),
+            EmbeddingProviderConfig::Dummy(provider) => provider.get_credentials(credentials),
         }
     }
 }

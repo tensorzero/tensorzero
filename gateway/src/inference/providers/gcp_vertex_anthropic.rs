@@ -1952,4 +1952,41 @@ mod tests {
         assert_eq!(result.input_tokens, 0);
         assert_eq!(result.output_tokens, 0);
     }
+
+    #[test]
+    fn test_get_credentials() {
+        let provider_no_credentials = GCPVertexAnthropicProvider {
+            request_url: "https://example.com".to_string(),
+            streaming_request_url: "https://example.com/stream".to_string(),
+            audience: "audience".to_string(),
+            credentials: None,
+            model_id: "model_id".to_string(),
+            dynamic_credentials: false,
+        };
+        let credentials = InferenceCredentials::default();
+        let result = provider_no_credentials
+            .get_credentials(&credentials)
+            .unwrap_err();
+        assert_eq!(
+            result,
+            Error::ApiKeyMissing {
+                provider_name: "GCP Vertex Anthropic".to_string(),
+            }
+        );
+        let credentials = InferenceCredentials {
+            gcp_vertex_anthropic: Some(GCPVertexAnthropicCredentials {
+                token: SecretString::from("test_api_key".to_string()),
+            }),
+            ..Default::default()
+        };
+        let result = provider_no_credentials
+            .get_credentials(&credentials)
+            .unwrap();
+        match result {
+            ProviderCredentials::GCPVertexAnthropic(creds) => {
+                assert_eq!(creds.token.expose_secret(), "test_api_key".to_string());
+            }
+            _ => panic!("Expected GCP Vertex Anthropic credentials"),
+        }
+    }
 }

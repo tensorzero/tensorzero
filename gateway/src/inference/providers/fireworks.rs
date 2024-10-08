@@ -439,4 +439,61 @@ mod tests {
             "https://api.fireworks.ai/inference/v1/"
         );
     }
+
+    #[test]
+    fn test_get_credentials() {
+        let provider_no_credentials = FireworksProvider {
+            api_key: None,
+            model_name: "fireworks-model-v1".to_string(),
+        };
+        let credentials = InferenceCredentials::default();
+        let result = provider_no_credentials
+            .get_credentials(&credentials)
+            .unwrap_err();
+        assert_eq!(
+            result,
+            Error::ApiKeyMissing {
+                provider_name: "Fireworks".to_string(),
+            }
+        );
+        let credentials = InferenceCredentials {
+            fireworks: Some(FireworksCredentials {
+                api_key: Cow::Owned(SecretString::from("test_api_key".to_string())),
+            }),
+            ..Default::default()
+        };
+        let result = provider_no_credentials
+            .get_credentials(&credentials)
+            .unwrap();
+        match result {
+            ProviderCredentials::Fireworks(creds) => {
+                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
+            }
+            _ => panic!("Expected Fireworks credentials"),
+        }
+
+        let provider_with_credentials = FireworksProvider {
+            api_key: Some(SecretString::from("test_api_key".to_string())),
+            model_name: "fireworks-model-v1".to_string(),
+        };
+        let result = provider_with_credentials
+            .get_credentials(&credentials)
+            .unwrap_err();
+        assert_eq!(
+            result,
+            Error::UnexpectedDynamicCredentials {
+                provider_name: "Fireworks".to_string(),
+            }
+        );
+        let credentials = InferenceCredentials::default();
+        let result = provider_with_credentials
+            .get_credentials(&credentials)
+            .unwrap();
+        match result {
+            ProviderCredentials::Fireworks(creds) => {
+                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
+            }
+            _ => panic!("Expected Fireworks credentials"),
+        }
+    }
 }
