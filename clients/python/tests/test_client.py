@@ -30,6 +30,7 @@ from tensorzero import (
     TensorZeroGateway,
     Text,
     ToolCall,
+    ToolResult,
 )
 from tensorzero.types import TensorZeroError
 from uuid_extensions import uuid7
@@ -697,6 +698,11 @@ def test_sync_basic_inference_with_content_block(sync_client):
                             raw_arguments={"arg": "value"},
                             raw_name="test_tool",
                             arguments={"arg": "value"},
+                        ),
+                        ToolResult(
+                            name="test",
+                            result="success",
+                            id="1",
                         ),
                     ],
                 }

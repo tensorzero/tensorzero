@@ -11,6 +11,7 @@ from .types import (
     TextChunk,
     ToolCall,
     ToolCallChunk,
+    ToolResult,
     Usage,
 )
 
@@ -28,5 +29,6 @@ __all__ = [
     "TextChunk",
     "ToolCall",
     "ToolCallChunk",
+    "ToolResult",
     "Usage",
 ]

@@ -50,6 +50,16 @@ class ToolCall(ContentBlock):
 
 
 @dataclass
+class ToolResult:
+    name: str
+    result: str
+    id: str
+
+    def to_dict(self):
+        return dict(type="tool_result", name=self.name, result=self.result, id=self.id)
+
+
+@dataclass
 class JsonInferenceOutput:
     raw: str
     parsed: Optional[Dict[str, Any]]
