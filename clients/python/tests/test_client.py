@@ -28,6 +28,9 @@ from tensorzero import (
     FeedbackResponse,
     JsonInferenceResponse,
     TensorZeroGateway,
+    Text,
+    ToolCall,
+    ToolResult,
 )
 from tensorzero.types import TensorZeroError
 from uuid_extensions import uuid7
@@ -676,3 +679,45 @@ def test_sync_tensorzero_error(sync_client):
         str(excinfo.value)
         == 'TensorZeroError (status code 404): {"error":"Unknown function: not_a_function"}'
     )
+
+
+def test_sync_basic_inference_with_content_block(sync_client):
+    result = sync_client.inference(
+        function_name="basic_test",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        Text(type="text", text="Hello"),
+                        ToolCall(
+                            type="tool_call",
+                            id="1",
+                            name="test",
+                            raw_arguments={"arg": "value"},
+                            raw_name="test_tool",
+                            arguments={"arg": "value"},
+                        ),
+                        ToolResult(
+                            name="test",
+                            result="success",
+                            id="1",
+                        ),
+                    ],
+                }
+            ],
+        },
+    )
+    assert result.variant_name == "test"
+    assert isinstance(result, ChatInferenceResponse)
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert (
+        content[0].text
+        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    )
+    usage = result.usage
+    assert usage.input_tokens == 10
+    assert usage.output_tokens == 10

@@ -61,6 +61,14 @@ class BaseTensorZeroGateway(ABC):
         ] = None,
         parallel_tool_calls: Optional[bool] = None,
     ) -> Dict[str, Any]:
+        # Convert content blocks to dicts if necessary
+        for message in input.get("messages", []):
+            if isinstance(message["content"], list):
+                message["content"] = [
+                    item.to_dict() if hasattr(item, "to_dict") else item
+                    for item in message["content"]
+                ]
+
         data = {
             "function_name": function_name,
             "input": input,
