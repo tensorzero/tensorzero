@@ -29,7 +29,7 @@ class Text(ContentBlock):
     text: str
 
     def to_dict(self):
-        return dict(type=self.type, value=self.text)
+        return dict(type="text", value=self.text)
 
 
 @dataclass
@@ -42,7 +42,7 @@ class ToolCall(ContentBlock):
 
     def to_dict(self):
         return dict(
-            type=self.type,
+            type="tool_call",
             arguments=json.dumps(self.raw_arguments),
             id=self.id,
             name=self.raw_name,
