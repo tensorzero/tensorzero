@@ -1,3 +1,5 @@
+import json
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
@@ -14,13 +16,20 @@ class Usage:
 
 
 @dataclass
-class ContentBlock:
+class ContentBlock(ABC):
     type: str
+
+    @abstractmethod
+    def to_dict(self):
+        pass
 
 
 @dataclass
 class Text(ContentBlock):
     text: str
+
+    def to_dict(self):
+        return dict(type="text", value=self.text)
 
 
 @dataclass
@@ -30,6 +39,24 @@ class ToolCall(ContentBlock):
     name: Optional[str]
     raw_arguments: Dict[str, Any]
     raw_name: str
+
+    def to_dict(self):
+        return dict(
+            type="tool_call",
+            arguments=json.dumps(self.raw_arguments),
+            id=self.id,
+            name=self.raw_name,
+        )
+
+
+@dataclass
+class ToolResult:
+    name: str
+    result: str
+    id: str
+
+    def to_dict(self):
+        return dict(type="tool_result", name=self.name, result=self.result, id=self.id)
 
 
 @dataclass
