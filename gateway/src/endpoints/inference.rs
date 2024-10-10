@@ -26,6 +26,7 @@ use crate::inference::providers::dummy::DummyCredentials;
 use crate::inference::providers::fireworks::FireworksCredentials;
 use crate::inference::providers::gcp_vertex_anthropic::GCPVertexAnthropicCredentials;
 use crate::inference::providers::gcp_vertex_gemini::GCPVertexGeminiCredentials;
+use crate::inference::providers::google_ai_studio_gemini::GoogleAIStudioGeminiCredentials;
 use crate::inference::providers::mistral::MistralCredentials;
 use crate::inference::providers::openai::OpenAICredentials;
 use crate::inference::providers::together::TogetherCredentials;
@@ -104,6 +105,7 @@ pub struct InferenceCredentials<'a> {
     pub fireworks: Option<FireworksCredentials<'a>>,
     pub gcp_vertex_anthropic: Option<GCPVertexAnthropicCredentials>,
     pub gcp_vertex_gemini: Option<GCPVertexGeminiCredentials>,
+    pub google_ai_studio: Option<GoogleAIStudioGeminiCredentials<'a>>,
     pub mistral: Option<MistralCredentials<'a>>,
     pub openai: Option<OpenAICredentials<'a>>,
     pub together: Option<TogetherCredentials<'a>>,

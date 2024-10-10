@@ -8,6 +8,7 @@ pub mod dummy;
 pub mod fireworks;
 pub mod gcp_vertex_anthropic;
 pub mod gcp_vertex_gemini;
+pub mod google_ai_studio_gemini;
 pub mod mistral;
 pub mod openai;
 pub mod provider_trait;
