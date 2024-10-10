@@ -15,6 +15,8 @@ use crate::inference::providers::dummy::DummyProvider;
 use crate::inference::providers::fireworks::FireworksCredentials;
 use crate::inference::providers::gcp_vertex_anthropic::GCPVertexAnthropicCredentials;
 use crate::inference::providers::gcp_vertex_gemini::GCPVertexGeminiCredentials;
+use crate::inference::providers::google_ai_studio_gemini::GoogleAIStudioGeminiCredentials;
+use crate::inference::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
 use crate::inference::providers::mistral::MistralCredentials;
 use crate::inference::providers::openai::OpenAICredentials;
 use crate::inference::providers::together::TogetherCredentials;
@@ -148,6 +150,7 @@ pub enum ProviderConfig {
     Fireworks(FireworksProvider),
     GCPVertexAnthropic(GCPVertexAnthropicProvider),
     GCPVertexGemini(GCPVertexGeminiProvider),
+    GoogleAIStudioGemini(GoogleAIStudioGeminiProvider),
     Mistral(MistralProvider),
     OpenAI(OpenAIProvider),
     Together(TogetherProvider),
@@ -166,6 +169,7 @@ pub enum ProviderCredentials<'a> {
     Fireworks(Cow<'a, FireworksCredentials<'a>>),
     GCPVertexAnthropic(Cow<'a, GCPVertexAnthropicCredentials>),
     GCPVertexGemini(Cow<'a, GCPVertexGeminiCredentials>),
+    GoogleAIStudioGemini(Cow<'a, GoogleAIStudioGeminiCredentials<'a>>),
     Mistral(Cow<'a, MistralCredentials<'a>>),
     OpenAI(Cow<'a, OpenAICredentials<'a>>),
     Together(Cow<'a, TogetherCredentials<'a>>),
@@ -215,6 +219,12 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 model_id: String,
                 location: String,
                 project_id: String,
+                #[serde(default)]
+                dynamic_credentials: bool,
+            },
+            #[serde(rename = "google_ai_studio_gemini")]
+            GoogleAIStudioGemini {
+                model_name: String,
                 #[serde(default)]
                 dynamic_credentials: bool,
             },
@@ -409,6 +419,33 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                     model_id,
                 })
             }
+            ProviderConfigHelper::GoogleAIStudioGemini {
+                model_name,
+                dynamic_credentials,
+            } => {
+                let api_key = env::var("GOOGLE_AI_STUDIO_API_KEY")
+                    .ok()
+                    .map(SecretString::from);
+                if api_key.is_none() && !dynamic_credentials {
+                    return Err(D::Error::custom(
+                        Error::ApiKeyMissing {
+                            provider_name: "Google AI Studio Gemini".to_string(),
+                        }
+                        .to_string(),
+                    ));
+                }
+                let request_url = Url::parse(&format!(
+                    "https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent",
+                )).map_err(|e| D::Error::custom(format!("Failed to parse request URL: {}", e)))?;
+                let streaming_request_url = Url::parse(&format!(
+                    "https://generativelanguage.googleapis.com/v1beta/models/{model_name}:streamGenerateContent?alt=sse",
+                )).map_err(|e| D::Error::custom(format!("Failed to parse streaming request URL: {}", e)))?;
+                ProviderConfig::GoogleAIStudioGemini(GoogleAIStudioGeminiProvider {
+                    request_url,
+                    streaming_request_url,
+                    api_key,
+                })
+            }
             ProviderConfigHelper::Mistral {
                 model_name,
                 dynamic_credentials,
@@ -516,6 +553,9 @@ impl ProviderConfig {
             ProviderConfig::GCPVertexGemini(provider) => {
                 provider.infer(request, client, api_key).await
             }
+            ProviderConfig::GoogleAIStudioGemini(provider) => {
+                provider.infer(request, client, api_key).await
+            }
             ProviderConfig::Mistral(provider) => provider.infer(request, client, api_key).await,
             ProviderConfig::OpenAI(provider) => provider.infer(request, client, api_key).await,
             ProviderConfig::Together(provider) => provider.infer(request, client, api_key).await,
@@ -558,6 +598,9 @@ impl ProviderConfig {
             ProviderConfig::GCPVertexGemini(provider) => {
                 provider.infer_stream(request, client, api_key).await
             }
+            ProviderConfig::GoogleAIStudioGemini(provider) => {
+                provider.infer_stream(request, client, api_key).await
+            }
             ProviderConfig::Mistral(provider) => {
                 provider.infer_stream(request, client, api_key).await
             }
@@ -585,6 +628,7 @@ impl HasCredentials for ProviderConfig {
             ProviderConfig::Fireworks(provider) => provider.has_credentials(),
             ProviderConfig::GCPVertexAnthropic(provider) => provider.has_credentials(),
             ProviderConfig::GCPVertexGemini(provider) => provider.has_credentials(),
+            ProviderConfig::GoogleAIStudioGemini(provider) => provider.has_credentials(),
             ProviderConfig::Mistral(provider) => provider.has_credentials(),
             ProviderConfig::OpenAI(provider) => provider.has_credentials(),
             ProviderConfig::Together(provider) => provider.has_credentials(),
@@ -605,6 +649,7 @@ impl HasCredentials for ProviderConfig {
             ProviderConfig::Fireworks(provider) => provider.get_credentials(api_keys),
             ProviderConfig::GCPVertexAnthropic(provider) => provider.get_credentials(api_keys),
             ProviderConfig::GCPVertexGemini(provider) => provider.get_credentials(api_keys),
+            ProviderConfig::GoogleAIStudioGemini(provider) => provider.get_credentials(api_keys),
             ProviderConfig::Mistral(provider) => provider.get_credentials(api_keys),
             ProviderConfig::OpenAI(provider) => provider.get_credentials(api_keys),
             ProviderConfig::Together(provider) => provider.get_credentials(api_keys),

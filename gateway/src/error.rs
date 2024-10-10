@@ -72,6 +72,13 @@ pub enum Error {
     GCPVertexServer {
         message: String,
     },
+    GoogleAIStudioClient {
+        message: String,
+        status_code: StatusCode,
+    },
+    GoogleAIStudioServer {
+        message: String,
+    },
     Inference {
         message: String,
     },
@@ -241,6 +248,8 @@ impl Error {
             Error::GCPCredentials { .. } => tracing::Level::ERROR,
             Error::GCPVertexClient { .. } => tracing::Level::WARN,
             Error::GCPVertexServer { .. } => tracing::Level::ERROR,
+            Error::GoogleAIStudioClient { .. } => tracing::Level::WARN,
+            Error::GoogleAIStudioServer { .. } => tracing::Level::ERROR,
             Error::Inference { .. } => tracing::Level::ERROR,
             Error::InferenceClient { .. } => tracing::Level::ERROR,
             Error::InferenceTimeout { .. } => tracing::Level::WARN,
@@ -312,6 +321,8 @@ impl Error {
             Error::GCPCredentials { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::GCPVertexClient { status_code, .. } => *status_code,
             Error::GCPVertexServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::GoogleAIStudioClient { status_code, .. } => *status_code,
+            Error::GoogleAIStudioServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::Inference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InferenceClient { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InferenceTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
@@ -450,6 +461,12 @@ impl std::fmt::Display for Error {
             }
             Error::GCPVertexServer { message } => {
                 write!(f, "Error from GCP Vertex server: {}", message)
+            }
+            Error::GoogleAIStudioClient { message, .. } => {
+                write!(f, "Error from Google AI Studio client: {}", message)
+            }
+            Error::GoogleAIStudioServer { message } => {
+                write!(f, "Error from Google AI Studio server: {}", message)
             }
             Error::Inference { message } => write!(f, "{}", message),
             Error::InferenceClient { message } => write!(f, "{}", message),
