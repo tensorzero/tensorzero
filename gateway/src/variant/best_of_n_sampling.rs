@@ -3,7 +3,6 @@ use std::{collections::HashMap, path::PathBuf};
 use futures::future::join_all;
 use lazy_static::lazy_static;
 use rand::Rng;
-use reqwest::Client;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::time::{timeout, Duration};
@@ -80,7 +79,7 @@ impl Variant for BestOfNSamplingConfig {
             input,
             models.models,
             inference_config,
-            clients.http_client,
+            clients,
             candidate_inference_results,
         )
         .await
@@ -243,7 +242,7 @@ impl BestOfNSamplingConfig {
         input: &Input,
         models: &'a HashMap<String, ModelConfig>,
         inference_config: &'request InferenceConfig<'request>,
-        client: &'request Client,
+        clients: &'request InferenceClients<'request>,
         candidates: Vec<InferenceResult<'a>>,
     ) -> Result<InferenceResult<'a>, Error> {
         if candidates.is_empty() {
@@ -264,7 +263,7 @@ impl BestOfNSamplingConfig {
             input,
             models,
             inference_config,
-            client,
+            clients,
             &candidates,
         )
         .await
@@ -328,7 +327,7 @@ async fn inner_select_best_candidate<'a, 'request>(
     input: &'request Input,
     models: &'a HashMap<String, ModelConfig>,
     inference_config: &'request InferenceConfig<'request>,
-    client: &'request Client,
+    clients: &'request InferenceClients<'request>,
     candidates: &[InferenceResult<'request>],
 ) -> Result<
     (
@@ -354,7 +353,7 @@ async fn inner_select_best_candidate<'a, 'request>(
             .find(|&i| !skipped_indices.contains(&i))
             .ok_or(Error::Inference {
                 message:
-                    "No valid candidates available to prepare request (this should never happen)."
+                    "No valid candidates available to prepare request (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
                         .to_string(),
             })?;
         // Return the selected index and None for the model inference result
@@ -365,7 +364,9 @@ async fn inner_select_best_candidate<'a, 'request>(
         .ok_or(Error::UnknownModel {
             name: evaluator.inner.model.clone(),
         })?;
-    let model_inference_response = model_config.infer(&inference_request, client).await?;
+    let model_inference_response = model_config
+        .infer(&inference_request, clients.http_client, clients.credentials)
+        .await?;
     let model_inference_result =
         ModelInferenceResponseWithMetadata::new(model_inference_response, &evaluator.inner.model);
     let text_content = match model_inference_result
@@ -616,9 +617,12 @@ fn map_evaluator_to_actual_index(evaluator_idx: usize, skipped_indices: &[usize]
 
 #[cfg(test)]
 mod tests {
+    use reqwest::Client;
     use uuid::Uuid;
 
     use crate::{
+        clickhouse::ClickHouseConnectionInfo,
+        endpoints::inference::InferenceCredentials,
         inference::{
             providers::dummy::DummyProvider,
             types::{ChatInferenceResult, JsonInferenceResult, Latency},
@@ -1039,11 +1043,19 @@ mod tests {
                     "best_of_n_1".to_string(),
                     ProviderConfig::Dummy(DummyProvider {
                         model_name: "best_of_n_1".to_string(),
+                        ..Default::default()
                     }),
                 )]),
             },
         )]);
         let client = Client::new();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let api_keys = InferenceCredentials::default();
+        let inference_clients = InferenceClients {
+            http_client: &client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            credentials: &api_keys,
+        };
         let input = Input {
             system: None,
             messages: vec![],
@@ -1061,7 +1073,7 @@ mod tests {
                 &input,
                 &models,
                 &inference_config,
-                &client,
+                &inference_clients,
                 candidates.clone(),
             )
             .await
@@ -1110,13 +1122,13 @@ mod tests {
                         "error".to_string(),
                         ProviderConfig::Dummy(DummyProvider {
                             model_name: "error".to_string(),
+                            ..Default::default()
                         }),
                     )]),
                 },
             );
             map
         };
-        let client = Client::new();
         let input = Input {
             system: None,
             messages: vec![],
@@ -1127,7 +1139,7 @@ mod tests {
                 &input,
                 &models,
                 &inference_config,
-                &client,
+                &inference_clients,
                 candidates.clone(),
             )
             .await;
@@ -1169,6 +1181,7 @@ mod tests {
                         "regular".to_string(),
                         ProviderConfig::Dummy(DummyProvider {
                             model_name: "regular".to_string(),
+                            ..Default::default()
                         }),
                     )]),
                 },
@@ -1185,7 +1198,7 @@ mod tests {
                 &input,
                 &models,
                 &inference_config,
-                &client,
+                &inference_clients,
                 candidates.clone(),
             )
             .await;
@@ -1208,7 +1221,7 @@ mod tests {
                 &input,
                 &models,
                 &inference_config,
-                &client,
+                &inference_clients,
                 empty_candidates.clone(),
             )
             .await;
@@ -1243,6 +1256,7 @@ mod tests {
                     "best_of_n_big".to_string(),
                     ProviderConfig::Dummy(DummyProvider {
                         model_name: "best_of_n_big".to_string(),
+                        ..Default::default()
                     }),
                 )]),
             },
@@ -1253,7 +1267,7 @@ mod tests {
                 &input,
                 &big_models,
                 &inference_config,
-                &client,
+                &inference_clients,
                 candidates.clone(),
             )
             .await;

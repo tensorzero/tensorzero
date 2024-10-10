@@ -1,14 +1,17 @@
+use std::borrow::Cow;
 use std::time::Duration;
 
 use futures::{Stream, StreamExt};
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::time::Instant;
 use uuid::Uuid;
 
+use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ResultExt};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
@@ -18,6 +21,7 @@ use crate::inference::types::{
     ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream, RequestMessage, Usage,
 };
+use crate::model::ProviderCredentials;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::provider_trait::HasCredentials;
@@ -34,6 +38,11 @@ pub struct GCPVertexGeminiProvider {
     pub model_id: String,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct GCPVertexGeminiCredentials {
+    pub token: SecretString,
+}
+
 /// Auth
 ///
 /// We implement below the JWT request signing as documented [here](https://developers.google.com/identity/protocols/oauth2/service-account).
@@ -42,9 +51,9 @@ pub struct GCPVertexGeminiProvider {
 /// key. The way this works is that there are "claims" about who is making the request and we sign those claims using the key.
 #[derive(Clone)]
 pub struct GCPCredentials {
-    private_key_id: String,
-    private_key: EncodingKey,
-    client_email: String,
+    pub private_key_id: String,
+    pub private_key: EncodingKey,
+    pub client_email: String,
 }
 
 impl std::fmt::Debug for GCPCredentials {
@@ -150,17 +159,22 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
+        api_key: ProviderCredentials<'a>,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let credentials = self.credentials.as_ref().ok_or(Error::ApiKeyMissing {
-            provider_name: "GCP Vertex Gemini".to_string(),
-        })?;
         let request_body: GCPVertexGeminiRequest =
             GCPVertexGeminiRequest::new(request, &self.model_id)?;
-        let token = credentials.get_jwt_token(&self.audience)?;
+        let api_key = match &api_key {
+            ProviderCredentials::GCPVertexGemini(credentials) => &credentials.token,
+            _ => {
+                return Err(Error::BadCredentialsPreInference {
+                    provider_name: "GCP Vertex Gemini".to_string(),
+                })
+            }
+        };
         let start_time = Instant::now();
         let res = http_client
             .post(&self.request_url)
-            .bearer_auth(token)
+            .bearer_auth(api_key.expose_secret())
             .json(&request_body)
             .send()
             .await
@@ -198,6 +212,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
+        api_key: ProviderCredentials<'a>,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -206,20 +221,24 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         ),
         Error,
     > {
-        let credentials = self.credentials.as_ref().ok_or(Error::ApiKeyMissing {
-            provider_name: "GCP Vertex Gemini".to_string(),
-        })?;
         let request_body: GCPVertexGeminiRequest =
             GCPVertexGeminiRequest::new(request, &self.model_id)?;
         let raw_request =
             serde_json::to_string(&request_body).map_err(|e| Error::GCPVertexServer {
                 message: format!("Error serializing request: {e}"),
             })?;
-        let token = credentials.get_jwt_token(&self.audience)?;
+        let api_key = match &api_key {
+            ProviderCredentials::GCPVertexGemini(credentials) => &credentials.token,
+            _ => {
+                return Err(Error::BadCredentialsPreInference {
+                    provider_name: "GCP Vertex Gemini".to_string(),
+                })
+            }
+        };
         let start_time = Instant::now();
         let event_source = http_client
             .post(&self.streaming_request_url)
-            .bearer_auth(token)
+            .bearer_auth(api_key.expose_secret())
             .json(&request_body)
             .eventsource()
             .map_err(|e| Error::InferenceClient {
@@ -242,6 +261,32 @@ impl InferenceProvider for GCPVertexGeminiProvider {
 impl HasCredentials for GCPVertexGeminiProvider {
     fn has_credentials(&self) -> bool {
         self.credentials.is_some()
+    }
+
+    fn get_credentials<'a>(
+        &'a self,
+        api_keys: &'a InferenceCredentials,
+    ) -> Result<ProviderCredentials<'a>, Error> {
+        if let Some(credentials) = &self.credentials {
+            if api_keys.gcp_vertex_gemini.is_some() {
+                return Err(Error::UnexpectedDynamicCredentials {
+                    provider_name: "GCP Vertex Gemini".to_string(),
+                });
+            }
+            let token = SecretString::from(credentials.get_jwt_token(&self.audience)?);
+            return Ok(ProviderCredentials::GCPVertexGemini(Cow::Owned(
+                GCPVertexGeminiCredentials { token },
+            )));
+        } else {
+            match &api_keys.gcp_vertex_gemini {
+                Some(credentials) => Ok(ProviderCredentials::GCPVertexGemini(Cow::Borrowed(
+                    credentials,
+                ))),
+                None => Err(Error::ApiKeyMissing {
+                    provider_name: "GCP Vertex Gemini".to_string(),
+                }),
+            }
+        }
     }
 }
 
@@ -1703,5 +1748,41 @@ mod tests {
         });
         let processed_schema_recursive = process_output_schema(&output_schema_recursive).unwrap();
         assert_eq!(processed_schema_recursive, expected_processed_schema);
+    }
+
+    #[test]
+    fn test_get_credentials() {
+        let provider_no_credentials = GCPVertexGeminiProvider {
+            request_url: "https://example.com".to_string(),
+            streaming_request_url: "https://example.com/stream".to_string(),
+            audience: "audience".to_string(),
+            credentials: None,
+            model_id: "model_id".to_string(),
+        };
+        let credentials = InferenceCredentials::default();
+        let result = provider_no_credentials
+            .get_credentials(&credentials)
+            .unwrap_err();
+        assert_eq!(
+            result,
+            Error::ApiKeyMissing {
+                provider_name: "GCP Vertex Gemini".to_string(),
+            }
+        );
+        let credentials = InferenceCredentials {
+            gcp_vertex_gemini: Some(GCPVertexGeminiCredentials {
+                token: SecretString::from("test_api_key".to_string()),
+            }),
+            ..Default::default()
+        };
+        let result = provider_no_credentials
+            .get_credentials(&credentials)
+            .unwrap();
+        match result {
+            ProviderCredentials::GCPVertexGemini(creds) => {
+                assert_eq!(creds.token.expose_secret(), "test_api_key".to_string());
+            }
+            _ => panic!("Expected GCP Vertex Gemini credentials"),
+        }
     }
 }

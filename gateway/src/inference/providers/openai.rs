@@ -13,6 +13,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
+use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
@@ -20,6 +21,7 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     RequestMessage, Role, Text, TextChunk, Usage,
 };
+use crate::model::ProviderCredentials;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::provider_trait::HasCredentials;
@@ -38,17 +40,28 @@ pub struct OpenAIProvider {
     pub api_key: Option<SecretString>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct OpenAICredentials<'a> {
+    pub api_key: Cow<'a, SecretString>,
+}
+
 impl InferenceProvider for OpenAIProvider {
     async fn infer<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
+        api_key: ProviderCredentials<'a>,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
-            provider_name: "OpenAI".to_string(),
-        })?;
         let request_body = OpenAIRequest::new(&self.model_name, request)?;
         let request_url = get_chat_url(self.api_base.as_ref())?;
+        let api_key = match &api_key {
+            ProviderCredentials::OpenAI(credentials) => &credentials.api_key,
+            _ => {
+                return Err(Error::BadCredentialsPreInference {
+                    provider_name: "OpenAI".to_string(),
+                })
+            }
+        };
         let start_time = Instant::now();
         let res = http_client
             .post(request_url)
@@ -92,6 +105,7 @@ impl InferenceProvider for OpenAIProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
+        api_key: ProviderCredentials<'a>,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -105,15 +119,20 @@ impl InferenceProvider for OpenAIProvider {
                 message: "The OpenAI o1 family of models does not support streaming.".to_string(),
             });
         }
-        let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
-            provider_name: "OpenAI".to_string(),
-        })?;
         let request_body = OpenAIRequest::new(&self.model_name, request)?;
         let raw_request =
             serde_json::to_string(&request_body).map_err(|e| Error::OpenAIServer {
                 message: format!("Error serializing request: {e}"),
             })?;
         let request_url = get_chat_url(self.api_base.as_ref())?;
+        let api_key = match &api_key {
+            ProviderCredentials::OpenAI(credentials) => &credentials.api_key,
+            _ => {
+                return Err(Error::BadCredentialsPreInference {
+                    provider_name: "OpenAI".to_string(),
+                })
+            }
+        };
         let start_time = Instant::now();
         let event_source = http_client
             .post(request_url)
@@ -196,6 +215,29 @@ impl EmbeddingProvider for OpenAIProvider {
 impl HasCredentials for OpenAIProvider {
     fn has_credentials(&self) -> bool {
         self.api_key.is_some()
+    }
+
+    fn get_credentials<'a>(
+        &'a self,
+        credentials: &'a InferenceCredentials,
+    ) -> Result<ProviderCredentials<'a>, Error> {
+        if let Some(api_key) = &self.api_key {
+            if credentials.openai.is_some() {
+                return Err(Error::UnexpectedDynamicCredentials {
+                    provider_name: "OpenAI".to_string(),
+                });
+            }
+            return Ok(ProviderCredentials::OpenAI(Cow::Owned(OpenAICredentials {
+                api_key: Cow::Borrowed(api_key),
+            })));
+        } else {
+            match &credentials.openai {
+                Some(credentials) => Ok(ProviderCredentials::OpenAI(Cow::Borrowed(credentials))),
+                None => Err(Error::ApiKeyMissing {
+                    provider_name: "OpenAI".to_string(),
+                }),
+            }
+        }
     }
 }
 
@@ -820,7 +862,7 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             .choices
             .pop()
             .ok_or(Error::OpenAIServer {
-                message: "Response has no choices (this should never happen)".to_string(),
+                message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
             })?
             .message;
         let mut content: Vec<ContentBlock> = Vec::new();
@@ -2061,5 +2103,64 @@ mod tests {
         let expected = None;
         let result = tensorzero_to_openai_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_get_credentials() {
+        let provider_no_credentials = OpenAIProvider {
+            api_key: None,
+            api_base: None,
+            model_name: "gpt-3.5-turbo".to_string(),
+        };
+        let credentials = InferenceCredentials::default();
+        let result = provider_no_credentials
+            .get_credentials(&credentials)
+            .unwrap_err();
+        assert_eq!(
+            result,
+            Error::ApiKeyMissing {
+                provider_name: "OpenAI".to_string(),
+            }
+        );
+        let credentials = InferenceCredentials {
+            openai: Some(OpenAICredentials {
+                api_key: Cow::Owned(SecretString::from("test_api_key".to_string())),
+            }),
+            ..Default::default()
+        };
+        let result = provider_no_credentials
+            .get_credentials(&credentials)
+            .unwrap();
+        match result {
+            ProviderCredentials::OpenAI(creds) => {
+                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
+            }
+            _ => panic!("Expected OpenAI credentials"),
+        }
+
+        let provider_with_credentials = OpenAIProvider {
+            api_key: Some(SecretString::from("test_api_key".to_string())),
+            api_base: None,
+            model_name: "gpt-3.5-turbo".to_string(),
+        };
+        let result = provider_with_credentials
+            .get_credentials(&credentials)
+            .unwrap_err();
+        assert_eq!(
+            result,
+            Error::UnexpectedDynamicCredentials {
+                provider_name: "OpenAI".to_string(),
+            }
+        );
+        let credentials = InferenceCredentials::default();
+        let result = provider_with_credentials
+            .get_credentials(&credentials)
+            .unwrap();
+        match result {
+            ProviderCredentials::OpenAI(creds) => {
+                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
+            }
+            _ => panic!("Expected OpenAI credentials"),
+        }
     }
 }

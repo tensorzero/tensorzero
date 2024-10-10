@@ -5,11 +5,13 @@ use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::borrow::Cow;
 use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
 use uuid::Uuid;
 
+use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{ContentBlock, ContentBlockChunk, Latency, Role, Text};
@@ -17,6 +19,7 @@ use crate::inference::types::{
     ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream, RequestMessage, TextChunk, Usage,
 };
+use crate::model::ProviderCredentials;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::provider_trait::HasCredentials;
@@ -36,17 +39,28 @@ pub struct AnthropicProvider {
     pub api_key: Option<SecretString>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct AnthropicCredentials<'a> {
+    pub api_key: Cow<'a, SecretString>,
+}
+
 impl InferenceProvider for AnthropicProvider {
     /// Anthropic non-streaming API request
     async fn infer<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
+        api_key: ProviderCredentials<'a>,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
-            provider_name: "Anthropic".to_string(),
-        })?;
         let request_body = AnthropicRequestBody::new(&self.model_name, request)?;
+        let api_key = match &api_key {
+            ProviderCredentials::Anthropic(credentials) => &credentials.api_key,
+            _ => {
+                return Err(Error::BadCredentialsPreInference {
+                    provider_name: "Anthropic".to_string(),
+                })
+            }
+        };
         let start_time = Instant::now();
         let res = http_client
             .post(ANTHROPIC_BASE_URL.as_ref())
@@ -94,6 +108,7 @@ impl InferenceProvider for AnthropicProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
+        api_key: ProviderCredentials<'a>,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -102,15 +117,20 @@ impl InferenceProvider for AnthropicProvider {
         ),
         Error,
     > {
-        let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
-            provider_name: "Anthropic".to_string(),
-        })?;
         let request_body = AnthropicRequestBody::new(&self.model_name, request)?;
         let raw_request =
             serde_json::to_string(&request_body).map_err(|e| Error::AnthropicServer {
                 message: format!("Error serializing request body as JSON: {e}"),
             })?;
         let start_time = Instant::now();
+        let api_key = match &api_key {
+            ProviderCredentials::Anthropic(credentials) => &credentials.api_key,
+            _ => {
+                return Err(Error::BadCredentialsPreInference {
+                    provider_name: "Anthropic".to_string(),
+                })
+            }
+        };
         let event_source = http_client
             .post(ANTHROPIC_BASE_URL.as_ref())
             .header("anthropic-version", ANTHROPIC_API_VERSION)
@@ -138,6 +158,31 @@ impl InferenceProvider for AnthropicProvider {
 impl HasCredentials for AnthropicProvider {
     fn has_credentials(&self) -> bool {
         self.api_key.is_some()
+    }
+
+    fn get_credentials<'a>(
+        &'a self,
+        credentials: &'a InferenceCredentials,
+    ) -> Result<ProviderCredentials<'a>, Error> {
+        if let Some(api_key) = &self.api_key {
+            if credentials.anthropic.is_some() {
+                return Err(Error::UnexpectedDynamicCredentials {
+                    provider_name: "Anthropic".to_string(),
+                });
+            }
+            return Ok(ProviderCredentials::Anthropic(Cow::Owned(
+                AnthropicCredentials {
+                    api_key: Cow::Borrowed(api_key),
+                },
+            )));
+        } else {
+            match &credentials.anthropic {
+                Some(credentials) => Ok(ProviderCredentials::Anthropic(Cow::Borrowed(credentials))),
+                None => Err(Error::ApiKeyMissing {
+                    provider_name: "Anthropic".to_string(),
+                }),
+            }
+        }
     }
 }
 
@@ -423,7 +468,7 @@ fn prepare_messages(messages: Vec<AnthropicMessage>) -> Result<Vec<AnthropicMess
                 if role == this_role {
                     let mut last_message =
                         consolidated_messages.pop().ok_or(Error::InvalidRequest {
-                            message: "Last message is missing (this should never happen)"
+                            message: "Last message is missing (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
                                 .to_string(),
                         })?;
                     last_message.content.extend(message.content);
@@ -1905,5 +1950,62 @@ mod tests {
             ANTHROPIC_BASE_URL.as_str(),
             "https://api.anthropic.com/v1/messages"
         );
+    }
+
+    #[test]
+    fn test_get_credentials() {
+        let provider_no_credentials = AnthropicProvider {
+            api_key: None,
+            model_name: "claude-3-haiku-20240307".to_string(),
+        };
+        let credentials = InferenceCredentials::default();
+        let result = provider_no_credentials
+            .get_credentials(&credentials)
+            .unwrap_err();
+        assert_eq!(
+            result,
+            Error::ApiKeyMissing {
+                provider_name: "Anthropic".to_string(),
+            }
+        );
+        let credentials = InferenceCredentials {
+            anthropic: Some(AnthropicCredentials {
+                api_key: Cow::Owned(SecretString::from("test_api_key".to_string())),
+            }),
+            ..Default::default()
+        };
+        let result = provider_no_credentials
+            .get_credentials(&credentials)
+            .unwrap();
+        match result {
+            ProviderCredentials::Anthropic(creds) => {
+                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
+            }
+            _ => panic!("Expected Anthropic credentials"),
+        }
+
+        let provider_with_credentials = AnthropicProvider {
+            api_key: Some(SecretString::from("test_api_key".to_string())),
+            model_name: "claude-3-haiku-20240307".to_string(),
+        };
+        let result = provider_with_credentials
+            .get_credentials(&credentials)
+            .unwrap_err();
+        assert_eq!(
+            result,
+            Error::UnexpectedDynamicCredentials {
+                provider_name: "Anthropic".to_string(),
+            }
+        );
+        let credentials = InferenceCredentials::default();
+        let result = provider_with_credentials
+            .get_credentials(&credentials)
+            .unwrap();
+        match result {
+            ProviderCredentials::Anthropic(creds) => {
+                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
+            }
+            _ => panic!("Expected Anthropic credentials"),
+        }
     }
 }

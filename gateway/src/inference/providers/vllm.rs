@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use futures::{StreamExt, TryStreamExt};
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::time::Instant;
 use url::Url;
@@ -13,17 +13,24 @@ use super::openai::{
     OpenAIRequestMessage, OpenAIResponse, OpenAISystemRequestMessage, StreamOptions,
 };
 use super::provider_trait::{HasCredentials, InferenceProvider};
+use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
 use crate::inference::types::{
     ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
 };
+use crate::model::ProviderCredentials;
 
 #[derive(Debug)]
 pub struct VLLMProvider {
     pub model_name: String,
     pub api_key: Option<SecretString>,
     pub api_base: Url,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct VLLMCredentials<'a> {
+    pub api_key: Cow<'a, SecretString>,
 }
 
 /// Key differences between vLLM and OpenAI inference:
@@ -35,13 +42,19 @@ impl InferenceProvider for VLLMProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
+        api_key: ProviderCredentials<'a>,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
-            provider_name: "vLLM".to_string(),
-        })?;
         let request_body = VLLMRequest::new(&self.model_name, request)?;
         let request_url = get_chat_url(Some(&self.api_base))?;
         let start_time = Instant::now();
+        let api_key = match &api_key {
+            ProviderCredentials::VLLM(credentials) => &credentials.api_key,
+            _ => {
+                return Err(Error::ApiKeyMissing {
+                    provider_name: "vLLM".to_string(),
+                })
+            }
+        };
         let res = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
@@ -83,6 +96,7 @@ impl InferenceProvider for VLLMProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
+        api_key: ProviderCredentials<'a>,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -91,13 +105,18 @@ impl InferenceProvider for VLLMProvider {
         ),
         Error,
     > {
-        let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
-            provider_name: "vLLM".to_string(),
-        })?;
         let request_body = VLLMRequest::new(&self.model_name, request)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| Error::VLLMServer {
             message: format!("Error serializing request: {e}"),
         })?;
+        let api_key = match &api_key {
+            ProviderCredentials::VLLM(credentials) => &credentials.api_key,
+            _ => {
+                return Err(Error::BadCredentialsPreInference {
+                    provider_name: "vLLM".to_string(),
+                })
+            }
+        };
         let request_url = get_chat_url(Some(&self.api_base))?;
         let start_time = Instant::now();
         let event_source = http_client
@@ -129,6 +148,28 @@ impl InferenceProvider for VLLMProvider {
 impl HasCredentials for VLLMProvider {
     fn has_credentials(&self) -> bool {
         self.api_key.is_some()
+    }
+    fn get_credentials<'a>(
+        &'a self,
+        credentials: &'a InferenceCredentials,
+    ) -> Result<ProviderCredentials<'a>, Error> {
+        if let Some(api_key) = &self.api_key {
+            if credentials.vllm.is_some() {
+                return Err(Error::UnexpectedDynamicCredentials {
+                    provider_name: "vLLM".to_string(),
+                });
+            }
+            return Ok(ProviderCredentials::VLLM(Cow::Owned(VLLMCredentials {
+                api_key: Cow::Borrowed(api_key),
+            })));
+        } else {
+            match &credentials.vllm {
+                Some(credentials) => Ok(ProviderCredentials::VLLM(Cow::Borrowed(credentials))),
+                None => Err(Error::ApiKeyMissing {
+                    provider_name: "vLLM".to_string(),
+                }),
+            }
+        }
     }
 }
 
@@ -237,7 +278,7 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
             .choices
             .pop()
             .ok_or(Error::VLLMServer {
-                message: "Response has no choices (this should never happen)".to_string(),
+                message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
             })?
             .message;
         let mut content: Vec<ContentBlock> = Vec::new();
@@ -360,5 +401,64 @@ mod tests {
         assert!(err
             .to_string()
             .contains("TensorZero does not support tool use with vLLM"));
+    }
+
+    #[test]
+    fn test_get_credentials() {
+        let provider_no_credentials = VLLMProvider {
+            api_key: None,
+            api_base: Url::parse("https://example.com").unwrap(),
+            model_name: "llama-v3-8b".to_string(),
+        };
+        let credentials = InferenceCredentials::default();
+        let result = provider_no_credentials
+            .get_credentials(&credentials)
+            .unwrap_err();
+        assert_eq!(
+            result,
+            Error::ApiKeyMissing {
+                provider_name: "vLLM".to_string(),
+            }
+        );
+        let credentials = InferenceCredentials {
+            vllm: Some(VLLMCredentials {
+                api_key: Cow::Owned(SecretString::from("test_api_key".to_string())),
+            }),
+            ..Default::default()
+        };
+        let result = provider_no_credentials
+            .get_credentials(&credentials)
+            .unwrap();
+        match result {
+            ProviderCredentials::VLLM(creds) => {
+                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
+            }
+            _ => panic!("Expected vLLM credentials"),
+        }
+
+        let provider_with_credentials = VLLMProvider {
+            api_key: Some(SecretString::from("test_api_key".to_string())),
+            api_base: Url::parse("https://example.com").unwrap(),
+            model_name: "llama-v3-8b".to_string(),
+        };
+        let result = provider_with_credentials
+            .get_credentials(&credentials)
+            .unwrap_err();
+        assert_eq!(
+            result,
+            Error::UnexpectedDynamicCredentials {
+                provider_name: "vLLM".to_string(),
+            }
+        );
+        let credentials = InferenceCredentials::default();
+        let result = provider_with_credentials
+            .get_credentials(&credentials)
+            .unwrap();
+        match result {
+            ProviderCredentials::VLLM(creds) => {
+                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
+            }
+            _ => panic!("Expected vLLM credentials"),
+        }
     }
 }

@@ -1,13 +1,16 @@
+use std::borrow::Cow;
 use std::time::Duration;
 
 use futures::{Stream, StreamExt};
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::time::Instant;
 use uuid::Uuid;
 
+use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
 use crate::inference::providers::gcp_vertex_gemini::GCPCredentials;
 use crate::inference::providers::provider_trait::InferenceProvider;
@@ -16,6 +19,7 @@ use crate::inference::types::{
     ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream, RequestMessage, Usage,
 };
+use crate::model::ProviderCredentials;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::provider_trait::HasCredentials;
@@ -30,6 +34,13 @@ pub struct GCPVertexAnthropicProvider {
     pub audience: String,
     pub credentials: Option<GCPCredentials>,
     pub model_id: String,
+    pub dynamic_credentials: bool,
+}
+
+/// For use at runtime, not the static credentials we use at startup
+#[derive(Clone, Debug, Deserialize)]
+pub struct GCPVertexAnthropicCredentials {
+    pub token: SecretString,
 }
 
 const ANTHROPIC_API_VERSION: &str = "vertex-2023-10-16";
@@ -40,16 +51,21 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
+        api_key: ProviderCredentials<'a>,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let credentials = self.credentials.as_ref().ok_or(Error::ApiKeyMissing {
-            provider_name: "GCP Vertex Anthropic".to_string(),
-        })?;
         let request_body = GCPVertexAnthropicRequestBody::new(request)?;
-        let token = credentials.get_jwt_token(&self.audience)?;
+        let api_key = match &api_key {
+            ProviderCredentials::GCPVertexAnthropic(credentials) => &credentials.token,
+            _ => {
+                return Err(Error::BadCredentialsPreInference {
+                    provider_name: "GCP Vertex Anthropic".to_string(),
+                })
+            }
+        };
         let start_time = Instant::now();
         let res = http_client
             .post(&self.request_url)
-            .bearer_auth(token)
+            .bearer_auth(api_key.expose_secret())
             .json(&request_body)
             .send()
             .await
@@ -90,6 +106,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
+        api_key: ProviderCredentials<'a>,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -98,19 +115,23 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         ),
         Error,
     > {
-        let credentials = self.credentials.as_ref().ok_or(Error::ApiKeyMissing {
-            provider_name: "GCP Vertex Anthropic".to_string(),
-        })?;
         let request_body = GCPVertexAnthropicRequestBody::new(request)?;
         let raw_request =
             serde_json::to_string(&request_body).map_err(|e| Error::AnthropicServer {
                 message: format!("Error serializing request body as JSON: {e}"),
             })?;
-        let token = credentials.get_jwt_token(&self.audience)?;
+        let api_key = match &api_key {
+            ProviderCredentials::GCPVertexAnthropic(credentials) => &credentials.token,
+            _ => {
+                return Err(Error::BadCredentialsPreInference {
+                    provider_name: "GCP Vertex Anthropic".to_string(),
+                })
+            }
+        };
         let start_time = Instant::now();
         let event_source = http_client
             .post(&self.streaming_request_url)
-            .bearer_auth(token)
+            .bearer_auth(api_key.expose_secret())
             .header("content-type", "application/json")
             .json(&request_body)
             .eventsource()
@@ -134,6 +155,32 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
 impl HasCredentials for GCPVertexAnthropicProvider {
     fn has_credentials(&self) -> bool {
         self.credentials.is_some()
+    }
+
+    fn get_credentials<'a>(
+        &'a self,
+        api_keys: &'a InferenceCredentials,
+    ) -> Result<ProviderCredentials<'a>, Error> {
+        if let Some(credentials) = &self.credentials {
+            if api_keys.gcp_vertex_anthropic.is_some() {
+                return Err(Error::UnexpectedDynamicCredentials {
+                    provider_name: "GCP Vertex Anthropic".to_string(),
+                });
+            }
+            let token = SecretString::from(credentials.get_jwt_token(&self.audience)?);
+            return Ok(ProviderCredentials::GCPVertexAnthropic(Cow::Owned(
+                GCPVertexAnthropicCredentials { token },
+            )));
+        } else {
+            match &api_keys.gcp_vertex_anthropic {
+                Some(credentials) => Ok(ProviderCredentials::GCPVertexAnthropic(Cow::Borrowed(
+                    credentials,
+                ))),
+                None => Err(Error::ApiKeyMissing {
+                    provider_name: "GCP Vertex Anthropic".to_string(),
+                }),
+            }
+        }
     }
 }
 
@@ -422,7 +469,7 @@ fn prepare_messages(
                 if role == this_role {
                     let mut last_message =
                         consolidated_messages.pop().ok_or(Error::InvalidRequest {
-                            message: "Last message is missing (this should never happen)"
+                            message: "Last message is missing (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
                                 .to_string(),
                         })?;
                     last_message.content.extend(message.content);
@@ -1904,5 +1951,42 @@ mod tests {
         let result = parse_usage_info(&usage_info);
         assert_eq!(result.input_tokens, 0);
         assert_eq!(result.output_tokens, 0);
+    }
+
+    #[test]
+    fn test_get_credentials() {
+        let provider_no_credentials = GCPVertexAnthropicProvider {
+            request_url: "https://example.com".to_string(),
+            streaming_request_url: "https://example.com/stream".to_string(),
+            audience: "audience".to_string(),
+            credentials: None,
+            model_id: "model_id".to_string(),
+            dynamic_credentials: false,
+        };
+        let credentials = InferenceCredentials::default();
+        let result = provider_no_credentials
+            .get_credentials(&credentials)
+            .unwrap_err();
+        assert_eq!(
+            result,
+            Error::ApiKeyMissing {
+                provider_name: "GCP Vertex Anthropic".to_string(),
+            }
+        );
+        let credentials = InferenceCredentials {
+            gcp_vertex_anthropic: Some(GCPVertexAnthropicCredentials {
+                token: SecretString::from("test_api_key".to_string()),
+            }),
+            ..Default::default()
+        };
+        let result = provider_no_credentials
+            .get_credentials(&credentials)
+            .unwrap();
+        match result {
+            ProviderCredentials::GCPVertexAnthropic(creds) => {
+                assert_eq!(creds.token.expose_secret(), "test_api_key".to_string());
+            }
+            _ => panic!("Expected GCP Vertex Anthropic credentials"),
+        }
     }
 }

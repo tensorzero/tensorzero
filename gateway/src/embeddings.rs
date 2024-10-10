@@ -1,13 +1,14 @@
-use std::{collections::HashMap, future::Future};
+use std::collections::HashMap;
+use std::future::Future;
 
 use crate::{
+    endpoints::inference::InferenceCredentials,
     error::Error,
     inference::{
-        providers::openai::OpenAIProvider,
-        providers::provider_trait::HasCredentials,
+        providers::{openai::OpenAIProvider, provider_trait::HasCredentials},
         types::{current_timestamp, Latency, ModelInferenceResponseWithMetadata, Usage},
     },
-    model::ProviderConfig,
+    model::{ProviderConfig, ProviderCredentials},
 };
 use reqwest::Client;
 use serde::Deserialize;
@@ -200,6 +201,17 @@ impl HasCredentials for EmbeddingProviderConfig {
             EmbeddingProviderConfig::Dummy(provider) => provider.has_credentials(),
         }
     }
+
+    fn get_credentials<'a>(
+        &'a self,
+        credentials: &'a InferenceCredentials,
+    ) -> Result<ProviderCredentials<'a>, Error> {
+        match self {
+            EmbeddingProviderConfig::OpenAI(provider) => provider.get_credentials(credentials),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            EmbeddingProviderConfig::Dummy(provider) => provider.get_credentials(credentials),
+        }
+    }
 }
 
 impl EmbeddingProvider for EmbeddingProviderConfig {
@@ -247,9 +259,11 @@ mod tests {
     async fn test_embedding_fallbacks() {
         let bad_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
             model_name: "error".to_string(),
+            ..Default::default()
         });
         let good_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
             model_name: "good".to_string(),
+            ..Default::default()
         });
         let fallback_embedding_model = EmbeddingModelConfig {
             routing: vec!["error".to_string(), "good".to_string()],
@@ -271,9 +285,11 @@ mod tests {
     fn test_validate() {
         let bad_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
             model_name: "error".to_string(),
+            ..Default::default()
         });
         let good_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
             model_name: "good".to_string(),
+            ..Default::default()
         });
         let fallback_embedding_model = EmbeddingModelConfig {
             routing: vec!["error".to_string(), "good".to_string()],
@@ -287,9 +303,11 @@ mod tests {
         // If at least one provider has bad credentials, the validation should fail
         let bad_credential_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
             model_name: "bad_credentials".to_string(),
+            ..Default::default()
         });
         let good_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
             model_name: "good".to_string(),
+            ..Default::default()
         });
         let bad_credential_embedding_model = EmbeddingModelConfig {
             routing: vec!["bad_credentials".to_string(), "good".to_string()],

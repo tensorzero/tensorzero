@@ -36,6 +36,9 @@ pub enum Error {
     AzureServer {
         message: String,
     },
+    BadCredentialsPreInference {
+        provider_name: String,
+    },
     ChannelWrite {
         message: String,
     },
@@ -184,6 +187,9 @@ pub enum Error {
     TypeConversion {
         message: String,
     },
+    UnexpectedDynamicCredentials {
+        provider_name: String,
+    },
     UnknownCandidate {
         name: String,
     },
@@ -224,6 +230,7 @@ impl Error {
             Error::AWSBedrockServer { .. } => tracing::Level::ERROR,
             Error::AzureClient { .. } => tracing::Level::WARN,
             Error::AzureServer { .. } => tracing::Level::ERROR,
+            Error::BadCredentialsPreInference { .. } => tracing::Level::ERROR,
             Error::ChannelWrite { .. } => tracing::Level::ERROR,
             Error::ClickHouseMigration { .. } => tracing::Level::ERROR,
             Error::ClickHouseQuery { .. } => tracing::Level::ERROR,
@@ -270,6 +277,7 @@ impl Error {
             Error::ToolNotFound { .. } => tracing::Level::WARN,
             Error::ToolNotLoaded { .. } => tracing::Level::ERROR,
             Error::TypeConversion { .. } => tracing::Level::ERROR,
+            Error::UnexpectedDynamicCredentials { .. } => tracing::Level::WARN,
             Error::UnknownCandidate { .. } => tracing::Level::ERROR,
             Error::UnknownFunction { .. } => tracing::Level::WARN,
             Error::UnknownModel { .. } => tracing::Level::ERROR,
@@ -293,6 +301,7 @@ impl Error {
             Error::AWSBedrockServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::AzureClient { status_code, .. } => *status_code,
             Error::AzureServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::BadCredentialsPreInference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ClickHouseQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -340,6 +349,7 @@ impl Error {
             Error::ToolNotLoaded { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::TypeConversion { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::UnknownCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::UnexpectedDynamicCredentials { .. } => StatusCode::BAD_REQUEST,
             Error::UnknownFunction { .. } => StatusCode::NOT_FOUND,
             Error::UnknownModel { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::UnknownTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -399,6 +409,13 @@ impl std::fmt::Display for Error {
             }
             Error::AzureServer { message } => {
                 write!(f, "Error from Azure server: {}", message)
+            }
+            Error::BadCredentialsPreInference { provider_name } => {
+                write!(
+                    f,
+                    "Bad credentials at inference time for provider: {}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new",
+                    provider_name
+                )
             }
             Error::ChannelWrite { message } => {
                 write!(f, "Error writing to channel: {}", message)
@@ -555,6 +572,13 @@ impl std::fmt::Display for Error {
             }
             Error::ToolNotFound { name } => write!(f, "Tool not found: {}", name),
             Error::ToolNotLoaded { name } => write!(f, "Tool not loaded: {}", name),
+            Error::UnexpectedDynamicCredentials { provider_name } => {
+                write!(
+                    f,
+                    "Unexpected dynamic credentials for model provider: {}. Please enable the `dynamic_credentials` flag in config if appropriate.",
+                    provider_name
+                )
+            }
             Error::UnknownCandidate { name } => write!(f, "Unknown candidate variant: {}", name),
             Error::UnknownFunction { name } => write!(f, "Unknown function: {}", name),
             Error::UnknownModel { name } => write!(f, "Unknown model: {}", name),

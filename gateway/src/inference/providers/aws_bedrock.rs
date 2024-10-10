@@ -17,6 +17,7 @@ use std::time::Duration;
 use tokio::time::Instant;
 use uuid::Uuid;
 
+use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
@@ -24,6 +25,7 @@ use crate::inference::types::{
     ProviderInferenceResponseChunk, ProviderInferenceResponseStream, RequestMessage, Role, Text,
     TextChunk, Usage,
 };
+use crate::model::ProviderCredentials;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::provider_trait::HasCredentials;
@@ -65,6 +67,7 @@ impl InferenceProvider for AWSBedrockProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
+        _api_key: ProviderCredentials<'a>,
     ) -> Result<ProviderInferenceResponse, Error> {
         // TODO (#55): add support for guardrails and additional fields
 
@@ -148,6 +151,7 @@ impl InferenceProvider for AWSBedrockProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
+        _api_key: ProviderCredentials<'a>,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -238,6 +242,13 @@ impl HasCredentials for AWSBedrockProvider {
     fn has_credentials(&self) -> bool {
         // TODO (#313): Actually check if the AWS Bedrock client is configured with credentials
         true
+    }
+
+    fn get_credentials<'a>(
+        &'a self,
+        _credentials: &'a InferenceCredentials,
+    ) -> Result<ProviderCredentials<'a>, Error> {
+        Ok(ProviderCredentials::AWSBedrock)
     }
 }
 
@@ -589,7 +600,7 @@ impl TryFrom<&ToolConfig> for Tool {
             .build()
             .map_err(|_| Error::AWSBedrockClient {
                 status_code: StatusCode::INTERNAL_SERVER_ERROR,
-                message: "Error configuring AWS Bedrock tool choice (this should never happen)"
+                message: "Error configuring AWS Bedrock tool choice (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
                     .to_string(),
             })?;
 
@@ -619,7 +630,7 @@ impl TryFrom<ToolChoice> for AWSBedrockToolChoice {
                     .map_err(|_| Error::AWSBedrockClient {
                         status_code: StatusCode::INTERNAL_SERVER_ERROR,
                         message:
-                            "Error configuring AWS Bedrock tool choice (this should never happen)"
+                            "Error configuring AWS Bedrock tool choice (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
                                 .to_string(),
                     })?,
             )),

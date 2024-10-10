@@ -331,7 +331,7 @@ mod tests {
     use serde_json::{json, Value};
 
     use crate::clickhouse::ClickHouseConnectionInfo;
-    use crate::endpoints::inference::ChatCompletionInferenceParams;
+    use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceCredentials};
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::providers::common::get_temperature_tool_config;
     use crate::inference::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
@@ -643,9 +643,11 @@ mod tests {
     async fn test_infer_chat_completion() {
         let client = Client::new();
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let api_keys = InferenceCredentials::default();
         let clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
+            credentials: &api_keys,
         };
         let templates = get_test_template_config();
         let system_template_name = "system";
@@ -668,12 +670,15 @@ mod tests {
         });
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".to_string(),
+            ..Default::default()
         });
         let error_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "error".to_string(),
+            ..Default::default()
         });
         let json_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "json".to_string(),
+            ..Default::default()
         });
         let text_model_config = ModelConfig {
             routing: vec!["good".to_string()],
@@ -685,6 +690,7 @@ mod tests {
         };
         let tool_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "tool".to_string(),
+            ..Default::default()
         });
         let tool_model_config = ModelConfig {
             routing: vec!["tool_provider".to_string()],
@@ -825,6 +831,7 @@ mod tests {
         };
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".to_string(),
+            ..Default::default()
         });
         let text_model_config = ModelConfig {
             routing: vec!["good_provider".to_string()],
@@ -1275,9 +1282,11 @@ mod tests {
     async fn test_infer_chat_completion_stream() {
         let client = Client::new();
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let api_keys = InferenceCredentials::default();
         let clients = InferenceClients {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
+            credentials: &api_keys,
         };
         let templates = get_test_template_config();
         let function_config = Box::leak(Box::new(FunctionConfig::Chat(FunctionConfigChat {
@@ -1293,9 +1302,11 @@ mod tests {
         let user_template_name = "greeting_with_age";
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".to_string(),
+            ..Default::default()
         });
         let error_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "error".to_string(),
+            ..Default::default()
         });
         let text_model_config = ModelConfig {
             routing: vec!["good_provider".to_string()],

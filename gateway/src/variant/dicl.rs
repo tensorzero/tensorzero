@@ -305,7 +305,6 @@ impl DiclConfig {
                 .collect::<Vec<_>>()
                 .join(",")
         );
-
         let query = format!(
             r#"SELECT input, output, cosineDistance(embedding, {}) as distance
                    FROM DynamicInContextLearningExample
