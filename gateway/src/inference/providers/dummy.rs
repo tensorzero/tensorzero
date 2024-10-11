@@ -166,6 +166,9 @@ impl InferenceProvider for DummyProvider {
             "best_of_n_big" => {
                 vec![r#"{"thinking": "hmmm", "answer_choice": 100}"#.to_string().into()]
             }
+            "flaky_best_of_n_judge" => {
+                vec![r#"{"thinking": "hmmm", "answer_choice": 0}"#.to_string().into()]
+            }
             _ => vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()],
         };
         let raw_request = DUMMY_RAW_REQUEST.to_string();
