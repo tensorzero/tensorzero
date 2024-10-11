@@ -22,7 +22,7 @@ use crate::{
 
 use super::{
     infer_model_request, infer_model_request_stream, prepare_model_inference_request,
-    InferenceConfig, JsonMode, ModelUsedInfo, RetryConfig, Variant,
+    InferModelRequestArgs, InferenceConfig, JsonMode, ModelUsedInfo, RetryConfig, Variant,
 };
 
 /// The primary configuration for the Dicl variant
@@ -99,18 +99,20 @@ impl Variant for DiclConfig {
             name: self.model.clone(),
         })?;
 
-        // Actually run the inference
-        let mut inference_response = infer_model_request(
-            model_inference_request,
-            &self.model,
+        // Instantiate the InferModelRequestArgs struct
+        let args = InferModelRequestArgs {
+            request: model_inference_request,
+            model_name: &self.model,
             model_config,
             function,
             inference_config,
             clients,
             inference_params,
-            &self.retries,
-        )
-        .await?;
+            retry_config: &self.retries,
+        };
+
+        // Refactored function call using the struct
+        let mut inference_response = infer_model_request(args).await?;
 
         // Add the embedding to the model inference results
         inference_response
@@ -637,7 +639,7 @@ mod tests {
 
         // Mock Input data
         let input_data = Input {
-            system: Some(json!({"type": "system", "content": "System message"})),
+            system: Some(json!({"assistant_name": "Dr. Mehta"})),
             messages: vec![
                 InputMessage {
                     role: Role::User,

@@ -20,7 +20,7 @@ use crate::{
 
 use super::{
     infer_model_request, infer_model_request_stream, prepare_model_inference_request,
-    InferenceConfig, ModelUsedInfo, RetryConfig, Variant,
+    InferModelRequestArgs, InferenceConfig, ModelUsedInfo, RetryConfig, Variant,
 };
 
 #[derive(Debug, Default, Deserialize)]
@@ -158,17 +158,17 @@ impl Variant for ChatCompletionConfig {
         let model_config = models.models.get(&self.model).ok_or(Error::UnknownModel {
             name: self.model.clone(),
         })?;
-        infer_model_request(
+        let args = InferModelRequestArgs {
             request,
-            &self.model,
+            model_name: &self.model,
             model_config,
             function,
             inference_config,
             clients,
             inference_params,
-            &self.retries,
-        )
-        .await
+            retry_config: &self.retries,
+        };
+        infer_model_request(args).await
     }
 
     async fn infer_stream<'request>(
