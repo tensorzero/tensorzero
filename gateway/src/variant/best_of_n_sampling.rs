@@ -1,5 +1,6 @@
 use std::{collections::HashMap, path::PathBuf};
 
+use backon::Retryable;
 use futures::future::join_all;
 use lazy_static::lazy_static;
 use rand::Rng;
@@ -364,9 +365,13 @@ async fn inner_select_best_candidate<'a, 'request>(
         .ok_or(Error::UnknownModel {
             name: evaluator.inner.model.clone(),
         })?;
-    let model_inference_response = model_config
-        .infer(&inference_request, clients.http_client, clients.credentials)
-        .await?;
+    let model_inference_response = (|| async {
+        model_config
+            .infer(&inference_request, clients.http_client, clients.credentials)
+            .await
+    })
+    .retry(evaluator.inner.retries.get_backoff())
+    .await?;
     let model_inference_result =
         ModelInferenceResponseWithMetadata::new(model_inference_response, &evaluator.inner.model);
     let text_content = match model_inference_result

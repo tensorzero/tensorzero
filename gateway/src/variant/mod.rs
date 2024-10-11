@@ -1,8 +1,11 @@
+use backon::ExponentialBuilder;
+use backon::Retryable;
 use futures::StreamExt;
 use serde::Deserialize;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use tokio::time::Duration;
 use uuid::Uuid;
 
 use crate::embeddings::EmbeddingModelConfig;
@@ -332,10 +335,15 @@ async fn infer_model_request<'a, 'request>(
     inference_config: &'request InferenceConfig<'request>,
     clients: &'request InferenceClients<'request>,
     inference_params: InferenceParams,
+    retry_config: &'a RetryConfig,
 ) -> Result<InferenceResult<'a>, Error> {
-    let model_inference_response = model_config
-        .infer(&request, clients.http_client, clients.credentials)
-        .await?;
+    let model_inference_response = (|| async {
+        model_config
+            .infer(&request, clients.http_client, clients.credentials)
+            .await
+    })
+    .retry(retry_config.get_backoff())
+    .await?;
     let model_inference_result =
         ModelInferenceResponseWithMetadata::new(model_inference_response, model_name);
     let inference_id = Uuid::now_v7();
@@ -361,6 +369,7 @@ async fn infer_model_request_stream<'request>(
     function: &'static FunctionConfig,
     clients: &'request InferenceClients<'request>,
     inference_params: InferenceParams,
+    retry_config: &'static RetryConfig,
 ) -> Result<
     (
         InferenceResultChunk,
@@ -369,9 +378,13 @@ async fn infer_model_request_stream<'request>(
     ),
     Error,
 > {
-    let (first_chunk, stream, raw_request, model_provider_name) = model_config
-        .infer_stream(&request, clients.http_client, clients.credentials)
-        .await?;
+    let (first_chunk, stream, raw_request, model_provider_name) = (|| async {
+        model_config
+            .infer_stream(&request, clients.http_client, clients.credentials)
+            .await
+    })
+    .retry(retry_config.get_backoff())
+    .await?;
     let model_used_info = ModelUsedInfo {
         model_name,
         model_provider_name,
@@ -383,6 +396,30 @@ async fn infer_model_request_stream<'request>(
     let stream =
         stream.map(move |chunk| chunk.map(|chunk| InferenceResultChunk::new(chunk, function)));
     Ok((first_chunk, Box::pin(stream), model_used_info))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RetryConfig {
+    pub num_retries: usize,
+    pub max_delay_s: f32,
+}
+
+impl Default for RetryConfig {
+    fn default() -> Self {
+        RetryConfig {
+            num_retries: 0,
+            max_delay_s: 10.0,
+        }
+    }
+}
+
+impl RetryConfig {
+    pub fn get_backoff(&self) -> backon::ExponentialBuilder {
+        ExponentialBuilder::default()
+            .with_jitter()
+            .with_max_delay(Duration::from_secs_f32(self.max_delay_s))
+            .with_max_times(self.num_retries)
+    }
 }
 
 #[cfg(test)]
@@ -665,6 +702,7 @@ mod tests {
             routing: vec![model_name.to_string()],
             providers: HashMap::from([(model_name.to_string(), dummy_provider_config)]),
         };
+        let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
         let result = infer_model_request(
             model_request.clone(),
@@ -674,6 +712,7 @@ mod tests {
             &inference_config,
             &clients,
             inference_params.clone(),
+            retry_config,
         )
         .await;
 
@@ -760,6 +799,7 @@ mod tests {
             &inference_config,
             &clients,
             inference_params.clone(),
+            retry_config,
         )
         .await;
 
@@ -803,6 +843,7 @@ mod tests {
             &inference_config,
             &clients,
             inference_params.clone(),
+            retry_config,
         )
         .await;
 
@@ -822,7 +863,7 @@ mod tests {
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
         };
-
+        let retry_config = Box::leak(Box::new(RetryConfig::default()));
         // Create a dummy function config (chat completion)
         let function_config = Box::leak(Box::new(FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
@@ -877,6 +918,7 @@ mod tests {
             function_config,
             &clients,
             inference_params.clone(),
+            retry_config,
         )
         .await;
 

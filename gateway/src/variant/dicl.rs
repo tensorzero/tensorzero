@@ -22,7 +22,7 @@ use crate::{
 
 use super::{
     infer_model_request, infer_model_request_stream, prepare_model_inference_request,
-    InferenceConfig, JsonMode, ModelUsedInfo, Variant,
+    InferenceConfig, JsonMode, ModelUsedInfo, RetryConfig, Variant,
 };
 
 /// The primary configuration for the Dicl variant
@@ -40,6 +40,7 @@ pub struct DiclConfig {
     pub max_tokens: Option<u32>,
     pub seed: Option<u32>,
     pub json_mode: JsonMode,
+    pub retries: RetryConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -55,6 +56,8 @@ pub struct UninitializedDiclConfig {
     pub seed: Option<u32>,
     #[serde(default)]
     pub json_mode: JsonMode,
+    #[serde(default)]
+    pub retries: RetryConfig,
 }
 
 impl Variant for DiclConfig {
@@ -105,6 +108,7 @@ impl Variant for DiclConfig {
             inference_config,
             clients,
             inference_params,
+            &self.retries,
         )
         .await?;
 
@@ -169,6 +173,7 @@ impl Variant for DiclConfig {
                 function,
                 clients,
                 inference_params,
+                &self.retries,
             )
             .await?;
 
@@ -508,6 +513,7 @@ impl UninitializedDiclConfig {
             max_tokens: self.max_tokens,
             seed: self.seed,
             json_mode: self.json_mode,
+            retries: self.retries,
         })
     }
 }

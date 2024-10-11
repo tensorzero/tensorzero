@@ -20,7 +20,7 @@ use crate::{
 
 use super::{
     infer_model_request, infer_model_request_stream, prepare_model_inference_request,
-    InferenceConfig, ModelUsedInfo, Variant,
+    InferenceConfig, ModelUsedInfo, RetryConfig, Variant,
 };
 
 #[derive(Debug, Default, Deserialize)]
@@ -37,6 +37,8 @@ pub struct ChatCompletionConfig {
     pub seed: Option<u32>,
     #[serde(default)]
     pub json_mode: JsonMode, // Only for JSON functions, not for chat functions
+    #[serde(default)]
+    pub retries: RetryConfig,
 }
 
 impl ChatCompletionConfig {
@@ -164,6 +166,7 @@ impl Variant for ChatCompletionConfig {
             inference_config,
             clients,
             inference_params,
+            &self.retries,
         )
         .await
     }
@@ -202,6 +205,7 @@ impl Variant for ChatCompletionConfig {
             function,
             clients,
             inference_params,
+            &self.retries,
         )
         .await
     }
@@ -362,6 +366,7 @@ mod tests {
             temperature: None,
             max_tokens: None,
             seed: None,
+            retries: RetryConfig::default(),
         };
 
         // Test case 1: Regular user message
