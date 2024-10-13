@@ -551,7 +551,9 @@ fn prefill_json_message(messages: Vec<AnthropicMessage>) -> Vec<AnthropicMessage
     messages
 }
 
-fn prefill_json_response(content: Vec<ContentBlock>) -> Result<Vec<ContentBlock>, Error> {
+pub(crate) fn prefill_json_response(
+    content: Vec<ContentBlock>,
+) -> Result<Vec<ContentBlock>, Error> {
     // Check if the content is a single text block
     if content.len() == 1 {
         if let ContentBlock::Text(text) = &content[0] {
@@ -572,7 +574,7 @@ fn prefill_json_response(content: Vec<ContentBlock>) -> Result<Vec<ContentBlock>
     Ok(content)
 }
 
-fn prefill_json_chunk_response(
+pub(crate) fn prefill_json_chunk_response(
     chunk: ProviderInferenceResponseChunk,
 ) -> ProviderInferenceResponseChunk {
     let mut chunk = chunk;
@@ -2178,5 +2180,85 @@ mod tests {
         })];
         let result = prefill_json_response(input.clone()).unwrap();
         assert_eq!(result, input);
+    }
+
+    #[test]
+    fn test_prefill_json_chunk_response() {
+        // Test case 1: Empty content
+        let inference_id = Uuid::now_v7();
+        let chunk = ProviderInferenceResponseChunk {
+            inference_id,
+            content: vec![],
+            created: 0,
+            usage: None,
+            raw_response: "".to_string(),
+            latency: Duration::from_millis(0),
+        };
+        let result = prefill_json_chunk_response(chunk);
+        assert_eq!(
+            result.content,
+            vec![ContentBlockChunk::Text(TextChunk {
+                text: "{".to_string(),
+                id: inference_id.to_string(),
+            })]
+        );
+        // Test case 2: Single text block
+        let inference_id = Uuid::now_v7();
+        let chunk = ProviderInferenceResponseChunk {
+            inference_id,
+            created: 0,
+            usage: None,
+            raw_response: "".to_string(),
+            latency: Duration::from_millis(0),
+            content: vec![ContentBlockChunk::Text(TextChunk {
+                text: "\"key\": \"value\"".to_string(),
+                id: inference_id.to_string(),
+            })],
+        };
+        let result = prefill_json_chunk_response(chunk);
+        assert_eq!(
+            result.content,
+            vec![ContentBlockChunk::Text(TextChunk {
+                text: "{\"key\": \"value\"".to_string(),
+                id: inference_id.to_string(),
+            })]
+        );
+
+        // Test case 3: Multiple blocks (should remain unchanged)
+        let chunk = ProviderInferenceResponseChunk {
+            inference_id: Uuid::now_v7(),
+            created: 0,
+            usage: None,
+            raw_response: "".to_string(),
+            latency: Duration::from_millis(0),
+            content: vec![
+                ContentBlockChunk::Text(TextChunk {
+                    text: "Block 1".to_string(),
+                    id: "test_id".to_string(),
+                }),
+                ContentBlockChunk::Text(TextChunk {
+                    text: "Block 2".to_string(),
+                    id: "test_id".to_string(),
+                }),
+            ],
+        };
+        let result = prefill_json_chunk_response(chunk.clone());
+        assert_eq!(result, chunk);
+
+        // Test case 4: Non-text block (should remain unchanged)
+        let chunk = ProviderInferenceResponseChunk {
+            inference_id: Uuid::now_v7(),
+            created: 0,
+            usage: None,
+            raw_response: "".to_string(),
+            latency: Duration::from_millis(0),
+            content: vec![ContentBlockChunk::ToolCall(ToolCallChunk {
+                id: "1".to_string(),
+                raw_name: "test_tool".to_string(),
+                raw_arguments: "{}".to_string(),
+            })],
+        };
+        let result = prefill_json_chunk_response(chunk.clone());
+        assert_eq!(result, chunk);
     }
 }
