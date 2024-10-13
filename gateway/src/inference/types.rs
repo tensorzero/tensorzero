@@ -102,7 +102,7 @@ pub enum FunctionType {
     Json,
 }
 
-#[derive(Clone, Default, Debug, PartialEq)]
+#[derive(Clone, Default, Debug, PartialEq, Serialize)]
 pub enum ModelInferenceRequestJsonMode {
     #[default]
     Off,
