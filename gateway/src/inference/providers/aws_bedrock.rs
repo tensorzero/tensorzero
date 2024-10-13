@@ -155,9 +155,9 @@ impl InferenceProvider for AWSBedrockProvider {
             output,
             latency,
             raw_request,
-            model_id: self.model_id.clone(),
-            function_type: request.function_type.clone(),
-            json_mode: request.json_mode.clone(),
+            model_id: &self.model_id,
+            function_type: &request.function_type,
+            json_mode: &request.json_mode,
         }
         .try_into()
     }
@@ -557,16 +557,16 @@ impl TryFrom<&RequestMessage> for Message {
 }
 
 #[derive(Debug, PartialEq)]
-struct ConverseOutputWithMetadata {
+struct ConverseOutputWithMetadata<'a> {
     output: ConverseOutput,
     latency: Latency,
     raw_request: String,
-    model_id: String,
-    function_type: FunctionType,
-    json_mode: ModelInferenceRequestJsonMode,
+    model_id: &'a str,
+    function_type: &'a FunctionType,
+    json_mode: &'a ModelInferenceRequestJsonMode,
 }
 
-impl TryFrom<ConverseOutputWithMetadata> for ProviderInferenceResponse {
+impl<'a> TryFrom<ConverseOutputWithMetadata<'a>> for ProviderInferenceResponse {
     type Error = Error;
 
     fn try_from(value: ConverseOutputWithMetadata) -> Result<Self, Self::Error> {
@@ -600,9 +600,9 @@ impl TryFrom<ConverseOutputWithMetadata> for ProviderInferenceResponse {
             .collect::<Result<Vec<ContentBlock>, _>>()?;
 
         if model_id.contains("claude")
-            && function_type == FunctionType::Json
-            && (json_mode == ModelInferenceRequestJsonMode::Strict
-                || json_mode == ModelInferenceRequestJsonMode::On)
+            && *function_type == FunctionType::Json
+            && (*json_mode == ModelInferenceRequestJsonMode::Strict
+                || *json_mode == ModelInferenceRequestJsonMode::On)
         {
             content = prefill_json_response(content)?;
         }

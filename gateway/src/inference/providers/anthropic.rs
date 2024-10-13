@@ -92,8 +92,8 @@ impl InferenceProvider for AnthropicProvider {
                 response,
                 latency,
                 request: request_body,
-                function_type: request.function_type.clone(),
-                json_mode: request.json_mode.clone(),
+                function_type: &request.function_type,
+                json_mode: &request.json_mode,
             };
             Ok(response_with_latency.try_into()?)
         } else {
@@ -673,8 +673,8 @@ struct AnthropicResponseWithMetadata<'a> {
     response: AnthropicResponse,
     latency: Latency,
     request: AnthropicRequestBody<'a>,
-    function_type: FunctionType,
-    json_mode: ModelInferenceRequestJsonMode,
+    function_type: &'a FunctionType,
+    json_mode: &'a ModelInferenceRequestJsonMode,
 }
 
 impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -1589,8 +1589,8 @@ mod tests {
             response: anthropic_response_body.clone(),
             latency: latency.clone(),
             request: request_body,
-            function_type: FunctionType::Chat,
-            json_mode: ModelInferenceRequestJsonMode::Off,
+            function_type: &FunctionType::Chat,
+            json_mode: &ModelInferenceRequestJsonMode::Off,
         };
 
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
@@ -1639,8 +1639,8 @@ mod tests {
             response: anthropic_response_body.clone(),
             latency: latency.clone(),
             request: request_body,
-            function_type: FunctionType::Chat,
-            json_mode: ModelInferenceRequestJsonMode::Off,
+            function_type: &FunctionType::Chat,
+            json_mode: &ModelInferenceRequestJsonMode::Off,
         };
 
         let inference_response: ProviderInferenceResponse = body_with_latency.try_into().unwrap();
@@ -1699,8 +1699,8 @@ mod tests {
             response: anthropic_response_body.clone(),
             latency: latency.clone(),
             request: request_body,
-            function_type: FunctionType::Chat,
-            json_mode: ModelInferenceRequestJsonMode::Off,
+            function_type: &FunctionType::Chat,
+            json_mode: &ModelInferenceRequestJsonMode::Off,
         };
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
         assert_eq!(
