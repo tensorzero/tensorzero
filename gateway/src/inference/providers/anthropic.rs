@@ -14,7 +14,10 @@ use uuid::Uuid;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
-use crate::inference::types::{ContentBlock, ContentBlockChunk, Latency, Role, Text};
+use crate::inference::types::{
+    ContentBlock, ContentBlockChunk, FunctionType, Latency, ModelInferenceRequestJsonMode, Role,
+    Text,
+};
 use crate::inference::types::{
     ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream, RequestMessage, TextChunk, Usage,
@@ -89,6 +92,8 @@ impl InferenceProvider for AnthropicProvider {
                 response,
                 latency,
                 request: request_body,
+                function_type: &request.function_type,
+                json_mode: &request.json_mode,
             };
             Ok(response_with_latency.try_into()?)
         } else {
@@ -142,7 +147,7 @@ impl InferenceProvider for AnthropicProvider {
                 message: format!("Error sending request to Anthropic: {e}"),
             })?;
         let mut stream = Box::pin(stream_anthropic(event_source, start_time));
-        let chunk = match stream.next().await {
+        let mut chunk = match stream.next().await {
             Some(Ok(chunk)) => chunk,
             Some(Err(e)) => return Err(e),
             None => {
@@ -151,6 +156,13 @@ impl InferenceProvider for AnthropicProvider {
                 })
             }
         };
+        if matches!(
+            request.json_mode,
+            ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
+        ) && matches!(request.function_type, FunctionType::Json)
+        {
+            chunk = prefill_json_chunk_response(chunk);
+        }
         Ok((chunk, stream, raw_request))
     }
 }
@@ -427,6 +439,15 @@ impl<'a> AnthropicRequestBody<'a> {
             .map(AnthropicMessage::try_from)
             .collect::<Result<Vec<_>, _>>()?;
         let messages = prepare_messages(request_messages)?;
+        let messages = if matches!(
+            request.json_mode,
+            ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
+        ) && matches!(request.function_type, FunctionType::Json)
+        {
+            prefill_json_message(messages)
+        } else {
+            messages
+        };
         let tools = request
             .tool_config
             .as_ref()
@@ -518,6 +539,70 @@ fn prepare_messages(messages: Vec<AnthropicMessage>) -> Result<Vec<AnthropicMess
     Ok(consolidated_messages)
 }
 
+fn prefill_json_message(messages: Vec<AnthropicMessage>) -> Vec<AnthropicMessage> {
+    let mut messages = messages;
+    // Add a JSON-prefill message for Anthropic's JSON mode
+    messages.push(AnthropicMessage {
+        role: AnthropicRole::Assistant,
+        content: vec![AnthropicMessageContent::Text {
+            text: "Here is the JSON requested:\n{",
+        }],
+    });
+    messages
+}
+
+pub(crate) fn prefill_json_response(
+    content: Vec<ContentBlock>,
+) -> Result<Vec<ContentBlock>, Error> {
+    // Check if the content is a single text block
+    if content.len() == 1 {
+        if let ContentBlock::Text(text) = &content[0] {
+            // If it's a single text block, add a "{" to the beginning
+            return Ok(vec![ContentBlock::Text(Text {
+                text: format!("{{{}", text.text.trim()),
+            })]);
+        }
+    }
+    // If it's not a single text block, return content as-is but log an error
+    Error::OutputParsing {
+        message: "Expected a single text block in the response from Anthropic".to_string(),
+        raw_output: serde_json::to_string(&content).map_err(|e| Error::Inference {
+            message: format!("Error serializing content as JSON: {e}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"),
+        })?,
+    }
+    .log();
+    Ok(content)
+}
+
+pub(crate) fn prefill_json_chunk_response(
+    chunk: ProviderInferenceResponseChunk,
+) -> ProviderInferenceResponseChunk {
+    let mut chunk = chunk;
+    if chunk.content.is_empty() {
+        chunk.content = vec![ContentBlockChunk::Text(TextChunk {
+            text: "{".to_string(),
+            id: chunk.inference_id.to_string(),
+        })];
+    } else if chunk.content.len() == 1 {
+        if let ContentBlockChunk::Text(TextChunk { text, .. }) = &chunk.content[0] {
+            // Add a "{" to the beginning of the text
+            chunk.content = vec![ContentBlockChunk::Text(TextChunk {
+                text: format!("{{{}", text.trim_start()),
+                id: chunk.inference_id.to_string(),
+            })];
+        }
+    } else {
+        Error::OutputParsing {
+            message: "Expected a single text block in the response from Anthropic".to_string(),
+            raw_output: serde_json::to_string(&chunk.content).map_err(|e| Error::Inference {
+                message: format!("Error serializing content as JSON: {e}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"),
+            }).unwrap_or_default()
+        }
+        .log();
+    }
+    chunk
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 struct AnthropicError {
     error: AnthropicErrorBody,
@@ -596,6 +681,8 @@ struct AnthropicResponseWithMetadata<'a> {
     response: AnthropicResponse,
     latency: Latency,
     request: AnthropicRequestBody<'a>,
+    function_type: &'a FunctionType,
+    json_mode: &'a ModelInferenceRequestJsonMode,
 }
 
 impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -605,6 +692,8 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
             response,
             latency,
             request: request_body,
+            function_type,
+            json_mode,
         } = value;
 
         let raw_request =
@@ -622,6 +711,15 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
             .into_iter()
             .map(|block| block.try_into())
             .collect::<Result<Vec<_>, _>>()?;
+        let content = if matches!(
+            json_mode,
+            ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
+        ) && matches!(function_type, FunctionType::Json)
+        {
+            prefill_json_response(content)?
+        } else {
+            content
+        };
 
         Ok(ProviderInferenceResponse::new(
             content,
@@ -1499,6 +1597,8 @@ mod tests {
             response: anthropic_response_body.clone(),
             latency: latency.clone(),
             request: request_body,
+            function_type: &FunctionType::Chat,
+            json_mode: &ModelInferenceRequestJsonMode::Off,
         };
 
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
@@ -1547,6 +1647,8 @@ mod tests {
             response: anthropic_response_body.clone(),
             latency: latency.clone(),
             request: request_body,
+            function_type: &FunctionType::Chat,
+            json_mode: &ModelInferenceRequestJsonMode::Off,
         };
 
         let inference_response: ProviderInferenceResponse = body_with_latency.try_into().unwrap();
@@ -1605,6 +1707,8 @@ mod tests {
             response: anthropic_response_body.clone(),
             latency: latency.clone(),
             request: request_body,
+            function_type: &FunctionType::Chat,
+            json_mode: &ModelInferenceRequestJsonMode::Off,
         };
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
         assert_eq!(
@@ -2007,5 +2111,162 @@ mod tests {
             }
             _ => panic!("Expected Anthropic credentials"),
         }
+    }
+
+    #[test]
+    fn test_prefill_json_message() {
+        // Create a sample input message
+        let input_messages = vec![AnthropicMessage {
+            role: AnthropicRole::User,
+            content: vec![AnthropicMessageContent::Text {
+                text: "Generate some JSON",
+            }],
+        }];
+
+        // Call the function
+        let result = prefill_json_message(input_messages);
+
+        // Assert that the result has one more message than the input
+        assert_eq!(result.len(), 2);
+
+        // Check the original message is unchanged
+        assert_eq!(result[0].role, AnthropicRole::User);
+        assert_eq!(
+            result[0].content,
+            vec![AnthropicMessageContent::Text {
+                text: "Generate some JSON",
+            }]
+        );
+
+        // Check the new message is correct
+        assert_eq!(result[1].role, AnthropicRole::Assistant);
+        assert_eq!(
+            result[1].content,
+            vec![AnthropicMessageContent::Text {
+                text: "Here is the JSON requested:\n{",
+            }]
+        );
+    }
+
+    #[test]
+    fn test_prefill_json_response() {
+        // Test case 1: Single text block
+        let input = vec![ContentBlock::Text(Text {
+            text: "  \"key\": \"value\"}".to_string(),
+        })];
+        let result = prefill_json_response(input).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(
+            result[0],
+            ContentBlock::Text(Text {
+                text: "{\"key\": \"value\"}".to_string(),
+            })
+        );
+
+        // Test case 2: Multiple blocks
+        let input = vec![
+            ContentBlock::Text(Text {
+                text: "Block 1".to_string(),
+            }),
+            ContentBlock::Text(Text {
+                text: "Block 2".to_string(),
+            }),
+        ];
+        let result = prefill_json_response(input.clone()).unwrap();
+        assert_eq!(result, input);
+
+        // Test case 3: Empty input
+        let input = vec![];
+        let result = prefill_json_response(input.clone()).unwrap();
+        assert_eq!(result, input);
+
+        // Test case 4: Non-text block
+        let input = vec![ContentBlock::ToolCall(ToolCall {
+            id: "1".to_string(),
+            name: "test_tool".to_string(),
+            arguments: "{}".to_string(),
+        })];
+        let result = prefill_json_response(input.clone()).unwrap();
+        assert_eq!(result, input);
+    }
+
+    #[test]
+    fn test_prefill_json_chunk_response() {
+        // Test case 1: Empty content
+        let inference_id = Uuid::now_v7();
+        let chunk = ProviderInferenceResponseChunk {
+            inference_id,
+            content: vec![],
+            created: 0,
+            usage: None,
+            raw_response: "".to_string(),
+            latency: Duration::from_millis(0),
+        };
+        let result = prefill_json_chunk_response(chunk);
+        assert_eq!(
+            result.content,
+            vec![ContentBlockChunk::Text(TextChunk {
+                text: "{".to_string(),
+                id: inference_id.to_string(),
+            })]
+        );
+        // Test case 2: Single text block
+        let inference_id = Uuid::now_v7();
+        let chunk = ProviderInferenceResponseChunk {
+            inference_id,
+            created: 0,
+            usage: None,
+            raw_response: "".to_string(),
+            latency: Duration::from_millis(0),
+            content: vec![ContentBlockChunk::Text(TextChunk {
+                text: "\"key\": \"value ".to_string(),
+                id: inference_id.to_string(),
+            })],
+        };
+        let result = prefill_json_chunk_response(chunk);
+        assert_eq!(
+            result.content,
+            vec![ContentBlockChunk::Text(TextChunk {
+                text: "{\"key\": \"value ".to_string(),
+                id: inference_id.to_string(),
+            })]
+        );
+
+        // Test case 3: Multiple blocks (should remain unchanged)
+        let chunk = ProviderInferenceResponseChunk {
+            inference_id: Uuid::now_v7(),
+            created: 0,
+            usage: None,
+            raw_response: "".to_string(),
+            latency: Duration::from_millis(0),
+            content: vec![
+                ContentBlockChunk::Text(TextChunk {
+                    text: "Block 1".to_string(),
+                    id: "test_id".to_string(),
+                }),
+                ContentBlockChunk::Text(TextChunk {
+                    text: "Block 2".to_string(),
+                    id: "test_id".to_string(),
+                }),
+            ],
+        };
+        let result = prefill_json_chunk_response(chunk.clone());
+        assert_eq!(result, chunk);
+
+        // Test case 4: Non-text block (should remain unchanged)
+        let chunk = ProviderInferenceResponseChunk {
+            inference_id: Uuid::now_v7(),
+            created: 0,
+            usage: None,
+            raw_response: "".to_string(),
+            latency: Duration::from_millis(0),
+            content: vec![ContentBlockChunk::ToolCall(ToolCallChunk {
+                id: "1".to_string(),
+                raw_name: "test_tool".to_string(),
+                raw_arguments: "{}".to_string(),
+            })],
+        };
+        let result = prefill_json_chunk_response(chunk.clone());
+        assert_eq!(result, chunk);
     }
 }

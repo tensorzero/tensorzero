@@ -102,7 +102,7 @@ pub enum FunctionType {
     Json,
 }
 
-#[derive(Clone, Default, Debug, PartialEq)]
+#[derive(Clone, Default, Debug, PartialEq, Serialize)]
 pub enum ModelInferenceRequestJsonMode {
     #[default]
     Off,
@@ -240,7 +240,7 @@ pub struct JsonInferenceOutput {
 /// converted into an InferenceResponseChunk and sent to the client.
 /// We then collect all the InferenceResultChunks into an InferenceResult for validation and storage after the fact.
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ProviderInferenceResponseChunk {
     pub inference_id: Uuid,
     pub content: Vec<ContentBlockChunk>,
