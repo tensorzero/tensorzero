@@ -587,10 +587,18 @@ pub(crate) fn prefill_json_chunk_response(
         if let ContentBlockChunk::Text(TextChunk { text, .. }) = &chunk.content[0] {
             // Add a "{" to the beginning of the text
             chunk.content = vec![ContentBlockChunk::Text(TextChunk {
-                text: format!("{{{}", text.trim()),
+                text: format!("{{{}", text.trim_start()),
                 id: chunk.inference_id.to_string(),
             })];
         }
+    } else {
+        Error::OutputParsing {
+            message: "Expected a single text block in the response from Anthropic".to_string(),
+            raw_output: serde_json::to_string(&chunk.content).map_err(|e| Error::Inference {
+                message: format!("Error serializing content as JSON: {e}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"),
+            }).unwrap_or_default()
+        }
+        .log();
     }
     chunk
 }
@@ -2211,7 +2219,7 @@ mod tests {
             raw_response: "".to_string(),
             latency: Duration::from_millis(0),
             content: vec![ContentBlockChunk::Text(TextChunk {
-                text: "\"key\": \"value\"".to_string(),
+                text: "\"key\": \"value ".to_string(),
                 id: inference_id.to_string(),
             })],
         };
@@ -2219,7 +2227,7 @@ mod tests {
         assert_eq!(
             result.content,
             vec![ContentBlockChunk::Text(TextChunk {
-                text: "{\"key\": \"value\"".to_string(),
+                text: "{\"key\": \"value ".to_string(),
                 id: inference_id.to_string(),
             })]
         );
