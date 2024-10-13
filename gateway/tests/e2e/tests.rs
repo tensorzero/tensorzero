@@ -8,3 +8,4 @@ mod health;
 mod inference;
 mod prometheus;
 mod providers;
+mod retries;

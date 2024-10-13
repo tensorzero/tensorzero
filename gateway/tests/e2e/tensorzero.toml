@@ -216,6 +216,20 @@ type = "dummy"
 dynamic_credentials = true
 model_name = "test_key"
 
+[models.flaky_basic_test]
+routing = ["dummy"]
+
+[models.flaky_basic_test.providers.dummy]
+type = "dummy"
+model_name = "flaky_basic_test"
+
+[models.flaky_best_of_n_judge]
+routing = ["dummy"]
+
+[models.flaky_best_of_n_judge.providers.dummy]
+type = "dummy"
+model_name = "flaky_best_of_n_judge"
+
 [embedding_models.text-embedding-3-small]
 routing = ["openai"]
 
@@ -337,6 +351,13 @@ type = "chat_completion"
 model = "microsoft/Phi-3.5-mini-instruct"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
+
+[functions.basic_test.variants.flaky]
+type = "chat_completion"
+model = "flaky_basic_test"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+retries = { num_retries = 5, max_delay_s = 0.1 }
 
 [functions.basic_test.variants.dicl]
 type = "experimental_dynamic_in_context_learning"
@@ -943,6 +964,17 @@ system_template = "../../fixtures/config/functions/basic_test/prompt/system_temp
 [functions.best_of_n.variants.best_of_n_variant.evaluator]
 model = "gemini-1.5-flash-001"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.best_of_n.variants.flaky_best_of_n_variant]
+type = "experimental_best_of_n_sampling"
+weight = 1
+candidates = ["variant0", "variant1"]
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.best_of_n.variants.flaky_best_of_n_variant.evaluator]
+model = "flaky_best_of_n_judge"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+retries = { num_retries = 5, max_delay_s = 0.1 }
 
 [functions.best_of_n_json]
 type = "json"
