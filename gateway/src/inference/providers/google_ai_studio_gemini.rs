@@ -447,7 +447,7 @@ enum GeminiResponseMimeType {
     ApplicationJson,
 }
 
-// TODO (if needed): add the other options [here](https://ai.google.dev/api/generate-content#v1beta.GenerationConfigg)
+// TODO (if needed): add the other options [here](https://ai.google.dev/api/generate-content#v1beta.GenerationConfig)
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GeminiGenerationConfig<'a> {
