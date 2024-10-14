@@ -116,3 +116,21 @@ pub(crate) async fn select_feedback_clickhouse(
     let json: Value = serde_json::from_str(&text).ok()?;
     Some(json)
 }
+
+pub(crate) async fn select_feedback_tags_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    metric_name: &str,
+    tag_key: &str,
+    tag_value: &str,
+) -> Option<Value> {
+    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+
+    let query = format!(
+        "SELECT * FROM FeedbackTags WHERE metric_name = '{}' AND tag_key = '{}' AND tag_value = '{}' FORMAT JSONEachRow",
+        metric_name, tag_key, tag_value
+    );
+
+    let text = clickhouse_connection_info.run_query(query).await.unwrap();
+    let json: Value = serde_json::from_str(&text).ok()?;
+    Some(json)
+}
