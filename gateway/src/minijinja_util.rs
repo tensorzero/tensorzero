@@ -158,12 +158,7 @@ You have been provided with a set of responses from various open-source models t
 query.
 
 {%- endif %}
-Your task is to synthesize these responses into a single, high-quality response. It is crucial
-to critically evaluate the information provided in these responses, recognizing that some of it may
-be biased or incorrect. Your response should not simply replicate the given answers but should
-offer a refined, accurate, and comprehensive reply to the instruction. Ensure your response is
-well-structured, coherent, and adheres to the highest standards of accuracy and reliability.
-Below will be first any messages leading up to this point and then a final message containing the set of candidate responses."#;
+Your task is to synthesize these responses into a single, high-quality response. It is crucial to critically evaluate the information provided in these responses, recognizing that some of it may be biased or incorrect. Your response should not simply replicate the given answers but should offer a refined, accurate, and comprehensive reply to the instruction and take the best from all the responses. Ensure your response is well-structured, coherent, and adheres to the highest standards of accuracy and reliability.  Below will be: first, any messages leading up to this point, and then, a final message containing the set of candidate responses."#;
 
 const MIXTURE_OF_N_FUSER_CANDIDATES: &str = r#"Here are the candidate answers (with the index and a row of ------ separating):
 {% for candidate in candidates -%}
