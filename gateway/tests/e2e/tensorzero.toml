@@ -244,6 +244,27 @@ routing = ["dummy"]
 type = "dummy"
 model_name = "flaky_best_of_n_judge"
 
+[models.alternate]
+routing = ["dummy"]
+
+[models.alternate.providers.dummy]
+type = "dummy"
+model_name = "alternate"
+
+[models.json_beatles_1]
+routing = ["dummy"]
+
+[models.json_beatles_1.providers.dummy]
+type = "dummy"
+model_name = "json_beatles_1"
+
+[models.json_beatles_2]
+routing = ["dummy"]
+
+[models.json_beatles_2.providers.dummy]
+type = "dummy"
+model_name = "json_beatles_2"
+
 [embedding_models.text-embedding-3-small]
 routing = ["openai"]
 
@@ -1111,6 +1132,60 @@ system_template = "../../fixtures/config/functions/basic_test/prompt/system_temp
 [functions.best_of_n_json.variants.best_of_n_variant.evaluator]
 model = "gemini-1.5-flash-001"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.mixture_of_n]
+type = "chat"
+system_schema = "../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.mixture_of_n.variants.variant0]
+type = "chat_completion"
+weight = 0
+model = "test"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.mixture_of_n.variants.variant1]
+type = "chat_completion"
+weight = 0
+model = "alternate"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.mixture_of_n.variants.mixture_of_n_variant]
+type = "experimental_mixture_of_n"
+weight = 1
+candidates = ["variant0", "variant1"]
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.mixture_of_n.variants.mixture_of_n_variant.fuser]
+model = "gpt-4o-mini-2024-07-18"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.mixture_of_n_json]
+type = "json"
+system_schema = "../../fixtures/config/functions/basic_test/system_schema.json"
+output_schema = "../../fixtures/config/functions/mixture_of_n_json/output_schema.json"
+
+[functions.mixture_of_n_json.variants.variant0]
+type = "chat_completion"
+weight = 0
+model = "json_beatles_1"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.mixture_of_n_json.variants.variant1]
+type = "chat_completion"
+weight = 0
+model = "json_beatles_2"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.mixture_of_n_json.variants.mixture_of_n_variant]
+type = "experimental_mixture_of_n"
+weight = 1
+candidates = ["variant0", "variant1"]
+
+[functions.mixture_of_n_json.variants.mixture_of_n_variant.fuser]
+model = "gpt-4o-mini-2024-07-18"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+json_mode = "strict"
+
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │

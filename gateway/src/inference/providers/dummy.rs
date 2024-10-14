@@ -50,6 +50,9 @@ pub static DUMMY_INFER_RESPONSE_RAW: &str = r#"{
   ]
 }"#;
 
+pub static ALTERNATE_INFER_RESPONSE_CONTENT: &str =
+    "Megumin chanted her spell, but instead of an explosion, a gentle rain began to fall.";
+
 lazy_static! {
     pub static ref DUMMY_TOOL_RESPONSE: Value = json!({"location": "Brooklyn", "units": "celsius"});
     // This is the same as DUMMY_TOOL_RESPONSE, but with the units capitalized
@@ -157,6 +160,8 @@ impl InferenceProvider for DummyProvider {
             })],
             "json" => vec![DUMMY_JSON_RESPONSE_RAW.to_string().into()],
             "json_goodbye" => vec![DUMMY_JSON_GOODBYE_RESPONSE_RAW.to_string().into()],
+            "json_beatles_1" => vec![r#"{"names":["John", "George"]}"#.to_string().into()],
+            "json_beatles_2" => vec![r#"{"names":["Paul", "Ringo"]}"#.to_string().into()],
             "best_of_n_0" => {
                 vec![r#"{"thinking": "hmmm", "answer_choice": 0}"#.to_string().into()]
             }
@@ -169,6 +174,7 @@ impl InferenceProvider for DummyProvider {
             "flaky_best_of_n_judge" => {
                 vec![r#"{"thinking": "hmmm", "answer_choice": 0}"#.to_string().into()]
             }
+            "alternate" => vec![ALTERNATE_INFER_RESPONSE_CONTENT.to_string().into()],
             _ => vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()],
         };
         let raw_request = DUMMY_RAW_REQUEST.to_string();

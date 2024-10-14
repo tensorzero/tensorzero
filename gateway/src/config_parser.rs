@@ -15,6 +15,7 @@ use crate::tool::{
 use crate::variant::best_of_n_sampling::BestOfNSamplingConfig;
 use crate::variant::chat_completion::ChatCompletionConfig;
 use crate::variant::dicl::UninitializedDiclConfig;
+use crate::variant::mixture_of_n::MixtureOfNConfig;
 use crate::variant::{Variant, VariantConfig};
 
 #[derive(Debug, Default)]
@@ -431,6 +432,8 @@ pub enum UninitializedVariantConfig {
     BestOfNSampling(BestOfNSamplingConfig),
     #[serde(rename = "experimental_dynamic_in_context_learning")]
     Dicl(UninitializedDiclConfig),
+    #[serde(rename = "experimental_mixture_of_n")]
+    MixtureOfN(MixtureOfNConfig),
 }
 
 impl UninitializedVariantConfig {
@@ -445,6 +448,7 @@ impl UninitializedVariantConfig {
             UninitializedVariantConfig::Dicl(params) => {
                 Ok(VariantConfig::Dicl(params.load(base_path)?))
             }
+            UninitializedVariantConfig::MixtureOfN(params) => Ok(VariantConfig::MixtureOfN(params)),
         }
     }
 }
