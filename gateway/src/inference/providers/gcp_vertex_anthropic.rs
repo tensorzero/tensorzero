@@ -14,7 +14,10 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
 use crate::inference::providers::gcp_vertex_gemini::GCPCredentials;
 use crate::inference::providers::provider_trait::InferenceProvider;
-use crate::inference::types::{ContentBlock, ContentBlockChunk, Latency, Role, Text, TextChunk};
+use crate::inference::types::{
+    ContentBlock, ContentBlockChunk, FunctionType, Latency, ModelInferenceRequestJsonMode, Role,
+    Text, TextChunk,
+};
 use crate::inference::types::{
     ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream, RequestMessage, Usage,
@@ -22,6 +25,7 @@ use crate::inference::types::{
 use crate::model::ProviderCredentials;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
+use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
 use super::provider_trait::HasCredentials;
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
@@ -88,6 +92,8 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                 response,
                 latency,
                 request: request_body,
+                function_type: &request.function_type,
+                json_mode: &request.json_mode,
             };
             Ok(response_with_latency.try_into()?)
         } else {
@@ -139,7 +145,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                 message: format!("Error sending request to Anthropic: {e}"),
             })?;
         let mut stream = Box::pin(stream_anthropic(event_source, start_time));
-        let chunk = match stream.next().await {
+        let mut chunk = match stream.next().await {
             Some(Ok(chunk)) => chunk,
             Some(Err(e)) => return Err(e),
             None => {
@@ -148,6 +154,13 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                 })
             }
         };
+        if matches!(
+            request.json_mode,
+            ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
+        ) && matches!(request.function_type, FunctionType::Json)
+        {
+            chunk = prefill_json_chunk_response(chunk);
+        }
         Ok((chunk, stream, raw_request))
     }
 }
@@ -426,6 +439,15 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
             .map(GCPVertexAnthropicMessage::try_from)
             .collect::<Result<Vec<_>, _>>()?;
         let messages = prepare_messages(request_messages)?;
+        let messages = if matches!(
+            request.json_mode,
+            ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
+        ) && matches!(request.function_type, FunctionType::Json)
+        {
+            prefill_json_message(messages)
+        } else {
+            messages
+        };
         let tools = request
             .tool_config
             .as_ref()
@@ -519,6 +541,19 @@ fn prepare_messages(
     Ok(consolidated_messages)
 }
 
+fn prefill_json_message(
+    mut messages: Vec<GCPVertexAnthropicMessage>,
+) -> Vec<GCPVertexAnthropicMessage> {
+    // Add a JSON-prefill message for Anthropic's JSON mode
+    messages.push(GCPVertexAnthropicMessage {
+        role: GCPVertexAnthropicRole::Assistant,
+        content: vec![GCPVertexAnthropicMessageContent::Text {
+            text: "Here is the JSON requested:\n{",
+        }],
+    });
+    messages
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 struct GCPVertexAnthropicError {
     error: GCPVertexAnthropicErrorBody,
@@ -597,6 +632,8 @@ struct GCPVertexAnthropicResponseWithMetadata<'a> {
     response: GCPVertexAnthropicResponse,
     latency: Latency,
     request: GCPVertexAnthropicRequestBody<'a>,
+    function_type: &'a FunctionType,
+    json_mode: &'a ModelInferenceRequestJsonMode,
 }
 
 impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -606,6 +643,8 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
             response,
             latency,
             request,
+            function_type,
+            json_mode,
         } = value;
 
         let raw_response =
@@ -621,6 +660,16 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
         let raw_request = serde_json::to_string(&request).map_err(|e| Error::AnthropicServer {
             message: format!("Error serializing request to GCP Vertex Anthropic: {e}"),
         })?;
+
+        let content = if matches!(
+            json_mode,
+            ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
+        ) && matches!(function_type, FunctionType::Json)
+        {
+            prefill_json_response(content)?
+        } else {
+            content
+        };
 
         Ok(ProviderInferenceResponse::new(
             content,
@@ -1510,6 +1559,8 @@ mod tests {
             response: anthropic_response_body.clone(),
             latency: latency.clone(),
             request: request_body,
+            function_type: &FunctionType::Chat,
+            json_mode: &ModelInferenceRequestJsonMode::Off,
         };
 
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
@@ -1557,6 +1608,8 @@ mod tests {
             response: anthropic_response_body.clone(),
             latency: latency.clone(),
             request: request_body,
+            function_type: &FunctionType::Chat,
+            json_mode: &ModelInferenceRequestJsonMode::Off,
         };
 
         let inference_response: ProviderInferenceResponse = body_with_latency.try_into().unwrap();
@@ -1614,6 +1667,8 @@ mod tests {
             response: anthropic_response_body.clone(),
             latency: latency.clone(),
             request: request_body,
+            function_type: &FunctionType::Chat,
+            json_mode: &ModelInferenceRequestJsonMode::Off,
         };
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
         assert_eq!(
@@ -1988,5 +2043,34 @@ mod tests {
             }
             _ => panic!("Expected GCP Vertex Anthropic credentials"),
         }
+    }
+    #[test]
+    fn test_prefill_json_message() {
+        let input_messages = vec![GCPVertexAnthropicMessage {
+            role: GCPVertexAnthropicRole::User,
+            content: vec![GCPVertexAnthropicMessageContent::Text {
+                text: "Generate some JSON",
+            }],
+        }];
+
+        let result = prefill_json_message(input_messages);
+
+        assert_eq!(result.len(), 2);
+
+        assert_eq!(result[0].role, GCPVertexAnthropicRole::User);
+        assert_eq!(
+            result[0].content,
+            vec![GCPVertexAnthropicMessageContent::Text {
+                text: "Generate some JSON",
+            }]
+        );
+
+        assert_eq!(result[1].role, GCPVertexAnthropicRole::Assistant);
+        assert_eq!(
+            result[1].content,
+            vec![GCPVertexAnthropicMessageContent::Text {
+                text: "Here is the JSON requested:\n{",
+            }]
+        );
     }
 }

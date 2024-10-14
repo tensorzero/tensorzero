@@ -1,4 +1,6 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
+use std::sync::Mutex;
 use std::time::Duration;
 
 use lazy_static::lazy_static;
@@ -53,6 +55,7 @@ lazy_static! {
     // This is the same as DUMMY_TOOL_RESPONSE, but with the units capitalized
     // Since that field is an enum, this should fail validation
     pub static ref DUMMY_BAD_TOOL_RESPONSE: Value = json!({"location": "Brooklyn", "units": "Celsius"});
+    static ref FLAKY_COUNTERS: Mutex<HashMap<String, u16>> = Mutex::new(HashMap::new());
 }
 pub static DUMMY_JSON_RESPONSE_RAW: &str = r#"{"answer":"Hello"}"#;
 pub static DUMMY_JSON_GOODBYE_RESPONSE_RAW: &str = r#"{"answer":"Goodbye"}"#;
@@ -95,6 +98,26 @@ impl InferenceProvider for DummyProvider {
         _http_client: &'a reqwest::Client,
         api_key: ProviderCredentials<'a>,
     ) -> Result<ProviderInferenceResponse, Error> {
+        // Check for flaky models
+        if self.model_name.starts_with("flaky_") {
+            #[allow(clippy::expect_used)]
+            let mut counters = FLAKY_COUNTERS
+                .lock()
+                .expect("FLAKY_COUNTERS mutex is poisoned");
+            let counter = counters.entry(self.model_name.clone()).or_insert(0);
+            *counter += 1;
+
+            // Fail on even-numbered calls
+            if *counter % 2 == 0 {
+                return Err(Error::InferenceClient {
+                    message: format!(
+                        "Flaky model '{}' failed on call number {}",
+                        self.model_name, *counter
+                    ),
+                });
+            }
+        }
+
         if self.model_name == "error" {
             return Err(Error::InferenceClient {
                 message: "Error sending request to Dummy provider.".to_string(),
@@ -143,6 +166,9 @@ impl InferenceProvider for DummyProvider {
             "best_of_n_big" => {
                 vec![r#"{"thinking": "hmmm", "answer_choice": 100}"#.to_string().into()]
             }
+            "flaky_best_of_n_judge" => {
+                vec![r#"{"thinking": "hmmm", "answer_choice": 0}"#.to_string().into()]
+            }
             _ => vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()],
         };
         let raw_request = DUMMY_RAW_REQUEST.to_string();
@@ -188,6 +214,26 @@ impl InferenceProvider for DummyProvider {
         ),
         Error,
     > {
+        // Check for flaky models
+        if self.model_name.starts_with("flaky_") {
+            #[allow(clippy::expect_used)]
+            let mut counters = FLAKY_COUNTERS
+                .lock()
+                .expect("FLAKY_COUNTERS mutex is poisoned");
+            let counter = counters.entry(self.model_name.clone()).or_insert(0);
+            *counter += 1;
+
+            // Fail on even-numbered calls
+            if *counter % 2 == 0 {
+                return Err(Error::InferenceClient {
+                    message: format!(
+                        "Flaky model '{}' failed on call number {}",
+                        self.model_name, *counter
+                    ),
+                });
+            }
+        }
+
         if self.model_name == "error" {
             return Err(Error::InferenceClient {
                 message: "Error sending request to Dummy provider.".to_string(),

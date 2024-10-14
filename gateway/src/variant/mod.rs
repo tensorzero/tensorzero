@@ -1,8 +1,11 @@
+use backon::ExponentialBuilder;
+use backon::Retryable;
 use futures::StreamExt;
 use serde::Deserialize;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use tokio::time::Duration;
 use uuid::Uuid;
 
 use crate::embeddings::EmbeddingModelConfig;
@@ -319,12 +322,8 @@ where
     })
 }
 
-/// If you are in a variant and you want to make an inference request to a model,
-/// use this function unless you are calling another variant's `infer` function
-///
-/// Takes a ModelInferenceRequest and makes an inference request to the model.
-/// The model_name is only for bookkeeping and is not used by the model itself.
-async fn infer_model_request<'a, 'request>(
+/// Encapsulates all arguments for the `infer_model_request` function
+struct InferModelRequestArgs<'a, 'request> {
     request: ModelInferenceRequest<'request>,
     model_name: &'a str,
     model_config: &'a ModelConfig,
@@ -332,24 +331,40 @@ async fn infer_model_request<'a, 'request>(
     inference_config: &'request InferenceConfig<'request>,
     clients: &'request InferenceClients<'request>,
     inference_params: InferenceParams,
+    retry_config: &'a RetryConfig,
+}
+
+/// Refactored `infer_model_request` function accepting a single struct argument
+async fn infer_model_request<'a, 'request>(
+    args: InferModelRequestArgs<'a, 'request>,
 ) -> Result<InferenceResult<'a>, Error> {
-    let model_inference_response = model_config
-        .infer(&request, clients.http_client, clients.credentials)
-        .await?;
+    let model_inference_response = (|| async {
+        args.model_config
+            .infer(
+                &args.request,
+                args.clients.http_client,
+                args.clients.credentials,
+            )
+            .await
+    })
+    .retry(args.retry_config.get_backoff())
+    .await?;
+
     let model_inference_result =
-        ModelInferenceResponseWithMetadata::new(model_inference_response, model_name);
+        ModelInferenceResponseWithMetadata::new(model_inference_response, args.model_name);
     let inference_id = Uuid::now_v7();
     let raw_content = model_inference_result.content.clone();
     let usage = model_inference_result.usage.clone();
     let model_inference_results = vec![model_inference_result];
-    function
+
+    args.function
         .prepare_response(
             inference_id,
             raw_content,
             usage,
             model_inference_results,
-            inference_config,
-            inference_params,
+            args.inference_config,
+            args.inference_params,
         )
         .await
 }
@@ -361,6 +376,7 @@ async fn infer_model_request_stream<'request>(
     function: &'static FunctionConfig,
     clients: &'request InferenceClients<'request>,
     inference_params: InferenceParams,
+    retry_config: &'static RetryConfig,
 ) -> Result<
     (
         InferenceResultChunk,
@@ -369,9 +385,13 @@ async fn infer_model_request_stream<'request>(
     ),
     Error,
 > {
-    let (first_chunk, stream, raw_request, model_provider_name) = model_config
-        .infer_stream(&request, clients.http_client, clients.credentials)
-        .await?;
+    let (first_chunk, stream, raw_request, model_provider_name) = (|| async {
+        model_config
+            .infer_stream(&request, clients.http_client, clients.credentials)
+            .await
+    })
+    .retry(retry_config.get_backoff())
+    .await?;
     let model_used_info = ModelUsedInfo {
         model_name,
         model_provider_name,
@@ -383,6 +403,30 @@ async fn infer_model_request_stream<'request>(
     let stream =
         stream.map(move |chunk| chunk.map(|chunk| InferenceResultChunk::new(chunk, function)));
     Ok((first_chunk, Box::pin(stream), model_used_info))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RetryConfig {
+    pub num_retries: usize,
+    pub max_delay_s: f32,
+}
+
+impl Default for RetryConfig {
+    fn default() -> Self {
+        RetryConfig {
+            num_retries: 0,
+            max_delay_s: 10.0,
+        }
+    }
+}
+
+impl RetryConfig {
+    pub fn get_backoff(&self) -> backon::ExponentialBuilder {
+        ExponentialBuilder::default()
+            .with_jitter()
+            .with_max_delay(Duration::from_secs_f32(self.max_delay_s))
+            .with_max_times(self.num_retries)
+    }
 }
 
 #[cfg(test)]
@@ -665,17 +709,22 @@ mod tests {
             routing: vec![model_name.to_string()],
             providers: HashMap::from([(model_name.to_string(), dummy_provider_config)]),
         };
+        let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
-        let result = infer_model_request(
-            model_request.clone(),
+        // Create the arguments struct
+        let args = InferModelRequestArgs {
+            request: model_request.clone(),
             model_name,
-            &model_config,
-            &function_config_chat,
-            &inference_config,
-            &clients,
-            inference_params.clone(),
-        )
-        .await;
+            model_config: &model_config,
+            function: &function_config_chat,
+            inference_config: &inference_config,
+            clients: &clients,
+            inference_params: inference_params.clone(),
+            retry_config,
+        };
+
+        // Refactored function call
+        let result = infer_model_request(args).await;
 
         let inference_result = result.unwrap();
         match inference_result {
@@ -752,16 +801,20 @@ mod tests {
             providers: HashMap::from([(model_name_json.to_string(), dummy_provider_config_json)]),
         };
 
-        let result = infer_model_request(
-            model_request_json.clone(),
-            model_name_json,
-            &model_config_json,
-            &function_config_json,
-            &inference_config,
-            &clients,
-            inference_params.clone(),
-        )
-        .await;
+        // Create the arguments struct
+        let args = InferModelRequestArgs {
+            request: model_request_json.clone(),
+            model_name: model_name_json,
+            model_config: &model_config_json,
+            function: &function_config_json,
+            inference_config: &inference_config,
+            clients: &clients,
+            inference_params: inference_params.clone(),
+            retry_config,
+        };
+
+        // Refactored function call
+        let result = infer_model_request(args).await;
 
         let inference_result = result.unwrap();
         match inference_result {
@@ -795,16 +848,20 @@ mod tests {
             providers: HashMap::from([(error_model_name.to_string(), error_provider_config)]),
         };
 
-        let result = infer_model_request(
-            model_request.clone(),
-            error_model_name,
-            &error_model_config,
-            &function_config_chat,
-            &inference_config,
-            &clients,
-            inference_params.clone(),
-        )
-        .await;
+        // Create the arguments struct
+        let args = InferModelRequestArgs {
+            request: model_request.clone(),
+            model_name: error_model_name,
+            model_config: &error_model_config,
+            function: &function_config_chat,
+            inference_config: &inference_config,
+            clients: &clients,
+            inference_params: inference_params.clone(),
+            retry_config,
+        };
+
+        // Refactored function call
+        let result = infer_model_request(args).await;
 
         assert!(result.is_err());
         let error = result.unwrap_err();
@@ -822,7 +879,7 @@ mod tests {
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
         };
-
+        let retry_config = Box::leak(Box::new(RetryConfig::default()));
         // Create a dummy function config (chat completion)
         let function_config = Box::leak(Box::new(FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
@@ -877,6 +934,7 @@ mod tests {
             function_config,
             &clients,
             inference_params.clone(),
+            retry_config,
         )
         .await;
 
