@@ -97,6 +97,21 @@ impl<'c> TemplateConfig<'c> {
                 template_name: "t0:best_of_n_evaluator_candidates".to_string(),
                 message: format!("Failed to add template: {}", e),
             })?;
+        self.env
+            .add_template("t0:mixture_of_n_fuser_system", MIXTURE_OF_N_FUSER_SYSTEM)
+            .map_err(|e| Error::MiniJinjaTemplate {
+                template_name: "t0:mixture_of_n_fuser_system".to_string(),
+                message: format!("Failed to add template: {}", e),
+            })?;
+        self.env
+            .add_template(
+                "t0:mixture_of_n_fuser_candidates",
+                MIXTURE_OF_N_FUSER_CANDIDATES,
+            )
+            .map_err(|e| Error::MiniJinjaTemplate {
+                template_name: "t0:mixture_of_n_fuser_candidates".to_string(),
+                message: format!("Failed to add template: {}", e),
+            })?;
         Ok(())
     }
 }
@@ -132,6 +147,29 @@ const BEST_OF_N_EVALUATOR_CANDIDATES: &str = r#"Here are the candidate answers (
 ------
 {%- endfor %}
 Please evaluate these candidates and provide the index of the best one."#;
+
+// Lightly edited from Table 6 in the [Archon paper](https://arxiv.org/abs/2409.15254).
+const MIXTURE_OF_N_FUSER_SYSTEM: &str = r#"{%- if inner_system_message is defined -%}You have been provided with a set of responses from various open-source models to the following problem:
+------
+{{ inner_system_message }}
+------
+{%- else -%}
+You have been provided with a set of responses from various open-source models to the latest user
+query.
+
+{%- endif %}
+Your task is to synthesize these responses into a single, high-quality response. It is crucial
+to critically evaluate the information provided in these responses, recognizing that some of it may
+be biased or incorrect. Your response should not simply replicate the given answers but should
+offer a refined, accurate, and comprehensive reply to the instruction. Ensure your response is
+well-structured, coherent, and adheres to the highest standards of accuracy and reliability.
+Below will be first any messages leading up to this point and then a final message containing the set of candidate responses."#;
+
+const MIXTURE_OF_N_FUSER_CANDIDATES: &str = r#"Here are the candidate answers (with the index and a row of ------ separating):
+{% for candidate in candidates -%}
+{{ loop.index0 }}: {{ candidate }}
+------
+{%- endfor %}"#;
 
 #[cfg(test)]
 pub(crate) mod tests {
