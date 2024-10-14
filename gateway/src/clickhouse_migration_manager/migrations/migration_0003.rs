@@ -1,0 +1,225 @@
+use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse_migration_manager::migration_trait::Migration;
+use crate::error::Error;
+
+/// This migration is used to set up the ClickHouse database to efficiently validate
+/// the type of demonstrations.
+/// To do this, we need to be able to efficiently query what function was called for a
+/// particular inference ID.
+///
+/// As the original table was not set up to index on inference ID we instead need to create
+/// a materialized view that is indexed by inference ID and maps to the function_name that was used.
+/// Since we also would like to be able to get the original row from the inference ID we will keep the function_name,
+/// variant_name and episode_id in the materialized view so that we can use them to query the original table.
+
+pub struct Migration0003<'a> {
+    pub clickhouse: &'a ClickHouseConnectionInfo,
+}
+
+impl<'a> Migration for Migration0003<'a> {
+    /// Check if you can connect to the database
+    /// Then check if the four feedback tables exist as the sources for the materialized views
+    /// If all of this is OK, then we can apply the migration
+    async fn can_apply(&self) -> Result<(), Error> {
+        self.clickhouse
+            .health()
+            .await
+            .map_err(|e| Error::ClickHouseMigration {
+                id: "0003".to_string(),
+                message: e.to_string(),
+            })?;
+        let database = self.clickhouse.database();
+
+        let tables = vec![
+            "BooleanMetricFeedback",
+            "CommentFeedback",
+            "DemonstrationFeedback",
+            "FloatMetricFeedback",
+        ];
+
+        for table in tables {
+            let query = format!(
+                r#"SELECT EXISTS(
+                        SELECT 1
+                        FROM system.tables
+                        WHERE database = '{database}' AND name = '{table}'
+                    )"#
+            );
+
+            match self.clickhouse.run_query(query).await {
+                Err(e) => {
+                    return Err(Error::ClickHouseMigration {
+                        id: "0003".to_string(),
+                        message: e.to_string(),
+                    })
+                }
+                Ok(response) => {
+                    if response.trim() != "1" {
+                        return Err(Error::ClickHouseMigration {
+                            id: "0003".to_string(),
+                            message: format!("Table {} does not exist", table),
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check if the migration has already been applied
+    /// This should be equivalent to checking if `FeedbackTags` exists
+    async fn should_apply(&self) -> Result<bool, Error> {
+        let database = self.clickhouse.database();
+
+        let query = format!(
+            r#"SELECT EXISTS(
+                SELECT 1
+                FROM system.tables
+                WHERE database = '{database}' AND name = 'FeedbackTags'
+            )"#
+        );
+
+        match self.clickhouse.run_query(query).await {
+            Err(e) => {
+                return Err(Error::ClickHouseMigration {
+                    id: "0003".to_string(),
+                    message: e.to_string(),
+                })
+            }
+            Ok(response) => {
+                if response.trim() != "1" {
+                    return Ok(true);
+                }
+            }
+        }
+
+        Ok(false)
+    }
+
+    async fn apply(&self) -> Result<(), Error> {
+        // Create the `FeedbackTags` table
+        let query = r#"
+            CREATE TABLE IF NOT EXISTS FeedbackTags
+            (
+                metric_name LowCardinality(String),
+                tag_key String,
+                tag_value String,
+                feedback_id UUID, -- must be a UUIDv7
+            ) ENGINE = MergeTree()
+            ORDER BY (metric_name, tag_key, tag_value);
+        "#;
+        let _ = self.clickhouse.run_query(query.to_string()).await?;
+
+        // Add a column `tags` to the `BooleanMetricFeedback` table
+        let query = r#"ALTER TABLE BooleanMetricFeedback
+                             ADD COLUMN tags Map(String, String) DEFAULT map();"#;
+        let _ = self.clickhouse.run_query(query.to_string()).await?;
+
+        // Add a column `tags` to the `CommentFeedback` table
+        let query = r#"ALTER TABLE CommentFeedback
+                             ADD COLUMN tags Map(String, String) DEFAULT map();"#;
+        let _ = self.clickhouse.run_query(query.to_string()).await?;
+
+        // Add a column `tags` to the `DemonstrationFeedback` table
+        let query = r#"ALTER TABLE DemonstrationFeedback
+                             ADD COLUMN tags Map(String, String) DEFAULT map();"#;
+        let _ = self.clickhouse.run_query(query.to_string()).await?;
+
+        // Add a column `tags` to the `FloatMetricFeedback` table
+        let query = r#"ALTER TABLE FloatMetricFeedback
+                             ADD COLUMN tags Map(String, String) DEFAULT map();"#;
+        let _ = self.clickhouse.run_query(query.to_string()).await?;
+
+        // In the following few queries we create the materialized views that map the tags from the original tables to the new `FeedbackTags` table
+        // We do not need to handle the case where there are already tags in the table since we created those columns just now.
+        // So, we don't worry about timestamps for cutting over to the materialized views.
+        // Create the materialized view for the `FeedbackTags` table from BooleanMetricFeedback
+        let query = r#"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS BooleanMetricFeedbackTagsView
+            TO FeedbackTags
+            AS
+                SELECT
+                    metric_name,
+                    entry.1 as tag_key,
+                    entry.2 as tag_value,
+                    id as feedback_id
+                FROM BooleanMetricFeedback
+                ARRAY JOIN arrayZip(mapKeys(tags), mapValues(tags)) AS entry
+            "#;
+        let _ = self.clickhouse.run_query(query.to_string()).await?;
+
+        // Create the materialized view for the `FeedbackTags` table from CommentFeedback
+        let query = r#"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS CommentFeedbackTagsView
+            TO FeedbackTags
+            AS
+                SELECT
+                    'comment' as metric_name,
+                    entry.1 as tag_key,
+                    entry.2 as tag_value,
+                    id as feedback_id
+                FROM CommentFeedback
+                ARRAY JOIN arrayZip(mapKeys(tags), mapValues(tags)) AS entry
+            "#;
+        let _ = self.clickhouse.run_query(query.to_string()).await?;
+
+        // Create the materialized view for the `FeedbackTags` table from DemonstrationFeedback
+        let query = r#"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS DemonstrationFeedbackTagsView
+            TO FeedbackTags
+            AS
+                SELECT
+                    'demonstration' as metric_name,
+                    entry.1 as tag_key,
+                    entry.2 as tag_value,
+                    id as feedback_id
+                FROM DemonstrationFeedback
+                ARRAY JOIN arrayZip(mapKeys(tags), mapValues(tags)) AS entry
+            "#;
+        let _ = self.clickhouse.run_query(query.to_string()).await?;
+
+        // Create the materialized view for the `FeedbackTags` table from FloatMetricFeedback
+        let query = r#"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS FloatMetricFeedbackTagsView
+            TO FeedbackTags
+            AS
+                SELECT
+                    metric_name,
+                    entry.1 as tag_key,
+                    entry.2 as tag_value,
+                    id as feedback_id
+                FROM FloatMetricFeedback
+                ARRAY JOIN arrayZip(mapKeys(tags), mapValues(tags)) AS entry
+            "#;
+        let _ = self.clickhouse.run_query(query.to_string()).await?;
+
+        Ok(())
+    }
+
+    fn rollback_instructions(&self) -> String {
+        "\
+            -- Drop the materialized views\n\
+            DROP MATERIALIZED VIEW IF EXISTS BooleanMetricFeedbackTagsView;\n\
+            DROP MATERIALIZED VIEW IF EXISTS CommentFeedbackTagsView;\n\
+            DROP MATERIALIZED VIEW IF EXISTS DemonstrationFeedbackTagsView;\n\
+            DROP MATERIALIZED VIEW IF EXISTS FloatMetricFeedbackTagsView;\n\
+            \n\
+            -- Drop the table\n\
+            DROP TABLE IF EXISTS FeedbackTags;\n\
+            \n\
+            -- Drop the columns\n\
+            ALTER TABLE BooleanMetricFeedback DROP COLUMN tags;\n\
+            ALTER TABLE CommentFeedback DROP COLUMN tags;\n\
+            ALTER TABLE DemonstrationFeedback DROP COLUMN tags;\n\
+            ALTER TABLE FloatMetricFeedback DROP COLUMN tags;\n\
+        "
+        .to_string()
+    }
+
+    /// Check if the migration has succeeded (i.e. it should not be applied again)
+    async fn has_succeeded(&self) -> Result<bool, Error> {
+        let should_apply = self.should_apply().await?;
+        Ok(!should_apply)
+    }
+}
