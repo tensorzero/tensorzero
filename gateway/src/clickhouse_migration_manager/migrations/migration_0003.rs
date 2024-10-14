@@ -2,16 +2,16 @@ use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::clickhouse_migration_manager::migration_trait::Migration;
 use crate::error::Error;
 
-/// This migration is used to set up the ClickHouse database to efficiently validate
-/// the type of demonstrations.
-/// To do this, we need to be able to efficiently query what function was called for a
-/// particular inference ID.
+/// This migration is used to set up the ClickHouse database for tagged feedback.
+/// The primary queries we contemplate are: Select all feedback for a given tag, or select all tags for a given feedback item.
+/// We will store the tags in a new table `FeedbackTags` and create a materialized view for each original feedback table that writes them
+/// We will also denormalize and store the tags on the original tables for efficiency.
+/// There are 3 main changes:
 ///
-/// As the original table was not set up to index on inference ID we instead need to create
-/// a materialized view that is indexed by inference ID and maps to the function_name that was used.
-/// Since we also would like to be able to get the original row from the inference ID we will keep the function_name,
-/// variant_name and episode_id in the materialized view so that we can use them to query the original table.
-
+///  - First, we create a new table `FeedbackTags` to store the tags
+///  - Second, we add a column `tags` to each original feedback table
+///  - Third, we create a materialized view for each original feedback table that writes the tags to the `FeedbackTags`
+///    table as they are written to the original tables
 pub struct Migration0003<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
