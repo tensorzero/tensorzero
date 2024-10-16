@@ -4,13 +4,13 @@ use crate::error::Error;
 
 /// This migration is used to set up the ClickHouse database for tagged feedback.
 /// The primary queries we contemplate are: Select all feedback for a given tag, or select all tags for a given feedback item.
-/// We will store the tags in a new table `FeedbackTags` and create a materialized view for each original feedback table that writes them
+/// We will store the tags in a new table `FeedbackTag` and create a materialized view for each original feedback table that writes them
 /// We will also denormalize and store the tags on the original tables for efficiency.
 /// There are 3 main changes:
 ///
-///  - First, we create a new table `FeedbackTags` to store the tags
+///  - First, we create a new table `FeedbackTag` to store the tags
 ///  - Second, we add a column `tags` to each original feedback table
-///  - Third, we create a materialized view for each original feedback table that writes the tags to the `FeedbackTags`
+///  - Third, we create a materialized view for each original feedback table that writes the tags to the `FeedbackTag`
 ///    table as they are written to the original tables
 pub struct Migration0003<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
@@ -68,7 +68,7 @@ impl<'a> Migration for Migration0003<'a> {
     }
 
     /// Check if the migration has already been applied
-    /// This should be equivalent to checking if `FeedbackTags` exists
+    /// This should be equivalent to checking if `FeedbackTag` exists
     async fn should_apply(&self) -> Result<bool, Error> {
         let database = self.clickhouse.database();
 
@@ -76,7 +76,7 @@ impl<'a> Migration for Migration0003<'a> {
             r#"SELECT EXISTS(
                 SELECT 1
                 FROM system.tables
-                WHERE database = '{database}' AND name = 'FeedbackTags'
+                WHERE database = '{database}' AND name = 'FeedbackTag'
             )"#
         );
 
@@ -94,100 +94,169 @@ impl<'a> Migration for Migration0003<'a> {
             }
         }
 
+        // Check each of the original feedback tables for a `tags` column
+        let tables = vec![
+            "BooleanMetricFeedback",
+            "CommentFeedback",
+            "DemonstrationFeedback",
+            "FloatMetricFeedback",
+        ];
+
+        for table in tables {
+            let query = format!(
+                r#"SELECT EXISTS(
+                    SELECT 1
+                    FROM system.columns
+                    WHERE database = '{}'
+                      AND table = '{}'
+                      AND name = 'tags'
+                )"#,
+                database, table
+            );
+            match self.clickhouse.run_query(query).await {
+                Err(e) => {
+                    return Err(Error::ClickHouseMigration {
+                        id: "0003".to_string(),
+                        message: e.to_string(),
+                    });
+                }
+                Ok(response) => {
+                    if response.trim() != "1" {
+                        return Ok(true);
+                    }
+                }
+            }
+        }
+
+        // Check that each of the materialized views exists
+        let views = vec![
+            "BooleanMetricFeedbackTagView",
+            "CommentFeedbackTagView",
+            "DemonstrationFeedbackTagView",
+            "FloatMetricFeedbackTagView",
+        ];
+
+        for view in views {
+            let query = format!(
+                r#"SELECT EXISTS(
+                    SELECT 1
+                    FROM system.tables
+                    WHERE database = '{database}' AND name = '{view}'
+                )"#,
+            );
+            match self.clickhouse.run_query(query).await {
+                Err(e) => {
+                    return Err(Error::ClickHouseMigration {
+                        id: "0003".to_string(),
+                        message: e.to_string(),
+                    });
+                }
+                Ok(response) => {
+                    if response.trim() != "1" {
+                        return Ok(true);
+                    }
+                }
+            }
+        }
+        // Everything is in place, so we should not apply the migration
         Ok(false)
     }
 
     async fn apply(&self) -> Result<(), Error> {
-        // Create the `FeedbackTags` table
+        // Create the `FeedbackTag` table
         let query = r#"
-            CREATE TABLE IF NOT EXISTS FeedbackTags
+            CREATE TABLE IF NOT EXISTS FeedbackTag
             (
                 metric_name LowCardinality(String),
-                tag_key String,
-                tag_value String,
+                key String,
+                value String,
                 feedback_id UUID, -- must be a UUIDv7
             ) ENGINE = MergeTree()
-            ORDER BY (metric_name, tag_key, tag_value);
+            ORDER BY (metric_name, key, value);
         "#;
         let _ = self.clickhouse.run_query(query.to_string()).await?;
 
         // Add a column `tags` to the `BooleanMetricFeedback` table
-        let query = r#"ALTER TABLE BooleanMetricFeedback
-                             ADD COLUMN tags Map(String, String) DEFAULT map();"#;
+        let query = r#"
+            ALTER TABLE BooleanMetricFeedback
+            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
         let _ = self.clickhouse.run_query(query.to_string()).await?;
 
         // Add a column `tags` to the `CommentFeedback` table
-        let query = r#"ALTER TABLE CommentFeedback
-                             ADD COLUMN tags Map(String, String) DEFAULT map();"#;
+        let query = r#"
+            ALTER TABLE CommentFeedback
+            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
         let _ = self.clickhouse.run_query(query.to_string()).await?;
 
         // Add a column `tags` to the `DemonstrationFeedback` table
-        let query = r#"ALTER TABLE DemonstrationFeedback
-                             ADD COLUMN tags Map(String, String) DEFAULT map();"#;
+        let query = r#"
+            ALTER TABLE DemonstrationFeedback
+            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
         let _ = self.clickhouse.run_query(query.to_string()).await?;
 
         // Add a column `tags` to the `FloatMetricFeedback` table
-        let query = r#"ALTER TABLE FloatMetricFeedback
-                             ADD COLUMN tags Map(String, String) DEFAULT map();"#;
+        let query = r#"
+            ALTER TABLE FloatMetricFeedback
+            ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
         let _ = self.clickhouse.run_query(query.to_string()).await?;
 
-        // In the following few queries we create the materialized views that map the tags from the original tables to the new `FeedbackTags` table
+        // In the following few queries we create the materialized views that map the tags from the original tables to the new `FeedbackTag` table
         // We do not need to handle the case where there are already tags in the table since we created those columns just now.
         // So, we don't worry about timestamps for cutting over to the materialized views.
-        // Create the materialized view for the `FeedbackTags` table from BooleanMetricFeedback
+        // Create the materialized view for the `FeedbackTag` table from BooleanMetricFeedback
         let query = r#"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS BooleanMetricFeedbackTagsView
-            TO FeedbackTags
+            CREATE MATERIALIZED VIEW IF NOT EXISTS BooleanMetricFeedbackTagView
+            TO FeedbackTag
             AS
                 SELECT
                     metric_name,
-                    entry.1 as tag_key,
-                    entry.2 as tag_value,
+                    entry.1 as key,
+                    entry.2 as value,
                     id as feedback_id
                 FROM BooleanMetricFeedback
                 ARRAY JOIN arrayZip(mapKeys(tags), mapValues(tags)) AS entry
             "#;
         let _ = self.clickhouse.run_query(query.to_string()).await?;
 
-        // Create the materialized view for the `FeedbackTags` table from CommentFeedback
+        // Create the materialized view for the `FeedbackTag` table from CommentFeedback
         let query = r#"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS CommentFeedbackTagsView
-            TO FeedbackTags
+            CREATE MATERIALIZED VIEW IF NOT EXISTS CommentFeedbackTagView
+            TO FeedbackTag
             AS
                 SELECT
                     'comment' as metric_name,
-                    entry.1 as tag_key,
-                    entry.2 as tag_value,
+                    entry.1 as key,
+                    entry.2 as value,
                     id as feedback_id
                 FROM CommentFeedback
                 ARRAY JOIN arrayZip(mapKeys(tags), mapValues(tags)) AS entry
             "#;
         let _ = self.clickhouse.run_query(query.to_string()).await?;
 
-        // Create the materialized view for the `FeedbackTags` table from DemonstrationFeedback
+        // Create the materialized view for the `FeedbackTag` table from DemonstrationFeedback
         let query = r#"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS DemonstrationFeedbackTagsView
-            TO FeedbackTags
+            CREATE MATERIALIZED VIEW IF NOT EXISTS DemonstrationFeedbackTagView
+            TO FeedbackTag
             AS
                 SELECT
                     'demonstration' as metric_name,
-                    entry.1 as tag_key,
-                    entry.2 as tag_value,
+                    entry.1 as key,
+                    entry.2 as value,
                     id as feedback_id
                 FROM DemonstrationFeedback
                 ARRAY JOIN arrayZip(mapKeys(tags), mapValues(tags)) AS entry
             "#;
         let _ = self.clickhouse.run_query(query.to_string()).await?;
 
-        // Create the materialized view for the `FeedbackTags` table from FloatMetricFeedback
+        // Create the materialized view for the `FeedbackTag` table from FloatMetricFeedback
         let query = r#"
-            CREATE MATERIALIZED VIEW IF NOT EXISTS FloatMetricFeedbackTagsView
-            TO FeedbackTags
+            CREATE MATERIALIZED VIEW IF NOT EXISTS FloatMetricFeedbackTagView
+            TO FeedbackTag
             AS
                 SELECT
                     metric_name,
-                    entry.1 as tag_key,
-                    entry.2 as tag_value,
+                    entry.1 as key,
+                    entry.2 as value,
                     id as feedback_id
                 FROM FloatMetricFeedback
                 ARRAY JOIN arrayZip(mapKeys(tags), mapValues(tags)) AS entry
@@ -200,13 +269,13 @@ impl<'a> Migration for Migration0003<'a> {
     fn rollback_instructions(&self) -> String {
         "\
             -- Drop the materialized views\n\
-            DROP MATERIALIZED VIEW IF EXISTS BooleanMetricFeedbackTagsView;\n\
-            DROP MATERIALIZED VIEW IF EXISTS CommentFeedbackTagsView;\n\
-            DROP MATERIALIZED VIEW IF EXISTS DemonstrationFeedbackTagsView;\n\
-            DROP MATERIALIZED VIEW IF EXISTS FloatMetricFeedbackTagsView;\n\
+            DROP MATERIALIZED VIEW IF EXISTS BooleanMetricFeedbackTagView;\n\
+            DROP MATERIALIZED VIEW IF EXISTS CommentFeedbackTagView;\n\
+            DROP MATERIALIZED VIEW IF EXISTS DemonstrationFeedbackTagView;\n\
+            DROP MATERIALIZED VIEW IF EXISTS FloatMetricFeedbackTagView;\n\
             \n\
             -- Drop the table\n\
-            DROP TABLE IF EXISTS FeedbackTags;\n\
+            DROP TABLE IF EXISTS FeedbackTag;\n\
             \n\
             -- Drop the columns\n\
             ALTER TABLE BooleanMetricFeedback DROP COLUMN tags;\n\
