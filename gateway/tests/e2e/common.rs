@@ -126,7 +126,7 @@ pub(crate) async fn select_feedback_tags_clickhouse(
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
-        "SELECT * FROM FeedbackTags WHERE metric_name = '{}' AND tag_key = '{}' AND tag_value = '{}' FORMAT JSONEachRow",
+        "SELECT * FROM FeedbackTag WHERE metric_name = '{}' AND key = '{}' AND value = '{}' FORMAT JSONEachRow",
         metric_name, tag_key, tag_value
     );
 
