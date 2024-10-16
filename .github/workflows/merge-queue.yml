@@ -11,7 +11,7 @@ env:
   AZURE_OPENAI_API_BASE: ${{secrets.AZURE_OPENAI_API_BASE }} # for E2E tests
   AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }} # for E2E tests
   AZURE_OPENAI_DEPLOYMENT_ID: ${{secrets.AZURE_OPENAI_DEPLOYMENT_ID }} # for E2E tests
-  CLICKHOUSE_URL: "http://localhost:8123" # for E2E tests
+  CLICKHOUSE_URL: "http://host.docker.internal:8123/tensorzero" # for production deployment tests
   FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }} # for E2E tests
   FORCE_COLOR: 1
   GCP_VERTEX_CREDENTIALS_PATH: ${{ github.workspace }}/gcp_jwt_key.json
@@ -50,6 +50,31 @@ jobs:
         env:
           GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
+
+      - name: Stand up ClickHouse container for production deployment tests
+        run: |
+          docker run -d --name clickhouse-server -p 8123:8123 -p 9000:9000 clickhouse/clickhouse-server:latest
+          until curl -s http://localhost:8123/ping; do
+            echo "Waiting for ClickHouse to be ready..."
+            sleep 1
+          done
+          echo "ClickHouse is ready!"
+
+      - name: Run docker compose for production deployment tests
+        run: docker compose -f examples/production-deployment/docker-compose.yml up -d --wait
+
+      - name: Run inference for production deployment tests
+        run: examples/production-deployment/run_example_inference.sh
+
+      - name: Tear down ClickHouse container for production deployment tests
+        run: docker stop clickhouse-server && docker rm clickhouse-server
+
+      - name: Tear down docker compose for production deployment tests
+        run: docker compose -f examples/production-deployment/docker-compose.yml down
+
+      - name: Set up CLICKHOUSE_URL for E2E tests
+        run: |
+          echo "CLICKHOUSE_URL=http://localhost:8123/tensorzero" >> $GITHUB_ENV
 
       - name: Launch ClickHouse container for E2E tests
         run: docker compose -f gateway/tests/e2e/docker-compose.yml up -d --wait
