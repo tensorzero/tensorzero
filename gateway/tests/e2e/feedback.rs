@@ -4,14 +4,18 @@ use serde_json::{json, Value};
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
-use crate::common::{get_clickhouse, get_gateway_endpoint, select_feedback_clickhouse};
+use crate::common::{
+    get_clickhouse, get_gateway_endpoint, select_feedback_clickhouse,
+    select_feedback_tags_clickhouse,
+};
 
 #[tokio::test]
 async fn e2e_test_comment_feedback() {
     let client = Client::new();
     let episode_id = Uuid::now_v7();
     // Test comment feedback on episode
-    let payload = json!({"episode_id": episode_id, "metric_name": "comment", "value": "good job!"});
+    let tag_value = Uuid::now_v7().to_string();
+    let payload = json!({"episode_id": episode_id, "metric_name": "comment", "value": "good job!", "tags": {"key": tag_value}});
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -25,7 +29,7 @@ async fn e2e_test_comment_feedback() {
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
     sleep(Duration::from_millis(200)).await;
 
-    // Check ClickHouse
+    // Check ClickHouse CommentFeedback
     let clickhouse = get_clickhouse().await;
     let result = select_feedback_clickhouse(&clickhouse, "CommentFeedback", feedback_id)
         .await
@@ -40,6 +44,14 @@ async fn e2e_test_comment_feedback() {
     assert_eq!(retrieved_target_type, "episode");
     let retrieved_value = result.get("value").unwrap().as_str().unwrap();
     assert_eq!(retrieved_value, "good job!");
+
+    // Check ClickHouse FeedbackTags
+    let result = select_feedback_tags_clickhouse(&clickhouse, "comment", "key", &tag_value)
+        .await
+        .unwrap();
+    let id = result.get("feedback_id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, feedback_id);
 
     // Test comment feedback on Inference
     let inference_id = Uuid::now_v7();
@@ -103,10 +115,12 @@ async fn e2e_test_demonstration_feedback() {
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Test demonstration feedback on Inference
+    let tag_value = Uuid::now_v7().to_string();
     let payload = json!({
         "inference_id": inference_id,
         "metric_name": "demonstration",
-        "value": "do this!"
+        "value": "do this!",
+        "tags": {"key": tag_value}
     });
     let response = client
         .post(get_gateway_endpoint("/feedback"))
@@ -121,7 +135,7 @@ async fn e2e_test_demonstration_feedback() {
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
     sleep(Duration::from_millis(200)).await;
 
-    // Check ClickHouse
+    // Check ClickHouse DemonstrationFeedback
     let clickhouse = get_clickhouse().await;
     let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
         .await
@@ -138,6 +152,14 @@ async fn e2e_test_demonstration_feedback() {
     })]))
     .unwrap();
     assert_eq!(retrieved_value, expected_value);
+
+    // Check ClickHouse FeedbackTags
+    let result = select_feedback_tags_clickhouse(&clickhouse, "demonstration", "key", &tag_value)
+        .await
+        .unwrap();
+    let id = result.get("feedback_id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, feedback_id);
 
     // Try it for an episode (should 400)
     let episode_id = Uuid::now_v7();
@@ -423,8 +445,9 @@ async fn e2e_test_demonstration_feedback_tool() {
 async fn e2e_test_float_feedback() {
     let client = Client::new();
     let episode_id = Uuid::now_v7();
+    let tag_value = Uuid::now_v7().to_string();
     // Test Float feedback on episode
-    let payload = json!({"episode_id": episode_id, "metric_name": "user_rating", "value": 32.8});
+    let payload = json!({"episode_id": episode_id, "metric_name": "user_rating", "value": 32.8, "tags": {"key": tag_value}});
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -438,7 +461,7 @@ async fn e2e_test_float_feedback() {
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
     sleep(Duration::from_millis(200)).await;
 
-    // Check ClickHouse
+    // Check ClickHouse FloatMetricFeedback
     let clickhouse = get_clickhouse().await;
     let result = select_feedback_clickhouse(&clickhouse, "FloatMetricFeedback", feedback_id)
         .await
@@ -453,6 +476,14 @@ async fn e2e_test_float_feedback() {
     assert_eq!(retrieved_value, 32.8);
     let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
     assert_eq!(metric_name, "user_rating");
+
+    // Check ClickHouse FeedbackTags
+    let result = select_feedback_tags_clickhouse(&clickhouse, "user_rating", "key", &tag_value)
+        .await
+        .unwrap();
+    let id = result.get("feedback_id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, feedback_id);
 
     // Test boolean feedback on episode (should fail)
     let payload = json!({"episode_id": episode_id, "metric_name": "user_rating", "value": true});
@@ -525,8 +556,8 @@ async fn e2e_test_float_feedback() {
 async fn e2e_test_boolean_feedback() {
     let client = Client::new();
     let inference_id = Uuid::now_v7();
-    let payload =
-        json!({"inference_id": inference_id, "metric_name": "task_success", "value": true});
+    let tag_value = Uuid::now_v7().to_string();
+    let payload = json!({"inference_id": inference_id, "metric_name": "task_success", "value": true, "tags": {"key": tag_value}});
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -540,7 +571,7 @@ async fn e2e_test_boolean_feedback() {
     let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
     sleep(Duration::from_millis(200)).await;
 
-    // Check ClickHouse
+    // Check ClickHouse BooleanMetricFeedback
     let clickhouse = get_clickhouse().await;
     let result = select_feedback_clickhouse(&clickhouse, "BooleanMetricFeedback", feedback_id)
         .await
@@ -555,6 +586,14 @@ async fn e2e_test_boolean_feedback() {
     assert!(retrieved_value);
     let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
     assert_eq!(metric_name, "task_success");
+
+    // Check ClickHouse FeedbackTags
+    let result = select_feedback_tags_clickhouse(&clickhouse, "task_success", "key", &tag_value)
+        .await
+        .unwrap();
+    let id = result.get("feedback_id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, feedback_id);
 
     // Try episode-level feedback (should fail)
     let episode_id = Uuid::now_v7();
