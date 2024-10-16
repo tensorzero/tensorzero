@@ -1,6 +1,7 @@
 use gateway::clickhouse_migration_manager;
 use gateway::clickhouse_migration_manager::migrations::migration_0000::Migration0000;
 use gateway::clickhouse_migration_manager::migrations::migration_0002::Migration0002;
+use gateway::clickhouse_migration_manager::migrations::migration_0003::Migration0003;
 use gateway::{
     clickhouse::ClickHouseConnectionInfo,
     clickhouse_migration_manager::migrations::migration_0001::Migration0001,
@@ -32,7 +33,7 @@ fn get_clean_clickhouse() -> ClickHouseConnectionInfo {
 async fn test_clickhouse_migration_manager() {
     let clickhouse = get_clean_clickhouse();
     // NOTE:
-    // We need to split the test into two sub-functions so we can reset `traced_test`'s subscriber between each call.
+    // We need to split the test into sub-functions so we can reset `traced_test`'s subscriber between each call.
     // Otherwise, `logs_contain` will return true if the first call triggers a log message that the second call shouldn't trigger.
 
     #[traced_test]
@@ -126,7 +127,9 @@ async fn test_clickhouse_migration_manager() {
         clickhouse_migration_manager::run_migration(&Migration0002 { clickhouse })
             .await
             .unwrap();
-
+        clickhouse_migration_manager::run_migration(&Migration0003 { clickhouse })
+            .await
+            .unwrap();
         assert!(!logs_contain("Failed to apply migration"));
         assert!(!logs_contain("Failed migration success check"));
         assert!(!logs_contain("Failed to verify migration"));
@@ -137,12 +140,50 @@ async fn test_clickhouse_migration_manager() {
         assert!(!logs_contain("Migration succeeded: Migration0001"));
         assert!(!logs_contain("Applying migration: Migration0002"));
         assert!(!logs_contain("Migration succeeded: Migration0002"));
+        assert!(logs_contain("Applying migration: Migration0003"));
+        assert!(logs_contain("Migration succeeded: Migration0003"));
+    }
+
+    #[traced_test]
+    async fn fifth(clickhouse: &ClickHouseConnectionInfo) {
+        // Run the migration manager again (it should've already been run above)... there should be no changes
+        let clean_start =
+            clickhouse_migration_manager::run_migration(&Migration0000 { clickhouse })
+                .await
+                .unwrap();
+        // We know that the first migration was run so clean start should be false
+        assert!(!clean_start);
+        clickhouse_migration_manager::run_migration(&Migration0001 {
+            clickhouse,
+            clean_start: true, // For testing purposes, we know there is no data to migrate and it is a clean start
+        })
+        .await
+        .unwrap();
+        clickhouse_migration_manager::run_migration(&Migration0002 { clickhouse })
+            .await
+            .unwrap();
+        clickhouse_migration_manager::run_migration(&Migration0003 { clickhouse })
+            .await
+            .unwrap();
+        assert!(!logs_contain("Failed to apply migration"));
+        assert!(!logs_contain("Failed migration success check"));
+        assert!(!logs_contain("Failed to verify migration"));
+
+        assert!(!logs_contain("Applying migration: Migration0000"));
+        assert!(!logs_contain("Migration succeeded: Migration0000"));
+        assert!(!logs_contain("Applying migration: Migration0001"));
+        assert!(!logs_contain("Migration succeeded: Migration0001"));
+        assert!(!logs_contain("Applying migration: Migration0002"));
+        assert!(!logs_contain("Migration succeeded: Migration0002"));
+        assert!(!logs_contain("Applying migration: Migration0003"));
+        assert!(!logs_contain("Migration succeeded: Migration0003"));
     }
 
     first(&clickhouse).await;
     second(&clickhouse).await;
     third(&clickhouse).await;
     fourth(&clickhouse).await;
+    fifth(&clickhouse).await;
     let database = clickhouse.database();
     tracing::info!("Attempting to drop test database: {database}");
 
