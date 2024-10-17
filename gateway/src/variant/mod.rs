@@ -60,6 +60,8 @@ pub struct ModelUsedInfo<'a> {
     pub model_name: &'a str,
     pub model_provider_name: &'a str,
     pub raw_request: String,
+    pub system: Option<String>,
+    pub input_messages: Vec<RequestMessage>,
     pub inference_params: InferenceParams,
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
 }
@@ -353,7 +355,7 @@ async fn infer_model_request<'a, 'request>(
     let model_inference_result =
         ModelInferenceResponseWithMetadata::new(model_inference_response, args.model_name);
     let inference_id = Uuid::now_v7();
-    let raw_content = model_inference_result.content.clone();
+    let raw_content = model_inference_result.output.clone();
     let usage = model_inference_result.usage.clone();
     let model_inference_results = vec![model_inference_result];
 
@@ -392,12 +394,16 @@ async fn infer_model_request_stream<'request>(
     })
     .retry(retry_config.get_backoff())
     .await?;
+    let system = request.system.clone();
+    let input_messages = request.messages.clone();
     let model_used_info = ModelUsedInfo {
         model_name,
         model_provider_name,
         raw_request,
         inference_params,
         previous_model_inference_results: vec![],
+        system,
+        input_messages,
     };
     let first_chunk = InferenceResultChunk::new(first_chunk, function);
     let stream =
@@ -741,7 +747,7 @@ mod tests {
                 // Need to recreate to make this ContentBlock rather than ContentBlockOutput
                 let expected_content = vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()];
                 assert_eq!(
-                    chat_result.model_inference_results[0].content,
+                    chat_result.model_inference_results[0].output,
                     expected_content
                 );
             }
@@ -829,7 +835,7 @@ mod tests {
                     model_name_json
                 );
                 assert_eq!(
-                    json_result.model_inference_results[0].content,
+                    json_result.model_inference_results[0].output,
                     vec![expected_raw_output.into()]
                 );
             }

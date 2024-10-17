@@ -94,7 +94,7 @@ pub static DUMMY_RAW_REQUEST: &str = "raw request";
 impl InferenceProvider for DummyProvider {
     async fn infer<'a>(
         &'a self,
-        _request: &'a ModelInferenceRequest<'a>,
+        request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
         api_key: ProviderCredentials<'a>,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -190,14 +190,18 @@ impl InferenceProvider for DummyProvider {
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
         };
+        let system = request.system.clone();
+        let input_messages = request.messages.clone();
         Ok(ProviderInferenceResponse {
             id,
             created,
-            content,
+            output: content,
             raw_request,
             raw_response,
             usage,
             latency,
+            system,
+            input_messages,
         })
     }
 
@@ -352,7 +356,7 @@ impl HasCredentials for DummyProvider {
 impl EmbeddingProvider for DummyProvider {
     async fn embed(
         &self,
-        _request: &EmbeddingRequest,
+        request: &EmbeddingRequest,
         _http_client: &reqwest::Client,
     ) -> Result<EmbeddingProviderResponse, Error> {
         if self.model_name == "error" {
@@ -371,6 +375,7 @@ impl EmbeddingProvider for DummyProvider {
         };
         Ok(EmbeddingProviderResponse {
             id,
+            input: request.input.to_string(),
             embedding,
             created,
             raw_request,

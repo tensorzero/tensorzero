@@ -94,6 +94,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                 request: request_body,
                 function_type: &request.function_type,
                 json_mode: &request.json_mode,
+                generic_request: request,
             };
             Ok(response_with_latency.try_into()?)
         } else {
@@ -627,13 +628,14 @@ struct GCPVertexAnthropicResponse {
     usage: GCPVertexAnthropic,
 }
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq)]
 struct GCPVertexAnthropicResponseWithMetadata<'a> {
     response: GCPVertexAnthropicResponse,
     latency: Latency,
     request: GCPVertexAnthropicRequestBody<'a>,
     function_type: &'a FunctionType,
     json_mode: &'a ModelInferenceRequestJsonMode,
+    generic_request: &'a ModelInferenceRequest<'a>,
 }
 
 impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -645,6 +647,7 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
             request,
             function_type,
             json_mode,
+            generic_request,
         } = value;
 
         let raw_response =
@@ -671,8 +674,13 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
             content
         };
 
+        let system = generic_request.system.clone();
+        let input_messages = generic_request.messages.clone();
+
         Ok(ProviderInferenceResponse::new(
             content,
+            system,
+            input_messages,
             raw_request,
             raw_response,
             response.usage.into(),
@@ -1544,6 +1552,21 @@ mod tests {
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
         };
+        let generic_request = ModelInferenceRequest {
+            system: Some("system".to_string()),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["Hello".to_string().into()],
+            }],
+            tool_config: None,
+            temperature: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
         let request_body = GCPVertexAnthropicRequestBody {
             anthropic_version: "1.0",
             system: None,
@@ -1561,11 +1584,12 @@ mod tests {
             request: request_body,
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
+            generic_request: &generic_request,
         };
 
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
         assert_eq!(
-            inference_response.content,
+            inference_response.output,
             vec!["Response text".to_string().into()]
         );
 
@@ -1575,6 +1599,14 @@ mod tests {
         assert_eq!(inference_response.usage.output_tokens, 50);
         assert_eq!(inference_response.latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
+        assert_eq!(inference_response.system, Some("system".to_string()));
+        assert_eq!(
+            inference_response.input_messages,
+            vec![RequestMessage {
+                role: Role::User,
+                content: vec!["Hello".to_string().into()],
+            }]
+        );
         // Test case 2: Tool call response
         let anthropic_response_body = GCPVertexAnthropicResponse {
             id: "2".to_string(),
@@ -1593,6 +1625,21 @@ mod tests {
                 output_tokens: 50,
             },
         };
+        let generic_request = ModelInferenceRequest {
+            system: None,
+            messages: vec![RequestMessage {
+                role: Role::Assistant,
+                content: vec!["Hello2".to_string().into()],
+            }],
+            tool_config: None,
+            temperature: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
         let request_body = GCPVertexAnthropicRequestBody {
             anthropic_version: "1.0",
             system: None,
@@ -1610,12 +1657,13 @@ mod tests {
             request: request_body,
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
+            generic_request: &generic_request,
         };
 
         let inference_response: ProviderInferenceResponse = body_with_latency.try_into().unwrap();
-        assert!(inference_response.content.len() == 1);
+        assert!(inference_response.output.len() == 1);
         assert_eq!(
-            inference_response.content[0],
+            inference_response.output[0],
             ContentBlock::ToolCall(ToolCall {
                 id: "tool_call_1".to_string(),
                 name: "get_temperature".to_string(),
@@ -1629,6 +1677,14 @@ mod tests {
         assert_eq!(inference_response.usage.output_tokens, 50);
         assert_eq!(inference_response.latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
+        assert_eq!(inference_response.system, None);
+        assert_eq!(
+            inference_response.input_messages,
+            vec![RequestMessage {
+                role: Role::Assistant,
+                content: vec!["Hello2".to_string().into()],
+            }]
+        );
         // Test case 3: Mixed response (text and tool call)
         let anthropic_response_body = GCPVertexAnthropicResponse {
             id: "3".to_string(),
@@ -1652,6 +1708,21 @@ mod tests {
                 output_tokens: 50,
             },
         };
+        let generic_request = ModelInferenceRequest {
+            system: None,
+            messages: vec![RequestMessage {
+                role: Role::Assistant,
+                content: vec!["Hello3".to_string().into()],
+            }],
+            tool_config: None,
+            temperature: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
         let request_body = GCPVertexAnthropicRequestBody {
             anthropic_version: "1.0",
             system: None,
@@ -1669,15 +1740,16 @@ mod tests {
             request: request_body,
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
+            generic_request: &generic_request,
         };
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
         assert_eq!(
-            inference_response.content[0],
+            inference_response.output[0],
             "Here's the weather:".to_string().into()
         );
-        assert!(inference_response.content.len() == 2);
+        assert!(inference_response.output.len() == 2);
         assert_eq!(
-            inference_response.content[1],
+            inference_response.output[1],
             ContentBlock::ToolCall(ToolCall {
                 id: "tool_call_2".to_string(),
                 name: "get_temperature".to_string(),
@@ -1692,6 +1764,14 @@ mod tests {
         assert_eq!(inference_response.usage.output_tokens, 50);
         assert_eq!(inference_response.latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
+        assert_eq!(inference_response.system, None);
+        assert_eq!(
+            inference_response.input_messages,
+            vec![RequestMessage {
+                role: Role::Assistant,
+                content: vec!["Hello3".to_string().into()],
+            }]
+        );
     }
 
     #[test]

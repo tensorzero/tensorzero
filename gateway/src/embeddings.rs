@@ -6,7 +6,10 @@ use crate::{
     error::Error,
     inference::{
         providers::{openai::OpenAIProvider, provider_trait::HasCredentials},
-        types::{current_timestamp, Latency, ModelInferenceResponseWithMetadata, Usage},
+        types::{
+            current_timestamp, Latency, ModelInferenceResponseWithMetadata, RequestMessage, Role,
+            Usage,
+        },
     },
     model::{ProviderConfig, ProviderCredentials},
 };
@@ -77,6 +80,7 @@ pub struct EmbeddingRequest {
 #[derive(Debug, PartialEq)]
 pub struct EmbeddingProviderResponse {
     pub id: Uuid,
+    pub input: String,
     pub embedding: Vec<f32>,
     pub created: u64,
     pub raw_request: String,
@@ -88,6 +92,7 @@ pub struct EmbeddingProviderResponse {
 #[derive(Debug, PartialEq)]
 pub struct EmbeddingResponse<'a> {
     pub id: Uuid,
+    pub input: String,
     pub embedding: Vec<f32>,
     pub created: u64,
     pub raw_request: String,
@@ -99,6 +104,7 @@ pub struct EmbeddingResponse<'a> {
 
 pub struct EmbeddingResponseWithMetadata<'a> {
     pub id: Uuid,
+    pub input: String,
     pub embedding: Vec<f32>,
     pub created: u64,
     pub raw_request: String,
@@ -116,6 +122,7 @@ impl<'a> EmbeddingResponse<'a> {
     ) -> Self {
         Self {
             id: embedding_provider_response.id,
+            input: embedding_provider_response.input,
             embedding: embedding_provider_response.embedding,
             created: embedding_provider_response.created,
             raw_request: embedding_provider_response.raw_request,
@@ -131,6 +138,7 @@ impl<'a> EmbeddingResponseWithMetadata<'a> {
     pub fn new(embedding_response: EmbeddingResponse<'a>, embedding_model_name: &'a str) -> Self {
         Self {
             id: embedding_response.id,
+            input: embedding_response.input,
             embedding: embedding_response.embedding,
             created: embedding_response.created,
             raw_request: embedding_response.raw_request,
@@ -147,8 +155,13 @@ impl<'a> From<EmbeddingResponseWithMetadata<'a>> for ModelInferenceResponseWithM
     fn from(response: EmbeddingResponseWithMetadata<'a>) -> Self {
         Self {
             id: response.id,
-            content: vec![],
+            output: vec![],
             created: response.created,
+            system: None,
+            input_messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec![response.input.into()],
+            }], // TODO (#399): Store this information in a more appropriate way for this kind of request
             raw_request: response.raw_request,
             raw_response: response.raw_response,
             usage: response.usage,
@@ -231,6 +244,7 @@ impl EmbeddingProvider for EmbeddingProviderConfig {
 impl EmbeddingProviderResponse {
     pub fn new(
         embedding: Vec<f32>,
+        input: String,
         raw_request: String,
         raw_response: String,
         usage: Usage,
@@ -238,6 +252,7 @@ impl EmbeddingProviderResponse {
     ) -> Self {
         Self {
             id: Uuid::now_v7(),
+            input,
             embedding,
             created: current_timestamp(),
             raw_request,

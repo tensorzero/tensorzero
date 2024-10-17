@@ -715,7 +715,7 @@ mod tests {
             .infer(&request, &Client::new(), &api_keys)
             .await
             .unwrap();
-        let content = response.content;
+        let content = response.output;
         assert_eq!(
             content,
             vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()]
@@ -790,7 +790,7 @@ mod tests {
             .unwrap();
         // Ensure that the error for the bad provider was logged, but the request worked nonetheless
         assert!(logs_contain("Error sending request to Dummy provider"));
-        let content = response.content;
+        let content = response.output;
         assert_eq!(
             content,
             vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()]
@@ -1084,7 +1084,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(
-            response.content,
+            response.output,
             vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()]
         );
     }

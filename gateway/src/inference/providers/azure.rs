@@ -81,6 +81,7 @@ impl InferenceProvider for AzureProvider {
                 response,
                 latency,
                 request: request_body,
+                generic_request: request,
             }
             .try_into()
             .map_err(map_openai_to_azure_error)?)
@@ -302,6 +303,7 @@ struct AzureResponseWithMetadata<'a> {
     response: OpenAIResponse,
     latency: Latency,
     request: AzureRequest<'a>,
+    generic_request: &'a ModelInferenceRequest<'a>,
 }
 
 impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -311,6 +313,7 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
             mut response,
             latency,
             request: request_body,
+            generic_request,
         } = value;
         let raw_response = serde_json::to_string(&response).map_err(|e| Error::OpenAIServer {
             message: format!("Error parsing response: {e}"),
@@ -323,6 +326,8 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 ),
             });
         }
+        let system = generic_request.system.clone();
+        let input_messages = generic_request.messages.clone();
         let usage = response.usage.into();
         let message = response
             .choices
@@ -346,6 +351,8 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
 
         Ok(ProviderInferenceResponse::new(
             content,
+            system,
+            input_messages,
             raw_request,
             raw_response,
             usage,
