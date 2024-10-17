@@ -73,7 +73,7 @@ pub struct Text {
 }
 
 /// Core representation of the types of content that could go in or out of a model
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlock {
     Text(Text),
@@ -89,7 +89,7 @@ pub enum ContentBlockOutput {
 }
 
 /// A RequestMessage is a message sent to a model
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct RequestMessage {
     pub role: Role,
     pub content: Vec<ContentBlock>,
