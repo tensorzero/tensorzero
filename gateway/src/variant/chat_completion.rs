@@ -881,7 +881,7 @@ mod tests {
                 );
                 assert_eq!(chat_response.model_inference_results.len(), 1);
                 assert_eq!(
-                    chat_response.model_inference_results[0].content,
+                    chat_response.model_inference_results[0].output,
                     vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()]
                 );
                 assert_eq!(

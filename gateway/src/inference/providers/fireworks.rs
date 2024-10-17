@@ -96,6 +96,7 @@ impl InferenceProvider for FireworksProvider {
                 response,
                 latency,
                 request: request_body,
+                generic_request: request,
             }
             .try_into()
             .map_err(map_openai_to_fireworks_error)?)
@@ -317,6 +318,7 @@ struct FireworksResponseWithMetadata<'a> {
     response: OpenAIResponse,
     latency: Latency,
     request: FireworksRequest<'a>,
+    generic_request: &'a ModelInferenceRequest<'a>,
 }
 
 impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -326,6 +328,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
             mut response,
             latency,
             request: request_body,
+            generic_request,
         } = value;
         let raw_response = serde_json::to_string(&response).map_err(|e| Error::OpenAIServer {
             message: format!("Error parsing response: {e}"),
@@ -359,9 +362,12 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
             serde_json::to_string(&request_body).map_err(|e| Error::FireworksServer {
                 message: format!("Error serializing request body as JSON: {e}"),
             })?;
-
+        let system = generic_request.system.clone();
+        let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
             content,
+            system,
+            input_messages,
             raw_request,
             raw_response,
             usage,

@@ -92,6 +92,7 @@ impl InferenceProvider for AnthropicProvider {
                 response,
                 latency,
                 request: request_body,
+                input_messages: request.messages.clone(),
                 function_type: &request.function_type,
                 json_mode: &request.json_mode,
             };
@@ -676,11 +677,12 @@ struct AnthropicResponse {
     usage: AnthropicUsage,
 }
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq)]
 struct AnthropicResponseWithMetadata<'a> {
     response: AnthropicResponse,
     latency: Latency,
     request: AnthropicRequestBody<'a>,
+    input_messages: Vec<RequestMessage>,
     function_type: &'a FunctionType,
     json_mode: &'a ModelInferenceRequestJsonMode,
 }
@@ -692,6 +694,7 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
             response,
             latency,
             request: request_body,
+            input_messages,
             function_type,
             json_mode,
         } = value;
@@ -706,7 +709,7 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
                 message: format!("Error parsing response from Anthropic: {e}"),
             })?;
 
-        let content: Vec<ContentBlock> = response
+        let output: Vec<ContentBlock> = response
             .content
             .into_iter()
             .map(|block| block.try_into())
@@ -716,13 +719,15 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
         ) && matches!(function_type, FunctionType::Json)
         {
-            prefill_json_response(content)?
+            prefill_json_response(output)?
         } else {
-            content
+            output
         };
 
         Ok(ProviderInferenceResponse::new(
             content,
+            request_body.system.map(String::from),
+            input_messages,
             raw_request,
             raw_response,
             response.usage.into(),
@@ -1592,18 +1597,23 @@ mod tests {
             tool_choice: None,
             tools: None,
         };
+        let input_messages = vec![RequestMessage {
+            role: Role::User,
+            content: vec!["Hello".to_string().into()],
+        }];
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let body_with_latency = AnthropicResponseWithMetadata {
             response: anthropic_response_body.clone(),
             latency: latency.clone(),
             request: request_body,
+            input_messages: input_messages.clone(),
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
         };
 
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
         assert_eq!(
-            inference_response.content,
+            inference_response.output,
             vec!["Response text".to_string().into()]
         );
 
@@ -1613,6 +1623,7 @@ mod tests {
         assert_eq!(inference_response.usage.output_tokens, 50);
         assert_eq!(inference_response.latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
+        assert_eq!(inference_response.input_messages, input_messages);
 
         // Test case 2: Tool call response
         let anthropic_response_body = AnthropicResponse {
@@ -1642,19 +1653,24 @@ mod tests {
             tool_choice: None,
             tools: None,
         };
+        let input_messages = vec![RequestMessage {
+            role: Role::Assistant,
+            content: vec!["Hello".to_string().into()],
+        }];
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let body_with_latency = AnthropicResponseWithMetadata {
             response: anthropic_response_body.clone(),
             latency: latency.clone(),
             request: request_body,
+            input_messages: input_messages.clone(),
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
         };
 
         let inference_response: ProviderInferenceResponse = body_with_latency.try_into().unwrap();
-        assert!(inference_response.content.len() == 1);
+        assert!(inference_response.output.len() == 1);
         assert_eq!(
-            inference_response.content[0],
+            inference_response.output[0],
             ContentBlock::ToolCall(ToolCall {
                 id: "tool_call_1".to_string(),
                 name: "get_temperature".to_string(),
@@ -1668,6 +1684,7 @@ mod tests {
         assert_eq!(inference_response.usage.output_tokens, 50);
         assert_eq!(inference_response.latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
+        assert_eq!(inference_response.input_messages, input_messages);
 
         // Test case 3: Mixed response (text and tool call)
         let anthropic_response_body = AnthropicResponse {
@@ -1702,22 +1719,27 @@ mod tests {
             tool_choice: None,
             tools: None,
         };
+        let input_messages = vec![RequestMessage {
+            role: Role::User,
+            content: vec!["Helloooo".to_string().into()],
+        }];
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let body_with_latency = AnthropicResponseWithMetadata {
             response: anthropic_response_body.clone(),
             latency: latency.clone(),
             request: request_body,
+            input_messages: input_messages.clone(),
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
         };
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
         assert_eq!(
-            inference_response.content[0],
+            inference_response.output[0],
             "Here's the weather:".to_string().into()
         );
-        assert!(inference_response.content.len() == 2);
+        assert!(inference_response.output.len() == 2);
         assert_eq!(
-            inference_response.content[1],
+            inference_response.output[1],
             ContentBlock::ToolCall(ToolCall {
                 id: "tool_call_2".to_string(),
                 name: "get_temperature".to_string(),
@@ -1732,6 +1754,7 @@ mod tests {
         assert_eq!(inference_response.usage.output_tokens, 50);
         assert_eq!(inference_response.latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
+        assert_eq!(inference_response.input_messages, input_messages);
     }
 
     #[test]

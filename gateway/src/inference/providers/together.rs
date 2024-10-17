@@ -93,6 +93,7 @@ impl InferenceProvider for TogetherProvider {
                     response_time: start_time.elapsed(),
                 },
                 request: request_body,
+                generic_request: request,
             }
             .try_into()
             .map_err(map_openai_to_together_error)?)
@@ -295,6 +296,7 @@ struct TogetherResponseWithMetadata<'a> {
     response: OpenAIResponse,
     latency: Latency,
     request: TogetherRequest<'a>,
+    generic_request: &'a ModelInferenceRequest<'a>,
 }
 
 impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -304,6 +306,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
             mut response,
             latency,
             request: request_body,
+            generic_request,
         } = value;
         let raw_response = serde_json::to_string(&response).map_err(|e| Error::OpenAIServer {
             message: format!("Error parsing response: {e}"),
@@ -337,9 +340,12 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
             serde_json::to_string(&request_body).map_err(|e| Error::FireworksServer {
                 message: format!("Error serializing request body as JSON: {e}"),
             })?;
-
+        let system = generic_request.system.clone();
+        let messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
             content,
+            system,
+            messages,
             raw_request,
             raw_response,
             usage,

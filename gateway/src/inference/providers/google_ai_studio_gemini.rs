@@ -12,14 +12,14 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{Error, ResultExt};
+use crate::error::Error;
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequestJsonMode, Role, Text, TextChunk,
+    serialize_or_log, ModelInferenceRequest, ProviderInferenceResponse,
+    ProviderInferenceResponseChunk, ProviderInferenceResponseStream, RequestMessage, Usage,
 };
 use crate::inference::types::{
-    ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStream, RequestMessage, Usage,
+    ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequestJsonMode, Role, Text, TextChunk,
 };
 use crate::model::ProviderCredentials;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
@@ -85,6 +85,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                 response,
                 latency,
                 request: request_body,
+                generic_request: request,
             };
             Ok(response_with_latency.try_into()?)
         } else {
@@ -594,14 +595,7 @@ impl From<GeminiResponseContentPart> for ContentBlockChunk {
                 id: "0".to_string(),
             }),
             GeminiResponseContentPart::FunctionCall(function_call) => {
-                let arguments = serde_json::to_string(&function_call.args)
-                    .map_err(|e| Error::Serialization {
-                        message: format!(
-                            "Error serializing function call arguments returned from Google AI Studio Gemini: {e}"
-                        ),
-                    })
-                    .ok_or_log()
-                    .unwrap_or_default();
+                let arguments = serialize_or_log(&function_call.args);
                 ContentBlockChunk::ToolCall(ToolCallChunk {
                     raw_name: function_call.name,
                     raw_arguments: arguments,
@@ -676,6 +670,7 @@ struct GeminiResponseWithMetadata<'a> {
     response: GeminiResponse,
     latency: Latency,
     request: GeminiRequest<'a>,
+    generic_request: &'a ModelInferenceRequest<'a>,
 }
 
 impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -685,6 +680,7 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
             response,
             latency,
             request: request_body,
+            generic_request,
         } = response;
         let raw_response =
             serde_json::to_string(&response).map_err(|e| Error::GoogleAIStudioServer {
@@ -723,9 +719,12 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
             serde_json::to_string(&request_body).map_err(|e| Error::GoogleAIStudioServer {
                 message: format!("Error serializing request: {e}"),
             })?;
-
+        let system = generic_request.system.clone();
+        let messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
             content,
+            system,
+            messages,
             raw_request,
             raw_response,
             usage,
@@ -1140,6 +1139,21 @@ mod tests {
         let latency = Latency::NonStreaming {
             response_time: Duration::from_secs(1),
         };
+        let generic_request = ModelInferenceRequest {
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test_user".to_string().into()],
+            }],
+            system: None,
+            tool_config: None,
+            temperature: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
         let request_body = GeminiRequest {
             contents: vec![],
             generation_config: None,
@@ -1152,11 +1166,12 @@ mod tests {
             response,
             latency: latency.clone(),
             request: request_body,
+            generic_request: &generic_request,
         };
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
         assert_eq!(
-            model_inference_response.content,
+            model_inference_response.output,
             vec!["test_assistant".to_string().into()]
         );
         assert_eq!(
@@ -1168,6 +1183,14 @@ mod tests {
         );
         assert_eq!(model_inference_response.latency, latency);
         assert_eq!(model_inference_response.raw_request, raw_request);
+        assert_eq!(model_inference_response.system, None);
+        assert_eq!(
+            model_inference_response.input_messages,
+            vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test_user".to_string().into()],
+            }]
+        );
         let text_part =
             GeminiResponseContentPart::Text("Here's the weather information:".to_string());
         let function_call_part =
@@ -1191,6 +1214,21 @@ mod tests {
         let latency = Latency::NonStreaming {
             response_time: Duration::from_secs(2),
         };
+        let generic_request = ModelInferenceRequest {
+            messages: vec![RequestMessage {
+                role: Role::Assistant,
+                content: vec!["test_assistant".to_string().into()],
+            }],
+            system: Some("test_system".to_string()),
+            tool_config: None,
+            temperature: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
         let request_body = GeminiRequest {
             contents: vec![],
             generation_config: None,
@@ -1203,12 +1241,13 @@ mod tests {
             response,
             latency: latency.clone(),
             request: request_body,
+            generic_request: &generic_request,
         };
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
 
         if let [ContentBlock::Text(Text { text }), ContentBlock::ToolCall(tool_call)] =
-            &model_inference_response.content[..]
+            &model_inference_response.output[..]
         {
             assert_eq!(text, "Here's the weather information:");
             assert_eq!(tool_call.name, "get_temperature");
@@ -1229,6 +1268,17 @@ mod tests {
         );
         assert_eq!(model_inference_response.latency, latency);
         assert_eq!(model_inference_response.raw_request, raw_request);
+        assert_eq!(
+            model_inference_response.system,
+            Some("test_system".to_string())
+        );
+        assert_eq!(
+            model_inference_response.input_messages,
+            vec![RequestMessage {
+                role: Role::Assistant,
+                content: vec!["test_assistant".to_string().into()],
+            }]
+        );
 
         let text_part1 =
             GeminiResponseContentPart::Text("Here's the weather information:".to_string());
@@ -1277,13 +1327,14 @@ mod tests {
             response,
             latency: latency.clone(),
             request: request_body,
+            generic_request: &generic_request,
         };
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
         assert_eq!(model_inference_response.raw_request, raw_request);
 
         if let [ContentBlock::Text(Text { text: text1 }), ContentBlock::ToolCall(tool_call1), ContentBlock::Text(Text { text: text2 }), ContentBlock::ToolCall(tool_call2)] =
-            &model_inference_response.content[..]
+            &model_inference_response.output[..]
         {
             assert_eq!(text1, "Here's the weather information:");
             assert_eq!(text2, "And here's a restaurant recommendation:");
@@ -1300,7 +1351,7 @@ mod tests {
         } else {
             panic!(
                 "Content does not match expected structure: {:?}",
-                model_inference_response.content
+                model_inference_response.output
             );
         }
 
@@ -1312,6 +1363,17 @@ mod tests {
             }
         );
         assert_eq!(model_inference_response.latency, latency);
+        assert_eq!(
+            model_inference_response.system,
+            Some("test_system".to_string())
+        );
+        assert_eq!(
+            model_inference_response.input_messages,
+            vec![RequestMessage {
+                role: Role::Assistant,
+                content: vec!["test_assistant".to_string().into()],
+            }]
+        );
     }
 
     #[test]

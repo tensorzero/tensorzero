@@ -1,6 +1,10 @@
 #![allow(clippy::print_stdout)]
 
 use futures::StreamExt;
+use gateway::{
+    inference::types::{ContentBlock, RequestMessage, Role},
+    tool::{ToolCall, ToolResult},
+};
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
@@ -421,6 +425,21 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
     assert!(result.get("ttft_ms").unwrap().is_null());
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta"
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec!["What is the capital city of Japan?".to_string().into()],
+    }];
+    assert_eq!(input_messages, expected_input_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 1);
 }
 
 pub async fn test_simple_streaming_inference_request_with_provider(provider: E2ETestProvider) {
@@ -632,6 +651,22 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
     assert!(ttft_ms > 50);
     assert!(ttft_ms <= response_time_ms);
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta"
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec!["What is the capital city of Japan?".to_string().into()],
+    }];
+    assert_eq!(input_messages, expected_input_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 1);
 }
 
 pub async fn test_inference_params_inference_request_with_provider(provider: E2ETestProvider) {
@@ -805,6 +840,21 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
     assert!(result.get("ttft_ms").unwrap().is_null());
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta"
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec!["What is the capital city of Japan?".to_string().into()],
+    }];
+    assert_eq!(input_messages, expected_input_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 1);
 }
 
 pub async fn test_inference_params_streaming_inference_request_with_provider(
@@ -1029,6 +1079,22 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
     assert!(ttft_ms > 50);
     assert!(ttft_ms <= response_time_ms);
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta"
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec!["What is the capital city of Japan?".to_string().into()],
+    }];
+    assert_eq!(input_messages, expected_input_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 1);
 }
 
 pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider(
@@ -1248,6 +1314,42 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
     assert!(result.get("ttft_ms").unwrap().is_null());
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec![
+            "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."
+                .to_string()
+                .into(),
+        ],
+    }];
+    assert_eq!(input_messages, expected_input_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 1);
+    let first = output.first().unwrap();
+    match first {
+        ContentBlock::ToolCall(tool_call) => {
+            assert_eq!(tool_call.name, "get_temperature");
+            let arguments =
+                serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
+            let expected_arguments = json!({
+                "location": "tokyo",
+                "units": "celsius"
+            });
+            assert_eq!(arguments, expected_arguments);
+        }
+        _ => {
+            panic!("Expected a tool call, got {:?}", first);
+        }
+    }
 }
 
 pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_with_provider(
@@ -1534,6 +1636,42 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
     assert!(ttft_ms > 50);
     assert!(ttft_ms <= response_time_ms);
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec![
+            "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."
+                .to_string()
+                .into(),
+        ],
+    }];
+    assert_eq!(input_messages, expected_input_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 1);
+    let first = output.first().unwrap();
+    match first {
+        ContentBlock::ToolCall(tool_call) => {
+            assert_eq!(tool_call.name, "get_temperature");
+            let arguments =
+                serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
+            let expected_arguments = json!({
+                "location": "tokyo",
+                "units": "celsius"
+            });
+            assert_eq!(arguments, expected_arguments);
+        }
+        _ => {
+            panic!("Expected a tool call, got {:?}", first);
+        }
+    }
 }
 
 /// This test is similar to `test_tool_use_tool_choice_auto_used_inference_request_with_provider`, but it steers the model to not use the tool.
@@ -1725,6 +1863,28 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
     assert!(result.get("ttft_ms").unwrap().is_null());
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec!["What is your name?".to_string().into()],
+    }];
+    assert_eq!(input_messages, expected_input_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let first = output.first().unwrap();
+    match first {
+        ContentBlock::Text(_text) => {}
+        _ => {
+            panic!("Expected a text block, got {:?}", first);
+        }
+    }
 }
 
 /// This test is similar to `test_tool_use_tool_choice_auto_used_streaming_inference_request_with_provider`, but it steers the model to not use the tool.
@@ -1986,6 +2146,28 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
     assert!(ttft_ms > 50);
     assert!(ttft_ms <= response_time_ms);
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec!["What is your name?".to_string().into()],
+    }];
+    assert_eq!(input_messages, expected_input_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let first = output.first().unwrap();
+    match first {
+        ContentBlock::Text(_text) => {}
+        _ => {
+            panic!("Expected a text block, got {:?}", first);
+        }
+    }
 }
 
 pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
@@ -2218,6 +2400,32 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
     assert!(result.get("ttft_ms").unwrap().is_null());
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec!["What is your name?".to_string().into()],
+    }];
+    assert_eq!(input_messages, expected_input_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 1);
+    let first = output.first().unwrap();
+    match first {
+        ContentBlock::ToolCall(tool_call) => {
+            assert_eq!(tool_call.name, "get_temperature");
+            serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
+        }
+        _ => {
+            panic!("Expected a tool call, got {:?}", first);
+        }
+    }
 }
 
 pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with_provider(
@@ -2516,6 +2724,32 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
     assert!(ttft_ms > 50);
     assert!(ttft_ms <= response_time_ms);
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec!["What is your name?".to_string().into()],
+    }];
+    assert_eq!(input_messages, expected_input_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 1);
+    let first = output.first().unwrap();
+    match first {
+        ContentBlock::ToolCall(tool_call) => {
+            assert_eq!(tool_call.name, "get_temperature");
+            serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
+        }
+        _ => {
+            panic!("Expected a tool call, got {:?}", first);
+        }
+    }
 }
 
 pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
@@ -2715,6 +2949,32 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
     assert!(result.get("ttft_ms").unwrap().is_null());
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec![
+            "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."
+                .to_string()
+                .into(),
+        ],
+    }];
+    assert_eq!(input_messages, expected_input_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let first = output.first().unwrap();
+    match first {
+        ContentBlock::Text(_text) => {}
+        _ => {
+            panic!("Expected a text block, got {:?}", first);
+        }
+    }
 }
 
 pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_provider(
@@ -2982,6 +3242,32 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
     assert!(ttft_ms > 50);
     assert!(ttft_ms <= response_time_ms);
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec![
+            "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."
+                .to_string()
+                .into(),
+        ],
+    }];
+    assert_eq!(input_messages, expected_input_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    let first = output.first().unwrap();
+    match first {
+        ContentBlock::Text(_text) => {}
+        _ => {
+            panic!("Expected a text block, got {:?}", first);
+        }
+    }
 }
 
 pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
@@ -3252,6 +3538,36 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
     assert!(result.get("ttft_ms").unwrap().is_null());
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec![
+            "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool."
+                .to_string()
+                .into(),
+        ],
+    }];
+    assert_eq!(input_messages, expected_input_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 1);
+    let first = output.first().unwrap();
+    match first {
+        ContentBlock::ToolCall(tool_call) => {
+            assert_eq!(tool_call.name, "self_destruct");
+            serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
+        }
+        _ => {
+            panic!("Expected a tool call, got {:?}", first);
+        }
+    }
 }
 
 pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with_provider(
@@ -3606,6 +3922,36 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
     assert!(ttft_ms > 50);
     assert!(ttft_ms <= response_time_ms);
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec![
+            "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool."
+                .to_string()
+                .into(),
+        ],
+    }];
+    assert_eq!(input_messages, expected_input_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 1);
+    let first = output.first().unwrap();
+    match first {
+        ContentBlock::ToolCall(tool_call) => {
+            assert_eq!(tool_call.name, "self_destruct");
+            serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
+        }
+        _ => {
+            panic!("Expected a tool call, got {:?}", first);
+        }
+    }
 }
 
 pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
@@ -3814,6 +4160,34 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
     assert!(result.get("ttft_ms").unwrap().is_null());
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta"
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec!["What is the weather like in Tokyo? Call a function."
+            .to_string()
+            .into()],
+    }];
+    assert_eq!(input_messages, expected_input_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 1);
+    let first = output.first().unwrap();
+    match first {
+        ContentBlock::ToolCall(tool_call) => {
+            assert_eq!(tool_call.name, "get_humidity");
+            serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
+        }
+        _ => {
+            panic!("Expected a tool call, got {:?}", first);
+        }
+    }
 }
 
 pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provider(
@@ -4098,6 +4472,34 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
     assert!(ttft_ms > 50);
     assert!(ttft_ms <= response_time_ms);
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta"
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec!["What is the weather like in Tokyo? Call a function."
+            .to_string()
+            .into()],
+    }];
+    assert_eq!(input_messages, expected_input_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 1);
+    let first = output.first().unwrap();
+    match first {
+        ContentBlock::ToolCall(tool_call) => {
+            assert_eq!(tool_call.name, "get_humidity");
+            serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
+        }
+        _ => {
+            panic!("Expected a tool call, got {:?}", first);
+        }
+    }
 }
 
 pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ETestProvider) {
@@ -4302,6 +4704,53 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
     assert!(result.get("ttft_ms").unwrap().is_null());
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![
+        RequestMessage {
+            role: Role::User,
+            content: vec![
+                "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."
+                    .to_string()
+                    .into(),
+            ],
+        },
+        RequestMessage {
+            role: Role::Assistant,
+            content: vec![ContentBlock::ToolCall(ToolCall {
+                id: "123456789".to_string(),
+                name: "get_temperature".to_string(),
+                arguments: "{\"location\": \"Tokyo\"}".to_string(),
+            })],
+        },
+        RequestMessage {
+            role: Role::User,
+            content: vec![ContentBlock::ToolResult(ToolResult {
+                id: "123456789".to_string(),
+                name: "get_temperature".to_string(),
+                result: "70".to_string(),
+            })],
+        },
+    ];
+    assert_eq!(input_messages, expected_input_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 1);
+    let first = output.first().unwrap();
+    match first {
+        ContentBlock::Text(text) => {
+            assert!(text.text.to_lowercase().contains("tokyo"));
+        }
+        _ => {
+            panic!("Expected a text block, got {:?}", first);
+        }
+    }
 }
 
 pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
@@ -4561,6 +5010,53 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
     assert!(ttft_ms > 50);
     assert!(ttft_ms <= response_time_ms);
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![
+        RequestMessage {
+            role: Role::User,
+            content: vec![
+                "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."
+                    .to_string()
+                    .into(),
+            ],
+        },
+        RequestMessage {
+            role: Role::Assistant,
+            content: vec![ContentBlock::ToolCall(ToolCall {
+                id: "123456789".to_string(),
+                name: "get_temperature".to_string(),
+                arguments: "{\"location\": \"Tokyo\"}".to_string(),
+            })],
+        },
+        RequestMessage {
+            role: Role::User,
+            content: vec![ContentBlock::ToolResult(ToolResult {
+                id: "123456789".to_string(),
+                name: "get_temperature".to_string(),
+                result: "70".to_string(),
+            })],
+        },
+    ];
+    assert_eq!(input_messages, expected_input_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 1);
+    let first = output.first().unwrap();
+    match first {
+        ContentBlock::Text(text) => {
+            assert!(text.text.to_lowercase().contains("tokyo"));
+        }
+        _ => {
+            panic!("Expected a text block, got {:?}", first);
+        }
+    }
 }
 
 pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2ETestProvider) {
@@ -4795,6 +5291,34 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
     assert!(result.get("ttft_ms").unwrap().is_null());
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta"
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec!["What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."
+            .to_string()
+            .into()],
+    }];
+    assert_eq!(input_messages, expected_input_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 1);
+    let first = output.first().unwrap();
+    match first {
+        ContentBlock::ToolCall(tool_call) => {
+            assert_eq!(tool_call.name, "get_temperature");
+            serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
+        }
+        _ => {
+            panic!("Expected a tool call, got {:?}", first);
+        }
+    }
 }
 
 pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
@@ -5098,6 +5622,34 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
     assert!(ttft_ms > 50);
     assert!(ttft_ms <= response_time_ms);
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta"
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec!["What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."
+            .to_string()
+            .into()],
+    }];
+    assert_eq!(input_messages, expected_input_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 1);
+    let first = output.first().unwrap();
+    match first {
+        ContentBlock::ToolCall(tool_call) => {
+            assert_eq!(tool_call.name, "get_temperature");
+            serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
+        }
+        _ => {
+            panic!("Expected a tool call, got {:?}", first);
+        }
+    }
 }
 
 pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2ETestProvider) {
@@ -5377,6 +5929,38 @@ pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
     assert!(result.get("ttft_ms").unwrap().is_null());
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with two tool calls. Use BOTH the \"get_temperature\" and \"get_humidity\" tools.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit with 50% humidity.\")."
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec!["What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
+            .to_string()
+            .into()],
+    }];
+    assert_eq!(input_messages, expected_input_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 2);
+    let mut tool_call_names = vec![];
+    for block in output {
+        match block {
+            ContentBlock::ToolCall(tool_call) => {
+                tool_call_names.push(tool_call.name);
+                serde_json::from_str::<Value>(&tool_call.arguments).unwrap();
+            }
+            _ => {
+                panic!("Expected a tool call, got {:?}", block);
+            }
+        }
+    }
+    assert!(tool_call_names.contains(&"get_temperature".to_string()));
+    assert!(tool_call_names.contains(&"get_humidity".to_string()));
 }
 
 pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
@@ -5740,6 +6324,38 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
     assert!(ttft_ms > 50);
     assert!(ttft_ms <= response_time_ms);
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with two tool calls. Use BOTH the \"get_temperature\" and \"get_humidity\" tools.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit with 50% humidity.\")."
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec!["What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
+            .to_string()
+            .into()],
+    }];
+    assert_eq!(input_messages, expected_input_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 2);
+    let mut tool_call_names = vec![];
+    for block in output {
+        match block {
+            ContentBlock::ToolCall(tool_call) => {
+                tool_call_names.push(tool_call.name);
+                serde_json::from_str::<Value>(&tool_call.arguments).unwrap();
+            }
+            _ => {
+                panic!("Expected a tool call, got {:?}", block);
+            }
+        }
+    }
+    assert!(tool_call_names.contains(&"get_temperature".to_string()));
+    assert!(tool_call_names.contains(&"get_humidity".to_string()));
 }
 
 pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestProvider) {
@@ -5915,6 +6531,39 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
     assert!(result.get("ttft_ms").unwrap().is_null());
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta.\n\nPlease answer the questions in a JSON with key \"answer\".\n\nDo not include any other text than the JSON object. Do not include \"```json\" or \"```\" or anything else.\n\nExample Response:\n\n{\n    \"answer\": \"42\"\n}"
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec!["What is the capital city of Japan?".to_string().into()],
+    }];
+    assert_eq!(input_messages, expected_input_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 1);
+    match &output[0] {
+        ContentBlock::Text(text) => {
+            let parsed: Value = serde_json::from_str(&text.text).unwrap();
+            let answer = parsed.get("answer").unwrap().as_str().unwrap();
+            assert!(answer.to_lowercase().contains("tokyo"));
+        }
+        ContentBlock::ToolCall(tool_call) => {
+            // Handles implicit tool calls
+            assert_eq!(tool_call.name, "respond");
+            let arguments: Value = serde_json::from_str(&tool_call.arguments).unwrap();
+            let answer = arguments.get("answer").unwrap().as_str().unwrap();
+            assert!(answer.to_lowercase().contains("tokyo"));
+        }
+        _ => {
+            panic!("Expected a text block, got {:?}", output[0]);
+        }
+    }
 }
 
 pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2ETestProvider) {
@@ -6092,6 +6741,39 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     assert!(response_time_ms > 0);
     assert!(result.get("ttft_ms").unwrap().is_null());
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta.\n\nDo not include any other text than the JSON object.  Do not include \"```json\" or \"```\" or anything else.\n\nPlease answer the questions in a JSON with the following schema:\n\n{\"type\":\"object\",\"properties\":{\"response\":{\"type\":\"string\"}},\"required\":[\"response\"],\"additionalProperties\":false}"
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec!["What is the capital city of Japan?".to_string().into()],
+    }];
+    assert_eq!(input_messages, expected_input_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 1);
+    match &output[0] {
+        ContentBlock::Text(text) => {
+            let parsed: Value = serde_json::from_str(&text.text).unwrap();
+            let answer = parsed.get("response").unwrap().as_str().unwrap();
+            assert!(answer.to_lowercase().contains("tokyo"));
+        }
+        ContentBlock::ToolCall(tool_call) => {
+            // Handles implicit tool calls
+            assert_eq!(tool_call.name, "respond");
+            let arguments: Value = serde_json::from_str(&tool_call.arguments).unwrap();
+            let answer = arguments.get("response").unwrap().as_str().unwrap();
+            assert!(answer.to_lowercase().contains("tokyo"));
+        }
+        _ => {
+            panic!("Expected a text block, got {:?}", output[0]);
+        }
+    }
 }
 
 pub async fn test_json_mode_streaming_inference_request_with_provider(provider: E2ETestProvider) {
@@ -6315,4 +6997,37 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
     assert!(ttft_ms > 50);
     assert!(ttft_ms <= response_time_ms);
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta.\n\nPlease answer the questions in a JSON with key \"answer\".\n\nDo not include any other text than the JSON object. Do not include \"```json\" or \"```\" or anything else.\n\nExample Response:\n\n{\n    \"answer\": \"42\"\n}"
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec!["What is the capital city of Japan?".to_string().into()],
+    }];
+    assert_eq!(input_messages, expected_input_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 1);
+    match &output[0] {
+        ContentBlock::Text(text) => {
+            let parsed: Value = serde_json::from_str(&text.text).unwrap();
+            let answer = parsed.get("answer").unwrap().as_str().unwrap();
+            assert!(answer.to_lowercase().contains("tokyo"));
+        }
+        ContentBlock::ToolCall(tool_call) => {
+            // Handles implicit tool calls
+            assert_eq!(tool_call.name, "respond");
+            let arguments: Value = serde_json::from_str(&tool_call.arguments).unwrap();
+            let answer = arguments.get("answer").unwrap().as_str().unwrap();
+            assert!(answer.to_lowercase().contains("tokyo"));
+        }
+        _ => {
+            panic!("Expected a text block, got {:?}", output[0]);
+        }
+    }
 }
