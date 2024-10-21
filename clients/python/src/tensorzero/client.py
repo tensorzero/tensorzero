@@ -220,15 +220,17 @@ class TensorZeroGateway(BaseTensorZeroGateway):
             tool_choice,
             parallel_tool_calls,
         )
-        response = self.client.post(url, json=data)
-        try:
-            response.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            raise TensorZeroError(response) from e
-        if not stream:
-            return parse_inference_response(response.json())
-        else:
+        if stream:
+            req = self.client.build_request("POST", url, json=data)
+            response = self.client.send(req, stream=True)
             return self._stream_sse(response)
+        else:
+            response = self.client.post(url, json=data)
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                raise TensorZeroError(response) from e
+            return parse_inference_response(response.json())
 
     def feedback(
         self,
@@ -296,6 +298,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
                     yield parse_inference_chunk(data)
                 except json.JSONDecodeError:
                     self.logger.error(f"Failed to parse SSE data: {data}")
+        response.close()
 
 
 class AsyncTensorZeroGateway(BaseTensorZeroGateway):
@@ -366,15 +369,17 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
             tool_choice,
             parallel_tool_calls,
         )
-        response = await self.client.post(url, json=data)
-        try:
-            response.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            raise TensorZeroError(response) from e
-        if not stream:
-            return parse_inference_response(response.json())
-        else:
+        if stream:
+            req = self.client.build_request("POST", url, json=data)
+            response = await self.client.send(req, stream=True)
             return self._stream_sse(response)
+        else:
+            response = await self.client.post(url, json=data)
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                raise TensorZeroError(response) from e
+            return parse_inference_response(response.json())
 
     async def feedback(
         self,
@@ -442,3 +447,4 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
                     yield parse_inference_chunk(data)
                 except json.JSONDecodeError:
                     self.logger.error(f"Failed to parse SSE data: {data}")
+        await response.aclose()
