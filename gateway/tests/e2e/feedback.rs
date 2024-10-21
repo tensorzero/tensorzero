@@ -557,7 +557,8 @@ async fn e2e_test_boolean_feedback() {
     let client = Client::new();
     let inference_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
-    let payload = json!({"inference_id": inference_id, "metric_name": "task_success", "value": true, "tags": {"key": tag_value}});
+    let tag_value2 = Uuid::now_v7().to_string();
+    let payload = json!({"inference_id": inference_id, "metric_name": "task_success", "value": true, "tags": {"key": tag_value, "key2": tag_value2}});
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
@@ -589,6 +590,13 @@ async fn e2e_test_boolean_feedback() {
 
     // Check ClickHouse FeedbackTags
     let result = select_feedback_tags_clickhouse(&clickhouse, "task_success", "key", &tag_value)
+        .await
+        .unwrap();
+    let id = result.get("feedback_id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, feedback_id);
+
+    let result = select_feedback_tags_clickhouse(&clickhouse, "task_success", "key2", &tag_value2)
         .await
         .unwrap();
     let id = result.get("feedback_id").unwrap().as_str().unwrap();
