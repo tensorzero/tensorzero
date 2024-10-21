@@ -51,27 +51,6 @@ jobs:
           GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
-      - name: Stand up ClickHouse container for production deployment tests
-        run: |
-          docker run -d --name clickhouse-server -p 8123:8123 -p 9000:9000 clickhouse/clickhouse-server:latest
-          until curl -s http://localhost:8123/ping; do
-            echo "Waiting for ClickHouse to be ready..."
-            sleep 1
-          done
-          echo "ClickHouse is ready!"
-
-      - name: Run docker compose for production deployment tests
-        run: docker compose -f examples/production-deployment/docker-compose.yml up -d --wait
-
-      - name: Run inference for production deployment tests
-        run: examples/production-deployment/run_example_inference.sh
-
-      - name: Tear down ClickHouse container for production deployment tests
-        run: docker stop clickhouse-server && docker rm clickhouse-server
-
-      - name: Tear down docker compose for production deployment tests
-        run: docker compose -f examples/production-deployment/docker-compose.yml down
-
       - name: Set up CLICKHOUSE_URL for E2E tests
         run: |
           echo "CLICKHOUSE_URL=http://localhost:8123/tensorzero" >> $GITHUB_ENV
@@ -101,3 +80,21 @@ jobs:
       - name: Run python async client tests
         working-directory: clients/python
         run: uv run pytest
+
+      - name: Terminate the gateway
+        run: kill %1
+
+      - name: Build Docker container for production deployment tests
+        run: docker build -t tensorzero/gateway .
+
+      - name: Run docker compose for production deployment tests
+        run: docker compose -f examples/production-deployment/docker-compose.yml up -d --wait
+
+      - name: Run inference for production deployment tests
+        run: examples/production-deployment/run_example_inference.sh
+
+      - name: Tear down ClickHouse container
+        run: docker compose -f gateway/tests/e2e/docker-compose.yml down
+
+      - name: Tear down docker compose for production deployment tests
+        run: docker compose -f examples/production-deployment/docker-compose.yml down
