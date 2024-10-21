@@ -581,8 +581,8 @@ mod tests {
             validation_result.unwrap_err(),
             Error::JsonSchemaValidation {
                 messages: vec!["\"system content\" is not of type \"object\"".to_string()],
-                data: json!("system content"),
-                schema: system_value,
+                data: Box::new(json!("system content")),
+                schema: Box::new(system_value),
             }
         );
 
@@ -637,8 +637,8 @@ mod tests {
             validation_result.unwrap_err(),
             Error::JsonSchemaValidation {
                 messages: vec!["\"user content\" is not of type \"object\"".to_string()],
-                data: json!("user content"),
-                schema: user_value,
+                data: Box::new(json!("user content")),
+                schema: Box::new(user_value),
             }
         );
 
@@ -693,8 +693,8 @@ mod tests {
             validation_result.unwrap_err(),
             Error::JsonSchemaValidation {
                 messages: vec!["\"assistant content\" is not of type \"object\"".to_string()],
-                data: json!("assistant content"),
-                schema: assistant_value,
+                data: Box::new(json!("assistant content")),
+                schema: Box::new(assistant_value),
             }
         );
 
@@ -753,8 +753,8 @@ mod tests {
             validation_result.unwrap_err(),
             Error::JsonSchemaValidation {
                 messages: vec!["\"system content\" is not of type \"object\"".to_string()],
-                data: json!("system content"),
-                schema: system_value,
+                data: Box::new(json!("system content")),
+                schema: Box::new(system_value),
             }
         );
 
@@ -871,8 +871,8 @@ mod tests {
             validation_result.unwrap_err(),
             Error::JsonSchemaValidation {
                 messages: vec!["\"system content\" is not of type \"object\"".to_string()],
-                data: json!("system content"),
-                schema: system_value,
+                data: Box::new(json!("system content")),
+                schema: Box::new(system_value),
             }
         );
 
@@ -932,8 +932,8 @@ mod tests {
             validation_result.unwrap_err(),
             Error::JsonSchemaValidation {
                 messages: vec!["\"user content\" is not of type \"object\"".to_string()],
-                data: json!("user content"),
-                schema: user_value,
+                data: Box::new(json!("user content")),
+                schema: Box::new(user_value),
             }
         );
 
@@ -991,8 +991,8 @@ mod tests {
             validation_result.unwrap_err(),
             Error::JsonSchemaValidation {
                 messages: vec!["\"assistant content\" is not of type \"object\"".to_string()],
-                data: json!("assistant content"),
-                schema: assistant_value,
+                data: Box::new(json!("assistant content")),
+                schema: Box::new(assistant_value),
             }
         );
 
@@ -1052,8 +1052,8 @@ mod tests {
             validation_result.unwrap_err(),
             Error::JsonSchemaValidation {
                 messages: vec!["\"system content\" is not of type \"object\"".to_string()],
-                data: json!("system content"),
-                schema: system_value,
+                data: Box::new(json!("system content")),
+                schema: Box::new(system_value),
             }
         );
 
