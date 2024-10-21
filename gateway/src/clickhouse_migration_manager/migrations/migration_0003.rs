@@ -210,11 +210,11 @@ impl<'a> Migration for Migration0003<'a> {
             AS
                 SELECT
                     metric_name,
-                    entry.1 as key,
-                    entry.2 as value,
+                    key,
+                    tags[key] as value,
                     id as feedback_id
                 FROM BooleanMetricFeedback
-                ARRAY JOIN arrayZip(mapKeys(tags), mapValues(tags)) AS entry
+                ARRAY JOIN mapKeys(tags) as key
             "#;
         let _ = self.clickhouse.run_query(query.to_string()).await?;
 
@@ -225,11 +225,11 @@ impl<'a> Migration for Migration0003<'a> {
             AS
                 SELECT
                     'comment' as metric_name,
-                    entry.1 as key,
-                    entry.2 as value,
+                    key,
+                    tags[key] as value,
                     id as feedback_id
                 FROM CommentFeedback
-                ARRAY JOIN arrayZip(mapKeys(tags), mapValues(tags)) AS entry
+                ARRAY JOIN mapKeys(tags) as key
             "#;
         let _ = self.clickhouse.run_query(query.to_string()).await?;
 
@@ -240,11 +240,11 @@ impl<'a> Migration for Migration0003<'a> {
             AS
                 SELECT
                     'demonstration' as metric_name,
-                    entry.1 as key,
-                    entry.2 as value,
+                    key,
+                    tags[key] as value,
                     id as feedback_id
                 FROM DemonstrationFeedback
-                ARRAY JOIN arrayZip(mapKeys(tags), mapValues(tags)) AS entry
+                ARRAY JOIN mapKeys(tags) as key
             "#;
         let _ = self.clickhouse.run_query(query.to_string()).await?;
 
@@ -255,11 +255,11 @@ impl<'a> Migration for Migration0003<'a> {
             AS
                 SELECT
                     metric_name,
-                    entry.1 as key,
-                    entry.2 as value,
+                    key,
+                    tags[key] as value,
                     id as feedback_id
                 FROM FloatMetricFeedback
-                ARRAY JOIN arrayZip(mapKeys(tags), mapValues(tags)) AS entry
+                ARRAY JOIN mapKeys(tags) as key
             "#;
         let _ = self.clickhouse.run_query(query.to_string()).await?;
 

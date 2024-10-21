@@ -125,8 +125,8 @@ pub enum Error {
     },
     JsonSchemaValidation {
         messages: Vec<String>,
-        data: Value,
-        schema: Value,
+        data: Box<Value>,
+        schema: Box<Value>,
     },
     MiniJinjaEnvironment {
         message: String,
