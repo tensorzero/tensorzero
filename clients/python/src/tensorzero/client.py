@@ -223,6 +223,10 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         if stream:
             req = self.client.build_request("POST", url, json=data)
             response = self.client.send(req, stream=True)
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                raise TensorZeroError(response) from e
             return self._stream_sse(response)
         else:
             response = self.client.post(url, json=data)
@@ -372,6 +376,10 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         if stream:
             req = self.client.build_request("POST", url, json=data)
             response = await self.client.send(req, stream=True)
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                raise TensorZeroError(response) from e
             return self._stream_sse(response)
         else:
             response = await self.client.post(url, json=data)
