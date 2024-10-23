@@ -95,7 +95,7 @@ jobs:
 
       - name: Set up CLICKHOUSE_URL for production deployment tests
         run: |
-          echo "CLICKHOUSE_URL=http://localhost:8123/tensorzero" >> $GITHUB_ENV
+          echo "CLICKHOUSE_URL=http://host.docker.internal:8123/tensorzero" >> $GITHUB_ENV
       - name: Set up .env file for production deployment tests
         run: |
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > examples/production-deployment/.env
