@@ -45,7 +45,7 @@ async fn e2e_test_comment_feedback() {
     let retrieved_value = result.get("value").unwrap().as_str().unwrap();
     assert_eq!(retrieved_value, "good job!");
 
-    // Check ClickHouse FeedbackTags
+    // Check ClickHouse FeedbackTag
     let result = select_feedback_tags_clickhouse(&clickhouse, "comment", "key", &tag_value)
         .await
         .unwrap();
@@ -153,7 +153,7 @@ async fn e2e_test_demonstration_feedback() {
     .unwrap();
     assert_eq!(retrieved_value, expected_value);
 
-    // Check ClickHouse FeedbackTags
+    // Check ClickHouse FeedbackTag
     let result = select_feedback_tags_clickhouse(&clickhouse, "demonstration", "key", &tag_value)
         .await
         .unwrap();
@@ -477,7 +477,7 @@ async fn e2e_test_float_feedback() {
     let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
     assert_eq!(metric_name, "user_rating");
 
-    // Check ClickHouse FeedbackTags
+    // Check ClickHouse FeedbackTag
     let result = select_feedback_tags_clickhouse(&clickhouse, "user_rating", "key", &tag_value)
         .await
         .unwrap();
@@ -588,7 +588,7 @@ async fn e2e_test_boolean_feedback() {
     let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
     assert_eq!(metric_name, "task_success");
 
-    // Check ClickHouse FeedbackTags
+    // Check ClickHouse FeedbackTag
     let result = select_feedback_tags_clickhouse(&clickhouse, "task_success", "key", &tag_value)
         .await
         .unwrap();
