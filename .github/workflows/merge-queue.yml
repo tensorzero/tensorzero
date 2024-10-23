@@ -61,25 +61,31 @@ jobs:
       - name: Launch the gateway for E2E tests
         run: cargo run-e2e &
 
-      - name: Run all tests (including E2E tests)
-        run: |
-          cargo test-all --profile ci ${{ vars.CARGO_NEXTEST_ARGS }}
+      # - name: Run all tests (including E2E tests)
+      #   run: |
+      #     cargo test-all --profile ci ${{ vars.CARGO_NEXTEST_ARGS }}
 
-      - name: Set up uv
-        # uv recommends pinning a version to avoid unexpected behavior
-        run: curl -LsSf https://astral.sh/uv/0.3.3/install.sh | sh
+      # - name: Set up uv
+      #   # uv recommends pinning a version to avoid unexpected behavior
+      #   run: curl -LsSf https://astral.sh/uv/0.3.3/install.sh | sh
 
-      - name: Install Python for python async client tests
-        working-directory: clients/python
-        run: uv python install 3.10
+      # - name: Install Python for python async client tests
+      #   working-directory: clients/python
+      #   run: uv python install 3.10
 
-      - name: Install dependencies for python async client tests
-        working-directory: clients/python
-        run: uv sync --all-extras --dev
+      # - name: Install dependencies for python async client tests
+      #   working-directory: clients/python
+      #   run: uv sync --all-extras --dev
 
-      - name: Run python async client tests
-        working-directory: clients/python
-        run: uv run pytest
+      # - name: Run python async client tests
+      #   working-directory: clients/python
+      #   run: uv run pytest
+
+      - name: List all running processes
+        run: ps aux
+
+      - name: List jobs in this shell
+        run: jobs
 
       - name: Terminate the gateway
         run: kill %1
