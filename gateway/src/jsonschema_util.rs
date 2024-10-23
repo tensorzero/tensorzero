@@ -107,8 +107,8 @@ impl JSONSchemaFromPath {
                     .into_iter()
                     .map(|error| error.to_string())
                     .collect::<Vec<String>>(),
-                data: instance.clone(),
-                schema: self.value.clone(),
+                data: Box::new(instance.clone()),
+                schema: Box::new(self.value.clone()),
             })
     }
 }
@@ -172,8 +172,8 @@ impl DynamicJSONSchema {
             let messages = e.into_iter().map(|error| error.to_string()).collect();
             Error::JsonSchemaValidation {
                 messages,
-                data: instance.clone(),
-                schema: self.value.clone(),
+                data: Box::new(instance.clone()),
+                schema: Box::new(self.value.clone()),
             }
         })
     }
