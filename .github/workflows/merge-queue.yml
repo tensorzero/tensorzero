@@ -59,7 +59,7 @@ jobs:
         run: docker compose -f gateway/tests/e2e/docker-compose.yml up -d --wait
 
       - name: Launch the gateway for E2E tests
-        run: cargo run-e2e &
+        run: cargo run-e2e & echo $! > .gateway.pid
 
       # - name: Run all tests (including E2E tests)
       #   run: |
@@ -88,7 +88,7 @@ jobs:
         run: jobs
 
       - name: Terminate the gateway
-        run: kill %1
+        run: pkill -f "cargo run-e2e" || true
 
       - name: Build Docker container for production deployment tests
         run: docker build -t tensorzero/gateway .
