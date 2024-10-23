@@ -94,5 +94,5 @@ For example, you could try mixing candidates that use different LLMs.
 ## Next Steps
 
 You now have a ClickHouse database with a ton of trajectories of LLMs trying to solve chess puzzles.
-Consider our library of [recipes](https://github.com/tensorzero/tensorzero/tree/main/recipes) for ideas on how to use this dataset to improve further!
+Consider our library of [recipes](https://www.tensorzero.com/docs/recipes) for ideas on how to use this dataset to improve further!
 Since this data ended up in ClickHouse, we also included a test set at `data/lichess_easy_puzzles_test.csv` (use `dryrun=True` to avoid leaking it) to evaluate variants on held-out data.

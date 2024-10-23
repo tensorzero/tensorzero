@@ -44,22 +44,6 @@ pub struct FuserConfig {
     inner: ChatCompletionConfig,
 }
 
-// lazy_static! {
-//     static ref EVALUATOR_OUTPUT_SCHEMA: JSONSchemaFromPath = {
-//         #[allow(clippy::expect_used)]
-//         JSONSchemaFromPath::from_value(&json!({
-//             "type": "object",
-//             "properties": {
-//                 "thinking": { "type": "string" },
-//                 "answer_choice": { "type": "integer" }
-//             },
-//             "required": ["thinking", "answer_choice"],
-//             "additionalProperties": false
-//         }))
-//         .expect("Failed to create schema for evaluator output")
-//     };
-// }
-
 impl Variant for MixtureOfNConfig {
     async fn infer<'a, 'request>(
         &'a self,
@@ -243,7 +227,7 @@ impl MixtureOfNConfig {
         models: &'a HashMap<String, ModelConfig>,
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
-        candidates: Vec<InferenceResult<'a>>,
+        mut candidates: Vec<InferenceResult<'a>>,
     ) -> Result<InferenceResult<'a>, Error> {
         if candidates.is_empty() {
             return Err(Error::Inference {
@@ -251,7 +235,6 @@ impl MixtureOfNConfig {
             });
         }
         if candidates.len() == 1 {
-            let mut candidates = candidates;
             return candidates.pop().ok_or_else(|| Error::Inference {
                 message: "Expected one candidate but found none. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
             });
@@ -731,7 +714,7 @@ mod tests {
         let (request_message, included_indices) = result.unwrap();
         assert_eq!(included_indices, vec![0, 1]);
 
-        let expected_message_text = "Here are the candidate answers (with the index and a row of ------ separating):\n0: [{\"type\":\"text\",\"text\":\"Candidate answer 1\"}]\n------1: [{\"type\":\"text\",\"text\":\"Candidate answer 2\"}]\n------".to_string();
+        let expected_message_text = "Here are the candidate answers (with the index and a row of ------ separating):\n0:\n[{\"type\":\"text\",\"text\":\"Candidate answer 1\"}]\n------1:\n[{\"type\":\"text\",\"text\":\"Candidate answer 2\"}]\n------".to_string();
         // Now check that the request_message has the expected role and content
         assert_eq!(request_message.role, Role::User);
         assert_eq!(request_message.content, vec![expected_message_text.into()]);
@@ -823,7 +806,7 @@ mod tests {
         // Expect included_indices to contain index 0
         assert_eq!(included_indices, vec![0]);
 
-        let expected_message_text = "Here are the candidate answers (with the index and a row of ------ separating):\n0: {\"response\": \"Valid JSON response\"}\n------".to_string();
+        let expected_message_text = "Here are the candidate answers (with the index and a row of ------ separating):\n0:\n{\"response\": \"Valid JSON response\"}\n------".to_string();
 
         // Check that the request_message has the expected role and content
         assert_eq!(request_message.role, Role::User);

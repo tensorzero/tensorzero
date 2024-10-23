@@ -149,12 +149,12 @@ const BEST_OF_N_EVALUATOR_CANDIDATES: &str = r#"Here are the candidate answers (
 Please evaluate these candidates and provide the index of the best one."#;
 
 // Lightly edited from Table 6 in the [Archon paper](https://arxiv.org/abs/2409.15254).
-const MIXTURE_OF_N_FUSER_SYSTEM: &str = r#"{%- if inner_system_message is defined -%}You have been provided with a set of responses from various open-source models to the following problem:
+const MIXTURE_OF_N_FUSER_SYSTEM: &str = r#"{%- if inner_system_message is defined -%}You have been provided with a set of responses from various models to the following problem:
 ------
 {{ inner_system_message }}
 ------
 {%- else -%}
-You have been provided with a set of responses from various open-source models to the latest user
+You have been provided with a set of responses from various models to the latest user
 query.
 
 {%- endif %}
@@ -162,7 +162,8 @@ Your task is to synthesize these responses into a single, high-quality response.
 
 const MIXTURE_OF_N_FUSER_CANDIDATES: &str = r#"Here are the candidate answers (with the index and a row of ------ separating):
 {% for candidate in candidates -%}
-{{ loop.index0 }}: {{ candidate }}
+{{ loop.index0 }}:
+{{ candidate }}
 ------
 {%- endfor %}"#;
 
