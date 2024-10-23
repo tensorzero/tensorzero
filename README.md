@@ -2,18 +2,18 @@
 
 # TensorZero
 
-**TensorZero enables LLM applications that learn from real-world experience.**
+**TensorZero makes LLM improve through experience.**
 
 1. Integrate our model gateway
 2. Send metrics or feedback
 3. Optimize prompts, models, and inference-time strategies
-4. Unlock compounding improvements in quality, cost, and latency
+4. Watch your LLMs get smarter, cheaper, and faster over time
 
 It provides a **data & learning flywheel for LLMs** by unifying:
 
 - [x] **Inference:** one API for all LLMs, with <1ms P99 overhead
 - [x] **Observability:** inference & feedback → your database
-- [x] **Optimization:** from prompts to fine-tuning and RL (& even 🍓? **[→](https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations)**) 
+- [x] **Optimization:** from prompts to fine-tuning and RL (& even 🍓? **[→](https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations)**)
 - [x] **Experimentation:** built-in A/B testing, routing, fallbacks
 
 <p align="center">
