@@ -95,13 +95,10 @@ jobs:
 
       - name: Set up CLICKHOUSE_URL for production deployment tests
         run: |
-          echo "CLICKHOUSE_URL=http://host.docker.internal:8123/tensorzero" >> $GITHUB_ENV
+          echo "CLICKHOUSE_URL=http://172.17.0.1:8123/tensorzero" >> $GITHUB_ENV
       - name: Set up .env file for production deployment tests
         run: |
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > examples/production-deployment/.env
-
-      - name: Debugging with ssh
-        uses: lhotari/action-upterm@v1
 
       - name: Run docker compose for production deployment tests
         run: docker compose -f examples/production-deployment/docker-compose.yml up -d --wait --add-host host.docker.internal:host-gateway
