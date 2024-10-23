@@ -2,7 +2,7 @@
 
 # TensorZero
 
-**TensorZero makes LLM improve through experience.**
+**TensorZero makes LLMs improve through experience.**
 
 1. Integrate our model gateway
 2. Send metrics or feedback
