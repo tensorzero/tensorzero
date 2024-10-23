@@ -27,6 +27,9 @@ pub struct Params {
     metric_name: String,
     // the value of the feedback being provided
     value: Value,
+    // the tags to add to the feedback
+    #[serde(default)]
+    tags: HashMap<String, String>,
     // if true, the feedback will not be stored
     dryrun: Option<bool>,
 }
@@ -86,6 +89,7 @@ pub async fn feedback_handler(
                 clickhouse_connection_info,
                 feedback_metadata.target_id,
                 params.value,
+                params.tags,
                 feedback_metadata.level,
                 feedback_id,
                 dryrun,
@@ -98,6 +102,7 @@ pub async fn feedback_handler(
                 config,
                 feedback_metadata.target_id,
                 params.value,
+                params.tags,
                 feedback_id,
                 dryrun,
             )
@@ -109,6 +114,7 @@ pub async fn feedback_handler(
                 &params.metric_name,
                 feedback_metadata.target_id,
                 params.value,
+                params.tags,
                 feedback_id,
                 dryrun,
             )
@@ -120,6 +126,7 @@ pub async fn feedback_handler(
                 &params.metric_name,
                 feedback_metadata.target_id,
                 params.value,
+                params.tags,
                 feedback_id,
                 dryrun,
             )
@@ -197,6 +204,7 @@ async fn write_comment(
     connection_info: ClickHouseConnectionInfo,
     target_id: Uuid,
     value: Value,
+    tags: HashMap<String, String>,
     level: &MetricConfigLevel,
     feedback_id: Uuid,
     dryrun: bool,
@@ -208,7 +216,8 @@ async fn write_comment(
         "target_type": level,
         "target_id": target_id,
         "value": value,
-        "id": feedback_id
+        "id": feedback_id,
+        "tags": tags
     });
     if !dryrun {
         tokio::spawn(async move {
@@ -223,13 +232,14 @@ async fn write_demonstration(
     config: &'static Config<'_>,
     inference_id: Uuid,
     value: Value,
+    tags: HashMap<String, String>,
     feedback_id: Uuid,
     dryrun: bool,
 ) -> Result<(), Error> {
     let function_name = get_function_name_from_inference_id(inference_id, &connection_info).await?;
     let function_config = config.get_function(&function_name)?;
     let parsed_value = validate_parse_demonstration(function_config, &config.tools, &value).await?;
-    let payload = json!({"inference_id": inference_id, "value": parsed_value, "id": feedback_id});
+    let payload = json!({"inference_id": inference_id, "value": parsed_value, "id": feedback_id, "tags": tags});
     if !dryrun {
         tokio::spawn(async move {
             write_feedback(connection_info, payload, "DemonstrationFeedback").await;
@@ -243,13 +253,14 @@ async fn write_float(
     metric_name: &str,
     target_id: Uuid,
     value: Value,
+    tags: HashMap<String, String>,
     feedback_id: Uuid,
     dryrun: bool,
 ) -> Result<(), Error> {
     let value = value.as_f64().ok_or(Error::InvalidRequest {
         message: format!("Feedback value for metric `{metric_name}` must be a number"),
     })?;
-    let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id});
+    let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
     if !dryrun {
         tokio::spawn(async move {
             write_feedback(connection_info, payload, "FloatMetricFeedback").await;
@@ -263,13 +274,14 @@ async fn write_boolean(
     metric_name: &str,
     target_id: Uuid,
     value: Value,
+    tags: HashMap<String, String>,
     feedback_id: Uuid,
     dryrun: bool,
 ) -> Result<(), Error> {
     let value = value.as_bool().ok_or(Error::InvalidRequest {
         message: format!("Feedback value for metric `{metric_name}` must be a boolean"),
     })?;
-    let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id});
+    let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
     if !dryrun {
         tokio::spawn(async move {
             write_feedback(connection_info, payload, "BooleanMetricFeedback").await;
@@ -639,6 +651,7 @@ mod tests {
             inference_id: None,
             metric_name: "comment".to_string(),
             value: value.clone(),
+            tags: HashMap::from([("foo".to_string(), "bar".to_string())]),
             dryrun: Some(false),
         };
         let response =
@@ -661,6 +674,12 @@ mod tests {
         assert_eq!(retrieved_value, &value);
         let retrieved_target_type = mock_data.get("target_type").unwrap().as_str().unwrap();
         assert_eq!(retrieved_target_type, "episode");
+        let retrieved_tags: HashMap<String, String> =
+            serde_json::from_value(mock_data["tags"].clone()).unwrap();
+        assert_eq!(
+            retrieved_tags,
+            HashMap::from([("foo".to_string(), "bar".to_string())])
+        );
 
         // Test a Demonstration Feedback
         let episode_id = Uuid::now_v7();
@@ -671,6 +690,7 @@ mod tests {
             inference_id: None,
             metric_name: "demonstration".to_string(),
             value: value.clone(),
+            tags: HashMap::from([("baz".to_string(), "bat".to_string())]),
             dryrun: Some(false),
         };
         let response = feedback_handler(State(app_state_data.clone()), StructuredJson(params))
@@ -690,6 +710,7 @@ mod tests {
             inference_id: Some(inference_id),
             metric_name: "demonstration".to_string(),
             value: value.clone(),
+            tags: HashMap::from([("bat".to_string(), "man".to_string())]),
             dryrun: Some(false),
         };
         let response =
@@ -730,6 +751,7 @@ mod tests {
             inference_id: Some(inference_id),
             metric_name: "test_float".to_string(),
             value: value.clone(),
+            tags: HashMap::from([("boo".to_string(), "far".to_string())]),
             dryrun: Some(false),
         };
         let response = feedback_handler(State(app_state_data.clone()), StructuredJson(params))
@@ -747,6 +769,7 @@ mod tests {
             inference_id: None,
             metric_name: "test_float".to_string(),
             value: value.clone(),
+            tags: HashMap::from([("poo".to_string(), "bar".to_string())]),
             dryrun: Some(false),
         };
         let response =
@@ -769,6 +792,12 @@ mod tests {
         assert_eq!(retrieved_target_id, &episode_id.to_string());
         let retrieved_value = mock_data.get("value").unwrap();
         assert_eq!(retrieved_value, &value);
+        let retrieved_tags: HashMap<String, String> =
+            serde_json::from_value(mock_data["tags"].clone()).unwrap();
+        assert_eq!(
+            retrieved_tags,
+            HashMap::from([("poo".to_string(), "bar".to_string())])
+        );
 
         // Test Boolean feedback with inference-level
         let mut metrics = HashMap::new();
@@ -797,6 +826,7 @@ mod tests {
             inference_id: Some(inference_id),
             metric_name: "test_boolean".to_string(),
             value: value.clone(),
+            tags: HashMap::from([("new".to_string(), "car".to_string())]),
             dryrun: None,
         };
         let response =
@@ -823,6 +853,12 @@ mod tests {
         assert_eq!(retrieved_target_id, &inference_id.to_string());
         let retrieved_value = mock_data.get("value").unwrap();
         assert_eq!(retrieved_value, &value);
+        let retrieved_tags: HashMap<String, String> =
+            serde_json::from_value(mock_data["tags"].clone()).unwrap();
+        assert_eq!(
+            retrieved_tags,
+            HashMap::from([("new".to_string(), "car".to_string())])
+        );
 
         // Test dryrun
         let inference_id = Uuid::now_v7();
@@ -831,6 +867,7 @@ mod tests {
             inference_id: Some(inference_id),
             metric_name: "test_boolean".to_string(),
             value: value.clone(),
+            tags: HashMap::from([("foo".to_string(), "bar".to_string())]),
             dryrun: Some(true),
         };
         let response =
