@@ -1123,7 +1123,7 @@ async fn test_dicl_json_request() {
                 assert!(!raw_response.to_lowercase().contains("brasilia"));
                 assert!(raw_response.to_lowercase().contains("nose"));
                 let system = model_inference.get("system").unwrap().as_str().unwrap();
-                assert_eq!(system, "You are tasked with learning by induction and then solving a problem below. You will be shown several examples of inputs followed by outputs. Then, in the same format you will be given one last set of inputs. Your job is to use the provided examples to inform your response to the last set of inputs.");
+                assert_eq!(system, "You are a helpful and friendly assistant with a name that will be provided to you.\n\nPlease answer the questions in a JSON with key \"answer\".\n\nDo not include any other text than the JSON object. Do not include \"```json\" or \"```\" or anything else.\n\nExample Response:\n\n{\n    \"answer\": \"42\"\n}\n");
                 assert_eq!(input_messages.len(), 7);
                 assert_eq!(output.len(), 1);
                 match &output[0] {

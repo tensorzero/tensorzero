@@ -85,20 +85,8 @@ impl<'a> Migration for Migration0004<'a> {
         // Add a column `system` to the `ModelInference` table
         let query = r#"
             ALTER TABLE ModelInference
-            ADD COLUMN IF NOT EXISTS system Nullable(String)
-        "#;
-        let _ = self.clickhouse.run_query(query.to_string()).await?;
-
-        // Add a column `input_messages` to the `ModelInference` table
-        let query = r#"
-            ALTER TABLE ModelInference
-            ADD COLUMN IF NOT EXISTS input_messages String
-        "#;
-        let _ = self.clickhouse.run_query(query.to_string()).await?;
-
-        // Add a column `output` to the `ModelInference` table
-        let query = r#"
-            ALTER TABLE ModelInference
+            ADD COLUMN IF NOT EXISTS system Nullable(String),
+            ADD COLUMN IF NOT EXISTS input_messages String,
             ADD COLUMN IF NOT EXISTS output String
         "#;
         let _ = self.clickhouse.run_query(query.to_string()).await?;
