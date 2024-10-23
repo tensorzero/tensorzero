@@ -81,7 +81,9 @@ jobs:
         run: uv run pytest
 
       - name: Terminate the gateway
-        run: pkill -f "cargo run-e2e &" || true
+        run: |
+          pid=$(pgrep -f "cargo run-e2e")
+          kill -9 $pid
 
       - name: Build Docker container for production deployment tests
         run: docker build -t tensorzero/gateway .
