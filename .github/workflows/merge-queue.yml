@@ -100,6 +100,9 @@ jobs:
         run: |
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > examples/production-deployment/.env
 
+      - name: Debugging with ssh
+        uses: lhotari/action-upterm@v1
+
       - name: Run docker compose for production deployment tests
         run: docker compose -f examples/production-deployment/docker-compose.yml up -d --wait
 
