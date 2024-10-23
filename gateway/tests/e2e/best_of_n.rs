@@ -19,6 +19,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
 
     let payload = json!({
         "function_name": "best_of_n",
+        "variant_name": "best_of_n_variant",
         "episode_id": episode_id,
         "input": {
             "system": {"assistant_name": "AskJeeves"},

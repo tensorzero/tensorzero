@@ -17,7 +17,7 @@ uv run pytest
 ```
 """
 
-from time import sleep
+from time import sleep, time
 from uuid import UUID
 
 import pytest
@@ -67,6 +67,7 @@ async def test_async_basic_inference(async_client):
 
 @pytest.mark.asyncio
 async def test_async_inference_streaming(async_client):
+    start_time = time()
     stream = await async_client.inference(
         function_name="basic_test",
         input={
@@ -75,7 +76,14 @@ async def test_async_inference_streaming(async_client):
         },
         stream=True,
     )
-    chunks = [chunk async for chunk in stream]
+    first_chunk_duration = None
+    chunks = []
+    async for chunk in stream:
+        chunks.append(chunk)
+        if first_chunk_duration is None:
+            first_chunk_duration = time() - start_time
+    last_chunk_duration = time() - start_time - first_chunk_duration
+    assert last_chunk_duration > first_chunk_duration + 0.1
     expected_text = [
         "Wally,",
         " the",
@@ -394,6 +402,7 @@ def test_sync_basic_inference(sync_client):
 
 
 def test_sync_inference_streaming(sync_client):
+    start_time = time()
     stream = sync_client.inference(
         function_name="basic_test",
         input={
@@ -402,8 +411,15 @@ def test_sync_inference_streaming(sync_client):
         },
         stream=True,
     )
-    chunks = list(stream)
-    print(chunks)
+    first_chunk_duration = None
+    chunks = []
+    for chunk in stream:
+        chunks.append(chunk)
+        if first_chunk_duration is None:
+            first_chunk_duration = time() - start_time
+    last_chunk_duration = time() - start_time - first_chunk_duration
+    assert last_chunk_duration > first_chunk_duration + 0.1
+
     expected_text = [
         "Wally,",
         " the",
