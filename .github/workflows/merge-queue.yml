@@ -104,7 +104,7 @@ jobs:
         uses: lhotari/action-upterm@v1
 
       - name: Run docker compose for production deployment tests
-        run: docker compose -f examples/production-deployment/docker-compose.yml up -d --wait
+        run: docker compose -f examples/production-deployment/docker-compose.yml up -d --wait --add-host host.docker.internal:host-gateway
 
       - name: Run inference for production deployment tests
         run: examples/production-deployment/run_example_inference.sh
