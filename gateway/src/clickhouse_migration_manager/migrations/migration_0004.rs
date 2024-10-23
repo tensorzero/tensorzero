@@ -16,8 +16,7 @@ pub struct Migration0004<'a> {
 }
 
 impl<'a> Migration for Migration0004<'a> {
-    /// Check if you can connect to the database
-    /// Then check if the four feedback tables exist as the sources for the materialized views
+    /// Check if you can connect to the database and if the ModelInference table exists
     /// If all of this is OK, then we can apply the migration
     async fn can_apply(&self) -> Result<(), Error> {
         self.clickhouse
@@ -56,8 +55,7 @@ impl<'a> Migration for Migration0004<'a> {
         Ok(())
     }
 
-    /// Check if the migration has already been applied
-    /// This should be equivalent to checking if `FeedbackTag` exists
+    /// Check if the migration has already been applied by checking if the new columns exist
     async fn should_apply(&self) -> Result<bool, Error> {
         let database = self.clickhouse.database();
         let query = format!(
