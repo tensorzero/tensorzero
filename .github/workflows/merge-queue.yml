@@ -58,7 +58,7 @@ jobs:
         run: docker compose -f gateway/tests/e2e/docker-compose.yml up -d --wait
 
       - name: Launch the gateway for E2E tests
-        run: cargo run-e2e & echo $! > .gateway.pid
+        run: cargo run-e2e
 
       - name: Run all tests (including E2E tests)
         run: |
