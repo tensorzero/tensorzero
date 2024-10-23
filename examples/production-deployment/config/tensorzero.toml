@@ -16,8 +16,7 @@ model_name = "gpt-4o-mini-2024-07-18"
 [functions.simple_llm_call]
 type = "chat"
 
-[functions.simple_llm_call.variants.default]
-weight = 1
+[functions.simple_llm_call.variants.baseline]
 type = "chat_completion"
 model = "gpt-4o-mini-2024-07-18"
 
@@ -25,4 +24,7 @@ model = "gpt-4o-mini-2024-07-18"
 # │                                  METRICS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-# No metrics for now
+[metrics.task_success]
+type = "boolean"
+optimize = "max"
+level = "episode"

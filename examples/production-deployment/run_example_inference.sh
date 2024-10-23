@@ -1,4 +1,5 @@
 #!/bin/bash
+
 curl -X POST http://localhost:3000/inference \
   -H "Content-Type: application/json" \
   -d '{
@@ -12,4 +13,12 @@ curl -X POST http://localhost:3000/inference \
         }
       ]
     }
+  }'
+
+curl -X POST http://localhost:3000/feedback \
+  -H "Content-Type: application/json" \
+  -d '{
+    "metric_name": "task_success",
+    "inference_id": "00000000-0000-0000-0000-000000000000",
+    "value": true
   }'

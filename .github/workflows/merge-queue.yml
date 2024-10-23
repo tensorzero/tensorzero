@@ -2,6 +2,7 @@ name: Merge Queue Checks
 
 on:
   merge_group:
+  push:
 
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }} # for E2E tests
@@ -11,7 +12,6 @@ env:
   AZURE_OPENAI_API_BASE: ${{secrets.AZURE_OPENAI_API_BASE }} # for E2E tests
   AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }} # for E2E tests
   AZURE_OPENAI_DEPLOYMENT_ID: ${{secrets.AZURE_OPENAI_DEPLOYMENT_ID }} # for E2E tests
-  CLICKHOUSE_URL: "http://host.docker.internal:8123/tensorzero" # for production deployment tests
   FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }} # for E2E tests
   FORCE_COLOR: 1
   GCP_VERTEX_CREDENTIALS_PATH: ${{ github.workspace }}/gcp_jwt_key.json
@@ -87,14 +87,12 @@ jobs:
       - name: Build Docker container for production deployment tests
         run: docker build -t tensorzero/gateway .
 
+      - name: Set up CLICKHOUSE_URL for production deployment tests
+        run: |
+          echo "CLICKHOUSE_URL=http://localhost:8123/tensorzero" >> $GITHUB_ENV
+
       - name: Run docker compose for production deployment tests
         run: docker compose -f examples/production-deployment/docker-compose.yml up -d --wait
 
       - name: Run inference for production deployment tests
         run: examples/production-deployment/run_example_inference.sh
-
-      - name: Tear down ClickHouse container
-        run: docker compose -f gateway/tests/e2e/docker-compose.yml down
-
-      - name: Tear down docker compose for production deployment tests
-        run: docker compose -f examples/production-deployment/docker-compose.yml down
