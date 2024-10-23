@@ -1,7 +1,10 @@
 use futures::StreamExt;
-use gateway::inference::providers::dummy::{
-    DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW, DUMMY_RAW_REQUEST,
-    DUMMY_STREAMING_RESPONSE,
+use gateway::inference::{
+    providers::dummy::{
+        DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW, DUMMY_RAW_REQUEST,
+        DUMMY_STREAMING_RESPONSE,
+    },
+    types::{ContentBlock, RequestMessage, Role, Text},
 };
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
@@ -129,6 +132,28 @@ async fn e2e_test_inference_flaky() {
     assert_eq!(
         result.get("raw_request").unwrap().as_str().unwrap(),
         DUMMY_RAW_REQUEST
+    );
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named AskJeeves"
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    assert_eq!(
+        input_messages,
+        vec![RequestMessage {
+            role: Role::User,
+            content: vec!["Hello, world!".to_string().into()],
+        }]
+    );
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(
+        output,
+        vec![ContentBlock::Text(Text {
+            text: DUMMY_INFER_RESPONSE_CONTENT.to_string(),
+        })]
     );
 }
 
@@ -292,6 +317,28 @@ async fn e2e_test_streaming_flaky() {
     assert_eq!(
         result.get("raw_request").unwrap().as_str().unwrap(),
         DUMMY_RAW_REQUEST
+    );
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named AskJeeves"
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    assert_eq!(
+        input_messages,
+        vec![RequestMessage {
+            role: Role::User,
+            content: vec!["Hello, world!".to_string().into(),],
+        }]
+    );
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(
+        output,
+        vec![ContentBlock::Text(Text {
+            text: DUMMY_STREAMING_RESPONSE.join(""),
+        })]
     );
 }
 

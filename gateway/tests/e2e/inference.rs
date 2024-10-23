@@ -1,8 +1,14 @@
 use futures::StreamExt;
-use gateway::inference::providers::dummy::{
-    DUMMY_BAD_TOOL_RESPONSE, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
-    DUMMY_JSON_RESPONSE_RAW, DUMMY_RAW_REQUEST, DUMMY_STREAMING_RESPONSE,
-    DUMMY_STREAMING_TOOL_RESPONSE, DUMMY_TOOL_RESPONSE,
+use gateway::{
+    inference::{
+        providers::dummy::{
+            DUMMY_BAD_TOOL_RESPONSE, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
+            DUMMY_JSON_RESPONSE_RAW, DUMMY_RAW_REQUEST, DUMMY_STREAMING_RESPONSE,
+            DUMMY_STREAMING_TOOL_RESPONSE, DUMMY_TOOL_RESPONSE,
+        },
+        types::{ContentBlock, RequestMessage, Role},
+    },
+    tool::ToolCall,
 };
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
@@ -174,6 +180,27 @@ async fn e2e_test_inference_model_fallback() {
         result.get("raw_request").unwrap().as_str().unwrap(),
         DUMMY_RAW_REQUEST
     );
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named AskJeeves"
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    assert_eq!(input_messages.len(), 1);
+    assert_eq!(
+        input_messages[0],
+        RequestMessage {
+            role: Role::User,
+            content: vec!["Hello, world!".to_string().into()],
+        }
+    );
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(
+        output,
+        vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()]
+    );
 }
 
 #[tokio::test]
@@ -344,6 +371,34 @@ async fn e2e_test_tool_call() {
         result.get("raw_request").unwrap().as_str().unwrap(),
         DUMMY_RAW_REQUEST
     );
+    let system = result.get("system").unwrap().as_str().unwrap();
+    let expected_system = "You are a helpful and friendly assistant named AskJeeves.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\").";
+    assert_eq!(system, expected_system);
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec!["Hi I'm visiting Brooklyn from Brazil. What's the weather?"
+            .to_string()
+            .into()],
+    }];
+    assert_eq!(input_messages, expected_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 1);
+    match &output[0] {
+        ContentBlock::ToolCall(tool_call) => {
+            assert_eq!(tool_call.id, "0");
+            assert_eq!(tool_call.name, "get_temperature");
+            assert_eq!(
+                tool_call.arguments,
+                serde_json::to_string(&*DUMMY_TOOL_RESPONSE).unwrap()
+            );
+        }
+        _ => {
+            panic!("Expected a tool call block, got {:?}", output[0]);
+        }
+    }
 }
 
 #[tokio::test]
@@ -510,6 +565,34 @@ async fn e2e_test_tool_call_malformed() {
         result.get("raw_request").unwrap().as_str().unwrap(),
         DUMMY_RAW_REQUEST
     );
+    let system = result.get("system").unwrap().as_str().unwrap();
+    let expected_system = "You are a helpful and friendly assistant named AskJeeves.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\").";
+    assert_eq!(system, expected_system);
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec!["Hi I'm visiting Brooklyn from Brazil. What's the weather?"
+            .to_string()
+            .into()],
+    }];
+    assert_eq!(input_messages, expected_messages);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 1);
+    match &output[0] {
+        ContentBlock::ToolCall(tool_call) => {
+            assert_eq!(tool_call.id, "0");
+            assert_eq!(tool_call.name, "get_temperature");
+            assert_eq!(
+                tool_call.arguments,
+                serde_json::to_string(&*DUMMY_BAD_TOOL_RESPONSE).unwrap()
+            );
+        }
+        _ => {
+            panic!("Expected a tool call block, got {:?}", output[0]);
+        }
+    }
 }
 
 /// This test checks the return type and clickhouse writes for a function with an output schema and
@@ -617,6 +700,27 @@ async fn e2e_test_inference_json_fail() {
     assert_eq!(
         result.get("raw_request").unwrap().as_str().unwrap(),
         DUMMY_RAW_REQUEST
+    );
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named AskJeeves"
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    assert_eq!(input_messages.len(), 1);
+    assert_eq!(
+        input_messages[0],
+        RequestMessage {
+            role: Role::User,
+            content: vec!["Hello, world!".to_string().into()],
+        }
+    );
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(
+        output,
+        vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()]
     );
 }
 
@@ -732,6 +836,24 @@ async fn e2e_test_inference_json_success() {
         result.get("raw_request").unwrap().as_str().unwrap(),
         DUMMY_RAW_REQUEST
     );
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named AskJeeves.\n\nPlease answer the questions in a JSON with key \"answer\".\n\nDo not include any other text than the JSON object. Do not include \"```json\" or \"```\" or anything else.\n\nExample Response:\n\n{\n    \"answer\": \"42\"\n}"
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    assert_eq!(input_messages.len(), 1);
+    assert_eq!(
+        input_messages[0],
+        RequestMessage {
+            role: Role::User,
+            content: vec!["What is the capital city of Japan?".to_string().into()],
+        }
+    );
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output, vec!["{\"answer\":\"Hello\"}".to_string().into()]);
 }
 
 /// The variant_failover function has two variants: good and error, each with weight 0.5
@@ -877,6 +999,24 @@ async fn e2e_test_variant_failover() {
         result.get("raw_request").unwrap().as_str().unwrap(),
         DUMMY_RAW_REQUEST
     );
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named AskJeeves"
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    assert_eq!(input_messages.len(), 1);
+    assert_eq!(
+        input_messages[0],
+        RequestMessage {
+            role: Role::User,
+            content: vec!["I want 13 of tacos, please.".to_string().into()],
+        }
+    );
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output, vec!["Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.".to_string().into()]);
 }
 
 /// This test checks that streaming inference works as expected.
@@ -1039,6 +1179,24 @@ async fn e2e_test_streaming() {
         result.get("raw_request").unwrap().as_str().unwrap(),
         DUMMY_RAW_REQUEST
     );
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named AskJeeves"
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    assert_eq!(input_messages.len(), 1);
+    assert_eq!(
+        input_messages[0],
+        RequestMessage {
+            role: Role::User,
+            content: vec!["Hello, world!".to_string().into()],
+        }
+    );
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output, vec![DUMMY_STREAMING_RESPONSE.join("").into()]);
 }
 
 /// This test checks that streaming inference works as expected when dryrun is true.
@@ -1301,6 +1459,34 @@ async fn e2e_test_tool_call_streaming() {
     assert_eq!(
         result.get("raw_request").unwrap().as_str().unwrap(),
         DUMMY_RAW_REQUEST
+    );
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named AskJeeves.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with the tool call. Use the \"get_temperature\" tool.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit.\")."
+    );
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    assert_eq!(input_messages.len(), 1);
+    assert_eq!(
+        input_messages[0],
+        RequestMessage {
+            role: Role::User,
+            content: vec!["Hi I'm visiting Brooklyn from Brazil. What's the weather?"
+                .to_string()
+                .into()],
+        }
+    );
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(
+        output,
+        vec![ContentBlock::ToolCall(ToolCall {
+            name: "get_temperature".to_string(),
+            arguments: "{\"location\":\"Brooklyn\",\"units\":\"celsius\"}".to_string(),
+            id: "0".to_string(),
+        })]
     );
 }
 

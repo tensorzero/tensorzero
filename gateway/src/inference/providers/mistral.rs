@@ -93,6 +93,7 @@ impl InferenceProvider for MistralProvider {
                 response,
                 latency,
                 request: request_body,
+                generic_request: request,
             }
             .try_into()
         } else {
@@ -461,6 +462,7 @@ struct MistralResponseWithMetadata<'a> {
     response: MistralResponse,
     latency: Latency,
     request: MistralRequest<'a>,
+    generic_request: &'a ModelInferenceRequest<'a>,
 }
 
 impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -470,6 +472,7 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
             mut response,
             latency,
             request: request_body,
+            generic_request,
         } = value;
         let raw_response = serde_json::to_string(&response).map_err(|e| Error::MistralServer {
             message: format!("Error parsing response: {e}"),
@@ -505,9 +508,12 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
             serde_json::to_string(&request_body).map_err(|e| Error::MistralServer {
                 message: format!("Error serializing request body as JSON: {e}"),
             })?;
-
+        let system = generic_request.system.clone();
+        let messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
             content,
+            system,
+            messages,
             raw_request,
             raw_response,
             usage,
@@ -663,6 +669,23 @@ mod tests {
                 total_tokens: 30,
             },
         };
+
+        let generic_request = ModelInferenceRequest {
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test_user".to_string().into()],
+            }],
+            system: None,
+            temperature: Some(0.5),
+            max_tokens: Some(100),
+            seed: Some(69),
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::On,
+            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+
         let request_body = MistralRequest {
             messages: vec![],
             model: "mistral-small-latest",
@@ -681,11 +704,12 @@ mod tests {
                 response_time: Duration::from_millis(100),
             },
             request: request_body,
+            generic_request: &generic_request,
         });
         assert!(result.is_ok());
         let inference_response = result.unwrap();
         assert_eq!(
-            inference_response.content,
+            inference_response.output,
             vec!["Hello, world!".to_string().into()]
         );
         assert_eq!(inference_response.usage.input_tokens, 10);
@@ -697,6 +721,14 @@ mod tests {
             }
         );
         assert_eq!(inference_response.raw_request, raw_request);
+        assert_eq!(inference_response.system, None);
+        assert_eq!(
+            inference_response.input_messages,
+            vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test_user".to_string().into()],
+            }]
+        );
 
         // Test case 2: Valid response with tool calls
         let valid_response_with_tools = MistralResponse {
@@ -719,6 +751,21 @@ mod tests {
                 total_tokens: 40,
             },
         };
+        let generic_request = ModelInferenceRequest {
+            messages: vec![RequestMessage {
+                role: Role::Assistant,
+                content: vec!["test_assistant".to_string().into()],
+            }],
+            system: Some("test_system".to_string()),
+            temperature: Some(0.5),
+            max_tokens: Some(100),
+            seed: Some(69),
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::On,
+            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
         let request_body = MistralRequest {
             messages: vec![],
             model: "mistral-small-latest",
@@ -737,11 +784,12 @@ mod tests {
                 response_time: Duration::from_millis(110),
             },
             request: request_body,
+            generic_request: &generic_request,
         });
         assert!(result.is_ok());
         let inference_response = result.unwrap();
         assert_eq!(
-            inference_response.content,
+            inference_response.output,
             vec![ContentBlock::ToolCall(ToolCall {
                 id: "call1".to_string(),
                 name: "test_function".to_string(),
@@ -757,6 +805,14 @@ mod tests {
             }
         );
         assert_eq!(inference_response.raw_request, raw_request);
+        assert_eq!(inference_response.system, Some("test_system".to_string()));
+        assert_eq!(
+            inference_response.input_messages,
+            vec![RequestMessage {
+                role: Role::Assistant,
+                content: vec!["test_assistant".to_string().into()],
+            }]
+        );
         // Test case 3: Invalid response with no choices
         let invalid_response_no_choices = MistralResponse {
             choices: vec![],
@@ -783,6 +839,7 @@ mod tests {
                 response_time: Duration::from_millis(120),
             },
             request: request_body,
+            generic_request: &generic_request,
         });
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), Error::MistralServer { .. }));
@@ -827,6 +884,7 @@ mod tests {
                 response_time: Duration::from_millis(130),
             },
             request: request_body,
+            generic_request: &generic_request,
         });
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), Error::MistralServer { .. }));

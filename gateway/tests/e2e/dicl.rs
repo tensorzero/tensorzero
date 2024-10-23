@@ -5,7 +5,8 @@ use gateway::{
     clickhouse::ClickHouseConnectionInfo,
     embeddings::{EmbeddingProvider, EmbeddingProviderConfig, EmbeddingRequest},
     inference::types::{
-        ContentBlockOutput, Input, InputMessage, InputMessageContent, JsonInferenceOutput, Role,
+        ContentBlock, ContentBlockOutput, Input, InputMessage, InputMessageContent,
+        JsonInferenceOutput, RequestMessage, Role,
     },
 };
 use reqwest::{Client, StatusCode};
@@ -514,6 +515,14 @@ pub async fn test_dicl_inference_request() {
     assert_eq!(result.len(), 2);
     for model_inference in result {
         let model_name = model_inference.get("model_name").unwrap().as_str().unwrap();
+        let input_messages = model_inference
+            .get("input_messages")
+            .unwrap()
+            .as_str()
+            .unwrap();
+        let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+        let output = model_inference.get("output").unwrap().as_str().unwrap();
+        let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
         match model_name {
             "gpt-4o-mini-2024-07-18" => {
                 // The LLM call should generate output tokens
@@ -533,6 +542,18 @@ pub async fn test_dicl_inference_request() {
                     .unwrap();
                 assert!(!raw_response.to_lowercase().contains("rowling"));
                 assert!(raw_response.to_lowercase().contains("nose"));
+                let system = model_inference.get("system").unwrap().as_str().unwrap();
+                assert_eq!(system, "You are tasked with learning by induction and then solving a problem below. You will be shown several examples of inputs followed by outputs. Then, in the same format you will be given one last set of inputs. Your job is to use the provided examples to inform your response to the last set of inputs.");
+                assert_eq!(input_messages.len(), 7);
+                assert_eq!(output.len(), 1);
+                match &output[0] {
+                    ContentBlock::Text(text) => {
+                        assert!(text.text.to_lowercase().contains("nose"));
+                    }
+                    _ => {
+                        panic!("Expected a text block, got {:?}", output[0]);
+                    }
+                }
             }
             "text-embedding-3-small" => {
                 // The embedding call should not generate any output tokens
@@ -544,6 +565,9 @@ pub async fn test_dicl_inference_request() {
                         .unwrap(),
                     0
                 );
+                assert!(model_inference.get("system").unwrap().is_null());
+                assert_eq!(input_messages.len(), 1);
+                assert_eq!(output.len(), 0);
             }
             _ => {
                 panic!("Unexpected model: {}", model_name);
@@ -732,7 +756,6 @@ pub async fn test_dicl_inference_request() {
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
-
     // Check the ModelInference Table
     let result = select_model_inferences_clickhouse(&clickhouse, inference_id)
         .await
@@ -741,6 +764,14 @@ pub async fn test_dicl_inference_request() {
     assert_eq!(result.len(), 2);
     for model_inference in result {
         let model_name = model_inference.get("model_name").unwrap().as_str().unwrap();
+        let input_messages = model_inference
+            .get("input_messages")
+            .unwrap()
+            .as_str()
+            .unwrap();
+        let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+        let output = model_inference.get("output").unwrap().as_str().unwrap();
+        let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
         match model_name {
             "gpt-4o-mini-2024-07-18" => {
                 // The LLM call should generate output tokens
@@ -760,6 +791,18 @@ pub async fn test_dicl_inference_request() {
                     .unwrap();
                 assert!(!raw_response.to_lowercase().contains("rowling"));
                 assert!(raw_response.to_lowercase().contains("nose"));
+                let system = model_inference.get("system").unwrap().as_str().unwrap();
+                assert_eq!(system, "You are tasked with learning by induction and then solving a problem below. You will be shown several examples of inputs followed by outputs. Then, in the same format you will be given one last set of inputs. Your job is to use the provided examples to inform your response to the last set of inputs.");
+                assert_eq!(input_messages.len(), 7);
+                assert_eq!(output.len(), 1);
+                match &output[0] {
+                    ContentBlock::Text(text) => {
+                        assert!(text.text.to_lowercase().contains("nose"));
+                    }
+                    _ => {
+                        panic!("Expected a text block, got {:?}", output[0]);
+                    }
+                }
                 assert!(!model_inference.get("ttft_ms").unwrap().is_null());
             }
             "text-embedding-3-small" => {
@@ -772,6 +815,9 @@ pub async fn test_dicl_inference_request() {
                         .unwrap(),
                     0
                 );
+                assert!(model_inference.get("system").unwrap().is_null());
+                assert_eq!(input_messages.len(), 1);
+                assert_eq!(output.len(), 0);
             }
             _ => {
                 panic!("Unexpected model: {}", model_name);
@@ -1049,6 +1095,14 @@ async fn test_dicl_json_request() {
     assert_eq!(result.len(), 2);
     for model_inference in result {
         let model_name = model_inference.get("model_name").unwrap().as_str().unwrap();
+        let input_messages = model_inference
+            .get("input_messages")
+            .unwrap()
+            .as_str()
+            .unwrap();
+        let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+        let output = model_inference.get("output").unwrap().as_str().unwrap();
+        let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
         match model_name {
             "gpt-4o-mini-2024-07-18" => {
                 // The LLM call should generate output tokens
@@ -1068,6 +1122,19 @@ async fn test_dicl_json_request() {
                     .unwrap();
                 assert!(!raw_response.to_lowercase().contains("brasilia"));
                 assert!(raw_response.to_lowercase().contains("nose"));
+                let system = model_inference.get("system").unwrap().as_str().unwrap();
+                assert_eq!(system, "You are a helpful and friendly assistant with a name that will be provided to you.\n\nPlease answer the questions in a JSON with key \"answer\".\n\nDo not include any other text than the JSON object. Do not include \"```json\" or \"```\" or anything else.\n\nExample Response:\n\n{\n    \"answer\": \"42\"\n}\n");
+                assert_eq!(input_messages.len(), 7);
+                assert_eq!(output.len(), 1);
+                match &output[0] {
+                    ContentBlock::Text(text) => {
+                        assert!(!text.text.to_lowercase().contains("brasilia"));
+                        assert!(text.text.to_lowercase().contains("nose"));
+                    }
+                    _ => {
+                        panic!("Expected a text block, got {:?}", output[0]);
+                    }
+                }
             }
             "text-embedding-3-small" => {
                 // The embedding call should not generate any output tokens
@@ -1079,6 +1146,9 @@ async fn test_dicl_json_request() {
                         .unwrap(),
                     0
                 );
+                assert!(model_inference.get("system").unwrap().is_null());
+                assert_eq!(input_messages.len(), 1);
+                assert_eq!(output.len(), 0);
             }
             _ => {
                 panic!("Unexpected model: {}", model_name);

@@ -375,7 +375,7 @@ async fn inner_select_best_candidate<'a, 'request>(
     let model_inference_result =
         ModelInferenceResponseWithMetadata::new(model_inference_response, &evaluator.inner.model);
     let text_content = match model_inference_result
-        .content
+        .output
         .iter()
         .find_map(|block| match block {
             ContentBlock::Text(text) => Some(text),
@@ -790,7 +790,12 @@ mod tests {
         let model_inference_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: 200u64,
-            content: vec!["Candidate answer 1".to_string().into()],
+            output: vec!["Candidate answer 1".to_string().into()],
+            system: None,
+            input_messages: vec![RequestMessage {
+                role: Role::Assistant,
+                content: vec!["test_assistant".to_string().into()],
+            }],
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Example response\"}".to_string(),
             usage: Usage {
@@ -822,7 +827,12 @@ mod tests {
         let model_inference_response2 = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: 201u64,
-            content: vec!["Candidate answer 2".to_string().into()],
+            output: vec!["Candidate answer 2".to_string().into()],
+            system: Some("test_system".to_string()),
+            input_messages: vec![RequestMessage {
+                role: Role::Assistant,
+                content: vec!["test_assistant".to_string().into()],
+            }],
             raw_request: "{\"prompt\": \"Example prompt 2\"}".to_string(),
             raw_response: "{\"response\": \"Example response 2\"}".to_string(),
             usage: Usage {
@@ -882,7 +892,12 @@ mod tests {
         let model_inference_response_valid = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: 200u64,
-            content: vec!["{\"response\": \"Valid JSON response\"}".to_string().into()],
+            output: vec!["{\"response\": \"Valid JSON response\"}".to_string().into()],
+            system: Some("test_system".to_string()),
+            input_messages: vec![RequestMessage {
+                role: Role::Assistant,
+                content: vec!["test_assistant".to_string().into()],
+            }],
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Valid JSON response\"}".to_string(),
             usage: Usage {
@@ -912,9 +927,14 @@ mod tests {
         let model_inference_response_malformed = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: 201u64,
-            content: vec!["{\"response\": \"Malformed JSON response\""
+            output: vec!["{\"response\": \"Malformed JSON response\""
                 .to_string()
                 .into()], // missing closing brace
+            system: Some("test_system".to_string()),
+            input_messages: vec![RequestMessage {
+                role: Role::Assistant,
+                content: vec!["test_assistant".to_string().into()],
+            }],
             raw_request: "{\"prompt\": \"Example prompt 2\"}".to_string(),
             raw_response: "{\"response\": \"Malformed JSON response\"".to_string(), // malformed
             usage: Usage {
@@ -979,9 +999,14 @@ mod tests {
         let model_inference_response0 = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: 200u64,
-            content: vec!["Candidate answer 0".to_string().into()],
+            output: vec!["Candidate answer 0".to_string().into()],
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Example response\"}".to_string(),
+            system: Some("test_system".to_string()),
+            input_messages: vec![RequestMessage {
+                role: Role::Assistant,
+                content: vec!["test_assistant".to_string().into()],
+            }],
             usage: Usage {
                 input_tokens: 50,
                 output_tokens: 100,
@@ -1011,7 +1036,12 @@ mod tests {
         let model_inference_response1 = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: 201u64,
-            content: vec!["Candidate answer 1".to_string().into()],
+            output: vec!["Candidate answer 1".to_string().into()],
+            system: Some("test_system".to_string()),
+            input_messages: vec![RequestMessage {
+                role: Role::Assistant,
+                content: vec!["test_assistant".to_string().into()],
+            }],
             raw_request: "{\"prompt\": \"Example prompt 1\"}".to_string(),
             raw_response: "{\"response\": \"Example response 1\"}".to_string(),
             usage: Usage {

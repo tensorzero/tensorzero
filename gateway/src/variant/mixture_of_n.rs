@@ -645,7 +645,9 @@ mod tests {
         let model_inference_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: 200u64,
-            content: vec!["Candidate answer 1".to_string().into()],
+            output: vec!["Candidate answer 1".to_string().into()],
+            system: None,
+            input_messages: vec![],
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Example response\"}".to_string(),
             usage: Usage {
@@ -677,7 +679,9 @@ mod tests {
         let model_inference_response2 = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: 201u64,
-            content: vec!["Candidate answer 2".to_string().into()],
+            output: vec!["Candidate answer 2".to_string().into()],
+            system: None,
+            input_messages: vec![],
             raw_request: "{\"prompt\": \"Example prompt 2\"}".to_string(),
             raw_response: "{\"response\": \"Example response 2\"}".to_string(),
             usage: Usage {
@@ -737,7 +741,9 @@ mod tests {
         let model_inference_response_valid = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: 200u64,
-            content: vec!["{\"response\": \"Valid JSON response\"}".to_string().into()],
+            output: vec!["{\"response\": \"Valid JSON response\"}".to_string().into()],
+            system: None,
+            input_messages: vec![],
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Valid JSON response\"}".to_string(),
             usage: Usage {
@@ -767,9 +773,11 @@ mod tests {
         let model_inference_response_malformed = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: 201u64,
-            content: vec!["{\"response\": \"Malformed JSON response\""
+            output: vec!["{\"response\": \"Malformed JSON response\""
                 .to_string()
                 .into()], // missing closing brace
+            system: None,
+            input_messages: vec![],
             raw_request: "{\"prompt\": \"Example prompt 2\"}".to_string(),
             raw_response: "{\"response\": \"Malformed JSON response\"".to_string(), // malformed
             usage: Usage {
@@ -842,7 +850,9 @@ mod tests {
         let model_inference_response0 = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: 200u64,
-            content: vec!["Candidate answer 0".to_string().into()],
+            output: vec!["Candidate answer 0".to_string().into()],
+            system: None,
+            input_messages: vec![],
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Example response\"}".to_string(),
             usage: Usage {
@@ -874,7 +884,9 @@ mod tests {
         let model_inference_response1 = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: 201u64,
-            content: vec!["Candidate answer 1".to_string().into()],
+            output: vec!["Candidate answer 1".to_string().into()],
+            system: None,
+            input_messages: vec![],
             raw_request: "{\"prompt\": \"Example prompt 1\"}".to_string(),
             raw_response: "{\"response\": \"Example response 1\"}".to_string(),
             usage: Usage {

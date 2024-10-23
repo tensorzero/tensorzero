@@ -1,3 +1,4 @@
+use gateway::inference::types::{ContentBlock, RequestMessage, Role};
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use uuid::Uuid;
@@ -156,6 +157,41 @@ async fn e2e_test_mixture_of_n_dummy_candidates_real_judge() {
               }
             });
             assert_eq!(raw_request, expected_request);
+            let system = result.get("system").unwrap().as_str().unwrap();
+            assert_eq!(system, "You have been provided with a set of responses from various models to the following problem:\n------\nYou are a helpful and friendly assistant named AskJeeves\n------\nYour task is to synthesize these responses into a single, high-quality response. It is crucial to critically evaluate the information provided in these responses, recognizing that some of it may be biased or incorrect. Your response should not simply replicate the given answers but should offer a refined, accurate, and comprehensive reply to the instruction and take the best from all the responses. Ensure your response is well-structured, coherent, and adheres to the highest standards of accuracy and reliability.  Below will be: first, any messages leading up to this point, and then, a final message containing the set of candidate responses.");
+            let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+            let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+            assert_eq!(input_messages.len(), 2);
+            assert_eq!(
+                input_messages[0],
+                RequestMessage {
+                    role: Role::User,
+                    content: vec![
+                        "Please write me a sentence about the anime character Megumin."
+                            .to_string()
+                            .into()
+                    ],
+                }
+            );
+            assert_eq!(input_messages[1], RequestMessage {
+                role: Role::User,
+                content: vec![
+                    "Here are the candidate answers (with the index and a row of ------ separating):\n0:\n[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]\n------1:\n[{\"type\":\"text\",\"text\":\"Megumin chanted her spell, but instead of an explosion, a gentle rain began to fall.\"}]\n------"
+                        .to_string()
+                        .into()
+                ],
+            });
+            let output = result.get("output").unwrap().as_str().unwrap();
+            let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+            assert_eq!(output.len(), 1);
+            match &output[0] {
+                ContentBlock::Text(_) => {
+                    // We don't need to check the exact content since this is a fuser model
+                }
+                _ => {
+                    panic!("Expected a text block, got {:?}", output[0]);
+                }
+            }
         }
 
         let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
@@ -346,6 +382,41 @@ async fn e2e_test_mixture_of_n_json_real_judge() {
               }
             });
             assert_eq!(raw_request, expected_request);
+            let system = result.get("system").unwrap().as_str().unwrap();
+            assert_eq!(system, "You have been provided with a set of responses from various models to the following problem:\n------\nYou are a helpful and friendly assistant named AskJeeves\n------\nYour task is to synthesize these responses into a single, high-quality response. It is crucial to critically evaluate the information provided in these responses, recognizing that some of it may be biased or incorrect. Your response should not simply replicate the given answers but should offer a refined, accurate, and comprehensive reply to the instruction and take the best from all the responses. Ensure your response is well-structured, coherent, and adheres to the highest standards of accuracy and reliability.  Below will be: first, any messages leading up to this point, and then, a final message containing the set of candidate responses.");
+            let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+            let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+            assert_eq!(input_messages.len(), 2);
+            assert_eq!(
+                input_messages[0],
+                RequestMessage {
+                    role: Role::User,
+                    content: vec![
+                        "What are the first names of the Beatles? Respond in the format {\"names\": List[str]}"
+                            .to_string()
+                            .into()
+                    ],
+                }
+            );
+            assert_eq!(input_messages[1], RequestMessage {
+                role: Role::User,
+                content: vec![
+                    "Here are the candidate answers (with the index and a row of ------ separating):\n0:\n{\"names\":[\"John\", \"George\"]}\n------1:\n{\"names\":[\"Paul\", \"Ringo\"]}\n------"
+                        .to_string()
+                        .into()
+                ],
+            });
+            let output = result.get("output").unwrap().as_str().unwrap();
+            let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+            assert_eq!(output.len(), 1);
+            match &output[0] {
+                ContentBlock::Text(_) => {
+                    // We don't need to check the exact content since this is a fuser model
+                }
+                _ => {
+                    panic!("Expected a text block, got {:?}", output[0]);
+                }
+            }
         }
 
         let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();

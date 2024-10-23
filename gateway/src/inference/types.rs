@@ -73,7 +73,7 @@ pub struct Text {
 }
 
 /// Core representation of the types of content that could go in or out of a model
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlock {
     Text(Text),
@@ -89,7 +89,7 @@ pub enum ContentBlockOutput {
 }
 
 /// A RequestMessage is a message sent to a model
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct RequestMessage {
     pub role: Role,
     pub content: Vec<ContentBlock>,
@@ -116,7 +116,7 @@ pub enum ModelInferenceRequestJsonMode {
 /// and to convert it back to the appropriate response format.
 /// An example of the latter is that we might have prepared a request with Tools available
 /// but the client actually just wants a chat response.
-#[derive(Builder, Clone, Debug, Default)]
+#[derive(Builder, Clone, Debug, Default, PartialEq)]
 #[builder(setter(into, strip_option), default)]
 pub struct ModelInferenceRequest<'a> {
     pub messages: Vec<RequestMessage>,
@@ -142,7 +142,9 @@ pub struct ModelInferenceRequest<'a> {
 pub struct ProviderInferenceResponse {
     pub id: Uuid,
     pub created: u64,
-    pub content: Vec<ContentBlock>,
+    pub output: Vec<ContentBlock>,
+    pub system: Option<String>,
+    pub input_messages: Vec<RequestMessage>,
     pub raw_request: String,
     pub raw_response: String,
     pub usage: Usage,
@@ -173,7 +175,9 @@ pub enum Latency {
 pub struct ModelInferenceResponse<'a> {
     pub id: Uuid,
     pub created: u64,
-    pub content: Vec<ContentBlock>,
+    pub output: Vec<ContentBlock>,
+    pub system: Option<String>,
+    pub input_messages: Vec<RequestMessage>,
     pub raw_request: String,
     pub raw_response: String,
     pub usage: Usage,
@@ -187,7 +191,9 @@ pub struct ModelInferenceResponse<'a> {
 pub struct ModelInferenceResponseWithMetadata<'a> {
     pub id: Uuid,
     pub created: u64,
-    pub content: Vec<ContentBlock>,
+    pub output: Vec<ContentBlock>,
+    pub system: Option<String>,
+    pub input_messages: Vec<RequestMessage>,
     pub raw_request: String,
     pub raw_response: String,
     pub usage: Usage,
@@ -329,6 +335,9 @@ pub struct ModelInferenceDatabaseInsert {
     pub inference_id: Uuid,
     pub raw_request: String,
     pub raw_response: String,
+    pub system: Option<String>,
+    pub input_messages: String,
+    pub output: String,
     pub input_tokens: u32,
     pub output_tokens: u32,
     pub response_time_ms: u32,
@@ -424,7 +433,9 @@ impl<'a> ModelInferenceResponse<'a> {
         Self {
             id: provider_inference_response.id,
             created: provider_inference_response.created,
-            content: provider_inference_response.content,
+            output: provider_inference_response.output,
+            system: provider_inference_response.system,
+            input_messages: provider_inference_response.input_messages,
             raw_request: provider_inference_response.raw_request,
             raw_response: provider_inference_response.raw_response,
             usage: provider_inference_response.usage,
@@ -439,7 +450,9 @@ impl<'a> ModelInferenceResponseWithMetadata<'a> {
         Self {
             id: model_inference_response.id,
             created: model_inference_response.created,
-            content: model_inference_response.content,
+            output: model_inference_response.output,
+            system: model_inference_response.system,
+            input_messages: model_inference_response.input_messages,
             raw_request: model_inference_response.raw_request,
             raw_response: model_inference_response.raw_response,
             usage: model_inference_response.usage,
@@ -462,11 +475,16 @@ impl ModelInferenceDatabaseInsert {
             ),
             Latency::NonStreaming { response_time } => (response_time.as_millis() as u32, None),
         };
+        let serialized_input_messages = serialize_or_log(&result.input_messages);
+        let serialized_output = serialize_or_log(&result.output);
         Self {
             id: Uuid::now_v7(),
             inference_id,
             raw_request: result.raw_request,
             raw_response: result.raw_response,
+            system: result.system,
+            input_messages: serialized_input_messages,
+            output: serialized_output,
             input_tokens: result.usage.input_tokens,
             output_tokens: result.usage.output_tokens,
             response_time_ms: latency_ms,
@@ -479,7 +497,9 @@ impl ModelInferenceDatabaseInsert {
 
 impl ProviderInferenceResponse {
     pub fn new(
-        content: Vec<ContentBlock>,
+        output: Vec<ContentBlock>,
+        system: Option<String>,
+        input_messages: Vec<RequestMessage>,
         raw_request: String,
         raw_response: String,
         usage: Usage,
@@ -488,7 +508,9 @@ impl ProviderInferenceResponse {
         Self {
             id: Uuid::now_v7(),
             created: current_timestamp(),
-            content,
+            output,
+            system,
+            input_messages,
             raw_request,
             raw_response,
             usage,
@@ -674,22 +696,8 @@ impl JsonInferenceDatabaseInsert {
 
         let inference_params = json_result.inference_params;
 
-        let output = serde_json::to_string(&json_result.output)
-            .map_err(|e| Error::Serialization {
-                message: format!("Failed to serialize output: {}", e),
-            })
-            .unwrap_or_else(|e| {
-                e.log();
-                String::new()
-            });
-        let output_schema = serde_json::to_string(&json_result.output_schema)
-            .map_err(|e| Error::Serialization {
-                message: format!("Failed to serialize output schema: {}", e),
-            })
-            .unwrap_or_else(|e| {
-                e.log();
-                String::new()
-            });
+        let output = serialize_or_log(&json_result.output);
+        let output_schema = serialize_or_log(&json_result.output_schema);
         Self {
             id: json_result.inference_id,
             function_name: metadata.function_name,
@@ -828,15 +836,35 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
     }
 }
 
-pub async fn collect_chunks<'a>(
-    value: Vec<InferenceResultChunk>,
-    function: &FunctionConfig,
-    inference_config: &InferenceConfig<'a>,
-    model_name: &'a str,
-    model_provider_name: &'a str,
-    raw_request: String,
-    inference_params: InferenceParams,
+// Define the CollectChunksArgs struct with existing and new fields
+pub struct CollectChunksArgs<'a> {
+    pub value: Vec<InferenceResultChunk>,
+    pub function: &'a FunctionConfig,
+    pub model_name: &'a str,
+    pub model_provider_name: &'a str,
+    pub raw_request: String,
+    pub inference_params: InferenceParams,
+    pub system: Option<String>,              // New field
+    pub input_messages: Vec<RequestMessage>, // New field
+}
+
+// Modify the collect_chunks function to accept CollectChunksArgs
+// 'a ends up as static and 'b ends up as stack allocated in the caller (endpoints::inference::create_stream)
+pub async fn collect_chunks<'a, 'b>(
+    args: CollectChunksArgs<'a>,
+    inference_config: &'b InferenceConfig<'a>,
 ) -> Result<InferenceResult<'a>, Error> {
+    let CollectChunksArgs {
+        value,
+        function,
+        model_name,
+        model_provider_name,
+        raw_request,
+        inference_params,
+        system,
+        input_messages,
+    } = args;
+
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
 
     let inference_id = value
@@ -949,6 +977,8 @@ pub async fn collect_chunks<'a>(
     content_blocks.extend(text_blocks.into_values());
     let model_response = ProviderInferenceResponse::new(
         content_blocks.clone(),
+        system,
+        input_messages,
         raw_request,
         raw_response,
         usage.clone(),
@@ -1006,6 +1036,29 @@ impl<'a> std::iter::Sum<&'a Usage> for Usage {
     }
 }
 
+/// Serializes a value that implements `Serialize` into a JSON string.
+/// If serialization fails, it logs the error and returns an empty string.
+///
+/// # Arguments
+///
+/// * `value` - A reference to the value to be serialized.
+///
+/// # Returns
+///
+/// A `String` containing the serialized JSON, or an empty string if serialization fails.
+pub fn serialize_or_log<T: Serialize>(value: &T) -> String {
+    match serde_json::to_string(value) {
+        Ok(serialized) => serialized,
+        Err(e) => {
+            Error::Serialization {
+                message: format!("Failed to serialize value: {}", e),
+            }
+            .log();
+            String::new()
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::Instant;
@@ -1034,7 +1087,9 @@ mod tests {
         let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
-            content: content.clone(),
+            system: None,
+            input_messages: vec![],
+            output: content.clone(),
             raw_request: raw_request.clone(),
             raw_response: "".to_string(),
             usage: usage.clone(),
@@ -1074,7 +1129,9 @@ mod tests {
         let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
-            content: content.clone(),
+            system: None,
+            input_messages: vec![],
+            output: content.clone(),
             raw_request: raw_request.clone(),
             raw_response: "".to_string(),
             usage: usage.clone(),
@@ -1118,7 +1175,9 @@ mod tests {
         let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
-            content: content.clone(),
+            system: None,
+            input_messages: vec![],
+            output: content.clone(),
             raw_request: raw_request.clone(),
             raw_response: "".to_string(),
             usage: usage.clone(),
@@ -1161,7 +1220,9 @@ mod tests {
         let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: Instant::now().elapsed().as_secs(),
-            content: content.clone(),
+            system: None,
+            input_messages: vec![],
+            output: content.clone(),
             raw_request: raw_request.clone(),
             raw_response: "".to_string(),
             usage: usage.clone(),
@@ -1220,20 +1281,21 @@ mod tests {
             dynamic_output_schema: None,
         };
         let chunks = vec![];
-        let function = FunctionConfig::Chat(FunctionConfigChat::default());
+        let function_config = FunctionConfig::Chat(FunctionConfigChat::default());
         let model_name = "test_model";
         let model_provider_name = "test_provider";
         let raw_request = "raw request".to_string();
-        let result = collect_chunks(
-            chunks,
-            &function,
-            &inference_config,
+        let collect_chunks_args = CollectChunksArgs {
+            value: chunks,
+            system: None,
+            input_messages: vec![],
+            function: &function_config,
             model_name,
             model_provider_name,
-            raw_request.clone(),
-            InferenceParams::default(),
-        )
-        .await;
+            raw_request: raw_request.clone(),
+            inference_params: InferenceParams::default(),
+        };
+        let result = collect_chunks(collect_chunks_args, &inference_config).await;
         assert_eq!(
             result.unwrap_err(),
             Error::TypeConversion {
@@ -1275,17 +1337,19 @@ mod tests {
                 latency: Duration::from_millis(250),
             }),
         ];
-        let result = collect_chunks(
-            chunks,
-            &function,
-            &inference_config,
+        let collect_chunks_args = CollectChunksArgs {
+            value: chunks,
+            system: None,
+            input_messages: vec![],
+            function: &function_config,
             model_name,
             model_provider_name,
-            raw_request.clone(),
-            InferenceParams::default(),
-        )
-        .await
-        .unwrap();
+            raw_request: raw_request.clone(),
+            inference_params: InferenceParams::default(),
+        };
+        let result = collect_chunks(collect_chunks_args, &inference_config)
+            .await
+            .unwrap();
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
             _ => panic!("Expected Chat inference response"),
@@ -1323,7 +1387,7 @@ mod tests {
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let output_schema = JSONSchemaFromPath::from_value(&output_schema).unwrap();
-        let function_config = FunctionConfig::Json(FunctionConfigJson {
+        let json_function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: None,
@@ -1357,17 +1421,19 @@ mod tests {
                 latency: Duration::from_millis(250),
             }),
         ];
-        let response = collect_chunks(
-            chunks,
-            &function_config,
-            &inference_config,
+        let collect_chunks_args = CollectChunksArgs {
+            value: chunks,
+            system: None,
+            input_messages: vec![],
+            function: &json_function_config,
             model_name,
             model_provider_name,
-            raw_request.clone(),
-            InferenceParams::default(),
-        )
-        .await
-        .unwrap();
+            raw_request: raw_request.clone(),
+            inference_params: InferenceParams::default(),
+        };
+        let response = collect_chunks(collect_chunks_args, &inference_config)
+            .await
+            .unwrap();
         match response {
             InferenceResult::Json(json_result) => {
                 assert_eq!(json_result.inference_id, inference_id);
@@ -1423,16 +1489,17 @@ mod tests {
                 latency: Duration::from_millis(200),
             }),
         ];
-        let result = collect_chunks(
-            chunks,
-            &function_config,
-            &inference_config,
+        let collect_chunks_args = CollectChunksArgs {
+            value: chunks,
+            system: None,
+            input_messages: vec![],
+            function: &json_function_config,
             model_name,
             model_provider_name,
-            raw_request.clone(),
-            InferenceParams::default(),
-        )
-        .await;
+            raw_request: raw_request.clone(),
+            inference_params: InferenceParams::default(),
+        };
+        let result = collect_chunks(collect_chunks_args, &inference_config).await;
         assert!(result.is_ok());
         match result {
             Ok(InferenceResult::Json(json_result)) => {
@@ -1486,16 +1553,17 @@ mod tests {
                 latency: Duration::from_millis(300),
             }),
         ];
-        let result = collect_chunks(
-            chunks,
-            &function,
-            &inference_config,
+        let collect_chunks_args = CollectChunksArgs {
+            value: chunks,
+            system: None,
+            input_messages: vec![],
+            function: &function_config,
             model_name,
             model_provider_name,
-            raw_request.clone(),
-            InferenceParams::default(),
-        )
-        .await;
+            raw_request: raw_request.clone(),
+            inference_params: InferenceParams::default(),
+        };
+        let result = collect_chunks(collect_chunks_args, &inference_config).await;
         if let Ok(InferenceResult::Chat(chat_response)) = result {
             assert_eq!(chat_response.inference_id, inference_id);
             assert_eq!(chat_response.created, created);
@@ -1529,7 +1597,7 @@ mod tests {
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let output_schema = JSONSchemaFromPath::from_value(&output_schema).unwrap();
-        let function_config = FunctionConfig::Json(FunctionConfigJson {
+        let json_function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: None,
@@ -1563,17 +1631,19 @@ mod tests {
                 latency: Duration::from_millis(250),
             }),
         ];
-        let response = collect_chunks(
-            chunks,
-            &function_config,
-            &inference_config,
+        let collect_chunks_args = CollectChunksArgs {
+            value: chunks,
+            system: None,
+            input_messages: vec![],
+            function: &json_function_config,
             model_name,
             model_provider_name,
-            raw_request.clone(),
-            InferenceParams::default(),
-        )
-        .await
-        .unwrap();
+            raw_request: raw_request.clone(),
+            inference_params: InferenceParams::default(),
+        };
+        let response = collect_chunks(collect_chunks_args, &inference_config)
+            .await
+            .unwrap();
         match response {
             InferenceResult::Json(json_result) => {
                 assert_eq!(json_result.inference_id, inference_id);
@@ -1614,7 +1684,7 @@ mod tests {
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&static_output_schema);
         let output_schema = JSONSchemaFromPath::from_value(&static_output_schema).unwrap();
-        let function_config = FunctionConfig::Json(FunctionConfigJson {
+        let json_function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: None,
@@ -1663,17 +1733,19 @@ mod tests {
                 latency: Duration::from_millis(250),
             }),
         ];
-        let response = collect_chunks(
-            chunks,
-            &function_config,
-            &inference_config,
+        let collect_chunks_args = CollectChunksArgs {
+            value: chunks,
+            system: None,
+            input_messages: vec![],
+            function: &json_function_config,
             model_name,
             model_provider_name,
-            raw_request.clone(),
-            InferenceParams::default(),
-        )
-        .await
-        .unwrap();
+            raw_request: raw_request.clone(),
+            inference_params: InferenceParams::default(),
+        };
+        let response = collect_chunks(collect_chunks_args, &inference_config)
+            .await
+            .unwrap();
         match response {
             InferenceResult::Json(json_result) => {
                 assert_eq!(json_result.inference_id, inference_id);

@@ -32,9 +32,10 @@ use crate::inference::providers::openai::OpenAICredentials;
 use crate::inference::providers::together::TogetherCredentials;
 use crate::inference::providers::vllm::VLLMCredentials;
 use crate::inference::types::{
-    collect_chunks, ChatInferenceDatabaseInsert, ContentBlockChunk, ContentBlockOutput,
-    InferenceResult, InferenceResultChunk, InferenceResultStream, Input,
-    JsonInferenceDatabaseInsert, JsonInferenceOutput, ModelInferenceResponseWithMetadata, Usage,
+    collect_chunks, ChatInferenceDatabaseInsert, CollectChunksArgs, ContentBlockChunk,
+    ContentBlockOutput, InferenceResult, InferenceResultChunk, InferenceResultStream, Input,
+    JsonInferenceDatabaseInsert, JsonInferenceOutput, ModelInferenceResponseWithMetadata,
+    RequestMessage, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelConfig;
@@ -95,6 +96,8 @@ struct InferenceMetadata<'a> {
     pub model_name: &'a str,
     pub model_provider_name: &'a str,
     pub raw_request: String,
+    pub system: Option<String>,
+    pub input_messages: Vec<RequestMessage>,
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
 }
 
@@ -244,6 +247,8 @@ pub async fn inference_handler(
                 model_name: model_used_info.model_name,
                 model_provider_name: model_used_info.model_provider_name,
                 raw_request: model_used_info.raw_request,
+                system: model_used_info.system,
+                input_messages: model_used_info.input_messages,
                 previous_model_inference_results: model_used_info.previous_model_inference_results,
             };
 
@@ -362,27 +367,52 @@ fn create_stream(
         //
         // If we really care about storing interrupted requests, we should use a drop guard:
         // https://github.com/tokio-rs/axum/discussions/1060
+            let InferenceMetadata {
+                function_name,
+                variant_name,
+                episode_id,
+                input,
+                dryrun,
+                start_time,
+                inference_params,
+                model_name,
+                model_provider_name,
+                raw_request,
+                system,
+                input_messages,
+                previous_model_inference_results,
+            } = metadata;
 
-        if !metadata.dryrun {
+        if !dryrun {
+            let collect_chunks_args = CollectChunksArgs {
+                value: buffer,
+                system,
+                input_messages,
+                function,
+                model_name,
+                model_provider_name,
+                raw_request,
+                inference_params,
+            };
             let inference_response: Result<InferenceResult, Error> =
-                collect_chunks(buffer, function, &inference_config, metadata.model_name, metadata.model_provider_name, metadata.raw_request, metadata.inference_params).await;
+                collect_chunks(collect_chunks_args, &inference_config).await;
 
             let inference_response = inference_response.ok_or_log();
 
             if let Some(inference_response) = inference_response {
                 let mut inference_response = inference_response;
-                inference_response.mut_model_inference_results().extend(metadata.previous_model_inference_results);
+                inference_response.mut_model_inference_results().extend(previous_model_inference_results);
                 let write_metadata = InferenceDatabaseInsertMetadata {
-                    function_name: metadata.function_name,
-                    variant_name: metadata.variant_name,
-                    episode_id: metadata.episode_id,
+                    function_name,
+                    variant_name,
+                    episode_id,
                     tool_params: inference_config.tool_config,
-                    processing_time: metadata.start_time.elapsed(),
+                    processing_time: start_time.elapsed(),
                 };
                 tokio::spawn(async move {
                     write_inference(
                         &clickhouse_connection_info,
-                        metadata.input,
+                        input,
                         inference_response,
                         write_metadata,
                     )
@@ -652,6 +682,8 @@ mod tests {
             model_name: "test_model",
             model_provider_name: "test_provider",
             raw_request: raw_request.clone(),
+            system: None,
+            input_messages: vec![],
             previous_model_inference_results: vec![],
         };
 
@@ -684,6 +716,8 @@ mod tests {
             model_name: "test_model",
             model_provider_name: "test_provider",
             raw_request: raw_request.clone(),
+            system: None,
+            input_messages: vec![],
             previous_model_inference_results: vec![],
         };
 
