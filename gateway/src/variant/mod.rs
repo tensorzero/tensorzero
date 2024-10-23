@@ -24,12 +24,14 @@ use crate::{inference::types::InferenceResult, model::ModelConfig};
 pub mod best_of_n_sampling;
 pub mod chat_completion;
 pub mod dicl;
+pub mod mixture_of_n;
 
 #[derive(Debug)]
 pub enum VariantConfig {
     ChatCompletion(chat_completion::ChatCompletionConfig),
     BestOfNSampling(best_of_n_sampling::BestOfNSamplingConfig),
     Dicl(dicl::DiclConfig),
+    MixtureOfN(mixture_of_n::MixtureOfNConfig),
 }
 
 /// This type is used to determine how to enforce JSON mode for a given variant.
@@ -113,6 +115,7 @@ impl VariantConfig {
             VariantConfig::ChatCompletion(params) => params.weight,
             VariantConfig::BestOfNSampling(params) => params.weight,
             VariantConfig::Dicl(params) => params.weight,
+            VariantConfig::MixtureOfN(params) => params.weight,
         }
     }
 }
@@ -152,7 +155,20 @@ impl Variant for VariantConfig {
                     )
                     .await
             }
+
             VariantConfig::Dicl(params) => {
+                params
+                    .infer(
+                        input,
+                        models,
+                        function,
+                        inference_config,
+                        clients,
+                        inference_params,
+                    )
+                    .await
+            }
+            VariantConfig::MixtureOfN(params) => {
                 params
                     .infer(
                         input,
@@ -220,6 +236,18 @@ impl Variant for VariantConfig {
                     )
                     .await
             }
+            VariantConfig::MixtureOfN(params) => {
+                params
+                    .infer_stream(
+                        input,
+                        models,
+                        function,
+                        inference_config,
+                        clients,
+                        inference_params,
+                    )
+                    .await
+            }
         }
     }
 
@@ -257,6 +285,14 @@ impl Variant for VariantConfig {
                 function_name,
                 variant_name,
             ),
+            VariantConfig::MixtureOfN(params) => params.validate(
+                function,
+                models,
+                embedding_models,
+                templates,
+                function_name,
+                variant_name,
+            ),
         }
     }
 
@@ -265,6 +301,7 @@ impl Variant for VariantConfig {
             VariantConfig::ChatCompletion(params) => params.get_all_template_paths(),
             VariantConfig::BestOfNSampling(params) => params.get_all_template_paths(),
             VariantConfig::Dicl(params) => params.get_all_template_paths(),
+            VariantConfig::MixtureOfN(params) => params.get_all_template_paths(),
         }
     }
 }
