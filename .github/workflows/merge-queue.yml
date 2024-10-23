@@ -11,7 +11,6 @@ env:
   AZURE_OPENAI_API_BASE: ${{secrets.AZURE_OPENAI_API_BASE }} # for E2E tests
   AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }} # for E2E tests
   AZURE_OPENAI_DEPLOYMENT_ID: ${{secrets.AZURE_OPENAI_DEPLOYMENT_ID }} # for E2E tests
-  CLICKHOUSE_URL: "http://localhost:8123" # for E2E tests
   FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }} # for E2E tests
   FORCE_COLOR: 1
   GCP_VERTEX_CREDENTIALS_PATH: ${{ github.workspace }}/gcp_jwt_key.json
@@ -51,11 +50,17 @@ jobs:
           GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
+      - name: Set up CLICKHOUSE_URL for E2E tests
+        run: |
+          echo "CLICKHOUSE_URL=http://localhost:8123/tensorzero" >> $GITHUB_ENV
+
       - name: Launch ClickHouse container for E2E tests
         run: docker compose -f gateway/tests/e2e/docker-compose.yml up -d --wait
 
       - name: Launch the gateway for E2E tests
-        run: cargo run-e2e &
+        run: |
+          cargo run-e2e &
+          echo "GATEWAY_PID=$!" >> $GITHUB_ENV
 
       - name: Run all tests (including E2E tests)
         run: |
@@ -76,3 +81,24 @@ jobs:
       - name: Run python async client tests
         working-directory: clients/python
         run: uv run pytest
+
+      - name: Terminate the gateway
+        run: |
+          echo "Killing gateway with pid $GATEWAY_PID"
+          kill -9 $GATEWAY_PID
+
+      - name: Build Docker container for production deployment tests
+        run: docker build -t tensorzero/gateway .
+
+      - name: Set up CLICKHOUSE_URL for production deployment tests
+        run: |
+          echo "CLICKHOUSE_URL=http://172.17.0.1:8123/tensorzero" >> $GITHUB_ENV
+      - name: Set up .env file for production deployment tests
+        run: |
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > examples/production-deployment/.env
+
+      - name: Run docker compose for production deployment tests
+        run: docker compose -f examples/production-deployment/docker-compose.yml up -d --wait
+
+      - name: Run inference for production deployment tests
+        run: examples/production-deployment/run_example_inference.sh
