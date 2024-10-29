@@ -18,6 +18,7 @@ repos:
 
   - repo: local
     hooks:
+      # Existing Rust hooks
       - id: cargo-deny
         name: cargo deny
         entry: cargo deny check bans
@@ -25,7 +26,6 @@ repos:
         types: [rust]
         pass_filenames: false
         always_run: true
-
       - id: cargo-fmt
         name: cargo fmt
         entry: cargo fmt -- --check
@@ -33,7 +33,6 @@ repos:
         types: [rust]
         pass_filenames: false
         always_run: true
-
       - id: cargo-clippy
         name: cargo clippy
         entry: cargo clippy --all-targets --all-features -- -D warnings
@@ -41,13 +40,49 @@ repos:
         types: [rust]
         pass_filenames: false
         always_run: true
-
       - id: cargo-test-unit
         name: cargo test-unit
         entry: cargo test-unit
         language: system
         types: [rust]
         pass_filenames: false
+        always_run: true
+
+      # New TypeScript hooks
+      - id: eslint
+        name: eslint
+        entry: npx eslint
+        language: node
+        types_or: [javascript, jsx, ts, tsx]
+        files: \.(js|jsx|ts|tsx)$
+        args: ["--fix", "--max-warnings=0"]
+        additional_dependencies:
+          - eslint
+          - "@typescript-eslint/parser"
+          - "@typescript-eslint/eslint-plugin"
+          - "eslint-config-prettier"
+        always_run: true
+
+      - id: prettier
+        name: prettier
+        entry: npx prettier
+        language: node
+        types_or:
+          [javascript, jsx, ts, tsx, css, scss, html, json, yaml, markdown]
+        args: ["--write", "--list-different"]
+        additional_dependencies:
+          - prettier
+          - "@prettier/plugin-xml"
+        always_run: true
+
+      - id: tsc
+        name: typescript
+        entry: npx tsc
+        language: node
+        pass_filenames: false
+        types_or: [ts, tsx]
+        additional_dependencies:
+          - typescript
         always_run: true
 
   - repo: https://github.com/srstevenson/nb-clean
