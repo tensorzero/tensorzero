@@ -236,6 +236,12 @@ struct FireworksRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    presence_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    frequency_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -266,6 +272,9 @@ impl<'a> FireworksRequest<'a> {
             messages,
             model,
             temperature: request.temperature,
+            top_p: request.top_p,
+            presence_penalty: request.presence_penalty,
+            frequency_penalty: request.frequency_penalty,
             max_tokens: request.max_tokens,
             stream: request.stream,
             response_format,
@@ -398,6 +407,9 @@ mod tests {
             temperature: Some(0.5),
             max_tokens: Some(100),
             seed: Some(69),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
@@ -415,6 +427,9 @@ mod tests {
         assert_eq!(fireworks_request.messages.len(), 1);
         assert_eq!(fireworks_request.temperature, Some(0.5));
         assert_eq!(fireworks_request.max_tokens, Some(100));
+        assert_eq!(fireworks_request.top_p, Some(0.9));
+        assert_eq!(fireworks_request.presence_penalty, Some(0.1));
+        assert_eq!(fireworks_request.frequency_penalty, Some(0.2));
         assert!(!fireworks_request.stream);
         assert_eq!(
             fireworks_request.response_format,

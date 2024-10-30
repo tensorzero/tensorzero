@@ -165,6 +165,9 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                   "stopSequences": null,
                   "temperature": null,
                   "maxOutputTokens": null,
+                  "topP": null,
+                  "presencePenalty": null,
+                  "frequencyPenalty": null,
                   "seed": null,
                   "responseMimeType": "application/json",
                   "responseSchema": null
@@ -539,6 +542,9 @@ async fn e2e_test_best_of_n_json_real_judge() {
               "generationConfig": {
                 "stopSequences": null,
                 "temperature": null,
+                "topP": null,
+                "presencePenalty": null,
+                "frequencyPenalty": null,
                 "maxOutputTokens": null,
                 "seed": null,
                 "responseMimeType": "application/json",

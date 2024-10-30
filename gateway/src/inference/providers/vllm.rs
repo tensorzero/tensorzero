@@ -199,6 +199,12 @@ struct VLLMRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    presence_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    frequency_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -240,6 +246,9 @@ impl<'a> VLLMRequest<'a> {
             messages,
             model,
             temperature: request.temperature,
+            top_p: request.top_p,
+            presence_penalty: request.presence_penalty,
+            frequency_penalty: request.frequency_penalty,
             max_tokens: request.max_tokens,
             stream: request.stream,
             stream_options,
@@ -362,6 +371,9 @@ mod tests {
             }],
             system: None,
             temperature: Some(0.5),
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
             max_tokens: Some(100),
             seed: Some(69),
             stream: false,
@@ -384,7 +396,7 @@ mod tests {
             "type": "object",
             "properties": {
                 "temperature": {"type": "number"},
-                "location": {"type": "string"}
+                "location": {"type": "string"},
             }
         });
         let request_with_tools = ModelInferenceRequest {
@@ -394,6 +406,9 @@ mod tests {
             }],
             system: None,
             temperature: Some(0.5),
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
             max_tokens: Some(100),
             seed: Some(69),
             stream: false,

@@ -37,6 +37,9 @@ pub struct DiclConfig {
     pub model: String,
     pub system_instructions: String,
     pub temperature: Option<f32>,
+    pub top_p: Option<f32>,
+    pub presence_penalty: Option<f32>,
+    pub frequency_penalty: Option<f32>,
     pub max_tokens: Option<u32>,
     pub seed: Option<u32>,
     pub json_mode: JsonMode,
@@ -52,6 +55,9 @@ pub struct UninitializedDiclConfig {
     pub model: String,
     pub system_instructions: Option<PathBuf>,
     pub temperature: Option<f32>,
+    pub top_p: Option<f32>,
+    pub presence_penalty: Option<f32>,
+    pub frequency_penalty: Option<f32>,
     pub max_tokens: Option<u32>,
     pub seed: Option<u32>,
     #[serde(default)]
@@ -432,7 +438,14 @@ impl DiclConfig {
 
         inference_params
             .chat_completion
-            .backfill_with_variant_params(self.temperature, self.max_tokens, self.seed);
+            .backfill_with_variant_params(
+                self.temperature,
+                self.max_tokens,
+                self.seed,
+                self.top_p,
+                self.presence_penalty,
+                self.frequency_penalty,
+            );
 
         prepare_model_inference_request(
             messages,
@@ -512,6 +525,9 @@ impl UninitializedDiclConfig {
             model: self.model,
             system_instructions,
             temperature: self.temperature,
+            top_p: self.top_p,
+            presence_penalty: self.presence_penalty,
+            frequency_penalty: self.frequency_penalty,
             max_tokens: self.max_tokens,
             seed: self.seed,
             json_mode: self.json_mode,
