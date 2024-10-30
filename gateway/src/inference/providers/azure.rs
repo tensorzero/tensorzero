@@ -265,6 +265,12 @@ struct AzureRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    presence_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    frequency_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     seed: Option<u32>,
@@ -289,6 +295,9 @@ impl<'a> AzureRequest<'a> {
         AzureRequest {
             messages,
             temperature: request.temperature,
+            top_p: request.top_p,
+            presence_penalty: request.presence_penalty,
+            frequency_penalty: request.frequency_penalty,
             max_tokens: request.max_tokens,
             stream: request.stream,
             response_format,
@@ -382,6 +391,9 @@ mod tests {
             }],
             system: None,
             temperature: Some(0.5),
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
             max_tokens: Some(100),
             stream: false,
             seed: Some(69),
@@ -422,6 +434,9 @@ mod tests {
             }],
             system: None,
             temperature: Some(0.5),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
             max_tokens: Some(100),
             stream: false,
             seed: Some(69),
@@ -436,6 +451,9 @@ mod tests {
         assert_eq!(azure_request.messages.len(), 2);
         assert_eq!(azure_request.temperature, Some(0.5));
         assert_eq!(azure_request.max_tokens, Some(100));
+        assert_eq!(azure_request.top_p, Some(0.9));
+        assert_eq!(azure_request.presence_penalty, Some(0.1));
+        assert_eq!(azure_request.frequency_penalty, Some(0.2));
         assert!(!azure_request.stream);
         assert_eq!(azure_request.seed, Some(69));
         assert_eq!(

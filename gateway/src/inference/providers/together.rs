@@ -229,6 +229,12 @@ struct TogetherRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    presence_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    frequency_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     seed: Option<u32>,
@@ -259,6 +265,9 @@ impl<'a> TogetherRequest<'a> {
             messages,
             model,
             temperature: request.temperature,
+            top_p: request.top_p,
+            presence_penalty: request.presence_penalty,
+            frequency_penalty: request.frequency_penalty,
             max_tokens: request.max_tokens,
             seed: request.seed,
             stream: request.stream,
@@ -375,6 +384,9 @@ mod tests {
             }],
             system: None,
             temperature: Some(0.5),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.1),
             max_tokens: Some(100),
             seed: Some(69),
             stream: false,
@@ -390,6 +402,9 @@ mod tests {
         assert_eq!(together_request.model, "togethercomputer/llama-v3-8b");
         assert_eq!(together_request.messages.len(), 1);
         assert_eq!(together_request.temperature, Some(0.5));
+        assert_eq!(together_request.top_p, Some(0.9));
+        assert_eq!(together_request.presence_penalty, Some(0.1));
+        assert_eq!(together_request.frequency_penalty, Some(0.1));
         assert_eq!(together_request.max_tokens, Some(100));
         assert_eq!(together_request.seed, Some(69));
         assert!(!together_request.stream);

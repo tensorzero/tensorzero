@@ -591,6 +591,9 @@ struct GCPVertexGeminiGenerationConfig<'a> {
     stop_sequences: Option<Vec<&'a str>>,
     temperature: Option<f32>,
     max_output_tokens: Option<u32>,
+    top_p: Option<f32>,
+    presence_penalty: Option<f32>,
+    frequency_penalty: Option<f32>,
     seed: Option<u32>,
     response_mime_type: Option<GCPVertexGeminiResponseMimeType>,
     response_schema: Option<Value>,
@@ -655,6 +658,9 @@ impl<'a> GCPVertexGeminiRequest<'a> {
             temperature: request.temperature,
             max_output_tokens: request.max_tokens,
             seed: request.seed,
+            top_p: request.top_p,
+            presence_penalty: request.presence_penalty,
+            frequency_penalty: request.frequency_penalty,
             response_mime_type,
             response_schema,
         });
@@ -1188,6 +1194,9 @@ mod tests {
             temperature: None,
             max_tokens: None,
             seed: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
@@ -1220,6 +1229,9 @@ mod tests {
             temperature: None,
             max_tokens: None,
             seed: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
@@ -1265,6 +1277,9 @@ mod tests {
             temperature: Some(0.5),
             max_tokens: Some(100),
             seed: Some(69),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.1),
             stream: true,
             json_mode: ModelInferenceRequestJsonMode::On,
             function_type: FunctionType::Chat,
@@ -1327,6 +1342,9 @@ mod tests {
             temperature: Some(0.5),
             max_tokens: Some(100),
             seed: Some(69),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.1),
             stream: true,
             json_mode: ModelInferenceRequestJsonMode::On,
             function_type: FunctionType::Chat,
@@ -1359,6 +1377,19 @@ mod tests {
         assert_eq!(
             request.generation_config.as_ref().unwrap().temperature,
             Some(0.5)
+        );
+        assert_eq!(request.generation_config.as_ref().unwrap().top_p, Some(0.9));
+        assert_eq!(
+            request.generation_config.as_ref().unwrap().presence_penalty,
+            Some(0.1)
+        );
+        assert_eq!(
+            request
+                .generation_config
+                .as_ref()
+                .unwrap()
+                .frequency_penalty,
+            Some(0.1)
         );
         assert_eq!(
             request
@@ -1407,6 +1438,9 @@ mod tests {
             temperature: None,
             max_tokens: None,
             seed: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
@@ -1479,6 +1513,9 @@ mod tests {
             temperature: None,
             max_tokens: None,
             seed: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
@@ -1637,6 +1674,9 @@ mod tests {
             temperature: None,
             max_tokens: None,
             seed: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
             tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
@@ -1675,6 +1715,9 @@ mod tests {
             temperature: None,
             max_tokens: None,
             seed: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
             tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),

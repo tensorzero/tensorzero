@@ -583,6 +583,9 @@ impl EvaluatorConfig {
                 self.inner.temperature,
                 self.inner.max_tokens,
                 self.inner.seed,
+                self.inner.top_p,
+                self.inner.presence_penalty,
+                self.inner.frequency_penalty,
             );
         Ok((
             ModelInferenceRequest {
@@ -592,6 +595,9 @@ impl EvaluatorConfig {
                 temperature: inference_params.chat_completion.temperature,
                 max_tokens: inference_params.chat_completion.max_tokens,
                 seed: inference_params.chat_completion.seed,
+                top_p: inference_params.chat_completion.top_p,
+                presence_penalty: inference_params.chat_completion.presence_penalty,
+                frequency_penalty: inference_params.chat_completion.frequency_penalty,
                 stream: false,
                 json_mode: ModelInferenceRequestJsonMode::Strict, // TODO (#338): Handle Anthropic models better here.
                 function_type: FunctionType::Json,
