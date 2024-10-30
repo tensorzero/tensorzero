@@ -690,6 +690,9 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
                 "temperature": 0.9,
                 "seed": 1337,
                 "max_tokens": 120,
+                "top_p": 0.9,
+                "presence_penalty": 0.1,
+                "frequency_penalty": 0.2,
             },
             "fake_variant_type": {
                 "temperature": 0.8,
@@ -804,6 +807,20 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
         .as_u64()
         .unwrap();
     assert_eq!(max_tokens, 120);
+    let top_p = inference_params.get("top_p").unwrap().as_f64().unwrap();
+    assert_eq!(top_p, 0.9);
+    let presence_penalty = inference_params
+        .get("presence_penalty")
+        .unwrap()
+        .as_f64()
+        .unwrap();
+    assert_eq!(presence_penalty, 0.1);
+    let frequency_penalty = inference_params
+        .get("frequency_penalty")
+        .unwrap()
+        .as_f64()
+        .unwrap();
+    assert_eq!(frequency_penalty, 0.2);
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
@@ -880,11 +897,17 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
                 "temperature": 0.9,
                 "seed": 1337,
                 "max_tokens": 120,
+                "top_p": 0.9,
+                "presence_penalty": 0.1,
+                "frequency_penalty": 0.2,
             },
             "fake_variant_type": {
                 "temperature": 0.8,
                 "seed": 7331,
                 "max_tokens": 80,
+                "top_p": 0.9,
+                "presence_penalty": 0.1,
+                "frequency_penalty": 0.2,
             }
         },
         "stream": true,
@@ -1029,6 +1052,20 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
         .as_u64()
         .unwrap();
     assert_eq!(max_tokens, 120);
+    let top_p = inference_params.get("top_p").unwrap().as_f64().unwrap();
+    assert_eq!(top_p, 0.9);
+    let presence_penalty = inference_params
+        .get("presence_penalty")
+        .unwrap()
+        .as_f64()
+        .unwrap();
+    assert_eq!(presence_penalty, 0.1);
+    let frequency_penalty = inference_params
+        .get("frequency_penalty")
+        .unwrap()
+        .as_f64()
+        .unwrap();
+    assert_eq!(frequency_penalty, 0.2);
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
