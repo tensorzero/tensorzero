@@ -33,7 +33,10 @@ pub struct ChatCompletionConfig {
     pub user_template: Option<PathBuf>,
     pub assistant_template: Option<PathBuf>,
     pub temperature: Option<f32>,
+    pub top_p: Option<f32>,
     pub max_tokens: Option<u32>,
+    pub presence_penalty: Option<f32>,
+    pub frequency_penalty: Option<f32>,
     pub seed: Option<u32>,
     #[serde(default)]
     pub json_mode: JsonMode, // Only for JSON functions, not for chat functions
@@ -124,7 +127,14 @@ impl ChatCompletionConfig {
 
         inference_params
             .chat_completion
-            .backfill_with_variant_params(self.temperature, self.max_tokens, self.seed);
+            .backfill_with_variant_params(
+                self.temperature,
+                self.max_tokens,
+                self.seed,
+                self.top_p,
+                self.presence_penalty,
+                self.frequency_penalty,
+            );
         prepare_model_inference_request(
             messages,
             system,
@@ -364,6 +374,9 @@ mod tests {
             assistant_template: None,
             json_mode: JsonMode::On,
             temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
             max_tokens: None,
             seed: None,
             retries: RetryConfig::default(),
@@ -1127,6 +1140,9 @@ mod tests {
                 temperature: Some(0.5),
                 max_tokens: Some(100),
                 seed: Some(42),
+                top_p: Some(0.9),
+                presence_penalty: Some(0.1),
+                frequency_penalty: Some(0.2),
             },
         };
         // Will dynamically set "answer" instead of "response"
@@ -1235,6 +1251,9 @@ mod tests {
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
             temperature: Some(0.5),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
             max_tokens: Some(100),
             seed: Some(42),
             ..Default::default()
@@ -1275,6 +1294,9 @@ mod tests {
                         temperature: Some(0.5),
                         max_tokens: Some(100),
                         seed: Some(42),
+                        top_p: Some(0.9),
+                        presence_penalty: Some(0.1),
+                        frequency_penalty: Some(0.2),
                     },
                 };
                 assert_eq!(json_result.inference_params, expected_inference_params);
@@ -1514,6 +1536,9 @@ mod tests {
                 temperature: Some(1.),
                 max_tokens: Some(200),
                 seed: Some(420),
+                top_p: Some(0.9),
+                presence_penalty: Some(0.1),
+                frequency_penalty: Some(0.2),
             },
         };
         let model_request = chat_completion_config
@@ -1560,6 +1585,9 @@ mod tests {
             temperature: Some(0.5),
             max_tokens: Some(100),
             seed: Some(69),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
             ..Default::default()
         };
         // Do a JSON function
@@ -1612,6 +1640,9 @@ mod tests {
         assert_eq!(model_request.temperature, Some(0.5));
         assert_eq!(model_request.max_tokens, Some(100));
         assert_eq!(model_request.seed, Some(69));
+        assert_eq!(model_request.top_p, Some(0.9));
+        assert_eq!(model_request.presence_penalty, Some(0.1));
+        assert_eq!(model_request.frequency_penalty, Some(0.2));
         assert_eq!(model_request.json_mode, ModelInferenceRequestJsonMode::On);
         assert_eq!(model_request.output_schema, Some(&output_schema_value));
         assert_eq!(inference_params.chat_completion.temperature, Some(0.5));
@@ -1623,6 +1654,9 @@ mod tests {
                 temperature: Some(1.),
                 max_tokens: Some(200),
                 seed: Some(420),
+                top_p: Some(0.9),
+                presence_penalty: Some(0.3),
+                frequency_penalty: Some(0.2),
             },
         };
         let model_request = chat_completion_config
@@ -1637,6 +1671,9 @@ mod tests {
         assert_eq!(model_request.temperature, Some(1.));
         assert_eq!(model_request.max_tokens, Some(200));
         assert_eq!(model_request.seed, Some(420));
+        assert_eq!(model_request.top_p, Some(0.9));
+        assert_eq!(model_request.presence_penalty, Some(0.3));
+        assert_eq!(model_request.frequency_penalty, Some(0.2));
         assert_eq!(model_request.json_mode, ModelInferenceRequestJsonMode::On);
         assert_eq!(model_request.output_schema, Some(&output_schema_value));
         assert_eq!(inference_params.chat_completion.temperature, Some(1.));

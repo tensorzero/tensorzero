@@ -681,6 +681,12 @@ struct OpenAIRequest<'a> {
     max_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     seed: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    presence_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    frequency_penalty: Option<f32>,
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     stream_options: Option<StreamOptions>,
@@ -722,6 +728,9 @@ impl<'a> OpenAIRequest<'a> {
             temperature: request.temperature,
             max_tokens: request.max_tokens,
             seed: request.seed,
+            top_p: request.top_p,
+            presence_penalty: request.presence_penalty,
+            frequency_penalty: request.frequency_penalty,
             stream: request.stream,
             stream_options,
             response_format,
@@ -755,12 +764,18 @@ impl<'a> OpenAIRequest<'a> {
         let tool_choice = None;
         let parallel_tool_calls = None;
 
+        // Temperature, top_p are fixed at 1
+        // Presence and frequency penalty are fixed at 0
+        // See [this guide](https://platform.openai.com/docs/guides/reasoning/quickstart) for more details
         Ok(OpenAIRequest {
             messages,
             model,
             temperature: None,
             max_tokens: request.max_tokens,
             seed: request.seed,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
             stream: false,
             stream_options,
             response_format,
@@ -1188,6 +1203,9 @@ mod tests {
             temperature: Some(0.7),
             max_tokens: Some(100),
             seed: Some(69),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
             stream: true,
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
@@ -1201,6 +1219,9 @@ mod tests {
         assert_eq!(openai_request.temperature, Some(0.7));
         assert_eq!(openai_request.max_tokens, Some(100));
         assert_eq!(openai_request.seed, Some(69));
+        assert_eq!(openai_request.top_p, Some(0.9));
+        assert_eq!(openai_request.presence_penalty, Some(0.1));
+        assert_eq!(openai_request.frequency_penalty, Some(0.2));
         assert!(openai_request.stream);
         assert_eq!(
             openai_request.response_format,
@@ -1218,6 +1239,9 @@ mod tests {
             }],
             system: None,
             temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
             max_tokens: None,
             seed: None,
             stream: false,
@@ -1234,6 +1258,9 @@ mod tests {
         assert_eq!(openai_request.temperature, None);
         assert_eq!(openai_request.max_tokens, None);
         assert_eq!(openai_request.seed, None);
+        assert_eq!(openai_request.top_p, None);
+        assert_eq!(openai_request.presence_penalty, None);
+        assert_eq!(openai_request.frequency_penalty, None);
         assert!(!openai_request.stream);
         assert_eq!(
             openai_request.response_format,
@@ -1261,6 +1288,9 @@ mod tests {
             }],
             system: None,
             temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
             max_tokens: None,
             seed: None,
             stream: false,
@@ -1278,6 +1308,9 @@ mod tests {
         assert_eq!(openai_request.max_tokens, None);
         assert_eq!(openai_request.seed, None);
         assert!(!openai_request.stream);
+        assert_eq!(openai_request.top_p, None);
+        assert_eq!(openai_request.presence_penalty, None);
+        assert_eq!(openai_request.frequency_penalty, None);
         // Resolves to normal JSON mode since no schema is provided (this shouldn't really happen in practice)
         assert_eq!(
             openai_request.response_format,
@@ -1293,6 +1326,9 @@ mod tests {
             }],
             system: None,
             temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
             max_tokens: None,
             seed: None,
             stream: false,
@@ -1310,6 +1346,9 @@ mod tests {
         assert_eq!(openai_request.max_tokens, None);
         assert_eq!(openai_request.seed, None);
         assert!(!openai_request.stream);
+        assert_eq!(openai_request.top_p, None);
+        assert_eq!(openai_request.presence_penalty, None);
+        assert_eq!(openai_request.frequency_penalty, None);
         let expected_schema = serde_json::json!({"name": "response", "strict": true, "schema": {}});
         assert_eq!(
             openai_request.response_format,
@@ -1328,6 +1367,9 @@ mod tests {
             }],
             system: None,
             temperature: Some(0.5),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
             max_tokens: Some(100),
             seed: Some(69),
             stream: false,
@@ -1346,6 +1388,9 @@ mod tests {
         assert_eq!(openai_request.temperature, None);
         assert_eq!(openai_request.max_tokens, Some(100));
         assert_eq!(openai_request.seed, Some(69));
+        assert_eq!(openai_request.top_p, None);
+        assert_eq!(openai_request.presence_penalty, None);
+        assert_eq!(openai_request.frequency_penalty, None);
         assert!(openai_request.tools.is_none());
 
         // Test case: System message is converted to User message
@@ -1356,6 +1401,9 @@ mod tests {
             }],
             system: Some("This is the system message".to_string()),
             temperature: Some(0.5),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
             max_tokens: Some(100),
             seed: Some(69),
             stream: false,
@@ -1382,6 +1430,9 @@ mod tests {
         assert_eq!(openai_request_with_system.max_tokens, Some(100));
         assert_eq!(openai_request_with_system.seed, Some(69));
         assert!(openai_request_with_system.tools.is_none());
+        assert_eq!(openai_request_with_system.top_p, None);
+        assert_eq!(openai_request_with_system.presence_penalty, None);
+        assert_eq!(openai_request_with_system.frequency_penalty, None);
 
         // Test case: Tool config errors on O1 models
         let request_with_tools = ModelInferenceRequest {
@@ -1391,6 +1442,9 @@ mod tests {
             }],
             system: None,
             temperature: Some(0.5),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
             max_tokens: Some(100),
             seed: Some(69),
             stream: false,
@@ -1444,6 +1498,9 @@ mod tests {
             temperature: Some(0.5),
             max_tokens: Some(100),
             seed: Some(69),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
             tool_config: None,
@@ -1455,6 +1512,9 @@ mod tests {
             messages: vec![],
             model: "gpt-3.5-turbo",
             temperature: Some(0.5),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
             max_tokens: Some(100),
             seed: Some(69),
             stream: false,
@@ -1525,6 +1585,9 @@ mod tests {
             }],
             system: Some("test_system".to_string()),
             temperature: Some(0.5),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
             max_tokens: Some(100),
             seed: Some(69),
             stream: false,
@@ -1538,6 +1601,9 @@ mod tests {
             messages: vec![],
             model: "gpt-3.5-turbo",
             temperature: Some(0.5),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
             max_tokens: Some(100),
             seed: Some(69),
             stream: false,
@@ -1596,6 +1662,9 @@ mod tests {
             messages: vec![],
             model: "gpt-3.5-turbo",
             temperature: Some(0.5),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
             max_tokens: Some(100),
             seed: Some(69),
             stream: false,
@@ -1645,6 +1714,9 @@ mod tests {
             messages: vec![],
             model: "gpt-3.5-turbo",
             temperature: Some(0.5),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
             max_tokens: Some(100),
             seed: Some(69),
             stream: false,
@@ -1675,6 +1747,9 @@ mod tests {
             }],
             system: None,
             temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
             max_tokens: None,
             seed: None,
             stream: false,
@@ -1711,6 +1786,9 @@ mod tests {
             }],
             system: None,
             temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
             max_tokens: None,
             seed: None,
             stream: false,

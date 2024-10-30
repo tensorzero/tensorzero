@@ -465,6 +465,9 @@ impl FuserConfig {
                 self.inner.temperature,
                 self.inner.max_tokens,
                 self.inner.seed,
+                self.inner.top_p,
+                self.inner.presence_penalty,
+                self.inner.frequency_penalty,
             );
 
         let model_inference_request = prepare_model_inference_request(

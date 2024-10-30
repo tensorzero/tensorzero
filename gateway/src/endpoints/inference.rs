@@ -621,6 +621,12 @@ pub struct ChatCompletionInferenceParams {
     pub max_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seed: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub presence_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frequency_penalty: Option<f32>,
 }
 
 impl ChatCompletionInferenceParams {
@@ -629,6 +635,9 @@ impl ChatCompletionInferenceParams {
         temperature: Option<f32>,
         max_tokens: Option<u32>,
         seed: Option<u32>,
+        top_p: Option<f32>,
+        presence_penalty: Option<f32>,
+        frequency_penalty: Option<f32>,
     ) {
         if self.temperature.is_none() {
             self.temperature = temperature;
@@ -638,6 +647,15 @@ impl ChatCompletionInferenceParams {
         }
         if self.seed.is_none() {
             self.seed = seed;
+        }
+        if self.top_p.is_none() {
+            self.top_p = top_p;
+        }
+        if self.presence_penalty.is_none() {
+            self.presence_penalty = presence_penalty;
+        }
+        if self.frequency_penalty.is_none() {
+            self.frequency_penalty = frequency_penalty;
         }
     }
 }
