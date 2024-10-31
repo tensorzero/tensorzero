@@ -59,6 +59,7 @@ repos:
             "--max-warnings=0",
             "--config",
             "dashboard/eslint.config.js",
+            "--cache",
           ]
         additional_dependencies:
           - eslint
