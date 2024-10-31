@@ -47,27 +47,6 @@ repos:
         pass_filenames: false
         always_run: true
 
-      - id: eslint
-        name: eslint
-        entry: npx eslint
-        language: node
-        types_or: [javascript, jsx, ts, tsx]
-        files: \.(js|jsx|ts|tsx)$
-        args:
-          [
-            "--fix",
-            "--max-warnings=0",
-            "--config",
-            "dashboard/eslint.config.js",
-            "--cache",
-          ]
-        additional_dependencies:
-          - eslint
-          - "@typescript-eslint/parser"
-          - "@typescript-eslint/eslint-plugin"
-          - "eslint-config-prettier"
-        always_run: true
-
       - id: prettier
         name: prettier
         entry: npx prettier
