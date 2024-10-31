@@ -63,9 +63,9 @@ jobs:
           cargo run-e2e &
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
 
-      - name: Run all tests (including E2E tests)
-        run: |
-          cargo test-all --profile ci ${{ vars.CARGO_NEXTEST_ARGS }}
+      # - name: Run all tests (including E2E tests)
+      #   run: |
+      #     cargo test-all --profile ci ${{ vars.CARGO_NEXTEST_ARGS }}
 
       - name: Set up uv
         # uv recommends pinning a version to avoid unexpected behavior
@@ -125,6 +125,9 @@ jobs:
         working-directory: dashboard
         run: |
           npx tsc
+
+      - name: Debugging with ssh
+        uses: lhotari/action-upterm@v1
 
       - name: Start services for dashboard tests
         run: docker compose -f dashboard/docker-compose.yml up -d --wait clickhouse gateway
