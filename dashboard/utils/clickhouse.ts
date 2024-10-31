@@ -8,7 +8,7 @@ export async function checkClickhouseConnection(): Promise<boolean> {
   try {
     await clickhouseClient.ping();
     return true;
-  } catch (error) {
+  } catch {
     return false;
   }
 }

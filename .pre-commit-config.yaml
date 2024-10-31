@@ -18,7 +18,6 @@ repos:
 
   - repo: local
     hooks:
-      # Existing Rust hooks
       - id: cargo-deny
         name: cargo deny
         entry: cargo deny check bans
@@ -48,14 +47,19 @@ repos:
         pass_filenames: false
         always_run: true
 
-      # New TypeScript hooks
       - id: eslint
         name: eslint
         entry: npx eslint
         language: node
         types_or: [javascript, jsx, ts, tsx]
         files: \.(js|jsx|ts|tsx)$
-        args: ["--fix", "--max-warnings=0"]
+        args:
+          [
+            "--fix",
+            "--max-warnings=0",
+            "--config",
+            "dashboard/eslint.config.js",
+          ]
         additional_dependencies:
           - eslint
           - "@typescript-eslint/parser"
@@ -74,13 +78,13 @@ repos:
           - prettier
           - "@prettier/plugin-xml"
         always_run: true
+        exclude: '.*\.ipynb$'
 
       - id: tsc
         name: typescript
-        entry: npx tsc
+        entry: bash -c 'cd dashboard && tsc'
         language: node
         pass_filenames: false
-        types_or: [ts, tsx]
         additional_dependencies:
           - typescript
         always_run: true
