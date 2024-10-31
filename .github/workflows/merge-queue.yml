@@ -126,6 +126,9 @@ jobs:
         run: |
           npx tsc
 
+      - name: Debugging with ssh
+        uses: lhotari/action-upterm@v1
+
       - name: Stand up containers for dashboard tests
         run: docker compose -f dashboard/docker-compose.yml up -d --wait
 
