@@ -107,6 +107,10 @@ jobs:
       # - name: Take down docker compose for production deployment tests
       #   run: docker compose -f examples/production-deployment/docker-compose.yml down
 
+      - name: Install npm dependencies
+        working-directory: dashboard
+        run: npm install
+
       - name: Run ESLint
         working-directory: dashboard
         run: |
