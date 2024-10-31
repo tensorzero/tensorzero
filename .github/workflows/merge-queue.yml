@@ -79,9 +79,6 @@ jobs:
         working-directory: clients/python
         run: uv sync --all-extras --dev
 
-      - name: Debugging with ssh
-        uses: lhotari/action-upterm@v1
-
       - name: Run python async client tests
         working-directory: clients/python
         run: uv run pytest
