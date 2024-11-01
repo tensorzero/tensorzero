@@ -418,6 +418,8 @@ struct AnthropicRequestBody<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<AnthropicToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<AnthropicTool<'a>>>,
@@ -468,6 +470,7 @@ impl<'a> AnthropicRequestBody<'a> {
             stream: Some(request.stream),
             system,
             temperature: request.temperature,
+            top_p: request.top_p,
             tool_choice,
             tools,
         })
@@ -1111,6 +1114,9 @@ mod tests {
             system: None,
             tool_config: None,
             temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
             max_tokens: None,
             seed: None,
             stream: false,
@@ -1143,6 +1149,9 @@ mod tests {
             system: Some("test_system".to_string()),
             tool_config: None,
             temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
             max_tokens: None,
             seed: None,
             stream: false,
@@ -1165,6 +1174,7 @@ mod tests {
                 stream: Some(false),
                 system: Some("test_system"),
                 temperature: None,
+                top_p: None,
                 tool_choice: None,
                 tools: None,
             }
@@ -1192,6 +1202,9 @@ mod tests {
             tool_config: None,
             temperature: Some(0.5),
             max_tokens: Some(100),
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
             seed: None,
             stream: true,
             json_mode: ModelInferenceRequestJsonMode::On,
@@ -1219,6 +1232,7 @@ mod tests {
                 stream: Some(true),
                 system: Some("test_system"),
                 temperature: Some(0.5),
+                top_p: None,
                 tool_choice: None,
                 tools: None,
             }
@@ -1249,6 +1263,9 @@ mod tests {
             system: Some("test_system".to_string()),
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             temperature: Some(0.5),
+            top_p: Some(0.9),
+            presence_penalty: None,
+            frequency_penalty: None,
             max_tokens: Some(100),
             seed: None,
             stream: true,
@@ -1272,6 +1289,7 @@ mod tests {
                 stream: Some(true),
                 system: Some("test_system"),
                 temperature: Some(0.5),
+                top_p: Some(0.9),
                 tool_choice: Some(AnthropicToolChoice::Tool {
                     name: "get_temperature",
                 }),
@@ -1593,6 +1611,7 @@ mod tests {
             max_tokens: 100,
             stream: Some(false),
             system: None,
+            top_p: Some(0.9),
             temperature: None,
             tool_choice: None,
             tools: None,
@@ -1650,6 +1669,7 @@ mod tests {
             stream: Some(false),
             system: None,
             temperature: None,
+            top_p: Some(0.9),
             tool_choice: None,
             tools: None,
         };
@@ -1716,6 +1736,7 @@ mod tests {
             stream: Some(false),
             system: None,
             temperature: None,
+            top_p: Some(0.9),
             tool_choice: None,
             tools: None,
         };

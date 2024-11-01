@@ -324,7 +324,10 @@ where
             system,
             tool_config: inference_config.tool_config.as_ref().map(Cow::Borrowed),
             temperature: inference_params.chat_completion.temperature,
+            top_p: inference_params.chat_completion.top_p,
             max_tokens: inference_params.chat_completion.max_tokens,
+            presence_penalty: inference_params.chat_completion.presence_penalty,
+            frequency_penalty: inference_params.chat_completion.frequency_penalty,
             seed: inference_params.chat_completion.seed,
             stream,
             json_mode: ModelInferenceRequestJsonMode::Off,
@@ -350,7 +353,10 @@ where
                 system,
                 tool_config,
                 temperature: inference_params.chat_completion.temperature,
+                top_p: inference_params.chat_completion.top_p,
                 max_tokens: inference_params.chat_completion.max_tokens,
+                presence_penalty: inference_params.chat_completion.presence_penalty,
+                frequency_penalty: inference_params.chat_completion.frequency_penalty,
                 seed: inference_params.chat_completion.seed,
                 stream,
                 json_mode: json_mode.into(),
@@ -520,6 +526,9 @@ mod tests {
             chat_completion: ChatCompletionInferenceParams {
                 temperature: Some(0.7),
                 max_tokens: Some(50),
+                top_p: Some(0.9),
+                presence_penalty: Some(0.0),
+                frequency_penalty: Some(0.0),
                 seed: Some(42),
             },
         };
@@ -564,7 +573,10 @@ mod tests {
         assert_eq!(result.system, system);
         assert_eq!(result.tool_config, Some(Cow::Borrowed(&tool_config)));
         assert_eq!(result.temperature, Some(0.7));
+        assert_eq!(result.top_p, Some(0.9));
         assert_eq!(result.max_tokens, Some(50));
+        assert_eq!(result.presence_penalty, Some(0.0));
+        assert_eq!(result.frequency_penalty, Some(0.0));
         assert_eq!(result.seed, Some(42));
         assert_eq!(result.stream, stream);
         assert_eq!(result.json_mode, ModelInferenceRequestJsonMode::Off);
@@ -733,6 +745,9 @@ mod tests {
             system: None,
             temperature: Some(0.7),
             max_tokens: Some(100),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
             seed: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::Off,
@@ -827,6 +842,9 @@ mod tests {
             max_tokens: Some(100),
             seed: None,
             stream: false,
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
             json_mode: ModelInferenceRequestJsonMode::On,
             output_schema: Some(&output_schema),
             tool_config: None,
@@ -958,6 +976,9 @@ mod tests {
             system,
             temperature: Some(0.7),
             max_tokens: Some(50),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
             stream: true,
             json_mode: ModelInferenceRequestJsonMode::Off,
             output_schema: None,
