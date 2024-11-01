@@ -124,6 +124,20 @@ async def test_async_inference_streaming(async_client):
 
 
 @pytest.mark.asyncio
+async def test_async_inference_streaming_nonexistent_function(async_client):
+    with pytest.raises(TensorZeroError) as exc_info:
+        await async_client.inference(
+            function_name="does_not_exist",
+            input={
+                "system": {"assistant_name": "Alfred Pennyworth"},
+                "messages": [{"role": "user", "content": "Hello"}],
+            },
+            stream=True,
+        )
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_async_tool_call_inference(async_client):
     result = await async_client.inference(
         function_name="weather_helper",
@@ -457,6 +471,19 @@ def test_sync_inference_streaming(sync_client):
             assert len(chunk.content) == 0
             assert chunk.usage.input_tokens == 10
             assert chunk.usage.output_tokens == 16
+
+
+def test_sync_inference_streaming_nonexistent_function(sync_client):
+    with pytest.raises(TensorZeroError) as exc_info:
+        sync_client.inference(
+            function_name="does_not_exist",
+            input={
+                "system": {"assistant_name": "Alfred Pennyworth"},
+                "messages": [{"role": "user", "content": "Hello"}],
+            },
+            stream=True,
+        )
+    assert exc_info.value.status_code == 404
 
 
 def test_sync_tool_call_inference(sync_client):
