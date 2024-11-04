@@ -1,4 +1,4 @@
-use minijinja::Environment;
+use minijinja::{Environment, UndefinedBehavior};
 
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
@@ -37,6 +37,7 @@ impl JsExposedEnv {
 pub fn create_env(templates: JsValue) -> Result<JsExposedEnv, JsError> {
     let templates: HashMap<String, String> = serde_wasm_bindgen::from_value(templates)?;
     let mut env = Environment::new();
+    env.set_undefined_behavior(UndefinedBehavior::Strict);
     for (name, template) in templates.into_iter() {
         env.add_template_owned(name, template)
             .map_err(annotate_error)?;
