@@ -68,7 +68,7 @@ jobs:
       #     cargo test-all --profile ci ${{ vars.CARGO_NEXTEST_ARGS }}
 
       - name: Sleep for 10 seconds
-        run: sleep 30
+        run: sleep 120
 
       - name: Set up uv
         # uv recommends pinning a version to avoid unexpected behavior
