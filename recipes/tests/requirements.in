@@ -1,4 +1,5 @@
 ../../clients/python
 clickhouse-connect
+pandas
 pytest
 pytest-asyncio
