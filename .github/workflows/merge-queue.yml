@@ -78,6 +78,9 @@ jobs:
         working-directory: clients/python
         run: UV_PROJECT_ENVIRONMENT="../../.venv" uv sync --all-extras --dev
 
+      - name: Debugging with ssh
+        uses: lhotari/action-upterm@v1
+
       - name: Run python async client tests
         run: uv run pytest
 
