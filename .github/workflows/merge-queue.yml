@@ -79,7 +79,7 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Run python async client tests
-        run: UV_PROJECT_ENVIRONMENT="clients/python/.venv" uv run pytest
+        run: source clients/python/.venv/bin/activate && pytest
 
       - name: Terminate the gateway
         run: |
