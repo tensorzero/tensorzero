@@ -76,13 +76,10 @@ jobs:
 
       - name: Install dependencies for python async client tests
         working-directory: clients/python
-        run: UV_PROJECT_ENVIRONMENT="../../.venv" uv sync --all-extras --dev
-
-      - name: Debugging with ssh
-        uses: lhotari/action-upterm@v1
+        run: uv sync --all-extras --dev
 
       - name: Run python async client tests
-        run: uv run pytest
+        run: UV_PROJECT_ENVIRONMENT="clients/python/.venv" uv run pytest
 
       - name: Terminate the gateway
         run: |
