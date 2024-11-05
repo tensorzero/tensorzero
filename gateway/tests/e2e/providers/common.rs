@@ -1390,7 +1390,7 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
             });
             assert_eq!(arguments, expected_arguments);
         }
-        _ => panic!(),
+        _ => panic!("Unreachable"),
     }
 }
 
@@ -1717,7 +1717,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
             });
             assert_eq!(arguments, expected_arguments);
         }
-        _ => panic!(),
+        _ => panic!("Unreachable"),
     }
 }
 
@@ -2476,7 +2476,7 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
             assert_eq!(tool_call.name, "get_temperature");
             serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
         }
-        _ => panic!(),
+        _ => panic!("Unreachable"),
     }
 }
 
@@ -2805,7 +2805,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
             assert_eq!(tool_call.name, "get_temperature");
             serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
         }
-        _ => panic!(),
+        _ => panic!("Unreachable"),
     }
 }
 
@@ -3628,7 +3628,7 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
             assert_eq!(tool_call.name, "self_destruct");
             serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
         }
-        _ => panic!(),
+        _ => panic!("Unreachable"),
     }
 }
 
@@ -4017,7 +4017,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
             assert_eq!(tool_call.name, "self_destruct");
             serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
         }
-        _ => panic!(),
+        _ => panic!("Unreachable"),
     }
 }
 
@@ -4258,7 +4258,7 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
             assert_eq!(tool_call.name, "get_humidity");
             serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
         }
-        _ => panic!(),
+        _ => panic!("Unreachable"),
     }
 }
 
@@ -4575,7 +4575,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
             assert_eq!(tool_call.name, "get_humidity");
             serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
         }
-        _ => panic!(),
+        _ => panic!("Unreachable"),
     }
 }
 
@@ -5399,7 +5399,7 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
             assert_eq!(tool_call.name, "get_temperature");
             serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
         }
-        _ => panic!(),
+        _ => panic!("Unreachable"),
     }
 }
 
@@ -5735,7 +5735,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
             assert_eq!(tool_call.name, "get_temperature");
             serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
         }
-        _ => panic!(),
+        _ => panic!("Unreachable"),
     }
 }
 
