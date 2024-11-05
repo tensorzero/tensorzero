@@ -76,7 +76,7 @@ jobs:
 
       - name: Install dependencies for python async client tests
         working-directory: clients/python
-        run: UV_PROJECT_ENVIRONMENT="../../.venv" uv sync --all-extras --dev clients/python
+        run: UV_PROJECT_ENVIRONMENT="../../.venv" uv sync --all-extras --dev
 
       - name: Run python async client tests
         run: uv run pytest
