@@ -2,7 +2,7 @@ name: PR Checks
 
 on:
   pull_request:
-    branches: ["main"]
+    branches: ["main", "dashboard"]
 
 jobs:
   # We don't want to run live-tests on PRs, so we use a dummy job to satisfy branch protection checks
