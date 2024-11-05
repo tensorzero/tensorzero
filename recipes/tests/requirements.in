@@ -1,0 +1,4 @@
+../../clients/python
+clickhouse-connect
+pytest
+pytest-asyncio
