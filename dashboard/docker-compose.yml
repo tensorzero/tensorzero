@@ -61,4 +61,4 @@ services:
     depends_on:
       gateway:
         condition: service_healthy
-    command: ["bash", "/fixtures/load_fixtures.sh"]
+    command: ["bash", "-c", "cd /fixtures && ./load_fixtures.sh"]
