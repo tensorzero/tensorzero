@@ -1370,9 +1370,16 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
-    let first = output.first().unwrap();
-    match first {
+    let tool_call_blocks: Vec<_> = output
+        .iter()
+        .filter(|block| matches!(block, ContentBlock::ToolCall(_)))
+        .collect();
+
+    // Assert exactly one tool call
+    assert_eq!(tool_call_blocks.len(), 1, "Expected exactly one tool call");
+
+    let tool_call_block = tool_call_blocks[0];
+    match tool_call_block {
         ContentBlock::ToolCall(tool_call) => {
             assert_eq!(tool_call.name, "get_temperature");
             let arguments =
@@ -1383,9 +1390,7 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
             });
             assert_eq!(arguments, expected_arguments);
         }
-        _ => {
-            panic!("Expected a tool call, got {:?}", first);
-        }
+        _ => panic!("Unreachable"),
     }
 }
 
@@ -1692,9 +1697,16 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
-    let first = output.first().unwrap();
-    match first {
+    let tool_call_blocks: Vec<_> = output
+        .iter()
+        .filter(|block| matches!(block, ContentBlock::ToolCall(_)))
+        .collect();
+
+    // Assert exactly one tool call
+    assert_eq!(tool_call_blocks.len(), 1, "Expected exactly one tool call");
+
+    let tool_call_block = tool_call_blocks[0];
+    match tool_call_block {
         ContentBlock::ToolCall(tool_call) => {
             assert_eq!(tool_call.name, "get_temperature");
             let arguments =
@@ -1705,9 +1717,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
             });
             assert_eq!(arguments, expected_arguments);
         }
-        _ => {
-            panic!("Expected a tool call, got {:?}", first);
-        }
+        _ => panic!("Unreachable"),
     }
 }
 
@@ -2452,16 +2462,21 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
-    let first = output.first().unwrap();
-    match first {
+    let tool_call_blocks: Vec<_> = output
+        .iter()
+        .filter(|block| matches!(block, ContentBlock::ToolCall(_)))
+        .collect();
+
+    // Assert exactly one tool call
+    assert_eq!(tool_call_blocks.len(), 1, "Expected exactly one tool call");
+
+    let tool_call_block = tool_call_blocks[0];
+    match tool_call_block {
         ContentBlock::ToolCall(tool_call) => {
             assert_eq!(tool_call.name, "get_temperature");
             serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
         }
-        _ => {
-            panic!("Expected a tool call, got {:?}", first);
-        }
+        _ => panic!("Unreachable"),
     }
 }
 
@@ -2776,16 +2791,21 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
-    let first = output.first().unwrap();
-    match first {
+    let tool_call_blocks: Vec<_> = output
+        .iter()
+        .filter(|block| matches!(block, ContentBlock::ToolCall(_)))
+        .collect();
+
+    // Assert exactly one tool call
+    assert_eq!(tool_call_blocks.len(), 1, "Expected exactly one tool call");
+
+    let tool_call_block = tool_call_blocks[0];
+    match tool_call_block {
         ContentBlock::ToolCall(tool_call) => {
             assert_eq!(tool_call.name, "get_temperature");
             serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
         }
-        _ => {
-            panic!("Expected a tool call, got {:?}", first);
-        }
+        _ => panic!("Unreachable"),
     }
 }
 
@@ -3594,16 +3614,21 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
-    let first = output.first().unwrap();
-    match first {
+    let tool_call_blocks: Vec<_> = output
+        .iter()
+        .filter(|block| matches!(block, ContentBlock::ToolCall(_)))
+        .collect();
+
+    // Assert exactly one tool call
+    assert_eq!(tool_call_blocks.len(), 1, "Expected exactly one tool call");
+
+    let tool_call_block = tool_call_blocks[0];
+    match tool_call_block {
         ContentBlock::ToolCall(tool_call) => {
             assert_eq!(tool_call.name, "self_destruct");
             serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
         }
-        _ => {
-            panic!("Expected a tool call, got {:?}", first);
-        }
+        _ => panic!("Unreachable"),
     }
 }
 
@@ -3978,16 +4003,21 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
-    let first = output.first().unwrap();
-    match first {
+    let tool_call_blocks: Vec<_> = output
+        .iter()
+        .filter(|block| matches!(block, ContentBlock::ToolCall(_)))
+        .collect();
+
+    // Assert exactly one tool call
+    assert_eq!(tool_call_blocks.len(), 1, "Expected exactly one tool call");
+
+    let tool_call_block = tool_call_blocks[0];
+    match tool_call_block {
         ContentBlock::ToolCall(tool_call) => {
             assert_eq!(tool_call.name, "self_destruct");
             serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
         }
-        _ => {
-            panic!("Expected a tool call, got {:?}", first);
-        }
+        _ => panic!("Unreachable"),
     }
 }
 
@@ -4214,16 +4244,21 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
-    let first = output.first().unwrap();
-    match first {
+    let tool_call_blocks: Vec<_> = output
+        .iter()
+        .filter(|block| matches!(block, ContentBlock::ToolCall(_)))
+        .collect();
+
+    // Assert exactly one tool call
+    assert_eq!(tool_call_blocks.len(), 1, "Expected exactly one tool call");
+
+    let tool_call_block = tool_call_blocks[0];
+    match tool_call_block {
         ContentBlock::ToolCall(tool_call) => {
             assert_eq!(tool_call.name, "get_humidity");
             serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
         }
-        _ => {
-            panic!("Expected a tool call, got {:?}", first);
-        }
+        _ => panic!("Unreachable"),
     }
 }
 
@@ -4526,16 +4561,21 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
-    let first = output.first().unwrap();
-    match first {
+    let tool_call_blocks: Vec<_> = output
+        .iter()
+        .filter(|block| matches!(block, ContentBlock::ToolCall(_)))
+        .collect();
+
+    // Assert exactly one tool call
+    assert_eq!(tool_call_blocks.len(), 1, "Expected exactly one tool call");
+
+    let tool_call_block = tool_call_blocks[0];
+    match tool_call_block {
         ContentBlock::ToolCall(tool_call) => {
             assert_eq!(tool_call.name, "get_humidity");
             serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
         }
-        _ => {
-            panic!("Expected a tool call, got {:?}", first);
-        }
+        _ => panic!("Unreachable"),
     }
 }
 
@@ -5345,16 +5385,21 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
-    let first = output.first().unwrap();
-    match first {
+    let tool_call_blocks: Vec<_> = output
+        .iter()
+        .filter(|block| matches!(block, ContentBlock::ToolCall(_)))
+        .collect();
+
+    // Assert exactly one tool call
+    assert_eq!(tool_call_blocks.len(), 1, "Expected exactly one tool call");
+
+    let tool_call_block = tool_call_blocks[0];
+    match tool_call_block {
         ContentBlock::ToolCall(tool_call) => {
             assert_eq!(tool_call.name, "get_temperature");
             serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
         }
-        _ => {
-            panic!("Expected a tool call, got {:?}", first);
-        }
+        _ => panic!("Unreachable"),
     }
 }
 
@@ -5676,16 +5721,21 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
-    let first = output.first().unwrap();
-    match first {
+    let tool_call_blocks: Vec<_> = output
+        .iter()
+        .filter(|block| matches!(block, ContentBlock::ToolCall(_)))
+        .collect();
+
+    // Assert exactly one tool call
+    assert_eq!(tool_call_blocks.len(), 1, "Expected exactly one tool call");
+
+    let tool_call_block = tool_call_blocks[0];
+    match tool_call_block {
         ContentBlock::ToolCall(tool_call) => {
             assert_eq!(tool_call.name, "get_temperature");
             serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
         }
-        _ => {
-            panic!("Expected a tool call, got {:?}", first);
-        }
+        _ => panic!("Unreachable"),
     }
 }
 
