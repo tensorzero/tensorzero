@@ -75,10 +75,10 @@ jobs:
         run: uv python install 3.10
 
       - name: Install dependencies for python async client tests
+        working-directory: clients/python
         run: uv sync --all-extras --dev
 
       - name: Run python async client tests
-        working-directory: clients/python
         run: uv run pytest
 
       - name: Terminate the gateway
