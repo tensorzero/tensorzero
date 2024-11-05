@@ -6,8 +6,8 @@ export const clickhouseClient = createClient({
 
 export async function checkClickhouseConnection(): Promise<boolean> {
   try {
-    await clickhouseClient.ping();
-    return true;
+    const result = await clickhouseClient.ping();
+    return result.success;
   } catch {
     return false;
   }

@@ -51,6 +51,7 @@ services:
       start_period: 1s
       start_interval: 1s
       timeout: 1s
+
   fixtures:
     container_name: tensorzero-fixtures-dashboard-tests
     image: clickhouse/clickhouse-server:latest
