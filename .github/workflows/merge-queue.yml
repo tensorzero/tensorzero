@@ -76,10 +76,19 @@ jobs:
 
       - name: Install dependencies for python async client tests
         working-directory: clients/python
-        run: uv sync --all-extras --dev && uv pip install clickhouse-connect
+        run: uv sync --all-extras --dev
 
       - name: Run python async client tests
-        run: source clients/python/.venv/bin/activate && pytest
+        working-directory: clients/python
+        run: uv run pytest
+
+      - name: Install dependencies fro python recipes tests
+        working-directory: recipes/tests
+        run: uv sync --all-extras --dev
+
+      - name: Run python recipes tests
+        working-directory: recipes/tests
+        run: uv run pytest
 
       - name: Terminate the gateway
         run: |
