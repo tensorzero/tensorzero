@@ -18,5 +18,6 @@ test("queryBooleanMetricData", async () => {
     true,
     undefined,
   );
-  console.log(result.length);
+  // The fixture was written to have 41 rows with good boolean metric data that should be returned
+  expect(result.length).toBe(41);
 });
