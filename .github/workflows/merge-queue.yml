@@ -53,7 +53,7 @@ jobs:
 
       - name: Set up CLICKHOUSE_URL for E2E tests
         run: |
-          echo "CLICKHOUSE_URL=http://localhost:8123/tensorzero" >> $GITHUB_ENV
+          echo "CLICKHOUSE_URL=http://localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
       - name: Launch ClickHouse container for E2E tests
         run: docker compose -f gateway/tests/e2e/docker-compose.yml up -d --wait
