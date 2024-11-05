@@ -60,6 +60,7 @@ jobs:
 
       - name: Launch the gateway for E2E tests
         run: |
+          cargo build
           cargo run-e2e &
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
 
