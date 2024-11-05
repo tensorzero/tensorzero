@@ -3,7 +3,7 @@ name: General Checks
 on:
   merge_group:
   pull_request:
-    branches: ["main"]
+    branches: ["main", "dashboard"]
 
 env:
   FORCE_COLOR: 1

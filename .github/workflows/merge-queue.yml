@@ -102,3 +102,37 @@ jobs:
 
       - name: Run inference for production deployment tests
         run: examples/production-deployment/run_example_inference.sh
+
+      - name: Take down docker compose for production deployment tests
+        run: |
+          docker compose -f examples/production-deployment/docker-compose.yml down
+          docker compose -f gateway/tests/e2e/docker-compose.yml down
+
+      - name: Install npm dependencies
+        working-directory: dashboard
+        run: npm install
+
+      - name: Run ESLint
+        working-directory: dashboard
+        run: |
+          npx eslint . --fix --max-warnings=0 --config eslint.config.js --cache
+
+      - name: Run Prettier
+        working-directory: dashboard
+        run: |
+          npx prettier --write --list-different "**/*.{js,jsx,ts,tsx,css,scss,html,json,yaml,md}" --ignore-path "**/*.ipynb"
+
+      - name: Run TypeScript type checking
+        working-directory: dashboard
+        run: |
+          npx tsc
+
+      - name: Start services for dashboard tests
+        run: docker compose -f dashboard/docker-compose.yml up -d --wait clickhouse gateway
+
+      - name: Load test fixtures
+        run: docker compose -f dashboard/docker-compose.yml run fixtures
+
+      - name: Run dashboard tests
+        working-directory: dashboard
+        run: npm test -- --run
