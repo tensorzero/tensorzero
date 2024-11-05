@@ -76,7 +76,7 @@ jobs:
 
       - name: Install dependencies for python async client tests
         working-directory: clients/python
-        run: uv sync --all-extras --dev
+        run: uv sync --all-extras --dev && uv pip install clickhouse-connect
 
       - name: Run python async client tests
         run: source clients/python/.venv/bin/activate && pytest
