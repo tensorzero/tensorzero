@@ -84,7 +84,9 @@ jobs:
 
       - name: Install dependencies for python recipes tests
         working-directory: recipes/tests
-        run: uv sync --all-extras --dev
+        run: |
+          uv venv
+          uv pip sync
 
       - name: Run python recipes tests
         working-directory: recipes/tests
