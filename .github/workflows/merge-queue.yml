@@ -102,11 +102,11 @@ jobs:
 
       - name: Build minijinja WASM bindings
         working-directory: dashboard/utils/minijinja
-        run: wasm-pack build
+        run: wasm-pack build --features console_error_panic_hook
 
       - name: Run minijinja WASM tests
         working-directory: dashboard/utils/minijinja
-        run: wasm-pack test --node
+        run: wasm-pack test --node --features console_error_panic_hook
 
       - name: Build Docker container for production deployment tests
         run: docker build -t tensorzero/gateway .
