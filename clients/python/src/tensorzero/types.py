@@ -216,6 +216,11 @@ class FeedbackResponse:
 class TensorZeroError(Exception):
     def __init__(self, response: httpx.Response):
         self.response = response
+        self.status_code = response.status_code
+        try:
+            self.text = response.text
+        except Exception:
+            self.text = "(response body unavailable)"
 
     def __str__(self):
-        return f"TensorZeroError (status code {self.response.status_code}): {self.response.text}"
+        return f"TensorZeroError (status code {self.status_code}): {self.text}"

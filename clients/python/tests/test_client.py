@@ -33,7 +33,7 @@ from tensorzero import (
     ToolResult,
 )
 from tensorzero.types import TensorZeroError
-from uuid_extensions import uuid7
+from tensorzero.util import uuid7
 
 
 @pytest_asyncio.fixture
@@ -50,6 +50,8 @@ async def test_async_basic_inference(async_client):
             "system": {"assistant_name": "Alfred Pennyworth"},
             "messages": [{"role": "user", "content": "Hello"}],
         },
+        episode_id=uuid7(),  # This would not typically be done but this partially verifies that uuid7 is using a correct implementation
+        # because the gateway validates some of the properties needed
     )
     assert result.variant_name == "test"
     assert isinstance(result, ChatInferenceResponse)
@@ -121,6 +123,20 @@ async def test_async_inference_streaming(async_client):
             assert len(chunk.content) == 0
             assert chunk.usage.input_tokens == 10
             assert chunk.usage.output_tokens == 16
+
+
+@pytest.mark.asyncio
+async def test_async_inference_streaming_nonexistent_function(async_client):
+    with pytest.raises(TensorZeroError) as exc_info:
+        await async_client.inference(
+            function_name="does_not_exist",
+            input={
+                "system": {"assistant_name": "Alfred Pennyworth"},
+                "messages": [{"role": "user", "content": "Hello"}],
+            },
+            stream=True,
+        )
+    assert exc_info.value.status_code == 404
 
 
 @pytest.mark.asyncio
@@ -457,6 +473,19 @@ def test_sync_inference_streaming(sync_client):
             assert len(chunk.content) == 0
             assert chunk.usage.input_tokens == 10
             assert chunk.usage.output_tokens == 16
+
+
+def test_sync_inference_streaming_nonexistent_function(sync_client):
+    with pytest.raises(TensorZeroError) as exc_info:
+        sync_client.inference(
+            function_name="does_not_exist",
+            input={
+                "system": {"assistant_name": "Alfred Pennyworth"},
+                "messages": [{"role": "user", "content": "Hello"}],
+            },
+            stream=True,
+        )
+    assert exc_info.value.status_code == 404
 
 
 def test_sync_tool_call_inference(sync_client):

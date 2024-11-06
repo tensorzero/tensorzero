@@ -16,9 +16,11 @@
     "@remix-run/node": "^2.13.1",
     "@remix-run/react": "^2.13.1",
     "@remix-run/serve": "^2.13.1",
+    "@types/node": "^22.8.7",
     "isbot": "^4.1.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "vitest": "^2.1.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
@@ -37,9 +39,10 @@
     "globals": "^15.11.0",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.4",
-    "typescript": "^5.1.6",
+    "typescript": "^5.6.3",
     "typescript-eslint": "^8.12.2",
     "vite": "^5.1.0",
+    "vite-plugin-wasm": "^3.3.0",
     "vite-tsconfig-paths": "^4.2.1",
     "vitest": "^2.1.3"
   },
