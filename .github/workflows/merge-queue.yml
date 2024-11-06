@@ -130,7 +130,7 @@ jobs:
 
       - name: Install npm dependencies
         working-directory: dashboard
-        run: npm install
+        run: npm install --platform=linux
 
       - name: Run ESLint
         working-directory: dashboard
