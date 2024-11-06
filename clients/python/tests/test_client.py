@@ -33,7 +33,7 @@ from tensorzero import (
     ToolResult,
 )
 from tensorzero.types import TensorZeroError
-from uuid_extensions import uuid7
+from tensorzero.util import uuid7
 
 
 @pytest_asyncio.fixture
@@ -50,6 +50,8 @@ async def test_async_basic_inference(async_client):
             "system": {"assistant_name": "Alfred Pennyworth"},
             "messages": [{"role": "user", "content": "Hello"}],
         },
+        episode_id=uuid7(),  # This would not typically be done but this partially verifies that uuid7 is using a correct implementation
+        # because the gateway validates some of the properties needed
     )
     assert result.variant_name == "test"
     assert isinstance(result, ChatInferenceResponse)

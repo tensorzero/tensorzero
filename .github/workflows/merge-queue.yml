@@ -52,7 +52,7 @@ jobs:
 
       - name: Set up CLICKHOUSE_URL for E2E tests
         run: |
-          echo "CLICKHOUSE_URL=http://localhost:8123/tensorzero" >> $GITHUB_ENV
+          echo "CLICKHOUSE_URL=http://localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
       - name: Launch ClickHouse container for E2E tests
         run: docker compose -f gateway/tests/e2e/docker-compose.yml up -d --wait
@@ -71,7 +71,6 @@ jobs:
         run: curl -LsSf https://astral.sh/uv/0.3.3/install.sh | sh
 
       - name: Install Python for python async client tests
-        working-directory: clients/python
         run: uv python install 3.10
 
       - name: Install dependencies for python async client tests
@@ -80,6 +79,16 @@ jobs:
 
       - name: Run python async client tests
         working-directory: clients/python
+        run: uv run pytest
+
+      - name: Install dependencies for python recipes tests
+        working-directory: recipes/tests
+        run: |
+          uv venv
+          uv pip sync requirements.txt
+
+      - name: Run python recipes tests
+        working-directory: recipes/tests
         run: uv run pytest
 
       - name: Terminate the gateway
