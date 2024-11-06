@@ -155,4 +155,4 @@ jobs:
 
       - name: Run dashboard tests
         working-directory: dashboard
-        run: npm test -- --run
+        run: npm test
