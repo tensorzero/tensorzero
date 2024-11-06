@@ -2,6 +2,7 @@ name: Merge Queue Checks
 
 on:
   merge_group:
+  push:
 
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }} # for E2E tests
@@ -95,6 +96,17 @@ jobs:
         run: |
           echo "Killing gateway with pid $GATEWAY_PID"
           kill -9 $GATEWAY_PID
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Build minijinja WASM bindings
+        working-directory: dashboard/utils/minijinja
+        run: wasm-pack build
+
+      - name: Run minijinja WASM tests
+        working-directory: dashboard/utils/minijinja
+        run: wasm-pack test --node
 
       - name: Build Docker container for production deployment tests
         run: docker build -t tensorzero/gateway .
