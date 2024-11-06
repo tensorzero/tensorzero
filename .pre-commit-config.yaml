@@ -25,7 +25,6 @@ repos:
         types: [rust]
         pass_filenames: false
         always_run: true
-
       - id: cargo-fmt
         name: cargo fmt
         entry: cargo fmt -- --check
@@ -33,7 +32,6 @@ repos:
         types: [rust]
         pass_filenames: false
         always_run: true
-
       - id: cargo-clippy
         name: cargo clippy
         entry: cargo clippy --all-targets --all-features -- -D warnings
@@ -41,13 +39,34 @@ repos:
         types: [rust]
         pass_filenames: false
         always_run: true
-
       - id: cargo-test-unit
         name: cargo test-unit
         entry: cargo test-unit
         language: system
         types: [rust]
         pass_filenames: false
+        always_run: true
+
+      - id: prettier
+        name: prettier
+        entry: npx prettier
+        language: node
+        types_or:
+          [javascript, jsx, ts, tsx, css, scss, html, json, yaml, markdown]
+        args: ["--write", "--list-different"]
+        additional_dependencies:
+          - prettier
+          - "@prettier/plugin-xml"
+        always_run: true
+        exclude: '.*\.ipynb$'
+
+      - id: tsc
+        name: typescript
+        entry: bash -c 'cd dashboard && tsc'
+        language: node
+        pass_filenames: false
+        additional_dependencies:
+          - typescript
         always_run: true
 
   - repo: https://github.com/srstevenson/nb-clean
