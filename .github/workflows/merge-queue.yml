@@ -2,6 +2,7 @@ name: Merge Queue Checks
 
 on:
   merge_group:
+  push:
 
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }} # for E2E tests
@@ -80,6 +81,10 @@ jobs:
       - name: Run python async client tests
         working-directory: clients/python
         run: uv run pytest
+
+      - name: Run mypy type checking
+        working-directory: clients/python
+        run: uv run mypy . --strict
 
       - name: Install dependencies for python recipes tests
         working-directory: recipes/tests

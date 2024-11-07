@@ -20,7 +20,7 @@ class ContentBlock(ABC):
     type: str
 
     @abstractmethod
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         pass
 
 
@@ -28,7 +28,7 @@ class ContentBlock(ABC):
 class Text(ContentBlock):
     text: str
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         return dict(type="text", value=self.text)
 
 
@@ -40,7 +40,7 @@ class ToolCall(ContentBlock):
     raw_arguments: Dict[str, Any]
     raw_name: str
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         return dict(
             type="tool_call",
             arguments=json.dumps(self.raw_arguments),
@@ -55,7 +55,7 @@ class ToolResult:
     result: str
     id: str
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         return dict(type="tool_result", name=self.name, result=self.result, id=self.id)
 
 
@@ -222,5 +222,5 @@ class TensorZeroError(Exception):
         except Exception:
             self.text = "(response body unavailable)"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"TensorZeroError (status code {self.status_code}): {self.text}"

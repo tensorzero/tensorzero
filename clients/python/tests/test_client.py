@@ -1,3 +1,4 @@
+# type: ignore
 """
 Tests for the TensorZero client
 
