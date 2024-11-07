@@ -18,6 +18,7 @@ uv run pytest
 ```
 """
 
+from copy import deepcopy
 from time import sleep, time
 from uuid import UUID
 
@@ -45,15 +46,18 @@ async def async_client():
 
 @pytest.mark.asyncio
 async def test_async_basic_inference(async_client):
+    input = {
+        "system": {"assistant_name": "Alfred Pennyworth"},
+        "messages": [{"role": "user", "content": Text(type="text", text="Hello")}],
+    }
+    input_copy = deepcopy(input)
     result = await async_client.inference(
         function_name="basic_test",
-        input={
-            "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": "Hello"}],
-        },
+        input=input,
         episode_id=uuid7(),  # This would not typically be done but this partially verifies that uuid7 is using a correct implementation
         # because the gateway validates some of the properties needed
     )
+    assert input == input_copy, "Input should not be modified by the client"
     assert result.variant_name == "test"
     assert isinstance(result, ChatInferenceResponse)
     content = result.content

@@ -82,16 +82,25 @@ class BaseTensorZeroGateway(ABC):
         parallel_tool_calls: Optional[bool] = None,
     ) -> Dict[str, Any]:
         # Convert content blocks to dicts if necessary
+        converted_messages: List[Dict[str, Any]] = []
         for message in input.get("messages", []):
             if isinstance(message["content"], list):
-                message["content"] = [
-                    item.to_dict() if hasattr(item, "to_dict") else item
-                    for item in message["content"]
-                ]
+                converted_messages.append(
+                    {
+                        "role": message["role"],
+                        "content": [
+                            item.to_dict() if hasattr(item, "to_dict") else item
+                            for item in message["content"]
+                        ],
+                    }
+                )
+        converted_input: Dict[str, Any] = {"messages": converted_messages}
+        if input.get("system") is not None:
+            converted_input["system"] = input["system"]
 
         data: Dict[str, Any] = {
             "function_name": function_name,
-            "input": input,
+            "input": converted_input,
         }
         if episode_id is not None:
             data["episode_id"] = str(episode_id)
