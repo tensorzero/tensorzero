@@ -413,6 +413,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
             try:
                 response.raise_for_status()
             except httpx.HTTPStatusError as e:
+                response._content = await response.aread()
                 raise TensorZeroError(response) from e
             return self._stream_sse(response)
         else:
