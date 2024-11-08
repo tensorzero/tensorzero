@@ -2,7 +2,6 @@ name: Merge Queue Checks
 
 on:
   merge_group:
-
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }} # for E2E tests
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }} # for E2E tests
@@ -52,7 +51,7 @@ jobs:
 
       - name: Set up CLICKHOUSE_URL for E2E tests
         run: |
-          echo "CLICKHOUSE_URL=http://localhost:8123/tensorzero" >> $GITHUB_ENV
+          echo "CLICKHOUSE_URL=http://localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
       - name: Launch ClickHouse container for E2E tests
         run: docker compose -f gateway/tests/e2e/docker-compose.yml up -d --wait
@@ -71,7 +70,6 @@ jobs:
         run: curl -LsSf https://astral.sh/uv/0.3.3/install.sh | sh
 
       - name: Install Python for python async client tests
-        working-directory: clients/python
         run: uv python install 3.10
 
       - name: Install dependencies for python async client tests
@@ -82,10 +80,31 @@ jobs:
         working-directory: clients/python
         run: uv run pytest
 
+      - name: Install dependencies for python recipes tests
+        working-directory: recipes/tests
+        run: |
+          uv venv
+          uv pip sync requirements.txt
+
+      - name: Run python recipes tests
+        working-directory: recipes/tests
+        run: uv run pytest
+
       - name: Terminate the gateway
         run: |
           echo "Killing gateway with pid $GATEWAY_PID"
           kill -9 $GATEWAY_PID
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Build minijinja WASM bindings
+        working-directory: dashboard/utils/minijinja
+        run: wasm-pack build --features console_error_panic_hook
+
+      - name: Run minijinja WASM tests
+        working-directory: dashboard/utils/minijinja
+        run: wasm-pack test --node --features console_error_panic_hook
 
       - name: Build Docker container for production deployment tests
         run: docker build -t tensorzero/gateway .
@@ -110,7 +129,7 @@ jobs:
 
       - name: Install npm dependencies
         working-directory: dashboard
-        run: npm install
+        run: npm install --platform=linux
 
       - name: Run ESLint
         working-directory: dashboard
@@ -135,4 +154,4 @@ jobs:
 
       - name: Run dashboard tests
         working-directory: dashboard
-        run: npm test -- --run
+        run: npm test

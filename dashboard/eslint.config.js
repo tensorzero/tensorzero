@@ -5,6 +5,9 @@ import pluginReact from "eslint-plugin-react";
 
 export default [
   {
+    ignores: ["**/minijinja/pkg/"],
+  },
+  {
     files: ["**/*.{js,mjs,cjs,ts,jsx,tsx}"],
     plugins: {
       react: pluginReact,
