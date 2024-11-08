@@ -11,6 +11,7 @@ const baseConfigSchema = z.object({
 
 // Schema for FunctionConfigChat
 export const FunctionConfigChat = baseConfigSchema.extend({
+  type: z.literal("chat"),
   tools: z.array(z.string()).default([]),
   tool_choice: z.enum(["none", "auto", "any"]).default("none"), // Assuming these are the ToolChoice variants
   parallel_tool_calls: z.boolean().default(false),
@@ -18,27 +19,14 @@ export const FunctionConfigChat = baseConfigSchema.extend({
 
 // Schema for FunctionConfigJson
 export const FunctionConfigJson = baseConfigSchema.extend({
-  output_schema: z.string(),
-  implicit_tool_call_config: z.object({
-    tools_available: z.array(z.any()), // ToolConfig schema would need to be defined separately
-    tool_choice: z.object({
-      type: z.literal("specific"),
-      value: z.string(),
-    }),
-    parallel_tool_calls: z.boolean(),
-  }),
+  type: z.literal("json"),
+  output_schema: z.string().optional(),
 });
 
 // Combined FunctionConfig schema
 export const FunctionConfig = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("chat"),
-    config: FunctionConfigChat,
-  }),
-  z.object({
-    type: z.literal("json"),
-    config: FunctionConfigJson,
-  }),
+  FunctionConfigChat,
+  FunctionConfigJson,
 ]);
 
 export type FunctionConfigChat = z.infer<typeof FunctionConfigChat>;

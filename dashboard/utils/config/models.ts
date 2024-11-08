@@ -18,6 +18,11 @@ const AzureProviderConfig = z.object({
   endpoint: z.string().url(),
 });
 
+const DummyProviderConfig = z.object({
+  type: z.literal("dummy"),
+  model_name: z.string(),
+});
+
 const FireworksProviderConfig = z.object({
   type: z.literal("fireworks"),
   model_name: z.string(),
@@ -69,6 +74,7 @@ export const ProviderConfig = z.discriminatedUnion("type", [
   AnthropicProviderConfig,
   AWSBedrockProviderConfig,
   AzureProviderConfig,
+  DummyProviderConfig,
   FireworksProviderConfig,
   GCPVertexAnthropicProviderConfig,
   GCPVertexGeminiProviderConfig,

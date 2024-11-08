@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { jsonModeSchema, retryConfigSchema } from "./types";
 
-export const ChatCompletionConfig = z.object({
+const BaseChatCompletionConfig = z.object({
   weight: z.number().default(0),
   model: z.string(),
   system_template: z.string().optional(),
@@ -17,15 +17,20 @@ export const ChatCompletionConfig = z.object({
   retries: retryConfigSchema.default({ num_retries: 0, max_delay_s: 10 }),
 });
 
+export const ChatCompletionConfig = BaseChatCompletionConfig.extend({
+  type: z.literal("chat_completion"),
+});
+
 export type ChatCompletionConfig = z.infer<typeof ChatCompletionConfig>;
 
 export const EvaluatorConfig = z.object({
-  ...ChatCompletionConfig.shape,
+  ...BaseChatCompletionConfig.shape,
 });
 
 export type EvaluatorConfig = z.infer<typeof EvaluatorConfig>;
 
 export const BestOfNSamplingConfig = z.object({
+  type: z.literal("experimental_best_of_n_sampling"),
   weight: z.number().default(0),
   timeout_s: z.number().default(300),
   candidates: z.array(z.string()),
@@ -35,11 +40,12 @@ export const BestOfNSamplingConfig = z.object({
 export type BestOfNSamplingConfig = z.infer<typeof BestOfNSamplingConfig>;
 
 export const DiclConfig = z.object({
+  type: z.literal("experimental_dynamic_in_context_learning"),
   weight: z.number().default(0),
   embedding_model: z.string(),
   k: z.number().int(), // k as in k-nearest neighbors
   model: z.string(),
-  system_instructions: z.string(),
+  system_instructions: z.string().optional(), // should be the path here not the actual system instructions
   temperature: z.number().optional(),
   top_p: z.number().optional(),
   presence_penalty: z.number().optional(),
@@ -53,12 +59,13 @@ export const DiclConfig = z.object({
 export type DiclConfig = z.infer<typeof DiclConfig>;
 
 export const FuserConfig = z.object({
-  ...ChatCompletionConfig.shape,
+  ...BaseChatCompletionConfig.shape,
 });
 
 export type FuserConfig = z.infer<typeof FuserConfig>;
 
 export const MixtureOfNConfig = z.object({
+  type: z.literal("experimental_mixture_of_n"),
   weight: z.number().default(0),
   timeout_s: z.number().default(300),
   candidates: z.array(z.string()),
@@ -68,22 +75,10 @@ export const MixtureOfNConfig = z.object({
 export type MixtureOfNConfig = z.infer<typeof MixtureOfNConfig>;
 
 export const VariantConfig = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("chat_completion"),
-    config: ChatCompletionConfig,
-  }),
-  z.object({
-    type: z.literal("experimental_best_of_n_sampling"),
-    config: BestOfNSamplingConfig,
-  }),
-  z.object({
-    type: z.literal("experimental_dynamic_in_context_learning"),
-    config: DiclConfig,
-  }),
-  z.object({
-    type: z.literal("experimental_mixture_of_n"),
-    config: MixtureOfNConfig,
-  }),
+  ChatCompletionConfig,
+  BestOfNSamplingConfig,
+  DiclConfig,
+  MixtureOfNConfig,
 ]);
 
 export type VariantConfig = z.infer<typeof VariantConfig>;
