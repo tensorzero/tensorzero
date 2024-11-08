@@ -1,3 +1,4 @@
+# type: ignore
 """
 Tests for the TensorZero client
 
@@ -17,6 +18,7 @@ uv run pytest
 ```
 """
 
+from copy import deepcopy
 from time import sleep, time
 from uuid import UUID
 
@@ -44,15 +46,18 @@ async def async_client():
 
 @pytest.mark.asyncio
 async def test_async_basic_inference(async_client):
+    input = {
+        "system": {"assistant_name": "Alfred Pennyworth"},
+        "messages": [{"role": "user", "content": Text(type="text", text="Hello")}],
+    }
+    input_copy = deepcopy(input)
     result = await async_client.inference(
         function_name="basic_test",
-        input={
-            "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": "Hello"}],
-        },
+        input=input,
         episode_id=uuid7(),  # This would not typically be done but this partially verifies that uuid7 is using a correct implementation
         # because the gateway validates some of the properties needed
     )
+    assert input == input_copy, "Input should not be modified by the client"
     assert result.variant_name == "test"
     assert isinstance(result, ChatInferenceResponse)
     content = result.content
@@ -137,6 +142,28 @@ async def test_async_inference_streaming_nonexistent_function(async_client):
             stream=True,
         )
     assert exc_info.value.status_code == 404
+    assert (
+        str(exc_info.value)
+        == 'TensorZeroError (status code 404): {"error":"Unknown function: does_not_exist"}'
+    )
+
+
+@pytest.mark.asyncio
+async def test_async_inference_streaming_malformed_input(async_client):
+    with pytest.raises(TensorZeroError) as exc_info:
+        await async_client.inference(
+            function_name="basic_test",
+            input={
+                "system": {"name_of_assistant": "Alfred Pennyworth"},  # WRONG
+                "messages": [{"role": "user", "content": "Hello"}],
+            },
+            stream=True,
+        )
+    assert exc_info.value.status_code == 400
+    assert (
+        str(exc_info.value)
+        == 'TensorZeroError (status code 400): {"error":"JSON Schema validation failed for Function:\\n\\n\\"assistant_name\\" is a required property\\nData: {\\"name_of_assistant\\":\\"Alfred Pennyworth\\"}Schema: {\\"type\\":\\"object\\",\\"properties\\":{\\"assistant_name\\":{\\"type\\":\\"string\\"}},\\"required\\":[\\"assistant_name\\"]}"}'
+    )
 
 
 @pytest.mark.asyncio
@@ -415,6 +442,18 @@ def test_sync_basic_inference(sync_client):
     usage = result.usage
     assert usage.input_tokens == 10
     assert usage.output_tokens == 10
+
+
+def test_sync_malformed_inference(sync_client):
+    with pytest.raises(TensorZeroError) as exc_info:
+        sync_client.inference(
+            function_name="basic_test",
+            input={
+                "system": {"name_of_assistant": "Alfred Pennyworth"},  # WRONG
+                "messages": [{"role": "user", "content": "Hello"}],
+            },
+        )
+    assert exc_info.value.status_code == 400
 
 
 def test_sync_inference_streaming(sync_client):

@@ -81,6 +81,12 @@ jobs:
         working-directory: clients/python
         run: uv run pytest
 
+      - name: Run mypy type checking
+        working-directory: clients/python
+        run: |
+          uv pip install mypy
+          uv run mypy . --strict
+
       - name: Install dependencies for python recipes tests
         working-directory: recipes/tests
         run: |
