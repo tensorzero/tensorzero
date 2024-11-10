@@ -2,6 +2,7 @@
 This script demonstrates how to fine-tune a model using the OpenAI API.
 To run:
 `npx tsx --experimental-wasm-modules fine-tune-openai-example.ts`
+You will need to have the docker compose for dashboard running.
 */
 
 import { create_env } from "./minijinja/pkg/minijinja_bindings.js";
