@@ -385,6 +385,7 @@ async def test_async_feedback(async_client):
         metric_name="demonstration",
         value="hi how are you",
         inference_id=result.inference_id,
+        tags={"author": "Alice"},
     )
     assert isinstance(result, FeedbackResponse)
 
@@ -738,6 +739,7 @@ def test_sync_feedback(sync_client):
         metric_name="demonstration",
         value="hi how are you",
         inference_id=result.inference_id,
+        tags={"author": "Alice"},
     )
     assert isinstance(result, FeedbackResponse)
 
