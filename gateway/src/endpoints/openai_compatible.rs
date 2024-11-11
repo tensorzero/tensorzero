@@ -4,10 +4,12 @@ use axum::body::Body;
 use axum::debug_handler;
 use axum::extract::State;
 use axum::http::HeaderMap;
+use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tokio_stream::StreamExt;
 use uuid::Uuid;
 
 use crate::endpoints::inference::{
@@ -16,11 +18,16 @@ use crate::endpoints::inference::{
 use crate::error::Error;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
-    current_timestamp, ContentBlockOutput, Input, InputMessage, InputMessageContent, Role,
+    current_timestamp, ContentBlockChunk, ContentBlockOutput, Input, InputMessage,
+    InputMessageContent, Role, Usage,
 };
-use crate::tool::{DynamicToolParams, Tool, ToolCall, ToolCallOutput, ToolChoice, ToolResult};
+use crate::tool::{
+    DynamicToolParams, Tool, ToolCall, ToolCallChunk, ToolCallOutput, ToolChoice, ToolResult,
+};
 
-use super::inference::{InferenceCredentials, InferenceOutput, InferenceResponse};
+use super::inference::{
+    InferenceCredentials, InferenceOutput, InferenceResponse, InferenceResponseChunk,
+};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct OpenAICompatibleFunctionCall {
@@ -191,7 +198,10 @@ pub async fn openai_compatible_handler(
             Ok(Json(openai_compatible_response).into_response())
         }
         InferenceOutput::Streaming(stream) => {
-            unimplemented!()
+            let openai_compatible_stream = stream.map(prepare_serialized_openai_compatible_chunk);
+            Ok(Sse::new(openai_compatible_stream)
+                .keep_alive(axum::response::sse::KeepAlive::new())
+                .into_response())
         }
     }
 }
@@ -416,11 +426,7 @@ impl From<InferenceResponse> for OpenAICompatibleResponse {
                     model: response.variant_name,
                     system_fingerprint: "".to_string(),
                     object: "chat.completion".to_string(),
-                    usage: OpenAICompatibleUsage {
-                        prompt_tokens: response.usage.input_tokens,
-                        completion_tokens: response.usage.output_tokens,
-                        total_tokens: response.usage.input_tokens + response.usage.output_tokens,
-                    },
+                    usage: response.usage.into(),
                 }
             }
             InferenceResponse::Json(response) => OpenAICompatibleResponse {
@@ -469,6 +475,134 @@ fn process_chat_content(
 
 impl From<ToolCallOutput> for OpenAICompatibleToolCall {
     fn from(tool_call: ToolCallOutput) -> Self {
+        OpenAICompatibleToolCall {
+            id: tool_call.id,
+            r#type: "function".to_string(),
+            function: OpenAICompatibleFunctionCall {
+                name: tool_call.raw_name,
+                arguments: tool_call.raw_arguments,
+            },
+        }
+    }
+}
+
+impl From<Usage> for OpenAICompatibleUsage {
+    fn from(usage: Usage) -> Self {
+        OpenAICompatibleUsage {
+            prompt_tokens: usage.input_tokens,
+            completion_tokens: usage.output_tokens,
+            total_tokens: usage.input_tokens + usage.output_tokens,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+struct OpenAICompatibleResponseChunk {
+    id: String,
+    choices: Vec<OpenAICompatibleChoiceChunk>,
+    created: u32,
+    model: String,
+    system_fingerprint: String,
+    object: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    usage: Option<OpenAICompatibleUsage>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+struct OpenAICompatibleChoiceChunk {
+    index: u32,
+    finish_reason: String,
+    delta: OpenAICompatibleDelta,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+struct OpenAICompatibleDelta {
+    content: Option<String>,
+    tool_calls: Option<Vec<OpenAICompatibleToolCall>>,
+}
+
+impl From<InferenceResponseChunk> for OpenAICompatibleResponseChunk {
+    fn from(chunk: InferenceResponseChunk) -> Self {
+        match chunk {
+            InferenceResponseChunk::Chat(c) => {
+                let (content, tool_calls) = process_chat_content_chunk(c.content);
+                OpenAICompatibleResponseChunk {
+                    id: c.inference_id.to_string(),
+                    choices: vec![OpenAICompatibleChoiceChunk {
+                        index: 0,
+                        finish_reason: "stop".to_string(),
+                        delta: OpenAICompatibleDelta {
+                            content,
+                            tool_calls: Some(tool_calls),
+                        },
+                    }],
+                    created: current_timestamp() as u32,
+                    model: c.variant_name,
+                    system_fingerprint: "".to_string(),
+                    object: "chat.completion".to_string(),
+                    usage: c.usage.map(|usage| usage.into()),
+                }
+            }
+            InferenceResponseChunk::Json(c) => OpenAICompatibleResponseChunk {
+                id: c.inference_id.to_string(),
+                choices: vec![OpenAICompatibleChoiceChunk {
+                    index: 0,
+                    finish_reason: "stop".to_string(),
+                    delta: OpenAICompatibleDelta {
+                        content: Some(c.raw),
+                        tool_calls: None,
+                    },
+                }],
+                created: current_timestamp() as u32,
+                model: c.variant_name,
+                system_fingerprint: "".to_string(),
+                object: "chat.completion".to_string(),
+                usage: c.usage.map(|usage| usage.into()),
+            },
+        }
+    }
+}
+
+fn process_chat_content_chunk(
+    content: Vec<ContentBlockChunk>,
+) -> (Option<String>, Vec<OpenAICompatibleToolCall>) {
+    let mut content_str: Option<String> = None;
+    let mut tool_calls = Vec::new();
+    for block in content {
+        match block {
+            ContentBlockChunk::Text(text) => match content_str {
+                Some(ref mut content) => content.push_str(&text.text),
+                None => content_str = Some(text.text),
+            },
+            ContentBlockChunk::ToolCall(tool_call) => {
+                tool_calls.push(tool_call.into());
+            }
+        }
+    }
+    (content_str, tool_calls)
+}
+
+fn prepare_serialized_openai_compatible_chunk(
+    chunk: Option<InferenceResponseChunk>,
+) -> Result<Event, Error> {
+    if let Some(chunk) = chunk {
+        let openai_compatible_chunk = OpenAICompatibleResponseChunk::from(chunk);
+        let chunk_json =
+            serde_json::to_value(openai_compatible_chunk).map_err(|e| Error::Inference {
+                message: format!("Failed to convert chunk to JSON: {}", e),
+            })?;
+        Event::default()
+            .json_data(chunk_json)
+            .map_err(|e| Error::Inference {
+                message: format!("Failed to convert Value to Event: {}", e),
+            })
+    } else {
+        Ok(Event::default().data("[DONE]"))
+    }
+}
+
+impl From<ToolCallChunk> for OpenAICompatibleToolCall {
+    fn from(tool_call: ToolCallChunk) -> Self {
         OpenAICompatibleToolCall {
             id: tool_call.id,
             r#type: "function".to_string(),

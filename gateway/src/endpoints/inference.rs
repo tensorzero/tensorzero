@@ -571,22 +571,22 @@ pub enum InferenceResponseChunk {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct ChatInferenceResponseChunk {
-    inference_id: Uuid,
-    episode_id: Uuid,
-    variant_name: String,
-    content: Vec<ContentBlockChunk>,
+    pub inference_id: Uuid,
+    pub episode_id: Uuid,
+    pub variant_name: String,
+    pub content: Vec<ContentBlockChunk>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    usage: Option<Usage>,
+    pub usage: Option<Usage>,
 }
 
 #[derive(Clone, Debug, Serialize)]
 pub struct JsonInferenceResponseChunk {
-    inference_id: Uuid,
-    episode_id: Uuid,
-    variant_name: String,
-    raw: String,
+    pub inference_id: Uuid,
+    pub episode_id: Uuid,
+    pub variant_name: String,
+    pub raw: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    usage: Option<Usage>,
+    pub usage: Option<Usage>,
 }
 
 impl InferenceResponseChunk {
@@ -738,7 +738,7 @@ mod tests {
                 assert_eq!(c.content, content);
                 assert!(c.usage.is_none());
             }
-            InferenceResponseChunk::Json(c) => {
+            InferenceResponseChunk::Json(_) => {
                 panic!("Expected ChatInferenceResponseChunk, got JsonInferenceResponseChunk");
             }
         }
@@ -785,7 +785,7 @@ mod tests {
                 assert_eq!(c.raw, "Test content");
                 assert!(c.usage.is_none());
             }
-            InferenceResponseChunk::Chat(c) => {
+            InferenceResponseChunk::Chat(_) => {
                 panic!("Expected JsonInferenceResponseChunk, got ChatInferenceResponseChunk");
             }
         }
