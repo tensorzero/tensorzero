@@ -2,12 +2,12 @@
 
 # TensorZero
 
-**TensorZero makes LLMs improve through experience.**
+**TensorZero creates a feedback loop for optimizing LLM applications — turning production data into smarter, faster, and cheaper models.**
 
 1. Integrate our model gateway
 2. Send metrics or feedback
 3. Optimize prompts, models, and inference-time strategies
-4. Watch your LLMs get smarter, cheaper, and faster over time
+4. Watch your LLMs improve over time
 
 It provides a **data & learning flywheel for LLMs** by unifying:
 
