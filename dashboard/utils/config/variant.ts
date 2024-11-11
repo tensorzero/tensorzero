@@ -19,7 +19,7 @@ const BaseChatCompletionConfig = z.object({
 
 export const ChatCompletionConfig = BaseChatCompletionConfig.extend({
   type: z.literal("chat_completion"),
-});
+}).partial({ retries: true, weight: true });
 
 export type ChatCompletionConfig = z.infer<typeof ChatCompletionConfig>;
 
@@ -53,7 +53,9 @@ export const DiclConfig = z.object({
   max_tokens: z.number().int().optional(),
   seed: z.number().int().optional(),
   json_mode: jsonModeSchema.default("on"),
-  retries: retryConfigSchema.default({ num_retries: 0, max_delay_s: 10 }),
+  retries: retryConfigSchema
+    .optional()
+    .default({ num_retries: 0, max_delay_s: 10 }),
 });
 
 export type DiclConfig = z.infer<typeof DiclConfig>;

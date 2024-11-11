@@ -41,3 +41,17 @@ optimize = "max"
 type = "boolean"
 level = "inference"
 optimize = "max"
+
+
+[models."accounts/viraj-ebfe5a/models/e78631ef5fad43fbbec00203c1a55579"]
+routing = [ "fireworks",]
+
+[models."accounts/viraj-ebfe5a/models/e78631ef5fad43fbbec00203c1a55579".providers.fireworks]
+type = "fireworks"
+model_name = "accounts/viraj-ebfe5a/models/e78631ef5fad43fbbec00203c1a55579"
+
+[functions.extract_entities.variants."accounts/viraj-ebfe5a/models/e78631ef5fad43fbbec00203c1a55579"]
+type = "chat_completion"
+weight = 1
+model = "accounts/viraj-ebfe5a/models/e78631ef5fad43fbbec00203c1a55579"
+system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
