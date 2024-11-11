@@ -181,7 +181,7 @@ struct OpenAICompatibleResponse {
 
 /// A handler for the inference endpoint
 #[debug_handler(state = AppStateData)]
-pub async fn openai_compatible_handler(
+pub async fn inference_handler(
     State(AppStateData {
         config,
         http_client,
