@@ -50,26 +50,26 @@ use crate::variant::{InferenceConfig, Variant};
 #[serde(deny_unknown_fields)]
 pub struct Params<'a> {
     // the function name
-    function_name: String,
+    pub function_name: String,
     // the episode ID (if not provided, it'll be set to inference_id)
     // NOTE: DO NOT GENERATE EPISODE IDS MANUALLY. THE API WILL DO THAT FOR YOU.
-    episode_id: Option<Uuid>,
+    pub episode_id: Option<Uuid>,
     // the input for the inference
-    input: Input,
+    pub input: Input,
     // default False
-    stream: Option<bool>,
+    pub stream: Option<bool>,
     // Inference-time overrides for variant types (use with caution)
     #[serde(default)]
-    params: InferenceParams,
+    pub params: InferenceParams,
     // if the client would like to pin a specific variant to be used
     // NOTE: YOU SHOULD TYPICALLY LET THE API SELECT A VARIANT FOR YOU (I.E. IGNORE THIS FIELD).
     //       ONLY PIN A VARIANT FOR SPECIAL USE CASES (E.G. TESTING / DEBUGGING VARIANTS).
-    variant_name: Option<String>,
+    pub variant_name: Option<String>,
     // if true, the inference will not be stored
-    dryrun: Option<bool>,
+    pub dryrun: Option<bool>,
     // dynamic information about tool calling. Don't directly include `dynamic_tool_params` in `Params`.
     #[serde(flatten)]
-    dynamic_tool_params: DynamicToolParams,
+    pub dynamic_tool_params: DynamicToolParams,
     // `dynamic_tool_params` includes the following fields, passed at the top level of `Params`:
     // If provided, the inference will only use the specified tools (a subset of the function's tools)
     // allowed_tools: Option<Vec<String>>,
@@ -81,9 +81,9 @@ pub struct Params<'a> {
     // parallel_tool_calls: Option<bool>,
     // If provided for a JSON inference, the inference will use the specified output schema instead of the
     // configured one. We only lazily validate this schema.
-    output_schema: Option<Value>,
+    pub output_schema: Option<Value>,
     #[serde(default)]
-    credentials: InferenceCredentials<'a>,
+    pub credentials: InferenceCredentials<'a>,
 }
 
 #[derive(Clone, Debug)]
