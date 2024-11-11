@@ -1,12 +1,14 @@
-use std::mem::uninitialized;
+use std::collections::HashMap;
 
 use axum::body::Body;
 use axum::debug_handler;
 use axum::extract::State;
 use axum::http::HeaderMap;
-use axum::response::Response;
-use serde::Deserialize;
+use axum::response::{IntoResponse, Response};
+use axum::Json;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tracing::span;
 use uuid::Uuid;
 
 use crate::endpoints::inference::{
@@ -14,18 +16,18 @@ use crate::endpoints::inference::{
 };
 use crate::error::Error;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
-use crate::inference::types::Input;
-use crate::tool::{DynamicToolParams, Tool, ToolChoice};
+use crate::inference::types::{current_timestamp, Input, InputMessage, InputMessageContent, Role};
+use crate::tool::{DynamicToolParams, Tool, ToolCall, ToolChoice, ToolResult};
 
-use super::inference::InferenceCredentials;
+use super::inference::{InferenceCredentials, InferenceOutput, InferenceResponse};
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct OpenAICompatibleFunctionCall {
     pub name: String,
     pub arguments: String,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct OpenAICompatibleToolCall {
     /// The ID of the tool call.
     pub id: String,
@@ -35,29 +37,29 @@ pub struct OpenAICompatibleToolCall {
     pub function: OpenAICompatibleFunctionCall,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 struct OpenAICompatibleSystemMessage {
     content: Value,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 struct OpenAICompatibleUserMessage {
     content: Value,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 struct OpenAICompatibleAssistantMessage {
     content: Option<Value>,
     tool_calls: Option<Vec<OpenAICompatibleToolCall>>,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 struct OpenAICompatibleToolMessage {
     content: Option<Value>,
     tool_call_id: String,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(tag = "role")]
 #[serde(rename_all = "lowercase")]
 enum OpenAICompatibleMessage {
@@ -67,7 +69,7 @@ enum OpenAICompatibleMessage {
     Tool(OpenAICompatibleToolMessage),
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 enum OpenAICompatibleResponseFormat {
@@ -75,19 +77,20 @@ enum OpenAICompatibleResponseFormat {
     JsonObject { json_schema: Option<Value> },
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(tag = "type", content = "function")]
 #[serde(rename_all = "snake_case")]
 enum OpenAICompatibleTool {
     Function {
         description: Option<String>,
         name: String,
-        parameters: Option<Value>,
-        strict: Option<bool>,
+        parameters: Value,
+        #[serde(default)]
+        strict: bool,
     },
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 struct FunctionName {
     name: String,
 }
@@ -107,7 +110,7 @@ struct OpenAICompatibleNamedToolChoice {
 /// Specifying a particular tool via `{"type": "function", "function": {"name": "my_function"}}` forces the model to call that tool.
 ///
 /// `none` is the default when no tools are present. `auto` is the default if tools are present.present.
-#[derive(Clone, Default, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 enum ChatCompletionToolChoiceOption {
     #[default]
@@ -118,7 +121,7 @@ enum ChatCompletionToolChoiceOption {
     Named(OpenAICompatibleNamedToolChoice),
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct OpenAICompatibleParams {
     messages: Vec<OpenAICompatibleMessage>,
     model: String,
@@ -136,6 +139,38 @@ pub struct OpenAICompatibleParams {
     parallel_tool_calls: Option<bool>,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize)]
+struct OpenAICompatibleUsage {
+    prompt_tokens: u32,
+    completion_tokens: u32,
+    total_tokens: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+struct OpenAICompatibleResponseMessage {
+    content: Option<String>,
+    tool_calls: Option<Vec<OpenAICompatibleToolCall>>,
+    role: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+struct OpenAICompatibleChoice {
+    index: u32,
+    finish_reason: String,
+    message: OpenAICompatibleResponseMessage,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+struct OpenAICompatibleResponse {
+    id: String,
+    choices: Vec<OpenAICompatibleChoice>,
+    created: u32,
+    model: String,
+    system_fingerprint: String,
+    object: String,
+    usage: OpenAICompatibleUsage,
+}
+
 /// A handler for the inference endpoint
 #[debug_handler(state = AppStateData)]
 pub async fn openai_compatible_handler(
@@ -149,8 +184,15 @@ pub async fn openai_compatible_handler(
 ) -> Result<Response<Body>, Error> {
     let params = (headers, openai_compatible_params).try_into()?;
     let response = inference(config, http_client, clickhouse_connection_info, params).await?;
-    // TODO: Convert the response to the OpenAI compatible response
-    unimplemented!()
+    match response {
+        InferenceOutput::NonStreaming(response) => {
+            let openai_compatible_response = OpenAICompatibleResponse::from(response);
+            Ok(Json(openai_compatible_response).into_response())
+        }
+        InferenceOutput::Streaming(stream) => {
+            unimplemented!()
+        }
+    }
 }
 
 impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params<'static> {
@@ -182,7 +224,7 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params<'static> {
                     })
             })
             .transpose()?;
-        let input = Input::from(openai_compatible_params.messages);
+        let input = openai_compatible_params.messages.try_into()?;
         let chat_completion_inference_params = ChatCompletionInferenceParams {
             temperature: openai_compatible_params.temperature,
             max_tokens: openai_compatible_params.max_tokens,
@@ -248,20 +290,138 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params<'static> {
     }
 }
 
-impl From<Vec<OpenAICompatibleMessage>> for Input {
-    fn from(messages: Vec<OpenAICompatibleMessage>) -> Self {
-        unimplemented!()
+impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
+    type Error = Error;
+    fn try_from(
+        openai_compatible_messages: Vec<OpenAICompatibleMessage>,
+    ) -> Result<Self, Self::Error> {
+        let mut system = None;
+        let mut messages = Vec::new();
+        let mut tool_call_id_to_name = HashMap::new();
+        for message in openai_compatible_messages {
+            match message {
+                OpenAICompatibleMessage::System(msg) => {
+                    if system.is_some() {
+                        return Err(Error::InvalidOpenAICompatibleRequest {
+                            message: "At most one system message is allowed".to_string(),
+                        });
+                    }
+                    system = Some(msg.content);
+                }
+                OpenAICompatibleMessage::User(msg) => {
+                    messages.push(InputMessage {
+                        role: Role::User,
+                        content: vec![InputMessageContent::Text { value: msg.content }],
+                    });
+                }
+                OpenAICompatibleMessage::Assistant(msg) => {
+                    let mut message_content = Vec::new();
+                    if let Some(content) = msg.content {
+                        message_content.push(InputMessageContent::Text { value: content });
+                    }
+                    if let Some(tool_calls) = msg.tool_calls {
+                        for tool_call in tool_calls {
+                            tool_call_id_to_name
+                                .insert(tool_call.id.clone(), tool_call.function.name.clone());
+                            message_content.push(InputMessageContent::ToolCall(tool_call.into()));
+                        }
+                    }
+                    messages.push(InputMessage {
+                        role: Role::Assistant,
+                        content: message_content,
+                    });
+                }
+                OpenAICompatibleMessage::Tool(msg) => {
+                    let name = tool_call_id_to_name
+                        .get(&msg.tool_call_id)
+                        .ok_or(Error::InvalidOpenAICompatibleRequest {
+                            message: "tool call id not found".to_string(),
+                        })?
+                        .to_string();
+                    messages.push(InputMessage {
+                        role: Role::User,
+                        content: vec![InputMessageContent::ToolResult(ToolResult {
+                            id: msg.tool_call_id,
+                            name,
+                            result: msg.content.unwrap_or_default().to_string(),
+                        })],
+                    });
+                }
+            }
+        }
+        Ok(Input { system, messages })
     }
 }
 
 impl From<OpenAICompatibleTool> for Tool {
     fn from(tool: OpenAICompatibleTool) -> Self {
-        unimplemented!()
+        match tool {
+            OpenAICompatibleTool::Function {
+                description,
+                name,
+                parameters,
+                strict,
+            } => Tool {
+                description: description.unwrap_or_default(),
+                parameters,
+                name,
+                strict,
+            },
+        }
     }
 }
 
 impl From<ChatCompletionToolChoiceOption> for ToolChoice {
     fn from(tool_choice: ChatCompletionToolChoiceOption) -> Self {
-        unimplemented!()
+        match tool_choice {
+            ChatCompletionToolChoiceOption::None => ToolChoice::None,
+            ChatCompletionToolChoiceOption::Auto => ToolChoice::Auto,
+            ChatCompletionToolChoiceOption::Required => ToolChoice::Required,
+            ChatCompletionToolChoiceOption::Named(named) => {
+                ToolChoice::Specific(named.function.name)
+            }
+        }
+    }
+}
+
+impl From<OpenAICompatibleToolCall> for ToolCall {
+    fn from(tool_call: OpenAICompatibleToolCall) -> Self {
+        ToolCall {
+            id: tool_call.id,
+            name: tool_call.function.name,
+            arguments: tool_call.function.arguments,
+        }
+    }
+}
+
+impl From<InferenceResponse> for OpenAICompatibleResponse {
+    // TODO (Viraj, urgently): What do we do with episode_id?
+    fn from(inference_response: InferenceResponse) -> Self {
+        match inference_response {
+            InferenceResponse::Chat(response) => {
+                unimplemented!()
+            }
+            InferenceResponse::Json(response) => OpenAICompatibleResponse {
+                id: response.inference_id.to_string(),
+                choices: vec![OpenAICompatibleChoice {
+                    index: 0,
+                    finish_reason: "stop".to_string(),
+                    message: OpenAICompatibleResponseMessage {
+                        content: Some(response.output.raw),
+                        tool_calls: None,
+                        role: "assistant".to_string(),
+                    },
+                }],
+                created: current_timestamp() as u32,
+                model: response.variant_name,
+                system_fingerprint: "".to_string(),
+                object: "chat.completion".to_string(),
+                usage: OpenAICompatibleUsage {
+                    prompt_tokens: response.usage.input_tokens,
+                    completion_tokens: response.usage.output_tokens,
+                    total_tokens: response.usage.input_tokens + response.usage.output_tokens,
+                },
+            },
+        }
     }
 }

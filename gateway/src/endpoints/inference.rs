@@ -528,11 +528,11 @@ pub struct ChatInferenceResponse {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct JsonInferenceResponse {
-    inference_id: Uuid,
-    episode_id: Uuid,
-    variant_name: String,
-    output: JsonInferenceOutput,
-    usage: Usage,
+    pub inference_id: Uuid,
+    pub episode_id: Uuid,
+    pub variant_name: String,
+    pub output: JsonInferenceOutput,
+    pub usage: Usage,
 }
 
 impl InferenceResponse {
