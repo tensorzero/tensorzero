@@ -171,6 +171,7 @@ struct OpenAICompatibleChoice {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct OpenAICompatibleResponse {
     id: String,
+    episode_id: String,
     choices: Vec<OpenAICompatibleChoice>,
     created: u32,
     model: String,
@@ -317,18 +318,22 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
                             message: "At most one system message is allowed".to_string(),
                         });
                     }
-                    system = Some(msg.content);
+                    system = Some(convert_openai_message_content(msg.content)?);
                 }
                 OpenAICompatibleMessage::User(msg) => {
                     messages.push(InputMessage {
                         role: Role::User,
-                        content: vec![InputMessageContent::Text { value: msg.content }],
+                        content: vec![InputMessageContent::Text {
+                            value: convert_openai_message_content(msg.content)?,
+                        }],
                     });
                 }
                 OpenAICompatibleMessage::Assistant(msg) => {
                     let mut message_content = Vec::new();
                     if let Some(content) = msg.content {
-                        message_content.push(InputMessageContent::Text { value: content });
+                        message_content.push(InputMessageContent::Text {
+                            value: convert_openai_message_content(content)?,
+                        });
                     }
                     if let Some(tool_calls) = msg.tool_calls {
                         for tool_call in tool_calls {
@@ -361,6 +366,25 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
             }
         }
         Ok(Input { system, messages })
+    }
+}
+
+fn convert_openai_message_content(content: Value) -> Result<Value, Error> {
+    match content {
+        Value::String(s) => Ok(Value::String(s)),
+        Value::Array(a) => {
+            if a.len() != 1 {
+                return Err(Error::InvalidOpenAICompatibleRequest {
+                    message: "OpenAI message content must either be a string or an array of length 1 containing structured TensorZero inputs".to_string(),
+                });
+            }
+            Ok(a.into_iter().next().ok_or(Error::InvalidOpenAICompatibleRequest {
+                message: "OpenAI message content array is empty. This should never happen. Please report this bug at https://github.com/tensorzero/tensorzero/issues.".to_string(),
+            })?)
+        }
+        _ => Err(Error::InvalidOpenAICompatibleRequest {
+            message: "OpenAI message content must either be a string or an array of length 1 containing structured TensorZero inputs".to_string(),
+        }),
     }
 }
 
@@ -406,7 +430,6 @@ impl From<OpenAICompatibleToolCall> for ToolCall {
 }
 
 impl From<InferenceResponse> for OpenAICompatibleResponse {
-    // TODO (Viraj, urgently): What do we do with episode_id?
     fn from(inference_response: InferenceResponse) -> Self {
         match inference_response {
             InferenceResponse::Chat(response) => {
@@ -427,6 +450,7 @@ impl From<InferenceResponse> for OpenAICompatibleResponse {
                     system_fingerprint: "".to_string(),
                     object: "chat.completion".to_string(),
                     usage: response.usage.into(),
+                    episode_id: response.episode_id.to_string(),
                 }
             }
             InferenceResponse::Json(response) => OpenAICompatibleResponse {
@@ -449,6 +473,7 @@ impl From<InferenceResponse> for OpenAICompatibleResponse {
                     completion_tokens: response.usage.output_tokens,
                     total_tokens: response.usage.input_tokens + response.usage.output_tokens,
                 },
+                episode_id: response.episode_id.to_string(),
             },
         }
     }
@@ -499,6 +524,7 @@ impl From<Usage> for OpenAICompatibleUsage {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct OpenAICompatibleResponseChunk {
     id: String,
+    episode_id: String,
     choices: Vec<OpenAICompatibleChoiceChunk>,
     created: u32,
     model: String,
@@ -528,6 +554,7 @@ impl From<InferenceResponseChunk> for OpenAICompatibleResponseChunk {
                 let (content, tool_calls) = process_chat_content_chunk(c.content);
                 OpenAICompatibleResponseChunk {
                     id: c.inference_id.to_string(),
+                    episode_id: c.episode_id.to_string(),
                     choices: vec![OpenAICompatibleChoiceChunk {
                         index: 0,
                         finish_reason: "stop".to_string(),
@@ -545,6 +572,7 @@ impl From<InferenceResponseChunk> for OpenAICompatibleResponseChunk {
             }
             InferenceResponseChunk::Json(c) => OpenAICompatibleResponseChunk {
                 id: c.inference_id.to_string(),
+                episode_id: c.episode_id.to_string(),
                 choices: vec![OpenAICompatibleChoiceChunk {
                     index: 0,
                     finish_reason: "stop".to_string(),
