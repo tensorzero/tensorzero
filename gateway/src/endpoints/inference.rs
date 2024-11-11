@@ -8,12 +8,14 @@ use metrics::counter;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::pin::Pin;
 use std::time::Duration;
 use tokio::time::Instant;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::config_parser::Config;
 use crate::embeddings::EmbeddingModelConfig;
 use crate::error::{Error, ResultExt};
 use crate::function::sample_variant;
@@ -127,6 +129,27 @@ pub async fn inference_handler(
     }): AppState,
     StructuredJson(params): StructuredJson<Params<'static>>,
 ) -> Result<Response<Body>, Error> {
+    let inference_output =
+        inference(config, http_client, clickhouse_connection_info, params).await?;
+    match inference_output {
+        InferenceOutput::NonStreaming(response) => Ok(Json(response).into_response()),
+        InferenceOutput::Streaming(stream) => Ok(Sse::new(stream)
+            .keep_alive(axum::response::sse::KeepAlive::new())
+            .into_response()),
+    }
+}
+
+pub enum InferenceOutput {
+    NonStreaming(InferenceResponse),
+    Streaming(Pin<Box<dyn Stream<Item = Result<Event, Error>> + Send>>),
+}
+
+pub async fn inference(
+    config: &'static Config<'static>,
+    http_client: reqwest::Client,
+    clickhouse_connection_info: ClickHouseConnectionInfo,
+    params: Params<'static>,
+) -> Result<InferenceOutput, Error> {
     // To be used for the Inference table processing_time measurements
     let start_time = Instant::now();
     // Get the function config or return an error if it doesn't exist
@@ -261,9 +284,7 @@ pub async fn inference_handler(
                 inference_config,
             );
 
-            return Ok(Sse::new(stream)
-                .keep_alive(axum::response::sse::KeepAlive::new())
-                .into_response());
+            return Ok(InferenceOutput::Streaming(Box::pin(stream)));
         } else {
             let result = variant
                 .infer(
@@ -314,12 +335,7 @@ pub async fn inference_handler(
 
             let response = InferenceResponse::new(result, episode_id, variant_name.to_string());
 
-            let response_serialized =
-                serde_json::to_value(response).map_err(|e| Error::Inference {
-                    message: format!("Failed to convert response to JSON: {}", e),
-                })?;
-
-            return Ok(Json(response_serialized).into_response());
+            return Ok(InferenceOutput::NonStreaming(response));
         }
     }
 
@@ -496,13 +512,13 @@ async fn write_inference<'a>(
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(untagged, rename_all = "snake_case")]
-enum InferenceResponse {
+pub enum InferenceResponse {
     Chat(ChatInferenceResponse),
     Json(JsonInferenceResponse),
 }
 
 #[derive(Clone, Debug, Serialize)]
-struct ChatInferenceResponse {
+pub struct ChatInferenceResponse {
     inference_id: Uuid,
     episode_id: Uuid,
     variant_name: String,
@@ -511,7 +527,7 @@ struct ChatInferenceResponse {
 }
 
 #[derive(Clone, Debug, Serialize)]
-struct JsonInferenceResponse {
+pub struct JsonInferenceResponse {
     inference_id: Uuid,
     episode_id: Uuid,
     variant_name: String,

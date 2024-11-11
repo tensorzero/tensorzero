@@ -5,6 +5,7 @@ use axum::response::Response;
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::endpoints::inference::{inference_handler, Params};
 use crate::error::Error;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 
@@ -125,13 +126,12 @@ pub struct OpenAICompatibleParams {
 
 /// A handler for the inference endpoint
 #[debug_handler(state = AppStateData)]
-pub async fn inference_handler(
-    State(AppStateData {
-        config,
-        http_client,
-        clickhouse_connection_info,
-    }): AppState,
-    StructuredJson(params): StructuredJson<OpenAICompatibleParams>,
+pub async fn openai_compatible_handler(
+    state: AppState,
+    StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
 ) -> Result<Response<Body>, Error> {
-    unimplemented!()
+    unimplemented!();
+
+    // let response = inference_handler(state, openai_compatible_params).await?;
+    // Ok(response)
 }
