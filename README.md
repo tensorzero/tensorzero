@@ -6,7 +6,7 @@
 
 1. Integrate our model gateway
 2. Send metrics or feedback
-3. Optimize prompts, models, and inference-time strategies
+3. Optimize prompts, models, and inference strategies
 4. Watch your LLMs improve over time
 
 It provides a **data & learning flywheel for LLMs** by unifying:
