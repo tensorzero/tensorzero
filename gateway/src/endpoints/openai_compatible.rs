@@ -8,7 +8,6 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tracing::span;
 use uuid::Uuid;
 
 use crate::endpoints::inference::{
@@ -16,8 +15,10 @@ use crate::endpoints::inference::{
 };
 use crate::error::Error;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
-use crate::inference::types::{current_timestamp, Input, InputMessage, InputMessageContent, Role};
-use crate::tool::{DynamicToolParams, Tool, ToolCall, ToolChoice, ToolResult};
+use crate::inference::types::{
+    current_timestamp, ContentBlockOutput, Input, InputMessage, InputMessageContent, Role,
+};
+use crate::tool::{DynamicToolParams, Tool, ToolCall, ToolCallOutput, ToolChoice, ToolResult};
 
 use super::inference::{InferenceCredentials, InferenceOutput, InferenceResponse};
 
@@ -399,7 +400,28 @@ impl From<InferenceResponse> for OpenAICompatibleResponse {
     fn from(inference_response: InferenceResponse) -> Self {
         match inference_response {
             InferenceResponse::Chat(response) => {
-                unimplemented!()
+                let (content, tool_calls) = process_chat_content(response.content);
+                OpenAICompatibleResponse {
+                    id: response.inference_id.to_string(),
+                    choices: vec![OpenAICompatibleChoice {
+                        index: 0,
+                        finish_reason: "stop".to_string(),
+                        message: OpenAICompatibleResponseMessage {
+                            content,
+                            tool_calls: Some(tool_calls),
+                            role: "assistant".to_string(),
+                        },
+                    }],
+                    created: current_timestamp() as u32,
+                    model: response.variant_name,
+                    system_fingerprint: "".to_string(),
+                    object: "chat.completion".to_string(),
+                    usage: OpenAICompatibleUsage {
+                        prompt_tokens: response.usage.input_tokens,
+                        completion_tokens: response.usage.output_tokens,
+                        total_tokens: response.usage.input_tokens + response.usage.output_tokens,
+                    },
+                }
             }
             InferenceResponse::Json(response) => OpenAICompatibleResponse {
                 id: response.inference_id.to_string(),
@@ -421,6 +443,38 @@ impl From<InferenceResponse> for OpenAICompatibleResponse {
                     completion_tokens: response.usage.output_tokens,
                     total_tokens: response.usage.input_tokens + response.usage.output_tokens,
                 },
+            },
+        }
+    }
+}
+
+fn process_chat_content(
+    content: Vec<ContentBlockOutput>,
+) -> (Option<String>, Vec<OpenAICompatibleToolCall>) {
+    let mut content_str: Option<String> = None;
+    let mut tool_calls = Vec::new();
+    for block in content {
+        match block {
+            ContentBlockOutput::Text(text) => match content_str {
+                Some(ref mut content) => content.push_str(&text.text),
+                None => content_str = Some(text.text),
+            },
+            ContentBlockOutput::ToolCall(tool_call) => {
+                tool_calls.push(tool_call.into());
+            }
+        }
+    }
+    (content_str, tool_calls)
+}
+
+impl From<ToolCallOutput> for OpenAICompatibleToolCall {
+    fn from(tool_call: ToolCallOutput) -> Self {
+        OpenAICompatibleToolCall {
+            id: tool_call.id,
+            r#type: "function".to_string(),
+            function: OpenAICompatibleFunctionCall {
+                name: tool_call.raw_name,
+                arguments: tool_call.raw_arguments,
             },
         }
     }

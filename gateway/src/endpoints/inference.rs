@@ -519,11 +519,11 @@ pub enum InferenceResponse {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct ChatInferenceResponse {
-    inference_id: Uuid,
-    episode_id: Uuid,
-    variant_name: String,
-    content: Vec<ContentBlockOutput>,
-    usage: Usage,
+    pub inference_id: Uuid,
+    pub episode_id: Uuid,
+    pub variant_name: String,
+    pub content: Vec<ContentBlockOutput>,
+    pub usage: Usage,
 }
 
 #[derive(Clone, Debug, Serialize)]
