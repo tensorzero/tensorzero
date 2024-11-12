@@ -311,8 +311,8 @@ pub struct ChatInferenceDatabaseInsert {
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
-    pub input: String,
-    pub output: String,
+    pub input: String,  // serialized `Input`
+    pub output: String, // serialized `Vec<ContentBlockOutput>`
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub inference_params: InferenceParams,
@@ -325,8 +325,8 @@ pub struct JsonInferenceDatabaseInsert {
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
-    pub input: String,
-    pub output: String,
+    pub input: String,  // serialized `Input`
+    pub output: String, // serialized `JsonInferenceOutput`
     pub inference_params: InferenceParams,
     pub processing_time_ms: u32,
     pub output_schema: String,
