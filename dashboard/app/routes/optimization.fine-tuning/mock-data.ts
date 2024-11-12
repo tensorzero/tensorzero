@@ -1,7 +1,6 @@
-import type { FunctionConfig } from "~/../../utils/config/function";
-import type { MetricConfig } from "~/../../utils/config/metric";
-import type { ModelConfig } from "~/../../utils/config/models";
-import type { VariantConfig } from "~/../../utils/config/variant";
+import type { FunctionConfig } from "~/utils/config/function";
+import type { MetricConfig } from "~/utils/config/metric";
+import type { VariantConfig } from "~/utils/config/variant";
 
 export const functions: Record<string, FunctionConfig> = {
   "sentiment-analysis": {

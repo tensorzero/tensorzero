@@ -1,4 +1,4 @@
-import { InputMessageContent, Role } from "utils/clickhouse";
+import { InputMessageContent, Role } from "~/utils/clickhouse";
 import { JsExposedEnv } from "../minijinja/pkg";
 
 /**

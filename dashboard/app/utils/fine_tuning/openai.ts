@@ -5,7 +5,7 @@ import {
   JsonInferenceOutput,
   InputMessageContent,
   Role,
-} from "utils/clickhouse";
+} from "~/utils/clickhouse";
 import * as os from "os";
 import { render_message } from "./rendering";
 import OpenAI from "openai";
