@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { ModelConfig, EmbeddingModelConfig } from "./models";
+import { parse } from "smol-toml";
+import { promises as fs } from "fs";
 import { FunctionConfig } from "./function";
 import { MetricConfig } from "./metric";
 import { ToolConfig } from "./tool";
@@ -19,3 +21,10 @@ export const Config = z.object({
   tools: z.record(z.string(), ToolConfig),
 });
 export type Config = z.infer<typeof Config>;
+
+export async function loadConfig(config_path: string): Promise<Config> {
+  const tomlContent = await fs.readFile(config_path, "utf-8");
+  const parsedConfig = parse(tomlContent);
+  const validatedConfig = Config.parse(parsedConfig);
+  return validatedConfig;
+}
