@@ -8,12 +8,14 @@ use metrics::counter;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::pin::Pin;
 use std::time::Duration;
 use tokio::time::Instant;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::config_parser::Config;
 use crate::embeddings::EmbeddingModelConfig;
 use crate::error::{Error, ResultExt};
 use crate::function::sample_variant;
@@ -48,26 +50,26 @@ use crate::variant::{InferenceConfig, Variant};
 #[serde(deny_unknown_fields)]
 pub struct Params<'a> {
     // the function name
-    function_name: String,
+    pub function_name: String,
     // the episode ID (if not provided, it'll be set to inference_id)
     // NOTE: DO NOT GENERATE EPISODE IDS MANUALLY. THE API WILL DO THAT FOR YOU.
-    episode_id: Option<Uuid>,
+    pub episode_id: Option<Uuid>,
     // the input for the inference
-    input: Input,
+    pub input: Input,
     // default False
-    stream: Option<bool>,
+    pub stream: Option<bool>,
     // Inference-time overrides for variant types (use with caution)
     #[serde(default)]
-    params: InferenceParams,
+    pub params: InferenceParams,
     // if the client would like to pin a specific variant to be used
     // NOTE: YOU SHOULD TYPICALLY LET THE API SELECT A VARIANT FOR YOU (I.E. IGNORE THIS FIELD).
     //       ONLY PIN A VARIANT FOR SPECIAL USE CASES (E.G. TESTING / DEBUGGING VARIANTS).
-    variant_name: Option<String>,
+    pub variant_name: Option<String>,
     // if true, the inference will not be stored
-    dryrun: Option<bool>,
+    pub dryrun: Option<bool>,
     // dynamic information about tool calling. Don't directly include `dynamic_tool_params` in `Params`.
     #[serde(flatten)]
-    dynamic_tool_params: DynamicToolParams,
+    pub dynamic_tool_params: DynamicToolParams,
     // `dynamic_tool_params` includes the following fields, passed at the top level of `Params`:
     // If provided, the inference will only use the specified tools (a subset of the function's tools)
     // allowed_tools: Option<Vec<String>>,
@@ -79,9 +81,9 @@ pub struct Params<'a> {
     // parallel_tool_calls: Option<bool>,
     // If provided for a JSON inference, the inference will use the specified output schema instead of the
     // configured one. We only lazily validate this schema.
-    output_schema: Option<Value>,
+    pub output_schema: Option<Value>,
     #[serde(default)]
-    credentials: InferenceCredentials<'a>,
+    pub credentials: InferenceCredentials<'a>,
 }
 
 #[derive(Clone, Debug)]
@@ -127,6 +129,31 @@ pub async fn inference_handler(
     }): AppState,
     StructuredJson(params): StructuredJson<Params<'static>>,
 ) -> Result<Response<Body>, Error> {
+    let inference_output =
+        inference(config, http_client, clickhouse_connection_info, params).await?;
+    match inference_output {
+        InferenceOutput::NonStreaming(response) => Ok(Json(response).into_response()),
+        InferenceOutput::Streaming(stream) => {
+            let event_stream = stream.map(prepare_serialized_event);
+
+            Ok(Sse::new(event_stream)
+                .keep_alive(axum::response::sse::KeepAlive::new())
+                .into_response())
+        }
+    }
+}
+
+pub enum InferenceOutput {
+    NonStreaming(InferenceResponse),
+    Streaming(Pin<Box<dyn Stream<Item = Option<InferenceResponseChunk>> + Send>>),
+}
+
+pub async fn inference(
+    config: &'static Config<'static>,
+    http_client: reqwest::Client,
+    clickhouse_connection_info: ClickHouseConnectionInfo,
+    params: Params<'static>,
+) -> Result<InferenceOutput, Error> {
     // To be used for the Inference table processing_time measurements
     let start_time = Instant::now();
     // Get the function config or return an error if it doesn't exist
@@ -261,9 +288,7 @@ pub async fn inference_handler(
                 inference_config,
             );
 
-            return Ok(Sse::new(stream)
-                .keep_alive(axum::response::sse::KeepAlive::new())
-                .into_response());
+            return Ok(InferenceOutput::Streaming(Box::pin(stream)));
         } else {
             let result = variant
                 .infer(
@@ -314,12 +339,7 @@ pub async fn inference_handler(
 
             let response = InferenceResponse::new(result, episode_id, variant_name.to_string());
 
-            let response_serialized =
-                serde_json::to_value(response).map_err(|e| Error::Inference {
-                    message: format!("Failed to convert response to JSON: {}", e),
-                })?;
-
-            return Ok(Json(response_serialized).into_response());
+            return Ok(InferenceOutput::NonStreaming(response));
         }
     }
 
@@ -336,14 +356,12 @@ fn create_stream(
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     inference_config: InferenceConfig<'static>,
-) -> impl Stream<Item = Result<Event, Error>> + Send {
+) -> impl Stream<Item = Option<InferenceResponseChunk>> + Send {
     async_stream::stream! {
         let mut buffer = vec![first_chunk.clone()];
 
         // Send the first chunk
-        if let Some(event) = prepare_event(&metadata, first_chunk).ok_or_log() {
-            yield Ok(event);
-        }
+        yield Some(prepare_response_chunk(&metadata, first_chunk));
 
         while let Some(chunk) = stream.next().await {
             let chunk = match chunk.ok_or_log() {
@@ -351,14 +369,12 @@ fn create_stream(
                 None => continue,
             };
             buffer.push(chunk.clone());
-            let event = prepare_event(&metadata, chunk).ok_or_log();
-            if let Some(event) = event {
-                yield Ok(event);
-            }
+            yield Some(prepare_response_chunk(&metadata, chunk));
+
         }
 
-        // Send the [DONE] event to signal the end of the stream
-        yield Ok(Event::default().data("[DONE]"));
+        // Send the None chunk to signal the end of the stream
+        yield None;
 
         // IMPORTANT: The following code will not be reached if the stream is interrupted.
         // Only do things that would be ok to skip in that case.
@@ -367,21 +383,21 @@ fn create_stream(
         //
         // If we really care about storing interrupted requests, we should use a drop guard:
         // https://github.com/tokio-rs/axum/discussions/1060
-            let InferenceMetadata {
-                function_name,
-                variant_name,
-                episode_id,
-                input,
-                dryrun,
-                start_time,
-                inference_params,
-                model_name,
-                model_provider_name,
-                raw_request,
-                system,
-                input_messages,
-                previous_model_inference_results,
-            } = metadata;
+        let InferenceMetadata {
+            function_name,
+            variant_name,
+            episode_id,
+            input,
+            dryrun,
+            start_time,
+            inference_params,
+            model_name,
+            model_provider_name,
+            raw_request,
+            system,
+            input_messages,
+            previous_model_inference_results,
+        } = metadata;
 
         if !dryrun {
             let collect_chunks_args = CollectChunksArgs {
@@ -423,20 +439,28 @@ fn create_stream(
     }
 }
 
-fn prepare_event(
+fn prepare_response_chunk(
     metadata: &InferenceMetadata,
     chunk: InferenceResultChunk,
-) -> Result<Event, Error> {
-    let response_chunk =
-        InferenceResponseChunk::new(chunk, metadata.episode_id, metadata.variant_name.clone());
-    let chunk_json = serde_json::to_value(response_chunk).map_err(|e| Error::Inference {
-        message: format!("Failed to convert chunk to JSON: {}", e),
-    })?;
-    Event::default()
-        .json_data(chunk_json)
-        .map_err(|e| Error::Inference {
-            message: format!("Failed to convert Value to Event: {}", e),
-        })
+) -> InferenceResponseChunk {
+    InferenceResponseChunk::new(chunk, metadata.episode_id, metadata.variant_name.clone())
+}
+
+// Prepares an Event for SSE on the way out of the gateway
+// When None is passed in, we send "[DONE]" to the client to signal the end of the stream
+fn prepare_serialized_event(chunk: Option<InferenceResponseChunk>) -> Result<Event, Error> {
+    if let Some(chunk) = chunk {
+        let chunk_json = serde_json::to_value(chunk).map_err(|e| Error::Inference {
+            message: format!("Failed to convert chunk to JSON: {}", e),
+        })?;
+        Event::default()
+            .json_data(chunk_json)
+            .map_err(|e| Error::Inference {
+                message: format!("Failed to convert Value to Event: {}", e),
+            })
+    } else {
+        Ok(Event::default().data("[DONE]"))
+    }
 }
 
 #[derive(Debug)]
@@ -496,27 +520,27 @@ async fn write_inference<'a>(
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(untagged, rename_all = "snake_case")]
-enum InferenceResponse {
+pub enum InferenceResponse {
     Chat(ChatInferenceResponse),
     Json(JsonInferenceResponse),
 }
 
 #[derive(Clone, Debug, Serialize)]
-struct ChatInferenceResponse {
-    inference_id: Uuid,
-    episode_id: Uuid,
-    variant_name: String,
-    content: Vec<ContentBlockOutput>,
-    usage: Usage,
+pub struct ChatInferenceResponse {
+    pub inference_id: Uuid,
+    pub episode_id: Uuid,
+    pub variant_name: String,
+    pub content: Vec<ContentBlockOutput>,
+    pub usage: Usage,
 }
 
 #[derive(Clone, Debug, Serialize)]
-struct JsonInferenceResponse {
-    inference_id: Uuid,
-    episode_id: Uuid,
-    variant_name: String,
-    output: JsonInferenceOutput,
-    usage: Usage,
+pub struct JsonInferenceResponse {
+    pub inference_id: Uuid,
+    pub episode_id: Uuid,
+    pub variant_name: String,
+    pub output: JsonInferenceOutput,
+    pub usage: Usage,
 }
 
 impl InferenceResponse {
@@ -542,29 +566,29 @@ impl InferenceResponse {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(untagged)]
-enum InferenceResponseChunk {
+pub enum InferenceResponseChunk {
     Chat(ChatInferenceResponseChunk),
     Json(JsonInferenceResponseChunk),
 }
 
 #[derive(Clone, Debug, Serialize)]
-struct ChatInferenceResponseChunk {
-    inference_id: Uuid,
-    episode_id: Uuid,
-    variant_name: String,
-    content: Vec<ContentBlockChunk>,
+pub struct ChatInferenceResponseChunk {
+    pub inference_id: Uuid,
+    pub episode_id: Uuid,
+    pub variant_name: String,
+    pub content: Vec<ContentBlockChunk>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    usage: Option<Usage>,
+    pub usage: Option<Usage>,
 }
 
 #[derive(Clone, Debug, Serialize)]
-struct JsonInferenceResponseChunk {
-    inference_id: Uuid,
-    episode_id: Uuid,
-    variant_name: String,
-    raw: String,
+pub struct JsonInferenceResponseChunk {
+    pub inference_id: Uuid,
+    pub episode_id: Uuid,
+    pub variant_name: String,
+    pub raw: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    usage: Option<Usage>,
+    pub usage: Option<Usage>,
 }
 
 impl InferenceResponseChunk {
@@ -674,12 +698,14 @@ mod tests {
     #[tokio::test]
     async fn test_prepare_event() {
         // Test case 1: Valid Chat ProviderInferenceResponseChunk
+        let inference_id = Uuid::now_v7();
+        let content = vec![ContentBlockChunk::Text(TextChunk {
+            text: "Test content".to_string(),
+            id: "0".to_string(),
+        })];
         let chunk = InferenceResultChunk::Chat(ChatInferenceResultChunk {
-            inference_id: Uuid::now_v7(),
-            content: vec![ContentBlockChunk::Text(TextChunk {
-                text: "Test content".to_string(),
-                id: "0".to_string(),
-            })],
+            inference_id,
+            content: content.clone(),
             created: 0,
             usage: None,
             raw_response: "".to_string(),
@@ -705,15 +731,28 @@ mod tests {
             previous_model_inference_results: vec![],
         };
 
-        let result = prepare_event(&inference_metadata, chunk);
-        assert!(result.is_ok());
+        let result = prepare_response_chunk(&inference_metadata, chunk);
+        match result {
+            InferenceResponseChunk::Chat(c) => {
+                assert_eq!(c.inference_id, inference_id);
+                assert_eq!(c.episode_id, inference_metadata.episode_id);
+                assert_eq!(c.variant_name, inference_metadata.variant_name);
+                assert_eq!(c.content, content);
+                assert!(c.usage.is_none());
+            }
+            InferenceResponseChunk::Json(_) => {
+                panic!("Expected ChatInferenceResponseChunk, got JsonInferenceResponseChunk");
+            }
+        }
+
         // TODO (#86): You could get the values of the private members using unsafe Rust.
         // For now, we won't and will rely on E2E testing here.
         // This test doesn't do much so consider deleting or doing more.
 
         // Test case 2: Valid JSON ProviderInferenceResponseChunk
+        let inference_id = Uuid::now_v7();
         let chunk = InferenceResultChunk::Json(JsonInferenceResultChunk {
-            inference_id: Uuid::now_v7(),
+            inference_id,
             raw: "Test content".to_string(),
             created: 0,
             usage: None,
@@ -739,7 +778,18 @@ mod tests {
             previous_model_inference_results: vec![],
         };
 
-        let result = prepare_event(&inference_metadata, chunk);
-        assert!(result.is_ok());
+        let result = prepare_response_chunk(&inference_metadata, chunk);
+        match result {
+            InferenceResponseChunk::Json(c) => {
+                assert_eq!(c.inference_id, inference_id);
+                assert_eq!(c.episode_id, inference_metadata.episode_id);
+                assert_eq!(c.variant_name, inference_metadata.variant_name);
+                assert_eq!(c.raw, "Test content");
+                assert!(c.usage.is_none());
+            }
+            InferenceResponseChunk::Chat(_) => {
+                panic!("Expected JsonInferenceResponseChunk, got ChatInferenceResponseChunk");
+            }
+        }
     }
 }

@@ -39,6 +39,10 @@ async fn main() {
 
     let router = Router::new()
         .route("/inference", post(endpoints::inference::inference_handler))
+        .route(
+            "/openai/v1/chat/completions",
+            post(endpoints::openai_compatible::inference_handler),
+        )
         .route("/feedback", post(endpoints::feedback::feedback_handler))
         .route("/status", get(endpoints::status::status_handler))
         .route("/health", get(endpoints::status::health_handler))

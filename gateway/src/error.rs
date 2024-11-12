@@ -107,6 +107,9 @@ pub enum Error {
     InvalidMessage {
         message: String,
     },
+    InvalidOpenAICompatibleRequest {
+        message: String,
+    },
     InvalidProviderConfig {
         message: String,
     },
@@ -259,6 +262,7 @@ impl Error {
             Error::InvalidEpisodeId { .. } => tracing::Level::WARN,
             Error::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
             Error::InvalidMessage { .. } => tracing::Level::WARN,
+            Error::InvalidOpenAICompatibleRequest { .. } => tracing::Level::ERROR,
             Error::InvalidProviderConfig { .. } => tracing::Level::ERROR,
             Error::InvalidRequest { .. } => tracing::Level::ERROR,
             Error::InvalidTemplatePath => tracing::Level::ERROR,
@@ -332,6 +336,7 @@ impl Error {
             Error::InvalidCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
+            Error::InvalidOpenAICompatibleRequest { .. } => StatusCode::BAD_REQUEST,
             Error::InvalidProviderConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::InvalidRequest { .. } => StatusCode::BAD_REQUEST,
             Error::InvalidTemplatePath => StatusCode::INTERNAL_SERVER_ERROR,
@@ -490,6 +495,11 @@ impl std::fmt::Display for Error {
             Error::InvalidFunctionVariants { message } => write!(f, "{}", message),
             Error::InvalidEpisodeId { message } => write!(f, "Invalid Episode ID: {}", message),
             Error::InvalidMessage { message } => write!(f, "{}", message),
+            Error::InvalidOpenAICompatibleRequest { message } => write!(
+                f,
+                "Invalid request to OpenAI-compatible endpoint: {}",
+                message
+            ),
             Error::InvalidProviderConfig { message } => write!(f, "{}", message),
             Error::InvalidRequest { message } => write!(f, "{}", message),
             Error::InvalidTemplatePath => {
