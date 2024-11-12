@@ -11,10 +11,6 @@ import {
 import { useForm } from "react-hook-form";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 import { functions, metrics, models, promptTemplates } from "./mock-data";
-import type { ModelOption } from "./mock-data";
-import type { FunctionConfig } from "~/../../utils/config/function";
-import type { MetricConfig } from "~/../../utils/config/metric";
-import type { VariantConfig } from "~/../../utils/config/variant";
 import {
   Accordion,
   AccordionContent,
@@ -61,7 +57,7 @@ export default function FineTuning() {
   });
 
   const [submissionResult, setSubmissionResult] = useState<string | null>(null);
-  const [counter, setCounter] = useState<number | null>(null);
+  const [, setCounter] = useState<number | null>(null);
   const [finalResult, setFinalResult] = useState<string | null>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submissionPhase, setSubmissionPhase] = useState<
@@ -315,13 +311,11 @@ export default function FineTuning() {
                             <SelectValue placeholder="Select a prompt template" />
                           </SelectTrigger>
                           <SelectContent>
-                            {Object.entries(promptTemplates).map(
-                              ([name, template]) => (
-                                <SelectItem key={name} value={name}>
-                                  <span>{name}</span>
-                                </SelectItem>
-                              ),
-                            )}
+                            {Object.entries(promptTemplates).map(([name]) => (
+                              <SelectItem key={name} value={name}>
+                                <span>{name}</span>
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                         <div className="flex">
