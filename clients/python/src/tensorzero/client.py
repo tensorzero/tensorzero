@@ -129,6 +129,7 @@ class BaseTensorZeroGateway(ABC):
         inference_id: Optional[UUID] = None,
         episode_id: Optional[UUID] = None,
         dryrun: Optional[bool] = None,
+        tags: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         if episode_id is None and inference_id is None:
             raise ValueError("Either episode_id or inference_id must be provided")
@@ -146,6 +147,8 @@ class BaseTensorZeroGateway(ABC):
             data["episode_id"] = str(episode_id)
         if inference_id is not None:
             data["inference_id"] = str(inference_id)
+        if tags is not None:
+            data["tags"] = tags
         return data
 
     @abstractmethod
@@ -177,6 +180,7 @@ class BaseTensorZeroGateway(ABC):
         inference_id: Optional[UUID] = None,
         episode_id: Optional[UUID] = None,
         dryrun: Optional[bool] = None,
+        tags: Optional[Dict[str, str]] = None,
     ) -> FeedbackResponse:
         pass
 
@@ -273,6 +277,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         inference_id: Optional[UUID] = None,
         episode_id: Optional[UUID] = None,
         dryrun: Optional[bool] = None,
+        tags: Optional[Dict[str, str]] = None,
     ) -> FeedbackResponse:
         """
         Make a POST request to the /feedback endpoint.
@@ -290,7 +295,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         """
         url = urljoin(self.base_url, "feedback")
         data = self._prepare_feedback_request(
-            metric_name, value, inference_id, episode_id, dryrun
+            metric_name, value, inference_id, episode_id, dryrun, tags
         )
         response = self.client.post(url, json=data)
         try:
@@ -432,6 +437,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         inference_id: Optional[UUID] = None,
         episode_id: Optional[UUID] = None,
         dryrun: Optional[bool] = None,
+        tags: Optional[Dict[str, str]] = None,
     ) -> FeedbackResponse:
         """
         Make a POST request to the /feedback endpoint.
@@ -449,7 +455,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         """
         url = urljoin(self.base_url, "feedback")
         data = self._prepare_feedback_request(
-            metric_name, value, inference_id, episode_id, dryrun
+            metric_name, value, inference_id, episode_id, dryrun, tags
         )
         response = await self.client.post(url, json=data)
         try:
