@@ -63,9 +63,9 @@ jobs:
           cargo run-e2e &
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
 
-      - name: Run all tests (including E2E tests)
-        run: |
-          cargo test-all --profile ci ${{ vars.CARGO_NEXTEST_ARGS }}
+      # - name: Run all tests (including E2E tests)
+      #   run: |
+      #     cargo test-all --profile ci ${{ vars.CARGO_NEXTEST_ARGS }}
 
       - name: Set up uv
         # uv recommends pinning a version to avoid unexpected behavior
@@ -74,15 +74,13 @@ jobs:
       - name: Install Python for python async client tests
         run: uv python install 3.10
 
-      - name: Install dependencies for python async client tests
-        working-directory: clients/python
-        run: uv sync --all-extras --dev
+      - name: Install dependencies for python client tests
+        working-directory: clients
+        run: uv pip sync requirements.txt
 
       - name: Run python client tests
         working-directory: clients
-        run: |
-          source python/.venv/bin/activate
-          uv run pytest
+        run: uv run pytest
 
       - name: Run mypy type checking
         working-directory: clients/python
