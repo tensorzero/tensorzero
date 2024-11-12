@@ -27,7 +27,7 @@ describe("Minijinja Wasm Integration", () => {
   it("handles invalid template gracefully", async () => {
     const invalidContext = { name: "Charlie" };
     await expect(
-      async () => await env.render("invalid", invalidContext)
+      async () => await env.render("invalid", invalidContext),
     ).rejects.toThrow(/template not found: template "invalid" does not exist/i);
   });
 });
