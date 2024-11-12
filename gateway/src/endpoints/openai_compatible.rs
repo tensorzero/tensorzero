@@ -155,7 +155,7 @@ struct OpenAICompatibleNamedToolChoice {
 /// `required` means the model must call one or more tools.
 /// Specifying a particular tool via `{"type": "function", "function": {"name": "my_function"}}` forces the model to call that tool.
 ///
-/// `none` is the default when no tools are present. `auto` is the default if tools are present.present.
+/// `none` is the default when no tools are present. `auto` is the default if tools are present.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 enum ChatCompletionToolChoiceOption {
@@ -327,6 +327,7 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params<'static> {
     }
 }
 
+// Start of Selection
 impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
     type Error = Error;
     fn try_from(
@@ -335,12 +336,17 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
         let mut system = None;
         let mut messages = Vec::new();
         let mut tool_call_id_to_name = HashMap::new();
-        for message in openai_compatible_messages {
+        for (index, message) in openai_compatible_messages.into_iter().enumerate() {
             match message {
                 OpenAICompatibleMessage::System(msg) => {
                     if system.is_some() {
                         return Err(Error::InvalidOpenAICompatibleRequest {
                             message: "At most one system message is allowed".to_string(),
+                        });
+                    }
+                    if index != 0 {
+                        return Err(Error::InvalidOpenAICompatibleRequest {
+                            message: "System message must be the first message".to_string(),
                         });
                     }
                     system = Some(convert_openai_message_content(msg.content)?);
@@ -867,6 +873,32 @@ mod tests {
             input.messages[0].content.contains(&expected_tool_call),
             "Content does not contain the expected ToolCall."
         );
+
+        let invalid_messages = vec![
+            OpenAICompatibleMessage::Assistant(OpenAICompatibleAssistantMessage {
+                content: Some(Value::String("Assistant message".to_string())),
+                tool_calls: None,
+            }),
+            OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
+                content: Value::String("System message".to_string()),
+            }),
+        ];
+        let result: Result<Input, Error> = invalid_messages.try_into();
+        assert!(
+            result.is_err(),
+            "Conversion should fail when a system message is after an assistant message."
+        );
+        if let Err(err) = result {
+            match err {
+                Error::InvalidOpenAICompatibleRequest { message } => {
+                    assert_eq!(
+                        message, "System message must be the first message",
+                        "Unexpected error message."
+                    );
+                }
+                _ => panic!("Unexpected error type."),
+            }
+        }
     }
 
     #[test]
