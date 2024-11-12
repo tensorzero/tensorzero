@@ -2,7 +2,7 @@ import { InputMessageContent, Role } from "utils/clickhouse";
 import { JsExposedEnv } from "../minijinja/pkg";
 
 /**
- * Renders a message using the provided environment and content.
+ * Renders a text message using the provided environment and content.
  *
  * @param env - The Minijinja environment for rendering (should contain templates for "system", "user" and "assistant" if and only
  *                                                       if the function takes structured input)
@@ -14,19 +14,13 @@ import { JsExposedEnv } from "../minijinja/pkg";
 export function render_message(
   env: JsExposedEnv,
   role: Role,
-  content: InputMessageContent[],
+  content: InputMessageContent,
 ) {
-  if (role !== "user" && role !== "assistant") {
-    throw new Error('Role must be either "user" or "assistant"');
-  }
-  if (content.length !== 1) {
-    throw new Error("Content must contain exactly one block");
-  }
-  if (content[0].type !== "text") {
+  if (content.type !== "text") {
     throw new Error("Content must be a text block");
   }
-  if (typeof content[0].value === "string") {
-    return content[0].value;
+  if (typeof content.value === "string") {
+    return content.value;
   }
-  return env.render(role, content[0].value);
+  return env.render(role, content.value);
 }

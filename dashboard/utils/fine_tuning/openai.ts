@@ -3,25 +3,34 @@ import {
   ParsedInferenceRow,
   ContentBlockOutput,
   JsonInferenceOutput,
+  InputMessageContent,
+  Role,
 } from "utils/clickhouse";
+import * as os from "os";
 import { render_message } from "./rendering";
 import OpenAI from "openai";
 import { createReadStream } from "fs";
 import * as fs from "fs/promises";
 import * as path from "path";
 
-type OpenAIRole = "system" | "user" | "assistant";
+type OpenAIRole = "system" | "user" | "assistant" | "tool";
 
 type OpenAIMessage = {
   role: OpenAIRole;
-  content: string;
+  content?: string;
+  tool_calls?: {
+    id: string;
+    type: string;
+    function: { name: string; arguments: string };
+  }[];
+  tool_call_id?: string;
 };
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-export function sample_to_openai_messages(
+export function tensorzero_inference_to_openai_messages(
   sample: ParsedInferenceRow,
   env: JsExposedEnv,
 ) {
@@ -45,13 +54,15 @@ export function sample_to_openai_messages(
     });
   }
   for (const message of sample.input.messages) {
-    const rendered_message = render_message(env, message.role, message.content);
-    messages.push({
-      role: message.role,
-      content: rendered_message,
-    });
+    for (const content of message.content) {
+      const rendered_message = content_block_to_openai_message(
+        content,
+        message.role,
+        env,
+      );
+      messages.push(rendered_message);
+    }
   }
-  // Add type check at the beginning
   const isChatInference = Array.isArray(sample.output);
   if (isChatInference) {
     const output = sample.output as ContentBlockOutput[];
@@ -62,24 +73,28 @@ export function sample_to_openai_messages(
       throw new Error("Chat inference must have a text message as output");
     }
     messages.push({ role: "assistant", content: output[0].text });
-  } else {
+  } else if ("raw" in sample.output) {
+    // Must be a JSON inference if it has "raw"
     const output = sample.output as JsonInferenceOutput;
     messages.push({ role: "assistant", content: output.raw });
+  } else {
+    throw new Error("Invalid inference type");
   }
   return messages;
 }
 
 export async function upload_examples_to_openai(samples: OpenAIMessage[][]) {
   // Convert samples to JSONL format
-  const jsonl = samples
-    .map((messages) => JSON.stringify({ messages }))
-    .join("\n");
-
-  // Write to temporary file
-  const tempFile = path.join(process.cwd(), "temp_training_data.jsonl");
-  await fs.writeFile(tempFile, jsonl);
-
+  let tempFile: string | null = null;
   try {
+    const jsonl = samples
+      .map((messages) => JSON.stringify({ messages }))
+      .join("\n");
+
+    // Write to temporary file
+    tempFile = path.join(os.tmpdir(), `temp_training_data_${Date.now()}.jsonl`);
+    await fs.writeFile(tempFile, jsonl);
+
     const file = await client.files.create({
       file: createReadStream(tempFile),
       purpose: "fine-tune",
@@ -88,7 +103,44 @@ export async function upload_examples_to_openai(samples: OpenAIMessage[][]) {
     return file.id;
   } finally {
     // Clean up temp file
-    await fs.unlink(tempFile);
+    if (tempFile) {
+      try {
+        await fs.unlink(tempFile);
+      } catch (err) {
+        console.error(`Error deleting temp file ${tempFile}: ${err}`);
+      }
+    }
+  }
+}
+
+function content_block_to_openai_message(
+  content: InputMessageContent,
+  role: Role,
+  env: JsExposedEnv,
+) {
+  switch (content.type) {
+    case "text":
+      return {
+        role: role as OpenAIRole,
+        content: render_message(env, role, content),
+      };
+    case "tool_call":
+      return {
+        role: "assistant" as OpenAIRole,
+        tool_calls: [
+          {
+            id: content.id,
+            type: "function",
+            function: { name: content.name, arguments: content.arguments },
+          },
+        ],
+      };
+    case "tool_result":
+      return {
+        role: "tool" as OpenAIRole,
+        tool_call_id: content.id,
+        content: content.result,
+      };
   }
 }
 
