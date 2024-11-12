@@ -82,7 +82,8 @@ enum OpenAICompatibleMessage {
 #[serde(rename_all = "snake_case")]
 enum OpenAICompatibleResponseFormat {
     Text,
-    JsonObject { json_schema: Option<Value> },
+    JsonSchema { schema: Value },
+    JsonObject,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -215,7 +216,7 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params<'static> {
         let function_name = headers
             .get("function_name")
             .ok_or(Error::InvalidOpenAICompatibleRequest {
-                message: "function_name header is required".to_string(),
+                message: "function_name header is required in extra_headers".to_string(),
             })?
             .to_str()
             .map_err(|_| Error::InvalidOpenAICompatibleRequest {
@@ -284,7 +285,7 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params<'static> {
             parallel_tool_calls: openai_compatible_params.parallel_tool_calls,
         };
         let output_schema = match openai_compatible_params.response_format {
-            Some(OpenAICompatibleResponseFormat::JsonObject { json_schema }) => json_schema,
+            Some(OpenAICompatibleResponseFormat::JsonSchema { schema }) => Some(schema),
             _ => None,
         };
         Ok(Params {
@@ -557,7 +558,7 @@ impl From<InferenceResponseChunk> for OpenAICompatibleResponseChunk {
                     episode_id: c.episode_id.to_string(),
                     choices: vec![OpenAICompatibleChoiceChunk {
                         index: 0,
-                        finish_reason: "stop".to_string(),
+                        finish_reason: "".to_string(),
                         delta: OpenAICompatibleDelta {
                             content,
                             tool_calls: Some(tool_calls),
@@ -575,7 +576,7 @@ impl From<InferenceResponseChunk> for OpenAICompatibleResponseChunk {
                 episode_id: c.episode_id.to_string(),
                 choices: vec![OpenAICompatibleChoiceChunk {
                     index: 0,
-                    finish_reason: "stop".to_string(),
+                    finish_reason: "".to_string(),
                     delta: OpenAICompatibleDelta {
                         content: Some(c.raw),
                         tool_calls: None,
