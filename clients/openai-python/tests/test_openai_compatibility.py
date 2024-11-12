@@ -48,6 +48,7 @@ async def test_async_basic_inference(async_client):
         extra_headers={"function_name": "basic_test", "episode_id": str(uuid7())},
         messages=messages,
         model="",
+        temperature=0.4,
     )
     # Verify IDs are valid UUIDs
     UUID(result.id)  # Will raise ValueError if invalid
@@ -74,6 +75,8 @@ async def test_async_inference_streaming(async_client):
         messages=messages,
         model="",
         stream=True,
+        max_tokens=300,
+        seed=69,
     )
     first_chunk_duration = None
     chunks = []
@@ -197,6 +200,7 @@ async def test_async_tool_call_inference(async_client):
         extra_headers={"function_name": "weather_helper", "episode_id": str(uuid7())},
         messages=messages,
         model="",
+        top_p=0.5,
     )
     assert result.model == "variant"
     assert result.choices[0].message.content is None
@@ -229,6 +233,7 @@ async def test_async_malformed_tool_call_inference(async_client):
         },
         messages=messages,
         model="",
+        presence_penalty=0.5,
     )
     assert result.model == "bad_tool"
     assert result.choices[0].message.content is None
