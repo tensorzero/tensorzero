@@ -223,16 +223,21 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params<'static> {
     fn try_from(
         (headers, openai_compatible_params): (HeaderMap, OpenAICompatibleParams),
     ) -> Result<Self, Self::Error> {
-        let function_name = headers
-            .get("function_name")
+        let function_name = openai_compatible_params
+            .model
+            .strip_prefix("tensorzero::")
             .ok_or(Error::InvalidOpenAICompatibleRequest {
-                message: "function_name header is required in extra_headers".to_string(),
-            })?
-            .to_str()
-            .map_err(|_| Error::InvalidOpenAICompatibleRequest {
-                message: "function_name header is not valid UTF-8".to_string(),
-            })?
-            .to_string();
+                message: "model name must start with 'tensorzero::'".to_string(),
+            })?;
+
+        if function_name.is_empty() {
+            return Err(Error::InvalidOpenAICompatibleRequest {
+                message:
+                    "function_name (passed in model field after \"tensorzero::\") cannot be empty"
+                        .to_string(),
+            });
+        }
+
         let episode_id = headers
             .get("episode_id")
             .map(|h| {
@@ -312,7 +317,7 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params<'static> {
             _ => None,
         };
         Ok(Params {
-            function_name,
+            function_name: function_name.to_string(),
             episode_id,
             input,
             stream: openai_compatible_params.stream,
@@ -327,7 +332,6 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params<'static> {
     }
 }
 
-// Start of Selection
 impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
     type Error = Error;
     fn try_from(
@@ -690,10 +694,6 @@ mod tests {
         let episode_id = Uuid::now_v7();
         let headers = HeaderMap::from_iter(vec![
             (
-                HeaderName::from_static("function_name"),
-                HeaderValue::from_static("test_function"),
-            ),
-            (
                 HeaderName::from_static("episode_id"),
                 HeaderValue::from_str(&episode_id.to_string()).unwrap(),
             ),
@@ -709,7 +709,7 @@ mod tests {
             headers,
             OpenAICompatibleParams {
                 messages,
-                model: "test_model".to_string(),
+                model: "tensorzero::test_function".to_string(),
                 frequency_penalty: Some(0.5),
                 max_tokens: Some(100),
                 max_completion_tokens: Some(50),
