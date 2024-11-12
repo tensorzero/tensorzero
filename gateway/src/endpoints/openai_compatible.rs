@@ -1,3 +1,13 @@
+//! OpenAI-compatible API endpoint implementation.
+//!
+//! This module provides compatibility with the OpenAI Chat Completions API format,
+//! translating between OpenAI's request/response format and our internal types.
+//! It implements request handling, parameter conversion, and response formatting
+//! to match OpenAI's API specification.
+//!
+//! We convert the request into our internal types, call `endpoints::inference::inference` to perform the actual inference,
+//! and then convert the response into the OpenAI-compatible format.
+
 use std::collections::HashMap;
 
 use axum::body::Body;
@@ -28,6 +38,33 @@ use crate::tool::{
 use super::inference::{
     InferenceCredentials, InferenceOutput, InferenceResponse, InferenceResponseChunk,
 };
+
+/// A handler for the OpenAI-compatible inference endpoint
+#[debug_handler(state = AppStateData)]
+pub async fn inference_handler(
+    State(AppStateData {
+        config,
+        http_client,
+        clickhouse_connection_info,
+    }): AppState,
+    headers: HeaderMap,
+    StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
+) -> Result<Response<Body>, Error> {
+    let params = (headers, openai_compatible_params).try_into()?;
+    let response = inference(config, http_client, clickhouse_connection_info, params).await?;
+    match response {
+        InferenceOutput::NonStreaming(response) => {
+            let openai_compatible_response = OpenAICompatibleResponse::from(response);
+            Ok(Json(openai_compatible_response).into_response())
+        }
+        InferenceOutput::Streaming(stream) => {
+            let openai_compatible_stream = stream.map(prepare_serialized_openai_compatible_chunk);
+            Ok(Sse::new(openai_compatible_stream)
+                .keep_alive(axum::response::sse::KeepAlive::new())
+                .into_response())
+        }
+    }
+}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct OpenAICompatibleFunctionCall {
@@ -181,33 +218,6 @@ struct OpenAICompatibleResponse {
     usage: OpenAICompatibleUsage,
 }
 
-/// A handler for the inference endpoint
-#[debug_handler(state = AppStateData)]
-pub async fn inference_handler(
-    State(AppStateData {
-        config,
-        http_client,
-        clickhouse_connection_info,
-    }): AppState,
-    headers: HeaderMap,
-    StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
-) -> Result<Response<Body>, Error> {
-    let params = (headers, openai_compatible_params).try_into()?;
-    let response = inference(config, http_client, clickhouse_connection_info, params).await?;
-    match response {
-        InferenceOutput::NonStreaming(response) => {
-            let openai_compatible_response = OpenAICompatibleResponse::from(response);
-            Ok(Json(openai_compatible_response).into_response())
-        }
-        InferenceOutput::Streaming(stream) => {
-            let openai_compatible_stream = stream.map(prepare_serialized_openai_compatible_chunk);
-            Ok(Sse::new(openai_compatible_stream)
-                .keep_alive(axum::response::sse::KeepAlive::new())
-                .into_response())
-        }
-    }
-}
-
 impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params<'static> {
     type Error = Error;
     fn try_from(
@@ -237,10 +247,23 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params<'static> {
                     })
             })
             .transpose()?;
+        // If both max_tokens and max_completion_tokens are provided, we use the minimum of the two.
+        // Otherwise, we use the provided value, or None if neither is provided.
+        let max_tokens = match (
+            openai_compatible_params.max_tokens,
+            openai_compatible_params.max_completion_tokens,
+        ) {
+            (Some(max_tokens), Some(max_completion_tokens)) => {
+                Some(max_tokens.min(max_completion_tokens))
+            }
+            (Some(max_tokens), None) => Some(max_tokens),
+            (None, Some(max_completion_tokens)) => Some(max_completion_tokens),
+            (None, None) => None,
+        };
         let input = openai_compatible_params.messages.try_into()?;
         let chat_completion_inference_params = ChatCompletionInferenceParams {
             temperature: openai_compatible_params.temperature,
-            max_tokens: openai_compatible_params.max_tokens,
+            max_tokens,
             seed: openai_compatible_params.seed,
             top_p: openai_compatible_params.top_p,
             presence_penalty: openai_compatible_params.presence_penalty,
@@ -376,15 +399,15 @@ fn convert_openai_message_content(content: Value) -> Result<Value, Error> {
         Value::Array(a) => {
             if a.len() != 1 {
                 return Err(Error::InvalidOpenAICompatibleRequest {
-                    message: "OpenAI message content must either be a string or an array of length 1 containing structured TensorZero inputs".to_string(),
+                    message: "message content must either be a string or an array of length 1 containing structured TensorZero inputs".to_string(),
                 });
             }
             Ok(a.into_iter().next().ok_or(Error::InvalidOpenAICompatibleRequest {
-                message: "OpenAI message content array is empty. This should never happen. Please report this bug at https://github.com/tensorzero/tensorzero/issues.".to_string(),
+                message: "message content array is empty. This should never happen. Please report this bug at https://github.com/tensorzero/tensorzero/issues.".to_string(),
             })?)
         }
         _ => Err(Error::InvalidOpenAICompatibleRequest {
-            message: "OpenAI message content must either be a string or an array of length 1 containing structured TensorZero inputs".to_string(),
+            message: "message content must either be a string or an array of length 1 containing structured TensorZero inputs".to_string(),
         }),
     }
 }
@@ -480,6 +503,8 @@ impl From<InferenceResponse> for OpenAICompatibleResponse {
     }
 }
 
+// Takes a vector of ContentBlockOutput and returns a tuple of (Option<String>, Vec<OpenAICompatibleToolCall>).
+// This is useful since the OpenAI format separates text and tool calls in the response fields.
 fn process_chat_content(
     content: Vec<ContentBlockOutput>,
 ) -> (Option<String>, Vec<OpenAICompatibleToolCall>) {
@@ -640,5 +665,356 @@ impl From<ToolCallChunk> for OpenAICompatibleToolCall {
                 arguments: tool_call.raw_arguments,
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::inference::types::{Text, TextChunk};
+
+    use super::*;
+    use axum::http::header::{HeaderName, HeaderValue};
+    use serde_json::json;
+
+    #[test]
+    fn test_try_from_openai_compatible_params() {
+        let episode_id = Uuid::now_v7();
+        let headers = HeaderMap::from_iter(vec![
+            (
+                HeaderName::from_static("function_name"),
+                HeaderValue::from_static("test_function"),
+            ),
+            (
+                HeaderName::from_static("episode_id"),
+                HeaderValue::from_str(&episode_id.to_string()).unwrap(),
+            ),
+            (
+                HeaderName::from_static("variant_name"),
+                HeaderValue::from_static("test_variant"),
+            ),
+        ]);
+        let messages = vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
+            content: Value::String("Hello, world!".to_string()),
+        })];
+        let params: Params = (
+            headers,
+            OpenAICompatibleParams {
+                messages,
+                model: "test_model".to_string(),
+                frequency_penalty: Some(0.5),
+                max_tokens: Some(100),
+                max_completion_tokens: Some(50),
+                presence_penalty: Some(0.5),
+                response_format: None,
+                seed: Some(23),
+                stream: None,
+                temperature: Some(0.5),
+                tools: None,
+                tool_choice: None,
+                top_p: Some(0.5),
+                parallel_tool_calls: None,
+            },
+        )
+            .try_into()
+            .unwrap();
+        assert_eq!(params.function_name, "test_function");
+        assert_eq!(params.episode_id, Some(episode_id));
+        assert_eq!(params.variant_name, Some("test_variant".to_string()));
+        assert_eq!(params.input.messages.len(), 1);
+        assert_eq!(params.input.messages[0].role, Role::User);
+        assert_eq!(
+            params.input.messages[0].content[0],
+            InputMessageContent::Text {
+                value: Value::String("Hello, world!".to_string()),
+            }
+        );
+        assert_eq!(params.params.chat_completion.temperature, Some(0.5));
+        assert_eq!(params.params.chat_completion.max_tokens, Some(50));
+        assert_eq!(params.params.chat_completion.seed, Some(23));
+        assert_eq!(params.params.chat_completion.top_p, Some(0.5));
+        assert_eq!(params.params.chat_completion.presence_penalty, Some(0.5));
+        assert_eq!(params.params.chat_completion.frequency_penalty, Some(0.5));
+    }
+
+    #[test]
+    fn test_try_from_openai_compatible_messages() {
+        let messages = vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
+            content: Value::String("Hello, world!".to_string()),
+        })];
+        let input: Input = messages.try_into().unwrap();
+        assert_eq!(input.messages.len(), 1);
+        assert_eq!(input.messages[0].role, Role::User);
+        assert_eq!(
+            input.messages[0].content[0],
+            InputMessageContent::Text {
+                value: Value::String("Hello, world!".to_string()),
+            }
+        );
+        // Now try a system message and a user message
+        let messages = vec![
+            OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
+                content: Value::String("You are a helpful assistant".to_string()),
+            }),
+            OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
+                content: Value::String("Hello, world!".to_string()),
+            }),
+        ];
+        let input: Input = messages.try_into().unwrap();
+        assert_eq!(input.messages.len(), 1);
+        assert_eq!(input.messages[0].role, Role::User);
+        assert_eq!(
+            input.system,
+            Some(Value::String("You are a helpful assistant".to_string()))
+        );
+        // Now try some messages with structured content
+        let messages = vec![
+            OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
+                content: Value::String("You are a helpful assistant".to_string()),
+            }),
+            OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
+                content: json!({
+                    "country": "Japan",
+                    "city": "Tokyo",
+                }),
+            }),
+        ];
+        let input: Result<Input, Error> = messages.try_into();
+        assert!(input.is_err());
+        assert_eq!(
+            input.unwrap_err(),
+            Error::InvalidOpenAICompatibleRequest {
+                message: "message content must either be a string or an array of length 1 containing structured TensorZero inputs".to_string(),
+            }
+        );
+
+        // Try 2 system messages
+        let messages = vec![
+            OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
+                content: Value::String("You are a helpful assistant".to_string()),
+            }),
+            OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
+                content: Value::String("You are a helpful assistant".to_string()),
+            }),
+        ];
+        let input: Result<Input, Error> = messages.try_into();
+        assert!(input.is_err());
+        assert_eq!(
+            input.unwrap_err(),
+            Error::InvalidOpenAICompatibleRequest {
+                message: "At most one system message is allowed".to_string(),
+            }
+        );
+
+        // Try an assistant message with structured content
+        let messages = vec![OpenAICompatibleMessage::Assistant(
+            OpenAICompatibleAssistantMessage {
+                content: Some(json!([{
+                    "country": "Japan",
+                    "city": "Tokyo",
+                }])),
+                tool_calls: None,
+            },
+        )];
+        let input: Input = messages.try_into().unwrap();
+        assert_eq!(input.messages.len(), 1);
+        assert_eq!(input.messages[0].role, Role::Assistant);
+        assert_eq!(
+            input.messages[0].content[0],
+            InputMessageContent::Text {
+                value: json!({
+                    "country": "Japan",
+                    "city": "Tokyo",
+                }),
+            }
+        );
+
+        // Try an assistant message with text and tool calls
+        let messages = vec![OpenAICompatibleMessage::Assistant(
+            OpenAICompatibleAssistantMessage {
+                content: Some(Value::String("Hello, world!".to_string())),
+                tool_calls: Some(vec![OpenAICompatibleToolCall {
+                    id: "1".to_string(),
+                    r#type: "function".to_string(),
+                    function: OpenAICompatibleFunctionCall {
+                        name: "test_tool".to_string(),
+                        arguments: "{}".to_string(),
+                    },
+                }]),
+            },
+        )];
+        let input: Input = messages.try_into().unwrap();
+        assert_eq!(input.messages.len(), 1);
+        assert_eq!(input.messages[0].role, Role::Assistant);
+        assert_eq!(input.messages[0].content.len(), 2);
+
+        let expected_text = InputMessageContent::Text {
+            value: Value::String("Hello, world!".to_string()),
+        };
+        let expected_tool_call = InputMessageContent::ToolCall(ToolCall {
+            id: "1".to_string(),
+            name: "test_tool".to_string(),
+            arguments: "{}".to_string(),
+        });
+
+        assert!(
+            input.messages[0].content.contains(&expected_text),
+            "Content does not contain the expected Text message."
+        );
+        assert!(
+            input.messages[0].content.contains(&expected_tool_call),
+            "Content does not contain the expected ToolCall."
+        );
+    }
+
+    #[test]
+    fn test_convert_openai_message_content() {
+        let content = json!([{
+            "country": "Japan",
+            "city": "Tokyo",
+        }]);
+        let value = convert_openai_message_content(content.clone()).unwrap();
+        assert_eq!(value, content[0]);
+        let content = json!({
+            "country": "Japan",
+            "city": "Tokyo",
+        });
+        let error = convert_openai_message_content(content.clone()).unwrap_err();
+        assert_eq!(
+            error,
+            Error::InvalidOpenAICompatibleRequest {
+                message: "message content must either be a string or an array of length 1 containing structured TensorZero inputs".to_string(),
+            }
+        );
+        let content = json!([]);
+        let error = convert_openai_message_content(content).unwrap_err();
+        assert_eq!(
+            error,
+            Error::InvalidOpenAICompatibleRequest {
+                message: "message content must either be a string or an array of length 1 containing structured TensorZero inputs".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn test_process_chat_content() {
+        let content = vec![
+            ContentBlockOutput::Text(Text {
+                text: "Hello".to_string(),
+            }),
+            ContentBlockOutput::ToolCall(ToolCallOutput {
+                arguments: None,
+                name: Some("test_tool".to_string()),
+                id: "1".to_string(),
+                raw_name: "test_tool".to_string(),
+                raw_arguments: "{}".to_string(),
+            }),
+            ContentBlockOutput::Text(Text {
+                text: ", world!".to_string(),
+            }),
+        ];
+        let (content_str, tool_calls) = process_chat_content(content);
+        assert_eq!(content_str, Some("Hello, world!".to_string()));
+        assert_eq!(tool_calls.len(), 1);
+        assert_eq!(tool_calls[0].id, "1");
+        assert_eq!(tool_calls[0].function.name, "test_tool");
+        assert_eq!(tool_calls[0].function.arguments, "{}");
+        let content: Vec<ContentBlockOutput> = vec![];
+        let (content_str, tool_calls) = process_chat_content(content);
+        assert_eq!(content_str, None);
+        assert!(tool_calls.is_empty());
+
+        let content = vec![
+            ContentBlockOutput::Text(Text {
+                text: "First part".to_string(),
+            }),
+            ContentBlockOutput::Text(Text {
+                text: " second part".to_string(),
+            }),
+            ContentBlockOutput::ToolCall(ToolCallOutput {
+                arguments: None,
+                name: Some("middle_tool".to_string()),
+                id: "123".to_string(),
+                raw_name: "middle_tool".to_string(),
+                raw_arguments: "{\"key\": \"value\"}".to_string(),
+            }),
+            ContentBlockOutput::Text(Text {
+                text: " third part".to_string(),
+            }),
+            ContentBlockOutput::Text(Text {
+                text: " fourth part".to_string(),
+            }),
+        ];
+        let (content_str, tool_calls) = process_chat_content(content);
+        assert_eq!(
+            content_str,
+            Some("First part second part third part fourth part".to_string())
+        );
+        assert_eq!(tool_calls.len(), 1);
+        assert_eq!(tool_calls[0].id, "123");
+        assert_eq!(tool_calls[0].function.name, "middle_tool");
+        assert_eq!(tool_calls[0].function.arguments, "{\"key\": \"value\"}");
+    }
+
+    #[test]
+    fn test_process_chat_content_chunk() {
+        let content = vec![
+            ContentBlockChunk::Text(TextChunk {
+                id: "1".to_string(),
+                text: "Hello".to_string(),
+            }),
+            ContentBlockChunk::ToolCall(ToolCallChunk {
+                id: "1".to_string(),
+                raw_name: "test_tool".to_string(),
+                raw_arguments: "{}".to_string(),
+            }),
+            ContentBlockChunk::Text(TextChunk {
+                id: "2".to_string(),
+                text: ", world!".to_string(),
+            }),
+        ];
+        let (content_str, tool_calls) = process_chat_content_chunk(content);
+        assert_eq!(content_str, Some("Hello, world!".to_string()));
+        assert_eq!(tool_calls.len(), 1);
+        assert_eq!(tool_calls[0].id, "1");
+        assert_eq!(tool_calls[0].function.name, "test_tool");
+        assert_eq!(tool_calls[0].function.arguments, "{}");
+
+        let content: Vec<ContentBlockChunk> = vec![];
+        let (content_str, tool_calls) = process_chat_content_chunk(content);
+        assert_eq!(content_str, None);
+        assert!(tool_calls.is_empty());
+
+        let content = vec![
+            ContentBlockChunk::Text(TextChunk {
+                id: "1".to_string(),
+                text: "First part".to_string(),
+            }),
+            ContentBlockChunk::Text(TextChunk {
+                id: "2".to_string(),
+                text: " second part".to_string(),
+            }),
+            ContentBlockChunk::ToolCall(ToolCallChunk {
+                id: "123".to_string(),
+                raw_name: "middle_tool".to_string(),
+                raw_arguments: "{\"key\": \"value\"}".to_string(),
+            }),
+            ContentBlockChunk::Text(TextChunk {
+                id: "3".to_string(),
+                text: " third part".to_string(),
+            }),
+            ContentBlockChunk::Text(TextChunk {
+                id: "4".to_string(),
+                text: " fourth part".to_string(),
+            }),
+        ];
+        let (content_str, tool_calls) = process_chat_content_chunk(content);
+        assert_eq!(
+            content_str,
+            Some("First part second part third part fourth part".to_string())
+        );
+        assert_eq!(tool_calls.len(), 1);
+        assert_eq!(tool_calls[0].id, "123");
+        assert_eq!(tool_calls[0].function.name, "middle_tool");
+        assert_eq!(tool_calls[0].function.arguments, "{\"key\": \"value\"}");
     }
 }
