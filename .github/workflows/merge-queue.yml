@@ -76,7 +76,9 @@ jobs:
 
       - name: Install dependencies for python client tests
         working-directory: clients
-        run: uv pip sync requirements.txt
+        run: |
+          uv venv
+          uv pip sync requirements.txt
 
       - name: Run python client tests
         working-directory: clients
