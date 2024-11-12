@@ -32,7 +32,7 @@ from tensorzero.util import uuid7
 @pytest_asyncio.fixture
 async def async_client():
     async with AsyncOpenAI(
-        api_key="donotuse", base_url="http://localhost:3000/openai"
+        api_key="donotuse", base_url="http://localhost:3000/openai/v1"
     ) as client:
         yield client
 

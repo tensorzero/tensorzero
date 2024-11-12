@@ -321,6 +321,7 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params<'static> {
             dryrun,
             dynamic_tool_params,
             output_schema,
+            // OpenAI compatible endpoint does not support dynamic credentials
             credentials: InferenceCredentials::default(),
         })
     }
@@ -636,6 +637,8 @@ fn process_chat_content_chunk(
     (content_str, tool_calls)
 }
 
+/// Prepares an Event for SSE on the way out of the gateway
+/// When None is passed in, we send "[DONE]" to the client to signal the end of the stream
 fn prepare_serialized_openai_compatible_chunk(
     chunk: Option<InferenceResponseChunk>,
 ) -> Result<Event, Error> {

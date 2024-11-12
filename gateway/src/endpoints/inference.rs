@@ -446,6 +446,8 @@ fn prepare_response_chunk(
     InferenceResponseChunk::new(chunk, metadata.episode_id, metadata.variant_name.clone())
 }
 
+// Prepares an Event for SSE on the way out of the gateway
+// When None is passed in, we send "[DONE]" to the client to signal the end of the stream
 fn prepare_serialized_event(chunk: Option<InferenceResponseChunk>) -> Result<Event, Error> {
     if let Some(chunk) = chunk {
         let chunk_json = serde_json::to_value(chunk).map_err(|e| Error::Inference {
