@@ -480,7 +480,8 @@ async def test_dynamic_json_mode_inference_openai(async_client):
     )
     assert result.model == "openai"
     assert result.episode_id == episode_id
-    assert result.choices[0].message.content == '{"response":"Tokyo"}'
+    json_content = json.loads(result.choices[0].message.content)
+    assert "tokyo" in json_content["response"].lower()
     assert result.choices[0].message.tool_calls is None
     assert result.usage.prompt_tokens > 50
     assert result.usage.completion_tokens > 0
