@@ -1,7 +1,7 @@
-[models.claude-3-5-haiku-20241022]
+[models.claude_3_5_haiku_20241022]
 routing = ["anthropic"]
 
-[models.claude-3-5-haiku-20241022.providers.anthropic]
+[models.claude_3_5_haiku_20241022.providers.anthropic]
 type = "anthropic"
 model_name = "claude-3-5-haiku-20241022"
 
@@ -10,7 +10,7 @@ type = "chat"
 
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
-model = "claude-3-5-haiku-20241022"
+model = "claude_3_5_haiku_20241022"
 
 # Disable observability to keep this example minimal (not recommended in production)
 [gateway]
