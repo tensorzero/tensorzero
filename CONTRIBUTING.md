@@ -20,8 +20,7 @@ Join our community on [Slack](https://www.tensorzero.com/slack) or [Discord](htt
 
 ### GitHub
 
-- Issues for bugs and feature requests
-- Discussions for general questions, technical support, and conversation not directly related to code
+We use GitHub Issues for tracking bugs and feature requests. For general questions, technical support, and conversations not directly related to code, please use GitHub Discussions.
 
 ## Contributions
 
@@ -37,15 +36,15 @@ The team will be happy to provide feedback and guidance.
 
 We're planning to open source our documentation pages soon. See [issue #432](https://github.com/tensorzero/tensorzero/issues/432) for more details.
 
-In the meantime, please open an issue if you find any issues with the documentation.
+In the meantime, please open an issue if you have suggestions or find any problems with the documentation.
 
 ### Content — Examples, Tutorials, etc.
 
 We'd love collaboration on examples, tutorials, and other content that showcases how to build AI applications with TensorZero.
 
-For content contributed directly to our repository (e.g. examples), please follow the same process as code contributions.
+For content contributed directly to our repository, please follow the same process as code contributions.
 
-For external content (e.g. blog posts, videos, social media content), we're excited to support and amplify your work!
+For external content (e.g. blog posts, videos, social media content), we're excited to support and amplify your work.
 Share your content in our community channels (Slack/Discord), tag us on social media, or reach out if you'd like technical review or feedback before publishing.
 
 We're happy to provide guidance and support for both types of content to help you create high-quality resources for the TensorZero community.
@@ -61,7 +60,7 @@ If you discover a security vulnerability, please email us at [security@tensorzer
 
 ### Other
 
-Did you have something else in mind? Reach out on Slack or Discord and let us know!
+Did you have something else in mind? Reach out on Slack or Discord and let us know.
 
 ---
 
