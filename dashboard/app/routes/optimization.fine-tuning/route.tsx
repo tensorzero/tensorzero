@@ -1,6 +1,11 @@
-import type { MetaFunction } from "@remix-run/node";
+import {
+  json,
+  type LoaderFunctionArgs,
+  type MetaFunction,
+} from "@remix-run/node";
 import { Form } from "~/components/ui/form";
 import { Button } from "~/components/ui/button";
+import { promptTemplates, models } from "./mock-data";
 import {
   Select,
   SelectContent,
@@ -10,7 +15,7 @@ import {
 } from "~/components/ui/select";
 import { useForm } from "react-hook-form";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
-import { functions, metrics, models, promptTemplates } from "./mock-data";
+// import { functions, metrics, models, promptTemplates } from "./mock-data";
 import {
   Accordion,
   AccordionContent,
@@ -28,7 +33,11 @@ import {
 } from "~/components/ui/dialog";
 import { Textarea } from "~/components/ui/textarea";
 import { promptTemplateDetails } from "./mock-data";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useConfig } from "~/context/config";
+import { countInferencesForFunction } from "~/utils/clickhouse";
+import { getConfig } from "~/utils/config.server";
+import { useLoaderData, useNavigate } from "@remix-run/react";
 
 export const meta: MetaFunction = () => {
   return [
@@ -47,7 +56,26 @@ type FormValues = {
   threshold?: number;
 };
 
+export async function loader({ request }: LoaderFunctionArgs) {
+  const url = new URL(request.url);
+  const functionName = url.searchParams.get("function");
+  if (!functionName) {
+    return json({ inferenceCount: null });
+  }
+  const config = await getConfig();
+  const inferenceCount = await countInferencesForFunction(
+    functionName,
+    config.functions[functionName]
+  );
+  return json({ inferenceCount });
+}
+
 export default function FineTuning() {
+  const { inferenceCount } = useLoaderData<typeof loader>();
+  const navigate = useNavigate();
+
+  const config = useConfig();
+  console.log(config);
   const form = useForm<FormValues>({
     defaultValues: {
       validationSplit: 20,
@@ -64,6 +92,19 @@ export default function FineTuning() {
     "idle" | "submitting" | "pending" | "complete"
   >("idle");
 
+  useEffect(() => {
+    const functionValue = form.watch("function");
+    if (functionValue) {
+      navigate(`?function=${functionValue}`, { replace: true });
+    }
+  }, [form.watch("function"), navigate]);
+
+  useEffect(() => {
+    if (inferenceCount !== null) {
+      form.setValue("maxSamples", Math.min(100000, inferenceCount));
+    }
+  }, [inferenceCount, form]);
+
   async function onSubmit(data: FormValues) {
     console.log(data);
     setIsSubmitted(true);
@@ -76,7 +117,7 @@ export default function FineTuning() {
     setSubmissionPhase("pending");
     setCounter(1);
     setSubmissionResult(
-      `1\n\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.`,
+      `1\n\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.`
     );
 
     // Counter interval
@@ -86,13 +127,13 @@ export default function FineTuning() {
           clearInterval(interval);
           setSubmissionPhase("complete");
           setFinalResult(
-            "Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.",
+            "Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."
           );
           return prev;
         }
         const newCount = prev! + 1;
         setSubmissionResult((prev) =>
-          prev ? prev.replace(/^\d+/, newCount.toString()) : prev,
+          prev ? prev.replace(/^\d+/, newCount.toString()) : prev
         );
         return newCount;
       });
@@ -152,33 +193,42 @@ export default function FineTuning() {
                             <SelectValue placeholder="Select a function" />
                           </SelectTrigger>
                           <SelectContent>
-                            {Object.entries(functions).map(([name, fn]) => (
-                              <SelectItem key={name} value={name}>
-                                <div className="flex items-center justify-between w-full">
-                                  <span>{name}</span>
-                                  <span
-                                    className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
+                            {Object.entries(config.functions).map(
+                              ([name, fn]) => {
+                                console.log(name);
+                                return (
+                                  <SelectItem key={name} value={name}>
+                                    <div className="flex items-center justify-between w-full">
+                                      <span>{name}</span>
+                                      <span
+                                        className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
                                     ${
                                       fn.type === "chat"
                                         ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300"
                                         : "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300"
                                     }`}
-                                  >
-                                    {fn.type === "chat"
-                                      ? "Chat"
-                                      : fn.type === "json"
-                                        ? "JSON"
-                                        : "Unknown"}
-                                  </span>
-                                </div>
-                              </SelectItem>
-                            ))}
+                                      >
+                                        {fn.type === "chat"
+                                          ? "Chat"
+                                          : fn.type === "json"
+                                          ? "JSON"
+                                          : "Unknown"}
+                                      </span>
+                                    </div>
+                                  </SelectItem>
+                                );
+                              }
+                            )}
                           </SelectContent>
                         </Select>
                         <div className="text-sm text-muted-foreground">
                           Inferences:{" "}
                           {field.value ? (
-                            <span className="font-medium">123,456</span>
+                            <span className="font-medium">
+                              {inferenceCount ?? (
+                                <Skeleton className="inline-block h-4 w-16 align-middle" />
+                              )}
+                            </span>
                           ) : (
                             <Skeleton className="inline-block h-4 w-16 align-middle" />
                           )}
@@ -204,50 +254,52 @@ export default function FineTuning() {
                               <SelectValue placeholder="Select a metric" />
                             </SelectTrigger>
                             <SelectContent>
-                              {Object.entries(metrics).map(([name, metric]) => (
-                                <SelectItem key={name} value={name}>
-                                  <div className="flex items-center justify-between w-full">
-                                    <span>{name}</span>
-                                    <div className="ml-2 flex gap-1.5">
-                                      <span
-                                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
+                              {Object.entries(config.metrics).map(
+                                ([name, metric]) => (
+                                  <SelectItem key={name} value={name}>
+                                    <div className="flex items-center justify-between w-full">
+                                      <span>{name}</span>
+                                      <div className="ml-2 flex gap-1.5">
+                                        <span
+                                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
                                         ${
                                           metric.type === "boolean"
                                             ? "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300"
                                             : "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-300"
                                         }`}
-                                      >
-                                        {metric.type}
-                                      </span>
-                                      <span
-                                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
+                                        >
+                                          {metric.type}
+                                        </span>
+                                        <span
+                                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
                                         ${
                                           metric.optimize === "max"
                                             ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
                                             : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"
                                         }`}
-                                      >
-                                        {metric.optimize}
-                                      </span>
-                                      <span
-                                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
+                                        >
+                                          {metric.optimize}
+                                        </span>
+                                        <span
+                                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
                                         ${
                                           metric.level === "episode"
                                             ? "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300"
                                             : "bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-300"
                                         }`}
-                                      >
-                                        {metric.level}
-                                      </span>
+                                        >
+                                          {metric.level}
+                                        </span>
+                                      </div>
                                     </div>
-                                  </div>
-                                </SelectItem>
-                              ))}
+                                  </SelectItem>
+                                )
+                              )}
                             </SelectContent>
                           </Select>
 
                           {field.value &&
-                            metrics[field.value]?.type === "float" && (
+                            config.metrics[field.value]?.type === "float" && (
                               <FormField
                                 control={form.control}
                                 name="threshold"
@@ -263,7 +315,7 @@ export default function FineTuning() {
                                       className="bg-transparent border-none focus:ring-0"
                                       onChange={(e) =>
                                         thresholdField.onChange(
-                                          Number(e.target.value),
+                                          Number(e.target.value)
                                         )
                                       }
                                     />
@@ -408,8 +460,8 @@ export default function FineTuning() {
                             <SelectValue placeholder="Select a model" />
                           </SelectTrigger>
                           <SelectContent>
-                            {models.map((model) => (
-                              <SelectItem key={model.name} value={model.name}>
+                            {Object.entries(models).map(([name, model]) => (
+                              <SelectItem key={name} value={name}>
                                 <div className="flex items-center justify-between w-full">
                                   <span>{model.name}</span>
                                   <span className="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300">

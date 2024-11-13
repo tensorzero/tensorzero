@@ -1,5 +1,6 @@
 import { createClient } from "@clickhouse/client";
 import { z } from "zod";
+import { FunctionConfig } from "./config/function";
 
 export const clickhouseClient = createClient({
   url: process.env.CLICKHOUSE_URL,
@@ -38,7 +39,7 @@ export type ParsedInferenceRow =
 
 export function parseInferenceRows(
   rows: InferenceRow[],
-  tableName: string,
+  tableName: string
 ): ParsedChatInferenceRow[] | ParsedJsonInferenceRow[] {
   if (tableName === "ChatInference") {
     return rows.map((row) => ({
@@ -69,13 +70,39 @@ export const InferenceJoinKey = {
 export type InferenceJoinKey =
   (typeof InferenceJoinKey)[keyof typeof InferenceJoinKey];
 
+function getInferenceTableName(
+  function_config: FunctionConfig
+): InferenceTableName {
+  switch (function_config.type) {
+    case "chat":
+      return InferenceTableName.CHAT;
+    case "json":
+      return InferenceTableName.JSON;
+  }
+}
+
+export async function countInferencesForFunction(
+  function_name: string,
+  function_config: FunctionConfig
+): Promise<number> {
+  const inference_table_name = getInferenceTableName(function_config);
+  const query = `SELECT COUNT() AS count FROM ${inference_table_name} WHERE function_name = {function_name:String}`;
+  const resultSet = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: { function_name },
+  });
+  const rows = await resultSet.json<{ count: string }>();
+  return Number(rows[0].count);
+}
+
 export async function queryGoodBooleanMetricData(
   function_name: string,
   metric_name: string,
   inference_table_name: InferenceTableName,
   inference_join_key: InferenceJoinKey,
   maximize: boolean,
-  max_samples: number | undefined,
+  max_samples: number | undefined
 ): Promise<ParsedInferenceRow[]> {
   const comparison_operator = maximize ? "= 1" : "= 0"; // Changed from "IS TRUE"/"IS FALSE"
   const limitClause = max_samples ? `LIMIT ${max_samples}` : "";

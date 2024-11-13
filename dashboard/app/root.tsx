@@ -7,9 +7,9 @@ import {
   useLoaderData,
 } from "@remix-run/react";
 import type { LinksFunction } from "@remix-run/node";
-import { loadConfig } from "~/utils/config";
-import { ConfigProvider } from "./context/config";
+import { getConfig } from "~/utils/config.server";
 import "./tailwind.css";
+import { ConfigProvider } from "./context/config";
 
 export const links: LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -25,9 +25,7 @@ export const links: LinksFunction = () => [
 ];
 
 export async function loader() {
-  const config_path = process.env.CONFIG_PATH || "config/tensorzero.toml";
-  const config = await loadConfig(config_path);
-  return config;
+  return await getConfig();
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
