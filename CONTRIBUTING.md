@@ -4,11 +4,8 @@ Thank you for your interest in contributing to TensorZero!
 
 TensorZero aims to enable the next generation of AI applications. We'd love to collaborate with you making this a reality.
 
-:::tip
-
-In addition to community contributions, we're also hiring in NYC (onsite only)! See our [open roles](https://www.tensorzero.com/jobs).
-
-:::
+> [!TIP]
+> In addition to community contributions, we're also hiring in NYC (onsite only)! See our [open roles](https://www.tensorzero.com/jobs).
 
 ## License
 
