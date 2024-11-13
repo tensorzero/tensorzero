@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockWriteGuard;
+use tracing::instrument;
 use url::Url;
 
 use crate::error::Error;
@@ -143,6 +144,7 @@ impl ClickHouseConnectionInfo {
         }
     }
 
+    #[instrument(skip(self))]
     pub async fn run_query(&self, query: String) -> Result<String, Error> {
         match self {
             Self::Disabled => Ok("".to_string()),

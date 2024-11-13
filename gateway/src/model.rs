@@ -4,6 +4,9 @@ use serde::de::Error as SerdeError;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::env;
+use tracing::instrument;
+use tracing::span;
+use tracing::Level;
 use url::Url;
 
 use crate::inference::providers::anthropic::AnthropicCredentials;
@@ -71,8 +74,12 @@ impl ModelConfig {
             let response = provider_config.infer(request, client, api_keys).await;
             match response {
                 Ok(response) => {
-                    for error in provider_errors.values() {
+                    for (provider_name, error) in &provider_errors {
+                        let _span =
+                            span!(Level::WARN, "provider_error", provider_name = provider_name)
+                                .entered();
                         error.log();
+                        // Span should exit automatically as it is dropped here
                     }
                     let model_inference_response =
                         ModelInferenceResponse::new(response, provider_name);
@@ -86,6 +93,7 @@ impl ModelConfig {
         Err(Error::ModelProvidersExhausted { provider_errors })
     }
 
+    #[instrument(skip_all)]
     pub async fn infer_stream<'a, 'request>(
         &'a self,
         request: &'request ModelInferenceRequest<'request>,
@@ -113,8 +121,12 @@ impl ModelConfig {
                 .await;
             match response {
                 Ok(response) => {
-                    for error in provider_errors.values() {
+                    for (provider_name, error) in &provider_errors {
+                        let _span =
+                            span!(Level::WARN, "provider_error", provider_name = provider_name)
+                                .entered();
                         error.log();
+                        // Span should exit automatically as it is dropped here
                     }
                     let (chunk, stream, raw_request) = response;
                     return Ok((chunk, stream, raw_request, provider_name));
