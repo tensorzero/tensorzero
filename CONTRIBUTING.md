@@ -2,10 +2,10 @@
 
 Thank you for your interest in contributing to TensorZero!
 
-TensorZero aims to enable the next generation of AI applications. We'd love to collaborate with you making this a reality.
+TensorZero aims to power the next generation of AI applications. We'd love to collaborate with you in making this vision a reality.
 
 > [!TIP]
-> In addition to community contributions, we're also hiring in NYC (onsite only)! See our [open roles](https://www.tensorzero.com/jobs).
+> In addition to community contributions, we're also hiring in NYC. See our [open roles](https://www.tensorzero.com/jobs).
 
 ## License
 
@@ -18,7 +18,7 @@ By contributing to TensorZero, you agree to license your contributions under the
 
 Join our community on [Slack](https://www.tensorzero.com/slack) or [Discord](https://www.tensorzero.com/discord) to chat with the team and other contributors.
 
-### Github
+### GitHub
 
 - Issues for bugs and feature requests
 - Discussions for general questions, technical support, and conversation not directly related to code
@@ -30,7 +30,7 @@ Join our community on [Slack](https://www.tensorzero.com/slack) or [Discord](htt
 For small changes (i.e. a few lines of code), feel free to open a PR directly.
 
 For larger changes, please communicate with us first to avoid duplicate work or wasted effort.
-You can start a discussion (Github, Slack, or Discord) or open an issue as a starting point.
+You can start a discussion (GitHub, Slack, or Discord) or open an issue as a starting point.
 The team will be happy to provide feedback and guidance.
 
 ### Documentation
