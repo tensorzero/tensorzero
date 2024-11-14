@@ -18,13 +18,10 @@ pub type AppState = axum::extract::State<AppStateData>;
 
 impl AppStateData {
     pub async fn new(config: &'static Config<'static>) -> Self {
-        let clickhouse_url = std::env::var("CLICKHOUSE_URL")
-            .map_err(|_| Error::AppState {
-                message: "Missing environment variable CLICKHOUSE_URL".to_string(),
-            })
-            .ok_or_log()
-            .unwrap_or_else(|| "".to_string());
-        let clickhouse_connection_info = setup_clickhouse(config, &clickhouse_url).await;
+        let clickhouse_url = std::env::var("CLICKHOUSE_URL").map_err(|_| Error::AppState {
+            message: "Missing environment variable CLICKHOUSE_URL".to_string(),
+        });
+        let clickhouse_connection_info = setup_clickhouse(config, clickhouse_url).await;
 
         let http_client = Client::new();
 
@@ -38,15 +35,17 @@ impl AppStateData {
 
 async fn setup_clickhouse(
     config: &'static Config<'static>,
-    clickhouse_url: &str,
+    clickhouse_url: Result<String, Error>,
 ) -> ClickHouseConnectionInfo {
     if config.gateway.disable_observability {
         ClickHouseConnectionInfo::new_disabled()
     } else {
-        ClickHouseConnectionInfo::new(clickhouse_url)
+        let clickhouse_url = clickhouse_url.ok_or_log().unwrap_or_else(|| "".to_string());
+
+        ClickHouseConnectionInfo::new(&clickhouse_url)
             .await
             .ok_or_log()
-            .unwrap_or_else(ClickHouseConnectionInfo::new_disabled)
+            .unwrap_or_else(ClickHouseConnectionInfo::new_disabled_unhealthy)
     }
 }
 
@@ -113,11 +112,44 @@ mod tests {
             ..Default::default()
         }));
 
-        let clickhouse_connection_info = setup_clickhouse(config, "").await;
+        let clickhouse_connection_info = setup_clickhouse(
+            config,
+            Err(Error::AppState {
+                message: "Missing environment variable CLICKHOUSE_URL".to_string(),
+            }),
+        )
+        .await;
         assert!(matches!(
             clickhouse_connection_info,
             ClickHouseConnectionInfo::Disabled
         ));
+        // Should not log if the ClickHouse URL is missing and observability is disabled
+        assert!(!logs_contain("Missing environment variable CLICKHOUSE_URL"));
+
+        // Observability enabled but ClickHouse URL is missing
+        let gateway_config = GatewayConfig {
+            disable_observability: false,
+            bind_address: None,
+        };
+
+        let config = Box::leak(Box::new(Config {
+            gateway: gateway_config,
+            ..Default::default()
+        }));
+
+        let clickhouse_connection_info = setup_clickhouse(
+            config,
+            Err(Error::AppState {
+                message: "Missing environment variable CLICKHOUSE_URL".to_string(),
+            }),
+        )
+        .await;
+        assert!(matches!(
+            clickhouse_connection_info,
+            ClickHouseConnectionInfo::DisabledUnhealthy
+        ));
+        // Should log if the ClickHouse URL is missing and observability is enabled
+        assert!(logs_contain("Missing environment variable CLICKHOUSE_URL"));
 
         // Bad URL
         let gateway_config = GatewayConfig {
@@ -128,10 +160,10 @@ mod tests {
             gateway: gateway_config,
             ..Default::default()
         }));
-        let clickhouse_connection_info = setup_clickhouse(config, "bad_url").await;
+        let clickhouse_connection_info = setup_clickhouse(config, Ok("bad_url".to_string())).await;
         assert!(matches!(
             clickhouse_connection_info,
-            ClickHouseConnectionInfo::Disabled
+            ClickHouseConnectionInfo::DisabledUnhealthy
         ));
         assert!(logs_contain("Invalid ClickHouse database URL"));
 
@@ -145,7 +177,7 @@ mod tests {
             ..Default::default()
         }));
         let clickhouse_connection_info =
-            setup_clickhouse(config, "https://tensorzero.com:8123").await;
+            setup_clickhouse(config, Ok("https://tensorzero.com:8123".to_string())).await;
         // If the ClickHouse URL is well-formed but just not pointing at a healthy ClickHouse,
         // we will log a connection error and still return a Production connection info
         // so that we start logging errors on writes
