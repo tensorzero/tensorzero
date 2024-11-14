@@ -5,7 +5,7 @@ use tracing::instrument;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::Config;
-use crate::error::Error;
+use crate::error::{Error, ResultExt};
 
 /// State for the API
 #[derive(Clone)]
@@ -17,24 +17,33 @@ pub struct AppStateData {
 pub type AppState = axum::extract::State<AppStateData>;
 
 impl AppStateData {
-    pub fn new(config: &'static Config<'static>) -> Result<Self, Error> {
-        let clickhouse_connection_info = if config.gateway.disable_observability {
-            ClickHouseConnectionInfo::new_disabled()
-        } else {
-            let clickhouse_url = std::env::var("CLICKHOUSE_URL").map_err(|_| Error::AppState {
-                message: "Missing environment variable CLICKHOUSE_URL".to_string(),
-            })?;
-
-            ClickHouseConnectionInfo::new(&clickhouse_url)?
-        };
+    pub fn new(config: &'static Config<'static>) -> Self {
+        let clickhouse_connection_info = setup_clickhouse(config);
 
         let http_client = Client::new();
 
-        Ok(Self {
+        Self {
             config,
             http_client,
             clickhouse_connection_info,
-        })
+        }
+    }
+}
+
+fn setup_clickhouse(config: &Config) -> ClickHouseConnectionInfo {
+    if config.gateway.disable_observability {
+        ClickHouseConnectionInfo::new_disabled()
+    } else {
+        let clickhouse_url = std::env::var("CLICKHOUSE_URL")
+            .map_err(|_| Error::AppState {
+                message: "Missing environment variable CLICKHOUSE_URL".to_string(),
+            })
+            .ok_or_log()
+            .unwrap_or_else(|| "".to_string());
+
+        ClickHouseConnectionInfo::new(&clickhouse_url)
+            .ok_or_log()
+            .unwrap_or_else(ClickHouseConnectionInfo::new_disabled)
     }
 }
 

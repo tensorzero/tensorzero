@@ -9,6 +9,7 @@ use tokio::signal;
 use gateway::clickhouse_migration_manager;
 use gateway::config_parser::Config;
 use gateway::endpoints;
+use gateway::error::ResultExt;
 use gateway::gateway_util;
 use gateway::observability;
 
@@ -19,7 +20,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 async fn main() {
     // Set up logs and metrics
     observability::setup_logs();
-    let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
+    let metrics_handle = observability::setup_metrics().ok_or_log();
 
     // Load config
     let config: &'static Config = Box::leak(Box::new(
@@ -27,8 +28,7 @@ async fn main() {
     ));
 
     // Initialize AppState
-    let app_state =
-        gateway_util::AppStateData::new(config).expect_pretty("Failed to initialize AppState");
+    let app_state = gateway_util::AppStateData::new(config);
 
     // Run ClickHouse migrations (if any)
     if !config.gateway.disable_observability {
@@ -37,7 +37,7 @@ async fn main() {
             .expect_pretty("Failed to run ClickHouse migrations");
     }
 
-    let router = Router::new()
+    let mut router = Router::new()
         .route("/inference", post(endpoints::inference::inference_handler))
         .route(
             "/openai/v1/chat/completions",
@@ -46,11 +46,14 @@ async fn main() {
         .route("/feedback", post(endpoints::feedback::feedback_handler))
         .route("/status", get(endpoints::status::status_handler))
         .route("/health", get(endpoints::status::health_handler))
-        .route(
+        .with_state(app_state);
+
+    if let Some(metrics_handle) = metrics_handle {
+        router = router.route(
             "/metrics",
             get(move || std::future::ready(metrics_handle.render())),
         )
-        .with_state(app_state);
+    }
 
     // Bind to the socket address specified in the config, or default to 0.0.0.0:3000
     let bind_address = config
