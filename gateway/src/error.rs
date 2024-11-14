@@ -42,6 +42,9 @@ pub enum Error {
     ChannelWrite {
         message: String,
     },
+    ClickHouseConnection {
+        message: String,
+    },
     ClickHouseMigration {
         id: String,
         message: String,
@@ -242,6 +245,7 @@ impl Error {
             Error::AzureServer { .. } => tracing::Level::ERROR,
             Error::BadCredentialsPreInference { .. } => tracing::Level::ERROR,
             Error::ChannelWrite { .. } => tracing::Level::ERROR,
+            Error::ClickHouseConnection { .. } => tracing::Level::ERROR,
             Error::ClickHouseMigration { .. } => tracing::Level::ERROR,
             Error::ClickHouseQuery { .. } => tracing::Level::ERROR,
             Error::Config { .. } => tracing::Level::ERROR,
@@ -316,6 +320,7 @@ impl Error {
             Error::AzureServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::BadCredentialsPreInference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::ClickHouseConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::ClickHouseQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -435,6 +440,9 @@ impl std::fmt::Display for Error {
             }
             Error::ChannelWrite { message } => {
                 write!(f, "Error writing to channel: {}", message)
+            }
+            Error::ClickHouseConnection { message } => {
+                write!(f, "Error connecting to ClickHouse: {}", message)
             }
             Error::ClickHouseMigration { id, message } => {
                 write!(f, "Error running ClickHouse migration {}: {}", id, message)

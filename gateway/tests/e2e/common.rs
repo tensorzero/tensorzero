@@ -18,7 +18,9 @@ pub fn get_gateway_endpoint(endpoint: &str) -> Url {
 
 pub async fn get_clickhouse() -> ClickHouseConnectionInfo {
     let clickhouse_url = url::Url::parse(&CLICKHOUSE_URL).unwrap();
-    ClickHouseConnectionInfo::new(clickhouse_url.as_ref()).unwrap()
+    ClickHouseConnectionInfo::new(clickhouse_url.as_ref())
+        .await
+        .expect("Failed to connect to ClickHouse")
 }
 
 async fn clickhouse_flush_async_insert(clickhouse: &ClickHouseConnectionInfo) {
