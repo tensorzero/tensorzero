@@ -7,6 +7,7 @@ use tokio::sync::RwLockWriteGuard;
 use url::Url;
 
 use crate::error::Error;
+use crate::error::ResultExt;
 
 #[derive(Debug, Clone)]
 pub enum ClickHouseConnectionInfo {
@@ -28,8 +29,11 @@ impl ClickHouseConnectionInfo {
     /// don't test specific ClickHouse behavior.
     /// For e2e tests, you should use the `get_clickhouse` function.
     ///
+    /// This function returns an error if anything is malformed but if the connection is unhealthy it logs that and
+    /// returns Ok(Production{ ... })
+    ///
     /// However, for tests that directly test ClickHouse behavior, you can directly create the struct.
-    pub fn new(database_url: &str) -> Result<Self, Error> {
+    pub async fn new(database_url: &str) -> Result<Self, Error> {
         // Add a query string for the database using the URL crate
         let mut database_url = Url::parse(database_url).map_err(|e| Error::Config {
             message: format!("Invalid ClickHouse database URL: {}", e),
@@ -53,12 +57,13 @@ impl ClickHouseConnectionInfo {
         set_clickhouse_format_settings(&mut database_url);
 
         let client = Client::new();
-
-        Ok(Self::Production {
+        let connection_info = Self::Production {
             database_url,
             database,
             client,
-        })
+        };
+        connection_info.health().await.ok_or_log();
+        Ok(connection_info)
     }
 
     pub fn new_mock(healthy: bool) -> Self {
@@ -122,23 +127,33 @@ impl ClickHouseConnectionInfo {
         }
     }
 
-    pub async fn health(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn health(&self) -> Result<(), Error> {
         match self {
             Self::Disabled => Ok(()),
             Self::Mock { healthy, .. } => {
                 if *healthy {
                     Ok(())
                 } else {
-                    Err("Mock ClickHouse is not healthy".into())
+                    Err(Error::ClickHouseConnection {
+                        message: "Mock ClickHouse is not healthy".to_string(),
+                    })
                 }
             }
             Self::Production {
                 database_url,
                 client,
                 ..
-            } => match client.get(database_url.clone()).send().await {
+            } => match client
+                .get(database_url.clone())
+                // If ClickHouse is healthy, it should respond within 500ms
+                .timeout(std::time::Duration::from_millis(500))
+                .send()
+                .await
+            {
                 Ok(_) => Ok(()),
-                Err(e) => Err(format!("ClickHouse is not healthy: {}", e).into()),
+                Err(e) => Err(Error::ClickHouseConnection {
+                    message: format!("ClickHouse is not healthy: {}", e),
+                }),
             },
         }
     }
