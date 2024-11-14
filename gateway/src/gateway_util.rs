@@ -42,6 +42,9 @@ async fn setup_clickhouse(
     } else {
         let clickhouse_url = clickhouse_url.ok_or_log().unwrap_or_else(|| "".to_string());
 
+        // If the ClickHouse URL is malformed, we will log an error and return a disabled connection info
+        // If the ClickHouse URL is healthy, we will return a Production connection info
+        // If the ClickHouse URL is unhealthy, we will log an error and return a Production connection info
         ClickHouseConnectionInfo::new(&clickhouse_url)
             .await
             .ok_or_log()

@@ -29,6 +29,9 @@ impl ClickHouseConnectionInfo {
     /// don't test specific ClickHouse behavior.
     /// For e2e tests, you should use the `get_clickhouse` function.
     ///
+    /// This function returns an error if anything is malformed but if the connection is unhealthy it logs that and
+    /// returns Ok(Production{ ... })
+    ///
     /// However, for tests that directly test ClickHouse behavior, you can directly create the struct.
     pub async fn new(database_url: &str) -> Result<Self, Error> {
         // Add a query string for the database using the URL crate
