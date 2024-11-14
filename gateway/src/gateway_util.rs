@@ -146,10 +146,12 @@ mod tests {
         }));
         let clickhouse_connection_info =
             setup_clickhouse(config, "https://tensorzero.com:8123").await;
-        assert!(matches!(
-            clickhouse_connection_info,
-            ClickHouseConnectionInfo::Disabled
-        ));
+        match clickhouse_connection_info {
+            ClickHouseConnectionInfo::Production { database_url, .. } => {
+                assert_eq!(database_url.host_str(), Some("tensorzero.com"));
+            }
+            _ => panic!("Expected production ClickHouse connection info"),
+        }
         assert!(logs_contain(
             "Error connecting to ClickHouse: ClickHouse is not healthy"
         ));

@@ -7,6 +7,7 @@ use tokio::sync::RwLockWriteGuard;
 use url::Url;
 
 use crate::error::Error;
+use crate::error::ResultExt;
 
 #[derive(Debug, Clone)]
 pub enum ClickHouseConnectionInfo {
@@ -58,7 +59,7 @@ impl ClickHouseConnectionInfo {
             database,
             client,
         };
-        connection_info.health().await?;
+        connection_info.health().await.ok_or_log();
         Ok(connection_info)
     }
 
