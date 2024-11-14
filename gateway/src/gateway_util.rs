@@ -17,8 +17,14 @@ pub struct AppStateData {
 pub type AppState = axum::extract::State<AppStateData>;
 
 impl AppStateData {
-    pub fn new(config: &'static Config<'static>) -> Self {
-        let clickhouse_connection_info = setup_clickhouse(config);
+    pub async fn new(config: &'static Config<'static>) -> Self {
+        let clickhouse_url = std::env::var("CLICKHOUSE_URL")
+            .map_err(|_| Error::AppState {
+                message: "Missing environment variable CLICKHOUSE_URL".to_string(),
+            })
+            .ok_or_log()
+            .unwrap_or_else(|| "".to_string());
+        let clickhouse_connection_info = setup_clickhouse(config, &clickhouse_url).await;
 
         let http_client = Client::new();
 
@@ -30,18 +36,15 @@ impl AppStateData {
     }
 }
 
-fn setup_clickhouse(config: &Config) -> ClickHouseConnectionInfo {
+async fn setup_clickhouse(
+    config: &'static Config<'static>,
+    clickhouse_url: &str,
+) -> ClickHouseConnectionInfo {
     if config.gateway.disable_observability {
         ClickHouseConnectionInfo::new_disabled()
     } else {
-        let clickhouse_url = std::env::var("CLICKHOUSE_URL")
-            .map_err(|_| Error::AppState {
-                message: "Missing environment variable CLICKHOUSE_URL".to_string(),
-            })
-            .ok_or_log()
-            .unwrap_or_else(|| "".to_string());
-
-        ClickHouseConnectionInfo::new(&clickhouse_url)
+        ClickHouseConnectionInfo::new(clickhouse_url)
+            .await
             .ok_or_log()
             .unwrap_or_else(ClickHouseConnectionInfo::new_disabled)
     }
@@ -86,5 +89,69 @@ where
             })?;
 
         Ok(StructuredJson(deserialized))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tracing_test::traced_test;
+
+    use super::*;
+    use crate::config_parser::GatewayConfig;
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_setup_clickhouse() {
+        // Disabled observability
+        let gateway_config = GatewayConfig {
+            disable_observability: true,
+            bind_address: None,
+        };
+
+        let config = Box::leak(Box::new(Config {
+            gateway: gateway_config,
+            ..Default::default()
+        }));
+
+        let clickhouse_connection_info = setup_clickhouse(config, "").await;
+        assert!(matches!(
+            clickhouse_connection_info,
+            ClickHouseConnectionInfo::Disabled
+        ));
+
+        // Bad URL
+        let gateway_config = GatewayConfig {
+            disable_observability: false,
+            bind_address: None,
+        };
+        let config = Box::leak(Box::new(Config {
+            gateway: gateway_config,
+            ..Default::default()
+        }));
+        let clickhouse_connection_info = setup_clickhouse(config, "bad_url").await;
+        assert!(matches!(
+            clickhouse_connection_info,
+            ClickHouseConnectionInfo::Disabled
+        ));
+        assert!(logs_contain("Invalid ClickHouse database URL"));
+
+        // Sensible URL that doesn't point to ClickHouse
+        let gateway_config = GatewayConfig {
+            disable_observability: false,
+            bind_address: None,
+        };
+        let config = Box::leak(Box::new(Config {
+            gateway: gateway_config,
+            ..Default::default()
+        }));
+        let clickhouse_connection_info =
+            setup_clickhouse(config, "https://tensorzero.com:8123").await;
+        assert!(matches!(
+            clickhouse_connection_info,
+            ClickHouseConnectionInfo::Disabled
+        ));
+        assert!(logs_contain(
+            "Error connecting to ClickHouse: ClickHouse is not healthy"
+        ));
     }
 }
