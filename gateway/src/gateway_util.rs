@@ -146,6 +146,9 @@ mod tests {
         }));
         let clickhouse_connection_info =
             setup_clickhouse(config, "https://tensorzero.com:8123").await;
+        // If the ClickHouse URL is well-formed but just not pointing at a healthy ClickHouse,
+        // we will log a connection error and still return a Production connection info
+        // so that we start logging errors on writes
         match clickhouse_connection_info {
             ClickHouseConnectionInfo::Production { database_url, .. } => {
                 assert_eq!(database_url.host_str(), Some("tensorzero.com"));
