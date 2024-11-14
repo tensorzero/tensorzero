@@ -5,10 +5,12 @@ use axum::http::StatusCode;
 use axum::response::Json;
 use serde_json::{json, Value};
 
+const TENSORZERO_VERSION: &str = "2024.11.1";
+
 /// A handler for a simple liveness check
 #[debug_handler]
 pub async fn status_handler() -> Json<Value> {
-    Json(json!({ "status": "ok" }))
+    Json(json!({ "status": "ok", "version": TENSORZERO_VERSION }))
 }
 
 /// A handler for a health check that includes availability of related services (for now, ClickHouse)
@@ -55,5 +57,11 @@ mod tests {
         assert_eq!(status_code, StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(error_json.get("gateway").unwrap(), "ok");
         assert_eq!(error_json.get("clickhouse").unwrap(), "error");
+    }
+
+    #[tokio::test]
+    async fn test_status_handler() {
+        let response = status_handler().await;
+        assert_eq!(response.get("version").unwrap(), TENSORZERO_VERSION);
     }
 }

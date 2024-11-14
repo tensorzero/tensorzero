@@ -5,7 +5,7 @@ use tracing::instrument;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::Config;
-use crate::error::Error;
+use crate::error::{Error, ResultExt};
 
 /// State for the API
 #[derive(Clone)]
@@ -17,24 +17,38 @@ pub struct AppStateData {
 pub type AppState = axum::extract::State<AppStateData>;
 
 impl AppStateData {
-    pub fn new(config: &'static Config<'static>) -> Result<Self, Error> {
-        let clickhouse_connection_info = if config.gateway.disable_observability {
-            ClickHouseConnectionInfo::new_disabled()
-        } else {
-            let clickhouse_url = std::env::var("CLICKHOUSE_URL").map_err(|_| Error::AppState {
-                message: "Missing environment variable CLICKHOUSE_URL".to_string(),
-            })?;
-
-            ClickHouseConnectionInfo::new(&clickhouse_url)?
-        };
+    pub async fn new(config: &'static Config<'static>) -> Self {
+        let clickhouse_url = std::env::var("CLICKHOUSE_URL").map_err(|_| Error::AppState {
+            message: "Missing environment variable CLICKHOUSE_URL".to_string(),
+        });
+        let clickhouse_connection_info = setup_clickhouse(config, clickhouse_url).await;
 
         let http_client = Client::new();
 
-        Ok(Self {
+        Self {
             config,
             http_client,
             clickhouse_connection_info,
-        })
+        }
+    }
+}
+
+async fn setup_clickhouse(
+    config: &'static Config<'static>,
+    clickhouse_url: Result<String, Error>,
+) -> ClickHouseConnectionInfo {
+    if config.gateway.disable_observability {
+        ClickHouseConnectionInfo::new_disabled()
+    } else {
+        let clickhouse_url = clickhouse_url.ok_or_log().unwrap_or_else(|| "".to_string());
+
+        // If the ClickHouse URL is malformed, we will log an error and return a disabled connection info
+        // If the ClickHouse URL is healthy, we will return a Production connection info
+        // If the ClickHouse URL is unhealthy, we will log an error and return a Production connection info
+        ClickHouseConnectionInfo::new(&clickhouse_url)
+            .await
+            .ok_or_log()
+            .unwrap_or_else(ClickHouseConnectionInfo::new_disabled)
     }
 }
 
@@ -77,5 +91,107 @@ where
             })?;
 
         Ok(StructuredJson(deserialized))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tracing_test::traced_test;
+
+    use super::*;
+    use crate::config_parser::GatewayConfig;
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_setup_clickhouse() {
+        // Disabled observability
+        let gateway_config = GatewayConfig {
+            disable_observability: true,
+            bind_address: None,
+        };
+
+        let config = Box::leak(Box::new(Config {
+            gateway: gateway_config,
+            ..Default::default()
+        }));
+
+        let clickhouse_connection_info = setup_clickhouse(
+            config,
+            Err(Error::AppState {
+                message: "Missing environment variable CLICKHOUSE_URL".to_string(),
+            }),
+        )
+        .await;
+        assert!(matches!(
+            clickhouse_connection_info,
+            ClickHouseConnectionInfo::Disabled
+        ));
+        // Should not log if the ClickHouse URL is missing and observability is disabled
+        assert!(!logs_contain("Missing environment variable CLICKHOUSE_URL"));
+
+        // Observability enabled but ClickHouse URL is missing
+        let gateway_config = GatewayConfig {
+            disable_observability: false,
+            bind_address: None,
+        };
+
+        let config = Box::leak(Box::new(Config {
+            gateway: gateway_config,
+            ..Default::default()
+        }));
+
+        let clickhouse_connection_info = setup_clickhouse(
+            config,
+            Err(Error::AppState {
+                message: "Missing environment variable CLICKHOUSE_URL".to_string(),
+            }),
+        )
+        .await;
+        assert!(matches!(
+            clickhouse_connection_info,
+            ClickHouseConnectionInfo::Disabled
+        ));
+        // Should log if the ClickHouse URL is missing and observability is enabled
+        assert!(logs_contain("Missing environment variable CLICKHOUSE_URL"));
+
+        // Bad URL
+        let gateway_config = GatewayConfig {
+            disable_observability: false,
+            bind_address: None,
+        };
+        let config = Box::leak(Box::new(Config {
+            gateway: gateway_config,
+            ..Default::default()
+        }));
+        let clickhouse_connection_info = setup_clickhouse(config, Ok("bad_url".to_string())).await;
+        assert!(matches!(
+            clickhouse_connection_info,
+            ClickHouseConnectionInfo::Disabled
+        ));
+        assert!(logs_contain("Invalid ClickHouse database URL"));
+
+        // Sensible URL that doesn't point to ClickHouse
+        let gateway_config = GatewayConfig {
+            disable_observability: false,
+            bind_address: None,
+        };
+        let config = Box::leak(Box::new(Config {
+            gateway: gateway_config,
+            ..Default::default()
+        }));
+        let clickhouse_connection_info =
+            setup_clickhouse(config, Ok("https://tensorzero.com:8123".to_string())).await;
+        // If the ClickHouse URL is well-formed but just not pointing at a healthy ClickHouse,
+        // we will log a connection error and still return a Production connection info
+        // so that we start logging errors on writes
+        match clickhouse_connection_info {
+            ClickHouseConnectionInfo::Production { database_url, .. } => {
+                assert_eq!(database_url.host_str(), Some("tensorzero.com"));
+            }
+            _ => panic!("Expected production ClickHouse connection info"),
+        }
+        assert!(logs_contain(
+            "Error connecting to ClickHouse: ClickHouse is not healthy"
+        ));
     }
 }

@@ -27,8 +27,7 @@ async fn main() {
     ));
 
     // Initialize AppState
-    let app_state =
-        gateway_util::AppStateData::new(config).expect_pretty("Failed to initialize AppState");
+    let app_state = gateway_util::AppStateData::new(config).await;
 
     // Run ClickHouse migrations (if any)
     if !config.gateway.disable_observability {
