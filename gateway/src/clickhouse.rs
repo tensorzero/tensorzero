@@ -12,7 +12,6 @@ use crate::error::ResultExt;
 #[derive(Debug, Clone)]
 pub enum ClickHouseConnectionInfo {
     Disabled,
-    DisabledUnhealthy,
     Mock {
         mock_data: Arc<RwLock<HashMap<String, Vec<serde_json::Value>>>>,
         healthy: bool,
@@ -75,14 +74,9 @@ impl ClickHouseConnectionInfo {
         Self::Disabled
     }
 
-    pub fn new_disabled_unhealthy() -> Self {
-        Self::DisabledUnhealthy
-    }
-
     pub fn database(&self) -> &str {
         match self {
             Self::Disabled => "",
-            Self::DisabledUnhealthy => "",
             Self::Mock { .. } => "mock-database",
             Self::Production { database, .. } => database,
         }
@@ -95,10 +89,6 @@ impl ClickHouseConnectionInfo {
     ) -> Result<(), Error> {
         match self {
             Self::Disabled => Ok(()),
-            Self::DisabledUnhealthy => {
-                tracing::warn!("ClickHouse is disabled due to unhealthy initialization but attempted to write to it");
-                Ok(())
-            }
             Self::Mock { mock_data, .. } => {
                 write_mock(row, table, &mut mock_data.write().await).await
             }
@@ -116,7 +106,6 @@ impl ClickHouseConnectionInfo {
     pub async fn read(&self, table: &str, column: &str, value: &str) -> Option<serde_json::Value> {
         match self {
             Self::Disabled => None,
-            Self::DisabledUnhealthy => None,
             Self::Mock { mock_data, .. } => {
                 let mock_data = mock_data.read().await;
                 let table = mock_data.get(table).unwrap();
@@ -138,9 +127,6 @@ impl ClickHouseConnectionInfo {
     pub async fn health(&self) -> Result<(), Error> {
         match self {
             Self::Disabled => Ok(()),
-            Self::DisabledUnhealthy => Err(Error::ClickHouseConnection {
-                message: "ClickHouse is disabled due to unhealthy initialization".to_string(),
-            }),
             Self::Mock { healthy, .. } => {
                 if *healthy {
                     Ok(())
@@ -172,10 +158,6 @@ impl ClickHouseConnectionInfo {
     pub async fn run_query(&self, query: String) -> Result<String, Error> {
         match self {
             Self::Disabled => Ok("".to_string()),
-            Self::DisabledUnhealthy => {
-                tracing::warn!("ClickHouse is disabled due to unhealthy initialization but attempted to run a query");
-                Ok("".to_string())
-            }
             Self::Mock { .. } => Ok("".to_string()),
             Self::Production {
                 client,
@@ -210,10 +192,6 @@ impl ClickHouseConnectionInfo {
     pub async fn create_database(&self) -> Result<(), Error> {
         match self {
             Self::Disabled => Ok(()),
-            Self::DisabledUnhealthy => {
-                tracing::warn!("ClickHouse is disabled due to unhealthy initialization but attempted to create a database");
-                Ok(())
-            }
             Self::Mock { .. } => Ok(()),
             Self::Production {
                 database_url,

@@ -45,7 +45,7 @@ async fn setup_clickhouse(
         ClickHouseConnectionInfo::new(&clickhouse_url)
             .await
             .ok_or_log()
-            .unwrap_or_else(ClickHouseConnectionInfo::new_disabled_unhealthy)
+            .unwrap_or_else(ClickHouseConnectionInfo::new_disabled)
     }
 }
 
@@ -146,7 +146,7 @@ mod tests {
         .await;
         assert!(matches!(
             clickhouse_connection_info,
-            ClickHouseConnectionInfo::DisabledUnhealthy
+            ClickHouseConnectionInfo::Disabled
         ));
         // Should log if the ClickHouse URL is missing and observability is enabled
         assert!(logs_contain("Missing environment variable CLICKHOUSE_URL"));
@@ -163,7 +163,7 @@ mod tests {
         let clickhouse_connection_info = setup_clickhouse(config, Ok("bad_url".to_string())).await;
         assert!(matches!(
             clickhouse_connection_info,
-            ClickHouseConnectionInfo::DisabledUnhealthy
+            ClickHouseConnectionInfo::Disabled
         ));
         assert!(logs_contain("Invalid ClickHouse database URL"));
 
