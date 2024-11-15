@@ -12,7 +12,8 @@ use uuid::Uuid;
 
 use crate::common::{
     get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
-    select_json_inference_clickhouse, select_model_inference_clickhouse,
+    select_inference_tags_clickhouse, select_json_inference_clickhouse,
+    select_model_inference_clickhouse,
 };
 
 #[derive(Clone, Debug)]
@@ -272,6 +273,7 @@ macro_rules! generate_provider_tests {
 
 pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
+    let tag_value = Uuid::now_v7().to_string();
 
     let payload = json!({
         "function_name": "basic_test",
@@ -287,6 +289,7 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
                 }
             ]},
         "stream": false,
+        "tags": {"key": tag_value},
     });
 
     let response = Client::new()
@@ -373,6 +376,10 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
     assert_eq!(clickhouse_content, content);
 
+    let tags = result.get("tags").unwrap().as_object().unwrap();
+    assert_eq!(tags.len(), 1);
+    assert_eq!(tags.get("key").unwrap().as_str().unwrap(), tag_value);
+
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
     assert!(tool_params.is_empty());
 
@@ -440,10 +447,19 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 1);
+
+    // Check the InferenceTag Table
+    let result = select_inference_tags_clickhouse(&clickhouse, "basic_test", "key", &tag_value)
+        .await
+        .unwrap();
+    let id = result.get("inference_id").unwrap().as_str().unwrap();
+    let id = Uuid::parse_str(id).unwrap();
+    assert_eq!(id, inference_id);
 }
 
 pub async fn test_simple_streaming_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
+    let tag_value = Uuid::now_v7().to_string();
 
     let payload = json!({
         "function_name": "basic_test",
@@ -459,6 +475,7 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
                 }
             ]},
         "stream": true,
+        "tags": {"key": tag_value},
     });
 
     let mut event_source = Client::new()
@@ -600,6 +617,10 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
 
+    let tags = result.get("tags").unwrap().as_object().unwrap();
+    assert_eq!(tags.len(), 1);
+    assert_eq!(tags.get("key").unwrap().as_str().unwrap(), tag_value);
+
     // Check ClickHouse - ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
@@ -667,6 +688,13 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 1);
+    // Check the InferenceTag Table
+    let result = select_inference_tags_clickhouse(&clickhouse, "basic_test", "key", &tag_value)
+        .await
+        .unwrap();
+    let id = result.get("inference_id").unwrap().as_str().unwrap();
+    let id = Uuid::parse_str(id).unwrap();
+    assert_eq!(id, inference_id);
 }
 
 pub async fn test_inference_params_inference_request_with_provider(provider: E2ETestProvider) {

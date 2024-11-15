@@ -136,3 +136,21 @@ pub(crate) async fn select_feedback_tags_clickhouse(
     let json: Value = serde_json::from_str(&text).ok()?;
     Some(json)
 }
+
+pub(crate) async fn select_inference_tags_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    function_name: &str,
+    tag_key: &str,
+    tag_value: &str,
+) -> Option<Value> {
+    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+
+    let query = format!(
+        "SELECT * FROM InferenceTag WHERE function_name = '{}' AND key = '{}' AND value = '{}' FORMAT JSONEachRow",
+        function_name, tag_key, tag_value
+    );
+
+    let text = clickhouse_connection_info.run_query(query).await.unwrap();
+    let json: Value = serde_json::from_str(&text).ok()?;
+    Some(json)
+}
