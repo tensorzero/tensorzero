@@ -83,7 +83,7 @@ class BaseTensorZeroGateway(ABC):
         parallel_tool_calls: Optional[bool] = None,
     ) -> Dict[str, Any]:
         # Convert content blocks to dicts if necessary
-        messages: List[Dict[str, Any]] = deepcopy(input.get("messages", []))
+        messages: List[Message] = deepcopy(input.get("messages", []))
         for i, message in enumerate(messages):
             if isinstance(message["content"], list):
                 messages[i] = {
