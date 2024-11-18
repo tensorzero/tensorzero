@@ -48,7 +48,7 @@ async def async_client():
 async def test_async_basic_inference(async_client):
     input = {
         "system": {"assistant_name": "Alfred Pennyworth"},
-        "messages": [{"role": "user", "content": Text(type="text", text="Hello")}],
+        "messages": [{"role": "user", "content": [Text(type="text", text="Hello")]}],
     }
     input_copy = deepcopy(input)
     result = await async_client.inference(
@@ -810,6 +810,7 @@ def test_sync_basic_inference_with_content_block(sync_client):
 
 
 def test_prepare_inference_request(sync_client):
+    # Test a simple request with string input and a structured system message
     request = sync_client._prepare_inference_request(
         function_name="basic_test",
         input={
@@ -821,6 +822,7 @@ def test_prepare_inference_request(sync_client):
     assert request["input"]["system"] == {"assistant_name": "Alfred Pennyworth"}
     assert request["function_name"] == "basic_test"
 
+    # Test a complex request that covers every argument of the client
     episode_id = uuid7()
     request = sync_client._prepare_inference_request(
         function_name="basic_test",
@@ -870,6 +872,7 @@ def test_prepare_inference_request(sync_client):
             {"name": "drill", "arguments": '{"foo": "bar"}', "description": "drills"}
         ],
     )
+
     assert request["input"]["messages"][0]["content"][0] == {
         "type": "tool_call",
         "id": "1",
