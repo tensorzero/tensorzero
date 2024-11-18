@@ -84,7 +84,7 @@ class BaseTensorZeroGateway(ABC):
     ) -> Dict[str, Any]:
         input = deepcopy(input)
         # Convert content blocks to dicts if necessary
-        for i, message in enumerate(input.get("messages", [])):
+        for message in input.get("messages", []):
             if isinstance(message["content"], list):
                 for i, item in enumerate(message["content"]):
                     if hasattr(item, "to_dict"):
