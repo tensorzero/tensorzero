@@ -82,23 +82,16 @@ class BaseTensorZeroGateway(ABC):
         ] = None,
         parallel_tool_calls: Optional[bool] = None,
     ) -> Dict[str, Any]:
+        input = deepcopy(input)
         # Convert content blocks to dicts if necessary
-        messages: List[Message] = deepcopy(input.get("messages", []))
-        for i, message in enumerate(messages):
+        for i, message in enumerate(input.get("messages", [])):
             if isinstance(message["content"], list):
-                messages[i] = {
-                    "role": message["role"],
-                    "content": [
-                        item.to_dict() if hasattr(item, "to_dict") else item
-                        for item in message["content"]
-                    ],
-                }
-        converted_input: Dict[str, Any] = {"messages": messages}
-        if input.get("system") is not None:
-            converted_input["system"] = input["system"]
+                for i, item in enumerate(message["content"]):
+                    if hasattr(item, "to_dict"):
+                        message["content"][i] = item.to_dict()
         data: Dict[str, Any] = {
             "function_name": function_name,
-            "input": converted_input,
+            "input": input,
         }
         if episode_id is not None:
             data["episode_id"] = str(episode_id)
