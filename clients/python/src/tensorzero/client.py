@@ -24,6 +24,7 @@ Usage:
 import json
 import logging
 from abc import ABC, abstractmethod
+from copy import deepcopy
 from typing import (
     Any,
     AsyncGenerator,
@@ -83,28 +84,24 @@ class BaseTensorZeroGateway(ABC):
         parallel_tool_calls: Optional[bool] = None,
     ) -> Dict[str, Any]:
         # Convert content blocks to dicts if necessary
-        converted_messages: List[Dict[str, Any]] = []
-        for message in input.get("messages", []):
+        messages: List[Dict[str, Any]] = deepcopy(input.get("messages", []))
+        for i, message in enumerate(messages):
             if isinstance(message["content"], list):
-                converted_messages.append(
-                    {
-                        "role": message["role"],
-                        "content": [
-                            item.to_dict() if hasattr(item, "to_dict") else item
-                            for item in message["content"]
-                        ],
-                    }
-                )
-            elif isinstance(message["content"], str):
-                converted_messages.append(dict(message))
+                messages[i] = {
+                    "role": message["role"],
+                    "content": [
+                        item.to_dict() if hasattr(item, "to_dict") else item
+                        for item in message["content"]
+                    ],
+                }
             elif isinstance(message["content"], ContentBlock):
-                converted_messages.append(
-                    {"role": message["role"], "content": [message["content"].to_dict()]}
-                )
-        converted_input: Dict[str, Any] = {"messages": converted_messages}
+                messages[i] = {
+                    "role": message["role"],
+                    "content": [message["content"].to_dict()],
+                }
+        converted_input: Dict[str, Any] = {"messages": messages}
         if input.get("system") is not None:
             converted_input["system"] = input["system"]
-
         data: Dict[str, Any] = {
             "function_name": function_name,
             "input": converted_input,
