@@ -24,6 +24,7 @@ Usage:
 import json
 import logging
 from abc import ABC, abstractmethod
+from copy import deepcopy
 from typing import (
     Any,
     AsyncGenerator,
@@ -81,26 +82,16 @@ class BaseTensorZeroGateway(ABC):
         ] = None,
         parallel_tool_calls: Optional[bool] = None,
     ) -> Dict[str, Any]:
+        input = deepcopy(input)
         # Convert content blocks to dicts if necessary
-        converted_messages: List[Dict[str, Any]] = []
         for message in input.get("messages", []):
             if isinstance(message["content"], list):
-                converted_messages.append(
-                    {
-                        "role": message["role"],
-                        "content": [
-                            item.to_dict() if hasattr(item, "to_dict") else item
-                            for item in message["content"]
-                        ],
-                    }
-                )
-        converted_input: Dict[str, Any] = {"messages": converted_messages}
-        if input.get("system") is not None:
-            converted_input["system"] = input["system"]
-
+                for i, item in enumerate(message["content"]):
+                    if hasattr(item, "to_dict"):
+                        message["content"][i] = item.to_dict()
         data: Dict[str, Any] = {
             "function_name": function_name,
-            "input": converted_input,
+            "input": input,
         }
         if episode_id is not None:
             data["episode_id"] = str(episode_id)
