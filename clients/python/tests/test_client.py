@@ -807,3 +807,103 @@ def test_sync_basic_inference_with_content_block(sync_client):
     usage = result.usage
     assert usage.input_tokens == 10
     assert usage.output_tokens == 10
+
+
+def test_prepare_inference_request(sync_client):
+    request = sync_client._prepare_inference_request(
+        function_name="basic_test",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+    )
+    assert request["input"]["messages"][0]["content"] == "Hello"
+    assert request["input"]["system"] == {"assistant_name": "Alfred Pennyworth"}
+    assert request["function_name"] == "basic_test"
+
+    episode_id = uuid7()
+    request = sync_client._prepare_inference_request(
+        function_name="basic_test",
+        input={
+            "system": "you are the bad guy",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        ToolCall(
+                            type="tool_call",
+                            id="1",
+                            name="test",
+                            raw_arguments={"arg": "value"},
+                            raw_name="test_tool",
+                            arguments={"arg": "value"},
+                        )
+                    ],
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        ToolResult(
+                            name="test",
+                            result="success",
+                            id="1",
+                        )
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        Text(type="text", text={"foo": "bar"}),
+                        ToolResult(name="drill", result="screwed", id="aaaa"),
+                    ],
+                },
+            ],
+        },
+        stream=True,
+        dryrun=False,
+        episode_id=episode_id,
+        variant_name="baz",
+        params={"chat_completion": {"temperature": 0.1}},
+        tool_choice="auto",
+        parallel_tool_calls=True,
+        additional_tools=[
+            {"name": "drill", "arguments": '{"foo": "bar"}', "description": "drills"}
+        ],
+    )
+    assert request["input"]["messages"][0]["content"][0] == {
+        "type": "tool_call",
+        "id": "1",
+        "name": "test_tool",
+        "arguments": '{"arg": "value"}',
+    }
+    assert request["input"]["messages"][1]["content"][0] == {
+        "type": "tool_result",
+        "name": "test",
+        "result": "success",
+        "id": "1",
+    }
+    assert request["input"]["messages"][2]["content"][0] == {
+        "type": "text",
+        "value": {"foo": "bar"},
+    }
+    assert request["input"]["messages"][2]["content"][1] == {
+        "type": "tool_result",
+        "name": "drill",
+        "result": "screwed",
+        "id": "aaaa",
+    }
+    assert request["input"]["system"] == "you are the bad guy"
+    assert request["stream"]
+    assert not request["dryrun"]
+    assert request["episode_id"] == str(episode_id)
+    assert request["params"]["chat_completion"]["temperature"] == 0.1
+    assert request["tool_choice"] == "auto"
+    assert request["additional_tools"][0] == {
+        "name": "drill",
+        "arguments": '{"foo": "bar"}',
+        "description": "drills",
+    }
+    assert len(request["additional_tools"]) == 1
+    assert request["variant_name"] == "baz"
+    assert request["function_name"] == "basic_test"
+    assert request["parallel_tool_calls"]

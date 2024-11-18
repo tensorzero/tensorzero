@@ -41,6 +41,7 @@ from uuid import UUID
 import httpx
 
 from .types import (
+    ContentBlock,
     FeedbackResponse,
     InferenceChunk,
     InferenceResponse,
@@ -94,9 +95,16 @@ class BaseTensorZeroGateway(ABC):
                         ],
                     }
                 )
+            elif isinstance(message["content"], str):
+                converted_messages.append(dict(message))
+            elif isinstance(message["content"], ContentBlock):
+                converted_messages.append(
+                    {"role": message["role"], "content": [message["content"].to_dict()]}
+                )
         converted_input: Dict[str, Any] = {"messages": converted_messages}
         if input.get("system") is not None:
             converted_input["system"] = input["system"]
+        print(converted_input)
 
         data: Dict[str, Any] = {
             "function_name": function_name,
