@@ -56,6 +56,7 @@ async def test_async_basic_inference(async_client):
         input=input,
         episode_id=uuid7(),  # This would not typically be done but this partially verifies that uuid7 is using a correct implementation
         # because the gateway validates some of the properties needed
+        tags={"key": "value"},
     )
     assert input == input_copy, "Input should not be modified by the client"
     assert result.variant_name == "test"
@@ -81,6 +82,7 @@ async def test_async_inference_streaming(async_client):
             "system": {"assistant_name": "Alfred Pennyworth"},
             "messages": [{"role": "user", "content": "Hello"}],
         },
+        tags={"key": "value"},
         stream=True,
     )
     first_chunk_duration = None
@@ -430,6 +432,7 @@ def test_sync_basic_inference(sync_client):
             "system": {"assistant_name": "Alfred Pennyworth"},
             "messages": [{"role": "user", "content": "Hello"}],
         },
+        tags={"key": "value"},
     )
     assert result.variant_name == "test"
     assert isinstance(result, ChatInferenceResponse)
@@ -466,6 +469,7 @@ def test_sync_inference_streaming(sync_client):
             "messages": [{"role": "user", "content": "Hello"}],
         },
         stream=True,
+        tags={"key": "value"},
     )
     first_chunk_duration = None
     chunks = []

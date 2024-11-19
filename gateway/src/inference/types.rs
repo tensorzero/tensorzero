@@ -317,6 +317,7 @@ pub struct ChatInferenceDatabaseInsert {
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub inference_params: InferenceParams,
     pub processing_time_ms: u32,
+    pub tags: HashMap<String, String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -330,6 +331,7 @@ pub struct JsonInferenceDatabaseInsert {
     pub inference_params: InferenceParams,
     pub processing_time_ms: u32,
     pub output_schema: String,
+    pub tags: HashMap<String, String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -685,6 +687,7 @@ impl ChatInferenceDatabaseInsert {
             inference_params,
             output,
             processing_time_ms,
+            tags: metadata.tags,
         }
     }
 }
@@ -711,6 +714,7 @@ impl JsonInferenceDatabaseInsert {
             output,
             processing_time_ms,
             output_schema,
+            tags: metadata.tags,
         }
     }
 }
