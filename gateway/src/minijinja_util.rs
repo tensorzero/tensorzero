@@ -52,11 +52,10 @@ impl<'c> TemplateConfig<'c> {
         match maybe_message {
             Ok(message) => Ok(message),
             Err(err) => {
-                let mut message = err.to_string();
+                let mut message = format!("Could not render template: {:#}", err);
                 let mut err = &err as &dyn std::error::Error;
                 while let Some(next_err) = err.source() {
-                    message.push_str("\nCaused by: ");
-                    message.push_str(&next_err.to_string());
+                    message.push_str(&format!("\nCaused by: {:#}", next_err));
                     err = next_err;
                 }
                 Err(Error::MiniJinjaTemplateRender {
@@ -200,7 +199,15 @@ pub(crate) mod tests {
             "name": "Bob"
         });
         let result = templates.template_message(template_name, &context);
-        assert!(result.is_err());
+        let err = result.unwrap_err();
+        match err {
+            Error::MiniJinjaTemplateRender { message, .. } => {
+                assert!(message.contains("Referenced variables"));
+            }
+            _ => {
+                panic!("Should be a MiniJinjaTemplateRender error");
+            }
+        }
 
         // Test with incorrect input type
         let context = serde_json::json!({

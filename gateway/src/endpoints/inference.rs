@@ -12,6 +12,7 @@ use std::pin::Pin;
 use std::time::Duration;
 use tokio::time::Instant;
 use tokio_stream::StreamExt;
+use tracing::instrument;
 use uuid::Uuid;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
@@ -148,6 +149,14 @@ pub enum InferenceOutput {
     Streaming(Pin<Box<dyn Stream<Item = Option<InferenceResponseChunk>> + Send>>),
 }
 
+#[instrument(
+    name="inference",
+    skip(config, http_client, clickhouse_connection_info, params),
+    fields(
+        function_name = %params.function_name,
+        variant_name = ?params.variant_name,
+    )
+)]
 pub async fn inference(
     config: &'static Config<'static>,
     http_client: reqwest::Client,

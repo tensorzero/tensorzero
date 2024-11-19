@@ -5,6 +5,7 @@ use axum::{debug_handler, Json};
 use metrics::counter;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use tracing::instrument;
 use uuid::Uuid;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
@@ -52,6 +53,12 @@ impl From<&MetricConfigType> for FeedbackType {
 }
 
 /// A handler for the feedback endpoint
+#[instrument(name="feedback",
+  skip(config, clickhouse_connection_info, params),
+  fields(
+    metric_name = %params.metric_name,
+  )
+)]
 #[debug_handler(state = AppStateData)]
 pub async fn feedback_handler(
     State(AppStateData {
