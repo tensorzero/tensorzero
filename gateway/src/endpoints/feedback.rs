@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::{Config, MetricConfigLevel, MetricConfigType};
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{parse_chat_output, ContentBlock, ContentBlockOutput, Text};
@@ -158,9 +158,10 @@ fn get_feedback_metadata<'a>(
     inference_id: Option<Uuid>,
 ) -> Result<FeedbackMetadata<'a>, Error> {
     if let (Some(_), Some(_)) = (episode_id, inference_id) {
-        return Err(Error::InvalidRequest {
+        return Err(ErrorDetails::InvalidRequest {
             message: "Both episode_id and inference_id cannot be provided".to_string(),
-        });
+        }
+        .into());
     }
     let metric = config.get_metric(metric_name);
     let feedback_type = match metric.as_ref() {
@@ -171,9 +172,9 @@ fn get_feedback_metadata<'a>(
         Err(e) => match metric_name {
             "comment" => Ok(FeedbackType::Comment),
             "demonstration" => Ok(FeedbackType::Demonstration),
-            _ => Err(Error::InvalidRequest {
+            _ => Err(Error::new(ErrorDetails::InvalidRequest {
                 message: e.to_string(),
-            }),
+            })),
         },
     }?;
     let feedback_level = match metric {
@@ -183,10 +184,10 @@ fn get_feedback_metadata<'a>(
             _ => match (inference_id, episode_id) {
                 (Some(_), None) => Ok(&MetricConfigLevel::Inference),
                 (None, Some(_)) => Ok(&MetricConfigLevel::Episode),
-                _ => Err(Error::InvalidRequest {
+                _ => Err(Error::new(ErrorDetails::InvalidRequest {
                     message: "Exactly one of inference_id or episode_id must be provided"
                         .to_string(),
-                }),
+                })),
             },
         },
     }?;
@@ -194,7 +195,7 @@ fn get_feedback_metadata<'a>(
         MetricConfigLevel::Inference => inference_id,
         MetricConfigLevel::Episode => episode_id,
     }
-    .ok_or(Error::InvalidRequest {
+    .ok_or(ErrorDetails::InvalidRequest {
         message: format!(
             r#"Correct ID was not provided for feedback level "{}"."#,
             feedback_level
@@ -216,7 +217,7 @@ async fn write_comment(
     feedback_id: Uuid,
     dryrun: bool,
 ) -> Result<(), Error> {
-    let value = value.as_str().ok_or(Error::InvalidRequest {
+    let value = value.as_str().ok_or(ErrorDetails::InvalidRequest {
         message: "Feedback value for a comment must be a string".to_string(),
     })?;
     let payload = json!({
@@ -228,7 +229,7 @@ async fn write_comment(
     });
     if !dryrun {
         tokio::spawn(async move {
-            write_feedback(connection_info, payload, "CommentFeedback").await;
+            let _ = connection_info.write(&payload, "CommentFeedback").await;
         });
     }
     Ok(())
@@ -249,7 +250,9 @@ async fn write_demonstration(
     let payload = json!({"inference_id": inference_id, "value": parsed_value, "id": feedback_id, "tags": tags});
     if !dryrun {
         tokio::spawn(async move {
-            write_feedback(connection_info, payload, "DemonstrationFeedback").await;
+            let _ = connection_info
+                .write(&payload, "DemonstrationFeedback")
+                .await;
         });
     }
     Ok(())
@@ -264,13 +267,15 @@ async fn write_float(
     feedback_id: Uuid,
     dryrun: bool,
 ) -> Result<(), Error> {
-    let value = value.as_f64().ok_or(Error::InvalidRequest {
-        message: format!("Feedback value for metric `{metric_name}` must be a number"),
-    })?;
+    let value = value
+        .as_f64()
+        .ok_or(Error::new(ErrorDetails::InvalidRequest {
+            message: format!("Feedback value for metric `{metric_name}` must be a number"),
+        }))?;
     let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
     if !dryrun {
         tokio::spawn(async move {
-            write_feedback(connection_info, payload, "FloatMetricFeedback").await;
+            let _ = connection_info.write(&payload, "FloatMetricFeedback").await;
         });
     }
     Ok(())
@@ -285,27 +290,20 @@ async fn write_boolean(
     feedback_id: Uuid,
     dryrun: bool,
 ) -> Result<(), Error> {
-    let value = value.as_bool().ok_or(Error::InvalidRequest {
-        message: format!("Feedback value for metric `{metric_name}` must be a boolean"),
-    })?;
+    let value = value
+        .as_bool()
+        .ok_or(Error::new(ErrorDetails::InvalidRequest {
+            message: format!("Feedback value for metric `{metric_name}` must be a boolean"),
+        }))?;
     let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
     if !dryrun {
         tokio::spawn(async move {
-            write_feedback(connection_info, payload, "BooleanMetricFeedback").await;
+            let _ = connection_info
+                .write(&payload, "BooleanMetricFeedback")
+                .await;
         });
     }
     Ok(())
-}
-
-async fn write_feedback(
-    connection_info: ClickHouseConnectionInfo,
-    payload: Value,
-    table_name: &str,
-) {
-    match connection_info.write(&payload, table_name).await {
-        Ok(_) => (),
-        Err(e) => e.log(),
-    }
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -320,12 +318,12 @@ impl TryFrom<DemonstrationToolCall> for ToolCall {
         Ok(ToolCall {
             name: value.name,
             arguments: serde_json::to_string(&value.arguments).map_err(|e| {
-                Error::InvalidRequest {
+                Error::new(ErrorDetails::InvalidRequest {
                     message: format!(
                         "Failed to serialize demonstration tool call arguments: {}",
                         e
                     ),
-                }
+                })
             })?,
             id: "".to_string(),
         })
@@ -361,9 +359,10 @@ async fn get_function_name_from_inference_id(
     );
     let function_name = connection_info.run_query(query).await?.trim().to_string();
     if function_name.is_empty() {
-        return Err(Error::InvalidRequest {
+        return Err(ErrorDetails::InvalidRequest {
             message: "Inference ID does not exist".to_string(),
-        });
+        }
+        .into());
     }
     Ok(function_name)
 }
@@ -390,17 +389,20 @@ async fn validate_parse_demonstration(
                     .iter()
                     .map(|block| {
                         serde_json::from_value::<DemonstrationContentBlock>(block.clone()).map_err(
-                            |e| Error::InvalidRequest {
-                                message: format!("Invalid demonstration content block: {}", e),
+                            |e| {
+                                Error::new(ErrorDetails::InvalidRequest {
+                                    message: format!("Invalid demonstration content block: {}", e),
+                                })
                             },
                         )
                     })
                     .collect::<Result<Vec<DemonstrationContentBlock>, Error>>()?,
                 _ => {
-                    return Err(Error::InvalidRequest {
+                    return Err(ErrorDetails::InvalidRequest {
                         message: "Demonstration must be a string or an array of content blocks"
                             .to_string(),
-                    });
+                    }
+                    .into());
                 }
             };
             let tool_config = ToolCallConfig::new(
@@ -424,45 +426,50 @@ async fn validate_parse_demonstration(
             for block in &parsed_value {
                 if let ContentBlockOutput::ToolCall(tool_call) = block {
                     if tool_call.name.is_none() {
-                        return Err(Error::InvalidRequest {
+                        return Err(ErrorDetails::InvalidRequest {
                             message: "Demonstration contains invalid tool name".to_string(),
-                        });
+                        }
+                        .into());
                     }
                     if tool_call.arguments.is_none() {
-                        return Err(Error::InvalidRequest {
+                        return Err(ErrorDetails::InvalidRequest {
                             message: "Demonstration contains invalid tool call arguments"
                                 .to_string(),
-                        });
+                        }
+                        .into());
                     }
                 }
             }
             let serialized_parsed_content_blocks =
-                serde_json::to_string(&parsed_value).map_err(|e| Error::InvalidRequest {
-                    message: format!("Failed to serialize parsed value to json: {}", e),
+                serde_json::to_string(&parsed_value).map_err(|e| {
+                    Error::new(ErrorDetails::InvalidRequest {
+                        message: format!("Failed to serialize parsed value to json: {}", e),
+                    })
                 })?;
             Ok(serialized_parsed_content_blocks)
         }
         FunctionConfig::Json(json_config) => {
             // For json functions, the value should be a valid json object.
             // TODO (#348): Eventually we should allow dynamic output_schema here as well.
-            json_config
-                .output_schema
-                .validate(value)
-                .map_err(|e| Error::InvalidRequest {
+            json_config.output_schema.validate(value).map_err(|e| {
+                Error::new(ErrorDetails::InvalidRequest {
                     message: format!("Demonstration does not fit function output schema: {}", e),
-                })?;
-            let raw = serde_json::to_string(value).map_err(|e| Error::InvalidRequest {
-                message: format!("Failed to serialize demonstration to json: {}", e),
+                })
+            })?;
+            let raw = serde_json::to_string(value).map_err(|e| {
+                Error::new(ErrorDetails::InvalidRequest {
+                    message: format!("Failed to serialize demonstration to json: {}", e),
+                })
             })?;
             let json_inference_response = json!({"raw": raw, "parsed": value});
             let serialized_json_inference_response =
                 serde_json::to_string(&json_inference_response).map_err(|e| {
-                    Error::InvalidRequest {
+                    Error::new(ErrorDetails::InvalidRequest {
                         message: format!(
                             "Failed to serialize json_inference_response to json: {}",
                             e
                         ),
-                    }
+                    })
                 })?;
             Ok(serialized_json_inference_response)
         }
@@ -512,9 +519,10 @@ mod tests {
 
         // Case 1.2: ID not provided
         let metadata = get_feedback_metadata(&config, "test_metric", None, None).unwrap_err();
+        let details = metadata.get_owned_details();
         assert_eq!(
-            metadata,
-            Error::InvalidRequest {
+            details,
+            ErrorDetails::InvalidRequest {
                 message: "Correct ID was not provided for feedback level \"inference\"."
                     .to_string(),
             }
@@ -522,9 +530,10 @@ mod tests {
         // Case 1.3: ID provided but not for the correct level
         let metadata =
             get_feedback_metadata(&config, "test_metric", Some(Uuid::now_v7()), None).unwrap_err();
+        let details = metadata.get_owned_details();
         assert_eq!(
-            metadata,
-            Error::InvalidRequest {
+            details,
+            ErrorDetails::InvalidRequest {
                 message: "Correct ID was not provided for feedback level \"inference\"."
                     .to_string(),
             }
@@ -538,9 +547,10 @@ mod tests {
             Some(Uuid::now_v7()),
         )
         .unwrap_err();
+        let details = metadata.get_owned_details();
         assert_eq!(
-            metadata,
-            Error::InvalidRequest {
+            details,
+            ErrorDetails::InvalidRequest {
                 message: "Both episode_id and inference_id cannot be provided".to_string(),
             }
         );
@@ -562,9 +572,10 @@ mod tests {
         let metadata =
             get_feedback_metadata(&config, "comment", Some(episode_id), Some(inference_id))
                 .unwrap_err();
+        let details = metadata.get_owned_details();
         assert_eq!(
-            metadata,
-            Error::InvalidRequest {
+            details,
+            ErrorDetails::InvalidRequest {
                 message: "Both episode_id and inference_id cannot be provided".to_string(),
             }
         );
@@ -579,9 +590,10 @@ mod tests {
         // Case 3.2 Demonstration Feedback with only episode id
         let metadata =
             get_feedback_metadata(&config, "demonstration", Some(episode_id), None).unwrap_err();
+        let details = metadata.get_owned_details();
         assert_eq!(
-            metadata,
-            Error::InvalidRequest {
+            details,
+            ErrorDetails::InvalidRequest {
                 message: "Correct ID was not provided for feedback level \"inference\"."
                     .to_string(),
             }
@@ -595,9 +607,10 @@ mod tests {
             Some(inference_id),
         )
         .unwrap_err();
+        let details = metadata.get_owned_details();
         assert_eq!(
-            metadata,
-            Error::InvalidRequest {
+            details,
+            ErrorDetails::InvalidRequest {
                 message: "Both episode_id and inference_id cannot be provided".to_string(),
             }
         );
@@ -630,9 +643,10 @@ mod tests {
         let metadata =
             get_feedback_metadata(&config, "test_metric", Some(episode_id), Some(inference_id))
                 .unwrap_err();
+        let details = metadata.get_owned_details();
         assert_eq!(
-            metadata,
-            Error::InvalidRequest {
+            details,
+            ErrorDetails::InvalidRequest {
                 message: "Both episode_id and inference_id cannot be provided".to_string(),
             }
         );
@@ -703,9 +717,10 @@ mod tests {
         let response = feedback_handler(State(app_state_data.clone()), StructuredJson(params))
             .await
             .unwrap_err();
+        let details = response.get_owned_details();
         assert_eq!(
-            response,
-            Error::InvalidRequest {
+            details,
+            ErrorDetails::InvalidRequest {
                 message: "Correct ID was not provided for feedback level \"inference\"."
                     .to_string(),
             }
@@ -722,10 +737,10 @@ mod tests {
         };
         let response =
             feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
-        let err = response.unwrap_err();
+        let details = response.unwrap_err().get_owned_details();
         assert_eq!(
-            err,
-            Error::InvalidRequest {
+            details,
+            ErrorDetails::InvalidRequest {
                 message: "Inference ID does not exist".to_string(),
             }
         );
@@ -764,9 +779,10 @@ mod tests {
         let response = feedback_handler(State(app_state_data.clone()), StructuredJson(params))
             .await
             .unwrap_err();
+        let details = response.get_owned_details();
         assert_eq!(
-            response,
-            Error::InvalidRequest {
+            details,
+            ErrorDetails::InvalidRequest {
                 message: "Correct ID was not provided for feedback level \"episode\".".to_string(),
             }
         );
@@ -965,9 +981,10 @@ mod tests {
         let err = validate_parse_demonstration(function_config_chat_tools, tools, &value)
             .await
             .unwrap_err();
+        let details = err.get_owned_details();
         assert_eq!(
-            err,
-            Error::InvalidRequest {
+            details,
+            ErrorDetails::InvalidRequest {
                 message: "Demonstration contains invalid tool name".to_string(),
             }
         );
@@ -978,9 +995,10 @@ mod tests {
         let err = validate_parse_demonstration(function_config_chat_tools, tools, &value)
             .await
             .unwrap_err();
+        let details = err.get_owned_details();
         assert_eq!(
-            err,
-            Error::InvalidRequest {
+            details,
+            ErrorDetails::InvalidRequest {
                 message: "Demonstration contains invalid tool call arguments".to_string(),
             }
         );

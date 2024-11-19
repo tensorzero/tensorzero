@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::clickhouse_migration_manager::migration_trait::Migration;
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 
 /// This migration is used to set up the ClickHouse database to efficiently validate
 /// the type of demonstrations.
@@ -24,13 +24,12 @@ impl<'a> Migration for Migration0001<'a> {
     /// Then check if the two inference tables exist as the sources for the materialized views
     /// If all of this is OK, then we can apply the migration
     async fn can_apply(&self) -> Result<(), Error> {
-        self.clickhouse
-            .health()
-            .await
-            .map_err(|e| Error::ClickHouseMigration {
+        self.clickhouse.health().await.map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseMigration {
                 id: "0001".to_string(),
                 message: e.to_string(),
-            })?;
+            })
+        })?;
         let database = self.clickhouse.database();
 
         let tables = vec!["ChatInference", "JsonInference"];
@@ -46,17 +45,19 @@ impl<'a> Migration for Migration0001<'a> {
 
             match self.clickhouse.run_query(query).await {
                 Err(e) => {
-                    return Err(Error::ClickHouseMigration {
+                    return Err(ErrorDetails::ClickHouseMigration {
                         id: "0001".to_string(),
                         message: e.to_string(),
-                    })
+                    }
+                    .into())
                 }
                 Ok(response) => {
                     if response.trim() != "1" {
-                        return Err(Error::ClickHouseMigration {
+                        return Err(ErrorDetails::ClickHouseMigration {
                             id: "0001".to_string(),
                             message: format!("Table {} does not exist", table),
-                        });
+                        }
+                        .into());
                     }
                 }
             }
@@ -80,10 +81,11 @@ impl<'a> Migration for Migration0001<'a> {
 
         match self.clickhouse.run_query(query).await {
             Err(e) => {
-                return Err(Error::ClickHouseMigration {
+                return Err(ErrorDetails::ClickHouseMigration {
                     id: "0001".to_string(),
                     message: e.to_string(),
-                })
+                }
+                .into())
             }
             Ok(response) => {
                 if response.trim() != "1" {
@@ -105,9 +107,11 @@ impl<'a> Migration for Migration0001<'a> {
 
         let view_timestamp = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|e| Error::ClickHouseMigration {
-                id: "0001".to_string(),
-                message: e.to_string(),
+            .map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseMigration {
+                    id: "0001".to_string(),
+                    message: e.to_string(),
+                })
             })?
             + view_offset)
             .as_secs();

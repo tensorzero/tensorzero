@@ -1,6 +1,6 @@
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::clickhouse_migration_manager::migration_trait::Migration;
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 
 /// This migration is used to set up the ClickHouse database to store examples
 /// for dynamic in-context learning.
@@ -11,13 +11,12 @@ pub struct Migration0002<'a> {
 impl<'a> Migration for Migration0002<'a> {
     /// Check if you can connect to the database
     async fn can_apply(&self) -> Result<(), Error> {
-        self.clickhouse
-            .health()
-            .await
-            .map_err(|e| Error::ClickHouseMigration {
+        self.clickhouse.health().await.map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseMigration {
                 id: "0002".to_string(),
                 message: e.to_string(),
             })
+        })
     }
 
     /// Check if the migration has already been applied
@@ -35,10 +34,11 @@ impl<'a> Migration for Migration0002<'a> {
 
         match self.clickhouse.run_query(query).await {
             Err(e) => {
-                return Err(Error::ClickHouseMigration {
-                    id: "0001".to_string(),
+                return Err(ErrorDetails::ClickHouseMigration {
+                    id: "0002".to_string(),
                     message: e.to_string(),
-                })
+                }
+                .into())
             }
             Ok(response) => {
                 if response.trim() != "1" {

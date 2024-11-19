@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::embeddings::EmbeddingModelConfig;
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
@@ -81,11 +81,12 @@ impl<'c> Config<'c> {
         let base_path = match PathBuf::from(&config_path).parent() {
             Some(base_path) => base_path.to_path_buf(),
             None => {
-                return Err(Error::Config {
+                return Err(ErrorDetails::Config {
                     message: format!(
                         "Failed to get parent directory of config file: {config_path}"
                     ),
-                })
+                }
+                .into())
             }
         };
         let config = Self::load_from_toml(config_table, base_path)?;
@@ -137,35 +138,43 @@ impl<'c> Config<'c> {
         for (model_name, model) in &self.models {
             // Ensure that the model has at least one provider
             if model.routing.is_empty() {
-                return Err(Error::Config {
+                return Err(ErrorDetails::Config {
                     message: format!("`models.{model_name}`: `routing` must not be empty"),
-                });
+                }
+                .into());
             }
 
             // Ensure that routing entries are unique and exist as keys in providers
             let mut seen_providers = std::collections::HashSet::new();
             for provider in &model.routing {
                 if !seen_providers.insert(provider) {
-                    return Err(Error::Config {
+                    return Err(ErrorDetails::Config {
                         message: format!(
                             "`models.{model_name}.routing`: duplicate entry `{provider}`"
                         ),
-                    });
+                    }
+                    .into());
                 }
 
                 if !model.providers.contains_key(provider) {
-                    return Err(Error::Config {
-                        message: format!("`models.{model_name}`: `routing` contains entry `{provider}` that does not exist in `providers`"),
-                    });
+                    return Err(ErrorDetails::Config {
+                        message: format!(
+                            "`models.{model_name}`: `routing` contains entry `{provider}` that does not exist in `providers`"
+                        ),
+                    }
+                    .into());
                 }
             }
 
             // Validate each provider
             for provider_name in model.providers.keys() {
                 if !seen_providers.contains(provider_name) {
-                    return Err(Error::Config {
-                        message: format!("`models.{model_name}`: Provider `{provider_name}` is not listed in `routing`"),
-                    });
+                    return Err(ErrorDetails::Config {
+                        message: format!(
+                            "`models.{model_name}`: Provider `{provider_name}` is not listed in `routing`"
+                        ),
+                    }
+                    .into());
                 }
             }
         }
@@ -184,12 +193,13 @@ impl<'c> Config<'c> {
         // Ensure that no metrics are named "comment" or "demonstration"
         for metric_name in self.metrics.keys() {
             if metric_name == "comment" || metric_name == "demonstration" {
-                return Err(Error::Config {
+                return Err(ErrorDetails::Config {
                     message: format!(
                         "Metric name '{}' is reserved and cannot be used",
                         metric_name
                     ),
-                });
+                }
+                .into());
             }
         }
 
@@ -198,36 +208,38 @@ impl<'c> Config<'c> {
 
     /// Get a function by name
     pub fn get_function<'a>(&'a self, function_name: &str) -> Result<&'a FunctionConfig, Error> {
-        self.functions
-            .get(function_name)
-            .ok_or_else(|| Error::UnknownFunction {
+        self.functions.get(function_name).ok_or_else(|| {
+            Error::new(ErrorDetails::UnknownFunction {
                 name: function_name.to_string(),
             })
+        })
     }
 
     /// Get a metric by name
     pub fn get_metric<'a>(&'a self, metric_name: &str) -> Result<&'a MetricConfig, Error> {
-        self.metrics
-            .get(metric_name)
-            .ok_or_else(|| Error::UnknownMetric {
+        self.metrics.get(metric_name).ok_or_else(|| {
+            Error::new(ErrorDetails::UnknownMetric {
                 name: metric_name.to_string(),
             })
+        })
     }
 
     /// Get a tool by name
     pub fn get_tool<'a>(&'a self, tool_name: &str) -> Result<&'a StaticToolConfig, Error> {
-        self.tools.get(tool_name).ok_or_else(|| Error::UnknownTool {
-            name: tool_name.to_string(),
+        self.tools.get(tool_name).ok_or_else(|| {
+            Error::new(ErrorDetails::UnknownTool {
+                name: tool_name.to_string(),
+            })
         })
     }
 
     /// Get a model by name
     pub fn get_model<'a>(&'a self, model_name: &str) -> Result<&'a ModelConfig, Error> {
-        self.models
-            .get(model_name)
-            .ok_or_else(|| Error::UnknownModel {
+        self.models.get(model_name).ok_or_else(|| {
+            Error::new(ErrorDetails::UnknownModel {
                 name: model_name.to_string(),
             })
+        })
     }
 
     /// Get all templates from the config
@@ -288,12 +300,16 @@ impl UninitializedConfig {
     /// Read a file from the file system and parse it as TOML
     fn read_toml_config(path: &str) -> Result<toml::Table, Error> {
         std::fs::read_to_string(path)
-            .map_err(|_| Error::Config {
-                message: format!("Failed to read config file: {path}"),
+            .map_err(|_| {
+                Error::new(ErrorDetails::Config {
+                    message: format!("Failed to read config file: {path}"),
+                })
             })?
             .parse::<toml::Table>()
-            .map_err(|_| Error::Config {
-                message: format!("Failed to parse config file as valid TOML: {path}"),
+            .map_err(|_| {
+                Error::new(ErrorDetails::Config {
+                    message: format!("Failed to parse config file as valid TOML: {path}"),
+                })
             })
     }
 }
@@ -307,9 +323,9 @@ impl TryFrom<toml::Table> for UninitializedConfig {
         //       https://github.com/dtolnay/path-to-error/issues/1
         match table.try_into() {
             Ok(config) => Ok(config),
-            Err(e) => Err(Error::Config {
+            Err(e) => Err(Error::new(ErrorDetails::Config {
                 message: format!("{e}"),
-            }),
+            })),
         }
     }
 }
@@ -632,9 +648,9 @@ mod tests {
         let result = Config::load_from_toml(config, base_path);
         assert_eq!(
             result.unwrap_err(),
-            Error::Config {
+            Error::new(ErrorDetails::Config {
                 message: "invalid socket address syntax\nin `gateway.bind_address`\n".to_string()
-            }
+            })
         );
     }
 
@@ -649,9 +665,9 @@ mod tests {
 
         assert_eq!(
             Config::load_from_toml(config, base_path).unwrap_err(),
-            Error::Config {
+            Error::new(ErrorDetails::Config {
                 message: "missing field `models`\n".to_string()
-            }
+            })
         );
     }
 
@@ -668,10 +684,10 @@ mod tests {
         let result = Config::load_from_toml(config, base_path);
         assert_eq!(
             result.unwrap_err(),
-            Error::Config {
+            Error::new(ErrorDetails::Config {
                 message: "missing field `providers`\nin `models.claude-3-haiku-20240307`\n"
                     .to_string()
-            }
+            })
         );
     }
 
@@ -739,10 +755,10 @@ mod tests {
         let error = Config::load_from_toml(config.clone(), base_path.clone()).unwrap_err();
         assert_eq!(
             error,
-            Error::Config {
+            Error::new(ErrorDetails::Config {
                 message: "`functions.generate_draft.variants.generate_draft_dummy` and model `dummy`: Failed to validate model: At least one provider lacks credentials"
                     .to_string()
-            }
+            })
         );
 
         // Change the weight of the new variant to zero
@@ -768,9 +784,10 @@ mod tests {
         let result = Config::load_from_toml(config, base_path);
         assert_eq!(
             result.unwrap_err(),
-            Error::Config {
+            ErrorDetails::Config {
                 message: "missing field `functions`\n".to_string()
             }
+            .into()
         );
     }
 
@@ -787,9 +804,10 @@ mod tests {
         let result = Config::load_from_toml(config, base_path);
         assert_eq!(
             result.unwrap_err(),
-            Error::Config {
+            ErrorDetails::Config {
                 message: "missing field `variants`\nin `functions.generate_draft`\n".to_string()
             }
+            .into()
         );
     }
 
@@ -915,9 +933,10 @@ mod tests {
         let result = Config::load_from_toml(config, base_path);
         assert_eq!(
             result.unwrap_err(),
-            Error::Config {
+            ErrorDetails::Config {
                 message: "`models.gpt-3.5-turbo`: `routing` must not be empty".to_string()
             }
+            .into()
         );
     }
 
@@ -930,9 +949,10 @@ mod tests {
         let result = Config::load_from_toml(config, PathBuf::new());
         assert_eq!(
             result.unwrap_err(),
-            Error::Config {
+            ErrorDetails::Config {
                 message: "`models.gpt-3.5-turbo.routing`: duplicate entry `openai`".to_string()
             }
+            .into()
         );
     }
 
@@ -944,9 +964,10 @@ mod tests {
         let result = Config::load_from_toml(config, PathBuf::new());
         assert_eq!(
             result.unwrap_err(),
-            Error::Config {
+            ErrorDetails::Config {
                 message: "`models.gpt-3.5-turbo`: `routing` contains entry `closedai` that does not exist in `providers`".to_string()
             }
+            .into()
         );
     }
 
@@ -960,9 +981,9 @@ mod tests {
         let result = Config::load_from_toml(sample_config, base_path);
         assert_eq!(
             result.unwrap_err(),
-            Error::JsonSchema {
+            ErrorDetails::JsonSchema {
                 message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
-            }
+            }.into()
         );
         let mut sample_config = get_sample_valid_config();
         sample_config["functions"]["templates_with_variables_json"]["system_schema"] =
@@ -971,9 +992,9 @@ mod tests {
         let result = Config::load_from_toml(sample_config, base_path);
         assert_eq!(
             result.unwrap_err(),
-            Error::JsonSchema {
+            ErrorDetails::JsonSchema {
                 message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
-            }
+            }.into()
         );
     }
 
@@ -987,9 +1008,9 @@ mod tests {
         let result = Config::load_from_toml(sample_config, base_path);
         assert_eq!(
             result.unwrap_err(),
-            Error::JsonSchema {
+            ErrorDetails::JsonSchema {
                 message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
-            }
+            }.into()
         );
         let mut sample_config = get_sample_valid_config();
         sample_config["functions"]["templates_with_variables_json"]["user_schema"] =
@@ -998,9 +1019,9 @@ mod tests {
         let result = Config::load_from_toml(sample_config, base_path);
         assert_eq!(
             result.unwrap_err(),
-            Error::JsonSchema {
+            ErrorDetails::JsonSchema {
                 message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
-            }
+            }.into()
         );
     }
 
@@ -1014,9 +1035,9 @@ mod tests {
         let result = Config::load_from_toml(sample_config, base_path);
         assert_eq!(
             result.unwrap_err(),
-            Error::JsonSchema {
+            ErrorDetails::JsonSchema {
                 message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
-            }
+            }.into()
         );
         let mut sample_config = get_sample_valid_config();
         sample_config["functions"]["templates_with_variables_json"]["assistant_schema"] =
@@ -1025,9 +1046,9 @@ mod tests {
         let result = Config::load_from_toml(sample_config, base_path);
         assert_eq!(
             result.unwrap_err(),
-            Error::JsonSchema {
+            ErrorDetails::JsonSchema {
                 message: "Failed to read JSON Schema `non_existent_file.json`: No such file or directory (os error 2)".to_string()
-            }
+            }.into()
         );
     }
 
@@ -1048,9 +1069,9 @@ mod tests {
         let result = Config::load_from_toml(sample_config, base_path);
         assert_eq!(
             result.unwrap_err(),
-            Error::Config {
+            ErrorDetails::Config {
                 message: "`functions.templates_with_variables_chat.variants.variant_with_variables.system_template`: schema is required when template is specified and needs variables".to_string()
-            }
+            }.into()
         );
         let mut sample_config = get_sample_valid_config();
         sample_config["functions"]["templates_with_variables_json"]
@@ -1061,9 +1082,9 @@ mod tests {
         let result = Config::load_from_toml(sample_config, base_path);
         assert_eq!(
             result.unwrap_err(),
-            Error::Config {
+            ErrorDetails::Config {
                 message: "`functions.templates_with_variables_json.variants.variant_with_variables.system_template`: schema is required when template is specified and needs variables".to_string()
-            }
+            }.into()
         );
     }
 
@@ -1083,9 +1104,9 @@ mod tests {
         let result = Config::load_from_toml(sample_config, base_path);
         assert_eq!(
             result.unwrap_err(),
-            Error::Config {
+            ErrorDetails::Config {
                 message: "`functions.templates_with_variables_chat.variants.variant_with_variables.user_template`: schema is required when template is specified and needs variables".to_string()
-            }
+            }.into()
         );
 
         let mut sample_config = get_sample_valid_config();
@@ -1097,9 +1118,9 @@ mod tests {
         let result = Config::load_from_toml(sample_config, base_path);
         assert_eq!(
             result.unwrap_err(),
-            Error::Config {
+            ErrorDetails::Config {
                 message: "`functions.templates_with_variables_json.variants.variant_with_variables.user_template`: schema is required when template is specified and needs variables".to_string()
-            }
+            }.into()
         );
     }
 
@@ -1120,9 +1141,9 @@ mod tests {
         let result = Config::load_from_toml(sample_config, base_path);
         assert_eq!(
             result.unwrap_err(),
-            Error::Config {
+            ErrorDetails::Config {
                 message: "`functions.templates_with_variables_chat.variants.variant_with_variables.assistant_template`: schema is required when template is specified and needs variables".to_string()
-            }
+            }.into()
         );
         let mut sample_config = get_sample_valid_config();
         sample_config["functions"]["templates_with_variables_json"]
@@ -1133,9 +1154,9 @@ mod tests {
         let result = Config::load_from_toml(sample_config, base_path);
         assert_eq!(
             result.unwrap_err(),
-            Error::Config {
+            ErrorDetails::Config {
                 message: "`functions.templates_with_variables_json.variants.variant_with_variables.assistant_template`: schema is required when template is specified and needs variables".to_string()
-            }
+            }.into()
         );
     }
 
@@ -1158,9 +1179,10 @@ mod tests {
         let result = Config::load_from_toml(sample_config, base_path);
         assert_eq!(
             result.unwrap_err(),
-            Error::UnknownCandidate {
+            ErrorDetails::UnknownCandidate {
                 name: "non_existent_candidate".to_string()
             }
+            .into()
         );
     }
 
@@ -1174,9 +1196,9 @@ mod tests {
         let result = Config::load_from_toml(config, base_path);
         assert_eq!(
             result.unwrap_err(),
-            Error::Config {
+            ErrorDetails::Config {
                 message: "`functions.generate_draft.variants.openai_promptA`: `weight` must be non-negative".to_string()
-            }
+            }.into()
         );
     }
 
@@ -1191,9 +1213,9 @@ mod tests {
 
         assert_eq!(
             result.unwrap_err(),
-            Error::Config {
+            ErrorDetails::Config {
                 message: "`functions.generate_draft.variants.openai_promptA`: `model` must be a valid model name".to_string()
-            }
+            }.into()
         );
     }
 
@@ -1212,9 +1234,9 @@ mod tests {
 
         assert_eq!(
             result.unwrap_err(),
-            Error::Config {
+            ErrorDetails::Config {
                 message: "`functions.generate_draft.tools`: tool `non_existent_tool` is not present in the config".to_string()
-            }
+            }.into()
         );
     }
 

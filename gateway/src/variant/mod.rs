@@ -58,6 +58,7 @@ pub struct InferenceConfig<'a> {
     pub variant_name: String,
 }
 
+#[derive(Debug)]
 pub struct ModelUsedInfo<'a> {
     pub model_name: &'a str,
     pub model_provider_name: &'a str,
@@ -483,6 +484,7 @@ mod tests {
     use super::*;
     use crate::clickhouse::ClickHouseConnectionInfo;
     use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceCredentials};
+    use crate::error::ErrorDetails;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::providers::dummy::{
         DummyProvider, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_USAGE, DUMMY_JSON_RESPONSE_RAW,
@@ -926,7 +928,10 @@ mod tests {
 
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(matches!(error, Error::ModelProvidersExhausted { .. }));
+        assert!(matches!(
+            error.get_details(),
+            ErrorDetails::ModelProvidersExhausted { .. }
+        ));
     }
 
     #[tokio::test]

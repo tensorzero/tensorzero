@@ -2,7 +2,7 @@ pub mod migration_trait;
 pub mod migrations;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 use migration_trait::Migration;
 use migrations::migration_0000::Migration0000;
 use migrations::migration_0001::Migration0001;
@@ -70,10 +70,11 @@ pub async fn run_migration(migration: &impl Migration) -> Result<bool, Error> {
                     "Failed migration success check: {migration_name}\n\n===== Rollback Instructions =====\n\n{}",
                     migration.rollback_instructions()
                 );
-                return Err(Error::ClickHouseMigration {
+                return Err(ErrorDetails::ClickHouseMigration {
                     id: migration_name.to_string(),
                     message: "Migration success check failed".to_string(),
-                });
+                }
+                .into());
             }
             Err(e) => {
                 tracing::error!(
@@ -124,10 +125,11 @@ mod tests {
             if self.can_apply_result {
                 Ok(())
             } else {
-                Err(Error::ClickHouseMigration {
+                Err(ErrorDetails::ClickHouseMigration {
                     id: "0000".to_string(),
                     message: "MockMigration can_apply failed".to_string(),
-                })
+                }
+                .into())
             }
         }
 
@@ -143,10 +145,11 @@ mod tests {
             if self.apply_result {
                 Ok(())
             } else {
-                Err(Error::ClickHouseMigration {
+                Err(ErrorDetails::ClickHouseMigration {
                     id: "0000".to_string(),
                     message: "MockMigration apply failed".to_string(),
-                })
+                }
+                .into())
             }
         }
 

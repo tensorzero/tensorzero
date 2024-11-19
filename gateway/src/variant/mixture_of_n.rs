@@ -11,7 +11,7 @@ use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::inference::types::{ModelInferenceRequest, RequestMessage, Role, Usage};
 use crate::{
     endpoints::inference::InferenceParams,
-    error::Error,
+    error::{Error, ErrorDetails},
     function::FunctionConfig,
     inference::types::{InferenceResult, InferenceResultChunk, InferenceResultStream, Input},
     minijinja_util::TemplateConfig,
@@ -84,9 +84,10 @@ impl Variant for MixtureOfNConfig {
         ),
         Error,
     > {
-        Err(Error::InvalidRequest {
+        Err(ErrorDetails::InvalidRequest {
             message: "Best of n variants do not support streaming inference.".to_string(),
-        })
+        }
+        .into())
     }
 
     fn validate(
@@ -100,12 +101,11 @@ impl Variant for MixtureOfNConfig {
     ) -> Result<(), Error> {
         // Validate each candidate variant
         for candidate in &self.candidates {
-            let variant = function
-                .variants()
-                .get(candidate)
-                .ok_or(Error::UnknownCandidate {
+            let variant = function.variants().get(candidate).ok_or(Error::new(
+                ErrorDetails::UnknownCandidate {
                     name: candidate.to_string(),
-                })?;
+                },
+            ))?;
             variant
                 .validate(
                     function,
@@ -115,9 +115,11 @@ impl Variant for MixtureOfNConfig {
                     function_name,
                     candidate,
                 )
-                .map_err(|e| Error::InvalidCandidate {
-                    variant_name: variant_name.to_string(),
-                    message: e.to_string(),
+                .map_err(|e| {
+                    Error::new(ErrorDetails::InvalidCandidate {
+                        variant_name: variant_name.to_string(),
+                        message: e.to_string(),
+                    })
                 })?;
         }
         // Validate the evaluator variant
@@ -155,16 +157,14 @@ impl MixtureOfNConfig {
             .candidates
             .iter()
             .map(|candidate| {
-                let variant =
-                    function
-                        .variants()
-                        .get(candidate)
-                        .ok_or(Error::UnknownCandidate {
-                            name: candidate.to_string(),
-                        })?;
+                let variant = function.variants().get(candidate).ok_or(Error::new(
+                    ErrorDetails::UnknownCandidate {
+                        name: candidate.to_string(),
+                    },
+                ))?;
                 Ok((candidate.to_string(), variant))
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>, Error>>()?;
 
         // Start the inference tasks (we keep the names around for logging)
         let mut inference_futures = Vec::new();
@@ -197,19 +197,16 @@ impl MixtureOfNConfig {
         let mut successful_results = Vec::new();
         for (candidate_name, result) in inference_results {
             match result {
-                Ok(inner_result) => match inner_result {
-                    Ok(res) => successful_results.push(res),
-                    Err(e) => {
-                        e.log();
+                Ok(inner_result) => {
+                    if let Ok(res) = inner_result {
+                        successful_results.push(res)
                     }
-                },
+                }
                 Err(_timeout_error) => {
                     // Map the Tokio timeout error to our own TimeoutError type
-                    let mapped_timeout_error = Error::InferenceTimeout {
+                    Error::new(ErrorDetails::InferenceTimeout {
                         variant_name: candidate_name.clone(),
-                    };
-                    // Log the mapped timeout error
-                    mapped_timeout_error.log();
+                    });
                 }
             }
         }
@@ -230,14 +227,15 @@ impl MixtureOfNConfig {
         mut candidates: Vec<InferenceResult<'a>>,
     ) -> Result<InferenceResult<'a>, Error> {
         if candidates.is_empty() {
-            return Err(Error::Inference {
+            return Err(ErrorDetails::Inference {
                 message: "No candidates to fuse in the mixture of n".to_string(),
-            });
+            }
+            .into());
         }
         if candidates.len() == 1 {
-            return candidates.pop().ok_or_else(|| Error::Inference {
+            return candidates.pop().ok_or_else(|| Error::new(ErrorDetails::Inference {
                 message: "Expected one candidate but found none. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
-            });
+            }));
         }
         let mut candidates = candidates;
         // If the fuser fails, we randomly select one of the candidates
@@ -254,13 +252,12 @@ impl MixtureOfNConfig {
         .await
         {
             Ok(inf_result) => inf_result,
-            Err(e) => {
-                e.log();
+            Err(_) => {
                 let random_index = rand::thread_rng().gen_range(0..candidates.len());
                 if random_index >= candidates.len() {
-                    return Err(Error::Inference {
+                    return Err(Error::new(ErrorDetails::Inference {
                         message: "Failed to get random candidate (should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
-                    });
+                    }));
                 }
                 candidates.swap_remove(random_index)
             }
@@ -305,13 +302,17 @@ async fn inner_fuse_candidates<'a, 'request>(
         &mut InferenceParams::default(),
     )?;
     if included_indices.is_empty() {
-        return Err(Error::Inference {
+        return Err(ErrorDetails::Inference {
             message: "No valid candidates available to prepare request.".to_string(),
-        });
+        }
+        .into());
     }
-    let model_config = models.get(&fuser.inner.model).ok_or(Error::UnknownModel {
-        name: fuser.inner.model.clone(),
-    })?;
+    let model_config =
+        models
+            .get(&fuser.inner.model)
+            .ok_or(Error::new(ErrorDetails::UnknownModel {
+                name: fuser.inner.model.clone(),
+            }))?;
     let infer_model_request_args = InferModelRequestArgs {
         request: inference_request,
         model_name: &fuser.inner.model,
@@ -386,9 +387,9 @@ impl FuserConfig {
                 InferenceResult::Chat(chat_result) => {
                     let serialized_content =
                         serde_json::to_string(&chat_result.content).map_err(|e| {
-                            Error::Inference {
+                            Error::new(ErrorDetails::Inference {
                                 message: format!("Error converting chat result to string: {e}"),
-                            }
+                            })
                         })?;
                     candidate_outputs.push(serialized_content);
                     included_indices.push(i);
@@ -548,7 +549,7 @@ mod tests {
         let prepared_message = result.unwrap_err();
         assert_eq!(
         prepared_message,
-        Error::InvalidMessage { message: "System message content {\"message\":\"You are a helpful assistant.\"} is not a string but there is no variant template".to_string() }
+        ErrorDetails::InvalidMessage { message: "System message content {\"message\":\"You are a helpful assistant.\"} is not a string but there is no variant template".to_string() }.into()
         );
 
         // Test without templates, no message
@@ -1123,9 +1124,10 @@ mod tests {
         let err = result.unwrap_err();
         assert_eq!(
             err,
-            Error::Inference {
+            ErrorDetails::Inference {
                 message: "No candidates to fuse in the mixture of n".to_string()
             }
+            .into()
         );
     }
 }

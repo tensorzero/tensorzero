@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 
 /// Timestamp when Scaling Laws for Neural Language Models was published.
 /// No way anyone could use TensorZero prior to this.
@@ -10,20 +10,21 @@ const EARLIEST_TIMESTAMP: u64 = 1579751960;
 pub fn validate_episode_id(episode_id: Uuid) -> Result<(), Error> {
     let version = episode_id.get_version_num();
     if version != 7 {
-        return Err(Error::InvalidEpisodeId {
+        return Err(ErrorDetails::InvalidEpisodeId {
             message: format!("Version must be 7, got {}", version),
-        });
+        }
+        .into());
     }
     let (timestamp, _) = episode_id
         .get_timestamp()
-        .ok_or(Error::InvalidEpisodeId {
+        .ok_or(Error::new(ErrorDetails::InvalidEpisodeId {
             message: "Timestamp is missing".to_string(),
-        })?
+        }))?
         .to_unix();
     if timestamp < EARLIEST_TIMESTAMP {
-        return Err(Error::InvalidEpisodeId {
+        return Err(Error::new(ErrorDetails::InvalidEpisodeId {
             message: "Timestamp is too early".to_string(),
-        });
+        }));
     }
     #[allow(clippy::expect_used)]
     let current_timestamp: u64 = SystemTime::now()
@@ -31,9 +32,10 @@ pub fn validate_episode_id(episode_id: Uuid) -> Result<(), Error> {
         .expect("Time went backwards")
         .as_secs();
     if timestamp > current_timestamp {
-        return Err(Error::InvalidEpisodeId {
+        return Err(ErrorDetails::InvalidEpisodeId {
             message: "Timestamp is in the future".to_string(),
-        });
+        }
+        .into());
     }
     Ok(())
 }

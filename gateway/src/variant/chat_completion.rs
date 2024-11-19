@@ -4,7 +4,7 @@ use std::{collections::HashMap, path::PathBuf};
 
 use crate::embeddings::EmbeddingModelConfig;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::{
     ContentBlock, InferenceResultChunk, InferenceResultStream, Input, InputMessageContent,
@@ -60,10 +60,10 @@ impl ChatCompletionConfig {
                 InputMessageContent::Text { value: text } => {
                     let text_content= match template_path {
                         Some(template_path) => templates.template_message(
-                            template_path.to_str().ok_or(Error::InvalidTemplatePath)?,
+                            template_path.to_str().ok_or(Error::new(ErrorDetails::InvalidTemplatePath))?,
                             text,
                         )?,
-                        None => text.as_str().ok_or(Error::InvalidMessage { message: format!("Request message content {} is not a string but there is no variant template for Role {}", text, message.role) })?.to_string(),
+                        None => text.as_str().ok_or(Error::new(ErrorDetails::InvalidMessage { message: format!("Request message content {} is not a string but there is no variant template for Role {}", text, message.role) }))?.to_string(),
                     };
                     content.push(text_content.into());
                 }
@@ -90,7 +90,7 @@ impl ChatCompletionConfig {
     ) -> Result<Option<String>, Error> {
         Ok(match &self.system_template {
             Some(template_path) => Some(templates.template_message(
-                template_path.to_str().ok_or(Error::InvalidTemplatePath)?,
+                template_path.to_str().ok_or(Error::new(ErrorDetails::InvalidTemplatePath))?,
                 system.unwrap_or(&Value::Null),
             )?),
             None => {
@@ -99,11 +99,11 @@ impl ChatCompletionConfig {
                     Some(system) =>
                 Some(system
                 .as_str()
-                .ok_or(Error::InvalidMessage {
+                .ok_or(Error::new(ErrorDetails::InvalidMessage {
                     message:
                         format!("System message content {} is not a string but there is no variant template", system)
                             .to_string(),
-                })?
+                }))?
                 .to_string()),
             }
         }})
@@ -165,9 +165,13 @@ impl Variant for ChatCompletionConfig {
             false,
             &mut inference_params,
         )?;
-        let model_config = models.models.get(&self.model).ok_or(Error::UnknownModel {
-            name: self.model.clone(),
-        })?;
+        let model_config =
+            models
+                .models
+                .get(&self.model)
+                .ok_or(Error::new(ErrorDetails::UnknownModel {
+                    name: self.model.clone(),
+                }))?;
         let args = InferModelRequestArgs {
             request,
             model_name: &self.model,
@@ -205,9 +209,13 @@ impl Variant for ChatCompletionConfig {
             true,
             &mut inference_params,
         )?;
-        let model_config = models.models.get(&self.model).ok_or(Error::UnknownModel {
-            name: self.model.clone(),
-        })?;
+        let model_config =
+            models
+                .models
+                .get(&self.model)
+                .ok_or(Error::new(ErrorDetails::UnknownModel {
+                    name: self.model.clone(),
+                }))?;
         infer_model_request_stream(
             request,
             &self.model,
@@ -238,23 +246,25 @@ impl Variant for ChatCompletionConfig {
     ) -> Result<(), Error> {
         // Validate that weight is non-negative
         if self.weight < 0.0 {
-            return Err(Error::Config {
+            return Err(ErrorDetails::Config {
                 message: format!(
                     "`functions.{function_name}.variants.{variant_name}`: `weight` must be non-negative"
                 ),
-            });
+            }.into());
         }
-        let model = models.get(&self.model).ok_or_else(|| Error::Config {
+        let model = models.get(&self.model).ok_or_else(|| Error::new(ErrorDetails::Config {
             message: format!("`functions.{function_name}.variants.{variant_name}`: `model` must be a valid model name"),
-        })?;
+        }))?;
 
         // If the variant has weight > 0.0, then we need to validate that the model is correctly configured
         if self.weight > 0.0 {
-            model.validate().map_err(|e| Error::Config {
-                message: format!(
-                    "`functions.{function_name}.variants.{variant_name}` and model `{}`: {e}",
-                    self.model
-                ),
+            model.validate().map_err(|e| {
+                Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "`functions.{function_name}.variants.{variant_name}` and model `{}`: {e}",
+                        self.model
+                    ),
+                })
             })?;
         }
 
@@ -264,10 +274,12 @@ impl Variant for ChatCompletionConfig {
             self.system_template.as_ref(),
             templates,
         )
-        .map_err(|e| Error::Config {
-            message: format!(
-                "`functions.{function_name}.variants.{variant_name}.system_template`: {e}"
-            ),
+        .map_err(|e| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "`functions.{function_name}.variants.{variant_name}.system_template`: {e}"
+                ),
+            })
         })?;
 
         // Validate the user template matches the user schema (best effort, we cannot check the variables comprehensively)
@@ -276,10 +288,12 @@ impl Variant for ChatCompletionConfig {
             self.user_template.as_ref(),
             templates,
         )
-        .map_err(|e| Error::Config {
-            message: format!(
-                "`functions.{function_name}.variants.{variant_name}.user_template`: {e}"
-            ),
+        .map_err(|e| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "`functions.{function_name}.variants.{variant_name}.user_template`: {e}"
+                ),
+            })
         })?;
 
         // Validate the assistant template matches the assistant schema (best effort, we cannot check the variables comprehensively)
@@ -288,10 +302,12 @@ impl Variant for ChatCompletionConfig {
             self.assistant_template.as_ref(),
             templates,
         )
-        .map_err(|e| Error::Config {
-            message: format!(
-                "`functions.{function_name}.variants.{variant_name}.assistant_template`: {e}"
-            ),
+        .map_err(|e| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "`functions.{function_name}.variants.{variant_name}.assistant_template`: {e}"
+                ),
+            })
         })?;
         Ok(())
     }
@@ -318,18 +334,20 @@ pub fn validate_template_and_schema(
 ) -> Result<(), Error> {
     match (schema, template) {
         (None, Some(template)) => {
-            let template_name = template.to_str().ok_or(Error::InvalidTemplatePath)?;
+            let template_name = template
+                .to_str()
+                .ok_or(Error::new(ErrorDetails::InvalidTemplatePath))?;
             if templates.template_needs_variables(template_name)? {
-                return Err(Error::Config {
+                return Err(Error::new(ErrorDetails::Config {
                     message: "schema is required when template is specified and needs variables"
                         .to_string(),
-                });
+                }));
             }
         }
         (Some(_), None) => {
-            return Err(Error::Config {
+            return Err(Error::new(ErrorDetails::Config {
                 message: "template is required when schema is specified".to_string(),
-            });
+            }));
         }
         _ => {}
     }
@@ -428,7 +446,7 @@ mod tests {
         let result = chat_completion_config
             .prepare_request_message(&templates, &input_message)
             .unwrap_err();
-        assert_eq!(result, Error::InvalidMessage { message: "Request message content {\"invalid\":\"json\"} is not a string but there is no variant template for Role user".to_string()});
+        assert_eq!(result, ErrorDetails::InvalidMessage { message: "Request message content {\"invalid\":\"json\"} is not a string but there is no variant template for Role user".to_string()}.into());
 
         // Part 2: test with templates
         let system_template_name = "system";
@@ -494,8 +512,8 @@ mod tests {
         };
         let result = chat_completion_config.prepare_request_message(&templates, &input_message);
         assert!(result.is_err());
-        match result {
-            Err(Error::MiniJinjaTemplateRender { message, .. }) => {
+        match result.unwrap_err().get_details() {
+            ErrorDetails::MiniJinjaTemplateRender { message, .. } => {
                 assert!(message.contains("undefined value"));
             }
             _ => panic!("Expected MiniJinjaTemplateRender error"),
@@ -507,8 +525,8 @@ mod tests {
         };
         let result = chat_completion_config.prepare_request_message(&templates, &input_message);
         assert!(result.is_err());
-        match result {
-            Err(Error::MiniJinjaTemplateRender { message, .. }) => {
+        match result.unwrap_err().get_details() {
+            ErrorDetails::MiniJinjaTemplateRender { message, .. } => {
                 assert!(message.contains("undefined value"), "{}", message);
             }
             _ => panic!("Expected MiniJinjaTemplateRender error"),
@@ -604,7 +622,7 @@ mod tests {
         let prepared_message = result.unwrap_err();
         assert_eq!(
             prepared_message,
-            Error::InvalidMessage { message: "System message content {\"message\":\"You are a helpful assistant.\"} is not a string but there is no variant template".to_string() }
+            ErrorDetails::InvalidMessage { message: "System message content {\"message\":\"You are a helpful assistant.\"} is not a string but there is no variant template".to_string() }.into()
         );
 
         // Test without templates, no message
@@ -751,8 +769,8 @@ mod tests {
             )
             .await
             .unwrap_err();
-        match result {
-            Error::MiniJinjaTemplateRender { message, .. } => {
+        match result.get_details() {
+            ErrorDetails::MiniJinjaTemplateRender { message, .. } => {
                 // template_name is a test filename
                 assert!(message.contains("undefined value"));
             }
@@ -792,7 +810,11 @@ mod tests {
             )
             .await
             .unwrap_err();
-        assert!(matches!(result, Error::UnknownModel { .. }), "{}", result);
+        assert!(
+            matches!(result.get_details(), ErrorDetails::UnknownModel { .. }),
+            "{}",
+            result
+        );
         // Test case 3: Model inference fails because of model issues
 
         let chat_completion_config = ChatCompletionConfig {
@@ -815,7 +837,7 @@ mod tests {
             variant_name: "".to_string(),
             dynamic_output_schema: None,
         };
-        let result = chat_completion_config
+        let err = chat_completion_config
             .infer(
                 &input,
                 &inference_models,
@@ -826,14 +848,15 @@ mod tests {
             )
             .await
             .unwrap_err();
+        let details = err.get_details();
         assert_eq!(
-            result,
-            Error::ModelProvidersExhausted {
+            *details,
+            ErrorDetails::ModelProvidersExhausted {
                 provider_errors: HashMap::from([(
                     "error".to_string(),
-                    Error::InferenceClient {
+                    Error::new(ErrorDetails::InferenceClient {
                         message: "Error sending request to Dummy provider.".to_string()
-                    }
+                    })
                 )])
             }
         );
@@ -1386,14 +1409,18 @@ mod tests {
                 inference_params.clone(),
             )
             .await;
-        match result {
-            Err(Error::ModelProvidersExhausted {
+        let err = match result {
+            Ok(_) => panic!("Expected error"),
+            Err(e) => e,
+        };
+        match err.get_details() {
+            ErrorDetails::ModelProvidersExhausted {
                 provider_errors, ..
-            }) => {
+            } => {
                 assert_eq!(provider_errors.len(), 1);
                 assert!(matches!(
-                    provider_errors["error_provider"],
-                    Error::InferenceClient { .. }
+                    provider_errors["error_provider"].get_details(),
+                    ErrorDetails::InferenceClient { .. }
                 ));
             }
             _ => panic!("Expected ModelProvidersExhausted error"),
@@ -1768,12 +1795,12 @@ mod tests {
     fn test_validate_template_and_schema_template_needs_variables() {
         let templates = get_test_template_config(); // Template needing variables
         let template = PathBuf::from("greeting");
-        let result = validate_template_and_schema(None, Some(&template), &templates);
-        assert!(result.is_err());
+        let err = validate_template_and_schema(None, Some(&template), &templates).unwrap_err();
+        let details = err.get_details();
 
-        if let Err(Error::Config { message }) = result {
+        if let ErrorDetails::Config { message } = details {
             assert_eq!(
-                message,
+                *message,
                 "schema is required when template is specified and needs variables".to_string()
             );
         } else {
@@ -1789,12 +1816,12 @@ mod tests {
             PathBuf::new(),
         )
         .unwrap();
-        let result = validate_template_and_schema(Some(&schema), None, &templates);
-        assert!(result.is_err());
+        let err = validate_template_and_schema(Some(&schema), None, &templates).unwrap_err();
+        let details = err.get_details();
 
-        if let Err(Error::Config { message }) = result {
+        if let ErrorDetails::Config { message } = details {
             assert_eq!(
-                message,
+                *message,
                 "template is required when schema is specified".to_string()
             );
         } else {

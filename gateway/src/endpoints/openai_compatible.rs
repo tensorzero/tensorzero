@@ -25,7 +25,7 @@ use uuid::Uuid;
 use crate::endpoints::inference::{
     inference, ChatCompletionInferenceParams, InferenceParams, Params,
 };
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
     current_timestamp, ContentBlockChunk, ContentBlockOutput, Input, InputMessage,
@@ -226,28 +226,33 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params<'static> {
         let function_name = openai_compatible_params
             .model
             .strip_prefix("tensorzero::")
-            .ok_or(Error::InvalidOpenAICompatibleRequest {
+            .ok_or(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
                 message: "model name must start with 'tensorzero::'".to_string(),
-            })?;
+            }))?;
 
         if function_name.is_empty() {
-            return Err(Error::InvalidOpenAICompatibleRequest {
+            return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
                 message:
                     "function_name (passed in model field after \"tensorzero::\") cannot be empty"
                         .to_string(),
-            });
+            }
+            .into());
         }
 
         let episode_id = headers
             .get("episode_id")
             .map(|h| {
                 h.to_str()
-                    .map_err(|_| Error::InvalidOpenAICompatibleRequest {
-                        message: "episode_id header is not valid UTF-8".to_string(),
+                    .map_err(|_| {
+                        Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                            message: "episode_id header is not valid UTF-8".to_string(),
+                        })
                     })
                     .and_then(|s| {
-                        Uuid::parse_str(s).map_err(|_| Error::InvalidEpisodeId {
-                            message: "episode_id header is not a valid UUID".to_string(),
+                        Uuid::parse_str(s).map_err(|_| {
+                            Error::new(ErrorDetails::InvalidEpisodeId {
+                                message: "episode_id header is not a valid UUID".to_string(),
+                            })
                         })
                     })
             })
@@ -281,8 +286,10 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params<'static> {
             .get("variant_name")
             .map(|h| {
                 h.to_str()
-                    .map_err(|_| Error::InvalidOpenAICompatibleRequest {
-                        message: "variant_name header is not valid UTF-8".to_string(),
+                    .map_err(|_| {
+                        Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                            message: "variant_name header is not valid UTF-8".to_string(),
+                        })
                     })
                     .map(|s| s.to_string())
             })
@@ -291,14 +298,17 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params<'static> {
             .get("dryrun")
             .map(|h| {
                 h.to_str()
-                    .map_err(|_| Error::InvalidOpenAICompatibleRequest {
-                        message: "dryrun header is not valid UTF-8".to_string(),
+                    .map_err(|_| {
+                        Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                            message: "dryrun header is not valid UTF-8".to_string(),
+                        })
                     })
                     .and_then(|s| {
-                        s.parse::<bool>()
-                            .map_err(|_| Error::InvalidOpenAICompatibleRequest {
+                        s.parse::<bool>().map_err(|_| {
+                            Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
                                 message: "dryrun header is not a valid boolean".to_string(),
                             })
+                        })
                     })
             })
             .transpose()?;
@@ -344,14 +354,16 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
             match message {
                 OpenAICompatibleMessage::System(msg) => {
                     if system.is_some() {
-                        return Err(Error::InvalidOpenAICompatibleRequest {
+                        return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
                             message: "At most one system message is allowed".to_string(),
-                        });
+                        }
+                        .into());
                     }
                     if index != 0 {
-                        return Err(Error::InvalidOpenAICompatibleRequest {
+                        return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
                             message: "System message must be the first message".to_string(),
-                        });
+                        }
+                        .into());
                     }
                     system = Some(convert_openai_message_content(msg.content)?);
                 }
@@ -385,9 +397,9 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
                 OpenAICompatibleMessage::Tool(msg) => {
                     let name = tool_call_id_to_name
                         .get(&msg.tool_call_id)
-                        .ok_or(Error::InvalidOpenAICompatibleRequest {
+                        .ok_or(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
                             message: "tool call id not found".to_string(),
-                        })?
+                        }))?
                         .to_string();
                     messages.push(InputMessage {
                         role: Role::User,
@@ -409,17 +421,18 @@ fn convert_openai_message_content(content: Value) -> Result<Value, Error> {
         Value::String(s) => Ok(Value::String(s)),
         Value::Array(a) => {
             if a.len() != 1 {
-                return Err(Error::InvalidOpenAICompatibleRequest {
+                return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
                     message: "message content must either be a string or an array of length 1 containing structured TensorZero inputs".to_string(),
-                });
+                }
+                .into());
             }
-            Ok(a.into_iter().next().ok_or(Error::InvalidOpenAICompatibleRequest {
+            Ok(a.into_iter().next().ok_or(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
                 message: "message content array is empty. This should never happen. Please report this bug at https://github.com/tensorzero/tensorzero/issues.".to_string(),
-            })?)
+            }))?)
         }
-        _ => Err(Error::InvalidOpenAICompatibleRequest {
+        _ => Err(ErrorDetails::InvalidOpenAICompatibleRequest {
             message: "message content must either be a string or an array of length 1 containing structured TensorZero inputs".to_string(),
-        }),
+        }.into()),
     }
 }
 
@@ -654,15 +667,16 @@ fn prepare_serialized_openai_compatible_chunk(
 ) -> Result<Event, Error> {
     if let Some(chunk) = chunk {
         let openai_compatible_chunk = OpenAICompatibleResponseChunk::from(chunk);
-        let chunk_json =
-            serde_json::to_value(openai_compatible_chunk).map_err(|e| Error::Inference {
+        let chunk_json = serde_json::to_value(openai_compatible_chunk).map_err(|e| {
+            Error::new(ErrorDetails::Inference {
                 message: format!("Failed to convert chunk to JSON: {}", e),
-            })?;
-        Event::default()
-            .json_data(chunk_json)
-            .map_err(|e| Error::Inference {
+            })
+        })?;
+        Event::default().json_data(chunk_json).map_err(|e| {
+            Error::new(ErrorDetails::Inference {
                 message: format!("Failed to convert Value to Event: {}", e),
             })
+        })
     } else {
         Ok(Event::default().data("[DONE]"))
     }
@@ -788,10 +802,10 @@ mod tests {
             }),
         ];
         let input: Result<Input, Error> = messages.try_into();
-        assert!(input.is_err());
+        let details = input.unwrap_err().get_owned_details();
         assert_eq!(
-            input.unwrap_err(),
-            Error::InvalidOpenAICompatibleRequest {
+            details,
+            ErrorDetails::InvalidOpenAICompatibleRequest {
                 message: "message content must either be a string or an array of length 1 containing structured TensorZero inputs".to_string(),
             }
         );
@@ -806,10 +820,10 @@ mod tests {
             }),
         ];
         let input: Result<Input, Error> = messages.try_into();
-        assert!(input.is_err());
+        let details = input.unwrap_err().get_owned_details();
         assert_eq!(
-            input.unwrap_err(),
-            Error::InvalidOpenAICompatibleRequest {
+            details,
+            ErrorDetails::InvalidOpenAICompatibleRequest {
                 message: "At most one system message is allowed".to_string(),
             }
         );
@@ -889,8 +903,9 @@ mod tests {
             "Conversion should fail when a system message is after an assistant message."
         );
         if let Err(err) = result {
-            match err {
-                Error::InvalidOpenAICompatibleRequest { message } => {
+            let details = err.get_owned_details();
+            match details {
+                ErrorDetails::InvalidOpenAICompatibleRequest { message } => {
                     assert_eq!(
                         message, "System message must be the first message",
                         "Unexpected error message."
@@ -914,17 +929,19 @@ mod tests {
             "city": "Tokyo",
         });
         let error = convert_openai_message_content(content.clone()).unwrap_err();
+        let details = error.get_owned_details();
         assert_eq!(
-            error,
-            Error::InvalidOpenAICompatibleRequest {
+            details,
+            ErrorDetails::InvalidOpenAICompatibleRequest {
                 message: "message content must either be a string or an array of length 1 containing structured TensorZero inputs".to_string(),
             }
         );
         let content = json!([]);
         let error = convert_openai_message_content(content).unwrap_err();
+        let details = error.get_owned_details();
         assert_eq!(
-            error,
-            Error::InvalidOpenAICompatibleRequest {
+            details,
+            ErrorDetails::InvalidOpenAICompatibleRequest {
                 message: "message content must either be a string or an array of length 1 containing structured TensorZero inputs".to_string(),
             }
         );
