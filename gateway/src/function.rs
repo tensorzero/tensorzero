@@ -125,13 +125,7 @@ impl FunctionConfig {
         }
     }
 
-    #[instrument(skip(
-        content_blocks,
-        usage,
-        model_inference_results,
-        inference_config,
-        inference_params
-    ))]
+    #[instrument(skip_all, fields(inference_id))]
     pub async fn prepare_response<'a, 'request>(
         &self,
         inference_id: Uuid,
