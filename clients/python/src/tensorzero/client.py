@@ -81,6 +81,7 @@ class BaseTensorZeroGateway(ABC):
             Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]
         ] = None,
         parallel_tool_calls: Optional[bool] = None,
+        tags: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         input = deepcopy(input)
         # Convert content blocks to dicts if necessary
@@ -111,6 +112,8 @@ class BaseTensorZeroGateway(ABC):
             data["tool_choice"] = tool_choice
         if parallel_tool_calls is not None:
             data["parallel_tool_calls"] = parallel_tool_calls
+        if tags is not None:
+            data["tags"] = tags
         return data
 
     def _prepare_feedback_request(
@@ -159,6 +162,7 @@ class BaseTensorZeroGateway(ABC):
             Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]
         ] = None,
         parallel_tool_calls: Optional[bool] = None,
+        tags: Optional[Dict[str, str]] = None,
     ) -> Union[InferenceResponse, Generator[InferenceChunk, None, None]]:
         pass
 
@@ -202,6 +206,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
             Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]
         ] = None,
         parallel_tool_calls: Optional[bool] = None,
+        tags: Optional[Dict[str, str]] = None,
     ) -> Union[InferenceResponse, Generator[InferenceChunk, None, None]]:
         """
         Make a POST request to the /inference endpoint.
@@ -227,6 +232,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param tool_choice: If set, overrides the tool choice strategy for the request.
                             It should be one of: "auto", "required", "off", or {"specific": str}. The last option pins the request to a specific tool name.
         :param parallel_tool_calls: If true, the request will allow for multiple tool calls in a single inference request.
+        :param tags: If set, adds tags to the inference request.
         :return: If stream is false, returns an InferenceResponse.
                  If stream is true, returns an async generator that yields InferenceChunks as they come in.
         """
@@ -243,6 +249,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
             additional_tools,
             tool_choice,
             parallel_tool_calls,
+            tags,
         )
         if stream:
             req = self.client.build_request("POST", url, json=data)
@@ -282,6 +289,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
                            Only use episode IDs that were returned by the TensorZero gateway.
                            Note: You can assign feedback to either an episode or an inference, but not both.
         :param dryrun: If true, the feedback request will be executed but won't be stored to the database (i.e. no-op).
+        :param tags: If set, adds tags to the feedback request.
         :return: {"feedback_id": str}
         """
         url = urljoin(self.base_url, "feedback")
@@ -361,6 +369,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
             Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]
         ] = None,
         parallel_tool_calls: Optional[bool] = None,
+        tags: Optional[Dict[str, str]] = None,
     ) -> Union[InferenceResponse, AsyncGenerator[InferenceChunk, None]]:
         """
         Make a POST request to the /inference endpoint.
@@ -386,6 +395,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param tool_choice: If set, overrides the tool choice strategy for the request.
                             It should be one of: "auto", "required", "off", or {"specific": str}. The last option pins the request to a specific tool name.
         :param parallel_tool_calls: If true, the request will allow for multiple tool calls in a single inference request.
+        :param tags: If set, adds tags to the inference request.
         :return: If stream is false, returns an InferenceResponse.
                  If stream is true, returns an async generator that yields InferenceChunks as they come in.
         """
@@ -402,6 +412,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
             additional_tools,
             tool_choice,
             parallel_tool_calls,
+            tags,
         )
         if stream:
             req = self.client.build_request("POST", url, json=data)
@@ -442,6 +453,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
                            Only use episode IDs that were returned by the TensorZero gateway.
                            Note: You can assign feedback to either an episode or an inference, but not both.
         :param dryrun: If true, the feedback request will be executed but won't be stored to the database (i.e. no-op).
+        :param tags: If set, adds tags to the feedback request.
         :return: {"feedback_id": str}
         """
         url = urljoin(self.base_url, "feedback")

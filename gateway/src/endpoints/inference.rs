@@ -67,6 +67,9 @@ pub struct Params<'a> {
     pub variant_name: Option<String>,
     // if true, the inference will not be stored
     pub dryrun: Option<bool>,
+    // the tags to add to the inference
+    #[serde(default)]
+    pub tags: HashMap<String, String>,
     // dynamic information about tool calling. Don't directly include `dynamic_tool_params` in `Params`.
     #[serde(flatten)]
     pub dynamic_tool_params: DynamicToolParams,
@@ -101,6 +104,7 @@ struct InferenceMetadata<'a> {
     pub system: Option<String>,
     pub input_messages: Vec<RequestMessage>,
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
+    pub tags: HashMap<String, String>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -277,6 +281,7 @@ pub async fn inference(
                 system: model_used_info.system,
                 input_messages: model_used_info.input_messages,
                 previous_model_inference_results: model_used_info.previous_model_inference_results,
+                tags: params.tags,
             };
 
             let stream = create_stream(
@@ -322,6 +327,7 @@ pub async fn inference(
                     episode_id,
                     tool_params: inference_config.tool_config,
                     processing_time: start_time.elapsed(),
+                    tags: params.tags,
                 };
 
                 let result_to_write = result.clone();
@@ -397,6 +403,7 @@ fn create_stream(
             system,
             input_messages,
             previous_model_inference_results,
+            tags,
         } = metadata;
 
         if !dryrun {
@@ -424,6 +431,7 @@ fn create_stream(
                     episode_id,
                     tool_params: inference_config.tool_config,
                     processing_time: start_time.elapsed(),
+                    tags,
                 };
                 tokio::spawn(async move {
                     write_inference(
@@ -470,6 +478,7 @@ pub struct InferenceDatabaseInsertMetadata {
     pub episode_id: Uuid,
     pub tool_params: Option<ToolCallConfig>,
     pub processing_time: Duration,
+    pub tags: HashMap<String, String>,
 }
 
 async fn write_inference<'a>(
@@ -729,6 +738,7 @@ mod tests {
             system: None,
             input_messages: vec![],
             previous_model_inference_results: vec![],
+            tags: HashMap::new(),
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk);
@@ -776,6 +786,7 @@ mod tests {
             system: None,
             input_messages: vec![],
             previous_model_inference_results: vec![],
+            tags: HashMap::new(),
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk);
