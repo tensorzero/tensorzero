@@ -6,6 +6,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tokio::time::Duration;
+use tracing::instrument;
 use uuid::Uuid;
 
 use crate::embeddings::EmbeddingModelConfig;
@@ -121,6 +122,7 @@ impl VariantConfig {
 }
 
 impl Variant for VariantConfig {
+    #[instrument(fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name), skip_all)]
     async fn infer<'a, 'request>(
         &'a self,
         input: &Input,
@@ -183,6 +185,7 @@ impl Variant for VariantConfig {
         }
     }
 
+    #[instrument(fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name), skip_all)]
     async fn infer_stream<'request>(
         &'static self,
         input: &Input,
@@ -380,6 +383,7 @@ struct InferModelRequestArgs<'a, 'request> {
 }
 
 /// Refactored `infer_model_request` function accepting a single struct argument
+#[instrument(fields(model_name = %args.model_name), skip_all)]
 async fn infer_model_request<'a, 'request>(
     args: InferModelRequestArgs<'a, 'request>,
 ) -> Result<InferenceResult<'a>, Error> {
@@ -414,6 +418,7 @@ async fn infer_model_request<'a, 'request>(
         .await
 }
 
+#[instrument(fields(model_name = %model_name), skip_all)]
 async fn infer_model_request_stream<'request>(
     request: ModelInferenceRequest<'request>,
     model_name: &'static str,
@@ -498,6 +503,7 @@ mod tests {
     use reqwest::Client;
     use serde_json::json;
     use std::collections::HashMap;
+    use tracing_test::traced_test;
 
     #[tokio::test]
     async fn test_prepare_model_inference_request() {
@@ -930,6 +936,124 @@ mod tests {
     }
 
     #[tokio::test]
+    #[traced_test]
+    async fn test_infer_model_request_errors() {
+        // Setup common variables
+        let api_keys = InferenceCredentials::default();
+        let client = Client::new();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clients = InferenceClients {
+            http_client: &client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            credentials: &api_keys,
+        };
+        let templates = get_test_template_config();
+        let inference_params = InferenceParams::default();
+        let inference_config = InferenceConfig {
+            templates: &templates,
+            tool_config: None,
+            function_name: "test_function".to_string(),
+            variant_name: "test_variant".to_string(),
+            dynamic_output_schema: None,
+        };
+
+        let model_name = "dummy_chat_model";
+        let error_model_name = "error";
+        let function_config_chat = FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: false,
+        });
+
+        let request_messages = vec![RequestMessage {
+            role: Role::User,
+            content: vec!["Hello, how are you?".to_string().into()],
+        }];
+
+        let model_request = ModelInferenceRequest {
+            messages: request_messages.clone(),
+            system: None,
+            temperature: Some(0.7),
+            max_tokens: Some(100),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            output_schema: None,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+        };
+
+        // Create a dummy provider config with the error model name
+        let error_provider_config = ProviderConfig::Dummy(DummyProvider {
+            model_name: error_model_name.to_string(),
+            ..Default::default()
+        });
+
+        // Create a dummy provider config with the good model name
+        let dummy_provider_config = ProviderConfig::Dummy(DummyProvider {
+            model_name: model_name.to_string(),
+            ..Default::default()
+        });
+
+        // Create a model config with the dummy provider
+        let model_config = ModelConfig {
+            routing: vec![error_model_name.to_string(), model_name.to_string()],
+            providers: HashMap::from([
+                (error_model_name.to_string(), error_provider_config),
+                (model_name.to_string(), dummy_provider_config),
+            ]),
+        };
+        let retry_config = Box::leak(Box::new(RetryConfig::default()));
+
+        // Create the arguments struct
+        let args = InferModelRequestArgs {
+            request: model_request.clone(),
+            model_name,
+            model_config: &model_config,
+            function: &function_config_chat,
+            inference_config: &inference_config,
+            clients: &clients,
+            inference_params: inference_params.clone(),
+            retry_config,
+        };
+
+        // Refactored function call
+        let result = infer_model_request(args).await;
+
+        let inference_result = result.unwrap();
+        match inference_result {
+            InferenceResult::Chat(chat_result) => {
+                // The DummyProvider returns DUMMY_INFER_RESPONSE_CONTENT by default
+                let expected_content = vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()];
+                assert_eq!(chat_result.content, expected_content);
+                assert_eq!(chat_result.usage, DUMMY_INFER_USAGE.clone());
+                assert_eq!(chat_result.model_inference_results.len(), 1);
+                assert_eq!(
+                    chat_result.model_inference_results[0].model_name,
+                    model_name
+                );
+                // Need to recreate to make this ContentBlock rather than ContentBlockOutput
+                let expected_content = vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()];
+                assert_eq!(
+                    chat_result.model_inference_results[0].output,
+                    expected_content
+                );
+            }
+            _ => panic!("Expected Chat inference result"),
+        }
+        assert!(logs_contain(
+            r#"ERROR test_infer_model_request_errors:infer_model_request{model_name=dummy_chat_model}:provider_error{provider_name="error"}: gateway::error: Error sending request to Dummy provider."#
+        ));
+    }
+
+    #[tokio::test]
     async fn test_infer_model_request_stream() {
         // Set up the HTTP client and ClickHouse connection info
         let client = reqwest::Client::new();
@@ -1052,5 +1176,142 @@ mod tests {
         // Verify the full response
         let expected_response: String = DUMMY_STREAMING_RESPONSE.iter().cloned().collect();
         assert_eq!(full_response, expected_response);
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_infer_model_request_errors_stream() {
+        // Setup common variables
+        let api_keys = InferenceCredentials::default();
+        let client = Client::new();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clients = InferenceClients {
+            http_client: &client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            credentials: &api_keys,
+        };
+        let inference_params = InferenceParams::default();
+
+        let model_name = "dummy_chat_model";
+        let error_model_name = "error";
+        let function_config_chat = Box::leak(Box::new(FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: false,
+        })));
+
+        let request_messages = vec![RequestMessage {
+            role: Role::User,
+            content: vec!["Hello, how are you?".to_string().into()],
+        }];
+
+        let model_request = ModelInferenceRequest {
+            messages: request_messages.clone(),
+            system: None,
+            temperature: Some(0.7),
+            max_tokens: Some(100),
+            top_p: Some(0.9),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            output_schema: None,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+        };
+
+        // Create a dummy provider config with the error model name
+        let error_provider_config = ProviderConfig::Dummy(DummyProvider {
+            model_name: error_model_name.to_string(),
+            ..Default::default()
+        });
+
+        // Create a dummy provider config with the good model name
+        let dummy_provider_config = ProviderConfig::Dummy(DummyProvider {
+            model_name: model_name.to_string(),
+            ..Default::default()
+        });
+
+        // Create a model config with the dummy provider
+        let model_config = Box::leak(Box::new(ModelConfig {
+            routing: vec![error_model_name.to_string(), model_name.to_string()],
+            providers: HashMap::from([
+                (error_model_name.to_string(), error_provider_config),
+                (model_name.to_string(), dummy_provider_config),
+            ]),
+        }));
+        let retry_config = Box::leak(Box::new(RetryConfig::default()));
+
+        // Call infer_model_request_stream
+        let result = infer_model_request_stream(
+            model_request,
+            model_name,
+            model_config,
+            function_config_chat,
+            &clients,
+            inference_params.clone(),
+            retry_config,
+        )
+        .await;
+
+        // Assert that the result is OK
+        assert!(result.is_ok());
+
+        // Unwrap the result
+        let (first_chunk, mut stream, model_used_info) = result.unwrap();
+
+        // Check the first chunk
+        if let InferenceResultChunk::Chat(chat_chunk) = first_chunk {
+            assert_eq!(chat_chunk.content.len(), 1);
+            if let ContentBlockChunk::Text(text_chunk) = &chat_chunk.content[0] {
+                assert_eq!(text_chunk.text, DUMMY_STREAMING_RESPONSE[0]);
+            } else {
+                panic!("Expected text chunk in first inference result chunk.");
+            }
+        } else {
+            panic!("Expected chat inference result chunk.");
+        }
+
+        // Verify the model used information
+        assert_eq!(model_used_info.model_name, model_name);
+        assert_eq!(model_used_info.model_provider_name, model_name);
+        assert_eq!(model_used_info.inference_params, inference_params);
+
+        // Iterate over the stream and collect the remaining chunks
+        let mut received_text = String::new();
+        while let Some(chunk_result) = stream.next().await {
+            let chunk = chunk_result.expect("Stream chunk should be OK.");
+
+            if let InferenceResultChunk::Chat(chat_chunk) = chunk {
+                for content_block in chat_chunk.content {
+                    if let ContentBlockChunk::Text(text_chunk) = content_block {
+                        received_text.push_str(&text_chunk.text);
+                    }
+                }
+            } else if let Some(usage) = chunk.usage() {
+                // Verify the usage information
+                assert_eq!(usage.input_tokens, 10);
+                assert_eq!(usage.output_tokens, DUMMY_STREAMING_RESPONSE.len() as u32);
+            } else {
+                panic!("Unexpected inference result chunk.");
+            }
+        }
+
+        // Combine the first chunk's text with the received text
+        let mut full_response = DUMMY_STREAMING_RESPONSE[0].to_string();
+        full_response.push_str(&received_text);
+
+        // Verify the full response
+        let expected_response: String = DUMMY_STREAMING_RESPONSE.iter().cloned().collect();
+        assert_eq!(full_response, expected_response);
+
+        assert!(logs_contain(
+            r#"ERROR test_infer_model_request_errors_stream:infer_model_request_stream{model_name=dummy_chat_model}:infer_stream:provider_error{provider_name="error"}: gateway::error: Error sending request to Dummy provider."#
+        ));
     }
 }

@@ -1,6 +1,7 @@
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use tracing::instrument;
 use uuid::Uuid;
 
 use crate::embeddings::EmbeddingModelConfig;
@@ -124,6 +125,7 @@ impl FunctionConfig {
         }
     }
 
+    #[instrument(skip_all, fields(inference_id))]
     pub async fn prepare_response<'a, 'request>(
         &self,
         inference_id: Uuid,
