@@ -54,7 +54,7 @@ impl From<&MetricConfigType> for FeedbackType {
 
 /// A handler for the feedback endpoint
 #[instrument(name="feedback",
-  skip(config, clickhouse_connection_info, params),
+  skip_all,
   fields(
     metric_name = %params.metric_name,
   )
