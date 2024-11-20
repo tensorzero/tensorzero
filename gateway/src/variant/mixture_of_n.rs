@@ -101,11 +101,11 @@ impl Variant for MixtureOfNConfig {
     ) -> Result<(), Error> {
         // Validate each candidate variant
         for candidate in &self.candidates {
-            let variant = function.variants().get(candidate).ok_or(Error::new(
-                ErrorDetails::UnknownCandidate {
+            let variant = function.variants().get(candidate).ok_or_else(|| {
+                Error::new(ErrorDetails::UnknownCandidate {
                     name: candidate.to_string(),
-                },
-            ))?;
+                })
+            })?;
             variant
                 .validate(
                     function,
@@ -157,11 +157,11 @@ impl MixtureOfNConfig {
             .candidates
             .iter()
             .map(|candidate| {
-                let variant = function.variants().get(candidate).ok_or(Error::new(
-                    ErrorDetails::UnknownCandidate {
+                let variant = function.variants().get(candidate).ok_or_else(|| {
+                    Error::new(ErrorDetails::UnknownCandidate {
                         name: candidate.to_string(),
-                    },
-                ))?;
+                    })
+                })?;
                 Ok((candidate.to_string(), variant))
             })
             .collect::<Result<Vec<_>, Error>>()?;
@@ -307,12 +307,11 @@ async fn inner_fuse_candidates<'a, 'request>(
         }
         .into());
     }
-    let model_config =
-        models
-            .get(&fuser.inner.model)
-            .ok_or(Error::new(ErrorDetails::UnknownModel {
-                name: fuser.inner.model.clone(),
-            }))?;
+    let model_config = models.get(&fuser.inner.model).ok_or_else(|| {
+        Error::new(ErrorDetails::UnknownModel {
+            name: fuser.inner.model.clone(),
+        })
+    })?;
     let infer_model_request_args = InferModelRequestArgs {
         request: inference_request,
         model_name: &fuser.inner.model,

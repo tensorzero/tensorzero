@@ -110,21 +110,27 @@ impl GCPCredentials {
         match (
             credential_value
                 .get("private_key_id")
-                .ok_or(Error::new(ErrorDetails::GCPCredentials {
-                    message: "GCP Vertex Gemini: missing private_key_id".to_string(),
-                }))?
+                .ok_or_else(|| {
+                    Error::new(ErrorDetails::GCPCredentials {
+                        message: "GCP Vertex Gemini: missing private_key_id".to_string(),
+                    })
+                })?
                 .as_str(),
             credential_value
                 .get("private_key")
-                .ok_or(Error::new(ErrorDetails::GCPCredentials {
-                    message: "GCP Vertex Gemini: missing private_key".to_string(),
-                }))?
+                .ok_or_else(|| {
+                    Error::new(ErrorDetails::GCPCredentials {
+                        message: "GCP Vertex Gemini: missing private_key".to_string(),
+                    })
+                })?
                 .as_str(),
             credential_value
                 .get("client_email")
-                .ok_or(Error::new(ErrorDetails::GCPCredentials {
-                    message: "GCP Vertex Gemini: missing client_email".to_string(),
-                }))?
+                .ok_or_else(|| {
+                    Error::new(ErrorDetails::GCPCredentials {
+                        message: "GCP Vertex Gemini: missing client_email".to_string(),
+                    })
+                })?
                 .as_str(),
         ) {
             (Some(private_key_id), Some(private_key), Some(client_email)) => Ok(GCPCredentials {
@@ -871,11 +877,11 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
 
         // GCP Vertex Gemini response can contain multiple candidates and each of these can contain
         // multiple content parts. We will only use the first candidate but handle all parts of the response therein.
-        let first_candidate = response.candidates.into_iter().next().ok_or(Error::new(
-            ErrorDetails::GCPVertexServer {
+        let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
+            Error::new(ErrorDetails::GCPVertexServer {
                 message: "GCP Vertex Gemini response has no candidates".to_string(),
-            },
-        ))?;
+            })
+        })?;
 
         // GCP sometimes doesn't return content in the response (e.g. safety settings blocked the generation).
         let content: Vec<ContentBlock> = match first_candidate.content {
@@ -889,10 +895,12 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
 
         let usage = response
             .usage_metadata
-            .ok_or(Error::new(ErrorDetails::GCPVertexServer {
-                message: "GCP Vertex Gemini non-streaming response has no usage metadata"
-                    .to_string(),
-            }))?
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::GCPVertexServer {
+                    message: "GCP Vertex Gemini non-streaming response has no usage metadata"
+                        .to_string(),
+                })
+            })?
             .into();
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::GCPVertexServer {
@@ -937,11 +945,11 @@ impl TryFrom<GCPVertexGeminiStreamResponseWithMetadata> for ProviderInferenceRes
             })
         })?;
 
-        let first_candidate = response.candidates.into_iter().next().ok_or(Error::new(
-            ErrorDetails::GCPVertexServer {
+        let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
+            Error::new(ErrorDetails::GCPVertexServer {
                 message: "GCP Vertex Gemini response has no candidates".to_string(),
-            },
-        ))?;
+            })
+        })?;
 
         // GCP sometimes returns chunks without content (e.g. they might have usage only).
         let mut content: Vec<ContentBlockChunk> = match first_candidate.content {

@@ -506,7 +506,7 @@ fn prepare_messages(messages: Vec<AnthropicMessage>) -> Result<Vec<AnthropicMess
             Some(role) => {
                 if role == this_role {
                     let mut last_message =
-                        consolidated_messages.pop().ok_or(Error::new(ErrorDetails::InvalidRequest {
+                        consolidated_messages.pop().ok_or_else(|| Error::new(ErrorDetails::InvalidRequest {
                             message: "Last message is missing (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
                                 .to_string(),
                         }))?;
@@ -861,10 +861,10 @@ fn anthropic_to_tensorzero_stream_message(
                     // This is necessary because the ToolCallChunk must always contain the tool name and ID
                     // even though Anthropic only sends the tool ID and name in the ToolUse chunk and not InputJSONDelta
                     vec![ContentBlockChunk::ToolCall(ToolCallChunk {
-                        raw_name: current_tool_name.clone().ok_or(Error::new(ErrorDetails::AnthropicServer {
+                        raw_name: current_tool_name.clone().ok_or_else(|| Error::new(ErrorDetails::AnthropicServer {
                             message: "Got InputJsonDelta chunk from Anthropic without current tool name being set by a ToolUse".to_string(),
                         }))?,
-                        id: current_tool_id.clone().ok_or(Error::new(ErrorDetails::AnthropicServer {
+                        id: current_tool_id.clone().ok_or_else(|| Error::new(ErrorDetails::AnthropicServer {
                             message: "Got InputJsonDelta chunk from Anthropic without current tool id being set by a ToolUse".to_string(),
                         }))?,
                         raw_arguments: partial_json,

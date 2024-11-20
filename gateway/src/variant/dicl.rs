@@ -101,13 +101,11 @@ impl Variant for DiclConfig {
             &mut inference_params,
         )?;
 
-        let model_config =
-            models
-                .models
-                .get(&self.model)
-                .ok_or(Error::new(ErrorDetails::UnknownModel {
-                    name: self.model.clone(),
-                }))?;
+        let model_config = models.models.get(&self.model).ok_or_else(|| {
+            Error::new(ErrorDetails::UnknownModel {
+                name: self.model.clone(),
+            })
+        })?;
 
         // Instantiate the InferModelRequestArgs struct
         let args = InferModelRequestArgs {
@@ -172,13 +170,11 @@ impl Variant for DiclConfig {
             &mut inference_params,
         )?;
 
-        let model_config =
-            models
-                .models
-                .get(&self.model)
-                .ok_or(Error::new(ErrorDetails::UnknownModel {
-                    name: self.model.clone(),
-                }))?;
+        let model_config = models.models.get(&self.model).ok_or_else(|| {
+            Error::new(ErrorDetails::UnknownModel {
+                name: self.model.clone(),
+            })
+        })?;
 
         // Actually run the inference
         let (inference_result_chunk, inference_result_stream, mut model_used_info) =
@@ -307,11 +303,11 @@ impl DiclConfig {
             })
         })?;
 
-        let embedding_model = embedding_models
-            .get(&self.embedding_model)
-            .ok_or(Error::new(ErrorDetails::Inference {
+        let embedding_model = embedding_models.get(&self.embedding_model).ok_or_else(|| {
+            Error::new(ErrorDetails::Inference {
                 message: format!("Embedding model {} not found", self.embedding_model),
-            }))?;
+            })
+        })?;
 
         let embedding_request = EmbeddingRequest {
             input: serialized_input.to_string(),

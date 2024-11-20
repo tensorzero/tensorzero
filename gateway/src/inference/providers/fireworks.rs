@@ -375,7 +375,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
         let message = response
             .choices
             .pop()
-            .ok_or(Error::new(ErrorDetails::FireworksServer {
+            .ok_or_else(|| Error::new(ErrorDetails::FireworksServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
             }
             ))?

@@ -305,7 +305,7 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let message = response
             .choices
             .pop()
-            .ok_or(Error::new(ErrorDetails::VLLMServer {
+            .ok_or_else(|| Error::new(ErrorDetails::VLLMServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
             }))?
             .message;

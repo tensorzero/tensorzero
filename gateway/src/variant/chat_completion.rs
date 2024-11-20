@@ -60,10 +60,10 @@ impl ChatCompletionConfig {
                 InputMessageContent::Text { value: text } => {
                     let text_content= match template_path {
                         Some(template_path) => templates.template_message(
-                            template_path.to_str().ok_or(Error::new(ErrorDetails::InvalidTemplatePath))?,
+                            template_path.to_str().ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))?,
                             text,
                         )?,
-                        None => text.as_str().ok_or(Error::new(ErrorDetails::InvalidMessage { message: format!("Request message content {} is not a string but there is no variant template for Role {}", text, message.role) }))?.to_string(),
+                        None => text.as_str().ok_or_else(|| Error::new(ErrorDetails::InvalidMessage { message: format!("Request message content {} is not a string but there is no variant template for Role {}", text, message.role) }))?.to_string(),
                     };
                     content.push(text_content.into());
                 }
@@ -90,7 +90,7 @@ impl ChatCompletionConfig {
     ) -> Result<Option<String>, Error> {
         Ok(match &self.system_template {
             Some(template_path) => Some(templates.template_message(
-                template_path.to_str().ok_or(Error::new(ErrorDetails::InvalidTemplatePath))?,
+                template_path.to_str().ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))?,
                 system.unwrap_or(&Value::Null),
             )?),
             None => {
@@ -99,7 +99,7 @@ impl ChatCompletionConfig {
                     Some(system) =>
                 Some(system
                 .as_str()
-                .ok_or(Error::new(ErrorDetails::InvalidMessage {
+                .ok_or_else(|| Error::new(ErrorDetails::InvalidMessage {
                     message:
                         format!("System message content {} is not a string but there is no variant template", system)
                             .to_string(),
@@ -165,13 +165,11 @@ impl Variant for ChatCompletionConfig {
             false,
             &mut inference_params,
         )?;
-        let model_config =
-            models
-                .models
-                .get(&self.model)
-                .ok_or(Error::new(ErrorDetails::UnknownModel {
-                    name: self.model.clone(),
-                }))?;
+        let model_config = models.models.get(&self.model).ok_or_else(|| {
+            Error::new(ErrorDetails::UnknownModel {
+                name: self.model.clone(),
+            })
+        })?;
         let args = InferModelRequestArgs {
             request,
             model_name: &self.model,
@@ -209,13 +207,11 @@ impl Variant for ChatCompletionConfig {
             true,
             &mut inference_params,
         )?;
-        let model_config =
-            models
-                .models
-                .get(&self.model)
-                .ok_or(Error::new(ErrorDetails::UnknownModel {
-                    name: self.model.clone(),
-                }))?;
+        let model_config = models.models.get(&self.model).ok_or_else(|| {
+            Error::new(ErrorDetails::UnknownModel {
+                name: self.model.clone(),
+            })
+        })?;
         infer_model_request_stream(
             request,
             &self.model,
@@ -336,7 +332,7 @@ pub fn validate_template_and_schema(
         (None, Some(template)) => {
             let template_name = template
                 .to_str()
-                .ok_or(Error::new(ErrorDetails::InvalidTemplatePath))?;
+                .ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))?;
             if templates.template_needs_variables(template_name)? {
                 return Err(Error::new(ErrorDetails::Config {
                     message: "schema is required when template is specified and needs variables"

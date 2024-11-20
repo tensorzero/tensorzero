@@ -365,9 +365,11 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let message = response
             .choices
             .pop()
-            .ok_or(Error::new(ErrorDetails::OpenAIServer {
-                message: "Response has no choices (this should never happen)".to_string(),
-            }))?
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::OpenAIServer {
+                    message: "Response has no choices (this should never happen)".to_string(),
+                })
+            })?
             .message;
         let mut content: Vec<ContentBlock> = Vec::new();
         if let Some(text) = message.content {

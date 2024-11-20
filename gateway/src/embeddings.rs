@@ -34,11 +34,11 @@ impl EmbeddingModelConfig {
     ) -> Result<EmbeddingResponse, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
-            let provider_config = self.providers.get(provider_name).ok_or(Error::new(
-                ErrorDetails::ProviderNotFound {
+            let provider_config = self.providers.get(provider_name).ok_or_else(|| {
+                Error::new(ErrorDetails::ProviderNotFound {
                     provider_name: provider_name.clone(),
-                },
-            ))?;
+                })
+            })?;
             let response = provider_config.embed(request, client).await;
             match response {
                 Ok(response) => {

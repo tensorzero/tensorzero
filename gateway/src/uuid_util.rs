@@ -17,9 +17,11 @@ pub fn validate_episode_id(episode_id: Uuid) -> Result<(), Error> {
     }
     let (timestamp, _) = episode_id
         .get_timestamp()
-        .ok_or(Error::new(ErrorDetails::InvalidEpisodeId {
-            message: "Timestamp is missing".to_string(),
-        }))?
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::InvalidEpisodeId {
+                message: "Timestamp is missing".to_string(),
+            })
+        })?
         .to_unix();
     if timestamp < EARLIEST_TIMESTAMP {
         return Err(Error::new(ErrorDetails::InvalidEpisodeId {

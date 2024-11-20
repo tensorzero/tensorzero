@@ -351,7 +351,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
         let message = response
             .choices
             .pop()
-            .ok_or(Error::new(ErrorDetails::TogetherServer {
+            .ok_or_else(|| Error::new(ErrorDetails::TogetherServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
             }))?
             .message;

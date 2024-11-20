@@ -49,10 +49,12 @@ impl AWSBedrockProvider {
             .or_else(Region::new("us-east-1"))
             .region()
             .await
-            .ok_or(Error::new(ErrorDetails::AWSBedrockClient {
-                status_code: StatusCode::INTERNAL_SERVER_ERROR,
-                message: "Failed to determine AWS region.".to_string(),
-            }))?;
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::AWSBedrockClient {
+                    status_code: StatusCode::INTERNAL_SERVER_ERROR,
+                    message: "Failed to determine AWS region.".to_string(),
+                })
+            })?;
 
         tracing::trace!("Creating new AWS Bedrock client for region: {region}",);
 
@@ -359,10 +361,10 @@ fn bedrock_to_tensorzero_stream_message(
                             // This is necessary because the ToolCallChunk must always contain the tool name and ID
                             // even though AWS Bedrock only sends the tool ID and name in the ToolUse chunk and not InputJSONDelta
                             vec![ContentBlockChunk::ToolCall(ToolCallChunk {
-                                raw_name: current_tool_name.clone().ok_or(Error::new(ErrorDetails::AWSBedrockServer {
+                                raw_name: current_tool_name.clone().ok_or_else(|| Error::new(ErrorDetails::AWSBedrockServer {
                                     message: "Got InputJsonDelta chunk from AWS Bedrock without current tool name being set by a ToolUse".to_string(),
                                 }))?,
-                                id: current_tool_id.clone().ok_or(Error::new(ErrorDetails::AWSBedrockServer {
+                                id: current_tool_id.clone().ok_or_else(|| Error::new(ErrorDetails::AWSBedrockServer {
                                     message: "Got InputJsonDelta chunk from AWS Bedrock without current tool id being set by a ToolUse".to_string(),
                                 }))?,
                                 raw_arguments: tool_use.input,
@@ -611,9 +613,11 @@ impl<'a> TryFrom<ConverseOutputWithMetadata<'a>> for ProviderInferenceResponse {
         };
 
         let mut content: Vec<ContentBlock> = message
-            .ok_or(Error::new(ErrorDetails::AWSBedrockServer {
-                message: "AWS Bedrock returned an empty message.".to_string(),
-            }))?
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::AWSBedrockServer {
+                    message: "AWS Bedrock returned an empty message.".to_string(),
+                })
+            })?
             .content
             .into_iter()
             .map(|block| block.try_into())
@@ -633,9 +637,12 @@ impl<'a> TryFrom<ConverseOutputWithMetadata<'a>> for ProviderInferenceResponse {
                 input_tokens: u.input_tokens as u32,
                 output_tokens: u.output_tokens as u32,
             })
-            .ok_or(Error::new(ErrorDetails::AWSBedrockServer {
-                message: "AWS Bedrock returned a message without usage information.".to_string(),
-            }))?;
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::AWSBedrockServer {
+                    message: "AWS Bedrock returned a message without usage information."
+                        .to_string(),
+                })
+            })?;
 
         Ok(ProviderInferenceResponse::new(
             content,

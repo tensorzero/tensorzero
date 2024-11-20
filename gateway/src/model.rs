@@ -62,11 +62,11 @@ impl ModelConfig {
     ) -> Result<ModelInferenceResponse<'a>, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
-            let provider_config = self.providers.get(provider_name).ok_or(Error::new(
-                ErrorDetails::ProviderNotFound {
+            let provider_config = self.providers.get(provider_name).ok_or_else(|| {
+                Error::new(ErrorDetails::ProviderNotFound {
                     provider_name: provider_name.clone(),
-                },
-            ))?;
+                })
+            })?;
             let response = provider_config.infer(request, client, api_keys).await;
             match response {
                 Ok(response) => {
@@ -100,11 +100,11 @@ impl ModelConfig {
     > {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
-            let provider_config = self.providers.get(provider_name).ok_or(Error::new(
-                ErrorDetails::ProviderNotFound {
+            let provider_config = self.providers.get(provider_name).ok_or_else(|| {
+                Error::new(ErrorDetails::ProviderNotFound {
                     provider_name: provider_name.clone(),
-                },
-            ))?;
+                })
+            })?;
             let response = provider_config
                 .infer_stream(request, client, api_keys)
                 .await;

@@ -519,7 +519,7 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
         let message = response
             .choices
             .pop()
-            .ok_or(Error::new(ErrorDetails::MistralServer {
+            .ok_or_else(|| Error::new(ErrorDetails::MistralServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
             }))?
             .message;

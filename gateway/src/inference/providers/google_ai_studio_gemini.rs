@@ -715,11 +715,11 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
 
         // Google AI Studio Gemini response can contain multiple candidates and each of these can contain
         // multiple content parts. We will only use the first candidate but handle all parts of the response therein.
-        let first_candidate = response.candidates.into_iter().next().ok_or(Error::new(
-            ErrorDetails::GoogleAIStudioServer {
+        let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
+            Error::new(ErrorDetails::GoogleAIStudioServer {
                 message: "Google AI Studio Gemini response has no candidates".to_string(),
-            },
-        ))?;
+            })
+        })?;
 
         // Gemini sometimes doesn't return content in the response (e.g. safety settings blocked the generation).
         let content: Vec<ContentBlock> = match first_candidate.content {
@@ -733,10 +733,12 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
 
         let usage = response
             .usage_metadata
-            .ok_or(Error::new(ErrorDetails::GoogleAIStudioServer {
-                message: "Google AI Studio Gemini non-streaming response has no usage metadata"
-                    .to_string(),
-            }))?
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::GoogleAIStudioServer {
+                    message: "Google AI Studio Gemini non-streaming response has no usage metadata"
+                        .to_string(),
+                })
+            })?
             .into();
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::GoogleAIStudioServer {
@@ -780,11 +782,11 @@ impl TryFrom<GoogleAIStudioGeminiResponseWithMetadata> for ProviderInferenceResp
             })
         })?;
 
-        let first_candidate = response.candidates.into_iter().next().ok_or(Error::new(
-            ErrorDetails::GoogleAIStudioServer {
+        let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
+            Error::new(ErrorDetails::GoogleAIStudioServer {
                 message: "Google AI Studio Gemini response has no candidates".to_string(),
-            },
-        ))?;
+            })
+        })?;
 
         // Gemini sometimes returns chunks without content (e.g. they might have usage only).
         let mut content: Vec<ContentBlockChunk> = match first_candidate.content {

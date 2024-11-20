@@ -182,12 +182,11 @@ impl EmbeddingProvider for OpenAIProvider {
         request: &EmbeddingRequest,
         client: &reqwest::Client,
     ) -> Result<EmbeddingProviderResponse, Error> {
-        let api_key = self
-            .api_key
-            .as_ref()
-            .ok_or(Error::new(ErrorDetails::ApiKeyMissing {
+        let api_key = self.api_key.as_ref().ok_or_else(|| {
+            Error::new(ErrorDetails::ApiKeyMissing {
                 provider_name: "OpenAI".to_string(),
-            }))?;
+            })
+        })?;
         let request_body = OpenAIEmbeddingRequest::new(&self.model_name, &request.input);
         let request_url = get_embedding_url(self.api_base.as_ref())?;
         let start_time = Instant::now();
@@ -916,7 +915,7 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let message = response
             .choices
             .pop()
-            .ok_or(Error::new(ErrorDetails::OpenAIServer {
+            .ok_or_else(|| Error::new(ErrorDetails::OpenAIServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
             }))?
             .message;
@@ -1027,7 +1026,7 @@ fn openai_to_tensorzero_chunk(
                     None => {
                         tool_call_ids
                             .get(index as usize)
-                            .ok_or(Error::new(ErrorDetails::OpenAIServer {
+                            .ok_or_else(|| Error::new(ErrorDetails::OpenAIServer {
                                 message: "Tool call index out of bounds (meaning we haven't seen this many ids in the stream)".to_string(),
                             }))?
                             .clone()
@@ -1041,7 +1040,7 @@ fn openai_to_tensorzero_chunk(
                     None => {
                         tool_names
                             .get(index as usize)
-                            .ok_or(Error::new(ErrorDetails::OpenAIServer {
+                            .ok_or_else(|| Error::new(ErrorDetails::OpenAIServer {
                                 message: "Tool call index out of bounds (meaning we haven't seen this many names in the stream)".to_string(),
                             }))?
                             .clone()
@@ -1121,9 +1120,11 @@ impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderR
             .data
             .into_iter()
             .next()
-            .ok_or(Error::new(ErrorDetails::OpenAIServer {
-                message: "Expected exactly one embedding in response".to_string(),
-            }))?
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::OpenAIServer {
+                    message: "Expected exactly one embedding in response".to_string(),
+                })
+            })?
             .embedding;
 
         Ok(EmbeddingProviderResponse::new(

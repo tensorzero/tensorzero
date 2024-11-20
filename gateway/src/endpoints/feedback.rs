@@ -195,7 +195,7 @@ fn get_feedback_metadata<'a>(
         MetricConfigLevel::Inference => inference_id,
         MetricConfigLevel::Episode => episode_id,
     }
-    .ok_or(ErrorDetails::InvalidRequest {
+    .ok_or_else(|| ErrorDetails::InvalidRequest {
         message: format!(
             r#"Correct ID was not provided for feedback level "{}"."#,
             feedback_level
@@ -217,7 +217,7 @@ async fn write_comment(
     feedback_id: Uuid,
     dryrun: bool,
 ) -> Result<(), Error> {
-    let value = value.as_str().ok_or(ErrorDetails::InvalidRequest {
+    let value = value.as_str().ok_or_else(|| ErrorDetails::InvalidRequest {
         message: "Feedback value for a comment must be a string".to_string(),
     })?;
     let payload = json!({
@@ -267,11 +267,11 @@ async fn write_float(
     feedback_id: Uuid,
     dryrun: bool,
 ) -> Result<(), Error> {
-    let value = value
-        .as_f64()
-        .ok_or(Error::new(ErrorDetails::InvalidRequest {
+    let value = value.as_f64().ok_or_else(|| {
+        Error::new(ErrorDetails::InvalidRequest {
             message: format!("Feedback value for metric `{metric_name}` must be a number"),
-        }))?;
+        })
+    })?;
     let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
     if !dryrun {
         tokio::spawn(async move {
@@ -290,11 +290,11 @@ async fn write_boolean(
     feedback_id: Uuid,
     dryrun: bool,
 ) -> Result<(), Error> {
-    let value = value
-        .as_bool()
-        .ok_or(Error::new(ErrorDetails::InvalidRequest {
+    let value = value.as_bool().ok_or_else(|| {
+        Error::new(ErrorDetails::InvalidRequest {
             message: format!("Feedback value for metric `{metric_name}` must be a boolean"),
-        }))?;
+        })
+    })?;
     let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
     if !dryrun {
         tokio::spawn(async move {

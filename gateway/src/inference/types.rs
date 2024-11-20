@@ -869,10 +869,13 @@ pub async fn collect_chunks<'a, 'b>(
 
     let inference_id = value
         .first()
-        .ok_or(Error::new(ErrorDetails::TypeConversion {
-            message: "Attempted to create an InferenceResult from an empty response chunk vector"
-                .to_string(),
-        }))?
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::TypeConversion {
+                message:
+                    "Attempted to create an InferenceResult from an empty response chunk vector"
+                        .to_string(),
+            })
+        })?
         .inference_id();
     let mut tool_call_blocks: HashMap<String, ContentBlock> = HashMap::new();
     let mut text_blocks: HashMap<String, ContentBlock> = HashMap::new();
@@ -885,10 +888,13 @@ pub async fn collect_chunks<'a, 'b>(
     let mut ttft: Option<Duration> = None;
     let response_time = value
         .last()
-        .ok_or(Error::new(ErrorDetails::TypeConversion {
-            message: "Attempted to create an InferenceResult from an empty response chunk vector"
-                .to_string(),
-        }))?
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::TypeConversion {
+                message:
+                    "Attempted to create an InferenceResult from an empty response chunk vector"
+                        .to_string(),
+            })
+        })?
         .latency();
     for chunk in value {
         if let Some(chunk_usage) = chunk.usage() {
@@ -966,9 +972,11 @@ pub async fn collect_chunks<'a, 'b>(
         }
     }
 
-    let ttft = ttft.ok_or(Error::new(ErrorDetails::TypeConversion {
-        message: "Never got TTFT because there was never content in the response.".to_string(),
-    }))?;
+    let ttft = ttft.ok_or_else(|| {
+        Error::new(ErrorDetails::TypeConversion {
+            message: "Never got TTFT because there was never content in the response.".to_string(),
+        })
+    })?;
     let latency = Latency::Streaming {
         ttft,
         response_time,

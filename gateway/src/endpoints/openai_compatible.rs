@@ -226,9 +226,11 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params<'static> {
         let function_name = openai_compatible_params
             .model
             .strip_prefix("tensorzero::")
-            .ok_or(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                message: "model name must start with 'tensorzero::'".to_string(),
-            }))?;
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                    message: "model name must start with 'tensorzero::'".to_string(),
+                })
+            })?;
 
         if function_name.is_empty() {
             return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
@@ -397,9 +399,11 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
                 OpenAICompatibleMessage::Tool(msg) => {
                     let name = tool_call_id_to_name
                         .get(&msg.tool_call_id)
-                        .ok_or(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                            message: "tool call id not found".to_string(),
-                        }))?
+                        .ok_or_else(|| {
+                            Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                                message: "tool call id not found".to_string(),
+                            })
+                        })?
                         .to_string();
                     messages.push(InputMessage {
                         role: Role::User,
@@ -426,7 +430,7 @@ fn convert_openai_message_content(content: Value) -> Result<Value, Error> {
                 }
                 .into());
             }
-            Ok(a.into_iter().next().ok_or(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+            Ok(a.into_iter().next().ok_or_else(|| Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
                 message: "message content array is empty. This should never happen. Please report this bug at https://github.com/tensorzero/tensorzero/issues.".to_string(),
             }))?)
         }

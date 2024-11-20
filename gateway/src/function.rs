@@ -1,6 +1,7 @@
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use tracing::instrument;
 use uuid::Uuid;
 
 use crate::embeddings::EmbeddingModelConfig;
@@ -161,10 +162,12 @@ impl FunctionConfig {
                         ContentBlock::ToolCall(tool_call) => Some(tool_call.arguments),
                         _ => None,
                     })
-                    .ok_or(Error::new(ErrorDetails::Inference {
-                        message: "No valid content blocks found in JSON function response"
-                            .to_string(),
-                    }))?;
+                    .ok_or_else(|| {
+                        Error::new(ErrorDetails::Inference {
+                            message: "No valid content blocks found in JSON function response"
+                                .to_string(),
+                        })
+                    })?;
                 let parsed_output = serde_json::from_str::<Value>(&raw)
                     .map_err(|e| {
                         Error::new(ErrorDetails::OutputParsing {
@@ -223,6 +226,7 @@ impl FunctionConfig {
         }
     }
 
+    #[instrument(skip_all, fields(function_name = %function_name))]
     pub fn validate(
         &self,
         static_tools: &HashMap<String, StaticToolConfig>,
@@ -245,7 +249,7 @@ impl FunctionConfig {
         match self {
             FunctionConfig::Chat(params) => {
                 for tool in params.tools.iter() {
-                    static_tools.get(tool).ok_or(Error::new(ErrorDetails::Config {
+                    static_tools.get(tool).ok_or_else(|| Error::new(ErrorDetails::Config {
                         message: format!("`functions.{function_name}.tools`: tool `{tool}` is not present in the config"),
                     }))?;
                 }
@@ -413,11 +417,11 @@ pub fn sample_variant<'a>(
         sampled_variant_name = candidate_variant_names.swap_remove(variants.len() - 1);
     }
 
-    let variant = variants.get(sampled_variant_name).ok_or(Error::new(
-        ErrorDetails::InvalidFunctionVariants {
+    let variant = variants.get(sampled_variant_name).ok_or_else(|| {
+        Error::new(ErrorDetails::InvalidFunctionVariants {
             message: format!("Function `{function_name}` has no variant `{sampled_variant_name}`"),
-        },
-    ))?;
+        })
+    })?;
     Ok((sampled_variant_name, variant))
 }
 

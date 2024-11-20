@@ -6,6 +6,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tokio::time::Duration;
+use tracing::instrument;
 use uuid::Uuid;
 
 use crate::embeddings::EmbeddingModelConfig;
@@ -252,6 +253,7 @@ impl Variant for VariantConfig {
         }
     }
 
+    #[instrument(skip_all, fields(variant_name = %variant_name))]
     fn validate(
         &self,
         function: &FunctionConfig,

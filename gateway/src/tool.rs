@@ -108,9 +108,11 @@ impl ToolCallConfig {
                 static_tools
                     .get(tool_name)
                     .map(ToolConfig::Static)
-                    .ok_or(Error::new(ErrorDetails::ToolNotFound {
-                        name: tool_name.clone(),
-                    }))
+                    .ok_or_else(|| {
+                        Error::new(ErrorDetails::ToolNotFound {
+                            name: tool_name.clone(),
+                        })
+                    })
             })
             .collect();
 

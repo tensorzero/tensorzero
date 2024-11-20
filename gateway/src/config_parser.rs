@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use tracing::instrument;
 
 use crate::embeddings::EmbeddingModelConfig;
 use crate::error::{Error, ErrorDetails};
@@ -75,6 +76,7 @@ impl std::fmt::Display for MetricConfigLevel {
 }
 
 impl<'c> Config<'c> {
+    #[instrument]
     pub fn load() -> Result<Config<'c>, Error> {
         let config_path = UninitializedConfig::get_config_path();
         let config_table = UninitializedConfig::read_toml_config(&config_path)?;
@@ -133,6 +135,7 @@ impl<'c> Config<'c> {
     }
 
     /// Validate the config
+    #[instrument(skip_all)]
     fn validate(&self) -> Result<(), Error> {
         // Validate each model
         for (model_name, model) in &self.models {

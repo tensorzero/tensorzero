@@ -120,11 +120,11 @@ impl Variant for BestOfNSamplingConfig {
     ) -> Result<(), Error> {
         // Validate each candidate variant
         for candidate in &self.candidates {
-            let variant = function.variants().get(candidate).ok_or(Error::new(
-                ErrorDetails::UnknownCandidate {
+            let variant = function.variants().get(candidate).ok_or_else(|| {
+                Error::new(ErrorDetails::UnknownCandidate {
                     name: candidate.to_string(),
-                },
-            ))?;
+                })
+            })?;
             variant
                 .validate(
                     function,
@@ -176,11 +176,11 @@ impl BestOfNSamplingConfig {
             .candidates
             .iter()
             .map(|candidate| {
-                let variant = function.variants().get(candidate).ok_or(Error::new(
-                    ErrorDetails::UnknownCandidate {
+                let variant = function.variants().get(candidate).ok_or_else(|| {
+                    Error::new(ErrorDetails::UnknownCandidate {
                         name: candidate.to_string(),
-                    },
-                ))?;
+                    })
+                })?;
                 Ok((candidate.to_string(), variant))
             })
             .collect::<Result<Vec<_>, Error>>()?;
@@ -353,7 +353,7 @@ async fn inner_select_best_candidate<'a, 'request>(
     if skipped_indices.len() == candidates.len() - 1 {
         let selected_index = (0..candidates.len())
             .find(|&i| !skipped_indices.contains(&i))
-            .ok_or(Error::new(ErrorDetails::Inference {
+            .ok_or_else(|| Error::new(ErrorDetails::Inference {
                 message:
                     "No valid candidates available to prepare request (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
                         .to_string(),
@@ -361,12 +361,11 @@ async fn inner_select_best_candidate<'a, 'request>(
         // Return the selected index and None for the model inference result
         return Ok((Some(selected_index), None));
     }
-    let model_config =
-        models
-            .get(&evaluator.inner.model)
-            .ok_or(Error::new(ErrorDetails::UnknownModel {
-                name: evaluator.inner.model.clone(),
-            }))?;
+    let model_config = models.get(&evaluator.inner.model).ok_or_else(|| {
+        Error::new(ErrorDetails::UnknownModel {
+            name: evaluator.inner.model.clone(),
+        })
+    })?;
     let model_inference_response = (|| async {
         model_config
             .infer(&inference_request, clients.http_client, clients.credentials)
