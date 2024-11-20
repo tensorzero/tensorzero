@@ -340,6 +340,7 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params<'static> {
             output_schema,
             // OpenAI compatible endpoint does not support dynamic credentials
             credentials: InferenceCredentials::default(),
+            tags: HashMap::new(),
         })
     }
 }

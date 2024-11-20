@@ -4,6 +4,7 @@ use serde::de::Error as SerdeError;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::env;
+use tracing::instrument;
 use url::Url;
 
 use crate::inference::providers::anthropic::AnthropicCredentials;
@@ -84,6 +85,7 @@ impl ModelConfig {
         }))
     }
 
+    #[instrument(skip_all)]
     pub async fn infer_stream<'a, 'request>(
         &'a self,
         request: &'request ModelInferenceRequest<'request>,

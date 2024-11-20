@@ -15,6 +15,7 @@ use crate::{
 };
 use reqwest::Client;
 use serde::Deserialize;
+use tracing::instrument;
 use uuid::Uuid;
 
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -27,6 +28,7 @@ pub struct EmbeddingModelConfig {
 }
 
 impl EmbeddingModelConfig {
+    #[instrument(skip_all)]
     pub async fn embed(
         &self,
         request: &EmbeddingRequest,

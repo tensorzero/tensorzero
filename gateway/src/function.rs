@@ -129,6 +129,7 @@ impl FunctionConfig {
         }
     }
 
+    #[instrument(skip_all, fields(inference_id))]
     pub async fn prepare_response<'a, 'request>(
         &self,
         inference_id: Uuid,
