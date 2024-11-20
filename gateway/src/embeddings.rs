@@ -3,7 +3,7 @@ use std::future::Future;
 
 use crate::{
     endpoints::inference::InferenceCredentials,
-    error::Error,
+    error::{Error, ErrorDetails},
     inference::{
         providers::{openai::OpenAIProvider, provider_trait::HasCredentials},
         types::{
@@ -36,18 +36,14 @@ impl EmbeddingModelConfig {
     ) -> Result<EmbeddingResponse, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
-            let provider_config =
-                self.providers
-                    .get(provider_name)
-                    .ok_or(Error::ProviderNotFound {
-                        provider_name: provider_name.clone(),
-                    })?;
+            let provider_config = self.providers.get(provider_name).ok_or_else(|| {
+                Error::new(ErrorDetails::ProviderNotFound {
+                    provider_name: provider_name.clone(),
+                })
+            })?;
             let response = provider_config.embed(request, client).await;
             match response {
                 Ok(response) => {
-                    for error in provider_errors.values() {
-                        error.log();
-                    }
                     let embedding_response = EmbeddingResponse::new(response, provider_name);
                     return Ok(embedding_response);
                 }
@@ -56,7 +52,7 @@ impl EmbeddingModelConfig {
                 }
             }
         }
-        Err(Error::ModelProvidersExhausted { provider_errors })
+        Err(ErrorDetails::ModelProvidersExhausted { provider_errors }.into())
     }
 
     pub fn validate(&self) -> Result<(), Error> {
@@ -66,9 +62,10 @@ impl EmbeddingModelConfig {
             .values()
             .all(|provider| provider.has_credentials())
         {
-            return Err(Error::ModelValidation {
+            return Err(ErrorDetails::ModelValidation {
                 message: "At least one provider lacks credentials".to_string(),
-            });
+            }
+            .into());
         }
         Ok(())
     }

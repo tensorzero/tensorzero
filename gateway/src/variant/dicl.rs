@@ -10,7 +10,7 @@ use crate::inference::types::{ModelInferenceRequest, RequestMessage, Role};
 use crate::{
     embeddings::{EmbeddingModelConfig, EmbeddingRequest},
     endpoints::inference::{InferenceClients, InferenceParams},
-    error::Error,
+    error::{Error, ErrorDetails},
     function::FunctionConfig,
     inference::types::{
         ContentBlock, ContentBlockOutput, InferenceResult, InferenceResultChunk,
@@ -101,8 +101,10 @@ impl Variant for DiclConfig {
             &mut inference_params,
         )?;
 
-        let model_config = models.models.get(&self.model).ok_or(Error::UnknownModel {
-            name: self.model.clone(),
+        let model_config = models.models.get(&self.model).ok_or_else(|| {
+            Error::new(ErrorDetails::UnknownModel {
+                name: self.model.clone(),
+            })
         })?;
 
         // Instantiate the InferModelRequestArgs struct
@@ -168,8 +170,10 @@ impl Variant for DiclConfig {
             &mut inference_params,
         )?;
 
-        let model_config = models.models.get(&self.model).ok_or(Error::UnknownModel {
-            name: self.model.clone(),
+        let model_config = models.models.get(&self.model).ok_or_else(|| {
+            Error::new(ErrorDetails::UnknownModel {
+                name: self.model.clone(),
+            })
         })?;
 
         // Actually run the inference
@@ -212,30 +216,39 @@ impl Variant for DiclConfig {
 
         // Validate that weight is non-negative
         if self.weight < 0.0 {
-            return Err(Error::Config {
+            return Err(ErrorDetails::Config {
                 message: format!(
                 "`functions.{function_name}.variants.{variant_name}`: `weight` must be non-negative"
             ),
-            });
+            }
+            .into());
         }
         // Validate that the generation model and embedding model are valid
-        let model = models.get(&self.model).ok_or_else(|| Error::Config {
-            message: format!("`functions.{function_name}.variants.{variant_name}`: `model` must be a valid model name"),
+        let model = models.get(&self.model).ok_or_else(|| Error::new(ErrorDetails::Config {
+                message: format!("`functions.{function_name}.variants.{variant_name}`: `model` must be a valid model name"),
+            }))?;
+        let embedding_model = embedding_models
+            .get(&self.embedding_model)
+            .ok_or_else(|| Error::new(ErrorDetails::Config {
+                message: format!(
+                    "`functions.{function_name}.variants.{variant_name}`: `embedding_model` must be a valid embedding model name"
+                ),
+            }))?;
+        model.validate().map_err(|e| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "`functions.{function_name}.variants.{variant_name}` and model `{}`: {e}",
+                    self.model
+                ),
+            })
         })?;
-        let embedding_model = embedding_models.get(&self.embedding_model).ok_or_else(|| Error::Config {
-            message: format!("`functions.{function_name}.variants.{variant_name}`: `embedding_model` must be a valid embedding model name"),
-        })?;
-        model.validate().map_err(|e| Error::Config {
-            message: format!(
-                "`functions.{function_name}.variants.{variant_name}` and model `{}`: {e}",
-                self.model
-            ),
-        })?;
-        embedding_model.validate().map_err(|e| Error::Config {
-            message: format!(
+        embedding_model.validate().map_err(|e| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
                 "`functions.{function_name}.variants.{variant_name}` and embedding model `{}`: {e}",
                 self.embedding_model
-            ),
+                ),
+            })
         })?;
         Ok(())
     }
@@ -281,19 +294,20 @@ impl DiclConfig {
         function: &FunctionConfig,
     ) -> Result<(Vec<Example>, EmbeddingResponseWithMetadata<'a>), Error> {
         // Serialize the input so that it can be embedded
-        let serialized_input = serde_json::to_string(&input).map_err(|e| Error::Serialization {
-            message: format!(
-                "Error in serializing Input in dynamic in-context learning variant: {}",
-                e
-            ),
+        let serialized_input = serde_json::to_string(&input).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error in serializing Input in dynamic in-context learning variant: {}",
+                    e
+                ),
+            })
         })?;
 
-        let embedding_model =
-            embedding_models
-                .get(&self.embedding_model)
-                .ok_or(Error::Inference {
-                    message: format!("Embedding model {} not found", self.embedding_model),
-                })?;
+        let embedding_model = embedding_models.get(&self.embedding_model).ok_or_else(|| {
+            Error::new(ErrorDetails::Inference {
+                message: format!("Embedding model {} not found", self.embedding_model),
+            })
+        })?;
 
         let embedding_request = EmbeddingRequest {
             input: serialized_input.to_string(),
@@ -336,8 +350,10 @@ impl DiclConfig {
             .lines()
             .map(serde_json::from_str::<RawExample>)
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| Error::Serialization {
-                message: format!("Failed to parse raw examples: {}", e),
+            .map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Failed to parse raw examples: {}", e),
+                })
             })?;
 
         // Convert RawExamples into Examples (parses those serialized JSON strings)
@@ -370,11 +386,13 @@ impl DiclConfig {
         messages.push(RequestMessage {
             role: Role::User,
             content: vec![serde_json::to_string(&input)
-                .map_err(|e| Error::Serialization {
-                    message: format!(
-                        "Error in serializing Input in dynamic in-context learning variant: {}",
-                        e
-                    ),
+                .map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Error in serializing Input in dynamic in-context learning variant: {}",
+                            e
+                        ),
+                    })
                 })?
                 .into()],
         });
@@ -400,11 +418,13 @@ impl DiclConfig {
 
     fn prepare_input_message(&self, input: &Input) -> Result<RequestMessage, Error> {
         let content = vec![serde_json::to_string(&input)
-            .map_err(|e| Error::Serialization {
-                message: format!(
-                    "Error in serializing Input in dynamic in-context learning variant: {}",
-                    e
-                ),
+            .map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error in serializing Input in dynamic in-context learning variant: {}",
+                        e
+                    ),
+                })
             })?
             .into()];
         Ok(RequestMessage {
@@ -469,31 +489,36 @@ fn parse_raw_examples(
     let mut examples = Vec::new();
     for raw_example in raw_examples {
         // Parse the `input` string into `Input`
-        let input: Input =
-            serde_json::from_str(&raw_example.input).map_err(|e| Error::Serialization {
+        let input: Input = serde_json::from_str(&raw_example.input).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to parse `input`: {}", e),
-            })?;
+            })
+        })?;
 
         match function {
             FunctionConfig::Chat(_) => {
                 // Try parsing `output` as `Vec<ContentBlockOutput>` (for ChatExample)
                 let output = serde_json::from_str::<Vec<ContentBlockOutput>>(&raw_example.output)
-                    .map_err(|e| Error::Serialization {
-                    message: format!(
-                        "Failed to parse `output` in example `{:?}`: {}",
-                        raw_example, e
-                    ),
+                    .map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Failed to parse `output` in example `{:?}`: {}",
+                            raw_example, e
+                        ),
+                    })
                 })?;
                 examples.push(Example::Chat(ChatExample { input, output }));
             }
             FunctionConfig::Json(_) => {
                 // Try parsing `output` as `JsonInferenceOutput` (for JsonExample)
                 let output = serde_json::from_str::<JsonInferenceOutput>(&raw_example.output)
-                    .map_err(|e| Error::Serialization {
-                        message: format!(
-                            "Failed to parse `output` in example `{:?}`: {}",
-                            raw_example, e
-                        ),
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!(
+                                "Failed to parse `output` in example `{:?}`: {}",
+                                raw_example, e
+                            ),
+                        })
                     })?;
                 examples.push(Example::Json(JsonExample { input, output }));
             }
@@ -511,8 +536,10 @@ impl UninitializedDiclConfig {
         let system_instructions = match self.system_instructions {
             Some(path) => {
                 let path = base_path.as_ref().join(path);
-                fs::read_to_string(path).map_err(|e| Error::Config {
-                    message: format!("Failed to read system instructions: {}", e),
+                fs::read_to_string(path).map_err(|e| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!("Failed to read system instructions: {}", e),
+                    })
                 })?
             }
             None => "You are tasked with learning by induction and then solving a problem below. You will be shown several examples of inputs followed by outputs. Then, in the same format you will be given one last set of inputs. Your job is to use the provided examples to inform your response to the last set of inputs.".to_string(),

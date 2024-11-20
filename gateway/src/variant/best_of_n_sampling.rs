@@ -10,6 +10,7 @@ use tokio::time::{timeout, Duration};
 
 use crate::embeddings::EmbeddingModelConfig;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
+use crate::error::ErrorDetails;
 use crate::inference::types::{
     ContentBlock, FunctionType, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
@@ -102,9 +103,10 @@ impl Variant for BestOfNSamplingConfig {
         ),
         Error,
     > {
-        Err(Error::InvalidRequest {
+        Err(ErrorDetails::InvalidRequest {
             message: "Best of n variants do not support streaming inference.".to_string(),
-        })
+        }
+        .into())
     }
 
     fn validate(
@@ -118,12 +120,11 @@ impl Variant for BestOfNSamplingConfig {
     ) -> Result<(), Error> {
         // Validate each candidate variant
         for candidate in &self.candidates {
-            let variant = function
-                .variants()
-                .get(candidate)
-                .ok_or(Error::UnknownCandidate {
+            let variant = function.variants().get(candidate).ok_or_else(|| {
+                Error::new(ErrorDetails::UnknownCandidate {
                     name: candidate.to_string(),
-                })?;
+                })
+            })?;
             variant
                 .validate(
                     function,
@@ -133,9 +134,11 @@ impl Variant for BestOfNSamplingConfig {
                     function_name,
                     candidate,
                 )
-                .map_err(|e| Error::InvalidCandidate {
-                    variant_name: variant_name.to_string(),
-                    message: e.to_string(),
+                .map_err(|e| {
+                    Error::new(ErrorDetails::InvalidCandidate {
+                        variant_name: variant_name.to_string(),
+                        message: e.to_string(),
+                    })
                 })?;
         }
         // Validate the evaluator variant
@@ -173,16 +176,14 @@ impl BestOfNSamplingConfig {
             .candidates
             .iter()
             .map(|candidate| {
-                let variant =
-                    function
-                        .variants()
-                        .get(candidate)
-                        .ok_or(Error::UnknownCandidate {
-                            name: candidate.to_string(),
-                        })?;
+                let variant = function.variants().get(candidate).ok_or_else(|| {
+                    Error::new(ErrorDetails::UnknownCandidate {
+                        name: candidate.to_string(),
+                    })
+                })?;
                 Ok((candidate.to_string(), variant))
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>, Error>>()?;
 
         // Start the inference tasks (we keep the names around for logging)
         let mut inference_futures = Vec::new();
@@ -215,19 +216,17 @@ impl BestOfNSamplingConfig {
         let mut successful_results = Vec::new();
         for (candidate_name, result) in inference_results {
             match result {
-                Ok(inner_result) => match inner_result {
-                    Ok(res) => successful_results.push(res),
-                    Err(e) => {
-                        e.log();
+                Ok(inner_result) => {
+                    if let Ok(res) = inner_result {
+                        successful_results.push(res)
                     }
-                },
+                }
                 Err(_timeout_error) => {
                     // Map the Tokio timeout error to our own TimeoutError type
-                    let mapped_timeout_error = Error::InferenceTimeout {
+                    // It logs on construction
+                    Error::new(ErrorDetails::InferenceTimeout {
                         variant_name: candidate_name.clone(),
-                    };
-                    // Log the mapped timeout error
-                    mapped_timeout_error.log();
+                    });
                 }
             }
         }
@@ -247,14 +246,17 @@ impl BestOfNSamplingConfig {
         candidates: Vec<InferenceResult<'a>>,
     ) -> Result<InferenceResult<'a>, Error> {
         if candidates.is_empty() {
-            return Err(Error::Inference {
+            return Err(ErrorDetails::Inference {
                 message: "No candidates to select from in best of n".to_string(),
-            });
+            }
+            .into());
         }
         if candidates.len() == 1 {
             let mut candidates = candidates;
-            return candidates.pop().ok_or_else(|| Error::Inference {
-                message: "Expected one candidate but found none".to_string(),
+            return candidates.pop().ok_or_else(|| {
+                Error::new(ErrorDetails::Inference {
+                    message: "Expected one candidate but found none".to_string(),
+                })
             });
         }
         // If the evaluator fails, we randomly select one of the candidates
@@ -273,10 +275,7 @@ impl BestOfNSamplingConfig {
                 idx_opt.unwrap_or_else(|| rand::thread_rng().gen_range(0..candidates.len())),
                 inf_result,
             ),
-            Err(e) => {
-                e.log();
-                (rand::thread_rng().gen_range(0..candidates.len()), None)
-            }
+            Err(_) => (rand::thread_rng().gen_range(0..candidates.len()), None),
         };
 
         // Safely remove the selected candidate without panicking
@@ -285,10 +284,11 @@ impl BestOfNSamplingConfig {
         let mut selected_candidate = if selection_idx < candidates.len() {
             candidates.swap_remove(selection_idx)
         } else {
-            return Err(Error::Inference {
+            return Err(ErrorDetails::Inference {
                 message: "The index chosen by the evaluator is out of bounds (should never happen)"
                     .to_string(),
-            });
+            }
+            .into());
         };
         if let Some(inference_result) = &inference_result {
             total_usage.input_tokens += inference_result.usage.input_tokens;
@@ -344,27 +344,28 @@ async fn inner_select_best_candidate<'a, 'request>(
         &mut InferenceParams::default(),
     )?;
     if skipped_indices.len() == candidates.len() {
-        return Err(Error::Inference {
+        return Err(ErrorDetails::Inference {
             message: "No valid candidates available to prepare request.".to_string(),
-        });
+        }
+        .into());
     }
     // If there is only one candidate that was not skipped, we return that one without running inference
     if skipped_indices.len() == candidates.len() - 1 {
         let selected_index = (0..candidates.len())
             .find(|&i| !skipped_indices.contains(&i))
-            .ok_or(Error::Inference {
+            .ok_or_else(|| Error::new(ErrorDetails::Inference {
                 message:
                     "No valid candidates available to prepare request (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
                         .to_string(),
-            })?;
+            }))?;
         // Return the selected index and None for the model inference result
         return Ok((Some(selected_index), None));
     }
-    let model_config = models
-        .get(&evaluator.inner.model)
-        .ok_or(Error::UnknownModel {
+    let model_config = models.get(&evaluator.inner.model).ok_or_else(|| {
+        Error::new(ErrorDetails::UnknownModel {
             name: evaluator.inner.model.clone(),
-        })?;
+        })
+    })?;
     let model_inference_response = (|| async {
         model_config
             .infer(&inference_request, clients.http_client, clients.credentials)
@@ -383,20 +384,18 @@ async fn inner_select_best_candidate<'a, 'request>(
         }) {
         Some(text) => text,
         None => {
-            let err = Error::Inference {
+            Error::new(ErrorDetails::Inference {
                 message: "The evaluator did not return a text response".to_string(),
-            };
-            err.log();
+            });
             return Ok((None, Some(model_inference_result)));
         }
     };
     let parsed_output = match serde_json::from_str::<Value>(&text_content.text) {
         Ok(value) => value,
         Err(e) => {
-            let err = Error::Inference {
+            Error::new(ErrorDetails::Inference {
                 message: format!("The evaluator did not return a valid JSON response: {e}"),
-            };
-            err.log();
+            });
             return Ok((None, Some(model_inference_result)));
         }
     };
@@ -404,34 +403,33 @@ async fn inner_select_best_candidate<'a, 'request>(
         Some(val) => match val.as_u64() {
             Some(num) => num as usize,
             None => {
-                let err = Error::Inference {
+                Error::new(ErrorDetails::Inference {
                     message: format!(
                         "The evaluator did not return a valid integer answer choice: {val}"
                     ),
-                };
-                err.log();
+                });
                 return Ok((None, Some(model_inference_result)));
             }
         },
         None => {
-            let err = Error::Inference {
-                message: format!("The evaluator returned a JSON response without an answer_choice field: {parsed_output}"),
-            };
-            err.log();
+            Error::new(ErrorDetails::Inference {
+                message: format!(
+                    "The evaluator returned a JSON response without an answer_choice field: {parsed_output}"
+                ),
+            });
             return Ok((None, Some(model_inference_result)));
         }
     };
     // Map the evaluator's index to the actual index
     let answer_choice = map_evaluator_to_actual_index(answer_choice, &skipped_indices);
     if answer_choice >= candidates.len() {
-        let err = Error::Inference {
+        Error::new(ErrorDetails::Inference {
             message: format!(
                 "The index chosen by the evaluator is out of bounds: {} >= {}",
                 answer_choice,
                 candidates.len()
             ),
-        };
-        err.log();
+        });
         return Ok((None, Some(model_inference_result)));
     }
     Ok((Some(answer_choice as usize), Some(model_inference_result)))
@@ -499,9 +497,9 @@ impl EvaluatorConfig {
                 InferenceResult::Chat(chat_result) => {
                     let serialized_content =
                         serde_json::to_string(&chat_result.content).map_err(|e| {
-                            Error::Inference {
+                            Error::new(ErrorDetails::Inference {
                                 message: format!("Error converting chat result to string: {e}"),
-                            }
+                            })
                         })?;
                     candidate_outputs.push(serialized_content);
                 }
@@ -560,8 +558,10 @@ impl EvaluatorConfig {
             .len()
             .checked_sub(skipped_indices.len())
             .and_then(|len| len.checked_sub(1))
-            .ok_or_else(|| Error::Inference {
-                message: "No valid candidates available to prepare request.".to_string(),
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::Inference {
+                    message: "No valid candidates available to prepare request.".to_string(),
+                })
             })?;
         let system = Some(self.prepare_system_message(
             inference_config.templates,
@@ -696,7 +696,7 @@ mod tests {
         let prepared_message = result.unwrap_err();
         assert_eq!(
         prepared_message,
-        Error::InvalidMessage { message: "System message content {\"message\":\"You are a helpful assistant.\"} is not a string but there is no variant template".to_string() }
+        ErrorDetails::InvalidMessage { message: "System message content {\"message\":\"You are a helpful assistant.\"} is not a string but there is no variant template".to_string() }.into()
         );
 
         // Test without templates, no message
@@ -1269,9 +1269,10 @@ mod tests {
         let err = result.unwrap_err();
         assert_eq!(
             err,
-            Error::Inference {
+            ErrorDetails::Inference {
                 message: "No candidates to select from in best of n".to_string()
             }
+            .into()
         );
 
         // Test case: Index returned too large (should return an error)

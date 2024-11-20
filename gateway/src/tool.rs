@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    error::Error,
+    error::{Error, ErrorDetails},
     jsonschema_util::{DynamicJSONSchema, JSONSchemaFromPath},
 };
 
@@ -108,8 +108,10 @@ impl ToolCallConfig {
                 static_tools
                     .get(tool_name)
                     .map(ToolConfig::Static)
-                    .ok_or(Error::ToolNotFound {
-                        name: tool_name.clone(),
+                    .ok_or_else(|| {
+                        Error::new(ErrorDetails::ToolNotFound {
+                            name: tool_name.clone(),
+                        })
                     })
             })
             .collect();
@@ -144,9 +146,10 @@ impl ToolCallConfig {
                 ToolConfig::Implicit(_) => false,
                 ToolConfig::DynamicImplicit(_) => false,
             }) {
-                return Err(Error::ToolNotFound {
+                return Err(ErrorDetails::ToolNotFound {
                     name: tool_name.clone(),
-                });
+                }
+                .into());
             }
         }
 
@@ -477,9 +480,10 @@ mod tests {
         .unwrap_err();
         assert_eq!(
             err,
-            Error::ToolNotFound {
+            ErrorDetails::ToolNotFound {
                 name: "get_temperature".to_string()
             }
+            .into()
         );
 
         // Dynamic tool config specifies a particular tool to call and it's in the function tools list
@@ -518,9 +522,10 @@ mod tests {
         .unwrap_err();
         assert_eq!(
             err,
-            Error::ToolNotFound {
+            ErrorDetails::ToolNotFound {
                 name: "establish_campground".to_string()
             }
+            .into()
         );
 
         // We pass an empty list of allowed tools and then configure a new tool

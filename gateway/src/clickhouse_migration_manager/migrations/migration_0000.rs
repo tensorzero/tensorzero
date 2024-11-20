@@ -1,6 +1,6 @@
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::clickhouse_migration_manager::migration_trait::Migration;
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 
 /// This migration is used to create the initial tables in the ClickHouse database.
 ///
@@ -20,13 +20,12 @@ pub struct Migration0000<'a> {
 impl<'a> Migration for Migration0000<'a> {
     /// Check if you can connect to the database
     async fn can_apply(&self) -> Result<(), Error> {
-        self.clickhouse
-            .health()
-            .await
-            .map_err(|e| Error::ClickHouseMigration {
+        self.clickhouse.health().await.map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseMigration {
                 id: "0000".to_string(),
                 message: e.to_string(),
             })
+        })
     }
 
     /// Check if the tables exist

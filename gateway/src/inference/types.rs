@@ -11,11 +11,11 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::endpoints::inference::InferenceParams;
 use crate::function::FunctionConfig;
 use crate::tool::ToolCallConfigDatabaseInsert;
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolResult};
 use crate::{endpoints::inference::InferenceDatabaseInsertMetadata, variant::InferenceConfig};
+use crate::{endpoints::inference::InferenceParams, error::ErrorDetails};
 use crate::{error::Error, variant::JsonMode};
 
 /// Data flow in TensorZero
@@ -628,10 +628,9 @@ pub async fn parse_chat_output(
     tool_config: Option<&ToolCallConfig>,
 ) -> Vec<ContentBlockOutput> {
     if content.is_empty() {
-        Error::Inference {
+        Error::new(ErrorDetails::Inference {
             message: "No content blocks in inference result".to_string(),
-        }
-        .log();
+        });
     }
 
     let mut output = Vec::new();
@@ -646,12 +645,11 @@ pub async fn parse_chat_output(
                 output.push(ContentBlockOutput::ToolCall(tool_call_output));
             }
             ContentBlock::ToolResult(tool_result) => {
-                Error::OutputParsing {
+                Error::new(ErrorDetails::OutputParsing {
                     message: "Tool results are not supported in output for Chat functions"
                         .to_string(),
                     raw_output: serde_json::to_string(&tool_result).unwrap_or_default(),
-                }
-                .log();
+                });
             }
         }
     }
@@ -669,13 +667,12 @@ impl ChatInferenceDatabaseInsert {
         let tool_params = metadata.tool_params.map(ToolCallConfigDatabaseInsert::from);
         let inference_params = chat_result.inference_params;
         let output = serde_json::to_string(&chat_result.content)
-            .map_err(|e| Error::Serialization {
-                message: format!("Failed to serialize output: {}", e),
+            .map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Failed to serialize output: {}", e),
+                })
             })
-            .unwrap_or_else(|e| {
-                e.log();
-                String::new()
-            });
+            .unwrap_or_else(|_| String::new());
 
         Self {
             id: chat_result.inference_id,
@@ -876,9 +873,12 @@ pub async fn collect_chunks<'a, 'b>(
 
     let inference_id = value
         .first()
-        .ok_or(Error::TypeConversion {
-            message: "Attempted to create an InferenceResult from an empty response chunk vector"
-                .to_string(),
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::TypeConversion {
+                message:
+                    "Attempted to create an InferenceResult from an empty response chunk vector"
+                        .to_string(),
+            })
         })?
         .inference_id();
     let mut tool_call_blocks: HashMap<String, ContentBlock> = HashMap::new();
@@ -892,9 +892,12 @@ pub async fn collect_chunks<'a, 'b>(
     let mut ttft: Option<Duration> = None;
     let response_time = value
         .last()
-        .ok_or(Error::TypeConversion {
-            message: "Attempted to create an InferenceResult from an empty response chunk vector"
-                .to_string(),
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::TypeConversion {
+                message:
+                    "Attempted to create an InferenceResult from an empty response chunk vector"
+                        .to_string(),
+            })
         })?
         .latency();
     for chunk in value {
@@ -973,8 +976,10 @@ pub async fn collect_chunks<'a, 'b>(
         }
     }
 
-    let ttft = ttft.ok_or(Error::TypeConversion {
-        message: "Never got TTFT because there was never content in the response.".to_string(),
+    let ttft = ttft.ok_or_else(|| {
+        Error::new(ErrorDetails::TypeConversion {
+            message: "Never got TTFT because there was never content in the response.".to_string(),
+        })
     })?;
     let latency = Latency::Streaming {
         ttft,
@@ -1057,10 +1062,9 @@ pub fn serialize_or_log<T: Serialize>(value: &T) -> String {
     match serde_json::to_string(value) {
         Ok(serialized) => serialized,
         Err(e) => {
-            Error::Serialization {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to serialize value: {}", e),
-            }
-            .log();
+            });
             String::new()
         }
     }
@@ -1305,11 +1309,12 @@ mod tests {
         let result = collect_chunks(collect_chunks_args, &inference_config).await;
         assert_eq!(
             result.unwrap_err(),
-            Error::TypeConversion {
+            ErrorDetails::TypeConversion {
                 message:
                     "Attempted to create an InferenceResult from an empty response chunk vector"
                         .to_string(),
             }
+            .into()
         );
 
         // Test case 2: non-empty chunks with no tool calls but content exists

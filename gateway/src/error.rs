@@ -5,7 +5,42 @@ use axum::response::{IntoResponse, Json, Response};
 use serde_json::{json, Value};
 
 #[derive(Debug, PartialEq)]
-pub enum Error {
+// As long as the struct member is private, we force people to use the `new` method and log the error.
+pub struct Error(ErrorDetails);
+
+impl Error {
+    pub fn new(details: ErrorDetails) -> Self {
+        details.log();
+        Error(details)
+    }
+
+    pub fn status_code(&self) -> StatusCode {
+        self.0.status_code()
+    }
+
+    pub fn get_details(&self) -> &ErrorDetails {
+        &self.0
+    }
+
+    pub fn get_owned_details(self) -> ErrorDetails {
+        self.0
+    }
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl From<ErrorDetails> for Error {
+    fn from(details: ErrorDetails) -> Self {
+        Error::new(details)
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ErrorDetails {
     AllVariantsFailed {
         errors: HashMap<String, Error>,
     },
@@ -230,154 +265,154 @@ pub enum Error {
     },
 }
 
-impl Error {
+impl ErrorDetails {
     /// Defines the error level for logging this error
     fn level(&self) -> tracing::Level {
         match self {
-            Error::AllVariantsFailed { .. } => tracing::Level::ERROR,
-            Error::ApiKeyMissing { .. } => tracing::Level::ERROR,
-            Error::AppState { .. } => tracing::Level::ERROR,
-            Error::AnthropicClient { .. } => tracing::Level::WARN,
-            Error::AnthropicServer { .. } => tracing::Level::ERROR,
-            Error::AWSBedrockClient { .. } => tracing::Level::WARN,
-            Error::AWSBedrockServer { .. } => tracing::Level::ERROR,
-            Error::AzureClient { .. } => tracing::Level::WARN,
-            Error::AzureServer { .. } => tracing::Level::ERROR,
-            Error::BadCredentialsPreInference { .. } => tracing::Level::ERROR,
-            Error::ChannelWrite { .. } => tracing::Level::ERROR,
-            Error::ClickHouseConnection { .. } => tracing::Level::ERROR,
-            Error::ClickHouseMigration { .. } => tracing::Level::ERROR,
-            Error::ClickHouseQuery { .. } => tracing::Level::ERROR,
-            Error::Config { .. } => tracing::Level::ERROR,
-            Error::DynamicJsonSchema { .. } => tracing::Level::WARN,
-            Error::FireworksClient { .. } => tracing::Level::WARN,
-            Error::FireworksServer { .. } => tracing::Level::ERROR,
-            Error::GCPCredentials { .. } => tracing::Level::ERROR,
-            Error::GCPVertexClient { .. } => tracing::Level::WARN,
-            Error::GCPVertexServer { .. } => tracing::Level::ERROR,
-            Error::GoogleAIStudioClient { .. } => tracing::Level::WARN,
-            Error::GoogleAIStudioServer { .. } => tracing::Level::ERROR,
-            Error::Inference { .. } => tracing::Level::ERROR,
-            Error::InferenceClient { .. } => tracing::Level::ERROR,
-            Error::InferenceTimeout { .. } => tracing::Level::WARN,
-            Error::InputValidation { .. } => tracing::Level::WARN,
-            Error::InvalidBaseUrl { .. } => tracing::Level::ERROR,
-            Error::InvalidCandidate { .. } => tracing::Level::ERROR,
-            Error::InvalidEpisodeId { .. } => tracing::Level::WARN,
-            Error::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
-            Error::InvalidMessage { .. } => tracing::Level::WARN,
-            Error::InvalidOpenAICompatibleRequest { .. } => tracing::Level::ERROR,
-            Error::InvalidProviderConfig { .. } => tracing::Level::ERROR,
-            Error::InvalidRequest { .. } => tracing::Level::ERROR,
-            Error::InvalidTemplatePath => tracing::Level::ERROR,
-            Error::InvalidTool { .. } => tracing::Level::ERROR,
-            Error::JsonRequest { .. } => tracing::Level::WARN,
-            Error::JsonSchema { .. } => tracing::Level::ERROR,
-            Error::JsonSchemaValidation { .. } => tracing::Level::ERROR,
-            Error::MiniJinjaEnvironment { .. } => tracing::Level::ERROR,
-            Error::MiniJinjaTemplate { .. } => tracing::Level::ERROR,
-            Error::MiniJinjaTemplateMissing { .. } => tracing::Level::ERROR,
-            Error::MiniJinjaTemplateRender { .. } => tracing::Level::ERROR,
-            Error::MistralClient { .. } => tracing::Level::WARN,
-            Error::MistralServer { .. } => tracing::Level::ERROR,
-            Error::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
-            Error::ModelValidation { .. } => tracing::Level::ERROR,
-            Error::Observability { .. } => tracing::Level::ERROR,
-            Error::OpenAIClient { .. } => tracing::Level::WARN,
-            Error::OpenAIServer { .. } => tracing::Level::ERROR,
-            Error::OutputParsing { .. } => tracing::Level::WARN,
-            Error::OutputValidation { .. } => tracing::Level::WARN,
-            Error::ProviderNotFound { .. } => tracing::Level::ERROR,
-            Error::Serialization { .. } => tracing::Level::ERROR,
-            Error::TogetherClient { .. } => tracing::Level::WARN,
-            Error::TogetherServer { .. } => tracing::Level::ERROR,
-            Error::ToolNotFound { .. } => tracing::Level::WARN,
-            Error::ToolNotLoaded { .. } => tracing::Level::ERROR,
-            Error::TypeConversion { .. } => tracing::Level::ERROR,
-            Error::UnexpectedDynamicCredentials { .. } => tracing::Level::WARN,
-            Error::UnknownCandidate { .. } => tracing::Level::ERROR,
-            Error::UnknownFunction { .. } => tracing::Level::WARN,
-            Error::UnknownModel { .. } => tracing::Level::ERROR,
-            Error::UnknownTool { .. } => tracing::Level::ERROR,
-            Error::UnknownVariant { .. } => tracing::Level::WARN,
-            Error::UnknownMetric { .. } => tracing::Level::WARN,
-            Error::VLLMClient { .. } => tracing::Level::WARN,
-            Error::VLLMServer { .. } => tracing::Level::ERROR,
+            ErrorDetails::AllVariantsFailed { .. } => tracing::Level::ERROR,
+            ErrorDetails::ApiKeyMissing { .. } => tracing::Level::ERROR,
+            ErrorDetails::AppState { .. } => tracing::Level::ERROR,
+            ErrorDetails::AnthropicClient { .. } => tracing::Level::WARN,
+            ErrorDetails::AnthropicServer { .. } => tracing::Level::ERROR,
+            ErrorDetails::AWSBedrockClient { .. } => tracing::Level::WARN,
+            ErrorDetails::AWSBedrockServer { .. } => tracing::Level::ERROR,
+            ErrorDetails::AzureClient { .. } => tracing::Level::WARN,
+            ErrorDetails::AzureServer { .. } => tracing::Level::ERROR,
+            ErrorDetails::BadCredentialsPreInference { .. } => tracing::Level::ERROR,
+            ErrorDetails::ChannelWrite { .. } => tracing::Level::ERROR,
+            ErrorDetails::ClickHouseConnection { .. } => tracing::Level::ERROR,
+            ErrorDetails::ClickHouseMigration { .. } => tracing::Level::ERROR,
+            ErrorDetails::ClickHouseQuery { .. } => tracing::Level::ERROR,
+            ErrorDetails::Config { .. } => tracing::Level::ERROR,
+            ErrorDetails::DynamicJsonSchema { .. } => tracing::Level::WARN,
+            ErrorDetails::FireworksClient { .. } => tracing::Level::WARN,
+            ErrorDetails::FireworksServer { .. } => tracing::Level::ERROR,
+            ErrorDetails::GCPCredentials { .. } => tracing::Level::ERROR,
+            ErrorDetails::GCPVertexClient { .. } => tracing::Level::WARN,
+            ErrorDetails::GCPVertexServer { .. } => tracing::Level::ERROR,
+            ErrorDetails::GoogleAIStudioClient { .. } => tracing::Level::WARN,
+            ErrorDetails::GoogleAIStudioServer { .. } => tracing::Level::ERROR,
+            ErrorDetails::Inference { .. } => tracing::Level::ERROR,
+            ErrorDetails::InferenceClient { .. } => tracing::Level::ERROR,
+            ErrorDetails::InferenceTimeout { .. } => tracing::Level::WARN,
+            ErrorDetails::InputValidation { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidBaseUrl { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidCandidate { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidEpisodeId { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidMessage { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidOpenAICompatibleRequest { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidProviderConfig { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidRequest { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidTemplatePath => tracing::Level::ERROR,
+            ErrorDetails::InvalidTool { .. } => tracing::Level::ERROR,
+            ErrorDetails::JsonRequest { .. } => tracing::Level::WARN,
+            ErrorDetails::JsonSchema { .. } => tracing::Level::ERROR,
+            ErrorDetails::JsonSchemaValidation { .. } => tracing::Level::ERROR,
+            ErrorDetails::MiniJinjaEnvironment { .. } => tracing::Level::ERROR,
+            ErrorDetails::MiniJinjaTemplate { .. } => tracing::Level::ERROR,
+            ErrorDetails::MiniJinjaTemplateMissing { .. } => tracing::Level::ERROR,
+            ErrorDetails::MiniJinjaTemplateRender { .. } => tracing::Level::ERROR,
+            ErrorDetails::MistralClient { .. } => tracing::Level::WARN,
+            ErrorDetails::MistralServer { .. } => tracing::Level::ERROR,
+            ErrorDetails::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
+            ErrorDetails::ModelValidation { .. } => tracing::Level::ERROR,
+            ErrorDetails::Observability { .. } => tracing::Level::ERROR,
+            ErrorDetails::OpenAIClient { .. } => tracing::Level::WARN,
+            ErrorDetails::OpenAIServer { .. } => tracing::Level::ERROR,
+            ErrorDetails::OutputParsing { .. } => tracing::Level::WARN,
+            ErrorDetails::OutputValidation { .. } => tracing::Level::WARN,
+            ErrorDetails::ProviderNotFound { .. } => tracing::Level::ERROR,
+            ErrorDetails::Serialization { .. } => tracing::Level::ERROR,
+            ErrorDetails::TogetherClient { .. } => tracing::Level::WARN,
+            ErrorDetails::TogetherServer { .. } => tracing::Level::ERROR,
+            ErrorDetails::ToolNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::ToolNotLoaded { .. } => tracing::Level::ERROR,
+            ErrorDetails::TypeConversion { .. } => tracing::Level::ERROR,
+            ErrorDetails::UnexpectedDynamicCredentials { .. } => tracing::Level::WARN,
+            ErrorDetails::UnknownCandidate { .. } => tracing::Level::ERROR,
+            ErrorDetails::UnknownFunction { .. } => tracing::Level::WARN,
+            ErrorDetails::UnknownModel { .. } => tracing::Level::ERROR,
+            ErrorDetails::UnknownTool { .. } => tracing::Level::ERROR,
+            ErrorDetails::UnknownVariant { .. } => tracing::Level::WARN,
+            ErrorDetails::UnknownMetric { .. } => tracing::Level::WARN,
+            ErrorDetails::VLLMClient { .. } => tracing::Level::WARN,
+            ErrorDetails::VLLMServer { .. } => tracing::Level::ERROR,
         }
     }
 
     /// Defines the HTTP status code for responses involving this error
     fn status_code(&self) -> StatusCode {
         match self {
-            Error::AllVariantsFailed { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::ApiKeyMissing { .. } => StatusCode::BAD_REQUEST,
-            Error::AppState { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::AnthropicClient { status_code, .. } => *status_code,
-            Error::AnthropicServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::AWSBedrockClient { status_code, .. } => *status_code,
-            Error::AWSBedrockServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::AzureClient { status_code, .. } => *status_code,
-            Error::AzureServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::BadCredentialsPreInference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::ClickHouseConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::ClickHouseQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::DynamicJsonSchema { .. } => StatusCode::BAD_REQUEST,
-            Error::FireworksServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::FireworksClient { status_code, .. } => *status_code,
-            Error::GCPCredentials { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::GCPVertexClient { status_code, .. } => *status_code,
-            Error::GCPVertexServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::GoogleAIStudioClient { status_code, .. } => *status_code,
-            Error::GoogleAIStudioServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::Inference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::InferenceClient { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::InferenceTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
-            Error::InvalidEpisodeId { .. } => StatusCode::BAD_REQUEST,
-            Error::InputValidation { .. } => StatusCode::BAD_REQUEST,
-            Error::InvalidBaseUrl { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::InvalidCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
-            Error::InvalidOpenAICompatibleRequest { .. } => StatusCode::BAD_REQUEST,
-            Error::InvalidProviderConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::InvalidRequest { .. } => StatusCode::BAD_REQUEST,
-            Error::InvalidTemplatePath => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::InvalidTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::JsonRequest { .. } => StatusCode::BAD_REQUEST,
-            Error::JsonSchema { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::JsonSchemaValidation { .. } => StatusCode::BAD_REQUEST,
-            Error::MiniJinjaEnvironment { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::MiniJinjaTemplate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::MiniJinjaTemplateMissing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::MiniJinjaTemplateRender { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::MistralClient { status_code, .. } => *status_code,
-            Error::MistralServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::OpenAIClient { status_code, .. } => *status_code,
-            Error::OpenAIServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::OutputParsing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::OutputValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::ProviderNotFound { .. } => StatusCode::NOT_FOUND,
-            Error::Serialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::TogetherClient { status_code, .. } => *status_code,
-            Error::TogetherServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::ToolNotFound { .. } => StatusCode::BAD_REQUEST,
-            Error::ToolNotLoaded { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::TypeConversion { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::UnknownCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::UnexpectedDynamicCredentials { .. } => StatusCode::BAD_REQUEST,
-            Error::UnknownFunction { .. } => StatusCode::NOT_FOUND,
-            Error::UnknownModel { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::UnknownTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::UnknownVariant { .. } => StatusCode::NOT_FOUND,
-            Error::UnknownMetric { .. } => StatusCode::NOT_FOUND,
-            Error::VLLMClient { status_code, .. } => *status_code,
-            Error::VLLMServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::AllVariantsFailed { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ApiKeyMissing { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::AppState { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::AnthropicClient { status_code, .. } => *status_code,
+            ErrorDetails::AnthropicServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::AWSBedrockClient { status_code, .. } => *status_code,
+            ErrorDetails::AWSBedrockServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::AzureClient { status_code, .. } => *status_code,
+            ErrorDetails::AzureServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::BadCredentialsPreInference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ClickHouseConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ClickHouseQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::DynamicJsonSchema { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::FireworksServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::FireworksClient { status_code, .. } => *status_code,
+            ErrorDetails::GCPCredentials { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::GCPVertexClient { status_code, .. } => *status_code,
+            ErrorDetails::GCPVertexServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::GoogleAIStudioClient { status_code, .. } => *status_code,
+            ErrorDetails::GoogleAIStudioServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::Inference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InferenceClient { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InferenceTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
+            ErrorDetails::InvalidEpisodeId { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InputValidation { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidBaseUrl { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidOpenAICompatibleRequest { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidProviderConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidRequest { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidTemplatePath => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::JsonRequest { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::JsonSchema { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::JsonSchemaValidation { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::MiniJinjaEnvironment { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::MiniJinjaTemplate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::MiniJinjaTemplateMissing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::MiniJinjaTemplateRender { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::MistralClient { status_code, .. } => *status_code,
+            ErrorDetails::MistralServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::OpenAIClient { status_code, .. } => *status_code,
+            ErrorDetails::OpenAIServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::OutputParsing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::OutputValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ProviderNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::Serialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::TogetherClient { status_code, .. } => *status_code,
+            ErrorDetails::TogetherServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ToolNotFound { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::ToolNotLoaded { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::TypeConversion { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::UnknownCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::UnexpectedDynamicCredentials { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::UnknownFunction { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::UnknownModel { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::UnknownTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::UnknownVariant { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::UnknownMetric { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::VLLMClient { status_code, .. } => *status_code,
+            ErrorDetails::VLLMServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
@@ -393,10 +428,10 @@ impl Error {
     }
 }
 
-impl std::fmt::Display for Error {
+impl std::fmt::Display for ErrorDetails {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::AllVariantsFailed { errors } => {
+            ErrorDetails::AllVariantsFailed { errors } => {
                 write!(
                     f,
                     "All variants failed with errors: {}",
@@ -407,90 +442,90 @@ impl std::fmt::Display for Error {
                         .join("\n")
                 )
             }
-            Error::ApiKeyMissing { provider_name } => {
+            ErrorDetails::ApiKeyMissing { provider_name } => {
                 write!(f, "API key missing for provider: {}", provider_name)
             }
-            Error::AppState { message } => {
+            ErrorDetails::AppState { message } => {
                 write!(f, "Error initializing AppState: {}", message)
             }
-            Error::AnthropicClient { message, .. } => {
+            ErrorDetails::AnthropicClient { message, .. } => {
                 write!(f, "Error from Anthropic client: {}", message)
             }
-            Error::AnthropicServer { message } => {
+            ErrorDetails::AnthropicServer { message } => {
                 write!(f, "Error from Anthropic server: {}", message)
             }
-            Error::AWSBedrockClient { message, .. } => {
+            ErrorDetails::AWSBedrockClient { message, .. } => {
                 write!(f, "Error from AWS Bedrock client: {}", message)
             }
-            Error::AWSBedrockServer { message } => {
+            ErrorDetails::AWSBedrockServer { message } => {
                 write!(f, "Error from AWS Bedrock server: {}", message)
             }
-            Error::AzureClient { message, .. } => {
+            ErrorDetails::AzureClient { message, .. } => {
                 write!(f, "Error from Azure client: {}", message)
             }
-            Error::AzureServer { message } => {
+            ErrorDetails::AzureServer { message } => {
                 write!(f, "Error from Azure server: {}", message)
             }
-            Error::BadCredentialsPreInference { provider_name } => {
+            ErrorDetails::BadCredentialsPreInference { provider_name } => {
                 write!(
                     f,
                     "Bad credentials at inference time for provider: {}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new",
                     provider_name
                 )
             }
-            Error::ChannelWrite { message } => {
+            ErrorDetails::ChannelWrite { message } => {
                 write!(f, "Error writing to channel: {}", message)
             }
-            Error::ClickHouseConnection { message } => {
+            ErrorDetails::ClickHouseConnection { message } => {
                 write!(f, "Error connecting to ClickHouse: {}", message)
             }
-            Error::ClickHouseMigration { id, message } => {
+            ErrorDetails::ClickHouseMigration { id, message } => {
                 write!(f, "Error running ClickHouse migration {}: {}", id, message)
             }
-            Error::ClickHouseQuery { message } => {
+            ErrorDetails::ClickHouseQuery { message } => {
                 write!(f, "Failed to run ClickHouse query: {}", message)
             }
-            Error::Config { message } => {
+            ErrorDetails::Config { message } => {
                 write!(f, "{}", message)
             }
-            Error::DynamicJsonSchema { message } => {
+            ErrorDetails::DynamicJsonSchema { message } => {
                 write!(
                     f,
                     "Error in compiling client-provided JSON schema: {}",
                     message
                 )
             }
-            Error::FireworksClient { message, .. } => {
+            ErrorDetails::FireworksClient { message, .. } => {
                 write!(f, "Error from Fireworks client: {}", message)
             }
-            Error::FireworksServer { message } => {
+            ErrorDetails::FireworksServer { message } => {
                 write!(f, "Error from Fireworks server: {}", message)
             }
-            Error::GCPCredentials { message } => {
+            ErrorDetails::GCPCredentials { message } => {
                 write!(f, "Error in acquiring GCP credentials: {}", message)
             }
-            Error::GCPVertexClient { message, .. } => {
+            ErrorDetails::GCPVertexClient { message, .. } => {
                 write!(f, "Error from GCP Vertex client: {}", message)
             }
-            Error::GCPVertexServer { message } => {
+            ErrorDetails::GCPVertexServer { message } => {
                 write!(f, "Error from GCP Vertex server: {}", message)
             }
-            Error::GoogleAIStudioClient { message, .. } => {
+            ErrorDetails::GoogleAIStudioClient { message, .. } => {
                 write!(f, "Error from Google AI Studio client: {}", message)
             }
-            Error::GoogleAIStudioServer { message } => {
+            ErrorDetails::GoogleAIStudioServer { message } => {
                 write!(f, "Error from Google AI Studio server: {}", message)
             }
-            Error::Inference { message } => write!(f, "{}", message),
-            Error::InferenceClient { message } => write!(f, "{}", message),
-            Error::InferenceTimeout { variant_name } => {
+            ErrorDetails::Inference { message } => write!(f, "{}", message),
+            ErrorDetails::InferenceClient { message } => write!(f, "{}", message),
+            ErrorDetails::InferenceTimeout { variant_name } => {
                 write!(f, "Inference timed out for variant: {}", variant_name)
             }
-            Error::InputValidation { source } => {
+            ErrorDetails::InputValidation { source } => {
                 write!(f, "Input validation failed with messages: {}", source)
             }
-            Error::InvalidBaseUrl { message } => write!(f, "{}", message),
-            Error::InvalidCandidate {
+            ErrorDetails::InvalidBaseUrl { message } => write!(f, "{}", message),
+            ErrorDetails::InvalidCandidate {
                 variant_name,
                 message,
             } => {
@@ -500,23 +535,25 @@ impl std::fmt::Display for Error {
                     variant_name, message
                 )
             }
-            Error::InvalidFunctionVariants { message } => write!(f, "{}", message),
-            Error::InvalidEpisodeId { message } => write!(f, "Invalid Episode ID: {}", message),
-            Error::InvalidMessage { message } => write!(f, "{}", message),
-            Error::InvalidOpenAICompatibleRequest { message } => write!(
+            ErrorDetails::InvalidFunctionVariants { message } => write!(f, "{}", message),
+            ErrorDetails::InvalidEpisodeId { message } => {
+                write!(f, "Invalid Episode ID: {}", message)
+            }
+            ErrorDetails::InvalidMessage { message } => write!(f, "{}", message),
+            ErrorDetails::InvalidOpenAICompatibleRequest { message } => write!(
                 f,
                 "Invalid request to OpenAI-compatible endpoint: {}",
                 message
             ),
-            Error::InvalidProviderConfig { message } => write!(f, "{}", message),
-            Error::InvalidRequest { message } => write!(f, "{}", message),
-            Error::InvalidTemplatePath => {
+            ErrorDetails::InvalidProviderConfig { message } => write!(f, "{}", message),
+            ErrorDetails::InvalidRequest { message } => write!(f, "{}", message),
+            ErrorDetails::InvalidTemplatePath => {
                 write!(f, "Template path failed to convert to Rust string")
             }
-            Error::InvalidTool { message } => write!(f, "{}", message),
-            Error::JsonRequest { message } => write!(f, "{}", message),
-            Error::JsonSchema { message } => write!(f, "{}", message),
-            Error::JsonSchemaValidation {
+            ErrorDetails::InvalidTool { message } => write!(f, "{}", message),
+            ErrorDetails::JsonRequest { message } => write!(f, "{}", message),
+            ErrorDetails::JsonSchema { message } => write!(f, "{}", message),
+            ErrorDetails::JsonSchemaValidation {
                 messages,
                 data,
                 schema,
@@ -537,31 +574,31 @@ impl std::fmt::Display for Error {
                     serde_json::to_string(schema).map_err(|_| std::fmt::Error)?
                 )
             }
-            Error::MiniJinjaEnvironment { message } => {
+            ErrorDetails::MiniJinjaEnvironment { message } => {
                 write!(f, "Error initializing MiniJinja environment: {}", message)
             }
-            Error::MiniJinjaTemplate {
+            ErrorDetails::MiniJinjaTemplate {
                 template_name,
                 message,
             } => {
                 write!(f, "Error rendering template {}: {}", template_name, message)
             }
-            Error::MiniJinjaTemplateMissing { template_name } => {
+            ErrorDetails::MiniJinjaTemplateMissing { template_name } => {
                 write!(f, "Template not found: {}", template_name)
             }
-            Error::MiniJinjaTemplateRender {
+            ErrorDetails::MiniJinjaTemplateRender {
                 template_name,
                 message,
             } => {
                 write!(f, "Error rendering template {}: {}", template_name, message)
             }
-            Error::MistralClient { message, .. } => {
+            ErrorDetails::MistralClient { message, .. } => {
                 write!(f, "Error from Mistral client: {}", message)
             }
-            Error::MistralServer { message } => {
+            ErrorDetails::MistralServer { message } => {
                 write!(f, "Error from Mistral server: {}", message)
             }
-            Error::ModelProvidersExhausted { provider_errors } => {
+            ErrorDetails::ModelProvidersExhausted { provider_errors } => {
                 write!(
                     f,
                     "All model providers failed to infer with errors: {}",
@@ -572,17 +609,19 @@ impl std::fmt::Display for Error {
                         .join(", ")
                 )
             }
-            Error::ModelValidation { message } => {
+            ErrorDetails::ModelValidation { message } => {
                 write!(f, "Failed to validate model: {}", message)
             }
-            Error::Observability { message } => {
+            ErrorDetails::Observability { message } => {
                 write!(f, "{}", message)
             }
-            Error::OpenAIClient { message, .. } => {
+            ErrorDetails::OpenAIClient { message, .. } => {
                 write!(f, "Error from OpenAI client: {}", message)
             }
-            Error::OpenAIServer { message } => write!(f, "Error from OpenAI server: {}", message),
-            Error::OutputParsing {
+            ErrorDetails::OpenAIServer { message } => {
+                write!(f, "Error from OpenAI server: {}", message)
+            }
+            ErrorDetails::OutputParsing {
                 raw_output,
                 message,
             } => {
@@ -591,39 +630,43 @@ impl std::fmt::Display for Error {
                     "Error parsing output as JSON with message: {message}: {raw_output}"
                 )
             }
-            Error::OutputValidation { source } => {
+            ErrorDetails::OutputValidation { source } => {
                 write!(f, "Output validation failed with messages: {}", source)
             }
-            Error::ProviderNotFound { provider_name } => {
+            ErrorDetails::ProviderNotFound { provider_name } => {
                 write!(f, "Provider not found: {}", provider_name)
             }
-            Error::Serialization { message } => write!(f, "{}", message),
-            Error::TypeConversion { message } => write!(f, "{}", message),
-            Error::TogetherClient { message, .. } => {
+            ErrorDetails::Serialization { message } => write!(f, "{}", message),
+            ErrorDetails::TypeConversion { message } => write!(f, "{}", message),
+            ErrorDetails::TogetherClient { message, .. } => {
                 write!(f, "Error from Together client: {}", message)
             }
-            Error::TogetherServer { message } => {
+            ErrorDetails::TogetherServer { message } => {
                 write!(f, "Error from Together server: {}", message)
             }
-            Error::ToolNotFound { name } => write!(f, "Tool not found: {}", name),
-            Error::ToolNotLoaded { name } => write!(f, "Tool not loaded: {}", name),
-            Error::UnexpectedDynamicCredentials { provider_name } => {
+            ErrorDetails::ToolNotFound { name } => write!(f, "Tool not found: {}", name),
+            ErrorDetails::ToolNotLoaded { name } => write!(f, "Tool not loaded: {}", name),
+            ErrorDetails::UnexpectedDynamicCredentials { provider_name } => {
                 write!(
                     f,
                     "Unexpected dynamic credentials for model provider: {}. Please enable the `dynamic_credentials` flag in config if appropriate.",
                     provider_name
                 )
             }
-            Error::UnknownCandidate { name } => write!(f, "Unknown candidate variant: {}", name),
-            Error::UnknownFunction { name } => write!(f, "Unknown function: {}", name),
-            Error::UnknownModel { name } => write!(f, "Unknown model: {}", name),
-            Error::UnknownTool { name } => write!(f, "Unknown tool: {}", name),
-            Error::UnknownVariant { name } => write!(f, "Unknown variant: {}", name),
-            Error::UnknownMetric { name } => write!(f, "Unknown metric: {}", name),
-            Error::VLLMClient { message, .. } => {
+            ErrorDetails::UnknownCandidate { name } => {
+                write!(f, "Unknown candidate variant: {}", name)
+            }
+            ErrorDetails::UnknownFunction { name } => write!(f, "Unknown function: {}", name),
+            ErrorDetails::UnknownModel { name } => write!(f, "Unknown model: {}", name),
+            ErrorDetails::UnknownTool { name } => write!(f, "Unknown tool: {}", name),
+            ErrorDetails::UnknownVariant { name } => write!(f, "Unknown variant: {}", name),
+            ErrorDetails::UnknownMetric { name } => write!(f, "Unknown metric: {}", name),
+            ErrorDetails::VLLMClient { message, .. } => {
                 write!(f, "Error from vLLM client: {}", message)
             }
-            Error::VLLMServer { message } => write!(f, "Error from vLLM server: {}", message),
+            ErrorDetails::VLLMServer { message } => {
+                write!(f, "Error from vLLM server: {}", message)
+            }
         }
     }
 }
@@ -633,24 +676,7 @@ impl std::error::Error for Error {}
 impl IntoResponse for Error {
     /// Log the error and convert it into an Axum response
     fn into_response(self) -> Response {
-        self.log();
         let body = json!({"error": self.to_string()});
         (self.status_code(), Json(body)).into_response()
-    }
-}
-
-pub trait ResultExt<T> {
-    fn ok_or_log(self) -> Option<T>;
-}
-
-impl<T> ResultExt<T> for Result<T, Error> {
-    fn ok_or_log(self) -> Option<T> {
-        match self {
-            Ok(value) => Some(value),
-            Err(error) => {
-                error.log();
-                None
-            }
-        }
     }
 }

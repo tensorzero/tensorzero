@@ -12,7 +12,7 @@ use url::Url;
 
 use crate::{
     endpoints::inference::InferenceCredentials,
-    error::Error,
+    error::{Error, ErrorDetails},
     inference::types::{
         ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
         ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
@@ -61,9 +61,10 @@ impl InferenceProvider for TogetherProvider {
         let api_key = match &api_key {
             ProviderCredentials::Together(credentials) => &credentials.api_key,
             _ => {
-                return Err(Error::BadCredentialsPreInference {
+                return Err(ErrorDetails::BadCredentialsPreInference {
                     provider_name: "Together".to_string(),
-                })
+                }
+                .into());
             }
         };
         let start_time = Instant::now();
@@ -74,17 +75,23 @@ impl InferenceProvider for TogetherProvider {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| Error::TogetherClient {
-                message: format!("{e}"),
-                status_code: e.status().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
+            .map_err(|e| {
+                Error::new(ErrorDetails::TogetherClient {
+                    message: format!("{e}"),
+                    status_code: e.status().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
+                })
             })?;
         if res.status().is_success() {
-            let response = res.text().await.map_err(|e| Error::TogetherServer {
-                message: format!("Error parsing text response: {e}"),
+            let response = res.text().await.map_err(|e| {
+                Error::new(ErrorDetails::TogetherServer {
+                    message: format!("Error parsing text response: {e}"),
+                })
             })?;
 
-            let response = serde_json::from_str(&response).map_err(|e| Error::TogetherServer {
-                message: format!("Error parsing JSON response: {e}: {response}"),
+            let response = serde_json::from_str(&response).map_err(|e| {
+                Error::new(ErrorDetails::TogetherServer {
+                    message: format!("Error parsing JSON response: {e}: {response}"),
+                })
             })?;
 
             Ok(TogetherResponseWithMetadata {
@@ -100,8 +107,10 @@ impl InferenceProvider for TogetherProvider {
         } else {
             Err(map_openai_to_together_error(handle_openai_error(
                 res.status(),
-                &res.text().await.map_err(|e| Error::TogetherServer {
-                    message: format!("Error parsing error response: {e}"),
+                &res.text().await.map_err(|e| {
+                    Error::new(ErrorDetails::TogetherServer {
+                        message: format!("Error parsing error response: {e}"),
+                    })
                 })?,
             )))
         }
@@ -121,16 +130,18 @@ impl InferenceProvider for TogetherProvider {
         Error,
     > {
         let request_body = TogetherRequest::new(&self.model_name, request);
-        let raw_request =
-            serde_json::to_string(&request_body).map_err(|e| Error::TogetherServer {
+        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
+            Error::new(ErrorDetails::TogetherServer {
                 message: format!("Error serializing request: {e}"),
-            })?;
+            })
+        })?;
         let api_key = match &api_key {
             ProviderCredentials::Together(credentials) => &credentials.api_key,
             _ => {
-                return Err(Error::BadCredentialsPreInference {
+                return Err(ErrorDetails::BadCredentialsPreInference {
                     provider_name: "Together".to_string(),
-                })
+                }
+                .into());
             }
         };
         let request_url = get_chat_url(Some(&TOGETHER_API_BASE))?;
@@ -141,8 +152,10 @@ impl InferenceProvider for TogetherProvider {
             .bearer_auth(api_key.expose_secret())
             .json(&request_body)
             .eventsource()
-            .map_err(|e| Error::InferenceClient {
-                message: format!("Error sending request to Together: {e}"),
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    message: format!("Error sending request to Together: {e}"),
+                })
             })?;
         let mut stream =
             Box::pin(stream_openai(event_source, start_time).map_err(map_openai_to_together_error));
@@ -152,9 +165,9 @@ impl InferenceProvider for TogetherProvider {
             Some(Ok(chunk)) => chunk,
             Some(Err(e)) => return Err(e),
             None => {
-                return Err(Error::TogetherServer {
+                return Err(Error::new(ErrorDetails::TogetherServer {
                     message: "Stream ended before first chunk".to_string(),
-                })
+                }));
             }
         };
         Ok((chunk, stream, raw_request))
@@ -172,9 +185,10 @@ impl HasCredentials for TogetherProvider {
     ) -> Result<ProviderCredentials<'a>, Error> {
         if let Some(api_key) = &self.api_key {
             if credentials.together.is_some() {
-                return Err(Error::UnexpectedDynamicCredentials {
+                return Err(ErrorDetails::UnexpectedDynamicCredentials {
                     provider_name: "Together".to_string(),
-                });
+                }
+                .into());
             }
             return Ok(ProviderCredentials::Together(Cow::Owned(
                 TogetherCredentials {
@@ -184,25 +198,27 @@ impl HasCredentials for TogetherProvider {
         } else {
             match &credentials.together {
                 Some(credentials) => Ok(ProviderCredentials::Together(Cow::Borrowed(credentials))),
-                None => Err(Error::ApiKeyMissing {
+                None => Err(Error::new(ErrorDetails::ApiKeyMissing {
                     provider_name: "Together".to_string(),
-                }),
+                })),
             }
         }
     }
 }
 
 fn map_openai_to_together_error(e: Error) -> Error {
-    match e {
-        Error::OpenAIServer { message } => Error::TogetherServer { message },
-        Error::OpenAIClient {
+    let details = e.get_owned_details();
+    match details {
+        ErrorDetails::OpenAIServer { message } => ErrorDetails::TogetherServer { message }.into(),
+        ErrorDetails::OpenAIClient {
             message,
             status_code,
-        } => Error::TogetherClient {
+        } => ErrorDetails::TogetherClient {
             message,
             status_code,
-        },
-        _ => e,
+        }
+        .into(),
+        e => e.into(),
     }
 }
 
@@ -317,24 +333,27 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
             request: request_body,
             generic_request,
         } = value;
-        let raw_response = serde_json::to_string(&response).map_err(|e| Error::OpenAIServer {
-            message: format!("Error parsing response: {e}"),
+        let raw_response = serde_json::to_string(&response).map_err(|e| {
+            Error::new(ErrorDetails::TogetherServer {
+                message: format!("Error parsing response: {e}"),
+            })
         })?;
         if response.choices.len() != 1 {
-            return Err(Error::OpenAIServer {
+            return Err(ErrorDetails::TogetherServer {
                 message: format!(
                     "Response has invalid number of choices: {}. Expected 1.",
                     response.choices.len()
                 ),
-            });
+            }
+            .into());
         }
         let usage = response.usage.into();
         let message = response
             .choices
             .pop()
-            .ok_or(Error::OpenAIServer {
+            .ok_or_else(|| Error::new(ErrorDetails::TogetherServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
-            })?
+            }))?
             .message;
         let mut content: Vec<ContentBlock> = Vec::new();
         if let Some(text) = message.content {
@@ -345,10 +364,11 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
                 content.push(ContentBlock::ToolCall(tool_call.into()));
             }
         }
-        let raw_request =
-            serde_json::to_string(&request_body).map_err(|e| Error::FireworksServer {
+        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
+            Error::new(ErrorDetails::TogetherServer {
                 message: format!("Error serializing request body as JSON: {e}"),
-            })?;
+            })
+        })?;
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
@@ -439,9 +459,10 @@ mod tests {
         let result = provider_no_credentials
             .get_credentials(&credentials)
             .unwrap_err();
+        let details = result.get_details();
         assert_eq!(
-            result,
-            Error::ApiKeyMissing {
+            *details,
+            ErrorDetails::ApiKeyMissing {
                 provider_name: "Together".to_string(),
             }
         );
@@ -468,9 +489,10 @@ mod tests {
         let result = provider_with_credentials
             .get_credentials(&credentials)
             .unwrap_err();
+        let details = result.get_details();
         assert_eq!(
-            result,
-            Error::UnexpectedDynamicCredentials {
+            *details,
+            ErrorDetails::UnexpectedDynamicCredentials {
                 provider_name: "Together".to_string(),
             }
         );

@@ -14,7 +14,7 @@ use super::provider_trait::{HasCredentials, InferenceProvider};
 
 use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{
     current_timestamp, ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
@@ -112,32 +112,36 @@ impl InferenceProvider for DummyProvider {
 
             // Fail on even-numbered calls
             if *counter % 2 == 0 {
-                return Err(Error::InferenceClient {
+                return Err(ErrorDetails::InferenceClient {
                     message: format!(
                         "Flaky model '{}' failed on call number {}",
                         self.model_name, *counter
                     ),
-                });
+                }
+                .into());
             }
         }
 
         if self.model_name == "error" {
-            return Err(Error::InferenceClient {
+            return Err(ErrorDetails::InferenceClient {
                 message: "Error sending request to Dummy provider.".to_string(),
-            });
+            }
+            .into());
         }
         let api_key = match &api_key {
             ProviderCredentials::Dummy(credentials) => &credentials.api_key,
             _ => {
-                return Err(Error::BadCredentialsPreInference {
+                return Err(ErrorDetails::BadCredentialsPreInference {
                     provider_name: "Dummy".to_string(),
-                })
+                }
+                .into());
             }
         };
         if self.model_name == "test_key" && api_key.expose_secret() != "good_key" {
-            return Err(Error::InferenceClient {
+            return Err(ErrorDetails::InferenceClient {
                 message: "Invalid API key for Dummy provider".to_string(),
-            });
+            }
+            .into());
         }
         let id = Uuid::now_v7();
         #[allow(clippy::expect_used)]
@@ -235,19 +239,21 @@ impl InferenceProvider for DummyProvider {
 
             // Fail on even-numbered calls
             if *counter % 2 == 0 {
-                return Err(Error::InferenceClient {
+                return Err(ErrorDetails::InferenceClient {
                     message: format!(
                         "Flaky model '{}' failed on call number {}",
                         self.model_name, *counter
                     ),
-                });
+                }
+                .into());
             }
         }
 
         if self.model_name == "error" {
-            return Err(Error::InferenceClient {
+            return Err(ErrorDetails::InferenceClient {
                 message: "Error sending request to Dummy provider.".to_string(),
-            });
+            }
+            .into());
         }
         let id = Uuid::now_v7();
         #[allow(clippy::expect_used)]
@@ -342,15 +348,17 @@ impl HasCredentials for DummyProvider {
         if self.dynamic_credentials {
             match &credentials.dummy {
                 Some(credentials) => Ok(ProviderCredentials::Dummy(Cow::Borrowed(credentials))),
-                None => Err(Error::ApiKeyMissing {
+                None => Err(ErrorDetails::ApiKeyMissing {
                     provider_name: "Dummy".to_string(),
-                }),
+                }
+                .into()),
             }
         } else {
             match &credentials.dummy {
-                Some(_credentials) => Err(Error::UnexpectedDynamicCredentials {
+                Some(_credentials) => Err(ErrorDetails::UnexpectedDynamicCredentials {
                     provider_name: "Dummy".to_string(),
-                }),
+                }
+                .into()),
                 None => Ok(ProviderCredentials::Dummy(Cow::Owned(DummyCredentials {
                     api_key: Cow::Borrowed(&EMPTY_SECRET),
                 }))),
@@ -366,9 +374,10 @@ impl EmbeddingProvider for DummyProvider {
         _http_client: &reqwest::Client,
     ) -> Result<EmbeddingProviderResponse, Error> {
         if self.model_name == "error" {
-            return Err(Error::InferenceClient {
+            return Err(ErrorDetails::InferenceClient {
                 message: "Error sending request to Dummy provider.".to_string(),
-            });
+            }
+            .into());
         }
         let id = Uuid::now_v7();
         let created = current_timestamp();

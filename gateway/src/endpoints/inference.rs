@@ -12,12 +12,13 @@ use std::pin::Pin;
 use std::time::Duration;
 use tokio::time::Instant;
 use tokio_stream::StreamExt;
+use tracing::instrument;
 use uuid::Uuid;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::Config;
 use crate::embeddings::EmbeddingModelConfig;
-use crate::error::{Error, ResultExt};
+use crate::error::{Error, ErrorDetails};
 use crate::function::sample_variant;
 use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
@@ -152,6 +153,14 @@ pub enum InferenceOutput {
     Streaming(Pin<Box<dyn Stream<Item = Option<InferenceResponseChunk>> + Send>>),
 }
 
+#[instrument(
+    name="inference",
+    skip(config, http_client, clickhouse_connection_info, params),
+    fields(
+        function_name = %params.function_name,
+        variant_name = ?params.variant_name,
+    )
+)]
 pub async fn inference(
     config: &'static Config<'static>,
     http_client: reqwest::Client,
@@ -169,9 +178,10 @@ pub async fn inference(
 
     // If the function has no variants, return an error
     if candidate_variant_names.is_empty() {
-        return Err(Error::InvalidFunctionVariants {
+        return Err(ErrorDetails::InvalidFunctionVariants {
             message: format!("Function `{}` has no variants", params.function_name),
-        });
+        }
+        .into());
     }
 
     // Validate the input
@@ -183,9 +193,10 @@ pub async fn inference(
 
         // If the pinned variant doesn't exist, return an error
         if candidate_variant_names.is_empty() {
-            return Err(Error::UnknownVariant {
+            return Err(ErrorDetails::UnknownVariant {
                 name: variant_name.to_string(),
-            });
+            }
+            .into());
         }
     }
 
@@ -350,9 +361,10 @@ pub async fn inference(
     }
 
     // Eventually, if we get here, it means we tried every variant and none of them worked
-    Err(Error::AllVariantsFailed {
+    Err(ErrorDetails::AllVariantsFailed {
         errors: variant_errors,
-    })
+    }
+    .into())
 }
 
 fn create_stream(
@@ -370,7 +382,7 @@ fn create_stream(
         yield Some(prepare_response_chunk(&metadata, first_chunk));
 
         while let Some(chunk) = stream.next().await {
-            let chunk = match chunk.ok_or_log() {
+            let chunk = match chunk.ok() {
                 Some(c) => c,
                 None => continue,
             };
@@ -420,7 +432,7 @@ fn create_stream(
             let inference_response: Result<InferenceResult, Error> =
                 collect_chunks(collect_chunks_args, &inference_config).await;
 
-            let inference_response = inference_response.ok_or_log();
+            let inference_response = inference_response.ok();
 
             if let Some(inference_response) = inference_response {
                 let mut inference_response = inference_response;
@@ -458,14 +470,16 @@ fn prepare_response_chunk(
 // When None is passed in, we send "[DONE]" to the client to signal the end of the stream
 fn prepare_serialized_event(chunk: Option<InferenceResponseChunk>) -> Result<Event, Error> {
     if let Some(chunk) = chunk {
-        let chunk_json = serde_json::to_value(chunk).map_err(|e| Error::Inference {
-            message: format!("Failed to convert chunk to JSON: {}", e),
+        let chunk_json = serde_json::to_value(chunk).map_err(|e| {
+            Error::new(ErrorDetails::Inference {
+                message: format!("Failed to convert chunk to JSON: {}", e),
+            })
         })?;
-        Event::default()
-            .json_data(chunk_json)
-            .map_err(|e| Error::Inference {
+        Event::default().json_data(chunk_json).map_err(|e| {
+            Error::new(ErrorDetails::Inference {
                 message: format!("Failed to convert Value to Event: {}", e),
             })
+        })
     } else {
         Ok(Event::default().data("[DONE]"))
     }
@@ -487,40 +501,38 @@ async fn write_inference<'a>(
     result: InferenceResult<'a>,
     metadata: InferenceDatabaseInsertMetadata,
 ) {
-    let serialized_input = match serde_json::to_string(&input).map_err(|e| Error::Serialization {
-        message: e.to_string(),
+    let serialized_input = match serde_json::to_string(&input).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: e.to_string(),
+        })
     }) {
         Ok(serialized_input) => serialized_input,
-        Err(e) => {
-            e.log();
+        Err(_) => {
             return;
         }
     };
     let model_responses: Vec<serde_json::Value> = result.get_serialized_model_inferences();
     // Write the model responses to the ModelInference table
     for response in model_responses {
-        clickhouse_connection_info
+        let _ = clickhouse_connection_info
             .write(&response, "ModelInference")
-            .await
-            .ok_or_log();
+            .await;
     }
     // Write the inference to the Inference table
     match result {
         InferenceResult::Chat(result) => {
             let chat_inference =
                 ChatInferenceDatabaseInsert::new(result, serialized_input, metadata);
-            clickhouse_connection_info
+            let _ = clickhouse_connection_info
                 .write(&chat_inference, "ChatInference")
-                .await
-                .ok_or_log();
+                .await;
         }
         InferenceResult::Json(result) => {
             let json_inference =
                 JsonInferenceDatabaseInsert::new(result, serialized_input, metadata);
-            clickhouse_connection_info
+            let _ = clickhouse_connection_info
                 .write(&json_inference, "JsonInference")
-                .await
-                .ok_or_log();
+                .await;
         }
     }
 }

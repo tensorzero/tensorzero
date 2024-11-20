@@ -5,7 +5,7 @@ use tracing::instrument;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::Config;
-use crate::error::{Error, ResultExt};
+use crate::error::{Error, ErrorDetails};
 
 /// State for the API
 #[derive(Clone)]
@@ -18,8 +18,10 @@ pub type AppState = axum::extract::State<AppStateData>;
 
 impl AppStateData {
     pub async fn new(config: &'static Config<'static>) -> Self {
-        let clickhouse_url = std::env::var("CLICKHOUSE_URL").map_err(|_| Error::AppState {
-            message: "Missing environment variable CLICKHOUSE_URL".to_string(),
+        let clickhouse_url = std::env::var("CLICKHOUSE_URL").map_err(|_| {
+            Error::new(ErrorDetails::AppState {
+                message: "Missing environment variable CLICKHOUSE_URL".to_string(),
+            })
         });
         let clickhouse_connection_info = setup_clickhouse(config, clickhouse_url).await;
 
@@ -40,15 +42,14 @@ async fn setup_clickhouse(
     if config.gateway.disable_observability {
         ClickHouseConnectionInfo::new_disabled()
     } else {
-        let clickhouse_url = clickhouse_url.ok_or_log().unwrap_or_else(|| "".to_string());
+        let clickhouse_url = clickhouse_url.unwrap_or_else(|_| "".to_string());
 
         // If the ClickHouse URL is malformed, we will log an error and return a disabled connection info
         // If the ClickHouse URL is healthy, we will return a Production connection info
         // If the ClickHouse URL is unhealthy, we will log an error and return a Production connection info
         ClickHouseConnectionInfo::new(&clickhouse_url)
             .await
-            .ok_or_log()
-            .unwrap_or_else(ClickHouseConnectionInfo::new_disabled)
+            .unwrap_or_else(|_| ClickHouseConnectionInfo::new_disabled())
     }
 }
 
@@ -70,25 +71,27 @@ where
     #[instrument(skip_all, level = "trace", name = "StructuredJson::from_request")]
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
         // Retrieve the request body as Bytes before deserializing it
-        let bytes =
-            bytes::Bytes::from_request(req, state)
-                .await
-                .map_err(|e| Error::JsonRequest {
-                    message: format!("{} ({})", e, e.status()),
-                })?;
+        let bytes = bytes::Bytes::from_request(req, state).await.map_err(|e| {
+            Error::new(ErrorDetails::JsonRequest {
+                message: format!("{} ({})", e, e.status()),
+            })
+        })?;
 
         // Convert the entire body into `serde_json::Value`
         let value = Json::<serde_json::Value>::from_bytes(&bytes)
-            .map_err(|e| Error::JsonRequest {
-                message: format!("{} ({})", e, e.status()),
+            .map_err(|e| {
+                Error::new(ErrorDetails::JsonRequest {
+                    message: format!("{} ({})", e, e.status()),
+                })
             })?
             .0;
 
         // Now use `serde_path_to_error::deserialize` to attempt deserialization into `T`
-        let deserialized: T =
-            serde_path_to_error::deserialize(&value).map_err(|e| Error::JsonRequest {
+        let deserialized: T = serde_path_to_error::deserialize(&value).map_err(|e| {
+            Error::new(ErrorDetails::JsonRequest {
                 message: e.to_string(),
-            })?;
+            })
+        })?;
 
         Ok(StructuredJson(deserialized))
     }
@@ -117,17 +120,16 @@ mod tests {
 
         let clickhouse_connection_info = setup_clickhouse(
             config,
-            Err(Error::AppState {
+            Err(ErrorDetails::AppState {
                 message: "Missing environment variable CLICKHOUSE_URL".to_string(),
-            }),
+            }
+            .into()),
         )
         .await;
         assert!(matches!(
             clickhouse_connection_info,
             ClickHouseConnectionInfo::Disabled
         ));
-        // Should not log if the ClickHouse URL is missing and observability is disabled
-        assert!(!logs_contain("Missing environment variable CLICKHOUSE_URL"));
 
         // Observability enabled but ClickHouse URL is missing
         let gateway_config = GatewayConfig {
@@ -142,17 +144,16 @@ mod tests {
 
         let clickhouse_connection_info = setup_clickhouse(
             config,
-            Err(Error::AppState {
+            Err(ErrorDetails::AppState {
                 message: "Missing environment variable CLICKHOUSE_URL".to_string(),
-            }),
+            }
+            .into()),
         )
         .await;
         assert!(matches!(
             clickhouse_connection_info,
             ClickHouseConnectionInfo::Disabled
         ));
-        // Should log if the ClickHouse URL is missing and observability is enabled
-        assert!(logs_contain("Missing environment variable CLICKHOUSE_URL"));
 
         // Bad URL
         let gateway_config = GatewayConfig {

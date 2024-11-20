@@ -1,7 +1,7 @@
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 
 /// Set up logs
 pub fn setup_logs() {
@@ -23,9 +23,9 @@ pub fn setup_logs() {
 
 /// Set up Prometheus metrics exporter
 pub fn setup_metrics() -> Result<PrometheusHandle, Error> {
-    PrometheusBuilder::new()
-        .install_recorder()
-        .map_err(|e| Error::Observability {
+    PrometheusBuilder::new().install_recorder().map_err(|e| {
+        Error::new(ErrorDetails::Observability {
             message: format!("Failed to install Prometheus exporter: {}", e),
         })
+    })
 }

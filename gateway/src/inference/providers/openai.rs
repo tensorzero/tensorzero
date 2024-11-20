@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
@@ -57,9 +57,10 @@ impl InferenceProvider for OpenAIProvider {
         let api_key = match &api_key {
             ProviderCredentials::OpenAI(credentials) => &credentials.api_key,
             _ => {
-                return Err(Error::BadCredentialsPreInference {
+                return Err(ErrorDetails::BadCredentialsPreInference {
                     provider_name: "OpenAI".to_string(),
-                })
+                }
+                .into())
             }
         };
         let start_time = Instant::now();
@@ -70,16 +71,22 @@ impl InferenceProvider for OpenAIProvider {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| Error::InferenceClient {
-                message: format!("Error sending request to OpenAI: {e}"),
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    message: format!("Error sending request to OpenAI: {e}"),
+                })
             })?;
         if res.status().is_success() {
-            let response = res.text().await.map_err(|e| Error::OpenAIServer {
-                message: format!("Error parsing text response: {e}"),
+            let response = res.text().await.map_err(|e| {
+                Error::new(ErrorDetails::OpenAIServer {
+                    message: format!("Error parsing text response: {e}"),
+                })
             })?;
 
-            let response = serde_json::from_str(&response).map_err(|e| Error::OpenAIServer {
-                message: format!("Error parsing JSON response: {e}: {response}"),
+            let response = serde_json::from_str(&response).map_err(|e| {
+                Error::new(ErrorDetails::OpenAIServer {
+                    message: format!("Error parsing JSON response: {e}: {response}"),
+                })
             })?;
 
             let latency = Latency::NonStreaming {
@@ -95,8 +102,10 @@ impl InferenceProvider for OpenAIProvider {
         } else {
             Err(handle_openai_error(
                 res.status(),
-                &res.text().await.map_err(|e| Error::OpenAIServer {
-                    message: format!("Error parsing error response: {e}"),
+                &res.text().await.map_err(|e| {
+                    Error::new(ErrorDetails::OpenAIServer {
+                        message: format!("Error parsing error response: {e}"),
+                    })
                 })?,
             ))
         }
@@ -116,22 +125,25 @@ impl InferenceProvider for OpenAIProvider {
         Error,
     > {
         if self.model_name.to_lowercase().starts_with("o1") {
-            return Err(Error::InvalidRequest {
+            return Err(ErrorDetails::InvalidRequest {
                 message: "The OpenAI o1 family of models does not support streaming.".to_string(),
-            });
+            }
+            .into());
         }
         let request_body = OpenAIRequest::new(&self.model_name, request)?;
-        let raw_request =
-            serde_json::to_string(&request_body).map_err(|e| Error::OpenAIServer {
+        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
+            Error::new(ErrorDetails::OpenAIServer {
                 message: format!("Error serializing request: {e}"),
-            })?;
+            })
+        })?;
         let request_url = get_chat_url(self.api_base.as_ref())?;
         let api_key = match &api_key {
             ProviderCredentials::OpenAI(credentials) => &credentials.api_key,
             _ => {
-                return Err(Error::BadCredentialsPreInference {
+                return Err(ErrorDetails::BadCredentialsPreInference {
                     provider_name: "OpenAI".to_string(),
-                })
+                }
+                .into())
             }
         };
         let start_time = Instant::now();
@@ -141,8 +153,10 @@ impl InferenceProvider for OpenAIProvider {
             .bearer_auth(api_key.expose_secret())
             .json(&request_body)
             .eventsource()
-            .map_err(|e| Error::InferenceClient {
-                message: format!("Error sending request to OpenAI: {e}"),
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    message: format!("Error sending request to OpenAI: {e}"),
+                })
             })?;
 
         let mut stream = Box::pin(stream_openai(event_source, start_time));
@@ -152,9 +166,10 @@ impl InferenceProvider for OpenAIProvider {
             Some(Ok(chunk)) => chunk,
             Some(Err(e)) => return Err(e),
             None => {
-                return Err(Error::OpenAIServer {
+                return Err(ErrorDetails::OpenAIServer {
                     message: "Stream ended before first chunk".to_string(),
-                })
+                }
+                .into())
             }
         };
         Ok((chunk, stream, raw_request))
@@ -167,8 +182,10 @@ impl EmbeddingProvider for OpenAIProvider {
         request: &EmbeddingRequest,
         client: &reqwest::Client,
     ) -> Result<EmbeddingProviderResponse, Error> {
-        let api_key = self.api_key.as_ref().ok_or(Error::ApiKeyMissing {
-            provider_name: "OpenAI".to_string(),
+        let api_key = self.api_key.as_ref().ok_or_else(|| {
+            Error::new(ErrorDetails::ApiKeyMissing {
+                provider_name: "OpenAI".to_string(),
+            })
         })?;
         let request_body = OpenAIEmbeddingRequest::new(&self.model_name, &request.input);
         let request_url = get_embedding_url(self.api_base.as_ref())?;
@@ -180,17 +197,23 @@ impl EmbeddingProvider for OpenAIProvider {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| Error::InferenceClient {
-                message: format!("Error sending request to OpenAI: {e}"),
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    message: format!("Error sending request to OpenAI: {e}"),
+                })
             })?;
         if res.status().is_success() {
-            let response = res.text().await.map_err(|e| Error::OpenAIServer {
-                message: format!("Error parsing text response: {e}"),
+            let response = res.text().await.map_err(|e| {
+                Error::new(ErrorDetails::OpenAIServer {
+                    message: format!("Error parsing text response: {e}"),
+                })
             })?;
 
             let response: OpenAIEmbeddingResponse =
-                serde_json::from_str(&response).map_err(|e| Error::OpenAIServer {
-                    message: format!("Error parsing JSON response: {e}: {response}"),
+                serde_json::from_str(&response).map_err(|e| {
+                    Error::new(ErrorDetails::OpenAIServer {
+                        message: format!("Error parsing JSON response: {e}: {response}"),
+                    })
                 })?;
             let latency = Latency::NonStreaming {
                 response_time: start_time.elapsed(),
@@ -205,8 +228,10 @@ impl EmbeddingProvider for OpenAIProvider {
         } else {
             Err(handle_openai_error(
                 res.status(),
-                &res.text().await.map_err(|e| Error::OpenAIServer {
-                    message: format!("Error parsing error response: {e}"),
+                &res.text().await.map_err(|e| {
+                    Error::new(ErrorDetails::OpenAIServer {
+                        message: format!("Error parsing error response: {e}"),
+                    })
                 })?,
             ))
         }
@@ -224,9 +249,10 @@ impl HasCredentials for OpenAIProvider {
     ) -> Result<ProviderCredentials<'a>, Error> {
         if let Some(api_key) = &self.api_key {
             if credentials.openai.is_some() {
-                return Err(Error::UnexpectedDynamicCredentials {
+                return Err(ErrorDetails::UnexpectedDynamicCredentials {
                     provider_name: "OpenAI".to_string(),
-                });
+                }
+                .into());
             }
             return Ok(ProviderCredentials::OpenAI(Cow::Owned(OpenAICredentials {
                 api_key: Cow::Borrowed(api_key),
@@ -234,9 +260,10 @@ impl HasCredentials for OpenAIProvider {
         } else {
             match &credentials.openai {
                 Some(credentials) => Ok(ProviderCredentials::OpenAI(Cow::Borrowed(credentials))),
-                None => Err(Error::ApiKeyMissing {
+                None => Err(ErrorDetails::ApiKeyMissing {
                     provider_name: "OpenAI".to_string(),
-                }),
+                }
+                .into()),
             }
         }
     }
@@ -253,9 +280,9 @@ pub fn stream_openai(
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    yield Err(Error::OpenAIServer {
+                    yield Err(ErrorDetails::OpenAIServer {
                         message: e.to_string(),
-                    });
+                    }.into());
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -264,12 +291,12 @@ pub fn stream_openai(
                             break;
                         }
                         let data: Result<OpenAIChatChunk, Error> =
-                            serde_json::from_str(&message.data).map_err(|e| Error::OpenAIServer {
+                            serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::OpenAIServer {
                                 message: format!(
                                     "Error parsing chunk. Error: {}, Data: {}",
                                     e, message.data
                                 ),
-                            });
+                            }));
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
@@ -291,10 +318,11 @@ pub(super) fn get_chat_url(base_url: Option<&Url>) -> Result<Url, Error> {
     if !url.path().ends_with('/') {
         url.set_path(&format!("{}/", url.path()));
     }
-    url.join("chat/completions")
-        .map_err(|e| Error::InvalidBaseUrl {
+    url.join("chat/completions").map_err(|e| {
+        Error::new(ErrorDetails::InvalidBaseUrl {
             message: e.to_string(),
         })
+    })
 }
 
 fn get_embedding_url(base_url: Option<&Url>) -> Result<Url, Error> {
@@ -303,8 +331,10 @@ fn get_embedding_url(base_url: Option<&Url>) -> Result<Url, Error> {
     if !url.path().ends_with('/') {
         url.set_path(&format!("{}/", url.path()));
     }
-    url.join("embeddings").map_err(|e| Error::InvalidBaseUrl {
-        message: e.to_string(),
+    url.join("embeddings").map_err(|e| {
+        Error::new(ErrorDetails::InvalidBaseUrl {
+            message: e.to_string(),
+        })
     })
 }
 
@@ -313,13 +343,15 @@ pub(super) fn handle_openai_error(response_code: StatusCode, response_body: &str
         StatusCode::BAD_REQUEST
         | StatusCode::UNAUTHORIZED
         | StatusCode::FORBIDDEN
-        | StatusCode::TOO_MANY_REQUESTS => Error::OpenAIClient {
+        | StatusCode::TOO_MANY_REQUESTS => ErrorDetails::OpenAIClient {
             message: response_body.to_string(),
             status_code: response_code,
-        },
-        _ => Error::OpenAIServer {
+        }
+        .into(),
+        _ => ErrorDetails::OpenAIServer {
             message: response_body.to_string(),
-        },
+        }
+        .into(),
     }
 }
 
@@ -756,9 +788,10 @@ impl<'a> OpenAIRequest<'a> {
             }
         }
         if request.tool_config.is_some() {
-            return Err(Error::InvalidRequest {
+            return Err(ErrorDetails::InvalidRequest {
                 message: "The OpenAI o1 family of models does not support tools.".to_string(),
-            });
+            }
+            .into());
         }
         let tools = None;
         let tool_choice = None;
@@ -864,24 +897,27 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             request: request_body,
             generic_request,
         } = value;
-        let raw_response = serde_json::to_string(&response).map_err(|e| Error::OpenAIServer {
-            message: format!("Error parsing response: {e}"),
+        let raw_response = serde_json::to_string(&response).map_err(|e| {
+            Error::new(ErrorDetails::OpenAIServer {
+                message: format!("Error parsing response: {e}"),
+            })
         })?;
         if response.choices.len() != 1 {
-            return Err(Error::OpenAIServer {
+            return Err(ErrorDetails::OpenAIServer {
                 message: format!(
                     "Response has invalid number of choices: {}. Expected 1.",
                     response.choices.len()
                 ),
-            });
+            }
+            .into());
         }
         let usage = response.usage.into();
         let message = response
             .choices
             .pop()
-            .ok_or(Error::OpenAIServer {
+            .ok_or_else(|| Error::new(ErrorDetails::OpenAIServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
-            })?
+            }))?
             .message;
         let mut content: Vec<ContentBlock> = Vec::new();
         if let Some(text) = message.content {
@@ -892,10 +928,11 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 content.push(ContentBlock::ToolCall(tool_call.into()));
             }
         }
-        let raw_request =
-            serde_json::to_string(&request_body).map_err(|e| Error::OpenAIServer {
+        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
+            Error::new(ErrorDetails::OpenAIServer {
                 message: format!("Error serializing request body as JSON: {e}"),
-            })?;
+            })
+        })?;
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
@@ -958,13 +995,16 @@ fn openai_to_tensorzero_chunk(
     tool_call_ids: &mut Vec<String>,
     tool_names: &mut Vec<String>,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
-    let raw_message = serde_json::to_string(&chunk).map_err(|e| Error::OpenAIServer {
-        message: format!("Error parsing response from OpenAI: {e}"),
+    let raw_message = serde_json::to_string(&chunk).map_err(|e| {
+        Error::new(ErrorDetails::OpenAIServer {
+            message: format!("Error parsing response from OpenAI: {e}"),
+        })
     })?;
     if chunk.choices.len() > 1 {
-        return Err(Error::OpenAIServer {
+        return Err(ErrorDetails::OpenAIServer {
             message: "Response has invalid number of choices: {}. Expected 1.".to_string(),
-        });
+        }
+        .into());
     }
     let usage = chunk.usage.map(|u| u.into());
     let mut content = vec![];
@@ -984,9 +1024,12 @@ fn openai_to_tensorzero_chunk(
                         id
                     }
                     None => {
-                        tool_call_ids.get(index as usize).ok_or(Error::OpenAIServer {
-                            message: "Tool call index out of bounds (meaning we haven't seen this many ids in the stream)".to_string(),
-                        })?.clone()
+                        tool_call_ids
+                            .get(index as usize)
+                            .ok_or_else(|| Error::new(ErrorDetails::OpenAIServer {
+                                message: "Tool call index out of bounds (meaning we haven't seen this many ids in the stream)".to_string(),
+                            }))?
+                            .clone()
                     }
                 };
                 let name = match tool_call.function.name {
@@ -995,9 +1038,12 @@ fn openai_to_tensorzero_chunk(
                         name
                     }
                     None => {
-                        tool_names.get(index as usize).ok_or(Error::OpenAIServer {
-                            message: "Tool call index out of bounds (meaning we haven't seen this many names in the stream)".to_string(),
-                        })?.clone()
+                        tool_names
+                            .get(index as usize)
+                            .ok_or_else(|| Error::new(ErrorDetails::OpenAIServer {
+                                message: "Tool call index out of bounds (meaning we haven't seen this many names in the stream)".to_string(),
+                            }))?
+                            .clone()
                     }
                 };
                 content.push(ContentBlockChunk::ToolCall(ToolCallChunk {
@@ -1055,23 +1101,29 @@ impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderR
             latency,
             request,
         } = response;
-        let raw_request = serde_json::to_string(&request).map_err(|e| Error::OpenAIServer {
-            message: format!("Error serializing request body as JSON: {e}"),
+        let raw_request = serde_json::to_string(&request).map_err(|e| {
+            Error::new(ErrorDetails::OpenAIServer {
+                message: format!("Error serializing request body as JSON: {e}"),
+            })
         })?;
-        let raw_response = serde_json::to_string(&response).map_err(|e| Error::OpenAIServer {
-            message: format!("Error parsing response from OpenAI: {e}"),
+        let raw_response = serde_json::to_string(&response).map_err(|e| {
+            Error::new(ErrorDetails::OpenAIServer {
+                message: format!("Error parsing response from OpenAI: {e}"),
+            })
         })?;
         if response.data.len() != 1 {
-            return Err(Error::OpenAIServer {
+            return Err(Error::new(ErrorDetails::OpenAIServer {
                 message: "Expected exactly one embedding in response".to_string(),
-            });
+            }));
         }
         let embedding = response
             .data
             .into_iter()
             .next()
-            .ok_or(Error::OpenAIServer {
-                message: "Expected exactly one embedding in response".to_string(),
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::OpenAIServer {
+                    message: "Expected exactly one embedding in response".to_string(),
+                })
             })?
             .embedding;
 
@@ -1142,44 +1194,48 @@ mod tests {
 
         // Test unauthorized error
         let unauthorized = handle_openai_error(StatusCode::UNAUTHORIZED, "Unauthorized access");
-        assert!(matches!(unauthorized, Error::OpenAIClient { .. }));
-        if let Error::OpenAIClient {
+        let details = unauthorized.get_details();
+        assert!(matches!(details, ErrorDetails::OpenAIClient { .. }));
+        if let ErrorDetails::OpenAIClient {
             message,
             status_code,
-        } = unauthorized
+        } = details
         {
             assert_eq!(message, "Unauthorized access");
-            assert_eq!(status_code, StatusCode::UNAUTHORIZED);
+            assert_eq!(*status_code, StatusCode::UNAUTHORIZED);
         }
 
         // Test forbidden error
         let forbidden = handle_openai_error(StatusCode::FORBIDDEN, "Forbidden access");
-        assert!(matches!(forbidden, Error::OpenAIClient { .. }));
-        if let Error::OpenAIClient {
+        let details = forbidden.get_details();
+        assert!(matches!(details, ErrorDetails::OpenAIClient { .. }));
+        if let ErrorDetails::OpenAIClient {
             message,
             status_code,
-        } = forbidden
+        } = details
         {
             assert_eq!(message, "Forbidden access");
-            assert_eq!(status_code, StatusCode::FORBIDDEN);
+            assert_eq!(*status_code, StatusCode::FORBIDDEN);
         }
 
         // Test rate limit error
         let rate_limit = handle_openai_error(StatusCode::TOO_MANY_REQUESTS, "Rate limit exceeded");
-        assert!(matches!(rate_limit, Error::OpenAIClient { .. }));
-        if let Error::OpenAIClient {
+        let details = rate_limit.get_details();
+        assert!(matches!(details, ErrorDetails::OpenAIClient { .. }));
+        if let ErrorDetails::OpenAIClient {
             message,
             status_code,
-        } = rate_limit
+        } = details
         {
             assert_eq!(message, "Rate limit exceeded");
-            assert_eq!(status_code, StatusCode::TOO_MANY_REQUESTS);
+            assert_eq!(*status_code, StatusCode::TOO_MANY_REQUESTS);
         }
 
         // Test server error
         let server_error = handle_openai_error(StatusCode::INTERNAL_SERVER_ERROR, "Server error");
-        assert!(matches!(server_error, Error::OpenAIServer { .. }));
-        if let Error::OpenAIServer { message } = server_error {
+        let details = server_error.get_details();
+        assert!(matches!(details, ErrorDetails::OpenAIServer { .. }));
+        if let ErrorDetails::OpenAIServer { message } = details {
             assert_eq!(message, "Server error");
         }
     }
@@ -1462,10 +1518,12 @@ mod tests {
 
         // Check that it returns an error
         assert!(openai_request_with_tools.is_err());
-        if let Err(Error::InvalidRequest { message }) = openai_request_with_tools {
+        let err = openai_request_with_tools.unwrap_err();
+        let details = err.get_details();
+        if let ErrorDetails::InvalidRequest { message } = details {
             assert_eq!(
                 message,
-                "The OpenAI o1 family of models does not support tools.".to_string()
+                "The OpenAI o1 family of models does not support tools."
             );
         } else {
             panic!("Expected InvalidRequest error");
@@ -1683,7 +1741,9 @@ mod tests {
             generic_request: &generic_request,
         });
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::OpenAIServer { .. }));
+        let err = result.unwrap_err();
+        let details = err.get_details();
+        assert!(matches!(details, ErrorDetails::OpenAIServer { .. }));
 
         // Test case 4: Invalid response with multiple choices
         let invalid_response_multiple_choices = OpenAIResponse {
@@ -1735,7 +1795,9 @@ mod tests {
             generic_request: &generic_request,
         });
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::OpenAIServer { .. }));
+        let err = result.unwrap_err();
+        let details = err.get_details();
+        assert!(matches!(details, ErrorDetails::OpenAIServer { .. }));
     }
 
     #[test]
@@ -1961,9 +2023,10 @@ mod tests {
             &mut tool_call_names,
         )
         .unwrap_err();
+        let details = error.get_details();
         assert_eq!(
-            error,
-            Error::OpenAIServer {
+            *details,
+            ErrorDetails::OpenAIServer {
                 message: "Tool call index out of bounds (meaning we haven't seen this many ids in the stream)".to_string(),
             }
         );
@@ -2253,9 +2316,10 @@ mod tests {
         let result = provider_no_credentials
             .get_credentials(&credentials)
             .unwrap_err();
+        let details = result.get_details();
         assert_eq!(
-            result,
-            Error::ApiKeyMissing {
+            *details,
+            ErrorDetails::ApiKeyMissing {
                 provider_name: "OpenAI".to_string(),
             }
         );
@@ -2283,9 +2347,10 @@ mod tests {
         let result = provider_with_credentials
             .get_credentials(&credentials)
             .unwrap_err();
+        let details = result.get_details();
         assert_eq!(
-            result,
-            Error::UnexpectedDynamicCredentials {
+            *details,
+            ErrorDetails::UnexpectedDynamicCredentials {
                 provider_name: "OpenAI".to_string(),
             }
         );

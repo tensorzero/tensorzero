@@ -59,6 +59,7 @@ pub struct InferenceConfig<'a> {
     pub variant_name: String,
 }
 
+#[derive(Debug)]
 pub struct ModelUsedInfo<'a> {
     pub model_name: &'a str,
     pub model_provider_name: &'a str,
@@ -254,6 +255,7 @@ impl Variant for VariantConfig {
         }
     }
 
+    #[instrument(skip_all, fields(variant_name = %variant_name))]
     fn validate(
         &self,
         function: &FunctionConfig,
@@ -488,6 +490,7 @@ mod tests {
     use super::*;
     use crate::clickhouse::ClickHouseConnectionInfo;
     use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceCredentials};
+    use crate::error::ErrorDetails;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::providers::dummy::{
         DummyProvider, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_USAGE, DUMMY_JSON_RESPONSE_RAW,
@@ -932,7 +935,10 @@ mod tests {
 
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(matches!(error, Error::ModelProvidersExhausted { .. }));
+        assert!(matches!(
+            error.get_details(),
+            ErrorDetails::ModelProvidersExhausted { .. }
+        ));
     }
 
     #[tokio::test]
@@ -1049,7 +1055,7 @@ mod tests {
             _ => panic!("Expected Chat inference result"),
         }
         assert!(logs_contain(
-            r#"ERROR test_infer_model_request_errors:infer_model_request{model_name=dummy_chat_model}:provider_error{provider_name="error"}: gateway::error: Error sending request to Dummy provider."#
+            r#"ERROR test_infer_model_request_errors:infer_model_request{model_name=dummy_chat_model}: gateway::error: Error sending request to Dummy provider."#
         ));
     }
 
@@ -1311,7 +1317,7 @@ mod tests {
         assert_eq!(full_response, expected_response);
 
         assert!(logs_contain(
-            r#"ERROR test_infer_model_request_errors_stream:infer_model_request_stream{model_name=dummy_chat_model}:infer_stream:provider_error{provider_name="error"}: gateway::error: Error sending request to Dummy provider."#
+            r#"ERROR test_infer_model_request_errors_stream:infer_model_request_stream{model_name=dummy_chat_model}:infer_stream: gateway::error: Error sending request to Dummy provider."#
         ));
     }
 }

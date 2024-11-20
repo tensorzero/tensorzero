@@ -5,8 +5,6 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::env;
 use tracing::instrument;
-use tracing::span;
-use tracing::Level;
 use url::Url;
 
 use crate::inference::providers::anthropic::AnthropicCredentials;
@@ -26,7 +24,7 @@ use crate::inference::providers::together::TogetherCredentials;
 use crate::inference::providers::vllm::VLLMCredentials;
 use crate::{
     endpoints::inference::InferenceCredentials,
-    error::Error,
+    error::{Error, ErrorDetails},
     inference::{
         providers::{
             anthropic::AnthropicProvider,
@@ -65,22 +63,14 @@ impl ModelConfig {
     ) -> Result<ModelInferenceResponse<'a>, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
-            let provider_config =
-                self.providers
-                    .get(provider_name)
-                    .ok_or(Error::ProviderNotFound {
-                        provider_name: provider_name.clone(),
-                    })?;
+            let provider_config = self.providers.get(provider_name).ok_or_else(|| {
+                Error::new(ErrorDetails::ProviderNotFound {
+                    provider_name: provider_name.clone(),
+                })
+            })?;
             let response = provider_config.infer(request, client, api_keys).await;
             match response {
                 Ok(response) => {
-                    for (provider_name, error) in &provider_errors {
-                        let _span =
-                            span!(Level::WARN, "provider_error", provider_name = provider_name)
-                                .entered();
-                        error.log();
-                        // Span should exit automatically as it is dropped here
-                    }
                     let model_inference_response =
                         ModelInferenceResponse::new(response, provider_name);
                     return Ok(model_inference_response);
@@ -90,7 +80,9 @@ impl ModelConfig {
                 }
             }
         }
-        Err(Error::ModelProvidersExhausted { provider_errors })
+        Err(Error::new(ErrorDetails::ModelProvidersExhausted {
+            provider_errors,
+        }))
     }
 
     #[instrument(skip_all)]
@@ -110,24 +102,16 @@ impl ModelConfig {
     > {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
-            let provider_config =
-                self.providers
-                    .get(provider_name)
-                    .ok_or(Error::ProviderNotFound {
-                        provider_name: provider_name.clone(),
-                    })?;
+            let provider_config = self.providers.get(provider_name).ok_or_else(|| {
+                Error::new(ErrorDetails::ProviderNotFound {
+                    provider_name: provider_name.clone(),
+                })
+            })?;
             let response = provider_config
                 .infer_stream(request, client, api_keys)
                 .await;
             match response {
                 Ok(response) => {
-                    for (provider_name, error) in &provider_errors {
-                        let _span =
-                            span!(Level::WARN, "provider_error", provider_name = provider_name)
-                                .entered();
-                        error.log();
-                        // Span should exit automatically as it is dropped here
-                    }
                     let (chunk, stream, raw_request) = response;
                     return Ok((chunk, stream, raw_request, provider_name));
                 }
@@ -136,7 +120,9 @@ impl ModelConfig {
                 }
             }
         }
-        Err(Error::ModelProvidersExhausted { provider_errors })
+        Err(Error::new(ErrorDetails::ModelProvidersExhausted {
+            provider_errors,
+        }))
     }
 
     pub fn validate(&self) -> Result<(), Error> {
@@ -146,9 +132,10 @@ impl ModelConfig {
             .values()
             .all(|provider| provider.has_credentials())
         {
-            return Err(Error::ModelValidation {
+            return Err(ErrorDetails::ModelValidation {
                 message: "At least one provider lacks credentials".to_string(),
-            });
+            }
+            .into());
         }
         Ok(())
     }
@@ -286,7 +273,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 let api_key = env::var("ANTHROPIC_API_KEY").ok().map(SecretString::from);
                 if api_key.is_none() && !dynamic_credentials {
                     return Err(D::Error::custom(
-                        Error::ApiKeyMissing {
+                        ErrorDetails::ApiKeyMissing {
                             provider_name: "Anthropic".to_string(),
                         }
                         .to_string(),
@@ -324,7 +311,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                     .map(SecretString::from);
                 if api_key.is_none() && !dynamic_credentials {
                     return Err(D::Error::custom(
-                        Error::ApiKeyMissing {
+                        ErrorDetails::ApiKeyMissing {
                             provider_name: "Azure".to_string(),
                         }
                         .to_string(),
@@ -343,7 +330,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 let api_key = env::var("FIREWORKS_API_KEY").ok().map(SecretString::from);
                 if api_key.is_none() && !dynamic_credentials {
                     return Err(D::Error::custom(
-                        Error::ApiKeyMissing {
+                        ErrorDetails::ApiKeyMissing {
                             provider_name: "Fireworks".to_string(),
                         }
                         .to_string(),
@@ -374,7 +361,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 };
                 if credentials.is_none() && !dynamic_credentials {
                     return Err(D::Error::custom(
-                        Error::ApiKeyMissing {
+                        ErrorDetails::ApiKeyMissing {
                             provider_name: "GCPVertexAnthropic".to_string(),
                         }
                         .to_string(),
@@ -413,7 +400,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 };
                 if credentials.is_none() && !dynamic_credentials {
                     return Err(D::Error::custom(
-                        Error::ApiKeyMissing {
+                        ErrorDetails::ApiKeyMissing {
                             provider_name: "GCPVertexGemini".to_string(),
                         }
                         .to_string(),
@@ -440,7 +427,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                     .map(SecretString::from);
                 if api_key.is_none() && !dynamic_credentials {
                     return Err(D::Error::custom(
-                        Error::ApiKeyMissing {
+                        ErrorDetails::ApiKeyMissing {
                             provider_name: "Google AI Studio Gemini".to_string(),
                         }
                         .to_string(),
@@ -465,7 +452,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 let api_key = env::var("MISTRAL_API_KEY").ok().map(SecretString::from);
                 if api_key.is_none() && !dynamic_credentials {
                     return Err(D::Error::custom(
-                        Error::ApiKeyMissing {
+                        ErrorDetails::ApiKeyMissing {
                             provider_name: "Mistral".to_string(),
                         }
                         .to_string(),
@@ -484,7 +471,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 let api_key = env::var("OPENAI_API_KEY").ok().map(SecretString::from);
                 if api_key.is_none() && !dynamic_credentials {
                     return Err(D::Error::custom(
-                        Error::ApiKeyMissing {
+                        ErrorDetails::ApiKeyMissing {
                             provider_name: "OpenAI".to_string(),
                         }
                         .to_string(),
@@ -503,7 +490,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 let api_key = env::var("TOGETHER_API_KEY").ok().map(SecretString::from);
                 if api_key.is_none() && !dynamic_credentials {
                     return Err(D::Error::custom(
-                        Error::ApiKeyMissing {
+                        ErrorDetails::ApiKeyMissing {
                             provider_name: "Together".to_string(),
                         }
                         .to_string(),
@@ -522,7 +509,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 let api_key = env::var("VLLM_API_KEY").ok().map(SecretString::from);
                 if api_key.is_none() && !dynamic_credentials {
                     return Err(D::Error::custom(
-                        Error::ApiKeyMissing {
+                        ErrorDetails::ApiKeyMissing {
                             provider_name: "VLLM".to_string(),
                         }
                         .to_string(),
@@ -752,14 +739,16 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             response,
-            Error::ModelProvidersExhausted {
+            ErrorDetails::ModelProvidersExhausted {
                 provider_errors: HashMap::from([(
                     "error".to_string(),
-                    Error::InferenceClient {
+                    ErrorDetails::InferenceClient {
                         message: "Error sending request to Dummy provider.".to_string()
                     }
+                    .into()
                 )])
             }
+            .into()
         );
     }
 
@@ -902,14 +891,16 @@ mod tests {
         };
         assert_eq!(
             error,
-            Error::ModelProvidersExhausted {
+            ErrorDetails::ModelProvidersExhausted {
                 provider_errors: HashMap::from([(
                     "error".to_string(),
-                    Error::InferenceClient {
+                    ErrorDetails::InferenceClient {
                         message: "Error sending request to Dummy provider.".to_string()
                     }
+                    .into()
                 )])
             }
+            .into()
         );
     }
 
@@ -1025,14 +1016,16 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             error,
-            Error::ModelProvidersExhausted {
+            ErrorDetails::ModelProvidersExhausted {
                 provider_errors: HashMap::from([(
                     "model".to_string(),
-                    Error::InferenceClient {
+                    ErrorDetails::InferenceClient {
                         message: "Invalid API key for Dummy provider".to_string()
                     }
+                    .into()
                 )])
             }
+            .into()
         );
 
         let api_keys = InferenceCredentials {
@@ -1047,14 +1040,16 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             response,
-            Error::ModelProvidersExhausted {
+            ErrorDetails::ModelProvidersExhausted {
                 provider_errors: HashMap::from([(
                     "model".to_string(),
-                    Error::UnexpectedDynamicCredentials {
+                    ErrorDetails::UnexpectedDynamicCredentials {
                         provider_name: "Dummy".to_string(),
                     }
+                    .into()
                 )])
             }
+            .into()
         );
 
         let provider_config = ProviderConfig::Dummy(DummyProvider {
@@ -1093,14 +1088,16 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             error,
-            Error::ModelProvidersExhausted {
+            ErrorDetails::ModelProvidersExhausted {
                 provider_errors: HashMap::from([(
                     "model".to_string(),
-                    Error::ApiKeyMissing {
+                    ErrorDetails::ApiKeyMissing {
                         provider_name: "Dummy".to_string()
                     }
+                    .into()
                 )])
             }
+            .into()
         );
 
         let api_keys = InferenceCredentials {
