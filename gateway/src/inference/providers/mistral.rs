@@ -19,7 +19,7 @@ use crate::{
         ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
         ProviderInferenceResponseStream, TextChunk, Usage,
     },
-    model::ApiKeyLocation,
+    model::CredentialLocation,
     tool::{ToolCall, ToolCallChunk, ToolChoice},
 };
 
@@ -38,8 +38,8 @@ lazy_static! {
     };
 }
 
-pub fn default_api_key_location() -> ApiKeyLocation {
-    ApiKeyLocation::Env("MISTRAL_API_KEY".to_string())
+pub fn default_api_key_location() -> CredentialLocation {
+    CredentialLocation::Env("MISTRAL_API_KEY".to_string())
 }
 
 #[derive(Debug)]

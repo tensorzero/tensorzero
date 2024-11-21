@@ -21,7 +21,7 @@ use crate::inference::types::{
     ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream, RequestMessage, TextChunk, Usage,
 };
-use crate::model::ApiKeyLocation;
+use crate::model::CredentialLocation;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 lazy_static! {
@@ -33,8 +33,8 @@ lazy_static! {
 }
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 
-pub fn default_api_key_location() -> ApiKeyLocation {
-    ApiKeyLocation::Env("ANTHROPIC_API_KEY".to_string())
+pub fn default_api_key_location() -> CredentialLocation {
+    CredentialLocation::Env("ANTHROPIC_API_KEY".to_string())
 }
 
 #[derive(Debug)]

@@ -21,7 +21,7 @@ use crate::inference::types::{
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequestJsonMode, Role, Text, TextChunk,
 };
-use crate::model::ApiKeyLocation;
+use crate::model::CredentialLocation;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
@@ -36,8 +36,8 @@ pub struct GCPVertexGeminiProvider {
     pub model_id: String,
 }
 
-pub fn default_api_key_location() -> ApiKeyLocation {
-    ApiKeyLocation::Path("/app/gcp-credentials.json".to_string())
+pub fn default_api_key_location() -> CredentialLocation {
+    CredentialLocation::Path("/app/gcp-credentials.json".to_string())
 }
 
 #[derive(Debug)]

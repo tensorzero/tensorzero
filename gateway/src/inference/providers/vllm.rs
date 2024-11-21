@@ -19,7 +19,7 @@ use crate::inference::types::{
     ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
 };
-use crate::model::ApiKeyLocation;
+use crate::model::CredentialLocation;
 
 #[derive(Debug)]
 pub struct VLLMProvider {
@@ -28,8 +28,8 @@ pub struct VLLMProvider {
     pub credentials: VLLMCredentials,
 }
 
-pub fn default_api_key_location() -> ApiKeyLocation {
-    ApiKeyLocation::Env("VLLM_API_KEY".to_string())
+pub fn default_api_key_location() -> CredentialLocation {
+    CredentialLocation::Env("VLLM_API_KEY".to_string())
 }
 
 #[derive(Debug)]

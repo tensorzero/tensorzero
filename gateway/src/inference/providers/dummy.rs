@@ -18,7 +18,7 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     Usage,
 };
-use crate::model::ApiKeyLocation;
+use crate::model::CredentialLocation;
 use crate::tool::{ToolCall, ToolCallChunk};
 
 #[derive(Debug, Default)]
@@ -27,8 +27,8 @@ pub struct DummyProvider {
     pub credentials: DummyCredentials,
 }
 
-pub fn default_api_key_location() -> ApiKeyLocation {
-    ApiKeyLocation::None
+pub fn default_api_key_location() -> CredentialLocation {
+    CredentialLocation::None
 }
 
 #[derive(Debug, Default)]

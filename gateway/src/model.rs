@@ -165,7 +165,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
             Anthropic {
                 model_name: String,
                 #[serde(default = "providers::anthropic::default_api_key_location")]
-                api_key_location: ApiKeyLocation,
+                api_key_location: CredentialLocation,
             },
             #[serde(rename = "aws_bedrock")]
             AWSBedrock {
@@ -176,7 +176,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 deployment_id: String,
                 endpoint: Url,
                 #[serde(default = "providers::azure::default_api_key_location")]
-                api_key_location: ApiKeyLocation,
+                api_key_location: CredentialLocation,
             },
             #[serde(rename = "gcp_vertex_anthropic")]
             GCPVertexAnthropic {
@@ -184,7 +184,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 location: String,
                 project_id: String,
                 #[serde(default = "providers::gcp_vertex_gemini::default_api_key_location")]
-                api_key_location: ApiKeyLocation,
+                credential_location: CredentialLocation,
             },
             #[serde(rename = "gcp_vertex_gemini")]
             GCPVertexGemini {
@@ -192,47 +192,47 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 location: String,
                 project_id: String,
                 #[serde(default = "providers::gcp_vertex_gemini::default_api_key_location")]
-                api_key_location: ApiKeyLocation,
+                credential_location: CredentialLocation,
             },
             #[serde(rename = "google_ai_studio_gemini")]
             GoogleAIStudioGemini {
                 model_name: String,
                 #[serde(default = "providers::google_ai_studio_gemini::default_api_key_location")]
-                api_key_location: ApiKeyLocation,
+                api_key_location: CredentialLocation,
             },
             Fireworks {
                 model_name: String,
                 #[serde(default = "providers::fireworks::default_api_key_location")]
-                api_key_location: ApiKeyLocation,
+                api_key_location: CredentialLocation,
             },
             Mistral {
                 model_name: String,
                 #[serde(default = "providers::mistral::default_api_key_location")]
-                api_key_location: ApiKeyLocation,
+                api_key_location: CredentialLocation,
             },
             OpenAI {
                 model_name: String,
                 api_base: Option<Url>,
                 #[serde(default = "providers::openai::default_api_key_location")]
-                api_key_location: ApiKeyLocation,
+                api_key_location: CredentialLocation,
             },
             Together {
                 model_name: String,
                 #[serde(default = "providers::together::default_api_key_location")]
-                api_key_location: ApiKeyLocation,
+                api_key_location: CredentialLocation,
             },
             #[allow(clippy::upper_case_acronyms)]
             VLLM {
                 model_name: String,
                 api_base: Url,
                 #[serde(default = "providers::vllm::default_api_key_location")]
-                api_key_location: ApiKeyLocation,
+                api_key_location: CredentialLocation,
             },
             #[cfg(any(test, feature = "e2e_tests"))]
             Dummy {
                 model_name: String,
                 #[serde(default = "providers::dummy::default_api_key_location")]
-                api_key_location: ApiKeyLocation,
+                api_key_location: CredentialLocation,
             },
         }
 
@@ -244,7 +244,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 api_key_location,
             } => {
                 let credentials = match api_key_location {
-                    ApiKeyLocation::Env(key_name) => {
+                    CredentialLocation::Env(key_name) => {
                         let api_key = env::var(key_name)
                             .map_err(|_| {
                                 serde::de::Error::custom(
@@ -257,7 +257,9 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                             .into();
                         AnthropicCredentials::Static(api_key)
                     }
-                    ApiKeyLocation::Dynamic(key_name) => AnthropicCredentials::Dynamic(key_name),
+                    CredentialLocation::Dynamic(key_name) => {
+                        AnthropicCredentials::Dynamic(key_name)
+                    }
                     _ => Err(serde::de::Error::custom(
                         "Anthropic model provider requires Env or Dynamic API key location"
                             .to_string(),
@@ -291,7 +293,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 api_key_location,
             } => {
                 let credentials = match api_key_location {
-                    ApiKeyLocation::Env(key_name) => {
+                    CredentialLocation::Env(key_name) => {
                         let api_key = env::var(key_name)
                             .map_err(|_| {
                                 serde::de::Error::custom(
@@ -304,7 +306,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                             .into();
                         AzureCredentials::Static(api_key)
                     }
-                    ApiKeyLocation::Dynamic(key_name) => AzureCredentials::Dynamic(key_name),
+                    CredentialLocation::Dynamic(key_name) => AzureCredentials::Dynamic(key_name),
                     _ => Err(serde::de::Error::custom(
                         "Azure model provider requires Env or Dynamic API key location".to_string(),
                     ))?,
@@ -320,7 +322,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 api_key_location,
             } => {
                 let credentials = match api_key_location {
-                    ApiKeyLocation::Env(key_name) => {
+                    CredentialLocation::Env(key_name) => {
                         let api_key = env::var(key_name)
                             .map_err(|_| {
                                 serde::de::Error::custom(
@@ -333,7 +335,9 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                             .into();
                         FireworksCredentials::Static(api_key)
                     }
-                    ApiKeyLocation::Dynamic(key_name) => FireworksCredentials::Dynamic(key_name),
+                    CredentialLocation::Dynamic(key_name) => {
+                        FireworksCredentials::Dynamic(key_name)
+                    }
                     _ => Err(serde::de::Error::custom(
                         "Fireworks model provider requires Env or Dynamic API key location"
                             .to_string(),
@@ -348,10 +352,10 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 model_id,
                 location,
                 project_id,
-                api_key_location,
+                credential_location: api_key_location,
             } => {
                 let credentials = match api_key_location {
-                    ApiKeyLocation::Env(key_name) => {
+                    CredentialLocation::Env(key_name) => {
                         let path = env::var(key_name).map_err(|e| {
                             serde::de::Error::custom(format!(
                                 "Failed to load GCP credentials from environment variable: {}",
@@ -369,7 +373,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                             )?,
                         )
                     }
-                    ApiKeyLocation::Path(path) => GCPVertexCredentials::Static(
+                    CredentialLocation::Path(path) => GCPVertexCredentials::Static(
                         GCPServiceAccountCredentials::from_path(path.as_str()).map_err(|e| {
                             serde::de::Error::custom(format!(
                                 "Failed to load GCP credentials: {}",
@@ -377,7 +381,9 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                             ))
                         })?,
                     ),
-                    ApiKeyLocation::Dynamic(key_name) => GCPVertexCredentials::Dynamic(key_name),
+                    CredentialLocation::Dynamic(key_name) => {
+                        GCPVertexCredentials::Dynamic(key_name)
+                    }
                     _ => Err(serde::de::Error::custom(
                         "Invalid ApiKeyLocation for GCPVertexAnthropic provider".to_string(),
                     ))?,
@@ -398,10 +404,10 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 model_id,
                 location,
                 project_id,
-                api_key_location,
+                credential_location: api_key_location,
             } => {
                 let credentials = match api_key_location {
-                    ApiKeyLocation::Env(key_name) => {
+                    CredentialLocation::Env(key_name) => {
                         let path = env::var(key_name).map_err(|e| {
                             serde::de::Error::custom(format!(
                                 "Failed to load GCP credentials from environment variable: {}",
@@ -419,7 +425,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                             )?,
                         )
                     }
-                    ApiKeyLocation::Path(path) => GCPVertexCredentials::Static(
+                    CredentialLocation::Path(path) => GCPVertexCredentials::Static(
                         GCPServiceAccountCredentials::from_path(path.as_str()).map_err(|e| {
                             serde::de::Error::custom(format!(
                                 "Failed to load GCP credentials: {}",
@@ -427,7 +433,9 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                             ))
                         })?,
                     ),
-                    ApiKeyLocation::Dynamic(key_name) => GCPVertexCredentials::Dynamic(key_name),
+                    CredentialLocation::Dynamic(key_name) => {
+                        GCPVertexCredentials::Dynamic(key_name)
+                    }
                     _ => Err(serde::de::Error::custom(
                         "Invalid ApiKeyLocation for GCPVertexAnthropic provider".to_string(),
                     ))?,
@@ -449,7 +457,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 api_key_location,
             } => {
                 let credentials = match api_key_location {
-                    ApiKeyLocation::Env(key_name) => GoogleAIStudioCredentials::Static(
+                    CredentialLocation::Env(key_name) => GoogleAIStudioCredentials::Static(
                         env::var(key_name)
                             .map_err(|_| {
                                 serde::de::Error::custom(
@@ -461,7 +469,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                             })?
                             .into(),
                     ),
-                    ApiKeyLocation::Dynamic(key_name) => {
+                    CredentialLocation::Dynamic(key_name) => {
                         GoogleAIStudioCredentials::Dynamic(key_name)
                     }
                     _ => Err(serde::de::Error::custom(
@@ -485,7 +493,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 api_key_location,
             } => {
                 let credentials = match api_key_location {
-                    ApiKeyLocation::Env(key_name) => {
+                    CredentialLocation::Env(key_name) => {
                         let api_key = env::var(key_name)
                             .map_err(|_| {
                                 serde::de::Error::custom(
@@ -498,7 +506,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                             .into();
                         MistralCredentials::Static(api_key)
                     }
-                    ApiKeyLocation::Dynamic(key_name) => MistralCredentials::Dynamic(key_name),
+                    CredentialLocation::Dynamic(key_name) => MistralCredentials::Dynamic(key_name),
                     _ => Err(serde::de::Error::custom(
                         "Invalid ApiKeyLocation for Mistral provider".to_string(),
                     ))?,
@@ -514,7 +522,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 api_key_location,
             } => {
                 let credentials = match api_key_location {
-                    ApiKeyLocation::Env(key_name) => {
+                    CredentialLocation::Env(key_name) => {
                         let api_key = env::var(key_name)
                             .map_err(|_| {
                                 serde::de::Error::custom(
@@ -527,7 +535,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                             .into();
                         OpenAICredentials::Static(api_key)
                     }
-                    ApiKeyLocation::Dynamic(key_name) => OpenAICredentials::Dynamic(key_name),
+                    CredentialLocation::Dynamic(key_name) => OpenAICredentials::Dynamic(key_name),
                     _ => Err(serde::de::Error::custom(
                         "Invalid ApiKeyLocation for OpenAI provider".to_string(),
                     ))?,
@@ -543,7 +551,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 api_key_location,
             } => {
                 let credentials = match api_key_location {
-                    ApiKeyLocation::Env(key_name) => {
+                    CredentialLocation::Env(key_name) => {
                         let api_key = env::var(key_name)
                             .map_err(|_| {
                                 serde::de::Error::custom(
@@ -556,7 +564,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                             .into();
                         TogetherCredentials::Static(api_key)
                     }
-                    ApiKeyLocation::Dynamic(key_name) => TogetherCredentials::Dynamic(key_name),
+                    CredentialLocation::Dynamic(key_name) => TogetherCredentials::Dynamic(key_name),
                     _ => Err(serde::de::Error::custom(
                         "Invalid ApiKeyLocation for Together provider".to_string(),
                     ))?,
@@ -572,7 +580,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 api_key_location,
             } => {
                 let credentials = match api_key_location {
-                    ApiKeyLocation::Env(key_name) => {
+                    CredentialLocation::Env(key_name) => {
                         let api_key = env::var(key_name)
                             .map_err(|_| {
                                 serde::de::Error::custom(
@@ -585,8 +593,8 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                             .into();
                         VLLMCredentials::Static(api_key)
                     }
-                    ApiKeyLocation::Dynamic(key_name) => VLLMCredentials::Dynamic(key_name),
-                    ApiKeyLocation::None => VLLMCredentials::None,
+                    CredentialLocation::Dynamic(key_name) => VLLMCredentials::Dynamic(key_name),
+                    CredentialLocation::None => VLLMCredentials::None,
                     _ => Err(serde::de::Error::custom(
                         "Invalid ApiKeyLocation for VLLM provider".to_string(),
                     ))?,
@@ -602,11 +610,11 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 model_name,
                 api_key_location,
             } => match api_key_location {
-                ApiKeyLocation::Dynamic(key_name) => ProviderConfig::Dummy(DummyProvider {
+                CredentialLocation::Dynamic(key_name) => ProviderConfig::Dummy(DummyProvider {
                     model_name,
                     credentials: DummyCredentials::Dynamic(key_name),
                 }),
-                ApiKeyLocation::None => ProviderConfig::Dummy(DummyProvider {
+                CredentialLocation::None => ProviderConfig::Dummy(DummyProvider {
                     model_name,
                     credentials: DummyCredentials::None,
                 }),
@@ -703,27 +711,27 @@ impl ProviderConfig {
     }
 }
 
-pub enum ApiKeyLocation {
+pub enum CredentialLocation {
     Env(String),
     Dynamic(String),
     Path(String),
     None,
 }
 
-impl<'de> Deserialize<'de> for ApiKeyLocation {
+impl<'de> Deserialize<'de> for CredentialLocation {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
         if let Some(inner) = s.strip_prefix("env::") {
-            Ok(ApiKeyLocation::Env(inner.to_string()))
+            Ok(CredentialLocation::Env(inner.to_string()))
         } else if let Some(inner) = s.strip_prefix("dynamic::") {
-            Ok(ApiKeyLocation::Dynamic(inner.to_string()))
+            Ok(CredentialLocation::Dynamic(inner.to_string()))
         } else if let Some(inner) = s.strip_prefix("path::") {
-            Ok(ApiKeyLocation::Path(inner.to_string()))
+            Ok(CredentialLocation::Path(inner.to_string()))
         } else if s == "none" {
-            Ok(ApiKeyLocation::None)
+            Ok(CredentialLocation::None)
         } else {
             Err(serde::de::Error::custom(format!(
                 "Invalid ApiKeyLocation format: {}",

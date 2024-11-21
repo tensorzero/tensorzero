@@ -21,7 +21,7 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     RequestMessage, Role, Text, TextChunk, Usage,
 };
-use crate::model::ApiKeyLocation;
+use crate::model::CredentialLocation;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 lazy_static! {
@@ -31,8 +31,8 @@ lazy_static! {
     };
 }
 
-pub fn default_api_key_location() -> ApiKeyLocation {
-    ApiKeyLocation::Env("OPENAI_API_KEY".to_string())
+pub fn default_api_key_location() -> CredentialLocation {
+    CredentialLocation::Env("OPENAI_API_KEY".to_string())
 }
 
 #[derive(Debug)]

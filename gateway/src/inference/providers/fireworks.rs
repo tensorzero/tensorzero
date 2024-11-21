@@ -16,7 +16,7 @@ use crate::{
         ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
         ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     },
-    model::ApiKeyLocation,
+    model::CredentialLocation,
 };
 
 use super::{
@@ -67,8 +67,8 @@ impl FireworksCredentials {
     }
 }
 
-pub fn default_api_key_location() -> ApiKeyLocation {
-    ApiKeyLocation::Env("FIREWORKS_API_KEY".to_string())
+pub fn default_api_key_location() -> CredentialLocation {
+    CredentialLocation::Env("FIREWORKS_API_KEY".to_string())
 }
 
 /// Key differences between Fireworks and OpenAI inference:

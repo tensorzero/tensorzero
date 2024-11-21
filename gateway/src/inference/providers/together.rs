@@ -17,7 +17,7 @@ use crate::{
         ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
         ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     },
-    model::ApiKeyLocation,
+    model::CredentialLocation,
 };
 
 use super::{
@@ -42,8 +42,8 @@ pub struct TogetherProvider {
     pub credentials: TogetherCredentials,
 }
 
-pub fn default_api_key_location() -> ApiKeyLocation {
-    ApiKeyLocation::Env("TOGETHER_API_KEY".to_string())
+pub fn default_api_key_location() -> CredentialLocation {
+    CredentialLocation::Env("TOGETHER_API_KEY".to_string())
 }
 
 #[derive(Debug)]

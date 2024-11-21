@@ -12,7 +12,7 @@ use crate::inference::types::{
     ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
 };
-use crate::model::ApiKeyLocation;
+use crate::model::CredentialLocation;
 
 use super::openai::{
     handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
@@ -53,8 +53,8 @@ impl AzureCredentials {
     }
 }
 
-pub fn default_api_key_location() -> ApiKeyLocation {
-    ApiKeyLocation::Env("AZURE_OPENAI_API_KEY".to_string())
+pub fn default_api_key_location() -> CredentialLocation {
+    CredentialLocation::Env("AZURE_OPENAI_API_KEY".to_string())
 }
 
 impl InferenceProvider for AzureProvider {

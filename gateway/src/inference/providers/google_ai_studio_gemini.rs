@@ -20,7 +20,7 @@ use crate::inference::types::{
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequestJsonMode, Role, Text, TextChunk,
 };
-use crate::model::ApiKeyLocation;
+use crate::model::CredentialLocation;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 /// Implements a subset of the Google AI Studio Gemini API as documented [here](https://ai.google.dev/gemini-api/docs/text-generation?lang=rest)
@@ -32,8 +32,8 @@ pub struct GoogleAIStudioGeminiProvider {
     pub credentials: GoogleAIStudioCredentials,
 }
 
-pub fn default_api_key_location() -> ApiKeyLocation {
-    ApiKeyLocation::Env("GOOGLE_AI_STUDIO_API_KEY".to_string())
+pub fn default_api_key_location() -> CredentialLocation {
+    CredentialLocation::Env("GOOGLE_AI_STUDIO_API_KEY".to_string())
 }
 
 #[derive(Debug)]
