@@ -37,7 +37,7 @@ pub struct GCPVertexGeminiProvider {
 }
 
 pub fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Path("/app/gcp-credentials.json".to_string())
+    CredentialLocation::Env("GCP_VERTEX_CREDENTIALS_PATH".to_string())
 }
 
 #[derive(Debug)]

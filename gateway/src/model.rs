@@ -126,7 +126,7 @@ impl ModelConfig {
     }
 
     pub fn validate(&self) -> Result<(), Error> {
-        // Ensure that all providers have credentials
+        // Placeholder in case we want to add validation in the future
         Ok(())
     }
 }
