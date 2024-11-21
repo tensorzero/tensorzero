@@ -382,7 +382,6 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                         "Invalid ApiKeyLocation for GCPVertexAnthropic provider".to_string(),
                     ))?,
                 };
-
                 let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:rawPredict");
                 let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:streamRawPredict");
                 let audience = format!("https://{location}-aiplatform.googleapis.com/");
