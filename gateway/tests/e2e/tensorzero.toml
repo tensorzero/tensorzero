@@ -79,7 +79,7 @@ type = "gcp_vertex_anthropic"
 model_id = "claude-3-haiku@20240307"
 location = "us-central1"
 project_id = "tensorzero-public"
-api_key_location = "env::GCP_VERTEX_CREDENTIALS_PATH"
+credential_location = "env::GCP_VERTEX_CREDENTIALS_PATH"
 
 [models."gemini-1.5-flash-001"]
 routing = ["gcp_vertex_gemini"]
@@ -89,7 +89,7 @@ type = "gcp_vertex_gemini"
 model_id = "gemini-1.5-flash-001"
 location = "us-central1"
 project_id = "tensorzero-public"
-api_key_location = "env::GCP_VERTEX_CREDENTIALS_PATH"
+credential_location = "env::GCP_VERTEX_CREDENTIALS_PATH"
 
 [models."gemini-1.5-pro-001"]
 routing = ["gcp_vertex_gemini"]
@@ -99,7 +99,7 @@ type = "gcp_vertex_gemini"
 model_id = "gemini-1.5-pro-001"
 location = "us-central1"
 project_id = "tensorzero-public"
-api_key_location = "env::GCP_VERTEX_CREDENTIALS_PATH"
+credential_location = "env::GCP_VERTEX_CREDENTIALS_PATH"
 
 [models."gemini-1.5-flash-8b"]
 routing = ["google_ai_studio_gemini"]

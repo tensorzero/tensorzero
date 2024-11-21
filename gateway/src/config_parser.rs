@@ -761,7 +761,7 @@ mod tests {
         assert_eq!(
             error,
             Error::new(ErrorDetails::Config {
-                message: "Invalid ApiKeyLocation for Dummy provider\nin `models.dummy.providers.bad_credentials`\n"
+                message: "Invalid api_key_location for Dummy provider\nin `models.dummy.providers.bad_credentials`\n"
                     .to_string()
             })
         );

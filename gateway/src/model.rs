@@ -261,8 +261,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                         AnthropicCredentials::Dynamic(key_name)
                     }
                     _ => Err(serde::de::Error::custom(
-                        "Anthropic model provider requires Env or Dynamic API key location"
-                            .to_string(),
+                        "Invalid api_key_location for Anthropic provider".to_string(),
                     ))?,
                 };
                 ProviderConfig::Anthropic(AnthropicProvider {
@@ -308,7 +307,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                     }
                     CredentialLocation::Dynamic(key_name) => AzureCredentials::Dynamic(key_name),
                     _ => Err(serde::de::Error::custom(
-                        "Azure model provider requires Env or Dynamic API key location".to_string(),
+                        "Invalid api_key_location for Azure provider".to_string(),
                     ))?,
                 };
                 ProviderConfig::Azure(AzureProvider {
@@ -339,8 +338,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                         FireworksCredentials::Dynamic(key_name)
                     }
                     _ => Err(serde::de::Error::custom(
-                        "Fireworks model provider requires Env or Dynamic API key location"
-                            .to_string(),
+                        "Invalid api_key_location for Fireworks provider".to_string(),
                     ))?,
                 };
                 ProviderConfig::Fireworks(FireworksProvider {
@@ -385,7 +383,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                         GCPVertexCredentials::Dynamic(key_name)
                     }
                     _ => Err(serde::de::Error::custom(
-                        "Invalid ApiKeyLocation for GCPVertexAnthropic provider".to_string(),
+                        "Invalid credential_location for GCPVertexAnthropic provider".to_string(),
                     ))?,
                 };
                 let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:rawPredict");
@@ -437,7 +435,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                         GCPVertexCredentials::Dynamic(key_name)
                     }
                     _ => Err(serde::de::Error::custom(
-                        "Invalid ApiKeyLocation for GCPVertexAnthropic provider".to_string(),
+                        "Invalid credential_location for GCPVertexGemini provider".to_string(),
                     ))?,
                 };
                 let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:generateContent");
@@ -473,7 +471,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                         GoogleAIStudioCredentials::Dynamic(key_name)
                     }
                     _ => Err(serde::de::Error::custom(
-                        "Invalid ApiKeyLocation for Google AI Studio Gemini provider".to_string(),
+                        "Invalid api_key_location for Google AI Studio Gemini provider".to_string(),
                     ))?,
                 };
                 let request_url = Url::parse(&format!(
@@ -508,7 +506,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                     }
                     CredentialLocation::Dynamic(key_name) => MistralCredentials::Dynamic(key_name),
                     _ => Err(serde::de::Error::custom(
-                        "Invalid ApiKeyLocation for Mistral provider".to_string(),
+                        "Invalid api_key_location for Mistral provider".to_string(),
                     ))?,
                 };
                 ProviderConfig::Mistral(MistralProvider {
@@ -537,7 +535,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                     }
                     CredentialLocation::Dynamic(key_name) => OpenAICredentials::Dynamic(key_name),
                     _ => Err(serde::de::Error::custom(
-                        "Invalid ApiKeyLocation for OpenAI provider".to_string(),
+                        "Invalid api_key_location for OpenAI provider".to_string(),
                     ))?,
                 };
                 ProviderConfig::OpenAI(OpenAIProvider {
@@ -566,7 +564,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                     }
                     CredentialLocation::Dynamic(key_name) => TogetherCredentials::Dynamic(key_name),
                     _ => Err(serde::de::Error::custom(
-                        "Invalid ApiKeyLocation for Together provider".to_string(),
+                        "Invalid api_key_location for Together provider".to_string(),
                     ))?,
                 };
                 ProviderConfig::Together(TogetherProvider {
@@ -596,7 +594,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                     CredentialLocation::Dynamic(key_name) => VLLMCredentials::Dynamic(key_name),
                     CredentialLocation::None => VLLMCredentials::None,
                     _ => Err(serde::de::Error::custom(
-                        "Invalid ApiKeyLocation for VLLM provider".to_string(),
+                        "Invalid api_key_location for VLLM provider".to_string(),
                     ))?,
                 };
                 ProviderConfig::VLLM(VLLMProvider {
@@ -619,7 +617,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                     credentials: DummyCredentials::None,
                 }),
                 _ => Err(serde::de::Error::custom(
-                    "Invalid ApiKeyLocation for Dummy provider".to_string(),
+                    "Invalid api_key_location for Dummy provider".to_string(),
                 ))?,
             },
         })
