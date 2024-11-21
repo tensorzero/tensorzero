@@ -153,14 +153,15 @@ impl InferenceProvider for DummyProvider {
             .into());
         }
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        if self.model_name == "test_key"
-            && api_key.is_some()
-            && api_key.unwrap().expose_secret() != "good_key"
-        {
-            return Err(ErrorDetails::InferenceClient {
-                message: "Invalid API key for Dummy provider".to_string(),
+        if self.model_name == "test_key" {
+            if let Some(api_key) = api_key {
+                if api_key.expose_secret() != "good_key" {
+                    return Err(ErrorDetails::InferenceClient {
+                        message: "Invalid API key for Dummy provider".to_string(),
+                    }
+                    .into());
+                }
             }
-            .into());
         }
         let id = Uuid::now_v7();
         #[allow(clippy::expect_used)]
