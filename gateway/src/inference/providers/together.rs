@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 use reqwest::StatusCode;
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value;
 use tokio::time::Instant;
 use url::Url;
@@ -17,7 +17,7 @@ use crate::{
         ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
         ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     },
-    model::ProviderCredentials,
+    model::ApiKeyLocation,
 };
 
 use super::{
@@ -26,7 +26,7 @@ use super::{
         tensorzero_to_openai_messages, OpenAIRequestMessage, OpenAIResponse,
         OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice,
     },
-    provider_trait::{HasCredentials, InferenceProvider},
+    provider_trait::InferenceProvider,
 };
 
 lazy_static! {
@@ -39,12 +39,35 @@ lazy_static! {
 #[derive(Debug)]
 pub struct TogetherProvider {
     pub model_name: String,
-    pub api_key: Option<SecretString>,
+    pub credentials: TogetherCredentials,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-pub struct TogetherCredentials<'a> {
-    pub api_key: Cow<'a, SecretString>,
+pub fn default_api_key_location() -> ApiKeyLocation {
+    ApiKeyLocation::Env("TOGETHER_API_KEY".to_string())
+}
+
+#[derive(Debug)]
+pub enum TogetherCredentials {
+    Static(SecretString),
+    Dynamic(String),
+}
+
+impl TogetherCredentials {
+    pub fn get_api_key<'a>(
+        &'a self,
+        dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<Cow<'a, SecretString>, Error> {
+        match self {
+            TogetherCredentials::Static(api_key) => Ok(Cow::Owned(api_key.clone())),
+            TogetherCredentials::Dynamic(key_name) => {
+                Ok(Cow::Borrowed(dynamic_api_keys.get(key_name).ok_or_else(
+                    || ErrorDetails::ApiKeyMissing {
+                        provider_name: "Together".to_string(),
+                    },
+                )?))
+            }
+        }
+    }
 }
 
 // TODO (#80): Add support for Llama 3.1 function calling as discussed [here](https://docs.together.ai/docs/llama-3-function-calling)
@@ -54,19 +77,11 @@ impl InferenceProvider for TogetherProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: ProviderCredentials<'a>,
+        dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = TogetherRequest::new(&self.model_name, request);
         let request_url = get_chat_url(Some(&TOGETHER_API_BASE))?;
-        let api_key = match &api_key {
-            ProviderCredentials::Together(credentials) => &credentials.api_key,
-            _ => {
-                return Err(ErrorDetails::BadCredentialsPreInference {
-                    provider_name: "Together".to_string(),
-                }
-                .into());
-            }
-        };
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let res = http_client
             .post(request_url)
@@ -120,7 +135,7 @@ impl InferenceProvider for TogetherProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: ProviderCredentials<'a>,
+        dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -135,15 +150,7 @@ impl InferenceProvider for TogetherProvider {
                 message: format!("Error serializing request: {e}"),
             })
         })?;
-        let api_key = match &api_key {
-            ProviderCredentials::Together(credentials) => &credentials.api_key,
-            _ => {
-                return Err(ErrorDetails::BadCredentialsPreInference {
-                    provider_name: "Together".to_string(),
-                }
-                .into());
-            }
-        };
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let request_url = get_chat_url(Some(&TOGETHER_API_BASE))?;
         let start_time = Instant::now();
         let event_source = http_client
@@ -171,38 +178,6 @@ impl InferenceProvider for TogetherProvider {
             }
         };
         Ok((chunk, stream, raw_request))
-    }
-}
-
-impl HasCredentials for TogetherProvider {
-    fn has_credentials(&self) -> bool {
-        self.api_key.is_some()
-    }
-
-    fn get_credentials<'a>(
-        &'a self,
-        credentials: &'a InferenceCredentials,
-    ) -> Result<ProviderCredentials<'a>, Error> {
-        if let Some(api_key) = &self.api_key {
-            if credentials.together.is_some() {
-                return Err(ErrorDetails::UnexpectedDynamicCredentials {
-                    provider_name: "Together".to_string(),
-                }
-                .into());
-            }
-            return Ok(ProviderCredentials::Together(Cow::Owned(
-                TogetherCredentials {
-                    api_key: Cow::Borrowed(api_key),
-                },
-            )));
-        } else {
-            match &credentials.together {
-                Some(credentials) => Ok(ProviderCredentials::Together(Cow::Borrowed(credentials))),
-                None => Err(Error::new(ErrorDetails::ApiKeyMissing {
-                    provider_name: "Together".to_string(),
-                })),
-            }
-        }
     }
 }
 
@@ -447,64 +422,5 @@ mod tests {
     #[test]
     fn test_together_api_base() {
         assert_eq!(TOGETHER_API_BASE.as_str(), "https://api.together.xyz/v1");
-    }
-
-    #[test]
-    fn test_get_credentials() {
-        let provider_no_credentials = TogetherProvider {
-            api_key: None,
-            model_name: "togethercomputer/llama-v3-8b".to_string(),
-        };
-        let credentials = InferenceCredentials::default();
-        let result = provider_no_credentials
-            .get_credentials(&credentials)
-            .unwrap_err();
-        let details = result.get_details();
-        assert_eq!(
-            *details,
-            ErrorDetails::ApiKeyMissing {
-                provider_name: "Together".to_string(),
-            }
-        );
-        let credentials = InferenceCredentials {
-            together: Some(TogetherCredentials {
-                api_key: Cow::Owned(SecretString::from("test_api_key".to_string())),
-            }),
-            ..Default::default()
-        };
-        let result = provider_no_credentials
-            .get_credentials(&credentials)
-            .unwrap();
-        match result {
-            ProviderCredentials::Together(creds) => {
-                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
-            }
-            _ => panic!("Expected Together credentials"),
-        }
-
-        let provider_with_credentials = TogetherProvider {
-            api_key: Some(SecretString::from("test_api_key".to_string())),
-            model_name: "togethercomputer/llama-v3-8b".to_string(),
-        };
-        let result = provider_with_credentials
-            .get_credentials(&credentials)
-            .unwrap_err();
-        let details = result.get_details();
-        assert_eq!(
-            *details,
-            ErrorDetails::UnexpectedDynamicCredentials {
-                provider_name: "Together".to_string(),
-            }
-        );
-        let credentials = InferenceCredentials::default();
-        let result = provider_with_credentials
-            .get_credentials(&credentials)
-            .unwrap();
-        match result {
-            ProviderCredentials::Together(creds) => {
-                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
-            }
-            _ => panic!("Expected Together credentials"),
-        }
     }
 }

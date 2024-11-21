@@ -742,6 +742,8 @@ mod tests {
                                 provider.insert("type".into(), "dummy".into());
                                 provider.insert("model_name".into(), "bad_credentials".into());
                                 provider
+                                    .insert("api_key_location".into(), "env::not_a_place".into());
+                                provider
                             }),
                         );
                         providers
@@ -759,21 +761,10 @@ mod tests {
         assert_eq!(
             error,
             Error::new(ErrorDetails::Config {
-                message: "`functions.generate_draft.variants.generate_draft_dummy` and model `dummy`: Failed to validate model: At least one provider lacks credentials"
+                message: "Invalid ApiKeyLocation for Dummy provider\nin `models.dummy.providers.bad_credentials`\n"
                     .to_string()
             })
         );
-
-        // Change the weight of the new variant to zero
-        let generate_draft = config["functions"]["generate_draft"]
-            .as_table_mut()
-            .unwrap();
-        let variants = generate_draft["variants"].as_table_mut().unwrap();
-        let dummy_variant = variants["generate_draft_dummy"].as_table_mut().unwrap();
-        dummy_variant.insert("weight".into(), 0.0.into());
-
-        // Now the test should pass because the variant with zero weight doesn't require credentials
-        Config::load_from_toml(config, base_path).expect("Config should load successfully");
     }
 
     /// Ensure that the config parsing fails when the `[functions]` section is missing

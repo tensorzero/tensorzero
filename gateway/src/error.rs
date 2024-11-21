@@ -235,9 +235,6 @@ pub enum ErrorDetails {
     TypeConversion {
         message: String,
     },
-    UnexpectedDynamicCredentials {
-        provider_name: String,
-    },
     UnknownCandidate {
         name: String,
     },
@@ -329,7 +326,6 @@ impl ErrorDetails {
             ErrorDetails::ToolNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::ToolNotLoaded { .. } => tracing::Level::ERROR,
             ErrorDetails::TypeConversion { .. } => tracing::Level::ERROR,
-            ErrorDetails::UnexpectedDynamicCredentials { .. } => tracing::Level::WARN,
             ErrorDetails::UnknownCandidate { .. } => tracing::Level::ERROR,
             ErrorDetails::UnknownFunction { .. } => tracing::Level::WARN,
             ErrorDetails::UnknownModel { .. } => tracing::Level::ERROR,
@@ -405,7 +401,6 @@ impl ErrorDetails {
             ErrorDetails::ToolNotLoaded { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::TypeConversion { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::UnknownCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::UnexpectedDynamicCredentials { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::UnknownFunction { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::UnknownModel { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::UnknownTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -646,13 +641,6 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::ToolNotFound { name } => write!(f, "Tool not found: {}", name),
             ErrorDetails::ToolNotLoaded { name } => write!(f, "Tool not loaded: {}", name),
-            ErrorDetails::UnexpectedDynamicCredentials { provider_name } => {
-                write!(
-                    f,
-                    "Unexpected dynamic credentials for model provider: {}. Please enable the `dynamic_credentials` flag in config if appropriate.",
-                    provider_name
-                )
-            }
             ErrorDetails::UnknownCandidate { name } => {
                 write!(f, "Unknown candidate variant: {}", name)
             }

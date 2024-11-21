@@ -19,7 +19,7 @@ use crate::{
         ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
         ProviderInferenceResponseStream, TextChunk, Usage,
     },
-    model::ProviderCredentials,
+    model::ApiKeyLocation,
     tool::{ToolCall, ToolCallChunk, ToolChoice},
 };
 
@@ -28,7 +28,7 @@ use super::{
         get_chat_url, tensorzero_to_openai_messages, OpenAIFunction, OpenAIRequestMessage,
         OpenAISystemRequestMessage, OpenAITool, OpenAIToolType,
     },
-    provider_trait::{HasCredentials, InferenceProvider},
+    provider_trait::InferenceProvider,
 };
 
 lazy_static! {
@@ -38,15 +38,39 @@ lazy_static! {
     };
 }
 
+pub fn default_api_key_location() -> ApiKeyLocation {
+    ApiKeyLocation::Env("MISTRAL_API_KEY".to_string())
+}
+
 #[derive(Debug)]
 pub struct MistralProvider {
     pub model_name: String,
-    pub api_key: Option<SecretString>,
+    pub credentials: MistralCredentials,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-pub struct MistralCredentials<'a> {
-    pub api_key: Cow<'a, SecretString>,
+#[derive(Debug)]
+pub enum MistralCredentials {
+    Static(SecretString),
+    Dynamic(String),
+}
+
+impl MistralCredentials {
+    pub fn get_api_key<'a>(
+        &'a self,
+        dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<&'a SecretString, Error> {
+        match self {
+            MistralCredentials::Static(api_key) => Ok(api_key),
+            MistralCredentials::Dynamic(key_name) => {
+                dynamic_api_keys.get(key_name).ok_or_else(|| {
+                    ErrorDetails::ApiKeyMissing {
+                        provider_name: "Mistral".to_string(),
+                    }
+                    .into()
+                })
+            }
+        }
+    }
 }
 
 impl InferenceProvider for MistralProvider {
@@ -54,19 +78,11 @@ impl InferenceProvider for MistralProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: ProviderCredentials<'a>,
+        dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = MistralRequest::new(&self.model_name, request)?;
         let request_url = get_chat_url(Some(&MISTRAL_API_BASE))?;
-        let api_key = match &api_key {
-            ProviderCredentials::Mistral(credentials) => &credentials.api_key,
-            _ => {
-                return Err(ErrorDetails::BadCredentialsPreInference {
-                    provider_name: "Mistral".to_string(),
-                }
-                .into())
-            }
-        };
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let res = http_client
             .post(request_url)
@@ -119,7 +135,7 @@ impl InferenceProvider for MistralProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: ProviderCredentials<'a>,
+        dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -135,14 +151,7 @@ impl InferenceProvider for MistralProvider {
             })
         })?;
         let request_url = get_chat_url(Some(&MISTRAL_API_BASE))?;
-        let api_key = match &api_key {
-            ProviderCredentials::Mistral(credentials) => &credentials.api_key,
-            _ => {
-                return Err(Error::new(ErrorDetails::BadCredentialsPreInference {
-                    provider_name: "Mistral".to_string(),
-                }))
-            }
-        };
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let event_source = http_client
             .post(request_url)
@@ -168,39 +177,6 @@ impl InferenceProvider for MistralProvider {
             }
         };
         Ok((chunk, stream, raw_request))
-    }
-}
-
-impl HasCredentials for MistralProvider {
-    fn has_credentials(&self) -> bool {
-        self.api_key.is_some()
-    }
-
-    fn get_credentials<'a>(
-        &'a self,
-        credentials: &'a InferenceCredentials,
-    ) -> Result<ProviderCredentials<'a>, Error> {
-        if let Some(api_key) = &self.api_key {
-            if credentials.mistral.is_some() {
-                return Err(ErrorDetails::UnexpectedDynamicCredentials {
-                    provider_name: "Mistral".to_string(),
-                }
-                .into());
-            }
-            return Ok(ProviderCredentials::Mistral(Cow::Owned(
-                MistralCredentials {
-                    api_key: Cow::Borrowed(api_key),
-                },
-            )));
-        } else {
-            match &credentials.mistral {
-                Some(credentials) => Ok(ProviderCredentials::Mistral(Cow::Borrowed(credentials))),
-                None => Err(ErrorDetails::ApiKeyMissing {
-                    provider_name: "Mistral".to_string(),
-                }
-                .into()),
-            }
-        }
     }
 }
 
@@ -1000,62 +976,5 @@ mod tests {
     #[test]
     fn test_mistral_api_base() {
         assert_eq!(MISTRAL_API_BASE.as_str(), "https://api.mistral.ai/v1/");
-    }
-
-    #[test]
-    fn test_get_credentials() {
-        let provider_no_credentials = MistralProvider {
-            api_key: None,
-            model_name: "mistral-7b".to_string(),
-        };
-        let credentials = InferenceCredentials::default();
-        let result = provider_no_credentials
-            .get_credentials(&credentials)
-            .unwrap_err();
-        assert_eq!(
-            result,
-            Error::new(ErrorDetails::ApiKeyMissing {
-                provider_name: "Mistral".to_string(),
-            })
-        );
-        let credentials = InferenceCredentials {
-            mistral: Some(MistralCredentials {
-                api_key: Cow::Owned(SecretString::from("test_api_key".to_string())),
-            }),
-            ..Default::default()
-        };
-        let result = provider_no_credentials
-            .get_credentials(&credentials)
-            .unwrap();
-        match result {
-            ProviderCredentials::Mistral(creds) => {
-                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
-            }
-            _ => panic!("Expected Mistral credentials"),
-        }
-
-        let provider_with_credentials = MistralProvider {
-            api_key: Some(SecretString::from("test_api_key".to_string())),
-            model_name: "mistral-7b".to_string(),
-        };
-        let result = provider_with_credentials
-            .get_credentials(&credentials)
-            .unwrap_err();
-        assert_eq!(
-            result,
-            Error::new(ErrorDetails::UnexpectedDynamicCredentials {
-                provider_name: "Mistral".to_string(),
-            })
-        );
-        let credentials = InferenceCredentials::default();
-        let result = provider_with_credentials
-            .get_credentials(&credentials)
-            .unwrap();
-        match result {
-            ProviderCredentials::Mistral(creds) => {
-                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
-            }
-            _ => panic!("Expected Mistral credentials"),
-        }
     }
 }

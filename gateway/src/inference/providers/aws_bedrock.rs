@@ -26,10 +26,7 @@ use crate::inference::types::{
     ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream, RequestMessage, Role, Text, TextChunk, Usage,
 };
-use crate::model::ProviderCredentials;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
-
-use super::provider_trait::HasCredentials;
 
 // NB: If you add `Clone` someday, you'll need to wrap client in Arc
 #[derive(Debug)]
@@ -70,7 +67,7 @@ impl InferenceProvider for AWSBedrockProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
-        _api_key: ProviderCredentials<'a>,
+        _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
         // TODO (#55): add support for guardrails and additional fields
 
@@ -171,7 +168,7 @@ impl InferenceProvider for AWSBedrockProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
-        _api_key: ProviderCredentials<'a>,
+        _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -276,20 +273,6 @@ impl InferenceProvider for AWSBedrockProvider {
         }
 
         Ok((chunk, stream, raw_request))
-    }
-}
-
-impl HasCredentials for AWSBedrockProvider {
-    fn has_credentials(&self) -> bool {
-        // TODO (#313): Actually check if the AWS Bedrock client is configured with credentials
-        true
-    }
-
-    fn get_credentials<'a>(
-        &'a self,
-        _credentials: &'a InferenceCredentials,
-    ) -> Result<ProviderCredentials<'a>, Error> {
-        Ok(ProviderCredentials::AWSBedrock)
     }
 }
 

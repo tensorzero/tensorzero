@@ -5,13 +5,13 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
     inference::{
-        providers::{openai::OpenAIProvider, provider_trait::HasCredentials},
+        providers::openai::OpenAIProvider,
         types::{
             current_timestamp, Latency, ModelInferenceResponseWithMetadata, RequestMessage, Role,
             Usage,
         },
     },
-    model::{ProviderConfig, ProviderCredentials},
+    model::ProviderConfig,
 };
 use reqwest::Client;
 use serde::Deserialize;
@@ -33,6 +33,7 @@ impl EmbeddingModelConfig {
         &self,
         request: &EmbeddingRequest,
         client: &Client,
+        dynamic_api_keys: &InferenceCredentials,
     ) -> Result<EmbeddingResponse, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
@@ -41,7 +42,9 @@ impl EmbeddingModelConfig {
                     provider_name: provider_name.clone(),
                 })
             })?;
-            let response = provider_config.embed(request, client).await;
+            let response = provider_config
+                .embed(request, client, dynamic_api_keys)
+                .await;
             match response {
                 Ok(response) => {
                     let embedding_response = EmbeddingResponse::new(response, provider_name);
@@ -56,17 +59,8 @@ impl EmbeddingModelConfig {
     }
 
     pub fn validate(&self) -> Result<(), Error> {
-        // Ensure that all providers have credentials
-        if !self
-            .providers
-            .values()
-            .all(|provider| provider.has_credentials())
-        {
-            return Err(ErrorDetails::ModelValidation {
-                message: "At least one provider lacks credentials".to_string(),
-            }
-            .into());
-        }
+        // Credentials are validated during deserialization
+        // We may add additional validation here in the future
         Ok(())
     }
 }
@@ -171,11 +165,12 @@ impl<'a> From<EmbeddingResponseWithMetadata<'a>> for ModelInferenceResponseWithM
     }
 }
 
-pub trait EmbeddingProvider: HasCredentials {
+pub trait EmbeddingProvider {
     fn embed(
         &self,
         request: &EmbeddingRequest,
         client: &Client,
+        dynamic_api_keys: &InferenceCredentials,
     ) -> impl Future<Output = Result<EmbeddingProviderResponse, Error>> + Send;
 }
 
@@ -205,37 +200,21 @@ impl<'de> Deserialize<'de> for EmbeddingProviderConfig {
     }
 }
 
-impl HasCredentials for EmbeddingProviderConfig {
-    fn has_credentials(&self) -> bool {
-        match self {
-            EmbeddingProviderConfig::OpenAI(provider) => provider.has_credentials(),
-            #[cfg(any(test, feature = "e2e_tests"))]
-            EmbeddingProviderConfig::Dummy(provider) => provider.has_credentials(),
-        }
-    }
-
-    fn get_credentials<'a>(
-        &'a self,
-        credentials: &'a InferenceCredentials,
-    ) -> Result<ProviderCredentials<'a>, Error> {
-        match self {
-            EmbeddingProviderConfig::OpenAI(provider) => provider.get_credentials(credentials),
-            #[cfg(any(test, feature = "e2e_tests"))]
-            EmbeddingProviderConfig::Dummy(provider) => provider.get_credentials(credentials),
-        }
-    }
-}
-
 impl EmbeddingProvider for EmbeddingProviderConfig {
     async fn embed(
         &self,
         request: &EmbeddingRequest,
         client: &Client,
+        dynamic_api_keys: &InferenceCredentials,
     ) -> Result<EmbeddingProviderResponse, Error> {
         match self {
-            EmbeddingProviderConfig::OpenAI(provider) => provider.embed(request, client).await,
+            EmbeddingProviderConfig::OpenAI(provider) => {
+                provider.embed(request, client, dynamic_api_keys).await
+            }
             #[cfg(any(test, feature = "e2e_tests"))]
-            EmbeddingProviderConfig::Dummy(provider) => provider.embed(request, client).await,
+            EmbeddingProviderConfig::Dummy(provider) => {
+                provider.embed(request, client, dynamic_api_keys).await
+            }
         }
     }
 }
@@ -290,46 +269,11 @@ mod tests {
             input: "Hello, world!".to_string(),
         };
         let client = Client::new();
-        let response = fallback_embedding_model.embed(&request, &client).await;
+        let inference_credentials = InferenceCredentials::default();
+        let response = fallback_embedding_model
+            .embed(&request, &client, &inference_credentials)
+            .await;
         assert!(response.is_ok());
         assert!(logs_contain("Error sending request to Dummy provider."))
-    }
-
-    #[test]
-    fn test_validate() {
-        let bad_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
-            model_name: "error".to_string(),
-            ..Default::default()
-        });
-        let good_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
-            model_name: "good".to_string(),
-            ..Default::default()
-        });
-        let fallback_embedding_model = EmbeddingModelConfig {
-            routing: vec!["error".to_string(), "good".to_string()],
-            providers: HashMap::from([
-                ("error".to_string(), bad_provider),
-                ("good".to_string(), good_provider),
-            ]),
-        };
-        assert!(fallback_embedding_model.validate().is_ok());
-
-        // If at least one provider has bad credentials, the validation should fail
-        let bad_credential_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
-            model_name: "bad_credentials".to_string(),
-            ..Default::default()
-        });
-        let good_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
-            model_name: "good".to_string(),
-            ..Default::default()
-        });
-        let bad_credential_embedding_model = EmbeddingModelConfig {
-            routing: vec!["bad_credentials".to_string(), "good".to_string()],
-            providers: HashMap::from([
-                ("bad_credentials".to_string(), bad_credential_provider),
-                ("good".to_string(), good_provider),
-            ]),
-        };
-        assert!(bad_credential_embedding_model.validate().is_err());
     }
 }
