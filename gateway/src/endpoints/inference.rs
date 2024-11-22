@@ -230,6 +230,7 @@ pub async fn inference(
             &episode_id,
         )?;
         // Will be edited by the variant as part of making the request so we must clone here
+        // TODO (#479): make this a Cow
         let variant_inference_params = params.params.clone();
         inference_config.variant_name = variant_name.to_string();
         if stream {
