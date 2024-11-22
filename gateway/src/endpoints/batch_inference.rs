@@ -197,6 +197,7 @@ pub async fn post_batch_inference_handler(
 
     // Keep track of which variants failed
     let mut variant_errors = std::collections::HashMap::new();
+    // TODO(Viraj, urgent): make a batch version of this, maybe with a `new` fn
     let mut inference_config = InferenceConfig {
         function_name: params.function_name.clone(),
         variant_name: "".to_string(),
@@ -398,6 +399,7 @@ impl InferenceResponse {
 }
 
 // Carryall struct for clients used in inference
+// TODO (Viraj): remove and unify
 pub struct InferenceClients<'a> {
     pub http_client: &'a reqwest::Client,
     pub clickhouse_connection_info: &'a ClickHouseConnectionInfo,
@@ -405,6 +407,7 @@ pub struct InferenceClients<'a> {
 }
 
 // Carryall struct for models used in inference
+// TODO (Viraj): remove and unify
 #[derive(Debug)]
 pub struct InferenceModels<'a> {
     pub models: &'a HashMap<String, ModelConfig>,

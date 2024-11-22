@@ -59,6 +59,16 @@ pub struct InferenceConfig<'a> {
     pub variant_name: String,
 }
 
+/// Maps to the subset of Config that applies to the current inference request.
+/// It doesn't take into account inference-time overrides (e.g. dynamic tools).
+pub struct BatchInferenceConfig<'a> {
+    pub tool_configs: Vec<Option<ToolCallConfig>>,
+    pub templates: &'a TemplateConfig<'a>,
+    pub dynamic_output_schemas: Vec<Option<DynamicJSONSchema>>,
+    pub function_name: String,
+    pub variant_name: String,
+}
+
 #[derive(Debug)]
 pub struct ModelUsedInfo<'a> {
     pub model_name: &'a str,
@@ -109,6 +119,16 @@ pub trait Variant {
     ) -> Result<(), Error>;
 
     fn get_all_template_paths(&self) -> Vec<&PathBuf>;
+
+    fn infer_batch<'a, 'request>(
+        &'a self,
+        input: &Input,
+        models: &'request InferenceModels<'a>,
+        function: &'a FunctionConfig,
+        inference_config: &'request BatchInferenceConfig,
+        clients: &'request InferenceClients,
+        inference_params: Vec<InferenceParams>,
+    ) -> Result<InferenceResult<'a>, Error>;
 }
 
 impl VariantConfig {
@@ -253,6 +273,18 @@ impl Variant for VariantConfig {
                     .await
             }
         }
+    }
+
+    fn infer_batch<'a, 'request>(
+        &'a self,
+        input: &Input,
+        models: &'request InferenceModels<'a>,
+        function: &'a FunctionConfig,
+        inference_config: &'request BatchInferenceConfig,
+        clients: &'request InferenceClients,
+        inference_params: Vec<InferenceParams>,
+    ) -> Result<InferenceResult<'a>, Error> {
+        todo!()
     }
 
     #[instrument(skip_all, fields(variant_name = %variant_name))]
