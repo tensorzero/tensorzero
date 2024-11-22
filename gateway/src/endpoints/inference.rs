@@ -190,6 +190,12 @@ pub async fn inference(
             "function_name" => params.function_name.to_string(),
         )
         .increment(1);
+        counter!(
+            "inference_count",
+            "endpoint" => "post_batch_inference",
+            "function_name" => params.function_name.to_string(),
+        )
+        .increment(1);
     }
 
     // Should we stream the inference?

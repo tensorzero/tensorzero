@@ -19,7 +19,7 @@ use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCall, ToolCallConfig}
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Params {
+struct Params {
     // the episode ID client is providing feedback for (either this or `inference_id` must be set but not both)
     episode_id: Option<Uuid>,
     // the inference ID client is providing feedback for (either this or `episode_id` must be set but not both)

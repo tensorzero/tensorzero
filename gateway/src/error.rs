@@ -74,6 +74,10 @@ pub enum ErrorDetails {
     BadCredentialsPreInference {
         provider_name: String,
     },
+    BatchInputValidation {
+        index: usize,
+        message: String,
+    },
     ChannelWrite {
         message: String,
     },
@@ -276,6 +280,7 @@ impl ErrorDetails {
             ErrorDetails::AzureClient { .. } => tracing::Level::WARN,
             ErrorDetails::AzureServer { .. } => tracing::Level::ERROR,
             ErrorDetails::BadCredentialsPreInference { .. } => tracing::Level::ERROR,
+            ErrorDetails::BatchInputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::ChannelWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseConnection { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseMigration { .. } => tracing::Level::ERROR,
@@ -350,6 +355,7 @@ impl ErrorDetails {
             ErrorDetails::AzureClient { status_code, .. } => *status_code,
             ErrorDetails::AzureServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::BadCredentialsPreInference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::BatchInputValidation { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -467,6 +473,9 @@ impl std::fmt::Display for ErrorDetails {
                     "Bad credentials at inference time for provider: {}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new",
                     provider_name
                 )
+            }
+            ErrorDetails::BatchInputValidation { index, message } => {
+                write!(f, "Input at index {} failed validation: {}", index, message,)
             }
             ErrorDetails::ChannelWrite { message } => {
                 write!(f, "Error writing to channel: {}", message)
