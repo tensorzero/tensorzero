@@ -218,7 +218,7 @@ struct OpenAICompatibleResponse {
     usage: OpenAICompatibleUsage,
 }
 
-impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params<'static> {
+impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
     type Error = Error;
     fn try_from(
         (headers, openai_compatible_params): (HeaderMap, OpenAICompatibleParams),

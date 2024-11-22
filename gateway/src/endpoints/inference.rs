@@ -5,6 +5,7 @@ use axum::response::{IntoResponse, Response};
 use axum::{debug_handler, Json};
 use futures::stream::Stream;
 use metrics::counter;
+use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -22,18 +23,6 @@ use crate::error::{Error, ErrorDetails};
 use crate::function::sample_variant;
 use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
-use crate::inference::providers::anthropic::AnthropicCredentials;
-use crate::inference::providers::azure::AzureCredentials;
-#[cfg(any(test, feature = "e2e_tests"))]
-use crate::inference::providers::dummy::DummyCredentials;
-use crate::inference::providers::fireworks::FireworksCredentials;
-use crate::inference::providers::gcp_vertex_anthropic::GCPVertexAnthropicCredentials;
-use crate::inference::providers::gcp_vertex_gemini::GCPVertexGeminiCredentials;
-use crate::inference::providers::google_ai_studio_gemini::GoogleAIStudioGeminiCredentials;
-use crate::inference::providers::mistral::MistralCredentials;
-use crate::inference::providers::openai::OpenAICredentials;
-use crate::inference::providers::together::TogetherCredentials;
-use crate::inference::providers::vllm::VLLMCredentials;
 use crate::inference::types::{
     collect_chunks, ChatInferenceDatabaseInsert, CollectChunksArgs, ContentBlockChunk,
     ContentBlockOutput, InferenceResult, InferenceResultChunk, InferenceResultStream, Input,
@@ -49,7 +38,7 @@ use crate::variant::{InferenceConfig, Variant};
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Params<'a> {
+pub struct Params {
     // the function name
     pub function_name: String,
     // the episode ID (if not provided, it'll be set to inference_id)
@@ -87,7 +76,7 @@ pub struct Params<'a> {
     // configured one. We only lazily validate this schema.
     pub output_schema: Option<Value>,
     #[serde(default)]
-    pub credentials: InferenceCredentials<'a>,
+    pub credentials: InferenceCredentials,
 }
 
 #[derive(Clone, Debug)]
@@ -108,21 +97,7 @@ struct InferenceMetadata<'a> {
     pub tags: HashMap<String, String>,
 }
 
-#[derive(Debug, Deserialize, Default)]
-pub struct InferenceCredentials<'a> {
-    pub anthropic: Option<AnthropicCredentials<'a>>,
-    pub azure: Option<AzureCredentials<'a>>,
-    pub fireworks: Option<FireworksCredentials<'a>>,
-    pub gcp_vertex_anthropic: Option<GCPVertexAnthropicCredentials>,
-    pub gcp_vertex_gemini: Option<GCPVertexGeminiCredentials>,
-    pub google_ai_studio: Option<GoogleAIStudioGeminiCredentials<'a>>,
-    pub mistral: Option<MistralCredentials<'a>>,
-    pub openai: Option<OpenAICredentials<'a>>,
-    pub together: Option<TogetherCredentials<'a>>,
-    pub vllm: Option<VLLMCredentials<'a>>,
-    #[cfg(any(test, feature = "e2e_tests"))]
-    pub dummy: Option<DummyCredentials<'a>>,
-}
+pub type InferenceCredentials = HashMap<String, SecretString>;
 
 /// A handler for the inference endpoint
 #[debug_handler(state = AppStateData)]
@@ -132,7 +107,7 @@ pub async fn inference_handler(
         http_client,
         clickhouse_connection_info,
     }): AppState,
-    StructuredJson(params): StructuredJson<Params<'static>>,
+    StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
     let inference_output =
         inference(config, http_client, clickhouse_connection_info, params).await?;
@@ -165,7 +140,7 @@ pub async fn inference(
     config: &'static Config<'static>,
     http_client: reqwest::Client,
     clickhouse_connection_info: ClickHouseConnectionInfo,
-    params: Params<'static>,
+    params: Params,
 ) -> Result<InferenceOutput, Error> {
     // To be used for the Inference table processing_time measurements
     let start_time = Instant::now();
@@ -641,7 +616,7 @@ impl InferenceResponseChunk {
 pub struct InferenceClients<'a> {
     pub http_client: &'a reqwest::Client,
     pub clickhouse_connection_info: &'a ClickHouseConnectionInfo,
-    pub credentials: &'a InferenceCredentials<'a>,
+    pub credentials: &'a InferenceCredentials,
 }
 
 // Carryall struct for models used in inference

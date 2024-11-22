@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::time::Duration;
 
 use futures::{Stream, StreamExt};
@@ -21,10 +20,8 @@ use crate::inference::types::{
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequestJsonMode, Role, Text, TextChunk,
 };
-use crate::model::ProviderCredentials;
+use crate::model::CredentialLocation;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
-
-use super::provider_trait::HasCredentials;
 
 /// Implements a subset of the Google AI Studio Gemini API as documented [here](https://ai.google.dev/gemini-api/docs/text-generation?lang=rest)
 
@@ -32,12 +29,36 @@ use super::provider_trait::HasCredentials;
 pub struct GoogleAIStudioGeminiProvider {
     pub request_url: Url,
     pub streaming_request_url: Url,
-    pub api_key: Option<SecretString>,
+    pub credentials: GoogleAIStudioCredentials,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-pub struct GoogleAIStudioGeminiCredentials<'a> {
-    pub api_key: Cow<'a, SecretString>,
+pub fn default_api_key_location() -> CredentialLocation {
+    CredentialLocation::Env("GOOGLE_AI_STUDIO_API_KEY".to_string())
+}
+
+#[derive(Debug)]
+pub enum GoogleAIStudioCredentials {
+    Static(SecretString),
+    Dynamic(String),
+}
+
+impl GoogleAIStudioCredentials {
+    pub fn get_api_key<'a>(
+        &'a self,
+        dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<&'a SecretString, Error> {
+        match self {
+            GoogleAIStudioCredentials::Static(api_key) => Ok(api_key),
+            GoogleAIStudioCredentials::Dynamic(key_name) => {
+                dynamic_api_keys.get(key_name).ok_or_else(|| {
+                    ErrorDetails::ApiKeyMissing {
+                        provider_name: "Google AI Studio".to_string(),
+                    }
+                    .into()
+                })
+            }
+        }
+    }
 }
 
 impl InferenceProvider for GoogleAIStudioGeminiProvider {
@@ -46,18 +67,10 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: ProviderCredentials<'a>,
+        dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body: GeminiRequest = GeminiRequest::new(request)?;
-        let api_key = match &api_key {
-            ProviderCredentials::GoogleAIStudioGemini(credentials) => &credentials.api_key,
-            _ => {
-                return Err(ErrorDetails::BadCredentialsPreInference {
-                    provider_name: "Google AI Studio".to_string(),
-                }
-                .into())
-            }
-        };
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut url = self.request_url.clone();
         url.query_pairs_mut()
@@ -110,7 +123,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: ProviderCredentials<'a>,
+        dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -125,15 +138,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                 message: format!("Error serializing request: {e}"),
             })
         })?;
-        let api_key = match &api_key {
-            ProviderCredentials::GoogleAIStudioGemini(credentials) => &credentials.api_key,
-            _ => {
-                return Err(ErrorDetails::BadCredentialsPreInference {
-                    provider_name: "Google AI Studio".to_string(),
-                }
-                .into())
-            }
-        };
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut url = self.streaming_request_url.clone();
         url.query_pairs_mut()
@@ -159,41 +164,6 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             }
         };
         Ok((chunk, stream, raw_request))
-    }
-}
-
-impl HasCredentials for GoogleAIStudioGeminiProvider {
-    fn has_credentials(&self) -> bool {
-        self.api_key.is_some()
-    }
-
-    fn get_credentials<'a>(
-        &'a self,
-        api_keys: &'a InferenceCredentials,
-    ) -> Result<ProviderCredentials<'a>, Error> {
-        if let Some(api_key) = &self.api_key {
-            if api_keys.google_ai_studio.is_some() {
-                return Err(ErrorDetails::UnexpectedDynamicCredentials {
-                    provider_name: "Google AI Studio Gemini".to_string(),
-                }
-                .into());
-            }
-            return Ok(ProviderCredentials::GoogleAIStudioGemini(Cow::Owned(
-                GoogleAIStudioGeminiCredentials {
-                    api_key: Cow::Borrowed(api_key),
-                },
-            )));
-        } else {
-            match &api_keys.google_ai_studio {
-                Some(credentials) => Ok(ProviderCredentials::GoogleAIStudioGemini(Cow::Borrowed(
-                    credentials,
-                ))),
-                None => Err(ErrorDetails::ApiKeyMissing {
-                    provider_name: "Google AI Studio".to_string(),
-                }
-                .into()),
-            }
-        }
     }
 }
 
@@ -1609,40 +1579,5 @@ mod tests {
         });
         let processed_schema_recursive = process_output_schema(&output_schema_recursive).unwrap();
         assert_eq!(processed_schema_recursive, expected_processed_schema);
-    }
-
-    #[test]
-    fn test_get_credentials() {
-        let provider_no_credentials = GoogleAIStudioGeminiProvider {
-            request_url: Url::parse("https://example.com").unwrap(),
-            streaming_request_url: Url::parse("https://example.com/stream").unwrap(),
-            api_key: None,
-        };
-        let credentials = InferenceCredentials::default();
-        let details = provider_no_credentials
-            .get_credentials(&credentials)
-            .unwrap_err()
-            .get_owned_details();
-        assert_eq!(
-            details,
-            ErrorDetails::ApiKeyMissing {
-                provider_name: "Google AI Studio".to_string(),
-            }
-        );
-        let credentials = InferenceCredentials {
-            google_ai_studio: Some(GoogleAIStudioGeminiCredentials {
-                api_key: Cow::Owned(SecretString::from("test_api_key".to_string())),
-            }),
-            ..Default::default()
-        };
-        let result = provider_no_credentials
-            .get_credentials(&credentials)
-            .unwrap();
-        match result {
-            ProviderCredentials::GoogleAIStudioGemini(creds) => {
-                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
-            }
-            _ => panic!("Expected Google AI Studio credentials"),
-        }
     }
 }

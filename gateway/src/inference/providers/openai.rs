@@ -21,10 +21,8 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     RequestMessage, Role, Text, TextChunk, Usage,
 };
-use crate::model::ProviderCredentials;
+use crate::model::CredentialLocation;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
-
-use super::provider_trait::HasCredentials;
 
 lazy_static! {
     static ref OPENAI_DEFAULT_BASE_URL: Url = {
@@ -33,16 +31,40 @@ lazy_static! {
     };
 }
 
+pub fn default_api_key_location() -> CredentialLocation {
+    CredentialLocation::Env("OPENAI_API_KEY".to_string())
+}
+
 #[derive(Debug)]
 pub struct OpenAIProvider {
     pub model_name: String,
     pub api_base: Option<Url>,
-    pub api_key: Option<SecretString>,
+    pub credentials: OpenAICredentials,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-pub struct OpenAICredentials<'a> {
-    pub api_key: Cow<'a, SecretString>,
+#[derive(Debug)]
+pub enum OpenAICredentials {
+    Static(SecretString),
+    Dynamic(String),
+}
+
+impl OpenAICredentials {
+    pub fn get_api_key<'a>(
+        &'a self,
+        dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<&'a SecretString, Error> {
+        match self {
+            OpenAICredentials::Static(api_key) => Ok(api_key),
+            OpenAICredentials::Dynamic(key_name) => {
+                dynamic_api_keys.get(key_name).ok_or_else(|| {
+                    ErrorDetails::ApiKeyMissing {
+                        provider_name: "OpenAI".to_string(),
+                    }
+                    .into()
+                })
+            }
+        }
+    }
 }
 
 impl InferenceProvider for OpenAIProvider {
@@ -50,19 +72,11 @@ impl InferenceProvider for OpenAIProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: ProviderCredentials<'a>,
+        dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = OpenAIRequest::new(&self.model_name, request)?;
         let request_url = get_chat_url(self.api_base.as_ref())?;
-        let api_key = match &api_key {
-            ProviderCredentials::OpenAI(credentials) => &credentials.api_key,
-            _ => {
-                return Err(ErrorDetails::BadCredentialsPreInference {
-                    provider_name: "OpenAI".to_string(),
-                }
-                .into())
-            }
-        };
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let res = http_client
             .post(request_url)
@@ -115,7 +129,7 @@ impl InferenceProvider for OpenAIProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: ProviderCredentials<'a>,
+        dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -137,15 +151,7 @@ impl InferenceProvider for OpenAIProvider {
             })
         })?;
         let request_url = get_chat_url(self.api_base.as_ref())?;
-        let api_key = match &api_key {
-            ProviderCredentials::OpenAI(credentials) => &credentials.api_key,
-            _ => {
-                return Err(ErrorDetails::BadCredentialsPreInference {
-                    provider_name: "OpenAI".to_string(),
-                }
-                .into())
-            }
-        };
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let event_source = http_client
             .post(request_url)
@@ -181,12 +187,9 @@ impl EmbeddingProvider for OpenAIProvider {
         &self,
         request: &EmbeddingRequest,
         client: &reqwest::Client,
+        dynamic_api_keys: &InferenceCredentials,
     ) -> Result<EmbeddingProviderResponse, Error> {
-        let api_key = self.api_key.as_ref().ok_or_else(|| {
-            Error::new(ErrorDetails::ApiKeyMissing {
-                provider_name: "OpenAI".to_string(),
-            })
-        })?;
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let request_body = OpenAIEmbeddingRequest::new(&self.model_name, &request.input);
         let request_url = get_embedding_url(self.api_base.as_ref())?;
         let start_time = Instant::now();
@@ -234,37 +237,6 @@ impl EmbeddingProvider for OpenAIProvider {
                     })
                 })?,
             ))
-        }
-    }
-}
-
-impl HasCredentials for OpenAIProvider {
-    fn has_credentials(&self) -> bool {
-        self.api_key.is_some()
-    }
-
-    fn get_credentials<'a>(
-        &'a self,
-        credentials: &'a InferenceCredentials,
-    ) -> Result<ProviderCredentials<'a>, Error> {
-        if let Some(api_key) = &self.api_key {
-            if credentials.openai.is_some() {
-                return Err(ErrorDetails::UnexpectedDynamicCredentials {
-                    provider_name: "OpenAI".to_string(),
-                }
-                .into());
-            }
-            return Ok(ProviderCredentials::OpenAI(Cow::Owned(OpenAICredentials {
-                api_key: Cow::Borrowed(api_key),
-            })));
-        } else {
-            match &credentials.openai {
-                Some(credentials) => Ok(ProviderCredentials::OpenAI(Cow::Borrowed(credentials))),
-                None => Err(ErrorDetails::ApiKeyMissing {
-                    provider_name: "OpenAI".to_string(),
-                }
-                .into()),
-            }
         }
     }
 }
@@ -2303,66 +2275,5 @@ mod tests {
         let expected = None;
         let result = tensorzero_to_openai_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn test_get_credentials() {
-        let provider_no_credentials = OpenAIProvider {
-            api_key: None,
-            api_base: None,
-            model_name: "gpt-3.5-turbo".to_string(),
-        };
-        let credentials = InferenceCredentials::default();
-        let result = provider_no_credentials
-            .get_credentials(&credentials)
-            .unwrap_err();
-        let details = result.get_details();
-        assert_eq!(
-            *details,
-            ErrorDetails::ApiKeyMissing {
-                provider_name: "OpenAI".to_string(),
-            }
-        );
-        let credentials = InferenceCredentials {
-            openai: Some(OpenAICredentials {
-                api_key: Cow::Owned(SecretString::from("test_api_key".to_string())),
-            }),
-            ..Default::default()
-        };
-        let result = provider_no_credentials
-            .get_credentials(&credentials)
-            .unwrap();
-        match result {
-            ProviderCredentials::OpenAI(creds) => {
-                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
-            }
-            _ => panic!("Expected OpenAI credentials"),
-        }
-
-        let provider_with_credentials = OpenAIProvider {
-            api_key: Some(SecretString::from("test_api_key".to_string())),
-            api_base: None,
-            model_name: "gpt-3.5-turbo".to_string(),
-        };
-        let result = provider_with_credentials
-            .get_credentials(&credentials)
-            .unwrap_err();
-        let details = result.get_details();
-        assert_eq!(
-            *details,
-            ErrorDetails::UnexpectedDynamicCredentials {
-                provider_name: "OpenAI".to_string(),
-            }
-        );
-        let credentials = InferenceCredentials::default();
-        let result = provider_with_credentials
-            .get_credentials(&credentials)
-            .unwrap();
-        match result {
-            ProviderCredentials::OpenAI(creds) => {
-                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
-            }
-            _ => panic!("Expected OpenAI credentials"),
-        }
     }
 }

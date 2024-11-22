@@ -1,16 +1,14 @@
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;
 
 use lazy_static::lazy_static;
 use secrecy::{ExposeSecret, SecretString};
-use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
-use super::provider_trait::{HasCredentials, InferenceProvider};
+use super::provider_trait::InferenceProvider;
 
 use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
 use crate::endpoints::inference::InferenceCredentials;
@@ -20,18 +18,44 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     Usage,
 };
-use crate::model::ProviderCredentials;
+use crate::model::CredentialLocation;
 use crate::tool::{ToolCall, ToolCallChunk};
 
 #[derive(Debug, Default)]
 pub struct DummyProvider {
     pub model_name: String,
-    pub dynamic_credentials: bool,
+    pub credentials: DummyCredentials,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-pub struct DummyCredentials<'a> {
-    pub api_key: Cow<'a, SecretString>,
+pub fn default_api_key_location() -> CredentialLocation {
+    CredentialLocation::None
+}
+
+#[derive(Debug, Default)]
+pub enum DummyCredentials {
+    #[default]
+    None,
+    Dynamic(String),
+}
+
+impl DummyCredentials {
+    pub fn get_api_key<'a>(
+        &'a self,
+        dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<Option<&'a SecretString>, Error> {
+        match self {
+            DummyCredentials::None => Ok(None),
+            DummyCredentials::Dynamic(key_name) => {
+                Some(dynamic_api_keys.get(key_name).ok_or_else(|| {
+                    ErrorDetails::ApiKeyMissing {
+                        provider_name: "Dummy".to_string(),
+                    }
+                    .into()
+                }))
+                .transpose()
+            }
+        }
+    }
 }
 
 pub static DUMMY_INFER_RESPONSE_CONTENT: &str = "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.";
@@ -99,7 +123,7 @@ impl InferenceProvider for DummyProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
-        api_key: ProviderCredentials<'a>,
+        dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
         // Check for flaky models
         if self.model_name.starts_with("flaky_") {
@@ -128,20 +152,16 @@ impl InferenceProvider for DummyProvider {
             }
             .into());
         }
-        let api_key = match &api_key {
-            ProviderCredentials::Dummy(credentials) => &credentials.api_key,
-            _ => {
-                return Err(ErrorDetails::BadCredentialsPreInference {
-                    provider_name: "Dummy".to_string(),
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        if self.model_name == "test_key" {
+            if let Some(api_key) = api_key {
+                if api_key.expose_secret() != "good_key" {
+                    return Err(ErrorDetails::InferenceClient {
+                        message: "Invalid API key for Dummy provider".to_string(),
+                    }
+                    .into());
                 }
-                .into());
             }
-        };
-        if self.model_name == "test_key" && api_key.expose_secret() != "good_key" {
-            return Err(ErrorDetails::InferenceClient {
-                message: "Invalid API key for Dummy provider".to_string(),
-            }
-            .into());
         }
         let id = Uuid::now_v7();
         #[allow(clippy::expect_used)]
@@ -219,7 +239,7 @@ impl InferenceProvider for DummyProvider {
         &'a self,
         _request: &'a ModelInferenceRequest<'a>,
         _http_client: &'a reqwest::Client,
-        _api_key: ProviderCredentials<'a>,
+        _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -336,42 +356,12 @@ lazy_static! {
     static ref EMPTY_SECRET: SecretString = SecretString::from(String::new());
 }
 
-impl HasCredentials for DummyProvider {
-    fn has_credentials(&self) -> bool {
-        self.model_name != "bad_credentials"
-    }
-
-    fn get_credentials<'a>(
-        &'a self,
-        credentials: &'a InferenceCredentials,
-    ) -> Result<ProviderCredentials<'a>, Error> {
-        if self.dynamic_credentials {
-            match &credentials.dummy {
-                Some(credentials) => Ok(ProviderCredentials::Dummy(Cow::Borrowed(credentials))),
-                None => Err(ErrorDetails::ApiKeyMissing {
-                    provider_name: "Dummy".to_string(),
-                }
-                .into()),
-            }
-        } else {
-            match &credentials.dummy {
-                Some(_credentials) => Err(ErrorDetails::UnexpectedDynamicCredentials {
-                    provider_name: "Dummy".to_string(),
-                }
-                .into()),
-                None => Ok(ProviderCredentials::Dummy(Cow::Owned(DummyCredentials {
-                    api_key: Cow::Borrowed(&EMPTY_SECRET),
-                }))),
-            }
-        }
-    }
-}
-
 impl EmbeddingProvider for DummyProvider {
     async fn embed(
         &self,
         request: &EmbeddingRequest,
         _http_client: &reqwest::Client,
+        _dynamic_api_keys: &InferenceCredentials,
     ) -> Result<EmbeddingProviderResponse, Error> {
         if self.model_name == "error" {
             return Err(ErrorDetails::InferenceClient {
