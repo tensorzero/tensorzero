@@ -2,8 +2,6 @@
 #    uv pip compile requirements.in -o requirements.txt
 anyio==4.6.0
     # via httpx
-appnope==0.1.4
-    # via ipykernel
 asttokens==2.4.1
     # via stack-data
 certifi==2024.8.30
@@ -121,7 +119,7 @@ stack-data==0.6.3
     # via ipython
 tensorzero==2024.9.2
     # via -r requirements.in
-tornado==6.4.1
+tornado==6.4.2
     # via
     #   ipykernel
     #   jupyter-client
