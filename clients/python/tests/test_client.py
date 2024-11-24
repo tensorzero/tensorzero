@@ -419,6 +419,31 @@ async def test_async_tensorzero_error(async_client):
     )
 
 
+@pytest.mark.asyncio
+async def test_async_dynamic_credentials(async_client):
+    result = await async_client.inference(
+        function_name="basic_test",
+        variant_name="test_dynamic_api_key",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+        credentials={"DUMMY_API_KEY": "good_key"},
+    )
+    assert result.variant_name == "test_dynamic_api_key"
+    assert isinstance(result, ChatInferenceResponse)
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert (
+        content[0].text
+        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    )
+    usage = result.usage
+    assert usage.input_tokens == 10
+    assert usage.output_tokens == 10
+
+
 @pytest.fixture
 def sync_client():
     with TensorZeroGateway("http://localhost:3000") as client:
@@ -914,3 +939,27 @@ def test_prepare_inference_request(sync_client):
     assert request["variant_name"] == "baz"
     assert request["function_name"] == "basic_test"
     assert request["parallel_tool_calls"]
+
+
+def test_sync_dynamic_credentials(sync_client):
+    result = sync_client.inference(
+        function_name="basic_test",
+        variant_name="test_dynamic_api_key",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+        credentials={"DUMMY_API_KEY": "good_key"},
+    )
+    assert result.variant_name == "test_dynamic_api_key"
+    assert isinstance(result, ChatInferenceResponse)
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert (
+        content[0].text
+        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    )
+    usage = result.usage
+    assert usage.input_tokens == 10
+    assert usage.output_tokens == 10

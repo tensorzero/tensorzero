@@ -82,6 +82,7 @@ class BaseTensorZeroGateway(ABC):
         ] = None,
         parallel_tool_calls: Optional[bool] = None,
         tags: Optional[Dict[str, str]] = None,
+        credentials: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         input = deepcopy(input)
         # Convert content blocks to dicts if necessary
@@ -114,6 +115,8 @@ class BaseTensorZeroGateway(ABC):
             data["parallel_tool_calls"] = parallel_tool_calls
         if tags is not None:
             data["tags"] = tags
+        if credentials is not None:
+            data["credentials"] = credentials
         return data
 
     def _prepare_feedback_request(
@@ -163,6 +166,7 @@ class BaseTensorZeroGateway(ABC):
         ] = None,
         parallel_tool_calls: Optional[bool] = None,
         tags: Optional[Dict[str, str]] = None,
+        credentials: Optional[Dict[str, str]] = None,
     ) -> Union[InferenceResponse, Generator[InferenceChunk, None, None]]:
         pass
 
@@ -207,6 +211,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         ] = None,
         parallel_tool_calls: Optional[bool] = None,
         tags: Optional[Dict[str, str]] = None,
+        credentials: Optional[Dict[str, str]] = None,
     ) -> Union[InferenceResponse, Generator[InferenceChunk, None, None]]:
         """
         Make a POST request to the /inference endpoint.
@@ -250,6 +255,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
             tool_choice,
             parallel_tool_calls,
             tags,
+            credentials,
         )
         if stream:
             req = self.client.build_request("POST", url, json=data)
@@ -370,6 +376,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         ] = None,
         parallel_tool_calls: Optional[bool] = None,
         tags: Optional[Dict[str, str]] = None,
+        credentials: Optional[Dict[str, str]] = None,
     ) -> Union[InferenceResponse, AsyncGenerator[InferenceChunk, None]]:
         """
         Make a POST request to the /inference endpoint.
@@ -413,6 +420,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
             tool_choice,
             parallel_tool_calls,
             tags,
+            credentials,
         )
         if stream:
             req = self.client.build_request("POST", url, json=data)
