@@ -46,23 +46,26 @@ pub struct OpenAIProvider {
 pub enum OpenAICredentials {
     Static(SecretString),
     Dynamic(String),
+    None,
 }
 
 impl OpenAICredentials {
     pub fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<&'a SecretString, Error> {
+    ) -> Result<Option<&'a SecretString>, Error> {
         match self {
-            OpenAICredentials::Static(api_key) => Ok(api_key),
+            OpenAICredentials::Static(api_key) => Ok(Some(api_key)),
             OpenAICredentials::Dynamic(key_name) => {
-                dynamic_api_keys.get(key_name).ok_or_else(|| {
+                Some(dynamic_api_keys.get(key_name).ok_or_else(|| {
                     ErrorDetails::ApiKeyMissing {
                         provider_name: "OpenAI".to_string(),
                     }
                     .into()
-                })
+                }))
+                .transpose()
             }
+            OpenAICredentials::None => Ok(None),
         }
     }
 }
@@ -78,10 +81,13 @@ impl InferenceProvider for OpenAIProvider {
         let request_url = get_chat_url(self.api_base.as_ref())?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
-        let res = http_client
+        let mut request_builder = http_client
             .post(request_url)
-            .header("Content-Type", "application/json")
-            .bearer_auth(api_key.expose_secret())
+            .header("Content-Type", "application/json");
+        if let Some(api_key) = api_key {
+            request_builder = request_builder.bearer_auth(api_key.expose_secret());
+        }
+        let res = request_builder
             .json(&request_body)
             .send()
             .await
@@ -153,10 +159,13 @@ impl InferenceProvider for OpenAIProvider {
         let request_url = get_chat_url(self.api_base.as_ref())?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
-        let event_source = http_client
+        let mut request_builder = http_client
             .post(request_url)
-            .header("Content-Type", "application/json")
-            .bearer_auth(api_key.expose_secret())
+            .header("Content-Type", "application/json");
+        if let Some(api_key) = api_key {
+            request_builder = request_builder.bearer_auth(api_key.expose_secret());
+        }
+        let event_source = request_builder
             .json(&request_body)
             .eventsource()
             .map_err(|e| {
@@ -193,10 +202,13 @@ impl EmbeddingProvider for OpenAIProvider {
         let request_body = OpenAIEmbeddingRequest::new(&self.model_name, &request.input);
         let request_url = get_embedding_url(self.api_base.as_ref())?;
         let start_time = Instant::now();
-        let res = client
+        let mut request_builder = client
             .post(request_url)
-            .header("Content-Type", "application/json")
-            .bearer_auth(api_key.expose_secret())
+            .header("Content-Type", "application/json");
+        if let Some(api_key) = api_key {
+            request_builder = request_builder.bearer_auth(api_key.expose_secret());
+        }
+        let res = request_builder
             .json(&request_body)
             .send()
             .await
