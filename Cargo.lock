@@ -1057,6 +1057,7 @@ dependencies = [
  "derive_builder",
  "futures",
  "futures-core",
+ "itertools",
  "jsonschema",
  "jsonwebtoken",
  "lazy_static",
@@ -1410,6 +1411,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "924e5d73ea28f59011fec52a0d12185d496a9b075d360657aed2a5707f701153"
 dependencies = [
  "nom",
+]
+
+[[package]]
+name = "itertools"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
+dependencies = [
+ "either",
 ]
 
 [[package]]

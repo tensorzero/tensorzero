@@ -14,7 +14,7 @@ use uuid::Uuid;
 use crate::function::FunctionConfig;
 use crate::tool::ToolCallConfigDatabaseInsert;
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolResult};
-use crate::{endpoints::inference::InferenceDatabaseInsertMetadata, variant::InferenceConfig};
+use crate::{endpoints::inference::InferenceDatabaseInsertMetadata, variant::OwnedInferenceConfig};
 use crate::{endpoints::inference::InferenceParams, error::ErrorDetails};
 use crate::{error::Error, variant::JsonMode};
 
@@ -856,7 +856,7 @@ pub struct CollectChunksArgs<'a> {
 // 'a ends up as static and 'b ends up as stack allocated in the caller (endpoints::inference::create_stream)
 pub async fn collect_chunks<'a, 'b>(
     args: CollectChunksArgs<'a>,
-    inference_config: &'b InferenceConfig<'a>,
+    inference_config: &'b OwnedInferenceConfig<'a>,
 ) -> Result<InferenceResult<'a>, Error> {
     let CollectChunksArgs {
         value,
@@ -1284,7 +1284,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: false,
         };
-        let inference_config = InferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             tool_config: Some(tool_config),
             templates: &TemplateConfig::default(),
             function_name: "".to_string(),
@@ -1720,7 +1720,7 @@ mod tests {
             },
             "required": ["name", "age"]
         }));
-        let inference_config = InferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             tool_config: None,
             function_name: "".to_string(),
             variant_name: "".to_string(),

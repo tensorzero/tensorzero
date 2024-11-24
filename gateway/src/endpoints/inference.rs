@@ -29,11 +29,10 @@ use crate::inference::types::{
     JsonInferenceDatabaseInsert, JsonInferenceOutput, ModelInferenceResponseWithMetadata,
     RequestMessage, Usage,
 };
-use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelConfig;
 use crate::tool::{DynamicToolParams, ToolCallConfig};
 use crate::uuid_util::validate_episode_id;
-use crate::variant::{InferenceConfig, Variant};
+use crate::variant::{InferenceConfig, OwnedInferenceConfig, Variant};
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Deserialize)]
@@ -203,13 +202,12 @@ pub async fn inference(
 
     // Keep track of which variants failed
     let mut variant_errors = std::collections::HashMap::new();
-    let mut inference_config = InferenceConfig {
-        function_name: params.function_name.clone(),
-        variant_name: "".to_string(),
-        templates: &config.templates,
+    let mut inference_config = InferenceConfig::Owned(OwnedInferenceConfig::new(
+        params.function_name.clone(),
+        &config.templates,
         tool_config,
-        dynamic_output_schema: params.output_schema.map(DynamicJSONSchema::new),
-    };
+        params.output_schema,
+    ));
 
     let inference_clients = InferenceClients {
         http_client: &http_client,
@@ -232,7 +230,7 @@ pub async fn inference(
         // Will be edited by the variant as part of making the request so we must clone here
         // TODO (#479): make this a Cow
         let variant_inference_params = params.params.clone();
-        inference_config.variant_name = variant_name.to_string();
+        inference_config.set_variant_name(variant_name);
         if stream {
             let result = variant
                 .infer_stream(
@@ -355,7 +353,7 @@ fn create_stream(
     first_chunk: InferenceResultChunk,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
-    inference_config: InferenceConfig<'static>,
+    inference_config: OwnedInferenceConfig<'static>,
 ) -> impl Stream<Item = Option<InferenceResponseChunk>> + Send {
     async_stream::stream! {
         let mut buffer = vec![first_chunk.clone()];

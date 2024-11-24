@@ -257,6 +257,9 @@ pub enum ErrorDetails {
     UnknownMetric {
         name: String,
     },
+    UnsupportedVariantForBatchInference {
+        variant_name: String,
+    },
     VLLMClient {
         message: String,
         status_code: StatusCode,
@@ -305,7 +308,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidMessage { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidOpenAICompatibleRequest { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidProviderConfig { .. } => tracing::Level::ERROR,
-            ErrorDetails::InvalidRequest { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidRequest { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidTemplatePath => tracing::Level::ERROR,
             ErrorDetails::InvalidTool { .. } => tracing::Level::ERROR,
             ErrorDetails::JsonRequest { .. } => tracing::Level::WARN,
@@ -337,6 +340,7 @@ impl ErrorDetails {
             ErrorDetails::UnknownTool { .. } => tracing::Level::ERROR,
             ErrorDetails::UnknownVariant { .. } => tracing::Level::WARN,
             ErrorDetails::UnknownMetric { .. } => tracing::Level::WARN,
+            ErrorDetails::UnsupportedVariantForBatchInference { .. } => tracing::Level::WARN,
             ErrorDetails::VLLMClient { .. } => tracing::Level::WARN,
             ErrorDetails::VLLMServer { .. } => tracing::Level::ERROR,
         }
@@ -412,6 +416,7 @@ impl ErrorDetails {
             ErrorDetails::UnknownTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::UnknownVariant { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::UnknownMetric { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::UnsupportedVariantForBatchInference { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::VLLMClient { status_code, .. } => *status_code,
             ErrorDetails::VLLMServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -658,6 +663,13 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::UnknownTool { name } => write!(f, "Unknown tool: {}", name),
             ErrorDetails::UnknownVariant { name } => write!(f, "Unknown variant: {}", name),
             ErrorDetails::UnknownMetric { name } => write!(f, "Unknown metric: {}", name),
+            ErrorDetails::UnsupportedVariantForBatchInference { variant_name } => {
+                write!(
+                    f,
+                    "Unsupported variant for batch inference: {}",
+                    variant_name
+                )
+            }
             ErrorDetails::VLLMClient { message, .. } => {
                 write!(f, "Error from vLLM client: {}", message)
             }

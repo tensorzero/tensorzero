@@ -1,6 +1,8 @@
+use itertools::izip;
 use serde::Deserialize;
 use serde_json::Value;
 use std::{collections::HashMap, path::PathBuf};
+use tracing::instrument;
 
 use crate::embeddings::EmbeddingModelConfig;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
@@ -12,7 +14,7 @@ use crate::inference::types::{
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
-use crate::variant::JsonMode;
+use crate::variant::{BatchInferenceConfig, BorrowedInferenceConfig, JsonMode};
 use crate::{
     inference::types::{InferenceResult, InputMessage},
     model::ModelConfig,
@@ -20,7 +22,8 @@ use crate::{
 
 use super::{
     infer_model_request, infer_model_request_stream, prepare_model_inference_request,
-    InferModelRequestArgs, InferenceConfig, ModelUsedInfo, RetryConfig, Variant,
+    InferModelRequestArgs, InferenceConfig, ModelUsedInfo, OwnedInferenceConfig, RetryConfig,
+    Variant,
 };
 
 #[derive(Debug, Default, Deserialize)]
@@ -109,21 +112,21 @@ impl ChatCompletionConfig {
         }})
     }
 
-    fn prepare_request<'a>(
+    fn prepare_request<'a, 'request>(
         &'a self,
         input: &Input,
         function: &'a FunctionConfig,
-        inference_config: &'a InferenceConfig<'a>,
+        inference_config: &'request InferenceConfig<'a, 'request>,
         stream: bool,
         inference_params: &mut InferenceParams,
-    ) -> Result<ModelInferenceRequest<'a>, Error> {
+    ) -> Result<ModelInferenceRequest<'request>, Error> {
         let messages = input
             .messages
             .iter()
-            .map(|message| self.prepare_request_message(inference_config.templates, message))
+            .map(|message| self.prepare_request_message(inference_config.templates(), message))
             .collect::<Result<Vec<_>, _>>()?;
         let system =
-            self.prepare_system_message(inference_config.templates, input.system.as_ref())?;
+            self.prepare_system_message(inference_config.templates(), input.system.as_ref())?;
 
         inference_params
             .chat_completion
@@ -153,7 +156,7 @@ impl Variant for ChatCompletionConfig {
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
+        inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult<'a>, Error> {
@@ -188,7 +191,7 @@ impl Variant for ChatCompletionConfig {
         input: &Input,
         models: &'request InferenceModels<'static>,
         function: &'static FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
+        inference_config: &'request InferenceConfig<'static, 'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<
@@ -320,6 +323,54 @@ impl Variant for ChatCompletionConfig {
             templates.push(assistant_template);
         }
         templates
+    }
+
+    async fn prepare_batch_inference<'a, 'request>(
+        &'a self,
+        inputs: &[Input],
+        models: &'request InferenceModels<'a>,
+        function: &'a FunctionConfig,
+        batch_inference_config: &'request BatchInferenceConfig<'request>,
+        clients: &'request InferenceClients<'request>,
+        inference_params: Vec<InferenceParams>,
+    ) -> Result<InferenceResult<'a>, Error> {
+        // First construct all inference configs so they stick around for the duration of this function body
+        let inference_configs: Vec<InferenceConfig> = izip!(
+            batch_inference_config
+                .tool_configs
+                .iter()
+                .map(|x| x.as_ref()),
+            batch_inference_config
+                .dynamic_output_schemas
+                .iter()
+                .map(|x| x.as_ref())
+        )
+        .map(|(tool_config, dynamic_output_schema)| {
+            InferenceConfig::Borrowed(BorrowedInferenceConfig {
+                templates: batch_inference_config.templates,
+                tool_config,
+                dynamic_output_schema,
+                function_name: &batch_inference_config.function_name,
+                variant_name: &batch_inference_config.variant_name,
+            })
+        })
+        .collect();
+
+        // Next, prepare all the ModelInferenceRequests
+        let mut inference_requests = Vec::new();
+        for ((input, mut inference_param), inference_config) in
+            inputs.iter().zip(inference_params).zip(&inference_configs)
+        {
+            let request = self.prepare_request(
+                input,
+                function,
+                inference_config,
+                false,
+                &mut inference_param,
+            )?;
+            inference_requests.push(request);
+        }
+        todo!();
     }
 }
 
@@ -742,7 +793,7 @@ mod tests {
             messages,
         };
         let inference_params = InferenceParams::default();
-        let inference_config = InferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             function_name: "".to_string(),
@@ -788,7 +839,7 @@ mod tests {
             models: &models,
             embedding_models: &HashMap::new(),
         };
-        let inference_config = InferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             function_name: "".to_string(),
@@ -826,7 +877,7 @@ mod tests {
             models: &models,
             embedding_models: &HashMap::new(),
         };
-        let inference_config = InferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             function_name: "".to_string(),
@@ -879,7 +930,7 @@ mod tests {
             models: &models,
             embedding_models: &HashMap::new(),
         };
-        let inference_config = InferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             function_name: "".to_string(),
@@ -949,7 +1000,7 @@ mod tests {
             embedding_models: &HashMap::new(),
         };
         let weather_tool_config = get_temperature_tool_config();
-        let inference_config = InferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: Some(weather_tool_config),
             function_name: "".to_string(),
@@ -1029,7 +1080,7 @@ mod tests {
             output_schema,
             implicit_tool_call_config,
         });
-        let inference_config = InferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             function_name: "".to_string(),
@@ -1082,7 +1133,7 @@ mod tests {
             models: &models,
             embedding_models: &HashMap::new(),
         };
-        let inference_config = InferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             function_name: "".to_string(),
@@ -1174,7 +1225,7 @@ mod tests {
             },
             "required": ["answer"]
         }));
-        let inference_config = InferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             function_name: "".to_string(),
@@ -1257,7 +1308,7 @@ mod tests {
             },
             "required": ["response"]
         }));
-        let inference_config = InferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             function_name: "".to_string(),
@@ -1388,7 +1439,7 @@ mod tests {
             models,
             embedding_models,
         };
-        let inference_config = InferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             function_name: "".to_string(),
@@ -1439,7 +1490,7 @@ mod tests {
             models,
             embedding_models,
         };
-        let inference_config = InferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             function_name: "".to_string(),
@@ -1531,7 +1582,7 @@ mod tests {
             parallel_tool_calls: false,
         });
         let mut inference_params = InferenceParams::default();
-        let inference_config = InferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             function_name: "".to_string(),
@@ -1643,7 +1694,7 @@ mod tests {
                 parallel_tool_calls: false,
             },
         });
-        let inference_config = InferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             dynamic_output_schema: None,
@@ -1737,7 +1788,7 @@ mod tests {
             "required": ["answer"]
         }));
         let dynamic_output_schema_value = dynamic_output_schema.value.clone();
-        let inference_config = InferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             dynamic_output_schema: Some(dynamic_output_schema),

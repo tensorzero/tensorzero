@@ -26,7 +26,7 @@ use crate::{
     variant::chat_completion::ChatCompletionConfig,
 };
 
-use super::{InferenceConfig, ModelUsedInfo, Variant};
+use super::{BatchInferenceConfig, InferenceConfig, ModelUsedInfo, Variant};
 
 #[derive(Debug, Deserialize)]
 pub struct BestOfNSamplingConfig {
@@ -70,7 +70,7 @@ impl Variant for BestOfNSamplingConfig {
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
+        inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<InferenceResult<'a>, Error> {
@@ -92,7 +92,7 @@ impl Variant for BestOfNSamplingConfig {
         _input: &Input,
         _models: &'request InferenceModels<'static>,
         _function: &'static FunctionConfig,
-        _inference_config: &'request InferenceConfig<'request>,
+        _inference_config: &'request InferenceConfig<'static, 'request>,
         _clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<
@@ -159,6 +159,21 @@ impl Variant for BestOfNSamplingConfig {
     fn get_all_template_paths(&self) -> Vec<&PathBuf> {
         self.evaluator.inner.get_all_template_paths()
     }
+
+    async fn prepare_batch_inference<'a, 'request>(
+        &'a self,
+        _input: &[Input],
+        _models: &'request InferenceModels<'a>,
+        _function: &'a FunctionConfig,
+        inference_config: &'request BatchInferenceConfig<'request>,
+        _clients: &'request InferenceClients<'request>,
+        _inference_params: Vec<InferenceParams>,
+    ) -> Result<InferenceResult<'a>, Error> {
+        Err(ErrorDetails::UnsupportedVariantForBatchInference {
+            variant_name: inference_config.variant_name.clone(),
+        }
+        .into())
+    }
 }
 
 impl BestOfNSamplingConfig {
@@ -168,7 +183,7 @@ impl BestOfNSamplingConfig {
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
+        inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
     ) -> Result<Vec<InferenceResult<'a>>, Error> {
         // Get all the variants we are going to infer
@@ -241,7 +256,7 @@ impl BestOfNSamplingConfig {
         &'a self,
         input: &Input,
         models: &'a HashMap<String, ModelConfig>,
-        inference_config: &'request InferenceConfig<'request>,
+        inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
         candidates: Vec<InferenceResult<'a>>,
     ) -> Result<InferenceResult<'a>, Error> {
@@ -327,7 +342,7 @@ async fn inner_select_best_candidate<'a, 'request>(
     evaluator: &'a EvaluatorConfig,
     input: &'request Input,
     models: &'a HashMap<String, ModelConfig>,
-    inference_config: &'request InferenceConfig<'request>,
+    inference_config: &'request InferenceConfig<'a, 'request>,
     clients: &'request InferenceClients<'request>,
     candidates: &[InferenceResult<'request>],
 ) -> Result<
@@ -543,16 +558,16 @@ impl EvaluatorConfig {
     /// # Errors
     ///
     /// Returns an `Error` if any of the candidate outputs fail to serialize or if templating fails.
-    fn prepare_request(
+    fn prepare_request<'a, 'request>(
         &self,
         input: &Input,
-        inference_config: &InferenceConfig,
+        inference_config: &InferenceConfig<'a, 'request>,
         candidates: &[InferenceResult],
         inference_params: &mut InferenceParams,
     ) -> Result<(ModelInferenceRequest, Vec<usize>), Error> {
         // Do this before we prepare the system message so we can use the correct max index in the system message
         let (candidate_message, skipped_indices) =
-            self.prepare_candidate_message(inference_config.templates, candidates)?;
+            self.prepare_candidate_message(inference_config.templates(), candidates)?;
         // Need to subtract the skipped indices from the total number of candidates to get the correct max index
         let max_index = candidates
             .len()
@@ -564,7 +579,7 @@ impl EvaluatorConfig {
                 })
             })?;
         let system = Some(self.prepare_system_message(
-            inference_config.templates,
+            inference_config.templates(),
             input.system.as_ref(),
             max_index,
         )?);
@@ -573,7 +588,7 @@ impl EvaluatorConfig {
             .iter()
             .map(|message| {
                 self.inner
-                    .prepare_request_message(inference_config.templates, message)
+                    .prepare_request_message(inference_config.templates(), message)
             })
             .chain(std::iter::once(Ok(candidate_message)))
             .collect::<Result<Vec<_>, _>>()?;
@@ -1101,7 +1116,7 @@ mod tests {
             system: None,
             messages: vec![],
         };
-        let inference_config = InferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             dynamic_output_schema: None,

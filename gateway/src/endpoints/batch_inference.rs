@@ -30,9 +30,11 @@ use crate::tool::{
     BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams, ToolCallConfig,
 };
 use crate::uuid_util::validate_episode_id;
-use crate::variant::{InferenceConfig, Variant};
+use crate::variant::{BatchInferenceConfig, OwnedInferenceConfig, Variant};
 
-use super::inference::{ChatCompletionInferenceParams, InferenceParams};
+use super::inference::{
+    ChatCompletionInferenceParams, InferenceClients, InferenceModels, InferenceParams,
+};
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Deserialize)]
@@ -71,7 +73,7 @@ struct Params {
     // If provided for a JSON inference, the inference will use the specified output schema instead of the
     // configured one. We only lazily validate this schema.
     #[serde(default)]
-    pub output_schema: Option<BatchOutputSchemas>,
+    pub output_schemas: Option<BatchOutputSchemas>,
     #[serde(default)]
     pub credentials: InferenceCredentials,
 }
@@ -111,7 +113,7 @@ pub type InferenceCredentials = HashMap<String, SecretString>;
     )
 )]
 #[debug_handler(state = AppStateData)]
-pub async fn post_batch_inference_handler(
+pub async fn prepare_batch_inference_handler(
     State(AppStateData {
         config,
         http_client,
@@ -197,14 +199,12 @@ pub async fn post_batch_inference_handler(
 
     // Keep track of which variants failed
     let mut variant_errors = std::collections::HashMap::new();
-    // TODO(Viraj, urgent): make a batch version of this, maybe with a `new` fn
-    let mut inference_config = InferenceConfig {
-        function_name: params.function_name.clone(),
-        variant_name: "".to_string(),
-        templates: &config.templates,
-        tool_config,
-        dynamic_output_schema: params.output_schema.map(DynamicJSONSchema::new),
-    };
+    let mut inference_config = BatchInferenceConfig::new(
+        params.function_name.clone(),
+        &config.templates,
+        tool_configs,
+        params.output_schemas,
+    );
 
     let inference_clients = InferenceClients {
         http_client: &http_client,
@@ -239,8 +239,8 @@ pub async fn post_batch_inference_handler(
         inference_config.variant_name = variant_name.to_string();
 
         let result = variant
-            .infer(
-                &params.input,
+            .prepare_batch_inference(
+                &params.inputs,
                 &inference_models,
                 function,
                 &inference_config,
@@ -248,6 +248,7 @@ pub async fn post_batch_inference_handler(
                 variant_inference_params,
             )
             .await;
+        // TODO(Viraj): stopped here
 
         let result = match result {
             Ok(result) => result,
@@ -396,22 +397,6 @@ impl InferenceResponse {
             }),
         }
     }
-}
-
-// Carryall struct for clients used in inference
-// TODO (Viraj): remove and unify
-pub struct InferenceClients<'a> {
-    pub http_client: &'a reqwest::Client,
-    pub clickhouse_connection_info: &'a ClickHouseConnectionInfo,
-    pub credentials: &'a InferenceCredentials,
-}
-
-// Carryall struct for models used in inference
-// TODO (Viraj): remove and unify
-#[derive(Debug)]
-pub struct InferenceModels<'a> {
-    pub models: &'a HashMap<String, ModelConfig>,
-    pub embedding_models: &'a HashMap<String, EmbeddingModelConfig>,
 }
 
 struct BatchEpisodeIdsWithSize(Option<BatchEpisodeIdInput>, usize);

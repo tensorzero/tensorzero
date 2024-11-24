@@ -15,7 +15,7 @@ use crate::jsonschema_util::{JSONSchemaFromPath, JsonSchemaRef};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelConfig;
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
-use crate::variant::{InferenceConfig, Variant, VariantConfig};
+use crate::variant::{OwnedInferenceConfig, Variant, VariantConfig};
 
 #[derive(Debug)]
 pub enum FunctionConfig {
@@ -136,7 +136,7 @@ impl FunctionConfig {
         content_blocks: Vec<ContentBlock>,
         usage: Usage,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
-        inference_config: &InferenceConfig<'request>,
+        inference_config: &OwnedInferenceConfig<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult<'a>, Error> {
         match self {
@@ -1278,7 +1278,7 @@ mod tests {
             model_name: "model_name",
             latency,
         };
-        let inference_config = InferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             tool_config: None,
             function_name: "".to_string(),
             variant_name: "".to_string(),
@@ -1555,7 +1555,7 @@ mod tests {
             },
             "required": ["answer"]
         }));
-        let inference_config = InferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             tool_config: None,
             function_name: "".to_string(),
             variant_name: "".to_string(),

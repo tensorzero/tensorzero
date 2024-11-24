@@ -22,7 +22,8 @@ use crate::{
 
 use super::{
     infer_model_request, infer_model_request_stream, prepare_model_inference_request,
-    InferModelRequestArgs, InferenceConfig, JsonMode, ModelUsedInfo, RetryConfig, Variant,
+    BatchInferenceConfig, InferModelRequestArgs, InferenceConfig, JsonMode, ModelUsedInfo,
+    OwnedInferenceConfig, RetryConfig, Variant,
 };
 
 /// The primary configuration for the Dicl variant
@@ -72,7 +73,7 @@ impl Variant for DiclConfig {
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
+        inference_config: &'request OwnedInferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
@@ -134,7 +135,7 @@ impl Variant for DiclConfig {
         input: &Input,
         models: &'request InferenceModels<'static>,
         function: &'static FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
+        inference_config: &'request OwnedInferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<
@@ -255,6 +256,21 @@ impl Variant for DiclConfig {
 
     fn get_all_template_paths(&self) -> Vec<&PathBuf> {
         vec![]
+    }
+
+    async fn prepare_batch_inference<'a, 'request>(
+        &'a self,
+        _input: &[Input],
+        _models: &'request InferenceModels<'a>,
+        _function: &'a FunctionConfig,
+        inference_config: &'request BatchInferenceConfig<'request>,
+        _clients: &'request InferenceClients<'request>,
+        _inference_params: Vec<InferenceParams>,
+    ) -> Result<InferenceResult<'a>, Error> {
+        Err(ErrorDetails::UnsupportedVariantForBatchInference {
+            variant_name: inference_config.variant_name.clone(),
+        }
+        .into())
     }
 }
 
@@ -438,7 +454,7 @@ impl DiclConfig {
         input: &Input,
         examples: &[Example],
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
+        inference_config: &'request OwnedInferenceConfig<'request>,
         stream: bool,
         inference_params: &mut InferenceParams,
     ) -> Result<ModelInferenceRequest<'request>, Error>
@@ -466,7 +482,6 @@ impl DiclConfig {
                 self.presence_penalty,
                 self.frequency_penalty,
             );
-
         prepare_model_inference_request(
             messages,
             system,
