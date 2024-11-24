@@ -21,7 +21,7 @@ use crate::{
 
 use super::{
     infer_model_request, prepare_model_inference_request, BatchInferenceConfig,
-    InferModelRequestArgs, InferenceConfig, ModelUsedInfo, OwnedInferenceConfig, Variant,
+    InferModelRequestArgs, InferenceConfig, ModelUsedInfo, Variant,
 };
 
 #[derive(Debug, Deserialize)]
@@ -458,10 +458,10 @@ impl FuserConfig {
     {
         // Do this before we prepare the system message so we can use the correct max index in the system message
         let (candidate_message, included_indices) =
-            self.prepare_candidate_message(inference_config.templates, candidates)?;
+            self.prepare_candidate_message(inference_config.templates(), candidates)?;
         let max_index = included_indices.len().saturating_sub(1);
         let system = Some(self.prepare_system_message(
-            inference_config.templates,
+            inference_config.templates(),
             input.system.as_ref(),
             max_index,
         )?);
@@ -470,7 +470,7 @@ impl FuserConfig {
             .iter()
             .map(|message| {
                 self.inner
-                    .prepare_request_message(inference_config.templates, message)
+                    .prepare_request_message(inference_config.templates(), message)
             })
             .chain(std::iter::once(Ok(candidate_message)))
             .collect::<Result<Vec<_>, _>>()?;

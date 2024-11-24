@@ -15,7 +15,7 @@ use crate::jsonschema_util::{JSONSchemaFromPath, JsonSchemaRef};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelConfig;
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
-use crate::variant::{OwnedInferenceConfig, Variant, VariantConfig};
+use crate::variant::{InferenceConfig, Variant, VariantConfig};
 
 #[derive(Debug)]
 pub enum FunctionConfig {
@@ -136,7 +136,7 @@ impl FunctionConfig {
         content_blocks: Vec<ContentBlock>,
         usage: Usage,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
-        inference_config: &OwnedInferenceConfig<'request>,
+        inference_config: &'request InferenceConfig<'a, 'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult<'a>, Error> {
         match self {
@@ -146,7 +146,7 @@ impl FunctionConfig {
                     content_blocks,
                     usage,
                     model_inference_results,
-                    inference_config.tool_config.as_ref(),
+                    inference_config.tool_config(),
                     inference_params,
                 )
                 .await,
@@ -180,7 +180,7 @@ impl FunctionConfig {
                         })
                     })
                     .ok();
-                let output_schema = match &inference_config.dynamic_output_schema {
+                let output_schema = match &inference_config.dynamic_output_schema() {
                     Some(schema) => JsonSchemaRef::Dynamic(schema),
                     None => JsonSchemaRef::Static(&params.output_schema),
                 };

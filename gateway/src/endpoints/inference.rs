@@ -230,6 +230,7 @@ pub async fn inference(
         // Will be edited by the variant as part of making the request so we must clone here
         // TODO (#479): make this a Cow
         let variant_inference_params = params.params.clone();
+
         inference_config.set_variant_name(variant_name);
         if stream {
             let result = variant
@@ -316,7 +317,7 @@ pub async fn inference(
                     function_name: params.function_name,
                     variant_name: variant_name.to_string(),
                     episode_id,
-                    tool_params: inference_config.tool_config,
+                    tool_params: inference_config.into_tool_config(),
                     processing_time: start_time.elapsed(),
                     tags: params.tags,
                 };
@@ -347,14 +348,14 @@ pub async fn inference(
     .into())
 }
 
-fn create_stream(
+fn create_stream<'a>(
     function: &'static FunctionConfig,
     metadata: InferenceMetadata<'static>,
     first_chunk: InferenceResultChunk,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
-    inference_config: OwnedInferenceConfig<'static>,
-) -> impl Stream<Item = Option<InferenceResponseChunk>> + Send {
+    inference_config: InferenceConfig<'static, 'a>,
+) -> impl Stream<Item = Option<InferenceResponseChunk>> + Send + 'a {
     async_stream::stream! {
         let mut buffer = vec![first_chunk.clone()];
 
@@ -421,7 +422,7 @@ fn create_stream(
                     function_name,
                     variant_name,
                     episode_id,
-                    tool_params: inference_config.tool_config,
+                    tool_params: inference_config.into_tool_config(),
                     processing_time: start_time.elapsed(),
                     tags,
                 };

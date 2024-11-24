@@ -73,7 +73,7 @@ impl Variant for DiclConfig {
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request OwnedInferenceConfig<'request>,
+        inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
@@ -86,8 +86,8 @@ impl Variant for DiclConfig {
                 input,
                 models.embedding_models,
                 clients,
-                &inference_config.function_name,
-                &inference_config.variant_name,
+                inference_config.function_name(),
+                inference_config.variant_name(),
                 function,
             )
             .await?;
@@ -135,7 +135,7 @@ impl Variant for DiclConfig {
         input: &Input,
         models: &'request InferenceModels<'static>,
         function: &'static FunctionConfig,
-        inference_config: &'request OwnedInferenceConfig<'request>,
+        inference_config: &'request InferenceConfig<'static, 'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<
@@ -155,8 +155,8 @@ impl Variant for DiclConfig {
                 input,
                 models.embedding_models,
                 clients,
-                &inference_config.function_name,
-                &inference_config.variant_name,
+                inference_config.function_name(),
+                inference_config.variant_name(),
                 function,
             )
             .await?;
@@ -454,7 +454,7 @@ impl DiclConfig {
         input: &Input,
         examples: &[Example],
         function: &'a FunctionConfig,
-        inference_config: &'request OwnedInferenceConfig<'request>,
+        inference_config: &'request InferenceConfig<'a, 'request>,
         stream: bool,
         inference_params: &mut InferenceParams,
     ) -> Result<ModelInferenceRequest<'request>, Error>
