@@ -109,7 +109,7 @@ impl<'a, 'request> InferenceConfig<'a, 'request> {
         }
     }
 
-    pub fn set_variant_name(&mut self, variant_name: &str) {
+    pub fn set_variant_name(&mut self, variant_name: &'request str) {
         match self {
             InferenceConfig::Owned(config) => config.variant_name = variant_name.to_string(),
             InferenceConfig::Borrowed(config) => config.variant_name = variant_name,
@@ -118,8 +118,8 @@ impl<'a, 'request> InferenceConfig<'a, 'request> {
 
     pub fn into_tool_config(self) -> Option<ToolCallConfig> {
         match self {
-            InferenceConfig::Owned(config) => Some(config.tool_config),
-            InferenceConfig::Borrowed(config) => {
+            InferenceConfig::Owned(config) => config.tool_config,
+            InferenceConfig::Borrowed(_) => {
                 Error::new(ErrorDetails::Inference {
                 message: "Cannot convert a borrowed inference config to an owned tool config. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
             });

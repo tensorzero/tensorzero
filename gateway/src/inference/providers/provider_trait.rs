@@ -31,4 +31,11 @@ pub trait InferenceProvider {
         >,
     > + Send
            + 'a;
+
+    fn prepare_batch_inference<'a>(
+        &'a self,
+        requests: &'a [ModelInferenceRequest],
+        client: &'a Client,
+        dynamic_api_keys: &'a InferenceCredentials,
+    ) -> impl Future<Output = Result<Vec<ModelInferenceRequest>, Error>> + Send + 'a;
 }

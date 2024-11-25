@@ -180,6 +180,25 @@ impl InferenceProvider for OpenAIProvider {
         };
         Ok((chunk, stream, raw_request))
     }
+
+    async fn prepare_batch_inference<'a>(
+        &'a self,
+        requests: &'a [ModelInferenceRequest<'_>],
+        client: &'a reqwest::Client,
+        dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<Vec<ModelInferenceRequest>, Error> {
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let inference_ids: Vec<Uuid> = requests.iter().map(|_| Uuid::now_v7()).collect();
+        let batch_requests: Result<Vec<OpenAIBatchInput>, Error> = requests
+            .iter()
+            .zip(&inference_ids)
+            .map(|(request, inference_id)| {
+                OpenAIBatchInput::new(*inference_id, &self.model_name, request)
+            })
+            .collect();
+        let batch_requests = batch_requests?;
+        todo!()
+    }
 }
 
 impl EmbeddingProvider for OpenAIProvider {
@@ -787,6 +806,29 @@ impl<'a> OpenAIRequest<'a> {
             tools,
             tool_choice,
             parallel_tool_calls,
+        })
+    }
+}
+
+struct OpenAIBatchInput<'a> {
+    custom_id: String,
+    method: String,
+    url: String,
+    body: OpenAIRequest<'a>,
+}
+
+impl<'a> OpenAIBatchInput<'a> {
+    fn new(
+        inference_id: Uuid,
+        model: &'a str,
+        request: &'a ModelInferenceRequest,
+    ) -> Result<Self, Error> {
+        let body = OpenAIRequest::new(model, request)?;
+        Ok(Self {
+            custom_id: inference_id.to_string(),
+            method: "POST".to_string(),
+            url: "/v1/chat/completions".to_string(),
+            body,
         })
     }
 }
