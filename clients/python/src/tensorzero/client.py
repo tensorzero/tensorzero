@@ -258,17 +258,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
             credentials,
         )
         if stream:
-            req = self.client.build_request("POST", url, json=data)
-            response = self.client.send(req, stream=True)
-            try:
-                response.raise_for_status()
-                return self._stream_sse(response)
-            except httpx.HTTPStatusError as e:
-                response.close()
-                raise TensorZeroError(response) from e
-            except Exception as e:
-                response.close()
-                raise e
+            return self._stream_inference(url, data)
         else:
             response = self.client.post(url, json=data)
             try:
@@ -331,16 +321,23 @@ class TensorZeroGateway(BaseTensorZeroGateway):
     ) -> None:
         self.close()
 
-    def _stream_sse(
-        self, response: httpx.Response
+    def _stream_inference(
+        self, url: str, data: Dict[str, Any]
     ) -> Generator[InferenceChunk, None, None]:
         """
         Parse the SSE stream from the response.
 
-        :param response: The httpx.Response object
-        :yield: Parsed SSE events as dictionaries
+        :param url: The URL to stream from
+        :param data: The request data to send
+        :yield: InferenceChunk objects containing partial results
         """
-        try:
+        with self.client.stream("POST", url, json=data) as response:
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                response.read()
+                raise TensorZeroError(response) from e
+
             for line in response.iter_lines():
                 if line.startswith("data: "):
                     data = line[6:].strip()
@@ -351,8 +348,6 @@ class TensorZeroGateway(BaseTensorZeroGateway):
                         yield parse_inference_chunk(parsed_data)
                     except json.JSONDecodeError:
                         self.logger.error(f"Failed to parse SSE data: {data}")
-        finally:
-            response.close()
 
 
 class AsyncTensorZeroGateway(BaseTensorZeroGateway):
@@ -429,18 +424,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
             credentials,
         )
         if stream:
-            req = self.client.build_request("POST", url, json=data)
-            response = await self.client.send(req, stream=True)
-            try:
-                response.raise_for_status()
-                return self._stream_sse(response)
-            except httpx.HTTPStatusError as e:
-                response._content = await response.aread()
-                await response.aclose()
-                raise TensorZeroError(response) from e
-            except Exception as e:
-                await response.aclose()
-                raise e
+            return self._stream_inference(url, data)
         else:
             response = await self.client.post(url, json=data)
             try:
@@ -503,16 +487,23 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
     ) -> None:
         await self.close()
 
-    async def _stream_sse(
-        self, response: httpx.Response
+    async def _stream_inference(
+        self, url: str, data: Dict[str, Any]
     ) -> AsyncGenerator[InferenceChunk, None]:
         """
-        Parse the SSE stream from the response.
+        Stream inference results from the server.
 
-        :param response: The httpx.Response object
-        :yield: Parsed SSE events as dictionaries
+        :param url: The URL to stream from
+        :param data: The request data to send
+        :yield: InferenceChunk objects containing partial results
         """
-        try:
+        async with self.client.stream("POST", url, json=data) as response:
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                await response.aread()
+                raise TensorZeroError(response) from e
+
             async for line in response.aiter_lines():
                 if line.startswith("data: "):
                     data = line[6:].strip()
@@ -523,5 +514,3 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
                         yield parse_inference_chunk(parsed_data)
                     except json.JSONDecodeError:
                         self.logger.error(f"Failed to parse SSE data: {data}")
-        finally:
-            await response.aclose()

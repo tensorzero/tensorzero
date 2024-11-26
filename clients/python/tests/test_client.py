@@ -138,7 +138,7 @@ async def test_async_inference_streaming(async_client):
 @pytest.mark.asyncio
 async def test_async_inference_streaming_nonexistent_function(async_client):
     with pytest.raises(TensorZeroError) as exc_info:
-        await async_client.inference(
+        stream = await async_client.inference(
             function_name="does_not_exist",
             input={
                 "system": {"assistant_name": "Alfred Pennyworth"},
@@ -146,6 +146,10 @@ async def test_async_inference_streaming_nonexistent_function(async_client):
             },
             stream=True,
         )
+
+        async for chunk in stream:
+            pass
+
     assert exc_info.value.status_code == 404
     assert (
         str(exc_info.value)
@@ -156,7 +160,7 @@ async def test_async_inference_streaming_nonexistent_function(async_client):
 @pytest.mark.asyncio
 async def test_async_inference_streaming_malformed_input(async_client):
     with pytest.raises(TensorZeroError) as exc_info:
-        await async_client.inference(
+        stream = await async_client.inference(
             function_name="basic_test",
             input={
                 "system": {"name_of_assistant": "Alfred Pennyworth"},  # WRONG
@@ -164,6 +168,10 @@ async def test_async_inference_streaming_malformed_input(async_client):
             },
             stream=True,
         )
+
+        async for chunk in stream:
+            pass
+
     assert exc_info.value.status_code == 400
     assert (
         str(exc_info.value)
@@ -551,7 +559,7 @@ def test_sync_inference_streaming(sync_client):
 
 def test_sync_inference_streaming_nonexistent_function(sync_client):
     with pytest.raises(TensorZeroError) as exc_info:
-        sync_client.inference(
+        stream = sync_client.inference(
             function_name="does_not_exist",
             input={
                 "system": {"assistant_name": "Alfred Pennyworth"},
@@ -559,7 +567,32 @@ def test_sync_inference_streaming_nonexistent_function(sync_client):
             },
             stream=True,
         )
+
+        for chunk in stream:
+            pass
+
     assert exc_info.value.status_code == 404
+
+
+def test_sync_inference_streaming_malformed_input(sync_client):
+    with pytest.raises(TensorZeroError) as exc_info:
+        stream = sync_client.inference(
+            function_name="basic_test",
+            input={
+                "system": {"name_of_assistant": "Alfred Pennyworth"},  # WRONG
+                "messages": [{"role": "user", "content": "Hello"}],
+            },
+            stream=True,
+        )
+
+        for chunk in stream:
+            pass
+
+    assert exc_info.value.status_code == 400
+    assert (
+        str(exc_info.value)
+        == 'TensorZeroError (status code 400): {"error":"JSON Schema validation failed for Function:\\n\\n\\"assistant_name\\" is a required property\\nData: {\\"name_of_assistant\\":\\"Alfred Pennyworth\\"}Schema: {\\"type\\":\\"object\\",\\"properties\\":{\\"assistant_name\\":{\\"type\\":\\"string\\"}},\\"required\\":[\\"assistant_name\\"]}"}'
+    )
 
 
 def test_sync_tool_call_inference(sync_client):
