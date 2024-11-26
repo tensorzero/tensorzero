@@ -262,9 +262,13 @@ class TensorZeroGateway(BaseTensorZeroGateway):
             response = self.client.send(req, stream=True)
             try:
                 response.raise_for_status()
+                return self._stream_sse(response)
             except httpx.HTTPStatusError as e:
+                response.close()
                 raise TensorZeroError(response) from e
-            return self._stream_sse(response)
+            except Exception as e:
+                response.close()
+                raise e
         else:
             response = self.client.post(url, json=data)
             try:
@@ -336,17 +340,19 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param response: The httpx.Response object
         :yield: Parsed SSE events as dictionaries
         """
-        for line in response.iter_lines():
-            if line.startswith("data: "):
-                data = line[6:].strip()
-                if data == "[DONE]":
-                    break
-                try:
-                    parsed_data: Dict[str, Any] = json.loads(data)
-                    yield parse_inference_chunk(parsed_data)
-                except json.JSONDecodeError:
-                    self.logger.error(f"Failed to parse SSE data: {data}")
-        response.close()
+        try:
+            for line in response.iter_lines():
+                if line.startswith("data: "):
+                    data = line[6:].strip()
+                    if data == "[DONE]":
+                        break
+                    try:
+                        parsed_data: Dict[str, Any] = json.loads(data)
+                        yield parse_inference_chunk(parsed_data)
+                    except json.JSONDecodeError:
+                        self.logger.error(f"Failed to parse SSE data: {data}")
+        finally:
+            response.close()
 
 
 class AsyncTensorZeroGateway(BaseTensorZeroGateway):
@@ -427,10 +433,14 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
             response = await self.client.send(req, stream=True)
             try:
                 response.raise_for_status()
+                return self._stream_sse(response)
             except httpx.HTTPStatusError as e:
                 response._content = await response.aread()
+                await response.aclose()
                 raise TensorZeroError(response) from e
-            return self._stream_sse(response)
+            except Exception as e:
+                await response.aclose()
+                raise e
         else:
             response = await self.client.post(url, json=data)
             try:
@@ -502,14 +512,16 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param response: The httpx.Response object
         :yield: Parsed SSE events as dictionaries
         """
-        async for line in response.aiter_lines():
-            if line.startswith("data: "):
-                data = line[6:].strip()
-                if data == "[DONE]":
-                    break
-                try:
-                    parsed_data: Dict[str, Any] = json.loads(data)
-                    yield parse_inference_chunk(parsed_data)
-                except json.JSONDecodeError:
-                    self.logger.error(f"Failed to parse SSE data: {data}")
-        await response.aclose()
+        try:
+            async for line in response.aiter_lines():
+                if line.startswith("data: "):
+                    data = line[6:].strip()
+                    if data == "[DONE]":
+                        break
+                    try:
+                        parsed_data: Dict[str, Any] = json.loads(data)
+                        yield parse_inference_chunk(parsed_data)
+                    except json.JSONDecodeError:
+                        self.logger.error(f"Failed to parse SSE data: {data}")
+        finally:
+            await response.aclose()

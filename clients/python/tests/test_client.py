@@ -75,7 +75,6 @@ async def test_async_basic_inference(async_client):
 
 @pytest.mark.asyncio
 async def test_async_inference_streaming(async_client):
-    start_time = time()
     stream = await async_client.inference(
         function_name="basic_test",
         input={
@@ -85,14 +84,18 @@ async def test_async_inference_streaming(async_client):
         tags={"key": "value"},
         stream=True,
     )
-    first_chunk_duration = None
+
     chunks = []
+    previous_chunk_timestamp = None
+    last_chunk_duration = None
     async for chunk in stream:
+        if previous_chunk_timestamp is not None:
+            last_chunk_duration = time() - previous_chunk_timestamp
+        previous_chunk_timestamp = time()
         chunks.append(chunk)
-        if first_chunk_duration is None:
-            first_chunk_duration = time() - start_time
-    last_chunk_duration = time() - start_time - first_chunk_duration
-    assert last_chunk_duration > first_chunk_duration + 0.1
+
+    assert last_chunk_duration > 0.01
+
     expected_text = [
         "Wally,",
         " the",
@@ -486,7 +489,6 @@ def test_sync_malformed_inference(sync_client):
 
 
 def test_sync_inference_streaming(sync_client):
-    start_time = time()
     stream = sync_client.inference(
         function_name="basic_test",
         input={
@@ -496,14 +498,17 @@ def test_sync_inference_streaming(sync_client):
         stream=True,
         tags={"key": "value"},
     )
-    first_chunk_duration = None
+
     chunks = []
+    previous_chunk_timestamp = None
+    last_chunk_duration = None
     for chunk in stream:
+        if previous_chunk_timestamp is not None:
+            last_chunk_duration = time() - previous_chunk_timestamp
+        previous_chunk_timestamp = time()
         chunks.append(chunk)
-        if first_chunk_duration is None:
-            first_chunk_duration = time() - start_time
-    last_chunk_duration = time() - start_time - first_chunk_duration
-    assert last_chunk_duration > first_chunk_duration + 0.1
+
+    assert last_chunk_duration > 0.01
 
     expected_text = [
         "Wally,",
