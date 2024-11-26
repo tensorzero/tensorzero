@@ -325,7 +325,7 @@ impl Variant for ChatCompletionConfig {
         templates
     }
 
-    async fn prepare_batch_inference<'a, 'request>(
+    async fn start_batch_inference<'a, 'request>(
         &'a self,
         inputs: &[Input],
         models: &'request InferenceModels<'a>,
@@ -370,7 +370,6 @@ impl Variant for ChatCompletionConfig {
             )?;
             inference_requests.push(request);
         }
-        todo!();
     }
 }
 

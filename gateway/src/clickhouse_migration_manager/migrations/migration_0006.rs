@@ -76,14 +76,16 @@ impl<'a> Migration for Migration0006<'a> {
             CREATE TABLE IF NOT EXISTS BatchModelInference
             (
                 id UUID,
+                batch_id UUID,
                 function_name LowCardinality(String),
                 variant_name LowCardinality(String),
                 episode_id UUID,
                 input String,
                 tool_params String,
                 inference_params String,
+                output_schema String,
+                tags Map(String, String) DEFAULT map(),
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id),
-                batch_id UUID,
             ) ENGINE = MergeTree()
             ORDER BY (batch_id, id)
         "#;

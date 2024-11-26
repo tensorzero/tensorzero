@@ -1,12 +1,15 @@
 use futures::stream::Stream;
 use futures::StreamExt;
 use lazy_static::lazy_static;
+use reqwest::multipart::{Form, Part};
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::borrow::Cow;
+use std::collections::HashMap;
+use std::io::Write;
 use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
@@ -18,8 +21,8 @@ use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-    ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
-    RequestMessage, Role, Text, TextChunk, Usage,
+    ProviderBatchInferenceResponse, ProviderInferenceResponse, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStream, RequestMessage, Role, Text, TextChunk, Usage,
 };
 use crate::model::CredentialLocation;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
@@ -181,23 +184,88 @@ impl InferenceProvider for OpenAIProvider {
         Ok((chunk, stream, raw_request))
     }
 
-    async fn prepare_batch_inference<'a>(
+    async fn start_batch_inference<'a>(
         &'a self,
         requests: &'a [ModelInferenceRequest<'_>],
         client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<Vec<ModelInferenceRequest>, Error> {
+    ) -> Result<ProviderBatchInferenceResponse, Error> {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let request_url = get_files_url(self.api_base.as_ref())?;
         let inference_ids: Vec<Uuid> = requests.iter().map(|_| Uuid::now_v7()).collect();
-        let batch_requests: Result<Vec<OpenAIBatchInput>, Error> = requests
+        let batch_requests: Result<Vec<OpenAIBatchFileInput>, Error> = requests
             .iter()
             .zip(&inference_ids)
             .map(|(request, inference_id)| {
-                OpenAIBatchInput::new(*inference_id, &self.model_name, request)
+                OpenAIBatchFileInput::new(*inference_id, &self.model_name, request)
             })
             .collect();
         let batch_requests = batch_requests?;
-        todo!()
+        let mut jsonl_data = Vec::new();
+        for item in batch_requests {
+            serde_json::to_writer(&mut jsonl_data, &item).map_err(|e| {
+                Error::new(ErrorDetails::OpenAIServer {
+                    message: format!("Error serializing request: {e}"),
+                })
+            })?;
+            jsonl_data.write_all(b"\n").map_err(|e| {
+                Error::new(ErrorDetails::OpenAIServer {
+                    message: format!("Error writing to JSONL: {e}"),
+                })
+            })?;
+        }
+        // Create the multipart form
+        let form = Form::new().text("purpose", "batch").part(
+            "file",
+            Part::bytes(jsonl_data)
+                .file_name("data.jsonl")
+                .mime_str("application/json")
+                .map_err(|e| {
+                    Error::new(ErrorDetails::OpenAIServer {
+                        message: format!("Error setting MIME type: {e}"),
+                    })
+                })?,
+        );
+        let res = client
+            .post(request_url)
+            .bearer_auth(api_key.expose_secret())
+            .multipart(form)
+            .send()
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    message: format!("Error sending request to OpenAI: {e}"),
+                })
+            })?;
+        let response: OpenAIFileResponse = res.json().await.map_err(|e| {
+            Error::new(ErrorDetails::OpenAIServer {
+                message: format!("Error parsing JSON response: {e}"),
+            })
+        })?;
+        let file_id = response.id;
+        let batch_request = OpenAIBatchRequest::new(&file_id);
+        let request_url = get_batch_url(self.api_base.as_ref())?;
+        let res = client
+            .post(request_url)
+            .bearer_auth(api_key.expose_secret())
+            .json(&batch_request)
+            .send()
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    message: format!("Error sending request to OpenAI: {e}"),
+                })
+            })?;
+        let response: OpenAIBatchResponse = res.json().await.map_err(|e| {
+            Error::new(ErrorDetails::OpenAIServer {
+                message: format!("Error parsing JSON response: {e}"),
+            })
+        })?;
+        Ok(ProviderBatchInferenceResponse {
+            batch_id: Uuid::now_v7(),
+            inference_ids,
+            batch_params: json!({"file_id": file_id, "batch_id": response.id}),
+        })
     }
 }
 
@@ -310,6 +378,32 @@ pub(super) fn get_chat_url(base_url: Option<&Url>) -> Result<Url, Error> {
         url.set_path(&format!("{}/", url.path()));
     }
     url.join("chat/completions").map_err(|e| {
+        Error::new(ErrorDetails::InvalidBaseUrl {
+            message: e.to_string(),
+        })
+    })
+}
+
+fn get_files_url(base_url: Option<&Url>) -> Result<Url, Error> {
+    let base_url = base_url.unwrap_or(&OPENAI_DEFAULT_BASE_URL);
+    let mut url = base_url.clone();
+    if !url.path().ends_with('/') {
+        url.set_path(&format!("{}/", url.path()));
+    }
+    url.join("files").map_err(|e| {
+        Error::new(ErrorDetails::InvalidBaseUrl {
+            message: e.to_string(),
+        })
+    })
+}
+
+fn get_batch_url(base_url: Option<&Url>) -> Result<Url, Error> {
+    let base_url = base_url.unwrap_or(&OPENAI_DEFAULT_BASE_URL);
+    let mut url = base_url.clone();
+    if !url.path().ends_with('/') {
+        url.set_path(&format!("{}/", url.path()));
+    }
+    url.join("batches").map_err(|e| {
         Error::new(ErrorDetails::InvalidBaseUrl {
             message: e.to_string(),
         })
@@ -810,14 +904,15 @@ impl<'a> OpenAIRequest<'a> {
     }
 }
 
-struct OpenAIBatchInput<'a> {
+#[derive(Debug, Serialize)]
+struct OpenAIBatchFileInput<'a> {
     custom_id: String,
     method: String,
     url: String,
     body: OpenAIRequest<'a>,
 }
 
-impl<'a> OpenAIBatchInput<'a> {
+impl<'a> OpenAIBatchFileInput<'a> {
     fn new(
         inference_id: Uuid,
         model: &'a str,
@@ -830,6 +925,24 @@ impl<'a> OpenAIBatchInput<'a> {
             url: "/v1/chat/completions".to_string(),
             body,
         })
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct OpenAIBatchRequest<'a> {
+    input_file_id: &'a str,
+    endpoint: &'a str,
+    completion_window: &'a str,
+    // metadata: HashMap<String, String>
+}
+
+impl<'a> OpenAIBatchRequest<'a> {
+    fn new(input_file_id: &'a str) -> Self {
+        Self {
+            input_file_id,
+            endpoint: "/v1/chat/completions",
+            completion_window: "24h",
+        }
     }
 }
 
@@ -1150,6 +1263,56 @@ impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderR
             latency,
         ))
     }
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIFileResponse {
+    id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIBatchResponse {
+    id: String,
+    object: String,
+    endpoint: String,
+    errors: OpenAIBatchErrors,
+    input_file_id: String,
+    completion_window: String,
+    status: String,
+    output_file_id: String,
+    error_file_id: String,
+    created_at: i64,
+    in_progress_at: Option<i64>,
+    expires_at: i64,
+    finalizing_at: Option<i64>,
+    completed_at: Option<i64>,
+    failed_at: Option<i64>,
+    expired_at: Option<i64>,
+    cancelling_at: Option<i64>,
+    cancelled_at: Option<i64>,
+    request_counts: OpenAIBatchRequestCounts,
+    metadata: HashMap<String, String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIBatchErrors {
+    object: String,
+    data: Vec<OpenAIBatchError>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIBatchError {
+    code: String,
+    message: String,
+    param: Option<String>,
+    line: Option<i32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIBatchRequestCounts {
+    total: u32,
+    completed: u32,
+    failed: u32,
 }
 
 #[cfg(test)]

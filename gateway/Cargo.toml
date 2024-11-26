@@ -48,6 +48,7 @@ minijinja = { version = "2.1.0", features = ["loader", "debug"] }
 rand = "0.8.5"
 reqwest = { version = "0.12.5", features = [
     "json",
+    "multipart",
     "rustls-tls",
 ], default-features = false }
 reqwest-eventsource = "0.6.0"

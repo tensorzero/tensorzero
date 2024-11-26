@@ -1070,6 +1070,12 @@ pub fn serialize_or_log<T: Serialize>(value: &T) -> String {
     }
 }
 
+pub struct ProviderBatchInferenceResponse {
+    pub batch_id: Uuid,
+    pub inference_ids: Vec<Uuid>,
+    pub batch_params: Value,
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::Instant;

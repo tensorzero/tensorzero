@@ -141,7 +141,7 @@ impl Variant for MixtureOfNConfig {
         self.fuser.inner.get_all_template_paths()
     }
 
-    async fn prepare_batch_inference<'a, 'request>(
+    async fn start_batch_inference<'a, 'request>(
         &'a self,
         _input: &[Input],
         _models: &'request InferenceModels<'a>,

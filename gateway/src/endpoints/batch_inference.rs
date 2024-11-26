@@ -239,7 +239,7 @@ pub async fn prepare_batch_inference_handler(
         inference_config.variant_name = variant_name.to_string();
 
         let result = variant
-            .prepare_batch_inference(
+            .start_batch_inference(
                 &params.inputs,
                 &inference_models,
                 function,

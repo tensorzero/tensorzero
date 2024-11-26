@@ -125,6 +125,15 @@ impl ModelConfig {
         }))
     }
 
+    pub async fn start_batch_inference<'a, 'request>(
+        &'a self,
+        requests: &'request [ModelInferenceRequest<'request>],
+        client: &'request Client,
+        api_keys: &'request InferenceCredentials,
+    ) -> Result<ProviderBatchInferenceResponse, Error>>  {
+        todo!()
+    }
+
     pub fn validate(&self) -> Result<(), Error> {
         // Placeholder in case we want to add validation in the future
         Ok(())

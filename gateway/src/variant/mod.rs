@@ -190,7 +190,7 @@ pub trait Variant {
 
     fn get_all_template_paths(&self) -> Vec<&PathBuf>;
 
-    async fn prepare_batch_inference<'a, 'request>(
+    async fn start_batch_inference<'a, 'request>(
         &'a self,
         input: &[Input],
         models: &'request InferenceModels<'a>,
@@ -346,7 +346,7 @@ impl Variant for VariantConfig {
     }
 
     #[instrument(skip_all, fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name))]
-    async fn prepare_batch_inference<'a, 'request>(
+    async fn start_batch_inference<'a, 'request>(
         &'a self,
         inputs: &[Input],
         models: &'request InferenceModels<'a>,
@@ -358,7 +358,7 @@ impl Variant for VariantConfig {
         match self {
             VariantConfig::ChatCompletion(params) => {
                 params
-                    .prepare_batch_inference(
+                    .start_batch_inference(
                         inputs,
                         models,
                         function,

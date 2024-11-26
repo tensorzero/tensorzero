@@ -258,7 +258,7 @@ impl Variant for DiclConfig {
         vec![]
     }
 
-    async fn prepare_batch_inference<'a, 'request>(
+    async fn start_batch_inference<'a, 'request>(
         &'a self,
         _input: &[Input],
         _models: &'request InferenceModels<'a>,
