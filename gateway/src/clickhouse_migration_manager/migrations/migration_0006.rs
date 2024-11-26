@@ -1,0 +1,151 @@
+use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse_migration_manager::migration_trait::Migration;
+use crate::error::{Error, ErrorDetails};
+
+/// This migration is used to set up the ClickHouse database for batch inference
+/// We will add two main tables: `BatchModelInference` and `BatchRequest` as well as a
+/// materialized view `BatchIdByInferenceId` that maps inference ids to batch ids.
+///
+/// `BatchModelInference` contains each actual inference being made in a batch request.
+/// It should contain enough information to create the eventual insertions into
+/// JsonInference, ChatInference, and ModelInference once the batch has been completed.
+///
+/// `BatchRequest` contains metadata about a batch request.
+/// Each time the batch is polled by either inference_id or batch_id, a row will be written to this table.
+/// This allows us to know and also to know the history of actions which have been taken here.
+pub struct Migration0006<'a> {
+    pub clickhouse: &'a ClickHouseConnectionInfo,
+}
+
+impl<'a> Migration for Migration0006<'a> {
+    /// Check if you can connect to the database
+    /// Then check if the two inference tables exist as the sources for the materialized views
+    /// If all of this is OK, then we can apply the migration
+    async fn can_apply(&self) -> Result<(), Error> {
+        self.clickhouse.health().await.map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseMigration {
+                id: "0006".to_string(),
+                message: e.to_string(),
+            })
+        })?;
+        Ok(())
+    }
+
+    /// Check if the migration has already been applied by checking if the new tables exist or the new view exists
+    async fn should_apply(&self) -> Result<bool, Error> {
+        let database = self.clickhouse.database();
+
+        let tables = vec![
+            "BatchModelInference",
+            "BatchRequest",
+            "BatchIdByInferenceId",
+            "BatchIdByInferenceIdView",
+        ];
+        for table in tables {
+            let query = format!(
+                r#"SELECT EXISTS(
+                    SELECT 1
+                    FROM system.tables
+                    WHERE database = '{database}' AND name = '{table}'
+                )"#
+            );
+
+            match self.clickhouse.run_query(query).await {
+                Err(e) => {
+                    return Err(ErrorDetails::ClickHouseMigration {
+                        id: "0006".to_string(),
+                        message: e.to_string(),
+                    }
+                    .into())
+                }
+                Ok(response) => {
+                    if response.trim() != "1" {
+                        return Ok(true);
+                    }
+                }
+            }
+        }
+
+        // Everything is in place, so we should not apply the migration
+        Ok(false)
+    }
+
+    async fn apply(&self) -> Result<(), Error> {
+        // Create the `BatchModelInference` table
+        let query = r#"
+            CREATE TABLE IF NOT EXISTS BatchModelInference
+            (
+                id UUID,
+                function_name LowCardinality(String),
+                variant_name LowCardinality(String),
+                episode_id UUID,
+                input String,
+                tool_params String,
+                inference_params String,
+                timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id),
+                batch_id UUID,
+            ) ENGINE = MergeTree()
+            ORDER BY (batch_id, id)
+        "#;
+        let _ = self.clickhouse.run_query(query.to_string()).await?;
+
+        // Create the `BatchRequest` table
+        let query = r#"
+            CREATE TABLE IF NOT EXISTS BatchRequest
+            (
+                batch_id UUID,
+                id UUID,
+                batch_params String,
+                model_provider_type String,
+                status Enum('pending' = 1, 'completed' = 2, 'failed' = 3),
+                errors Map(UUID, String),
+                timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id),
+            ) ENGINE = MergeTree()
+            ORDER BY (batch_id, id)
+        "#;
+        let _ = self.clickhouse.run_query(query.to_string()).await?;
+
+        // Create the BatchIdByInferenceId table
+        let query = r#"
+            CREATE TABLE IF NOT EXISTS BatchIdByInferenceId
+            (
+                inference_id UUID,
+                batch_id UUID,
+            ) ENGINE = MergeTree()
+            ORDER BY (inference_id)
+        "#;
+        let _ = self.clickhouse.run_query(query.to_string()).await?;
+
+        // Create the materialized view for the BatchIdByInferenceId table
+        let query = r#"
+            CREATE MATERIALIZED VIEW IF NOT EXISTS BatchIdByInferenceIdView
+            TO BatchIdByInferenceId
+            AS
+                SELECT
+                    id as inference_id,
+                    batch_id
+                FROM BatchModelInference
+            "#;
+        let _ = self.clickhouse.run_query(query.to_string()).await?;
+        Ok(())
+    }
+
+    /// Check if the migration has succeeded (i.e. it should not be applied again)
+    async fn has_succeeded(&self) -> Result<bool, Error> {
+        let should_apply = self.should_apply().await?;
+        Ok(!should_apply)
+    }
+
+    fn rollback_instructions(&self) -> String {
+        "\
+            -- Drop the materialized views\n\
+            DROP MATERIALIZED VIEW IF EXISTS BatchIdByInferenceIdView;\n\
+            \n\
+            -- Drop the tables\n\
+            DROP TABLE IF EXISTS BatchIdByInferenceId;\n\
+            DROP TABLE IF EXISTS BatchRequest;\n\
+            DROP TABLE IF EXISTS BatchModelInference;\n\
+        "
+        .to_string()
+    }
+}
