@@ -75,7 +75,6 @@ async def test_async_basic_inference(async_client):
 
 @pytest.mark.asyncio
 async def test_async_inference_streaming(async_client):
-    start_time = time()
     stream = await async_client.inference(
         function_name="basic_test",
         input={
@@ -85,14 +84,18 @@ async def test_async_inference_streaming(async_client):
         tags={"key": "value"},
         stream=True,
     )
-    first_chunk_duration = None
+
     chunks = []
+    previous_chunk_timestamp = None
+    last_chunk_duration = None
     async for chunk in stream:
+        if previous_chunk_timestamp is not None:
+            last_chunk_duration = time() - previous_chunk_timestamp
+        previous_chunk_timestamp = time()
         chunks.append(chunk)
-        if first_chunk_duration is None:
-            first_chunk_duration = time() - start_time
-    last_chunk_duration = time() - start_time - first_chunk_duration
-    assert last_chunk_duration > first_chunk_duration + 0.1
+
+    assert last_chunk_duration > 0.01
+
     expected_text = [
         "Wally,",
         " the",
@@ -135,7 +138,7 @@ async def test_async_inference_streaming(async_client):
 @pytest.mark.asyncio
 async def test_async_inference_streaming_nonexistent_function(async_client):
     with pytest.raises(TensorZeroError) as exc_info:
-        await async_client.inference(
+        stream = await async_client.inference(
             function_name="does_not_exist",
             input={
                 "system": {"assistant_name": "Alfred Pennyworth"},
@@ -143,6 +146,11 @@ async def test_async_inference_streaming_nonexistent_function(async_client):
             },
             stream=True,
         )
+
+        # The httpx client won't make a request until you start consuming the stream
+        async for chunk in stream:
+            pass
+
     assert exc_info.value.status_code == 404
     assert (
         str(exc_info.value)
@@ -153,7 +161,7 @@ async def test_async_inference_streaming_nonexistent_function(async_client):
 @pytest.mark.asyncio
 async def test_async_inference_streaming_malformed_input(async_client):
     with pytest.raises(TensorZeroError) as exc_info:
-        await async_client.inference(
+        stream = await async_client.inference(
             function_name="basic_test",
             input={
                 "system": {"name_of_assistant": "Alfred Pennyworth"},  # WRONG
@@ -161,6 +169,11 @@ async def test_async_inference_streaming_malformed_input(async_client):
             },
             stream=True,
         )
+
+        # The httpx client won't make a request until you start consuming the stream
+        async for chunk in stream:
+            pass
+
     assert exc_info.value.status_code == 400
     assert (
         str(exc_info.value)
@@ -486,7 +499,6 @@ def test_sync_malformed_inference(sync_client):
 
 
 def test_sync_inference_streaming(sync_client):
-    start_time = time()
     stream = sync_client.inference(
         function_name="basic_test",
         input={
@@ -496,14 +508,17 @@ def test_sync_inference_streaming(sync_client):
         stream=True,
         tags={"key": "value"},
     )
-    first_chunk_duration = None
+
     chunks = []
+    previous_chunk_timestamp = None
+    last_chunk_duration = None
     for chunk in stream:
+        if previous_chunk_timestamp is not None:
+            last_chunk_duration = time() - previous_chunk_timestamp
+        previous_chunk_timestamp = time()
         chunks.append(chunk)
-        if first_chunk_duration is None:
-            first_chunk_duration = time() - start_time
-    last_chunk_duration = time() - start_time - first_chunk_duration
-    assert last_chunk_duration > first_chunk_duration + 0.1
+
+    assert last_chunk_duration > 0.01
 
     expected_text = [
         "Wally,",
@@ -546,7 +561,7 @@ def test_sync_inference_streaming(sync_client):
 
 def test_sync_inference_streaming_nonexistent_function(sync_client):
     with pytest.raises(TensorZeroError) as exc_info:
-        sync_client.inference(
+        stream = sync_client.inference(
             function_name="does_not_exist",
             input={
                 "system": {"assistant_name": "Alfred Pennyworth"},
@@ -554,7 +569,34 @@ def test_sync_inference_streaming_nonexistent_function(sync_client):
             },
             stream=True,
         )
+
+        # The httpx client won't make a request until you start consuming the stream
+        for chunk in stream:
+            pass
+
     assert exc_info.value.status_code == 404
+
+
+def test_sync_inference_streaming_malformed_input(sync_client):
+    with pytest.raises(TensorZeroError) as exc_info:
+        stream = sync_client.inference(
+            function_name="basic_test",
+            input={
+                "system": {"name_of_assistant": "Alfred Pennyworth"},  # WRONG
+                "messages": [{"role": "user", "content": "Hello"}],
+            },
+            stream=True,
+        )
+
+        # The httpx client won't make a request until you start consuming the stream
+        for chunk in stream:
+            pass
+
+    assert exc_info.value.status_code == 400
+    assert (
+        str(exc_info.value)
+        == 'TensorZeroError (status code 400): {"error":"JSON Schema validation failed for Function:\\n\\n\\"assistant_name\\" is a required property\\nData: {\\"name_of_assistant\\":\\"Alfred Pennyworth\\"}Schema: {\\"type\\":\\"object\\",\\"properties\\":{\\"assistant_name\\":{\\"type\\":\\"string\\"}},\\"required\\":[\\"assistant_name\\"]}"}'
+    )
 
 
 def test_sync_tool_call_inference(sync_client):
