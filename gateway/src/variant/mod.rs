@@ -14,6 +14,7 @@ use crate::endpoints::inference::{InferenceClients, InferenceModels, InferencePa
 use crate::error::Error;
 use crate::error::ErrorDetails;
 use crate::function::FunctionConfig;
+use crate::inference::types::BatchModelInferenceWithMetadata;
 use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, Input, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, ModelInferenceResponseWithMetadata, RequestMessage,
@@ -198,7 +199,7 @@ pub trait Variant {
         inference_config: &'request BatchInferenceConfig,
         clients: &'request InferenceClients,
         inference_params: Vec<InferenceParams>,
-    ) -> Result<InferenceResult<'a>, Error>;
+    ) -> Result<BatchModelInferenceWithMetadata<'a>, Error>;
 }
 
 impl VariantConfig {
@@ -354,7 +355,7 @@ impl Variant for VariantConfig {
         inference_config: &'request BatchInferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: Vec<InferenceParams>,
-    ) -> Result<InferenceResult<'a>, Error> {
+    ) -> Result<BatchModelInferenceWithMetadata<'a>, Error> {
         match self {
             VariantConfig::ChatCompletion(params) => {
                 params
@@ -682,13 +683,13 @@ mod tests {
         };
 
         // Create a sample inference config
-        let inference_config = OwnedInferenceConfig {
+        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
             templates: &templates,
             tool_config: Some(tool_config.clone()),
             function_name: "test_function".to_string(),
             variant_name: "test_variant".to_string(),
             dynamic_output_schema: None,
-        };
+        });
 
         // Define common inference parameters
         let inference_params = InferenceParams {
@@ -805,13 +806,13 @@ mod tests {
             "required": ["result"],
         });
         let dynamic_output_schema = DynamicJSONSchema::new(dynamic_output_schema_value.clone());
-        let inference_config_dynamic = OwnedInferenceConfig {
+        let inference_config_dynamic = InferenceConfig::Owned(OwnedInferenceConfig {
             templates: &templates,
             tool_config: Some(tool_config.clone()),
             function_name: "test_function".to_string(),
             variant_name: "test_variant".to_string(),
             dynamic_output_schema: Some(dynamic_output_schema.clone()),
-        };
+        });
 
         let json_mode = JsonMode::ImplicitTool;
 
@@ -884,13 +885,13 @@ mod tests {
         };
         let templates = get_test_template_config();
         let inference_params = InferenceParams::default();
-        let inference_config = OwnedInferenceConfig {
+        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             function_name: "test_function".to_string(),
             variant_name: "test_variant".to_string(),
             dynamic_output_schema: None,
-        };
+        });
 
         // Test case 1: Successful inference with ChatCompletionConfig and FunctionConfigChat
         let model_name = "dummy_chat_model";
@@ -1115,13 +1116,13 @@ mod tests {
         };
         let templates = get_test_template_config();
         let inference_params = InferenceParams::default();
-        let inference_config = OwnedInferenceConfig {
+        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             function_name: "test_function".to_string(),
             variant_name: "test_variant".to_string(),
             dynamic_output_schema: None,
-        };
+        });
 
         let model_name = "dummy_chat_model";
         let error_model_name = "error";

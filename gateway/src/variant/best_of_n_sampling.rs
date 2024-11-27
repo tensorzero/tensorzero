@@ -12,8 +12,8 @@ use crate::embeddings::EmbeddingModelConfig;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
 use crate::inference::types::{
-    ContentBlock, FunctionType, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-    ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
+    BatchModelInferenceWithMetadata, ContentBlock, FunctionType, ModelInferenceRequest,
+    ModelInferenceRequestJsonMode, ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::{
@@ -168,7 +168,7 @@ impl Variant for BestOfNSamplingConfig {
         inference_config: &'request BatchInferenceConfig<'request>,
         _clients: &'request InferenceClients<'request>,
         _inference_params: Vec<InferenceParams>,
-    ) -> Result<InferenceResult<'a>, Error> {
+    ) -> Result<BatchModelInferenceWithMetadata<'a>, Error> {
         Err(ErrorDetails::UnsupportedVariantForBatchInference {
             variant_name: inference_config.variant_name.clone(),
         }
@@ -655,6 +655,7 @@ mod tests {
         },
         minijinja_util::tests::get_test_template_config,
         model::ProviderConfig,
+        variant::OwnedInferenceConfig,
     };
 
     use super::*;
@@ -1116,13 +1117,13 @@ mod tests {
             system: None,
             messages: vec![],
         };
-        let inference_config = OwnedInferenceConfig {
+        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             dynamic_output_schema: None,
             function_name: "".to_string(),
             variant_name: "".to_string(),
-        };
+        });
 
         let selected = best_of_n_variant
             .select_best_candidate(

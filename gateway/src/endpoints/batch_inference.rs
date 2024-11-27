@@ -1,36 +1,32 @@
 use axum::body::Body;
 use axum::extract::State;
-use axum::response::Response;
+use axum::response::{IntoResponse, Response};
 use axum::{debug_handler, Json};
+use itertools::izip;
 use metrics::counter;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::time::Duration;
+use std::iter::repeat;
 use tokio::time::Instant;
 use tracing::instrument;
 use uuid::Uuid;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::config_parser::Config;
-use crate::embeddings::EmbeddingModelConfig;
 use crate::error::{Error, ErrorDetails};
 use crate::function::sample_variant;
-use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
-    ChatInferenceDatabaseInsert, ContentBlockOutput, InferenceResult, Input,
-    JsonInferenceDatabaseInsert, JsonInferenceOutput, ModelInferenceResponseWithMetadata,
-    RequestMessage, Usage,
+    BatchModelInferenceWithMetadata, ContentBlockOutput, InferenceResult, Input,
+    JsonInferenceOutput, ModelInferenceResponseWithMetadata, RequestMessage, Usage,
 };
-use crate::jsonschema_util::DynamicJSONSchema;
-use crate::model::ModelConfig;
 use crate::tool::{
     BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams, ToolCallConfig,
+    ToolCallConfigDatabaseInsert,
 };
 use crate::uuid_util::validate_episode_id;
-use crate::variant::{BatchInferenceConfig, OwnedInferenceConfig, Variant};
+use crate::variant::{BatchInferenceConfig, Variant};
 
 use super::inference::{
     ChatCompletionInferenceParams, InferenceClients, InferenceModels, InferenceParams,
@@ -158,11 +154,10 @@ pub async fn prepare_batch_inference_handler(
         .enumerate()
         .try_for_each(|(i, input)| {
             function.validate_input(input).map_err(|e| {
-                ErrorDetails::BatchInputValidation {
+                Error::new(ErrorDetails::BatchInputValidation {
                     index: i,
                     message: e.to_string(),
-                }
-                .into()
+                })
             })
         })?;
 
@@ -183,7 +178,7 @@ pub async fn prepare_batch_inference_handler(
     let episode_ids: BatchEpisodeIds =
         BatchEpisodeIdsWithSize(params.episode_ids, num_inferences).try_into()?;
 
-    // Increment the request count if we're not in dryrun mode
+    // Increment the request count
     counter!(
         "request_count",
         "endpoint" => "post_batch_inference",
@@ -248,7 +243,6 @@ pub async fn prepare_batch_inference_handler(
                 variant_inference_params,
             )
             .await;
-        // TODO(Viraj): stopped here
 
         let result = match result {
             Ok(result) => result,
@@ -263,33 +257,29 @@ pub async fn prepare_batch_inference_handler(
             }
         };
 
-        if !dryrun {
-            // Spawn a thread for a trailing write to ClickHouse so that it doesn't block the response
-            let write_metadata = InferenceDatabaseInsertMetadata {
-                function_name: params.function_name,
-                variant_name: variant_name.to_string(),
-                episode_id,
-                tool_params: inference_config.tool_config,
-                processing_time: start_time.elapsed(),
-                tags: params.tags,
-            };
+        // Spawn a thread for a trailing write to ClickHouse so that it doesn't block the response
+        let write_metadata = BatchInferenceDatabaseInsertMetadata {
+            function_name: params.function_name.as_str(),
+            variant_name: variant_name,
+            episode_ids: &episode_ids,
+            tags: params.tags,
+            tool_configs: inference_config.tool_configs,
+        };
 
-            let result_to_write = result.clone();
+        let (batch_id, inference_ids) = write_inference(
+            &clickhouse_connection_info,
+            params.inputs,
+            result,
+            write_metadata,
+        )
+        .await?;
 
-            tokio::spawn(async move {
-                write_inference(
-                    &clickhouse_connection_info,
-                    params.input,
-                    result_to_write,
-                    write_metadata,
-                )
-                .await;
-            });
-        }
-
-        let response = InferenceResponse::new(result, episode_id, variant_name.to_string());
-
-        return Ok(InferenceOutput::NonStreaming(response));
+        return Ok(Json(PrepareBatchInferenceOutput {
+            batch_id,
+            inference_ids,
+            episode_ids,
+        })
+        .into_response());
     }
 
     // Eventually, if we get here, it means we tried every variant and none of them worked
@@ -299,56 +289,124 @@ pub async fn prepare_batch_inference_handler(
     .into())
 }
 
-#[derive(Debug)]
-pub struct InferenceDatabaseInsertMetadata {
-    pub function_name: String,
-    pub variant_name: String,
-    pub episode_id: Uuid,
-    pub tool_params: Option<ToolCallConfig>,
-    pub processing_time: Duration,
-    pub tags: HashMap<String, String>,
+#[derive(Debug, Serialize)]
+struct PrepareBatchInferenceOutput {
+    batch_id: Uuid,
+    inference_ids: Vec<Uuid>,
+    episode_ids: Vec<Uuid>,
 }
 
+#[derive(Debug)]
+struct BatchInferenceDatabaseInsertMetadata<'a> {
+    pub function_name: &'a str,
+    pub variant_name: &'a str,
+    pub episode_ids: &'a Vec<Uuid>,
+    pub tags: Option<Vec<Option<HashMap<String, String>>>>,
+    pub tool_configs: Vec<Option<ToolCallConfig>>,
+}
+
+#[derive(Debug, Serialize)]
+struct BatchModelInferenceInsert<'a> {
+    pub id: String,
+    pub batch_id: &'a str,
+    pub function_name: &'a str,
+    pub variant_name: &'a str,
+    pub episode_id: String,
+    pub input: String,
+    pub input_messages: String,
+    pub system: Option<String>,
+    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    pub inference_params: &'a InferenceParams,
+    pub output_schema: Option<String>,
+    pub model_name: &'a str,
+    pub model_provider_name: &'a str,
+    pub tags: Option<HashMap<String, String>>,
+}
+
+// Returns the batch ID and the inference IDs that were written to ClickHouse
 async fn write_inference<'a>(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
-    input: Input,
-    result: InferenceResult<'a>,
-    metadata: InferenceDatabaseInsertMetadata,
-) {
-    let serialized_input = match serde_json::to_string(&input).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: e.to_string(),
-        })
-    }) {
-        Ok(serialized_input) => serialized_input,
-        Err(_) => {
-            return;
-        }
-    };
-    let model_responses: Vec<serde_json::Value> = result.get_serialized_model_inferences();
-    // Write the model responses to the ModelInference table
-    for response in model_responses {
-        let _ = clickhouse_connection_info
-            .write(&response, "ModelInference")
-            .await;
+    inputs: Vec<Input>,
+    result: BatchModelInferenceWithMetadata<'a>,
+    metadata: BatchInferenceDatabaseInsertMetadata<'a>,
+) -> Result<(Uuid, Vec<Uuid>), Error> {
+    let mut rows = vec![];
+    let batch_id = result.batch_id.to_string();
+
+    for (
+        i,
+        inference_id,
+        input,
+        input_messages,
+        system,
+        tool_config,
+        inference_params,
+        output_schema,
+        tags,
+    ) in izip!(
+        0..,
+        result.inference_ids.iter(),
+        inputs,
+        result.input_messages.iter(),
+        result.systems.iter(),
+        metadata.tool_configs,
+        result.inference_params.iter(),
+        result.output_schemas.iter(),
+        metadata
+            .tags
+            .unwrap_or_default()
+            .into_iter()
+            .chain(repeat(None)),
+    ) {
+        let input = serde_json::to_string(&input).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: e.to_string(),
+            })
+        })?;
+        let input_messages = serde_json::to_string(&input_messages).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: e.to_string(),
+            })
+        })?;
+        let system = system
+            .as_ref()
+            .map(|s| serde_json::to_string(&s))
+            .transpose()
+            .map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: e.to_string(),
+                })
+            })?;
+        let tool_params: Option<ToolCallConfigDatabaseInsert> = tool_config.map(|t| t.into());
+        let output_schema = output_schema
+            .map(|s| serde_json::to_string(&s))
+            .transpose()
+            .map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: e.to_string(),
+                })
+            })?;
+        rows.push(BatchModelInferenceInsert {
+            id: inference_id.to_string(),
+            batch_id: &batch_id,
+            function_name: metadata.function_name,
+            variant_name: metadata.variant_name,
+            episode_id: metadata.episode_ids[i].to_string(),
+            input,
+            input_messages,
+            system,
+            tool_params,
+            inference_params,
+            output_schema,
+            model_name: result.model_name,
+            model_provider_name: result.model_provider_name,
+            tags,
+        });
     }
-    // Write the inference to the Inference table
-    match result {
-        InferenceResult::Chat(result) => {
-            let chat_inference =
-                ChatInferenceDatabaseInsert::new(result, serialized_input, metadata);
-            let _ = clickhouse_connection_info
-                .write(&chat_inference, "ChatInference")
-                .await;
-        }
-        InferenceResult::Json(result) => {
-            let json_inference =
-                JsonInferenceDatabaseInsert::new(result, serialized_input, metadata);
-            let _ = clickhouse_connection_info
-                .write(&json_inference, "JsonInference")
-                .await;
-        }
-    }
+    clickhouse_connection_info
+        .write(&rows, "BatchModelInference")
+        .await?;
+    Ok((result.batch_id, result.inference_ids))
 }
 
 /// InferenceResponse and InferenceResultChunk determine what gets serialized and sent to the client

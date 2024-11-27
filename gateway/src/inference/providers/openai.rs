@@ -20,9 +20,10 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-    ProviderBatchInferenceResponse, ProviderInferenceResponse, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStream, RequestMessage, Role, Text, TextChunk, Usage,
+    BatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, Latency,
+    ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
+    ProviderInferenceResponseChunk, ProviderInferenceResponseStream, RequestMessage, Role, Text,
+    TextChunk, Usage,
 };
 use crate::model::CredentialLocation;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
@@ -189,7 +190,7 @@ impl InferenceProvider for OpenAIProvider {
         requests: &'a [ModelInferenceRequest<'_>],
         client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<ProviderBatchInferenceResponse, Error> {
+    ) -> Result<BatchProviderInferenceResponse, Error> {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let request_url = get_files_url(self.api_base.as_ref())?;
         let inference_ids: Vec<Uuid> = requests.iter().map(|_| Uuid::now_v7()).collect();
@@ -261,7 +262,7 @@ impl InferenceProvider for OpenAIProvider {
                 message: format!("Error parsing JSON response: {e}"),
             })
         })?;
-        Ok(ProviderBatchInferenceResponse {
+        Ok(BatchProviderInferenceResponse {
             batch_id: Uuid::now_v7(),
             inference_ids,
             batch_params: json!({"file_id": file_id, "batch_id": response.id}),

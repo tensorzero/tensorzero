@@ -6,7 +6,9 @@ use serde::Deserialize;
 
 use crate::embeddings::EmbeddingResponseWithMetadata;
 use crate::endpoints::inference::InferenceModels;
-use crate::inference::types::{ModelInferenceRequest, RequestMessage, Role};
+use crate::inference::types::{
+    BatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role,
+};
 use crate::{
     embeddings::{EmbeddingModelConfig, EmbeddingRequest},
     endpoints::inference::{InferenceClients, InferenceParams},
@@ -23,7 +25,7 @@ use crate::{
 use super::{
     infer_model_request, infer_model_request_stream, prepare_model_inference_request,
     BatchInferenceConfig, InferModelRequestArgs, InferenceConfig, JsonMode, ModelUsedInfo,
-    OwnedInferenceConfig, RetryConfig, Variant,
+    RetryConfig, Variant,
 };
 
 /// The primary configuration for the Dicl variant
@@ -266,7 +268,7 @@ impl Variant for DiclConfig {
         inference_config: &'request BatchInferenceConfig<'request>,
         _clients: &'request InferenceClients<'request>,
         _inference_params: Vec<InferenceParams>,
-    ) -> Result<InferenceResult<'a>, Error> {
+    ) -> Result<BatchModelInferenceWithMetadata<'a>, Error> {
         Err(ErrorDetails::UnsupportedVariantForBatchInference {
             variant_name: inference_config.variant_name.clone(),
         }

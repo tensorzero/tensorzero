@@ -8,7 +8,9 @@ use tokio::time::{timeout, Duration};
 
 use crate::embeddings::EmbeddingModelConfig;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
-use crate::inference::types::{ModelInferenceRequest, RequestMessage, Role, Usage};
+use crate::inference::types::{
+    BatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role, Usage,
+};
 use crate::{
     endpoints::inference::InferenceParams,
     error::{Error, ErrorDetails},
@@ -149,7 +151,7 @@ impl Variant for MixtureOfNConfig {
         inference_config: &'request BatchInferenceConfig<'request>,
         _clients: &'request InferenceClients<'request>,
         _inference_params: Vec<InferenceParams>,
-    ) -> Result<InferenceResult<'a>, Error> {
+    ) -> Result<BatchModelInferenceWithMetadata<'a>, Error> {
         Err(ErrorDetails::UnsupportedVariantForBatchInference {
             variant_name: inference_config.variant_name.clone(),
         }
@@ -517,6 +519,7 @@ mod tests {
         minijinja_util::tests::get_test_template_config,
         model::ProviderConfig,
         tool::{ToolCallConfig, ToolChoice},
+        variant::OwnedInferenceConfig,
     };
 
     use super::*;
@@ -957,13 +960,13 @@ mod tests {
             system: None,
             messages: vec![],
         };
-        let inference_config = OwnedInferenceConfig {
+        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             dynamic_output_schema: None,
             function_name: "".to_string(),
             variant_name: "".to_string(),
-        };
+        });
 
         let fused = mixture_of_n_variant
             .fuse_candidates(

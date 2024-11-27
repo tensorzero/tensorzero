@@ -90,19 +90,19 @@ impl ClickHouseConnectionInfo {
 
     pub async fn write(
         &self,
-        row: &(impl Serialize + Send + Sync),
+        rows: &[impl Serialize + Send + Sync],
         table: &str,
     ) -> Result<(), Error> {
         match self {
             Self::Disabled => Ok(()),
             Self::Mock { mock_data, .. } => {
-                write_mock(row, table, &mut mock_data.write().await).await
+                write_mock(rows, table, &mut mock_data.write().await).await
             }
             Self::Production {
                 database_url,
                 client,
                 ..
-            } => write_production(database_url, client, row, table).await,
+            } => write_production(database_url, client, rows, table).await,
         }
     }
 
@@ -255,37 +255,56 @@ impl ClickHouseConnectionInfo {
 }
 
 async fn write_mock(
-    row: &(impl Serialize + Send + Sync),
+    rows: &[impl Serialize + Send + Sync],
     table: &str,
     tables: &mut RwLockWriteGuard<'_, HashMap<String, Vec<serde_json::Value>>>,
 ) -> Result<(), Error> {
-    let row_value = serde_json::to_value(row).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: e.to_string(),
-        })
-    })?;
-    tables.entry(table.to_string()).or_default().push(row_value);
+    for row in rows {
+        let row_value = serde_json::to_value(row).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: e.to_string(),
+            })
+        })?;
+        tables.entry(table.to_string()).or_default().push(row_value);
+    }
     Ok(())
 }
 
 async fn write_production(
     database_url: &Url,
     client: &Client,
-    row: &(impl Serialize + Send + Sync),
+    rows: &[impl Serialize + Send + Sync],
     table: &str,
 ) -> Result<(), Error> {
-    let row_json = serde_json::to_string(row).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: e.to_string(),
+    if rows.is_empty() {
+        // Empty rows is a no-op
+        return Ok(());
+    }
+
+    // let row_json = serde_json::to_string(rows).map_err(|e| {
+    //     Error::new(ErrorDetails::Serialization {
+    //         message: e.to_string(),
+    //     })
+    // })?;
+    let rows_json: Result<Vec<String>, _> = rows
+        .iter()
+        .map(|row| {
+            serde_json::to_string(row).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: e.to_string(),
+                })
+            })
         })
-    })?;
+        .collect();
+    let rows_json = rows_json?;
+    let rows_json = rows_json.join("\n");
 
     // We can wait for the async insert since we're spawning a new tokio task to do the insert
     let query = format!(
         "INSERT INTO {table}\n\
         SETTINGS async_insert=1, wait_for_async_insert=1\n\
         FORMAT JSONEachRow\n\
-        {row_json}"
+        {rows_json}"
     );
     let response = client
         .post(database_url.clone())

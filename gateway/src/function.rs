@@ -446,6 +446,7 @@ mod tests {
     use crate::minijinja_util::TemplateConfig;
     use crate::tool::ToolCall;
     use crate::variant::chat_completion::ChatCompletionConfig;
+    use crate::variant::OwnedInferenceConfig;
 
     use super::*;
     use serde_json::json;
@@ -1278,13 +1279,14 @@ mod tests {
             model_name: "model_name",
             latency,
         };
-        let inference_config = OwnedInferenceConfig {
+        let templates = TemplateConfig::default();
+        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
             tool_config: None,
             function_name: "".to_string(),
             variant_name: "".to_string(),
-            templates: &TemplateConfig::default(),
+            templates: &templates,
             dynamic_output_schema: None,
-        };
+        });
         let response = function_config
             .prepare_response(
                 inference_id,
@@ -1555,13 +1557,13 @@ mod tests {
             },
             "required": ["answer"]
         }));
-        let inference_config = OwnedInferenceConfig {
+        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
             tool_config: None,
             function_name: "".to_string(),
             variant_name: "".to_string(),
-            templates: &TemplateConfig::default(),
+            templates: &templates,
             dynamic_output_schema: Some(dynamic_output_schema),
-        };
+        });
         // Test with a correct content block
         let inference_id = Uuid::now_v7();
         let content_blocks = vec![r#"{"answer": "42"}"#.to_string().into()];
