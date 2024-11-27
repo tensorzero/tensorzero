@@ -342,14 +342,14 @@ class TensorZeroGateway(BaseTensorZeroGateway):
 
             for line in response.iter_lines():
                 if line.startswith("data: "):
-                    data = line[6:].strip()
-                    if data == "[DONE]":
+                    event_data = line[6:].strip()
+                    if event_data == "[DONE]":
                         break
                     try:
-                        parsed_data: Dict[str, Any] = json.loads(data)
+                        parsed_data: Dict[str, Any] = json.loads(event_data)
                         yield parse_inference_chunk(parsed_data)
                     except json.JSONDecodeError:
-                        self.logger.error(f"Failed to parse SSE data: {data}")
+                        self.logger.error(f"Failed to parse SSE data: {event_data}")
 
 
 class AsyncTensorZeroGateway(BaseTensorZeroGateway):
@@ -510,11 +510,11 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
 
             async for line in response.aiter_lines():
                 if line.startswith("data: "):
-                    data = line[6:].strip()
-                    if data == "[DONE]":
+                    event_data = line[6:].strip()
+                    if event_data == "[DONE]":
                         break
                     try:
-                        parsed_data: Dict[str, Any] = json.loads(data)
+                        parsed_data: Dict[str, Any] = json.loads(event_data)
                         yield parse_inference_chunk(parsed_data)
                     except json.JSONDecodeError:
-                        self.logger.error(f"Failed to parse SSE data: {data}")
+                        self.logger.error(f"Failed to parse SSE data: {event_data}")
