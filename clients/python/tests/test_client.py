@@ -147,6 +147,7 @@ async def test_async_inference_streaming_nonexistent_function(async_client):
             stream=True,
         )
 
+        # The httpx client won't make a request until you start consuming the stream
         async for chunk in stream:
             pass
 
@@ -169,6 +170,7 @@ async def test_async_inference_streaming_malformed_input(async_client):
             stream=True,
         )
 
+        # The httpx client won't make a request until you start consuming the stream
         async for chunk in stream:
             pass
 
@@ -568,6 +570,7 @@ def test_sync_inference_streaming_nonexistent_function(sync_client):
             stream=True,
         )
 
+        # The httpx client won't make a request until you start consuming the stream
         for chunk in stream:
             pass
 
@@ -585,6 +588,7 @@ def test_sync_inference_streaming_malformed_input(sync_client):
             stream=True,
         )
 
+        # The httpx client won't make a request until you start consuming the stream
         for chunk in stream:
             pass
 

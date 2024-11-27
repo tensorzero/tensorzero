@@ -327,6 +327,8 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         """
         Parse the SSE stream from the response.
 
+        NOTE: The httpx client won't make a request until you start consuming the stream.
+
         :param url: The URL to stream from
         :param data: The request data to send
         :yield: InferenceChunk objects containing partial results
@@ -492,6 +494,8 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
     ) -> AsyncGenerator[InferenceChunk, None]:
         """
         Stream inference results from the server.
+
+        NOTE: The httpx client won't make a request until you start consuming the stream.
 
         :param url: The URL to stream from
         :param data: The request data to send
