@@ -39,6 +39,10 @@ async fn main() {
     let router = Router::new()
         .route("/inference", post(endpoints::inference::inference_handler))
         .route(
+            "/batch",
+            post(endpoints::batch_inference::prepare_batch_inference_handler),
+        )
+        .route(
             "/openai/v1/chat/completions",
             post(endpoints::openai_compatible::inference_handler),
         )

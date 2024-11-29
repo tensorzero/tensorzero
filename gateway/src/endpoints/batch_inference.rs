@@ -33,7 +33,7 @@ use super::inference::{
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Params {
+pub struct Params {
     // the function name
     pub function_name: String,
     // the episode IDs for each inference (if not provided, it'll be set to inference_id)
@@ -456,12 +456,12 @@ impl TryFrom<BatchEpisodeIdsWithSize> for BatchEpisodeIds {
 /// InferenceParams is the top-level struct for inference parameters.
 /// We backfill these from the configs given in the variants used and ultimately write them to the database.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
-struct BatchInferenceParams {
+pub struct BatchInferenceParams {
     pub chat_completion: BatchChatCompletionInferenceParams,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
-struct BatchChatCompletionInferenceParams {
+pub struct BatchChatCompletionInferenceParams {
     #[serde(default)]
     pub temperature: Option<Vec<Option<f32>>>,
     #[serde(default)]
