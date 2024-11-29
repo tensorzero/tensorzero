@@ -1,4 +1,3 @@
-use itertools::izip;
 use serde::Deserialize;
 use serde_json::Value;
 use std::{collections::HashMap, path::PathBuf};
@@ -13,7 +12,7 @@ use crate::inference::types::{
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
-use crate::variant::{BatchInferenceConfig, BorrowedInferenceConfig, JsonMode};
+use crate::variant::JsonMode;
 use crate::{
     inference::types::{InferenceResult, InputMessage},
     model::ModelConfig,
@@ -21,7 +20,8 @@ use crate::{
 
 use super::{
     infer_model_request, infer_model_request_stream, prepare_model_inference_request,
-    InferModelRequestArgs, InferenceConfig, ModelUsedInfo, RetryConfig, Variant,
+    InferModelRequestArgs, InferenceConfig, ModelUsedInfo, OwnedInferenceConfig, RetryConfig,
+    Variant,
 };
 
 #[derive(Debug, Default, Deserialize)]
@@ -154,15 +154,17 @@ impl Variant for ChatCompletionConfig {
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        inference_config: &'request OwnedInferenceConfig<'a>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult<'a>, Error> {
         let mut inference_params = inference_params;
+        let owned_inference_config = InferenceConfig::Owned(inference_config);
+
         let request = self.prepare_request(
             input,
             function,
-            inference_config,
+            &owned_inference_config,
             false,
             &mut inference_params,
         )?;
@@ -189,7 +191,7 @@ impl Variant for ChatCompletionConfig {
         input: &Input,
         models: &'request InferenceModels<'static>,
         function: &'static FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request OwnedInferenceConfig<'static>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<
@@ -201,10 +203,11 @@ impl Variant for ChatCompletionConfig {
         Error,
     > {
         let mut inference_params = inference_params;
+        let owned_inference_config = InferenceConfig::Owned(inference_config);
         let request = self.prepare_request(
             input,
             function,
-            inference_config,
+            &owned_inference_config,
             true,
             &mut inference_params,
         )?;
@@ -323,52 +326,27 @@ impl Variant for ChatCompletionConfig {
         templates
     }
 
-    async fn start_batch_inference<'a, 'request>(
+    async fn start_batch_inference<'a>(
         &'a self,
         inputs: &[Input],
-        models: &'request InferenceModels<'a>,
+        models: &'a InferenceModels<'a>,
         function: &'a FunctionConfig,
-        batch_inference_config: &'request BatchInferenceConfig<'request>,
-        clients: &'request InferenceClients<'request>,
+        inference_configs: &'a [InferenceConfig<'a, 'a>],
+        clients: &'a InferenceClients<'a>,
         inference_params: Vec<InferenceParams>,
     ) -> Result<BatchModelInferenceWithMetadata<'a>, Error> {
         // First construct all inference configs so they stick around for the duration of this function body
         let mut inference_params = inference_params;
-        let inference_configs: Vec<InferenceConfig> = izip!(
-            batch_inference_config
-                .tool_configs
-                .iter()
-                .map(|x| x.as_ref()),
-            batch_inference_config
-                .dynamic_output_schemas
-                .iter()
-                .map(|x| x.as_ref())
-        )
-        .map(|(tool_config, dynamic_output_schema)| {
-            InferenceConfig::Borrowed(BorrowedInferenceConfig {
-                templates: batch_inference_config.templates,
-                tool_config,
-                dynamic_output_schema,
-                function_name: &batch_inference_config.function_name,
-                variant_name: &batch_inference_config.variant_name,
-            })
-        })
-        .collect();
 
         // Next, prepare all the ModelInferenceRequests
         let mut inference_requests = Vec::new();
-        for ((input, mut inference_param), inference_config) in inputs
+        for ((input, inference_param), inference_config) in inputs
             .iter()
             .zip(&mut inference_params)
-            .zip(&inference_configs)
+            .zip(inference_configs)
         {
-            let request = self.prepare_request(
-                input,
-                function,
-                inference_config,
-                false,
-                &mut inference_param,
-            )?;
+            let request =
+                self.prepare_request(input, function, inference_config, false, inference_param)?;
             inference_requests.push(request);
         }
         let model_config = models.models.get(&self.model).ok_or_else(|| {
@@ -379,8 +357,8 @@ impl Variant for ChatCompletionConfig {
         let model_inference_response = model_config
             .start_batch_inference(
                 &inference_requests,
-                &clients.http_client,
-                &clients.credentials,
+                clients.http_client,
+                clients.credentials,
             )
             .await?;
         Ok(BatchModelInferenceWithMetadata::new(
@@ -812,13 +790,13 @@ mod tests {
             messages,
         };
         let inference_params = InferenceParams::default();
-        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             function_name: "".to_string(),
             variant_name: "".to_string(),
             dynamic_output_schema: None,
-        });
+        };
         let models = HashMap::new();
         let inference_models = InferenceModels {
             models: &models,
@@ -858,13 +836,13 @@ mod tests {
             models: &models,
             embedding_models: &HashMap::new(),
         };
-        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             function_name: "".to_string(),
             variant_name: "".to_string(),
             dynamic_output_schema: None,
-        });
+        };
         let result = chat_completion_config
             .infer(
                 &input,
@@ -896,13 +874,13 @@ mod tests {
             models: &models,
             embedding_models: &HashMap::new(),
         };
-        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             function_name: "".to_string(),
             variant_name: "".to_string(),
             dynamic_output_schema: None,
-        });
+        };
         let err = chat_completion_config
             .infer(
                 &input,
@@ -949,13 +927,13 @@ mod tests {
             models: &models,
             embedding_models: &HashMap::new(),
         };
-        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             function_name: "".to_string(),
             variant_name: "".to_string(),
             dynamic_output_schema: None,
-        });
+        };
         let result = chat_completion_config
             .infer(
                 &input,
@@ -1019,13 +997,13 @@ mod tests {
             embedding_models: &HashMap::new(),
         };
         let weather_tool_config = get_temperature_tool_config();
-        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: Some(weather_tool_config),
             function_name: "".to_string(),
             variant_name: "".to_string(),
             dynamic_output_schema: None,
-        });
+        };
         let result = chat_completion_config
             .infer(
                 &input,
@@ -1099,13 +1077,13 @@ mod tests {
             output_schema,
             implicit_tool_call_config,
         });
-        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             function_name: "".to_string(),
             variant_name: "".to_string(),
             dynamic_output_schema: None,
-        });
+        };
         let inference_params = InferenceParams::default();
         let result = chat_completion_config
             .infer(
@@ -1152,13 +1130,13 @@ mod tests {
             models: &models,
             embedding_models: &HashMap::new(),
         };
-        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             function_name: "".to_string(),
             variant_name: "".to_string(),
             dynamic_output_schema: None,
-        });
+        };
         let chat_completion_config = ChatCompletionConfig {
             model: "json".to_string(),
             weight: 1.0,
@@ -1244,13 +1222,13 @@ mod tests {
             },
             "required": ["answer"]
         }));
-        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             function_name: "".to_string(),
             variant_name: "".to_string(),
             dynamic_output_schema: Some(output_schema),
-        });
+        };
         let chat_completion_config = ChatCompletionConfig {
             model: "json".to_string(),
             weight: 1.0,
@@ -1327,13 +1305,13 @@ mod tests {
             },
             "required": ["response"]
         }));
-        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             function_name: "".to_string(),
             variant_name: "".to_string(),
             dynamic_output_schema: Some(output_schema),
-        });
+        };
         let chat_completion_config = ChatCompletionConfig {
             model: "json".to_string(),
             weight: 1.0,
@@ -1458,13 +1436,13 @@ mod tests {
             models,
             embedding_models,
         };
-        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates,
             tool_config: None,
+            dynamic_output_schema: None,
             function_name: "".to_string(),
             variant_name: "".to_string(),
-            dynamic_output_schema: None,
-        });
+        };
         let result = chat_completion_config
             .infer_stream(
                 &input,
@@ -1509,13 +1487,13 @@ mod tests {
             models,
             embedding_models,
         };
-        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates,
             tool_config: None,
             function_name: "".to_string(),
             variant_name: "".to_string(),
             dynamic_output_schema: None,
-        });
+        };
         let (first_chunk, mut stream, models_used) = chat_completion_config
             .infer_stream(
                 &input,
@@ -1601,18 +1579,19 @@ mod tests {
             parallel_tool_calls: false,
         });
         let mut inference_params = InferenceParams::default();
-        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
-            templates: &templates,
+        let inference_config = OwnedInferenceConfig {
+            templates,
             tool_config: None,
             function_name: "".to_string(),
             variant_name: "".to_string(),
             dynamic_output_schema: None,
-        });
+        };
+        let owned_inference_config = InferenceConfig::Owned(&inference_config);
         let model_request = chat_completion_config
             .prepare_request(
                 &input,
                 &function_config,
-                &inference_config,
+                &owned_inference_config,
                 stream,
                 &mut inference_params,
             )
@@ -1638,7 +1617,7 @@ mod tests {
             .prepare_request(
                 &input,
                 &function_config,
-                &inference_config,
+                &owned_inference_config,
                 stream,
                 &mut inference_params,
             )
@@ -1646,32 +1625,18 @@ mod tests {
         assert_eq!(model_request.temperature, Some(1.));
         assert_eq!(model_request.max_tokens, Some(200));
         assert_eq!(model_request.seed, Some(420));
+        assert_eq!(model_request.top_p, Some(0.9));
+        assert_eq!(model_request.presence_penalty, Some(0.1));
+        assert_eq!(model_request.frequency_penalty, Some(0.2));
         assert_eq!(inference_params.chat_completion.temperature, Some(1.));
         assert_eq!(inference_params.chat_completion.max_tokens, Some(200));
         assert_eq!(inference_params.chat_completion.seed, Some(420));
-        // We will vary temperature, max_tokens, and seed
-        let chat_completion_config = ChatCompletionConfig::default();
-        let mut inference_params = InferenceParams {
-            chat_completion: ChatCompletionInferenceParams {
-                temperature: Some(0.9),
-                ..Default::default()
-            },
-        };
-        let model_request = chat_completion_config
-            .prepare_request(
-                &input,
-                &function_config,
-                &inference_config,
-                stream,
-                &mut inference_params,
-            )
-            .unwrap();
-        assert_eq!(model_request.temperature, Some(0.9));
-        assert_eq!(model_request.max_tokens, None);
-        assert_eq!(model_request.seed, None);
-        assert_eq!(inference_params.chat_completion.temperature, Some(0.9));
-        assert_eq!(inference_params.chat_completion.max_tokens, None);
-        assert_eq!(inference_params.chat_completion.seed, None);
+        assert_eq!(inference_params.chat_completion.top_p, Some(0.9));
+        assert_eq!(inference_params.chat_completion.presence_penalty, Some(0.1));
+        assert_eq!(
+            inference_params.chat_completion.frequency_penalty,
+            Some(0.2)
+        );
 
         // We will vary temperature, max_tokens, and seed
         let chat_completion_config = ChatCompletionConfig {
@@ -1713,13 +1678,14 @@ mod tests {
                 parallel_tool_calls: false,
             },
         });
-        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
+        let owned_inference_config = OwnedInferenceConfig {
             templates,
             tool_config: None,
             dynamic_output_schema: None,
             function_name: "".to_string(),
             variant_name: "".to_string(),
-        });
+        };
+        let inference_config = InferenceConfig::Owned(&owned_inference_config);
         let mut inference_params = InferenceParams::default();
         let model_request = chat_completion_config
             .prepare_request(
@@ -1741,37 +1707,13 @@ mod tests {
         assert_eq!(inference_params.chat_completion.temperature, Some(0.5));
         assert_eq!(inference_params.chat_completion.max_tokens, Some(100));
         assert_eq!(inference_params.chat_completion.seed, Some(69));
+        assert_eq!(inference_params.chat_completion.top_p, Some(0.9));
+        assert_eq!(inference_params.chat_completion.presence_penalty, Some(0.1));
+        assert_eq!(
+            inference_params.chat_completion.frequency_penalty,
+            Some(0.2)
+        );
 
-        let mut inference_params = InferenceParams {
-            chat_completion: ChatCompletionInferenceParams {
-                temperature: Some(1.),
-                max_tokens: Some(200),
-                seed: Some(420),
-                top_p: Some(0.9),
-                presence_penalty: Some(0.3),
-                frequency_penalty: Some(0.2),
-            },
-        };
-        let model_request = chat_completion_config
-            .prepare_request(
-                &input,
-                &function_config,
-                &inference_config,
-                stream,
-                &mut inference_params,
-            )
-            .unwrap();
-        assert_eq!(model_request.temperature, Some(1.));
-        assert_eq!(model_request.max_tokens, Some(200));
-        assert_eq!(model_request.seed, Some(420));
-        assert_eq!(model_request.top_p, Some(0.9));
-        assert_eq!(model_request.presence_penalty, Some(0.3));
-        assert_eq!(model_request.frequency_penalty, Some(0.2));
-        assert_eq!(model_request.json_mode, ModelInferenceRequestJsonMode::On);
-        assert_eq!(model_request.output_schema, Some(&output_schema_value));
-        assert_eq!(inference_params.chat_completion.temperature, Some(1.));
-        assert_eq!(inference_params.chat_completion.max_tokens, Some(200));
-        assert_eq!(inference_params.chat_completion.seed, Some(420));
         // We will vary temperature, max_tokens, and seed
         let chat_completion_config = ChatCompletionConfig::default();
         let mut inference_params = InferenceParams {
@@ -1807,18 +1749,19 @@ mod tests {
             "required": ["answer"]
         }));
         let dynamic_output_schema_value = dynamic_output_schema.value.clone();
-        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
-            templates: &templates,
+        let inference_config = OwnedInferenceConfig {
+            templates,
             tool_config: None,
             dynamic_output_schema: Some(dynamic_output_schema),
             function_name: "".to_string(),
             variant_name: "".to_string(),
-        });
+        };
+        let owned_inference_config = InferenceConfig::Owned(&inference_config);
         let model_request = chat_completion_config
             .prepare_request(
                 &input,
                 &function_config,
-                &inference_config,
+                &owned_inference_config,
                 stream,
                 &mut inference_params,
             )

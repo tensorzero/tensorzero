@@ -13,8 +13,8 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, FunctionType, Latency, ModelInferenceRequestJsonMode, Role,
-    Text, TextChunk,
+    BatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType, Latency,
+    ModelInferenceRequestJsonMode, Role, Text, TextChunk,
 };
 use crate::inference::types::{
     ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
@@ -153,6 +153,18 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             chunk = prefill_json_chunk_response(chunk);
         }
         Ok((chunk, stream, raw_request))
+    }
+
+    async fn start_batch_inference<'a>(
+        &'a self,
+        _requests: &'a [ModelInferenceRequest<'a>],
+        _client: &'a reqwest::Client,
+        _dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<BatchProviderInferenceResponse, Error> {
+        Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
+            provider_type: "GCP Vertex Anthropic".to_string(),
+        }
+        .into())
     }
 }
 

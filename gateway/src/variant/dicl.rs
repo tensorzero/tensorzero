@@ -24,7 +24,7 @@ use crate::{
 
 use super::{
     infer_model_request, infer_model_request_stream, prepare_model_inference_request,
-    BatchInferenceConfig, InferModelRequestArgs, InferenceConfig, JsonMode, ModelUsedInfo,
+    InferModelRequestArgs, InferenceConfig, JsonMode, ModelUsedInfo, OwnedInferenceConfig,
     RetryConfig, Variant,
 };
 
@@ -75,10 +75,10 @@ impl Variant for DiclConfig {
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        inference_config: &'request OwnedInferenceConfig<'a>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
-    ) -> Result<InferenceResult, Error> {
+    ) -> Result<InferenceResult<'a>, Error> {
         // So this can be mutably borrowed by the prepare_request function
         let mut inference_params = inference_params;
 
@@ -88,18 +88,19 @@ impl Variant for DiclConfig {
                 input,
                 models.embedding_models,
                 clients,
-                inference_config.function_name(),
-                inference_config.variant_name(),
+                inference_config.function_name.as_str(),
+                inference_config.variant_name.as_str(),
                 function,
             )
             .await?;
+        let owned_inference_config = InferenceConfig::Owned(inference_config);
 
         // Prepare the request for the model
         let model_inference_request = self.prepare_request(
             input,
             &relevant_examples,
             function,
-            inference_config,
+            &owned_inference_config,
             false,
             &mut inference_params,
         )?;
@@ -137,7 +138,7 @@ impl Variant for DiclConfig {
         input: &Input,
         models: &'request InferenceModels<'static>,
         function: &'static FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request OwnedInferenceConfig<'static>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<
@@ -157,18 +158,18 @@ impl Variant for DiclConfig {
                 input,
                 models.embedding_models,
                 clients,
-                inference_config.function_name(),
-                inference_config.variant_name(),
+                inference_config.function_name.as_str(),
+                inference_config.variant_name.as_str(),
                 function,
             )
             .await?;
-
+        let owned_inference_config = InferenceConfig::Owned(inference_config);
         // Prepare the request for the model
         let request = self.prepare_request(
             input,
             &relevant_examples,
             function,
-            inference_config,
+            &owned_inference_config,
             true,
             &mut inference_params,
         )?;
@@ -260,19 +261,16 @@ impl Variant for DiclConfig {
         vec![]
     }
 
-    async fn start_batch_inference<'a, 'request>(
+    async fn start_batch_inference<'a>(
         &'a self,
         _input: &[Input],
-        _models: &'request InferenceModels<'a>,
+        _models: &'a InferenceModels<'a>,
         _function: &'a FunctionConfig,
-        inference_config: &'request BatchInferenceConfig<'request>,
-        _clients: &'request InferenceClients<'request>,
+        _inference_configs: &'a [InferenceConfig<'a, 'a>],
+        _clients: &'a InferenceClients<'a>,
         _inference_params: Vec<InferenceParams>,
     ) -> Result<BatchModelInferenceWithMetadata<'a>, Error> {
-        Err(ErrorDetails::UnsupportedVariantForBatchInference {
-            variant_name: inference_config.variant_name.clone(),
-        }
-        .into())
+        Err(ErrorDetails::UnsupportedVariantForBatchInference { variant_name: None }.into())
     }
 }
 

@@ -301,7 +301,7 @@ async fn test_bad_clickhouse_write() {
     let payload =
         json!({"target_id": Uuid::now_v7(), "value": true, "name": "test", "id": Uuid::now_v7()});
     let err = clickhouse
-        .write(&payload, "BooleanMetricFeedback")
+        .write(&[payload], "BooleanMetricFeedback")
         .await
         .unwrap_err();
     assert!(err

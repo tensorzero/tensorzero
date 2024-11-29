@@ -15,9 +15,9 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
     inference::types::{
-        ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest,
-        ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
-        ProviderInferenceResponseStream, TextChunk, Usage,
+        BatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, Latency,
+        ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
+        ProviderInferenceResponseChunk, ProviderInferenceResponseStream, TextChunk, Usage,
     },
     model::CredentialLocation,
     tool::{ToolCall, ToolCallChunk, ToolChoice},
@@ -177,6 +177,18 @@ impl InferenceProvider for MistralProvider {
             }
         };
         Ok((chunk, stream, raw_request))
+    }
+
+    async fn start_batch_inference<'a>(
+        &'a self,
+        _requests: &'a [ModelInferenceRequest<'a>],
+        _client: &'a reqwest::Client,
+        _dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<BatchProviderInferenceResponse, Error> {
+        Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
+            provider_type: "Mistral".to_string(),
+        }
+        .into())
     }
 }
 

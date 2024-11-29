@@ -22,8 +22,8 @@ use crate::{
 };
 
 use super::{
-    infer_model_request, prepare_model_inference_request, BatchInferenceConfig,
-    InferModelRequestArgs, InferenceConfig, ModelUsedInfo, Variant,
+    infer_model_request, prepare_model_inference_request, InferModelRequestArgs, InferenceConfig,
+    ModelUsedInfo, OwnedInferenceConfig, Variant,
 };
 
 #[derive(Debug, Deserialize)]
@@ -52,18 +52,18 @@ impl Variant for MixtureOfNConfig {
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        owned_inference_config: &'request OwnedInferenceConfig<'a>,
         clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<InferenceResult<'a>, Error> {
         let candidate_inference_results = self
-            .infer_candidates(input, models, function, inference_config, clients)
+            .infer_candidates(input, models, function, owned_inference_config, clients)
             .await?;
         self.fuse_candidates(
             input,
             function,
             models.models,
-            inference_config,
+            owned_inference_config,
             clients,
             candidate_inference_results,
         )
@@ -75,7 +75,7 @@ impl Variant for MixtureOfNConfig {
         _input: &Input,
         _models: &'request InferenceModels<'static>,
         _function: &'static FunctionConfig,
-        _inference_config: &'request InferenceConfig<'static, 'request>,
+        _inference_config: &'request OwnedInferenceConfig<'static>,
         _clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<
@@ -143,19 +143,16 @@ impl Variant for MixtureOfNConfig {
         self.fuser.inner.get_all_template_paths()
     }
 
-    async fn start_batch_inference<'a, 'request>(
+    async fn start_batch_inference<'a>(
         &'a self,
         _input: &[Input],
-        _models: &'request InferenceModels<'a>,
+        _models: &'a InferenceModels<'a>,
         _function: &'a FunctionConfig,
-        inference_config: &'request BatchInferenceConfig<'request>,
-        _clients: &'request InferenceClients<'request>,
+        _inference_configs: &'a [InferenceConfig<'a, 'a>],
+        _clients: &'a InferenceClients<'a>,
         _inference_params: Vec<InferenceParams>,
     ) -> Result<BatchModelInferenceWithMetadata<'a>, Error> {
-        Err(ErrorDetails::UnsupportedVariantForBatchInference {
-            variant_name: inference_config.variant_name.clone(),
-        }
-        .into())
+        Err(ErrorDetails::UnsupportedVariantForBatchInference { variant_name: None }.into())
     }
 }
 
@@ -166,7 +163,7 @@ impl MixtureOfNConfig {
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        inference_config: &'request OwnedInferenceConfig<'a>,
         clients: &'request InferenceClients<'request>,
     ) -> Result<Vec<InferenceResult<'a>>, Error> {
         // Get all the variants we are going to infer
@@ -239,7 +236,7 @@ impl MixtureOfNConfig {
         input: &Input,
         function: &'a FunctionConfig,
         models: &'a HashMap<String, ModelConfig>,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        inference_config: &'request OwnedInferenceConfig<'a>,
         clients: &'request InferenceClients<'request>,
         mut candidates: Vec<InferenceResult<'a>>,
     ) -> Result<InferenceResult<'a>, Error> {
@@ -307,14 +304,15 @@ async fn inner_fuse_candidates<'a, 'request>(
     input: &'request Input,
     models: &'a HashMap<String, ModelConfig>,
     function: &'a FunctionConfig,
-    inference_config: &'request InferenceConfig<'a, 'request>,
+    owned_inference_config: &'request OwnedInferenceConfig<'a>,
     clients: &'request InferenceClients<'request>,
     candidates: &[InferenceResult<'request>],
 ) -> Result<InferenceResult<'a>, Error> {
+    let inference_config = InferenceConfig::Owned(owned_inference_config);
     let (inference_request, included_indices) = fuser.prepare_request(
         input,
         function,
-        inference_config,
+        &inference_config,
         candidates,
         &mut InferenceParams::default(),
     )?;
@@ -334,7 +332,7 @@ async fn inner_fuse_candidates<'a, 'request>(
         model_name: &fuser.inner.model,
         model_config,
         function,
-        inference_config,
+        inference_config: owned_inference_config,
         retry_config: &fuser.inner.retries,
         clients,
         inference_params: InferenceParams::default(),
@@ -490,7 +488,7 @@ impl FuserConfig {
             messages,
             system,
             function,
-            &inference_config,
+            inference_config,
             false,
             inference_params,
             &self.inner.json_mode,
@@ -960,13 +958,13 @@ mod tests {
             system: None,
             messages: vec![],
         };
-        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             dynamic_output_schema: None,
             function_name: "".to_string(),
             variant_name: "".to_string(),
-        });
+        };
 
         let fused = mixture_of_n_variant
             .fuse_candidates(

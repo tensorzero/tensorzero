@@ -14,8 +14,9 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
     inference::types::{
-        ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-        ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
+        BatchProviderInferenceResponse, ContentBlock, Latency, ModelInferenceRequest,
+        ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
+        ProviderInferenceResponseStream,
     },
     model::CredentialLocation,
 };
@@ -178,6 +179,18 @@ impl InferenceProvider for TogetherProvider {
             }
         };
         Ok((chunk, stream, raw_request))
+    }
+
+    async fn start_batch_inference<'a>(
+        &'a self,
+        _requests: &'a [ModelInferenceRequest<'a>],
+        _client: &'a reqwest::Client,
+        _dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<BatchProviderInferenceResponse, Error> {
+        Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
+            provider_type: "Together".to_string(),
+        }
+        .into())
     }
 }
 

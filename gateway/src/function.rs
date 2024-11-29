@@ -15,7 +15,7 @@ use crate::jsonschema_util::{JSONSchemaFromPath, JsonSchemaRef};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelConfig;
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
-use crate::variant::{InferenceConfig, Variant, VariantConfig};
+use crate::variant::{OwnedInferenceConfig, Variant, VariantConfig};
 
 #[derive(Debug)]
 pub enum FunctionConfig {
@@ -136,7 +136,7 @@ impl FunctionConfig {
         content_blocks: Vec<ContentBlock>,
         usage: Usage,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        inference_config: &'request OwnedInferenceConfig<'a>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult<'a>, Error> {
         match self {
@@ -146,7 +146,7 @@ impl FunctionConfig {
                     content_blocks,
                     usage,
                     model_inference_results,
-                    inference_config.tool_config(),
+                    inference_config.tool_config.as_ref(),
                     inference_params,
                 )
                 .await,
@@ -180,7 +180,7 @@ impl FunctionConfig {
                         })
                     })
                     .ok();
-                let output_schema = match &inference_config.dynamic_output_schema() {
+                let output_schema = match &inference_config.dynamic_output_schema {
                     Some(schema) => JsonSchemaRef::Dynamic(schema),
                     None => JsonSchemaRef::Static(&params.output_schema),
                 };
@@ -1280,20 +1280,20 @@ mod tests {
             latency,
         };
         let templates = TemplateConfig::default();
-        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
+        let owned_inference_config = OwnedInferenceConfig {
             tool_config: None,
             function_name: "".to_string(),
             variant_name: "".to_string(),
             templates: &templates,
             dynamic_output_schema: None,
-        });
+        };
         let response = function_config
             .prepare_response(
                 inference_id,
                 content_blocks,
                 usage.clone(),
                 vec![model_response.clone()],
-                &inference_config,
+                &owned_inference_config,
                 InferenceParams::default(),
             )
             .await
@@ -1341,7 +1341,7 @@ mod tests {
                 content_blocks,
                 usage.clone(),
                 vec![model_response.clone()],
-                &inference_config,
+                &owned_inference_config,
                 InferenceParams::default(),
             )
             .await
@@ -1389,7 +1389,7 @@ mod tests {
                 content_blocks,
                 usage.clone(),
                 vec![model_response.clone()],
-                &inference_config,
+                &owned_inference_config,
                 InferenceParams::default(),
             )
             .await
@@ -1438,7 +1438,7 @@ mod tests {
                 content_blocks,
                 usage.clone(),
                 vec![model_response.clone()],
-                &inference_config,
+                &owned_inference_config,
                 InferenceParams::default(),
             )
             .await
@@ -1488,7 +1488,7 @@ mod tests {
                 content_blocks,
                 usage.clone(),
                 vec![model_response.clone()],
-                &inference_config,
+                &owned_inference_config,
                 InferenceParams::default(),
             )
             .await
@@ -1535,7 +1535,7 @@ mod tests {
                 content_blocks,
                 usage.clone(),
                 vec![model_response.clone()],
-                &inference_config,
+                &owned_inference_config,
                 InferenceParams::default(),
             )
             .await
@@ -1557,13 +1557,13 @@ mod tests {
             },
             "required": ["answer"]
         }));
-        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
+        let owned_inference_config = OwnedInferenceConfig {
             tool_config: None,
             function_name: "".to_string(),
             variant_name: "".to_string(),
             templates: &templates,
             dynamic_output_schema: Some(dynamic_output_schema),
-        });
+        };
         // Test with a correct content block
         let inference_id = Uuid::now_v7();
         let content_blocks = vec![r#"{"answer": "42"}"#.to_string().into()];
@@ -1593,7 +1593,7 @@ mod tests {
                 content_blocks,
                 usage.clone(),
                 vec![model_response.clone()],
-                &inference_config,
+                &owned_inference_config,
                 InferenceParams::default(),
             )
             .await
@@ -1638,7 +1638,7 @@ mod tests {
                 content_blocks,
                 usage.clone(),
                 vec![model_response.clone()],
-                &inference_config,
+                &owned_inference_config,
                 InferenceParams::default(),
             )
             .await
@@ -1687,7 +1687,7 @@ mod tests {
                 content_blocks,
                 usage.clone(),
                 vec![model_response.clone()],
-                &inference_config,
+                &owned_inference_config,
                 InferenceParams::default(),
             )
             .await
@@ -1737,7 +1737,7 @@ mod tests {
                 content_blocks,
                 usage.clone(),
                 vec![model_response.clone()],
-                &inference_config,
+                &owned_inference_config,
                 InferenceParams::default(),
             )
             .await
@@ -1793,7 +1793,7 @@ mod tests {
                 content_blocks,
                 usage.clone(),
                 vec![model_response.clone()],
-                &inference_config,
+                &owned_inference_config,
                 InferenceParams::default(),
             )
             .await

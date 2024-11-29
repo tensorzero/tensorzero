@@ -257,8 +257,11 @@ pub enum ErrorDetails {
     UnknownMetric {
         name: String,
     },
+    UnsupportedModelProviderForBatchInference {
+        provider_type: String,
+    },
     UnsupportedVariantForBatchInference {
-        variant_name: String,
+        variant_name: Option<String>,
     },
     VLLMClient {
         message: String,
@@ -340,6 +343,7 @@ impl ErrorDetails {
             ErrorDetails::UnknownTool { .. } => tracing::Level::ERROR,
             ErrorDetails::UnknownVariant { .. } => tracing::Level::WARN,
             ErrorDetails::UnknownMetric { .. } => tracing::Level::WARN,
+            ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => tracing::Level::WARN,
             ErrorDetails::VLLMClient { .. } => tracing::Level::WARN,
             ErrorDetails::VLLMServer { .. } => tracing::Level::ERROR,
@@ -416,6 +420,9 @@ impl ErrorDetails {
             ErrorDetails::UnknownTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::UnknownVariant { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::UnknownMetric { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::VLLMClient { status_code, .. } => *status_code,
             ErrorDetails::VLLMServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -663,12 +670,22 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::UnknownTool { name } => write!(f, "Unknown tool: {}", name),
             ErrorDetails::UnknownVariant { name } => write!(f, "Unknown variant: {}", name),
             ErrorDetails::UnknownMetric { name } => write!(f, "Unknown metric: {}", name),
-            ErrorDetails::UnsupportedVariantForBatchInference { variant_name } => {
+            ErrorDetails::UnsupportedModelProviderForBatchInference { provider_type } => {
                 write!(
                     f,
-                    "Unsupported variant for batch inference: {}",
-                    variant_name
+                    "Unsupported model provider for batch inference: {}",
+                    provider_type
                 )
+            }
+            ErrorDetails::UnsupportedVariantForBatchInference { variant_name } => {
+                match variant_name {
+                    Some(variant_name) => write!(
+                        f,
+                        "Unsupported variant for batch inference: {}",
+                        variant_name
+                    ),
+                    None => write!(f, "Unsupported variant for batch inference"),
+                }
             }
             ErrorDetails::VLLMClient { message, .. } => {
                 write!(f, "Error from vLLM client: {}", message)

@@ -8,7 +8,6 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::io::Write;
 use std::time::Duration;
 use tokio::time::Instant;
@@ -20,7 +19,7 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
-    BatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, Latency,
+    BatchProviderInferenceResponse, BatchStatus, ContentBlock, ContentBlockChunk, Latency,
     ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
     ProviderInferenceResponseChunk, ProviderInferenceResponseStream, RequestMessage, Role, Text,
     TextChunk, Usage,
@@ -266,6 +265,7 @@ impl InferenceProvider for OpenAIProvider {
             batch_id: Uuid::now_v7(),
             inference_ids,
             batch_params: json!({"file_id": file_id, "batch_id": response.id}),
+            status: BatchStatus::Pending,
         })
     }
 }
@@ -1274,46 +1274,46 @@ struct OpenAIFileResponse {
 #[derive(Debug, Deserialize)]
 struct OpenAIBatchResponse {
     id: String,
-    object: String,
-    endpoint: String,
-    errors: OpenAIBatchErrors,
-    input_file_id: String,
-    completion_window: String,
-    status: String,
-    output_file_id: String,
-    error_file_id: String,
-    created_at: i64,
-    in_progress_at: Option<i64>,
-    expires_at: i64,
-    finalizing_at: Option<i64>,
-    completed_at: Option<i64>,
-    failed_at: Option<i64>,
-    expired_at: Option<i64>,
-    cancelling_at: Option<i64>,
-    cancelled_at: Option<i64>,
-    request_counts: OpenAIBatchRequestCounts,
-    metadata: HashMap<String, String>,
+    // object: String,
+    // endpoint: String,
+    // errors: OpenAIBatchErrors,
+    // input_file_id: String,
+    // completion_window: String,
+    // status: String,
+    // output_file_id: String,
+    // error_file_id: String,
+    // created_at: i64,
+    // in_progress_at: Option<i64>,
+    // expires_at: i64,
+    // finalizing_at: Option<i64>,
+    // completed_at: Option<i64>,
+    // failed_at: Option<i64>,
+    // expired_at: Option<i64>,
+    // cancelling_at: Option<i64>,
+    // cancelled_at: Option<i64>,
+    // request_counts: OpenAIBatchRequestCounts,
+    // metadata: HashMap<String, String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct OpenAIBatchErrors {
-    object: String,
-    data: Vec<OpenAIBatchError>,
+    // object: String,
+    // data: Vec<OpenAIBatchError>,
 }
 
 #[derive(Debug, Deserialize)]
 struct OpenAIBatchError {
-    code: String,
-    message: String,
-    param: Option<String>,
-    line: Option<i32>,
+    // code: String,
+    // message: String,
+    // param: Option<String>,
+    // line: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
 struct OpenAIBatchRequestCounts {
-    total: u32,
-    completed: u32,
-    failed: u32,
+    // total: u32,
+    // completed: u32,
+    // failed: u32,
 }
 
 #[cfg(test)]

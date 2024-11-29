@@ -32,7 +32,7 @@ use crate::inference::types::{
 use crate::model::ModelConfig;
 use crate::tool::{DynamicToolParams, ToolCallConfig};
 use crate::uuid_util::validate_episode_id;
-use crate::variant::{InferenceConfig, OwnedInferenceConfig, Variant};
+use crate::variant::{OwnedInferenceConfig, Variant};
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Deserialize)]
@@ -202,12 +202,12 @@ pub async fn inference(
 
     // Keep track of which variants failed
     let mut variant_errors = std::collections::HashMap::new();
-    let mut inference_config = InferenceConfig::Owned(OwnedInferenceConfig::new(
+    let mut inference_config = OwnedInferenceConfig::new(
         params.function_name.clone(),
         &config.templates,
         tool_config,
         params.output_schema,
-    ));
+    );
 
     let inference_clients = InferenceClients {
         http_client: &http_client,
@@ -231,7 +231,7 @@ pub async fn inference(
         // TODO (#479): make this a Cow
         let variant_inference_params = params.params.clone();
 
-        inference_config.set_variant_name(variant_name);
+        inference_config.variant_name = variant_name.to_string();
         if stream {
             let result = variant
                 .infer_stream(
@@ -317,7 +317,7 @@ pub async fn inference(
                     function_name: params.function_name,
                     variant_name: variant_name.to_string(),
                     episode_id,
-                    tool_params: inference_config.into_tool_config(),
+                    tool_params: inference_config.tool_config,
                     processing_time: start_time.elapsed(),
                     tags: params.tags,
                 };
@@ -354,7 +354,7 @@ fn create_stream<'a>(
     first_chunk: InferenceResultChunk,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
-    inference_config: InferenceConfig<'static, 'a>,
+    inference_config: OwnedInferenceConfig<'static>,
 ) -> impl Stream<Item = Option<InferenceResponseChunk>> + Send + 'a {
     async_stream::stream! {
         let mut buffer = vec![first_chunk.clone()];
@@ -422,7 +422,7 @@ fn create_stream<'a>(
                     function_name,
                     variant_name,
                     episode_id,
-                    tool_params: inference_config.into_tool_config(),
+                    tool_params: inference_config.tool_config,
                     processing_time: start_time.elapsed(),
                     tags,
                 };

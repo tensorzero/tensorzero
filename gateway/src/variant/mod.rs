@@ -1,6 +1,7 @@
 use backon::ExponentialBuilder;
 use backon::Retryable;
 use futures::StreamExt;
+use itertools::izip;
 use serde::Deserialize;
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -65,12 +66,10 @@ pub struct BorrowedInferenceConfig<'a, 'request> {
     pub tool_config: Option<&'request ToolCallConfig>,
     pub templates: &'a TemplateConfig<'a>,
     pub dynamic_output_schema: Option<&'request DynamicJSONSchema>,
-    pub function_name: &'request str,
-    pub variant_name: &'request str,
 }
 
 pub enum InferenceConfig<'a, 'request> {
-    Owned(OwnedInferenceConfig<'a>),
+    Owned(&'request OwnedInferenceConfig<'a>),
     Borrowed(BorrowedInferenceConfig<'a, 'request>),
 }
 
@@ -95,49 +94,32 @@ impl<'a, 'request> InferenceConfig<'a, 'request> {
             InferenceConfig::Borrowed(config) => config.dynamic_output_schema,
         }
     }
-
-    pub fn function_name(&'request self) -> &'request str {
-        match self {
-            InferenceConfig::Owned(config) => &config.function_name,
-            InferenceConfig::Borrowed(config) => config.function_name,
-        }
-    }
-
-    pub fn variant_name(&'request self) -> &'request str {
-        match self {
-            InferenceConfig::Owned(config) => &config.variant_name,
-            InferenceConfig::Borrowed(config) => config.variant_name,
-        }
-    }
-
-    pub fn set_variant_name(&mut self, variant_name: &'request str) {
-        match self {
-            InferenceConfig::Owned(config) => config.variant_name = variant_name.to_string(),
-            InferenceConfig::Borrowed(config) => config.variant_name = variant_name,
-        }
-    }
-
-    pub fn into_tool_config(self) -> Option<ToolCallConfig> {
-        match self {
-            InferenceConfig::Owned(config) => config.tool_config,
-            InferenceConfig::Borrowed(_) => {
-                Error::new(ErrorDetails::Inference {
-                message: "Cannot convert a borrowed inference config to an owned tool config. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
-            });
-                None
-            }
-        }
-    }
 }
 
 /// Maps to the subset of Config that applies to the current inference request.
 /// It doesn't take into account inference-time overrides (e.g. dynamic tools).
+#[derive(Clone, Debug)]
 pub struct BatchInferenceConfig<'a> {
     pub tool_configs: Vec<Option<ToolCallConfig>>,
     pub templates: &'a TemplateConfig<'a>,
     pub dynamic_output_schemas: Vec<Option<DynamicJSONSchema>>,
-    pub function_name: String,
-    pub variant_name: String,
+}
+
+impl<'a> BatchInferenceConfig<'a> {
+    pub fn inference_configs(&'a self) -> Vec<InferenceConfig<'a, 'a>> {
+        izip!(
+            self.tool_configs.iter().map(|x| x.as_ref()),
+            self.dynamic_output_schemas.iter().map(|x| x.as_ref())
+        )
+        .map(|(tool_config, dynamic_output_schema)| {
+            InferenceConfig::Borrowed(BorrowedInferenceConfig {
+                templates: self.templates,
+                tool_config,
+                dynamic_output_schema,
+            })
+        })
+        .collect()
+    }
 }
 
 #[derive(Debug)]
@@ -157,7 +139,7 @@ pub trait Variant {
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        inference_config: &'request OwnedInferenceConfig<'a>,
         clients: &'request InferenceClients,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult<'a>, Error>;
@@ -167,7 +149,7 @@ pub trait Variant {
         input: &Input,
         models: &'request InferenceModels<'static>,
         function: &'static FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request OwnedInferenceConfig<'static>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<
@@ -191,13 +173,13 @@ pub trait Variant {
 
     fn get_all_template_paths(&self) -> Vec<&PathBuf>;
 
-    async fn start_batch_inference<'a, 'request>(
+    async fn start_batch_inference<'a>(
         &'a self,
         input: &[Input],
-        models: &'request InferenceModels<'a>,
+        models: &'a InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request BatchInferenceConfig,
-        clients: &'request InferenceClients,
+        inference_configs: &'a [InferenceConfig<'a, 'a>],
+        clients: &'a InferenceClients<'a>,
         inference_params: Vec<InferenceParams>,
     ) -> Result<BatchModelInferenceWithMetadata<'a>, Error>;
 }
@@ -214,13 +196,13 @@ impl VariantConfig {
 }
 
 impl Variant for VariantConfig {
-    #[instrument(fields(function_name = %inference_config.function_name(), variant_name = %inference_config.variant_name()), skip_all)]
+    #[instrument(fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name), skip_all)]
     async fn infer<'a, 'request>(
         &'a self,
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        inference_config: &'request OwnedInferenceConfig<'a>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult<'a>, Error> {
@@ -277,13 +259,13 @@ impl Variant for VariantConfig {
         }
     }
 
-    #[instrument(fields(function_name = %inference_config.function_name(), variant_name = %inference_config.variant_name()), skip_all)]
+    #[instrument(fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name), skip_all)]
     async fn infer_stream<'request>(
         &'static self,
         input: &Input,
         models: &'request InferenceModels<'static>,
         function: &'static FunctionConfig,
-        inference_config: &'request InferenceConfig<'static, 'request>,
+        inference_config: &'request OwnedInferenceConfig<'static>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<
@@ -346,14 +328,15 @@ impl Variant for VariantConfig {
         }
     }
 
-    #[instrument(skip_all, fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name))]
-    async fn start_batch_inference<'a, 'request>(
+    // TODO(Viraj): deal with this
+    // #[instrument(skip_all, fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name))]
+    async fn start_batch_inference<'a>(
         &'a self,
         inputs: &[Input],
-        models: &'request InferenceModels<'a>,
+        models: &'a InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request BatchInferenceConfig<'request>,
-        clients: &'request InferenceClients<'request>,
+        inference_configs: &'a [InferenceConfig<'a, 'a>],
+        clients: &'a InferenceClients<'a>,
         inference_params: Vec<InferenceParams>,
     ) -> Result<BatchModelInferenceWithMetadata<'a>, Error> {
         match self {
@@ -363,16 +346,15 @@ impl Variant for VariantConfig {
                         inputs,
                         models,
                         function,
-                        inference_config,
+                        inference_configs,
                         clients,
                         inference_params,
                     )
                     .await
             }
-            _ => Err(ErrorDetails::UnsupportedVariantForBatchInference {
-                variant_name: inference_config.variant_name.clone(),
+            _ => {
+                Err(ErrorDetails::UnsupportedVariantForBatchInference { variant_name: None }.into())
             }
-            .into()),
         }
     }
 
@@ -499,7 +481,7 @@ struct InferModelRequestArgs<'a, 'request> {
     model_name: &'a str,
     model_config: &'a ModelConfig,
     function: &'a FunctionConfig,
-    inference_config: &'request InferenceConfig<'a, 'request>,
+    inference_config: &'request OwnedInferenceConfig<'a>,
     clients: &'request InferenceClients<'request>,
     inference_params: InferenceParams,
     retry_config: &'a RetryConfig,
@@ -626,14 +608,11 @@ impl<'a> OwnedInferenceConfig<'a> {
 
 impl<'a> BatchInferenceConfig<'a> {
     pub fn new(
-        function_name: String,
         templates: &'a TemplateConfig,
         tool_configs: Vec<Option<ToolCallConfig>>,
         dynamic_output_schemas: Option<Vec<Option<serde_json::Value>>>,
     ) -> Self {
         Self {
-            function_name,
-            variant_name: "".to_string(),
             templates,
             tool_configs,
             dynamic_output_schemas: dynamic_output_schemas.map_or(Vec::new(), |schemas| {
@@ -683,13 +662,14 @@ mod tests {
         };
 
         // Create a sample inference config
-        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
+        let owned_inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: Some(tool_config.clone()),
             function_name: "test_function".to_string(),
             variant_name: "test_variant".to_string(),
             dynamic_output_schema: None,
-        });
+        };
+        let inference_config = InferenceConfig::Owned(&owned_inference_config);
 
         // Define common inference parameters
         let inference_params = InferenceParams {
@@ -806,14 +786,14 @@ mod tests {
             "required": ["result"],
         });
         let dynamic_output_schema = DynamicJSONSchema::new(dynamic_output_schema_value.clone());
-        let inference_config_dynamic = InferenceConfig::Owned(OwnedInferenceConfig {
+        let owned_inference_config_dynamic = OwnedInferenceConfig {
             templates: &templates,
             tool_config: Some(tool_config.clone()),
             function_name: "test_function".to_string(),
             variant_name: "test_variant".to_string(),
             dynamic_output_schema: Some(dynamic_output_schema.clone()),
-        });
-
+        };
+        let inference_config_dynamic = InferenceConfig::Owned(&owned_inference_config_dynamic);
         let json_mode = JsonMode::ImplicitTool;
 
         let result = prepare_model_inference_request(
@@ -885,13 +865,13 @@ mod tests {
         };
         let templates = get_test_template_config();
         let inference_params = InferenceParams::default();
-        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             function_name: "test_function".to_string(),
             variant_name: "test_variant".to_string(),
             dynamic_output_schema: None,
-        });
+        };
 
         // Test case 1: Successful inference with ChatCompletionConfig and FunctionConfigChat
         let model_name = "dummy_chat_model";
@@ -1116,13 +1096,13 @@ mod tests {
         };
         let templates = get_test_template_config();
         let inference_params = InferenceParams::default();
-        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
+        let inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             function_name: "test_function".to_string(),
             variant_name: "test_variant".to_string(),
             dynamic_output_schema: None,
-        });
+        };
 
         let model_name = "dummy_chat_model";
         let error_model_name = "error";

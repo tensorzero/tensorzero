@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::iter::repeat;
-use tokio::time::Instant;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -18,11 +17,10 @@ use crate::error::{Error, ErrorDetails};
 use crate::function::sample_variant;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
-    BatchModelInferenceWithMetadata, ContentBlockOutput, InferenceResult, Input,
-    JsonInferenceOutput, ModelInferenceResponseWithMetadata, RequestMessage, Usage,
+    BatchModelInferenceWithMetadata, ContentBlockOutput, Input, JsonInferenceOutput, Usage,
 };
 use crate::tool::{
-    BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams, ToolCallConfig,
+    BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams,
     ToolCallConfigDatabaseInsert,
 };
 use crate::uuid_util::validate_episode_id;
@@ -79,24 +77,6 @@ type BatchEpisodeIds = Vec<Uuid>;
 type BatchTags = Vec<Option<HashMap<String, String>>>;
 type BatchOutputSchemas = Vec<Option<Value>>;
 
-#[derive(Clone, Debug)]
-struct InferenceMetadata<'a> {
-    pub function_name: String,
-    pub variant_name: String,
-    pub episode_id: Uuid,
-    pub input: Input,
-    pub dryrun: bool,
-    pub start_time: Instant,
-    pub inference_params: BatchInferenceParams,
-    pub model_name: &'a str,
-    pub model_provider_name: &'a str,
-    pub raw_request: String,
-    pub system: Option<String>,
-    pub input_messages: Vec<RequestMessage>,
-    pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
-    pub tags: HashMap<String, String>,
-}
-
 pub type InferenceCredentials = HashMap<String, SecretString>;
 
 /// A handler for the inference endpoint
@@ -117,8 +97,6 @@ pub async fn prepare_batch_inference_handler(
     }): AppState,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
-    // To be used for the Inference table processing_time measurements
-    let start_time = Instant::now();
     // Get the function config or return an error if it doesn't exist
     let function = config.get_function(&params.function_name)?;
     let num_inferences = params.inputs.len();
@@ -194,12 +172,8 @@ pub async fn prepare_batch_inference_handler(
 
     // Keep track of which variants failed
     let mut variant_errors = std::collections::HashMap::new();
-    let mut inference_config = BatchInferenceConfig::new(
-        params.function_name.clone(),
-        &config.templates,
-        tool_configs,
-        params.output_schemas,
-    );
+    let inference_config =
+        BatchInferenceConfig::new(&config.templates, tool_configs, params.output_schemas);
 
     let inference_clients = InferenceClients {
         http_client: &http_client,
@@ -217,10 +191,11 @@ pub async fn prepare_batch_inference_handler(
     // Keep sampling variants until one succeeds
     // We already guarantee there is at least one inference
     let first_episode_id = episode_ids
-        .get(0)
+        .first()
         .ok_or_else(|| Error::new(ErrorDetails::Inference {
             message: "batch episode_ids unexpectedly empty. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
         }))?;
+    let inference_configs = inference_config.inference_configs();
     while !candidate_variant_names.is_empty() {
         // We sample the same variant for the whole batch
         let (variant_name, variant) = sample_variant(
@@ -231,14 +206,13 @@ pub async fn prepare_batch_inference_handler(
         )?;
         // Will be edited by the variant as part of making the request so we must clone here
         let variant_inference_params = inference_params.clone();
-        inference_config.variant_name = variant_name.to_string();
 
         let result = variant
             .start_batch_inference(
                 &params.inputs,
                 &inference_models,
                 function,
-                &inference_config,
+                &inference_configs,
                 &inference_clients,
                 variant_inference_params,
             )
@@ -260,10 +234,9 @@ pub async fn prepare_batch_inference_handler(
         // Spawn a thread for a trailing write to ClickHouse so that it doesn't block the response
         let write_metadata = BatchInferenceDatabaseInsertMetadata {
             function_name: params.function_name.as_str(),
-            variant_name: variant_name,
+            variant_name,
             episode_ids: &episode_ids,
             tags: params.tags,
-            tool_configs: inference_config.tool_configs,
         };
 
         let (batch_id, inference_ids) = write_inference(
@@ -271,6 +244,7 @@ pub async fn prepare_batch_inference_handler(
             params.inputs,
             result,
             write_metadata,
+            inference_config.clone(), // Spent a while fighting the borrow checker here, gave up
         )
         .await?;
 
@@ -302,7 +276,7 @@ struct BatchInferenceDatabaseInsertMetadata<'a> {
     pub variant_name: &'a str,
     pub episode_ids: &'a Vec<Uuid>,
     pub tags: Option<Vec<Option<HashMap<String, String>>>>,
-    pub tool_configs: Vec<Option<ToolCallConfig>>,
+    // pub tool_configs: &'a Vec<Option<ToolCallConfig>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -329,6 +303,7 @@ async fn write_inference<'a>(
     inputs: Vec<Input>,
     result: BatchModelInferenceWithMetadata<'a>,
     metadata: BatchInferenceDatabaseInsertMetadata<'a>,
+    inference_config: BatchInferenceConfig<'a>,
 ) -> Result<(Uuid, Vec<Uuid>), Error> {
     let mut rows = vec![];
     let batch_id = result.batch_id.to_string();
@@ -349,7 +324,7 @@ async fn write_inference<'a>(
         inputs,
         result.input_messages.iter(),
         result.systems.iter(),
-        metadata.tool_configs,
+        inference_config.tool_configs,
         result.inference_params.iter(),
         result.output_schemas.iter(),
         metadata
@@ -434,27 +409,6 @@ pub struct JsonInferenceResponse {
     pub variant_name: String,
     pub output: JsonInferenceOutput,
     pub usage: Usage,
-}
-
-impl InferenceResponse {
-    fn new(inference_result: InferenceResult, episode_id: Uuid, variant_name: String) -> Self {
-        match inference_result {
-            InferenceResult::Chat(result) => InferenceResponse::Chat(ChatInferenceResponse {
-                inference_id: result.inference_id,
-                episode_id,
-                variant_name,
-                content: result.content,
-                usage: result.usage,
-            }),
-            InferenceResult::Json(result) => InferenceResponse::Json(JsonInferenceResponse {
-                inference_id: result.inference_id,
-                episode_id,
-                variant_name,
-                output: result.output,
-                usage: result.usage,
-            }),
-        }
-    }
 }
 
 struct BatchEpisodeIdsWithSize(Option<BatchEpisodeIdInput>, usize);

@@ -14,9 +14,9 @@ use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingR
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{
-    current_timestamp, ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest,
-    ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
-    Usage,
+    current_timestamp, BatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, Latency,
+    ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStream, Usage,
 };
 use crate::model::CredentialLocation;
 use crate::tool::{ToolCall, ToolCallChunk};
@@ -350,6 +350,19 @@ impl InferenceProvider for DummyProvider {
             Box::pin(stream),
             DUMMY_RAW_REQUEST.to_string(),
         ))
+    }
+
+    async fn start_batch_inference<'a>(
+        &'a self,
+        _requests: &'a [ModelInferenceRequest<'a>],
+        _client: &'a reqwest::Client,
+        _dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<BatchProviderInferenceResponse, Error> {
+        // TODO (Viraj): Implement batch inference for Dummy provider
+        Err(ErrorDetails::InferenceClient {
+            message: "Dummy provider does not support batch inference".to_string(),
+        }
+        .into())
     }
 }
 lazy_static! {

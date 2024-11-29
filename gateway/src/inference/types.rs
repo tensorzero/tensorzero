@@ -11,12 +11,12 @@ use std::{
 };
 use uuid::Uuid;
 
+use crate::function::FunctionConfig;
+use crate::tool::ToolCallConfigDatabaseInsert;
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolResult};
 use crate::{endpoints::inference::InferenceDatabaseInsertMetadata, variant::OwnedInferenceConfig};
 use crate::{endpoints::inference::InferenceParams, error::ErrorDetails};
 use crate::{error::Error, variant::JsonMode};
-use crate::{function::FunctionConfig, variant::InferenceConfig};
-use crate::{jsonschema_util::DynamicJSONSchema, tool::ToolCallConfigDatabaseInsert};
 
 /// Data flow in TensorZero
 ///
@@ -856,7 +856,7 @@ pub struct CollectChunksArgs<'a> {
 // 'a ends up as static and 'b ends up as stack allocated in the caller (endpoints::inference::create_stream)
 pub async fn collect_chunks<'a, 'b>(
     args: CollectChunksArgs<'a>,
-    inference_config: &'b InferenceConfig<'a, 'b>,
+    inference_config: &'b OwnedInferenceConfig<'a>,
 ) -> Result<InferenceResult<'a>, Error> {
     let CollectChunksArgs {
         value,
@@ -1124,7 +1124,7 @@ pub struct BatchModelInferenceWithMetadata<'a> {
 impl<'a> BatchModelInferenceWithMetadata<'a> {
     pub fn new(
         model_batch_response: BatchModelInferenceResponse<'a>,
-        model_inference_requests: Vec<ModelInferenceRequest<'_>>,
+        model_inference_requests: Vec<ModelInferenceRequest<'a>>,
         model_name: &'a str,
         inference_params: Vec<InferenceParams>,
     ) -> Self {
@@ -1165,6 +1165,7 @@ mod tests {
     use crate::jsonschema_util::{DynamicJSONSchema, JSONSchemaFromPath};
     use crate::minijinja_util::TemplateConfig;
     use crate::tool::ToolChoice;
+    use crate::variant::OwnedInferenceConfig;
 
     use super::*;
 
@@ -1368,9 +1369,10 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: false,
         };
+        let templates = TemplateConfig::default();
         let inference_config = OwnedInferenceConfig {
             tool_config: Some(tool_config),
-            templates: &TemplateConfig::default(),
+            templates: &templates,
             function_name: "".to_string(),
             variant_name: "".to_string(),
             dynamic_output_schema: None,
@@ -1804,11 +1806,12 @@ mod tests {
             },
             "required": ["name", "age"]
         }));
+        let templates = TemplateConfig::default();
         let inference_config = OwnedInferenceConfig {
             tool_config: None,
             function_name: "".to_string(),
             variant_name: "".to_string(),
-            templates: &TemplateConfig::default(),
+            templates: &templates,
             dynamic_output_schema: Some(dynamic_output_schema),
         };
         let chunks = vec![

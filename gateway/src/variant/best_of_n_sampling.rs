@@ -26,7 +26,7 @@ use crate::{
     variant::chat_completion::ChatCompletionConfig,
 };
 
-use super::{BatchInferenceConfig, InferenceConfig, ModelUsedInfo, Variant};
+use super::{InferenceConfig, ModelUsedInfo, OwnedInferenceConfig, Variant};
 
 #[derive(Debug, Deserialize)]
 pub struct BestOfNSamplingConfig {
@@ -70,17 +70,18 @@ impl Variant for BestOfNSamplingConfig {
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        inference_config: &'request OwnedInferenceConfig<'a>,
         clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<InferenceResult<'a>, Error> {
+        let owned_inference_config = InferenceConfig::Owned(inference_config);
         let candidate_inference_results = self
             .infer_candidates(input, models, function, inference_config, clients)
             .await?;
         self.select_best_candidate(
             input,
             models.models,
-            inference_config,
+            &owned_inference_config,
             clients,
             candidate_inference_results,
         )
@@ -92,7 +93,7 @@ impl Variant for BestOfNSamplingConfig {
         _input: &Input,
         _models: &'request InferenceModels<'static>,
         _function: &'static FunctionConfig,
-        _inference_config: &'request InferenceConfig<'static, 'request>,
+        _inference_config: &'request OwnedInferenceConfig<'static>,
         _clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<
@@ -160,19 +161,16 @@ impl Variant for BestOfNSamplingConfig {
         self.evaluator.inner.get_all_template_paths()
     }
 
-    async fn start_batch_inference<'a, 'request>(
+    async fn start_batch_inference<'a>(
         &'a self,
         _input: &[Input],
-        _models: &'request InferenceModels<'a>,
+        _models: &'a InferenceModels<'a>,
         _function: &'a FunctionConfig,
-        inference_config: &'request BatchInferenceConfig<'request>,
-        _clients: &'request InferenceClients<'request>,
+        _inference_configs: &'a [InferenceConfig<'a, 'a>],
+        _clients: &'a InferenceClients<'a>,
         _inference_params: Vec<InferenceParams>,
     ) -> Result<BatchModelInferenceWithMetadata<'a>, Error> {
-        Err(ErrorDetails::UnsupportedVariantForBatchInference {
-            variant_name: inference_config.variant_name.clone(),
-        }
-        .into())
+        Err(ErrorDetails::UnsupportedVariantForBatchInference { variant_name: None }.into())
     }
 }
 
@@ -183,7 +181,7 @@ impl BestOfNSamplingConfig {
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        inference_config: &'request OwnedInferenceConfig<'a>,
         clients: &'request InferenceClients<'request>,
     ) -> Result<Vec<InferenceResult<'a>>, Error> {
         // Get all the variants we are going to infer
@@ -558,10 +556,10 @@ impl EvaluatorConfig {
     /// # Errors
     ///
     /// Returns an `Error` if any of the candidate outputs fail to serialize or if templating fails.
-    fn prepare_request<'a, 'request>(
+    fn prepare_request(
         &self,
         input: &Input,
-        inference_config: &InferenceConfig<'a, 'request>,
+        inference_config: &InferenceConfig<'_, '_>,
         candidates: &[InferenceResult],
         inference_params: &mut InferenceParams,
     ) -> Result<(ModelInferenceRequest, Vec<usize>), Error> {
@@ -1117,13 +1115,14 @@ mod tests {
             system: None,
             messages: vec![],
         };
-        let inference_config = InferenceConfig::Owned(OwnedInferenceConfig {
+        let owned_inference_config = OwnedInferenceConfig {
             templates: &templates,
             tool_config: None,
             dynamic_output_schema: None,
             function_name: "".to_string(),
             variant_name: "".to_string(),
-        });
+        };
+        let inference_config = InferenceConfig::Owned(&owned_inference_config);
 
         let selected = best_of_n_variant
             .select_best_candidate(
