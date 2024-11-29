@@ -136,7 +136,7 @@ impl FunctionConfig {
         content_blocks: Vec<ContentBlock>,
         usage: Usage,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
-        inference_config: &'request OwnedInferenceConfig<'a>,
+        owned_inference_config: &'request OwnedInferenceConfig<'a>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult<'a>, Error> {
         match self {
@@ -146,7 +146,7 @@ impl FunctionConfig {
                     content_blocks,
                     usage,
                     model_inference_results,
-                    inference_config.tool_config.as_ref(),
+                    owned_inference_config.tool_config.as_ref(),
                     inference_params,
                 )
                 .await,
@@ -180,7 +180,7 @@ impl FunctionConfig {
                         })
                     })
                     .ok();
-                let output_schema = match &inference_config.dynamic_output_schema {
+                let output_schema = match &owned_inference_config.dynamic_output_schema {
                     Some(schema) => JsonSchemaRef::Dynamic(schema),
                     None => JsonSchemaRef::Static(&params.output_schema),
                 };
