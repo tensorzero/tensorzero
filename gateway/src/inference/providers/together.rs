@@ -14,7 +14,7 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
     inference::types::{
-        BatchProviderInferenceResponse, ContentBlock, Latency, ModelInferenceRequest,
+        batch::BatchProviderInferenceResponse, ContentBlock, Latency, ModelInferenceRequest,
         ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
         ProviderInferenceResponseStream,
     },

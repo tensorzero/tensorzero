@@ -19,10 +19,10 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
-    BatchProviderInferenceResponse, BatchStatus, ContentBlock, ContentBlockChunk, Latency,
-    ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, ProviderInferenceResponseStream, RequestMessage, Role, Text,
-    TextChunk, Usage,
+    batch::{BatchProviderInferenceResponse, BatchStatus},
+    ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+    ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
+    RequestMessage, Role, Text, TextChunk, Usage,
 };
 use crate::model::CredentialLocation;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};

@@ -22,7 +22,7 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
-    BatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType, Latency,
+    batch::BatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType, Latency,
     ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
     ProviderInferenceResponseChunk, ProviderInferenceResponseStream, RequestMessage, Role, Text,
     TextChunk, Usage,

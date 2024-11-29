@@ -15,7 +15,7 @@ use crate::endpoints::inference::{InferenceClients, InferenceModels, InferencePa
 use crate::error::Error;
 use crate::error::ErrorDetails;
 use crate::function::FunctionConfig;
-use crate::inference::types::BatchModelInferenceWithMetadata;
+use crate::inference::types::batch::BatchModelInferenceWithMetadata;
 use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, Input, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, ModelInferenceResponseWithMetadata, RequestMessage,

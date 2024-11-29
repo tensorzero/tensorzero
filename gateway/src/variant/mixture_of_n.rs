@@ -9,7 +9,7 @@ use tokio::time::{timeout, Duration};
 use crate::embeddings::EmbeddingModelConfig;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::inference::types::{
-    BatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role, Usage,
+    batch::BatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role, Usage,
 };
 use crate::{
     endpoints::inference::InferenceParams,

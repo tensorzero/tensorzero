@@ -7,8 +7,8 @@ use crate::endpoints::inference::{InferenceClients, InferenceModels, InferencePa
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::{
-    BatchModelInferenceWithMetadata, ContentBlock, InferenceResultChunk, InferenceResultStream,
-    Input, InputMessageContent, ModelInferenceRequest, RequestMessage, Role,
+    batch::BatchModelInferenceWithMetadata, ContentBlock, InferenceResultChunk,
+    InferenceResultStream, Input, InputMessageContent, ModelInferenceRequest, RequestMessage, Role,
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;

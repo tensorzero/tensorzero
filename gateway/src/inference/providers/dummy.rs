@@ -14,8 +14,8 @@ use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingR
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{
-    current_timestamp, BatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, Latency,
-    ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
+    batch::BatchProviderInferenceResponse, current_timestamp, ContentBlock, ContentBlockChunk,
+    Latency, ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream, Usage,
 };
 use crate::model::CredentialLocation;

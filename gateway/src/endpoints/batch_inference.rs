@@ -17,7 +17,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::function::sample_variant;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
-    BatchModelInferenceWithMetadata, ContentBlockOutput, Input, JsonInferenceOutput, Usage,
+    batch::BatchModelInferenceWithMetadata, ContentBlockOutput, Input, JsonInferenceOutput, Usage,
 };
 use crate::tool::{
     BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams,

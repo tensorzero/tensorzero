@@ -22,8 +22,7 @@ use crate::inference::providers::mistral::MistralCredentials;
 use crate::inference::providers::openai::OpenAICredentials;
 use crate::inference::providers::together::TogetherCredentials;
 use crate::inference::providers::vllm::VLLMCredentials;
-use crate::inference::types::BatchModelInferenceResponse;
-use crate::inference::types::BatchProviderInferenceResponse;
+use crate::inference::types::batch::{BatchModelInferenceResponse, BatchProviderInferenceResponse};
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},

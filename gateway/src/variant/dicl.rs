@@ -7,7 +7,7 @@ use serde::Deserialize;
 use crate::embeddings::EmbeddingResponseWithMetadata;
 use crate::endpoints::inference::InferenceModels;
 use crate::inference::types::{
-    BatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role,
+    batch::BatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role,
 };
 use crate::{
     embeddings::{EmbeddingModelConfig, EmbeddingRequest},

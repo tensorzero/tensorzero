@@ -1,6 +1,6 @@
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
-use crate::inference::types::BatchProviderInferenceResponse;
+use crate::inference::types::batch::BatchProviderInferenceResponse;
 use crate::inference::types::ModelInferenceRequest;
 use crate::inference::types::ProviderInferenceResponse;
 use crate::inference::types::ProviderInferenceResponseChunk;

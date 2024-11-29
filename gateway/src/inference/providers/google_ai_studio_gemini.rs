@@ -14,7 +14,7 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
-    serialize_or_log, BatchProviderInferenceResponse, ModelInferenceRequest,
+    batch::BatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     RequestMessage, Usage,
 };

@@ -16,7 +16,7 @@ use super::provider_trait::InferenceProvider;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{
-    BatchProviderInferenceResponse, ContentBlock, Latency, ModelInferenceRequest,
+    batch::BatchProviderInferenceResponse, ContentBlock, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream,
 };

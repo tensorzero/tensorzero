@@ -12,7 +12,7 @@ use crate::embeddings::EmbeddingModelConfig;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
 use crate::inference::types::{
-    BatchModelInferenceWithMetadata, ContentBlock, FunctionType, ModelInferenceRequest,
+    batch::BatchModelInferenceWithMetadata, ContentBlock, FunctionType, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
