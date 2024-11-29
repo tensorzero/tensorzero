@@ -231,7 +231,7 @@ pub async fn prepare_batch_inference_handler(
             }
         };
 
-        // Spawn a thread for a trailing write to ClickHouse so that it doesn't block the response
+        // Write to ClickHouse (don't spawn a thread for this because it's required)
         let write_metadata = BatchInferenceDatabaseInsertMetadata {
             function_name: params.function_name.as_str(),
             variant_name,
@@ -244,7 +244,9 @@ pub async fn prepare_batch_inference_handler(
             params.inputs,
             result,
             write_metadata,
-            inference_config.clone(), // Spent a while fighting the borrow checker here, gave up
+            inference_config.clone(),
+            // Spent a while fighting the borrow checker here, gave up
+            // The issue is that inference_config holds the ToolConfigs and ModelInferenceRequest has lifetimes that conflict with the inference_config
         )
         .await?;
 
@@ -614,5 +616,173 @@ impl TryFrom<BatchChatCompletionParamsWithSize> for Vec<ChatCompletionInferenceP
             });
         }
         Ok(all_inference_params)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use uuid::Timestamp;
+
+    use super::*;
+
+    #[test]
+    fn test_try_from_batch_episode_ids_with_size() {
+        let batch_episode_ids_with_size = BatchEpisodeIdsWithSize(None, 3);
+        let batch_episode_ids = BatchEpisodeIds::try_from(batch_episode_ids_with_size).unwrap();
+        assert_eq!(batch_episode_ids.len(), 3);
+
+        let batch_episode_ids_with_size = BatchEpisodeIdsWithSize(Some(vec![None, None, None]), 3);
+        let batch_episode_ids = BatchEpisodeIds::try_from(batch_episode_ids_with_size).unwrap();
+        assert_eq!(batch_episode_ids.len(), 3);
+
+        let episode_id_0 = Uuid::now_v7();
+        let episode_id_1 = Uuid::now_v7();
+        let batch_episode_ids_with_size =
+            BatchEpisodeIdsWithSize(Some(vec![Some(episode_id_0), Some(episode_id_1), None]), 3);
+        let batch_episode_ids = BatchEpisodeIds::try_from(batch_episode_ids_with_size).unwrap();
+        assert_eq!(batch_episode_ids.len(), 3);
+        assert_eq!(batch_episode_ids[0], episode_id_0);
+        assert_eq!(batch_episode_ids[1], episode_id_1);
+
+        let early_uuid = Uuid::new_v7(Timestamp::from_unix_time(946766218, 0, 0, 0));
+        let batch_episode_ids_with_size =
+            BatchEpisodeIdsWithSize(Some(vec![Some(early_uuid), None, None]), 3);
+        let err = BatchEpisodeIds::try_from(batch_episode_ids_with_size).unwrap_err();
+        assert_eq!(
+            err,
+            ErrorDetails::BatchInputValidation {
+                index: 0,
+                message: "Invalid Episode ID: Timestamp is too early".to_string(),
+            }
+            .into()
+        );
+    }
+
+    #[test]
+    fn test_batch_inference_params_with_size() {
+        // Try with default params
+        let batch_inference_params_with_size =
+            BatchInferenceParamsWithSize(BatchInferenceParams::default(), 3);
+        let inference_params =
+            Vec::<InferenceParams>::try_from(batch_inference_params_with_size).unwrap();
+        assert_eq!(inference_params.len(), 3);
+        assert_eq!(
+            inference_params[0].chat_completion,
+            ChatCompletionInferenceParams::default()
+        );
+
+        // Try with some overridden params
+        let batch_inference_params_with_size = BatchInferenceParamsWithSize(
+            BatchInferenceParams {
+                chat_completion: BatchChatCompletionInferenceParams {
+                    temperature: Some(vec![Some(0.5), None, None]),
+                    max_tokens: Some(vec![None, None, Some(30)]),
+                    seed: Some(vec![None, Some(2), Some(3)]),
+                    top_p: None,
+                    presence_penalty: Some(vec![Some(0.5), Some(0.6), Some(0.7)]),
+                    frequency_penalty: Some(vec![Some(0.5), Some(0.6), Some(0.7)]),
+                },
+            },
+            3,
+        );
+
+        let inference_params =
+            Vec::<InferenceParams>::try_from(batch_inference_params_with_size).unwrap();
+        assert_eq!(inference_params.len(), 3);
+        assert_eq!(inference_params[0].chat_completion.temperature, Some(0.5));
+        assert_eq!(inference_params[1].chat_completion.max_tokens, None);
+        assert_eq!(inference_params[2].chat_completion.seed, Some(3));
+        // Check top_p is None for all since it wasn't specified
+        assert_eq!(inference_params[0].chat_completion.top_p, None);
+        assert_eq!(inference_params[1].chat_completion.top_p, None);
+        assert_eq!(inference_params[2].chat_completion.top_p, None);
+
+        // Check presence_penalty values
+        assert_eq!(
+            inference_params[0].chat_completion.presence_penalty,
+            Some(0.5)
+        );
+        assert_eq!(
+            inference_params[1].chat_completion.presence_penalty,
+            Some(0.6)
+        );
+        assert_eq!(
+            inference_params[2].chat_completion.presence_penalty,
+            Some(0.7)
+        );
+
+        // Check frequency_penalty values
+        assert_eq!(
+            inference_params[0].chat_completion.frequency_penalty,
+            Some(0.5)
+        );
+        assert_eq!(
+            inference_params[1].chat_completion.frequency_penalty,
+            Some(0.6)
+        );
+        assert_eq!(
+            inference_params[2].chat_completion.frequency_penalty,
+            Some(0.7)
+        );
+
+        // Verify temperature is None for indices 1 and 2
+        assert_eq!(inference_params[1].chat_completion.temperature, None);
+        assert_eq!(inference_params[2].chat_completion.temperature, None);
+
+        // Verify max_tokens is 30 for last item and None for first
+        assert_eq!(inference_params[0].chat_completion.max_tokens, None);
+        assert_eq!(inference_params[2].chat_completion.max_tokens, Some(30));
+
+        // Verify seed is None for first item and 2 for second
+        assert_eq!(inference_params[0].chat_completion.seed, None);
+        assert_eq!(inference_params[1].chat_completion.seed, Some(2));
+
+        // Test with ragged arrays (arrays of different lengths)
+        let batch_inference_params_with_size = BatchInferenceParamsWithSize(
+            BatchInferenceParams {
+                chat_completion: BatchChatCompletionInferenceParams {
+                    temperature: Some(vec![Some(0.5), None]), // Too short
+                    max_tokens: Some(vec![None, None, Some(30), Some(40)]), // Too long
+                    seed: Some(vec![]),                       // Empty array
+                    top_p: None,
+                    presence_penalty: Some(vec![Some(0.5)]), // Too short
+                    frequency_penalty: Some(vec![Some(0.5), Some(0.6), Some(0.7), Some(0.8)]), // Too long
+                },
+            },
+            3,
+        );
+
+        let err = Vec::<InferenceParams>::try_from(batch_inference_params_with_size).unwrap_err();
+        match err.get_details() {
+            ErrorDetails::InvalidRequest { message } => assert_eq!(
+                message,
+                "temperature vector length (2) does not match number of inferences (3)"
+            ),
+            _ => panic!("Expected InvalidRequest error"),
+        }
+
+        // Test with wrong size specified
+        let batch_inference_params_with_size = BatchInferenceParamsWithSize(
+            BatchInferenceParams {
+                chat_completion: BatchChatCompletionInferenceParams {
+                    temperature: Some(vec![Some(0.5), None, None, None]),
+                    max_tokens: Some(vec![None, None, Some(30)]),
+                    seed: Some(vec![None, Some(2), Some(3)]),
+                    top_p: None,
+                    presence_penalty: Some(vec![Some(0.5), Some(0.6), Some(0.7)]),
+                    frequency_penalty: Some(vec![Some(0.5), Some(0.6), Some(0.7)]),
+                },
+            },
+            4, // Wrong size - arrays are length 3 but size is 4
+        );
+
+        let err = Vec::<InferenceParams>::try_from(batch_inference_params_with_size).unwrap_err();
+        match err.get_details() {
+            ErrorDetails::InvalidRequest { message } => assert_eq!(
+                message,
+                "max_tokens vector length (3) does not match number of inferences (4)"
+            ),
+            _ => panic!("Expected InvalidRequest error"),
+        }
     }
 }

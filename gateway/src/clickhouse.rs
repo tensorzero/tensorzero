@@ -281,11 +281,6 @@ async fn write_production(
         return Ok(());
     }
 
-    // let row_json = serde_json::to_string(rows).map_err(|e| {
-    //     Error::new(ErrorDetails::Serialization {
-    //         message: e.to_string(),
-    //     })
-    // })?;
     let rows_json: Result<Vec<String>, _> = rows
         .iter()
         .map(|row| {
