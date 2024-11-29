@@ -82,6 +82,7 @@ class BaseTensorZeroGateway(ABC):
         ] = None,
         parallel_tool_calls: Optional[bool] = None,
         tags: Optional[Dict[str, str]] = None,
+        credentials: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         input = deepcopy(input)
         # Convert content blocks to dicts if necessary
@@ -114,6 +115,8 @@ class BaseTensorZeroGateway(ABC):
             data["parallel_tool_calls"] = parallel_tool_calls
         if tags is not None:
             data["tags"] = tags
+        if credentials is not None:
+            data["credentials"] = credentials
         return data
 
     def _prepare_feedback_request(
@@ -163,6 +166,7 @@ class BaseTensorZeroGateway(ABC):
         ] = None,
         parallel_tool_calls: Optional[bool] = None,
         tags: Optional[Dict[str, str]] = None,
+        credentials: Optional[Dict[str, str]] = None,
     ) -> Union[InferenceResponse, Generator[InferenceChunk, None, None]]:
         pass
 
@@ -207,6 +211,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         ] = None,
         parallel_tool_calls: Optional[bool] = None,
         tags: Optional[Dict[str, str]] = None,
+        credentials: Optional[Dict[str, str]] = None,
     ) -> Union[InferenceResponse, Generator[InferenceChunk, None, None]]:
         """
         Make a POST request to the /inference endpoint.
@@ -250,15 +255,10 @@ class TensorZeroGateway(BaseTensorZeroGateway):
             tool_choice,
             parallel_tool_calls,
             tags,
+            credentials,
         )
         if stream:
-            req = self.client.build_request("POST", url, json=data)
-            response = self.client.send(req, stream=True)
-            try:
-                response.raise_for_status()
-            except httpx.HTTPStatusError as e:
-                raise TensorZeroError(response) from e
-            return self._stream_sse(response)
+            return self._stream_inference(url, data)
         else:
             response = self.client.post(url, json=data)
             try:
@@ -321,26 +321,35 @@ class TensorZeroGateway(BaseTensorZeroGateway):
     ) -> None:
         self.close()
 
-    def _stream_sse(
-        self, response: httpx.Response
+    def _stream_inference(
+        self, url: str, data: Dict[str, Any]
     ) -> Generator[InferenceChunk, None, None]:
         """
         Parse the SSE stream from the response.
 
-        :param response: The httpx.Response object
-        :yield: Parsed SSE events as dictionaries
+        NOTE: The httpx client won't make a request until you start consuming the stream.
+
+        :param url: The URL to stream from
+        :param data: The request data to send
+        :yield: InferenceChunk objects containing partial results
         """
-        for line in response.iter_lines():
-            if line.startswith("data: "):
-                data = line[6:].strip()
-                if data == "[DONE]":
-                    break
-                try:
-                    parsed_data: Dict[str, Any] = json.loads(data)
-                    yield parse_inference_chunk(parsed_data)
-                except json.JSONDecodeError:
-                    self.logger.error(f"Failed to parse SSE data: {data}")
-        response.close()
+        with self.client.stream("POST", url, json=data) as response:
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                response.read()
+                raise TensorZeroError(response) from e
+
+            for line in response.iter_lines():
+                if line.startswith("data: "):
+                    event_data = line[6:].strip()
+                    if event_data == "[DONE]":
+                        break
+                    try:
+                        parsed_data: Dict[str, Any] = json.loads(event_data)
+                        yield parse_inference_chunk(parsed_data)
+                    except json.JSONDecodeError:
+                        self.logger.error(f"Failed to parse SSE data: {event_data}")
 
 
 class AsyncTensorZeroGateway(BaseTensorZeroGateway):
@@ -370,6 +379,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         ] = None,
         parallel_tool_calls: Optional[bool] = None,
         tags: Optional[Dict[str, str]] = None,
+        credentials: Optional[Dict[str, str]] = None,
     ) -> Union[InferenceResponse, AsyncGenerator[InferenceChunk, None]]:
         """
         Make a POST request to the /inference endpoint.
@@ -413,16 +423,10 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
             tool_choice,
             parallel_tool_calls,
             tags,
+            credentials,
         )
         if stream:
-            req = self.client.build_request("POST", url, json=data)
-            response = await self.client.send(req, stream=True)
-            try:
-                response.raise_for_status()
-            except httpx.HTTPStatusError as e:
-                response._content = await response.aread()
-                raise TensorZeroError(response) from e
-            return self._stream_sse(response)
+            return self._stream_inference(url, data)
         else:
             response = await self.client.post(url, json=data)
             try:
@@ -485,23 +489,32 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
     ) -> None:
         await self.close()
 
-    async def _stream_sse(
-        self, response: httpx.Response
+    async def _stream_inference(
+        self, url: str, data: Dict[str, Any]
     ) -> AsyncGenerator[InferenceChunk, None]:
         """
-        Parse the SSE stream from the response.
+        Stream inference results from the server.
 
-        :param response: The httpx.Response object
-        :yield: Parsed SSE events as dictionaries
+        NOTE: The httpx client won't make a request until you start consuming the stream.
+
+        :param url: The URL to stream from
+        :param data: The request data to send
+        :yield: InferenceChunk objects containing partial results
         """
-        async for line in response.aiter_lines():
-            if line.startswith("data: "):
-                data = line[6:].strip()
-                if data == "[DONE]":
-                    break
-                try:
-                    parsed_data: Dict[str, Any] = json.loads(data)
-                    yield parse_inference_chunk(parsed_data)
-                except json.JSONDecodeError:
-                    self.logger.error(f"Failed to parse SSE data: {data}")
-        await response.aclose()
+        async with self.client.stream("POST", url, json=data) as response:
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                await response.aread()
+                raise TensorZeroError(response) from e
+
+            async for line in response.aiter_lines():
+                if line.startswith("data: "):
+                    event_data = line[6:].strip()
+                    if event_data == "[DONE]":
+                        break
+                    try:
+                        parsed_data: Dict[str, Any] = json.loads(event_data)
+                        yield parse_inference_chunk(parsed_data)
+                    except json.JSONDecodeError:
+                        self.logger.error(f"Failed to parse SSE data: {event_data}")

@@ -566,6 +566,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                         OpenAICredentials::Static(api_key)
                     }
                     CredentialLocation::Dynamic(key_name) => OpenAICredentials::Dynamic(key_name),
+                    CredentialLocation::None => OpenAICredentials::None,
                     _ => Err(serde::de::Error::custom(
                         "Invalid api_key_location for OpenAI provider".to_string(),
                     ))?,
