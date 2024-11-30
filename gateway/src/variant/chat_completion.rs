@@ -336,6 +336,9 @@ impl Variant for ChatCompletionConfig {
         inference_params: Vec<InferenceParams>,
     ) -> Result<BatchModelInferenceWithMetadata<'a>, Error> {
         // First construct all inference configs so they stick around for the duration of this function body
+        println!("inputs: {:?}", inputs);
+        println!("inference_configs: {:?}", inference_configs);
+        println!("inference_params: {:?}", inference_params);
         let mut inference_params = inference_params;
 
         // Next, prepare all the ModelInferenceRequests

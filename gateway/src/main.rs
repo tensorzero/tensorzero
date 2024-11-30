@@ -39,7 +39,7 @@ async fn main() {
     let router = Router::new()
         .route("/inference", post(endpoints::inference::inference_handler))
         .route(
-            "/batch",
+            "/batch_inference",
             post(endpoints::batch_inference::prepare_batch_inference_handler),
         )
         .route(

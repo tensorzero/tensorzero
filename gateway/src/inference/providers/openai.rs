@@ -202,6 +202,7 @@ impl InferenceProvider for OpenAIProvider {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let request_url = get_files_url(self.api_base.as_ref())?;
         let inference_ids: Vec<Uuid> = requests.iter().map(|_| Uuid::now_v7()).collect();
+        println!("requests: {:?}", requests);
         let batch_requests: Result<Vec<OpenAIBatchFileInput>, Error> = requests
             .iter()
             .zip(&inference_ids)
@@ -211,6 +212,7 @@ impl InferenceProvider for OpenAIProvider {
             .collect();
         let batch_requests = batch_requests?;
         let mut jsonl_data = Vec::new();
+        println!("Batch requests: {:?}", batch_requests);
         for item in batch_requests {
             serde_json::to_writer(&mut jsonl_data, &item).map_err(|e| {
                 Error::new(ErrorDetails::OpenAIServer {
@@ -223,6 +225,7 @@ impl InferenceProvider for OpenAIProvider {
                 })
             })?;
         }
+        println!("JSONL data: {}", String::from_utf8_lossy(&jsonl_data));
         // Create the multipart form
         let form = Form::new().text("purpose", "batch").part(
             "file",
@@ -244,11 +247,14 @@ impl InferenceProvider for OpenAIProvider {
                 message: format!("Error sending request to OpenAI: {e}"),
             })
         })?;
-        let response: OpenAIFileResponse = res.json().await.map_err(|e| {
-            Error::new(ErrorDetails::OpenAIServer {
-                message: format!("Error parsing JSON response: {e}"),
-            })
-        })?;
+        let text = res.text().await.unwrap();
+        println!("API response: {text}");
+        let response: OpenAIFileResponse = serde_json::from_str(&text).unwrap();
+        // })?; let response: OpenAIFileResponse = res.json().await.map_err(|e| {
+        //     Error::new(ErrorDetails::OpenAIServer {
+        //         message: format!("Error parsing JSON response: {e}"),
+        //     })
+        // })?;
         let file_id = response.id;
         let batch_request = OpenAIBatchRequest::new(&file_id);
         let request_url = get_batch_url(self.api_base.as_ref())?;
