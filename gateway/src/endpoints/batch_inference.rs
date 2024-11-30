@@ -172,8 +172,13 @@ pub async fn prepare_batch_inference_handler(
 
     // Keep track of which variants failed
     let mut variant_errors = std::collections::HashMap::new();
-    let inference_config =
-        BatchInferenceConfig::new(&config.templates, tool_configs, params.output_schemas);
+    let inference_config = BatchInferenceConfig::new(
+        &config.templates,
+        tool_configs,
+        params.output_schemas,
+        &params.function_name,
+        params.variant_name.as_deref(),
+    );
 
     let inference_clients = InferenceClients {
         http_client: &http_client,

@@ -26,7 +26,7 @@ use crate::{
     variant::chat_completion::ChatCompletionConfig,
 };
 
-use super::{InferenceConfig, ModelUsedInfo, OwnedInferenceConfig, Variant};
+use super::{InferenceConfig, ModelUsedInfo, Variant};
 
 #[derive(Debug, Deserialize)]
 pub struct BestOfNSamplingConfig {
@@ -70,18 +70,17 @@ impl Variant for BestOfNSamplingConfig {
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request OwnedInferenceConfig<'a>,
+        inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<InferenceResult<'a>, Error> {
-        let owned_inference_config = InferenceConfig::Owned(inference_config);
         let candidate_inference_results = self
             .infer_candidates(input, models, function, inference_config, clients)
             .await?;
         self.select_best_candidate(
             input,
             models.models,
-            &owned_inference_config,
+            inference_config,
             clients,
             candidate_inference_results,
         )
@@ -93,7 +92,7 @@ impl Variant for BestOfNSamplingConfig {
         _input: &Input,
         _models: &'request InferenceModels<'static>,
         _function: &'static FunctionConfig,
-        _inference_config: &'request OwnedInferenceConfig<'static>,
+        _inference_config: &'request InferenceConfig<'static, 'request>,
         _clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<
@@ -181,7 +180,7 @@ impl BestOfNSamplingConfig {
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request OwnedInferenceConfig<'a>,
+        inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
     ) -> Result<Vec<InferenceResult<'a>>, Error> {
         // Get all the variants we are going to infer
@@ -565,7 +564,7 @@ impl EvaluatorConfig {
     ) -> Result<(ModelInferenceRequest, Vec<usize>), Error> {
         // Do this before we prepare the system message so we can use the correct max index in the system message
         let (candidate_message, skipped_indices) =
-            self.prepare_candidate_message(inference_config.templates(), candidates)?;
+            self.prepare_candidate_message(inference_config.templates, candidates)?;
         // Need to subtract the skipped indices from the total number of candidates to get the correct max index
         let max_index = candidates
             .len()
@@ -577,7 +576,7 @@ impl EvaluatorConfig {
                 })
             })?;
         let system = Some(self.prepare_system_message(
-            inference_config.templates(),
+            inference_config.templates,
             input.system.as_ref(),
             max_index,
         )?);
@@ -586,7 +585,7 @@ impl EvaluatorConfig {
             .iter()
             .map(|message| {
                 self.inner
-                    .prepare_request_message(inference_config.templates(), message)
+                    .prepare_request_message(inference_config.templates, message)
             })
             .chain(std::iter::once(Ok(candidate_message)))
             .collect::<Result<Vec<_>, _>>()?;
@@ -653,7 +652,6 @@ mod tests {
         },
         minijinja_util::tests::get_test_template_config,
         model::ProviderConfig,
-        variant::OwnedInferenceConfig,
     };
 
     use super::*;
@@ -1115,14 +1113,13 @@ mod tests {
             system: None,
             messages: vec![],
         };
-        let owned_inference_config = OwnedInferenceConfig {
+        let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
             dynamic_output_schema: None,
-            function_name: "".to_string(),
-            variant_name: "".to_string(),
+            function_name: "",
+            variant_name: Some(""),
         };
-        let inference_config = InferenceConfig::Owned(&owned_inference_config);
 
         let selected = best_of_n_variant
             .select_best_candidate(

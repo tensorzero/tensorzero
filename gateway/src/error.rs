@@ -140,6 +140,9 @@ pub enum ErrorDetails {
         variant_name: String,
         message: String,
     },
+    InvalidDiclConfig {
+        message: String,
+    },
     InvalidEpisodeId {
         message: String,
     },
@@ -306,6 +309,7 @@ impl ErrorDetails {
             ErrorDetails::InputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidBaseUrl { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidCandidate { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidDiclConfig { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidEpisodeId { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidMessage { .. } => tracing::Level::WARN,
@@ -384,6 +388,7 @@ impl ErrorDetails {
             ErrorDetails::InputValidation { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidBaseUrl { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidDiclConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidOpenAICompatibleRequest { .. } => StatusCode::BAD_REQUEST,
@@ -550,6 +555,9 @@ impl std::fmt::Display for ErrorDetails {
                     "Invalid candidate variant as a component of variant {}: {}",
                     variant_name, message
                 )
+            }
+            ErrorDetails::InvalidDiclConfig { message } => {
+                write!(f, "Invalid dynamic in-context learning config: {}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new", message)
             }
             ErrorDetails::InvalidFunctionVariants { message } => write!(f, "{}", message),
             ErrorDetails::InvalidEpisodeId { message } => {

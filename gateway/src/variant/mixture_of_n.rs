@@ -23,7 +23,7 @@ use crate::{
 
 use super::{
     infer_model_request, prepare_model_inference_request, InferModelRequestArgs, InferenceConfig,
-    ModelUsedInfo, OwnedInferenceConfig, Variant,
+    ModelUsedInfo, Variant,
 };
 
 #[derive(Debug, Deserialize)]
@@ -52,18 +52,18 @@ impl Variant for MixtureOfNConfig {
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        owned_inference_config: &'request OwnedInferenceConfig<'a>,
+        inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<InferenceResult<'a>, Error> {
         let candidate_inference_results = self
-            .infer_candidates(input, models, function, owned_inference_config, clients)
+            .infer_candidates(input, models, function, inference_config, clients)
             .await?;
         self.fuse_candidates(
             input,
             function,
             models.models,
-            owned_inference_config,
+            inference_config,
             clients,
             candidate_inference_results,
         )
@@ -75,7 +75,7 @@ impl Variant for MixtureOfNConfig {
         _input: &Input,
         _models: &'request InferenceModels<'static>,
         _function: &'static FunctionConfig,
-        _inference_config: &'request OwnedInferenceConfig<'static>,
+        _inference_config: &'request InferenceConfig<'static, 'request>,
         _clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<
@@ -163,7 +163,7 @@ impl MixtureOfNConfig {
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request OwnedInferenceConfig<'a>,
+        inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
     ) -> Result<Vec<InferenceResult<'a>>, Error> {
         // Get all the variants we are going to infer
@@ -236,7 +236,7 @@ impl MixtureOfNConfig {
         input: &Input,
         function: &'a FunctionConfig,
         models: &'a HashMap<String, ModelConfig>,
-        inference_config: &'request OwnedInferenceConfig<'a>,
+        inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
         mut candidates: Vec<InferenceResult<'a>>,
     ) -> Result<InferenceResult<'a>, Error> {
@@ -304,11 +304,10 @@ async fn inner_fuse_candidates<'a, 'request>(
     input: &'request Input,
     models: &'a HashMap<String, ModelConfig>,
     function: &'a FunctionConfig,
-    owned_inference_config: &'request OwnedInferenceConfig<'a>,
+    inference_config: &'request InferenceConfig<'a, 'request>,
     clients: &'request InferenceClients<'request>,
     candidates: &[InferenceResult<'request>],
 ) -> Result<InferenceResult<'a>, Error> {
-    let inference_config = InferenceConfig::Owned(owned_inference_config);
     let (inference_request, included_indices) = fuser.prepare_request(
         input,
         function,
@@ -332,7 +331,7 @@ async fn inner_fuse_candidates<'a, 'request>(
         model_name: &fuser.inner.model,
         model_config,
         function,
-        inference_config: owned_inference_config,
+        inference_config,
         retry_config: &fuser.inner.retries,
         clients,
         inference_params: InferenceParams::default(),
@@ -458,10 +457,10 @@ impl FuserConfig {
     {
         // Do this before we prepare the system message so we can use the correct max index in the system message
         let (candidate_message, included_indices) =
-            self.prepare_candidate_message(inference_config.templates(), candidates)?;
+            self.prepare_candidate_message(inference_config.templates, candidates)?;
         let max_index = included_indices.len().saturating_sub(1);
         let system = Some(self.prepare_system_message(
-            inference_config.templates(),
+            inference_config.templates,
             input.system.as_ref(),
             max_index,
         )?);
@@ -470,7 +469,7 @@ impl FuserConfig {
             .iter()
             .map(|message| {
                 self.inner
-                    .prepare_request_message(inference_config.templates(), message)
+                    .prepare_request_message(inference_config.templates, message)
             })
             .chain(std::iter::once(Ok(candidate_message)))
             .collect::<Result<Vec<_>, _>>()?;
@@ -517,7 +516,6 @@ mod tests {
         minijinja_util::tests::get_test_template_config,
         model::ProviderConfig,
         tool::{ToolCallConfig, ToolChoice},
-        variant::OwnedInferenceConfig,
     };
 
     use super::*;
@@ -958,12 +956,12 @@ mod tests {
             system: None,
             messages: vec![],
         };
-        let inference_config = OwnedInferenceConfig {
+        let inference_config = InferenceConfig {
             templates: &templates,
             tool_config: None,
             dynamic_output_schema: None,
-            function_name: "".to_string(),
-            variant_name: "".to_string(),
+            function_name: "",
+            variant_name: Some(""),
         };
 
         let fused = mixture_of_n_variant

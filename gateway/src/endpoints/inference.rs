@@ -29,10 +29,12 @@ use crate::inference::types::{
     JsonInferenceDatabaseInsert, JsonInferenceOutput, ModelInferenceResponseWithMetadata,
     RequestMessage, Usage,
 };
+use crate::jsonschema_util::DynamicJSONSchema;
+use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelConfig;
 use crate::tool::{DynamicToolParams, ToolCallConfig};
 use crate::uuid_util::validate_episode_id;
-use crate::variant::{OwnedInferenceConfig, Variant};
+use crate::variant::{InferenceConfig, Variant};
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Deserialize)]
@@ -94,6 +96,8 @@ struct InferenceMetadata<'a> {
     pub input_messages: Vec<RequestMessage>,
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
     pub tags: HashMap<String, String>,
+    pub tool_config: Option<ToolCallConfig>,
+    pub dynamic_output_schema: Option<DynamicJSONSchema>,
 }
 
 pub type InferenceCredentials = HashMap<String, SecretString>;
@@ -202,12 +206,16 @@ pub async fn inference(
 
     // Keep track of which variants failed
     let mut variant_errors = std::collections::HashMap::new();
-    let mut inference_config = OwnedInferenceConfig::new(
-        params.function_name.clone(),
-        &config.templates,
-        tool_config,
-        params.output_schema,
-    );
+
+    // Set up inference config
+    let output_schema = params.output_schema.map(DynamicJSONSchema::new);
+    let mut inference_config = InferenceConfig {
+        function_name: &params.function_name,
+        variant_name: None,
+        templates: &config.templates,
+        tool_config: tool_config.as_ref(),
+        dynamic_output_schema: output_schema.as_ref(),
+    };
 
     let inference_clients = InferenceClients {
         http_client: &http_client,
@@ -230,7 +238,7 @@ pub async fn inference(
         // Will be edited by the variant as part of making the request so we must clone here
         let variant_inference_params = params.params.clone();
 
-        inference_config.variant_name = variant_name.to_string();
+        inference_config.variant_name = Some(variant_name);
         if stream {
             let result = variant
                 .infer_stream(
@@ -273,15 +281,17 @@ pub async fn inference(
                 input_messages: model_used_info.input_messages,
                 previous_model_inference_results: model_used_info.previous_model_inference_results,
                 tags: params.tags,
+                tool_config,
+                dynamic_output_schema: output_schema,
             };
 
             let stream = create_stream(
                 function,
+                &config.templates,
                 inference_metadata,
                 chunk,
                 stream,
                 clickhouse_connection_info,
-                inference_config,
             );
 
             return Ok(InferenceOutput::Streaming(Box::pin(stream)));
@@ -312,16 +322,16 @@ pub async fn inference(
 
             if !dryrun {
                 // Spawn a thread for a trailing write to ClickHouse so that it doesn't block the response
+
+                let result_to_write = result.clone();
                 let write_metadata = InferenceDatabaseInsertMetadata {
-                    function_name: params.function_name,
+                    function_name: params.function_name.clone(),
                     variant_name: variant_name.to_string(),
                     episode_id,
-                    tool_params: inference_config.tool_config,
+                    tool_config,
                     processing_time: start_time.elapsed(),
                     tags: params.tags,
                 };
-
-                let result_to_write = result.clone();
 
                 tokio::spawn(async move {
                     write_inference(
@@ -349,11 +359,11 @@ pub async fn inference(
 
 fn create_stream<'a>(
     function: &'static FunctionConfig,
+    templates: &'static TemplateConfig<'static>,
     metadata: InferenceMetadata<'static>,
     first_chunk: InferenceResultChunk,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
-    inference_config: OwnedInferenceConfig<'static>,
 ) -> impl Stream<Item = Option<InferenceResponseChunk>> + Send + 'a {
     async_stream::stream! {
         let mut buffer = vec![first_chunk.clone()];
@@ -396,6 +406,8 @@ fn create_stream<'a>(
             input_messages,
             previous_model_inference_results,
             tags,
+            tool_config,
+            dynamic_output_schema,
         } = metadata;
 
         if !dryrun {
@@ -408,9 +420,13 @@ fn create_stream<'a>(
                 model_provider_name,
                 raw_request,
                 inference_params,
+                function_name: &function_name,
+                variant_name: &variant_name,
+                dynamic_output_schema,
+                templates,
             };
             let inference_response: Result<InferenceResult, Error> =
-                collect_chunks(collect_chunks_args, &inference_config).await;
+                collect_chunks(collect_chunks_args).await;
 
             let inference_response = inference_response.ok();
 
@@ -421,7 +437,7 @@ fn create_stream<'a>(
                     function_name,
                     variant_name,
                     episode_id,
-                    tool_params: inference_config.tool_config,
+                    tool_config,
                     processing_time: start_time.elapsed(),
                     tags,
                 };
@@ -470,7 +486,7 @@ pub struct InferenceDatabaseInsertMetadata {
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
-    pub tool_params: Option<ToolCallConfig>,
+    pub tool_config: Option<ToolCallConfig>,
     pub processing_time: Duration,
     pub tags: HashMap<String, String>,
 }
@@ -731,6 +747,8 @@ mod tests {
             input_messages: vec![],
             previous_model_inference_results: vec![],
             tags: HashMap::new(),
+            tool_config: None,
+            dynamic_output_schema: None,
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk);
@@ -779,6 +797,8 @@ mod tests {
             input_messages: vec![],
             previous_model_inference_results: vec![],
             tags: HashMap::new(),
+            tool_config: None,
+            dynamic_output_schema: None,
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk);

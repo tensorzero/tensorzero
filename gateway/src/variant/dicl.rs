@@ -24,8 +24,7 @@ use crate::{
 
 use super::{
     infer_model_request, infer_model_request_stream, prepare_model_inference_request,
-    InferModelRequestArgs, InferenceConfig, JsonMode, ModelUsedInfo, OwnedInferenceConfig,
-    RetryConfig, Variant,
+    InferModelRequestArgs, InferenceConfig, JsonMode, ModelUsedInfo, RetryConfig, Variant,
 };
 
 /// The primary configuration for the Dicl variant
@@ -75,7 +74,7 @@ impl Variant for DiclConfig {
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request OwnedInferenceConfig<'a>,
+        inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult<'a>, Error> {
@@ -88,19 +87,22 @@ impl Variant for DiclConfig {
                 input,
                 models.embedding_models,
                 clients,
-                inference_config.function_name.as_str(),
-                inference_config.variant_name.as_str(),
+                inference_config.function_name,
+                inference_config.variant_name.ok_or_else(|| {
+                    Error::new(ErrorDetails::InvalidDiclConfig {
+                        message: "missing variant_name".to_string(),
+                    })
+                })?,
                 function,
             )
             .await?;
-        let owned_inference_config = InferenceConfig::Owned(inference_config);
 
         // Prepare the request for the model
         let model_inference_request = self.prepare_request(
             input,
             &relevant_examples,
             function,
-            &owned_inference_config,
+            inference_config,
             false,
             &mut inference_params,
         )?;
@@ -138,7 +140,7 @@ impl Variant for DiclConfig {
         input: &Input,
         models: &'request InferenceModels<'static>,
         function: &'static FunctionConfig,
-        inference_config: &'request OwnedInferenceConfig<'static>,
+        inference_config: &'request InferenceConfig<'static, 'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<
@@ -158,18 +160,21 @@ impl Variant for DiclConfig {
                 input,
                 models.embedding_models,
                 clients,
-                inference_config.function_name.as_str(),
-                inference_config.variant_name.as_str(),
+                inference_config.function_name,
+                inference_config.variant_name.ok_or_else(|| {
+                    Error::new(ErrorDetails::InvalidDiclConfig {
+                        message: "missing variant_name".to_string(),
+                    })
+                })?,
                 function,
             )
             .await?;
-        let owned_inference_config = InferenceConfig::Owned(inference_config);
         // Prepare the request for the model
         let request = self.prepare_request(
             input,
             &relevant_examples,
             function,
-            &owned_inference_config,
+            inference_config,
             true,
             &mut inference_params,
         )?;
