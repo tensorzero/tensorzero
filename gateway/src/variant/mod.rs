@@ -82,29 +82,6 @@ pub struct InferenceConfig<'a, 'request> {
     pub variant_name: Option<&'request str>,
 }
 
-// impl<'a, 'request> InferenceConfig<'a, 'request> {
-//     pub fn tool_config(&'request self) -> Option<&'request ToolCallConfig> {
-//         match self {
-//             InferenceConfig::Owned(config) => config.tool_config.as_ref(),
-//             InferenceConfig::Borrowed(config) => config.tool_config,
-//         }
-//     }
-
-//     pub fn templates(&self) -> &'a TemplateConfig<'a> {
-//         match self {
-//             InferenceConfig::Owned(config) => config.templates,
-//             InferenceConfig::Borrowed(config) => config.templates,
-//         }
-//     }
-
-//     pub fn dynamic_output_schema(&'request self) -> Option<&'request DynamicJSONSchema> {
-//         match self {
-//             InferenceConfig::Owned(config) => config.dynamic_output_schema.as_ref(),
-//             InferenceConfig::Borrowed(config) => config.dynamic_output_schema,
-//         }
-//     }
-// }
-
 /// Maps to the subset of Config that applies to the current inference request.
 /// It doesn't take into account inference-time overrides (e.g. dynamic tools).
 #[derive(Clone, Debug)]
@@ -608,19 +585,14 @@ impl<'a> BatchInferenceConfig<'a> {
     pub fn new(
         templates: &'a TemplateConfig,
         tool_configs: Vec<Option<ToolCallConfig>>,
-        dynamic_output_schemas: Option<Vec<Option<serde_json::Value>>>,
+        dynamic_output_schemas: Vec<Option<DynamicJSONSchema>>,
         function_name: &'a str,
         variant_name: Option<&'a str>,
     ) -> Self {
         Self {
             templates,
             tool_configs,
-            dynamic_output_schemas: dynamic_output_schemas.map_or(Vec::new(), |schemas| {
-                schemas
-                    .into_iter()
-                    .map(|schema| schema.map(DynamicJSONSchema::new))
-                    .collect()
-            }),
+            dynamic_output_schemas,
             function_name,
             variant_name,
         }

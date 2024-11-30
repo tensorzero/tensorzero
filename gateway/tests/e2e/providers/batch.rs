@@ -1,10 +1,14 @@
 #![allow(clippy::print_stdout)]
 
+use gateway::inference::types::{RequestMessage, Role};
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use crate::common::get_gateway_endpoint;
+use crate::common::{
+    get_clickhouse, get_gateway_endpoint, select_batch_model_inference_clickhouse,
+    select_latest_batch_request_clickhouse,
+};
 
 use super::common::E2ETestProvider;
 
@@ -58,160 +62,144 @@ pub async fn test_simple_batch_inference_request_with_provider(provider: E2ETest
         .unwrap();
 
     // Check that the API response is ok
-    // assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
 
     println!("API response: {response_json:#?}");
-    assert!(false);
+    let batch_id = response_json.get("batch_id").unwrap().as_str().unwrap();
+    let batch_id = Uuid::parse_str(batch_id).unwrap();
 
-    // let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
-    // let inference_id = Uuid::parse_str(inference_id).unwrap();
+    let inference_ids = response_json
+        .get("inference_ids")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    assert_eq!(inference_ids.len(), 1);
+    let inference_id = inference_ids.first().unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    // let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
-    // let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    // assert_eq!(episode_id_response, episode_id);
+    let episode_ids = response_json
+        .get("episode_ids")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    assert_eq!(episode_ids.len(), 1);
+    let returned_episode_id = episode_ids.first().unwrap().as_str().unwrap();
+    let returned_episode_id = Uuid::parse_str(returned_episode_id).unwrap();
+    assert_eq!(returned_episode_id, episode_id);
 
-    // let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
-    // assert_eq!(variant_name, provider.variant_name);
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
-    // let content = response_json.get("content").unwrap().as_array().unwrap();
-    // assert_eq!(content.len(), 1);
-    // let content_block = content.first().unwrap();
-    // let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    // assert_eq!(content_block_type, "text");
-    // let content = content_block.get("text").unwrap().as_str().unwrap();
-    // assert!(content.to_lowercase().contains("tokyo"));
+    // Check if ClickHouse is ok - BatchModelInference Table
+    let clickhouse = get_clickhouse().await;
+    let result = select_batch_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
 
-    // let usage = response_json.get("usage").unwrap();
-    // let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
-    // assert!(input_tokens > 0);
-    // let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
-    // assert!(output_tokens > 0);
+    println!("ClickHouse - BatchModelInference: {result:#?}");
 
-    // // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    // tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id = Uuid::parse_str(id).unwrap();
+    assert_eq!(id, inference_id);
 
-    // // Check if ClickHouse is ok - ChatInference Table
-    // let clickhouse = get_clickhouse().await;
-    // let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-    //     .await
-    //     .unwrap();
+    let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
+    let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
+    assert_eq!(retrieved_batch_id, batch_id);
 
-    // println!("ClickHouse - ChatInference: {result:#?}");
+    let function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(function_name, payload["function_name"]);
 
-    // let id = result.get("id").unwrap().as_str().unwrap();
-    // let id = Uuid::parse_str(id).unwrap();
-    // assert_eq!(id, inference_id);
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, provider.variant_name);
 
-    // let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    // assert_eq!(function_name, payload["function_name"]);
+    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+    assert_eq!(retrieved_episode_id, episode_id);
 
-    // let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    // assert_eq!(variant_name, provider.variant_name);
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let correct_input = json!({
+        "system": {"assistant_name": "Dr. Mehta"},
+        "messages": [
+            {
+                "role": "user",
+                "content": [{"type": "text", "value": "What is the capital city of Japan?"}]
+            }
+        ]
+    });
+    assert_eq!(input, correct_input);
 
-    // let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    // let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    // assert_eq!(retrieved_episode_id, episode_id);
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![RequestMessage {
+        role: Role::User,
+        content: vec!["What is the capital city of Japan?".to_string().into()],
+    }];
+    assert_eq!(input_messages, expected_input_messages);
 
-    // let input: Value =
-    //     serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    // let correct_input = json!({
-    //     "system": {"assistant_name": "Dr. Mehta"},
-    //     "messages": [
-    //         {
-    //             "role": "user",
-    //             "content": [{"type": "text", "value": "What is the capital city of Japan?"}]
-    //         }
-    //     ]
-    // });
-    // assert_eq!(input, correct_input);
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta"
+    );
 
-    // let content_blocks = result.get("output").unwrap().as_str().unwrap();
-    // let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
-    // assert_eq!(content_blocks.len(), 1);
-    // let content_block = content_blocks.first().unwrap();
-    // let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    // assert_eq!(content_block_type, "text");
-    // let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
-    // assert_eq!(clickhouse_content, content);
+    let tool_params = result.get("tool_params");
+    assert_eq!(tool_params, Some(&Value::Null));
 
-    // let tags = result.get("tags").unwrap().as_object().unwrap();
-    // assert_eq!(tags.len(), 1);
-    // assert_eq!(tags.get("key").unwrap().as_str().unwrap(), tag_value);
+    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
+    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    let inference_params = inference_params.get("chat_completion").unwrap();
+    assert!(inference_params.get("temperature").is_none());
+    assert!(inference_params.get("seed").is_none());
+    assert_eq!(
+        inference_params
+            .get("max_tokens")
+            .unwrap()
+            .as_u64()
+            .unwrap(),
+        100
+    );
 
-    // let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
-    // assert!(tool_params.is_empty());
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
 
-    // let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
-    // let inference_params: Value = serde_json::from_str(inference_params).unwrap();
-    // let inference_params = inference_params.get("chat_completion").unwrap();
-    // assert!(inference_params.get("temperature").is_none());
-    // assert!(inference_params.get("seed").is_none());
-    // assert_eq!(
-    //     inference_params
-    //         .get("max_tokens")
-    //         .unwrap()
-    //         .as_u64()
-    //         .unwrap(),
-    //     100
-    // );
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
 
-    // let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    // assert!(processing_time_ms > 0);
+    let output_schema = result.get("output_schema");
+    assert_eq!(output_schema, Some(&Value::Null));
 
-    // // Check the ModelInference Table
-    // let result = select_model_inference_clickhouse(&clickhouse, inference_id)
-    //     .await
-    //     .unwrap();
+    let tags = result.get("tags").unwrap().as_object().unwrap();
+    assert_eq!(tags.len(), 1);
+    assert_eq!(tags.get("key").unwrap().as_str().unwrap(), tag_value);
 
-    // println!("ClickHouse - ModelInference: {result:#?}");
+    // Check if ClickHouse is ok - BatchRequest Table
+    let result = select_latest_batch_request_clickhouse(&clickhouse, batch_id)
+        .await
+        .unwrap();
 
-    // let model_inference_id = result.get("id").unwrap().as_str().unwrap();
-    // assert!(Uuid::parse_str(model_inference_id).is_ok());
+    println!("ClickHouse - BatchRequest: {result:#?}");
 
-    // let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
-    // let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
-    // assert_eq!(inference_id_result, inference_id);
+    let id = result.get("id").unwrap().as_str().unwrap();
+    Uuid::parse_str(id).unwrap();
 
-    // let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
-    // assert!(raw_request.to_lowercase().contains("japan"));
-    // assert!(
-    //     serde_json::from_str::<Value>(raw_request).is_ok(),
-    //     "raw_request is not a valid JSON"
-    // );
+    let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
+    let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
+    assert_eq!(retrieved_batch_id, batch_id);
+    let batch_params = result.get("batch_params").unwrap().as_str().unwrap();
+    let _batch_params: Value = serde_json::from_str(batch_params).unwrap();
+    // We can't check that the batch params are exactly the same because they vary per-provider
+    // We will check that they are valid by using them instead.
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
 
-    // let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
-    // assert!(raw_response.to_lowercase().contains("tokyo"));
-    // assert!(serde_json::from_str::<Value>(raw_response).is_ok());
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
 
-    // let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
-    // assert!(input_tokens > 0);
-    // let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
-    // assert!(output_tokens > 0);
-    // let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    // assert!(response_time_ms > 0);
-    // assert!(result.get("ttft_ms").unwrap().is_null());
-    // let system = result.get("system").unwrap().as_str().unwrap();
-    // assert_eq!(
-    //     system,
-    //     "You are a helpful and friendly assistant named Dr. Mehta"
-    // );
-    // let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
-    // let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    // let expected_input_messages = vec![RequestMessage {
-    //     role: Role::User,
-    //     content: vec!["What is the capital city of Japan?".to_string().into()],
-    // }];
-    // assert_eq!(input_messages, expected_input_messages);
-    // let output = result.get("output").unwrap().as_str().unwrap();
-    // let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
-    // assert_eq!(output.len(), 1);
+    let status = result.get("status").unwrap().as_str().unwrap();
+    assert_eq!(status, "pending");
 
-    // // Check the InferenceTag Table
-    // let result = select_inference_tags_clickhouse(&clickhouse, "basic_test", "key", &tag_value)
-    //     .await
-    //     .unwrap();
-    // let id = result.get("inference_id").unwrap().as_str().unwrap();
-    // let id = Uuid::parse_str(id).unwrap();
-    // assert_eq!(id, inference_id);
+    let errors = result.get("errors").unwrap().as_object().unwrap();
+    assert_eq!(errors.len(), 0);
 }

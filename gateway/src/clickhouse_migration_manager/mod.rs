@@ -10,6 +10,7 @@ use migrations::migration_0002::Migration0002;
 use migrations::migration_0003::Migration0003;
 use migrations::migration_0004::Migration0004;
 use migrations::migration_0005::Migration0005;
+use migrations::migration_0006::Migration0006;
 
 pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     // If the first migration needs to run, we are starting from scratch and don't need to wait for data to migrate
@@ -23,6 +24,7 @@ pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     run_migration(&Migration0003 { clickhouse }).await?;
     run_migration(&Migration0004 { clickhouse }).await?;
     run_migration(&Migration0005 { clickhouse }).await?;
+    run_migration(&Migration0006 { clickhouse }).await?;
     // NOTE:
     // When we add more migrations, we need to add a test that applies them in a cumulative (N^2) way.
     //

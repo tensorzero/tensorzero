@@ -1094,7 +1094,7 @@ mod tests {
 
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::providers::common::get_temperature_tool_config;
-    use crate::jsonschema_util::{DynamicJSONSchema, JSONSchemaFromPath};
+    use crate::jsonschema_util::JSONSchemaFromPath;
     use crate::minijinja_util::TemplateConfig;
 
     use super::*;
@@ -1735,14 +1735,14 @@ mod tests {
             input_tokens: 5,
             output_tokens: 10,
         };
-        let dynamic_output_schema = DynamicJSONSchema::new(serde_json::json!({
-            "type": "object",
-            "properties": {
-                "name": {"type": "string"},
-                "age": {"type": "number"}
-            },
-            "required": ["name", "age"]
-        }));
+        // let dynamic_output_schema = DynamicJSONSchema::new(serde_json::json!({
+        //     "type": "object",
+        //     "properties": {
+        //         "name": {"type": "string"},
+        //         "age": {"type": "number"}
+        //     },
+        //     "required": ["name", "age"]
+        // }));
         let templates = TemplateConfig::default();
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {

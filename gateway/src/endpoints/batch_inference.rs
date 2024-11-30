@@ -16,9 +16,11 @@ use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::{Error, ErrorDetails};
 use crate::function::sample_variant;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
+use crate::inference::types::batch::BatchStatus;
 use crate::inference::types::{
     batch::BatchModelInferenceWithMetadata, ContentBlockOutput, Input, JsonInferenceOutput, Usage,
 };
+use crate::jsonschema_util::DynamicJSONSchema;
 use crate::tool::{
     BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams,
     ToolCallConfigDatabaseInsert,
@@ -108,6 +110,8 @@ pub async fn prepare_batch_inference_handler(
     }
     let batch_dynamic_tool_params: Vec<DynamicToolParams> =
         BatchDynamicToolParamsWithSize(params.dynamic_tool_params, num_inferences).try_into()?;
+    let batch_dynamic_output_schemas: Vec<Option<DynamicJSONSchema>> =
+        BatchOutputSchemasWithSize(params.output_schemas, num_inferences).try_into()?;
 
     let tool_configs = batch_dynamic_tool_params
         .into_iter()
@@ -175,7 +179,7 @@ pub async fn prepare_batch_inference_handler(
     let inference_config = BatchInferenceConfig::new(
         &config.templates,
         tool_configs,
-        params.output_schemas,
+        batch_dynamic_output_schemas,
         &params.function_name,
         params.variant_name.as_deref(),
     );
@@ -295,13 +299,53 @@ struct BatchModelInferenceInsert<'a> {
     pub episode_id: String,
     pub input: String,
     pub input_messages: String,
-    pub system: Option<String>,
+    pub system: Option<&'a str>,
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub inference_params: &'a InferenceParams,
     pub output_schema: Option<String>,
     pub model_name: &'a str,
     pub model_provider_name: &'a str,
     pub tags: Option<HashMap<String, String>>,
+}
+
+#[derive(Debug, Serialize)]
+struct BatchRequestInsert<'a> {
+    batch_id: &'a str,
+    id: String,
+    batch_params: String,
+    model_name: &'a str,
+    model_provider_name: &'a str,
+    status: BatchStatus,
+    errors: HashMap<String, String>,
+}
+
+impl<'a> BatchRequestInsert<'a> {
+    fn new(
+        batch_id: &'a str,
+        batch_params: Value,
+        model_name: &'a str,
+        model_provider_name: &'a str,
+        status: BatchStatus,
+        errors: Option<HashMap<String, String>>,
+    ) -> Self {
+        let id = Uuid::now_v7().to_string();
+        let errors = errors.unwrap_or_default();
+        Self {
+            batch_id,
+            id,
+            batch_params: serde_json::to_string(&batch_params)
+                .map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: e.to_string(),
+                    })
+                })
+                .unwrap_or_default(),
+            model_name,
+            model_provider_name,
+            status,
+            errors,
+        }
+    }
 }
 
 // Returns the batch ID and the inference IDs that were written to ClickHouse
@@ -350,15 +394,7 @@ async fn write_inference<'a>(
                 message: e.to_string(),
             })
         })?;
-        let system = system
-            .as_ref()
-            .map(|s| serde_json::to_string(&s))
-            .transpose()
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: e.to_string(),
-                })
-            })?;
+        let system = system.as_deref();
         let tool_params: Option<ToolCallConfigDatabaseInsert> = tool_config.map(|t| t.into());
         let output_schema = output_schema
             .map(|s| serde_json::to_string(&s))
@@ -388,6 +424,19 @@ async fn write_inference<'a>(
     clickhouse_connection_info
         .write(&rows, "BatchModelInference")
         .await?;
+
+    let batch_request_insert = BatchRequestInsert::new(
+        &batch_id,
+        result.batch_params,
+        result.model_name,
+        result.model_provider_name,
+        BatchStatus::Pending,
+        None, // There should not be errors for the batch request on initialization
+    );
+    clickhouse_connection_info
+        .write(&[batch_request_insert], "BatchRequest")
+        .await?;
+
     Ok((result.batch_id, result.inference_ids))
 }
 
@@ -624,6 +673,36 @@ impl TryFrom<BatchChatCompletionParamsWithSize> for Vec<ChatCompletionInferenceP
     }
 }
 
+struct BatchOutputSchemasWithSize(Option<BatchOutputSchemas>, usize);
+
+impl TryFrom<BatchOutputSchemasWithSize> for Vec<Option<DynamicJSONSchema>> {
+    type Error = Error;
+
+    fn try_from(
+        BatchOutputSchemasWithSize(schemas, num_inferences): BatchOutputSchemasWithSize,
+    ) -> Result<Self, Self::Error> {
+        if let Some(schemas) = schemas {
+            if schemas.len() != num_inferences {
+                Err(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "output_schemas vector length ({}) does not match number of inferences ({})",
+                        schemas.len(),
+                        num_inferences
+                    ),
+                }
+                .into())
+            } else {
+                Ok(schemas
+                    .into_iter()
+                    .map(|schema| schema.map(DynamicJSONSchema::new))
+                    .collect())
+            }
+        } else {
+            Ok(vec![None; num_inferences])
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use uuid::Timestamp;
@@ -789,5 +868,19 @@ mod tests {
             ),
             _ => panic!("Expected InvalidRequest error"),
         }
+    }
+
+    #[test]
+    fn test_batch_output_schemas_with_size() {
+        let batch_output_schemas_with_size = BatchOutputSchemasWithSize(None, 3);
+        let batch_output_schemas =
+            Vec::<Option<DynamicJSONSchema>>::try_from(batch_output_schemas_with_size).unwrap();
+        assert_eq!(batch_output_schemas.len(), 3);
+
+        let batch_output_schemas_with_size =
+            BatchOutputSchemasWithSize(Some(vec![None, None, None]), 3);
+        let batch_output_schemas =
+            Vec::<Option<DynamicJSONSchema>>::try_from(batch_output_schemas_with_size).unwrap();
+        assert_eq!(batch_output_schemas.len(), 3);
     }
 }

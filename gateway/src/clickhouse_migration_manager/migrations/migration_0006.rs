@@ -83,11 +83,11 @@ impl<'a> Migration for Migration0006<'a> {
                 input String,
                 input_messages String,
                 system Nullable(String),
-                tool_params String,
+                tool_params Nullable(String),
                 inference_params String,
                 model_name LowCardinality(String),
                 model_provider_name LowCardinality(String),
-                output_schema String,
+                output_schema Nullable(String),
                 tags Map(String, String) DEFAULT map(),
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id),
             ) ENGINE = MergeTree()

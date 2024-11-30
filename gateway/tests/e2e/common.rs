@@ -154,3 +154,36 @@ pub(crate) async fn select_inference_tags_clickhouse(
     let json: Value = serde_json::from_str(&text).ok()?;
     Some(json)
 }
+
+pub(crate) async fn select_batch_model_inference_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    inference_id: Uuid,
+) -> Option<Value> {
+    let query = format!(
+        r#"
+        SELECT bmi.*
+        FROM BatchModelInference bmi
+        INNER JOIN BatchIdByInferenceId bid ON bmi.id = bid.inference_id
+        WHERE bid.inference_id = '{}'
+        FORMAT JSONEachRow"#,
+        inference_id
+    );
+
+    let text = clickhouse_connection_info.run_query(query).await.unwrap();
+    let json: Value = serde_json::from_str(&text).ok()?;
+    Some(json)
+}
+
+pub(crate) async fn select_latest_batch_request_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    batch_id: Uuid,
+) -> Option<Value> {
+    let query = format!(
+        "SELECT * FROM BatchRequest WHERE batch_id = '{}' ORDER BY timestamp DESC LIMIT 1 FORMAT JSONEachRow",
+        batch_id
+    );
+
+    let text = clickhouse_connection_info.run_query(query).await.unwrap();
+    let json: Value = serde_json::from_str(&text).ok()?;
+    Some(json)
+}

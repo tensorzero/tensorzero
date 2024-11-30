@@ -311,7 +311,7 @@ async fn inner_fuse_candidates<'a, 'request>(
     let (inference_request, included_indices) = fuser.prepare_request(
         input,
         function,
-        &inference_config,
+        inference_config,
         candidates,
         &mut InferenceParams::default(),
     )?;

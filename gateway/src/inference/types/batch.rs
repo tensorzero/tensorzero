@@ -1,10 +1,13 @@
 use crate::{endpoints::inference::InferenceParams, tool::ToolCallConfig};
 
 use super::{ModelInferenceRequest, RequestMessage};
+use serde::Serialize;
 use serde_json::Value;
 use std::borrow::Cow;
 use uuid::Uuid;
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum BatchStatus {
     Pending,
     Completed,
@@ -41,7 +44,6 @@ impl<'a> BatchModelInferenceResponse<'a> {
     }
 }
 
-// TODO(Viraj): move to types::batch
 pub struct BatchModelInferenceWithMetadata<'a> {
     pub batch_id: Uuid,
     pub inference_ids: Vec<Uuid>,
