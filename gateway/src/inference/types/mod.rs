@@ -856,6 +856,7 @@ pub struct CollectChunksArgs<'a, 'b> {
     pub variant_name: &'b str,
     pub dynamic_output_schema: Option<DynamicJSONSchema>,
     pub templates: &'a TemplateConfig<'a>,
+    pub tool_config: Option<&'b ToolCallConfig>,
 }
 
 // Modify the collect_chunks function to accept CollectChunksArgs
@@ -876,6 +877,7 @@ pub async fn collect_chunks<'a, 'b>(
         variant_name,
         dynamic_output_schema,
         templates,
+        tool_config,
     } = args;
 
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
@@ -1011,7 +1013,7 @@ pub async fn collect_chunks<'a, 'b>(
     let inference_config = InferenceConfig {
         function_name,
         variant_name: Some(variant_name),
-        tool_config: None,
+        tool_config,
         templates,
         dynamic_output_schema: dynamic_output_schema.as_ref(),
     };
@@ -1314,6 +1316,7 @@ mod tests {
             variant_name: "",
             dynamic_output_schema: None,
             templates: &templates,
+            tool_config: None,
         };
         let result = collect_chunks(collect_chunks_args).await;
         assert_eq!(
@@ -1371,6 +1374,7 @@ mod tests {
             variant_name: "",
             dynamic_output_schema: None,
             templates: &templates,
+            tool_config: None,
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
@@ -1457,6 +1461,7 @@ mod tests {
             variant_name: "",
             dynamic_output_schema: None,
             templates: &templates,
+            tool_config: None,
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         match response {
@@ -1527,6 +1532,7 @@ mod tests {
             variant_name: "",
             dynamic_output_schema: None,
             templates: &templates,
+            tool_config: None,
         };
         let result = collect_chunks(collect_chunks_args).await;
         assert!(result.is_ok());
@@ -1595,6 +1601,7 @@ mod tests {
             variant_name: "",
             dynamic_output_schema: None,
             templates: &templates,
+            tool_config: None,
         };
         let result = collect_chunks(collect_chunks_args).await;
         if let Ok(InferenceResult::Chat(chat_response)) = result {
@@ -1677,6 +1684,7 @@ mod tests {
             variant_name: "",
             dynamic_output_schema: None,
             templates: &templates,
+            tool_config: None,
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         match response {
@@ -1735,14 +1743,14 @@ mod tests {
             input_tokens: 5,
             output_tokens: 10,
         };
-        // let dynamic_output_schema = DynamicJSONSchema::new(serde_json::json!({
-        //     "type": "object",
-        //     "properties": {
-        //         "name": {"type": "string"},
-        //         "age": {"type": "number"}
-        //     },
-        //     "required": ["name", "age"]
-        // }));
+        let dynamic_output_schema = DynamicJSONSchema::new(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "age": {"type": "number"}
+            },
+            "required": ["name", "age"]
+        }));
         let templates = TemplateConfig::default();
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -1773,8 +1781,9 @@ mod tests {
             inference_params: InferenceParams::default(),
             function_name: "",
             variant_name: "",
-            dynamic_output_schema: None,
+            dynamic_output_schema: Some(dynamic_output_schema),
             templates: &templates,
+            tool_config: None,
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         match response {

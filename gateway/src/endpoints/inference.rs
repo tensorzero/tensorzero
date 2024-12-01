@@ -424,6 +424,7 @@ fn create_stream<'a>(
                 variant_name: &variant_name,
                 dynamic_output_schema,
                 templates,
+                tool_config: tool_config.as_ref(),
             };
             let inference_response: Result<InferenceResult, Error> =
                 collect_chunks(collect_chunks_args).await;

@@ -44,8 +44,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_inference_params_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.simple_inference;
-            for provider in providers {
-                test_inference_params_batch_inference_request_with_provider(provider).await;
+            if all_providers.supports_batch_inference {
+                for provider in providers {
+                    test_inference_params_batch_inference_request_with_provider(provider).await;
+                }
             }
         }
 
@@ -53,8 +55,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_tool_use_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.simple_inference;
-            for provider in providers {
-                test_tool_use_batch_inference_request_with_provider(provider).await;
+            if all_providers.supports_batch_inference {
+                for provider in providers {
+                    test_tool_use_batch_inference_request_with_provider(provider).await;
+                }
             }
         }
 
@@ -62,8 +66,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_tool_multi_turn_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.simple_inference;
-            for provider in providers {
-                test_tool_multi_turn_batch_inference_request_with_provider(provider).await;
+            if all_providers.supports_batch_inference {
+                for provider in providers {
+                    test_tool_multi_turn_batch_inference_request_with_provider(provider).await;
+                }
             }
         }
 
@@ -71,8 +77,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_dynamic_tool_use_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.simple_inference;
-            for provider in providers {
-                test_dynamic_tool_use_batch_inference_request_with_provider(provider).await;
+            if all_providers.supports_batch_inference {
+                for provider in providers {
+                    test_dynamic_tool_use_batch_inference_request_with_provider(provider).await;
+                }
             }
         }
 
@@ -80,8 +88,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_parallel_tool_use_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.simple_inference;
-            for provider in providers {
-                test_parallel_tool_use_batch_inference_request_with_provider(provider).await;
+            if all_providers.supports_batch_inference {
+                for provider in providers {
+                    test_parallel_tool_use_batch_inference_request_with_provider(provider).await;
+                }
             }
         }
 
@@ -89,8 +99,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_json_mode_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.simple_inference;
-            for provider in providers {
-                test_json_mode_batch_inference_request_with_provider(provider).await;
+            if all_providers.supports_batch_inference {
+                for provider in providers {
+                    test_json_mode_batch_inference_request_with_provider(provider).await;
+                }
             }
         }
 
@@ -98,8 +110,10 @@ macro_rules! generate_batch_inference_tests {
         async fn test_dynamic_json_mode_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.simple_inference;
-            for provider in providers {
-                test_dynamic_json_mode_batch_inference_request_with_provider(provider).await;
+            if all_providers.supports_batch_inference {
+                for provider in providers {
+                    test_dynamic_json_mode_batch_inference_request_with_provider(provider).await;
+                }
             }
         }
     };
