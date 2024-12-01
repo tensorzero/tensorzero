@@ -305,7 +305,7 @@ struct BatchModelInferenceInsert<'a> {
     pub output_schema: Option<String>,
     pub model_name: &'a str,
     pub model_provider_name: &'a str,
-    pub tags: Option<HashMap<String, String>>,
+    pub tags: HashMap<String, String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -418,7 +418,7 @@ async fn write_inference<'a>(
             output_schema,
             model_name: result.model_name,
             model_provider_name: result.model_provider_name,
-            tags,
+            tags: tags.unwrap_or_default(),
         });
     }
     clickhouse_connection_info

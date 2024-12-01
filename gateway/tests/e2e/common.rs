@@ -170,8 +170,8 @@ pub(crate) async fn select_batch_model_inference_clickhouse(
     );
 
     let text = clickhouse_connection_info.run_query(query).await.unwrap();
-    let json: Value = serde_json::from_str(&text).ok()?;
-    Some(json)
+
+    Some(serde_json::from_str(&text).unwrap())
 }
 
 pub(crate) async fn select_latest_batch_request_clickhouse(
