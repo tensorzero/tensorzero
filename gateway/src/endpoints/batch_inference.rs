@@ -84,7 +84,7 @@ pub type InferenceCredentials = HashMap<String, SecretString>;
 /// A handler for the inference endpoint
 #[instrument(
     name="post_batch_inference",
-    skip(config, http_client, clickhouse_connection_info, params),
+    skip_all,
     fields(
         function_name = %params.function_name,
         variant_name = ?params.variant_name,
