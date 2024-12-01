@@ -184,7 +184,7 @@ pub async fn test_simple_batch_inference_request_with_provider(provider: E2ETest
 
     println!("ClickHouse - BatchModelInference: {result:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
+    let id = result.get("inference_id").unwrap().as_str().unwrap();
     let id = Uuid::parse_str(id).unwrap();
     assert_eq!(id, inference_id);
 
@@ -370,7 +370,7 @@ pub async fn test_inference_params_batch_inference_request_with_provider(
 
     println!("ClickHouse - BatchModelInference: {result:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
+    let id = result.get("inference_id").unwrap().as_str().unwrap();
     let id = Uuid::parse_str(id).unwrap();
     assert_eq!(id, inference_id);
 
@@ -903,7 +903,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
         let result = select_batch_model_inference_clickhouse(&clickhouse, inference_id)
             .await
             .unwrap();
-        let id_str = result.get("id").unwrap().as_str().unwrap();
+        let id_str = result.get("inference_id").unwrap().as_str().unwrap();
         let id = Uuid::parse_str(id_str).unwrap();
         let i = inference_id_to_index.remove(&id).unwrap();
         println!("ClickHouse - BatchModelInference (#{i}): {result:#?}");
@@ -1293,7 +1293,7 @@ pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
 
     println!("ClickHouse - BatchModelInference: {result:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
+    let id = result.get("inference_id").unwrap().as_str().unwrap();
     let id = Uuid::parse_str(id).unwrap();
     assert_eq!(id, inference_id);
 
@@ -1485,7 +1485,7 @@ pub async fn test_parallel_tool_use_batch_inference_request_with_provider(
 
     println!("ClickHouse - BatchModelInference: {result:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
+    let id = result.get("inference_id").unwrap().as_str().unwrap();
     let id = Uuid::parse_str(id).unwrap();
     assert_eq!(id, inference_id);
 
@@ -1875,7 +1875,7 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
 
     println!("ClickHouse - BatchModelInference: {result:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
+    let id = result.get("inference_id").unwrap().as_str().unwrap();
     let id = Uuid::parse_str(id).unwrap();
     assert_eq!(id, inference_id);
 

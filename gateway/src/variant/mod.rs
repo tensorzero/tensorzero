@@ -321,8 +321,7 @@ impl Variant for VariantConfig {
         }
     }
 
-    // TODO(Viraj): deal with this
-    // #[instrument(skip_all, fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name))]
+    #[instrument(skip_all, fields(variant_name = %inference_configs.first().map(|x| x.variant_name.unwrap_or("")).unwrap_or("")))]
     async fn start_batch_inference<'a>(
         &'a self,
         inputs: &[Input],

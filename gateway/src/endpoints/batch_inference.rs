@@ -292,7 +292,7 @@ struct BatchInferenceDatabaseInsertMetadata<'a> {
 
 #[derive(Debug, Serialize)]
 struct BatchModelInferenceInsert<'a> {
-    pub id: String,
+    pub inference_id: String,
     pub batch_id: &'a str,
     pub function_name: &'a str,
     pub variant_name: &'a str,
@@ -405,7 +405,7 @@ async fn write_inference<'a>(
                 })
             })?;
         rows.push(BatchModelInferenceInsert {
-            id: inference_id.to_string(),
+            inference_id: inference_id.to_string(),
             batch_id: &batch_id,
             function_name: metadata.function_name,
             variant_name: metadata.variant_name,

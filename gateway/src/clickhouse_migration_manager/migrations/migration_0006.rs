@@ -19,8 +19,6 @@ pub struct Migration0006<'a> {
 
 impl<'a> Migration for Migration0006<'a> {
     /// Check if you can connect to the database
-    /// Then check if the two inference tables exist as the sources for the materialized views
-    /// If all of this is OK, then we can apply the migration
     async fn can_apply(&self) -> Result<(), Error> {
         self.clickhouse.health().await.map_err(|e| {
             Error::new(ErrorDetails::ClickHouseMigration {
@@ -75,7 +73,7 @@ impl<'a> Migration for Migration0006<'a> {
         let query = r#"
             CREATE TABLE IF NOT EXISTS BatchModelInference
             (
-                id UUID,
+                inference_id UUID,
                 batch_id UUID,
                 function_name LowCardinality(String),
                 variant_name LowCardinality(String),
@@ -89,9 +87,9 @@ impl<'a> Migration for Migration0006<'a> {
                 model_provider_name LowCardinality(String),
                 output_schema Nullable(String),
                 tags Map(String, String) DEFAULT map(),
-                timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id),
+                timestamp DateTime MATERIALIZED UUIDv7ToDateTime(inference_id),
             ) ENGINE = MergeTree()
-            ORDER BY (batch_id, id)
+            ORDER BY (batch_id, inference_id)
         "#;
         let _ = self.clickhouse.run_query(query.to_string()).await?;
 
@@ -129,7 +127,7 @@ impl<'a> Migration for Migration0006<'a> {
             TO BatchIdByInferenceId
             AS
                 SELECT
-                    id as inference_id,
+                    inference_id,
                     batch_id
                 FROM BatchModelInference
             "#;
