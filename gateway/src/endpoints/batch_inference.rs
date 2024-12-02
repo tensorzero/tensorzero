@@ -1,5 +1,5 @@
 use axum::body::Body;
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::response::{IntoResponse, Response};
 use axum::{debug_handler, Json};
 use itertools::izip;
@@ -13,12 +13,14 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::config_parser::Config;
 use crate::error::{Error, ErrorDetails};
 use crate::function::sample_variant;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::batch::BatchStatus;
 use crate::inference::types::{
-    batch::BatchModelInferenceWithMetadata, ContentBlockOutput, Input, JsonInferenceOutput, Usage,
+    batch::{BatchModelInferenceWithMetadata, BatchRequest},
+    ContentBlockOutput, Input, JsonInferenceOutput, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::tool::{
@@ -84,7 +86,7 @@ pub type InferenceCredentials = HashMap<String, SecretString>;
 /// A handler for the inference endpoint
 #[instrument(
     name="post_batch_inference",
-    skip(config, http_client, clickhouse_connection_info, params),
+    skip_all,
     fields(
         function_name = %params.function_name,
         variant_name = ?params.variant_name,
@@ -272,6 +274,127 @@ pub async fn prepare_batch_inference_handler(
         errors: variant_errors,
     }
     .into())
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PollInferenceQueryParams {
+    batch_id: Option<Uuid>,
+    inference_id: Option<Uuid>,
+}
+
+enum PollInferenceQuery {
+    Batch(Uuid),
+    Inference(Uuid),
+}
+
+#[instrument(name = "poll_batch_inference", skip_all, fields(query))]
+#[debug_handler(state = AppStateData)]
+pub async fn poll_batch_inference_handler(
+    State(AppStateData {
+        config,
+        http_client,
+        clickhouse_connection_info,
+    }): AppState,
+    Query(query): Query<PollInferenceQueryParams>,
+) -> Result<Response<Body>, Error> {
+    let query = query.validate()?;
+    let batch_request = get_batch_request(&clickhouse_connection_info, query).await?;
+    match batch_request.status {
+        BatchStatus::Pending => todo!(),
+        BatchStatus::Completed => todo!(),
+        BatchStatus::Failed => todo!(),
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case", tag = "status")]
+enum PollInferenceResponse {
+    Pending,
+    Completed,
+    Failed { message: &'static str },
+}
+
+impl PollInferenceQueryParams {
+    fn validate(self) -> Result<PollInferenceQuery, Error> {
+        match (self.batch_id, self.inference_id) {
+            (Some(batch_id), None) => Ok(PollInferenceQuery::Batch(batch_id)),
+            (None, Some(inference_id)) => Ok(PollInferenceQuery::Inference(inference_id)),
+            _ => Err(ErrorDetails::InvalidRequest {
+                message: "Exactly one of `batch_id` or `inference_id` must be provided".to_string(),
+            }
+            .into()),
+        }
+    }
+}
+
+async fn get_batch_request(
+    clickhouse: &ClickHouseConnectionInfo,
+    query: PollInferenceQuery,
+) -> Result<BatchRequest, Error> {
+    let response = match query {
+        PollInferenceQuery::Batch(batch_id) => {
+            let query = format!(
+                r#"
+                    SELECT
+                        batch_id,
+                        batch_params,
+                        model_name,
+                        model_provider_name,
+                        status,
+                        errors
+                    FROM BatchRequest
+                    WHERE batch_id = {}
+                    ORDER BY timestamp DESC
+                    LIMIT 1
+                    FORMAT JSONEachRow
+                "#,
+                batch_id
+            );
+            let response = clickhouse.run_query(query).await?;
+            if response.is_empty() {
+                return Err(ErrorDetails::BatchNotFound { id: batch_id }.into());
+            }
+            response
+        }
+        PollInferenceQuery::Inference(inference_id) => {
+            let query = format!(
+                r#"
+                    SELECT br.*
+                    FROM BatchIdByInferenceId bi
+                    JOIN BatchRequest br ON bi.batch_id = br.batch_id
+                    WHERE bi.inference_id = {}
+                    ORDER BY br.timestamp DESC
+                    LIMIT 1
+                    FORMAT JSONEachRow
+                "#,
+                inference_id
+            );
+            let response = clickhouse.run_query(query).await?;
+            if response.is_empty() {
+                return Err(ErrorDetails::BatchNotFound { id: inference_id }.into());
+            }
+            response
+        }
+    };
+
+    let batch_request = serde_json::from_str::<BatchRequest>(&response).map_err(|e| {
+        Error::new(ErrorDetails::ClickHouseDeserialization {
+            message: e.to_string(),
+        })
+    })?;
+    Ok(batch_request)
+}
+
+async fn poll_batch_request(
+    batch_request: BatchRequest,
+    http_client: reqwest::Client,
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    config: &Config<'_>,
+) -> Result<PollInferenceResponse, Error> {
+    // Retrieve the relevant model provider
+    // Call model.poll_batch_inference on it
+    //
+    todo!()
 }
 
 #[derive(Debug, Serialize)]

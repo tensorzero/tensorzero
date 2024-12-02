@@ -1,12 +1,13 @@
 use crate::{endpoints::inference::InferenceParams, tool::ToolCallConfig};
 
 use super::{ModelInferenceRequest, RequestMessage};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
+use std::collections::HashMap;
 use uuid::Uuid;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BatchStatus {
     Pending,
@@ -14,14 +15,14 @@ pub enum BatchStatus {
     Failed,
 }
 
-pub struct BatchProviderInferenceResponse {
+pub struct StartBatchProviderInferenceResponse {
     pub batch_id: Uuid,
     pub inference_ids: Vec<Uuid>,
     pub batch_params: Value,
     pub status: BatchStatus,
 }
 
-pub struct BatchModelInferenceResponse<'a> {
+pub struct StartBatchModelInferenceResponse<'a> {
     pub batch_id: Uuid,
     pub inference_ids: Vec<Uuid>,
     pub batch_params: Value,
@@ -29,9 +30,9 @@ pub struct BatchModelInferenceResponse<'a> {
     pub status: BatchStatus,
 }
 
-impl<'a> BatchModelInferenceResponse<'a> {
+impl<'a> StartBatchModelInferenceResponse<'a> {
     pub fn new(
-        provider_batch_response: BatchProviderInferenceResponse,
+        provider_batch_response: StartBatchProviderInferenceResponse,
         model_provider_name: &'a str,
     ) -> Self {
         Self {
@@ -42,6 +43,19 @@ impl<'a> BatchModelInferenceResponse<'a> {
             status: provider_batch_response.status,
         }
     }
+}
+
+// TODO: add errors and stuff
+#[derive(Debug)]
+pub enum PollBatchInferenceResponse {
+    Pending,
+    Completed(BatchProviderInferenceResponse),
+    Failed,
+}
+
+#[derive(Debug)]
+pub struct BatchProviderInferenceResponse {
+    pub batch_id: Uuid,
 }
 
 pub struct BatchModelInferenceWithMetadata<'a> {
@@ -60,7 +74,7 @@ pub struct BatchModelInferenceWithMetadata<'a> {
 
 impl<'a> BatchModelInferenceWithMetadata<'a> {
     pub fn new(
-        model_batch_response: BatchModelInferenceResponse<'a>,
+        model_batch_response: StartBatchModelInferenceResponse<'a>,
         model_inference_requests: Vec<ModelInferenceRequest<'a>>,
         model_name: &'a str,
         inference_params: Vec<InferenceParams>,
@@ -89,4 +103,23 @@ impl<'a> BatchModelInferenceWithMetadata<'a> {
             status: model_batch_response.status,
         }
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BatchRequest {
+    pub batch_id: Uuid,
+    #[serde(deserialize_with = "deserialize_json_string")]
+    pub batch_params: Value,
+    pub model_name: String,
+    pub model_provider_name: String,
+    pub status: BatchStatus,
+    pub errors: HashMap<String, String>,
+}
+
+fn deserialize_json_string<'de, D>(deserializer: D) -> Result<Value, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let json_str = String::deserialize(deserializer)?;
+    serde_json::from_str(&json_str).map_err(serde::de::Error::custom)
 }

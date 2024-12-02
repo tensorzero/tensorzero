@@ -13,9 +13,10 @@ use super::provider_trait::InferenceProvider;
 use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
-use crate::inference::types::batch::BatchStatus;
+use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::batch::{BatchRequest, BatchStatus};
 use crate::inference::types::{
-    batch::BatchProviderInferenceResponse, current_timestamp, ContentBlock, ContentBlockChunk,
+    batch::StartBatchProviderInferenceResponse, current_timestamp, ContentBlock, ContentBlockChunk,
     Latency, ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream, Usage,
 };
@@ -358,16 +359,28 @@ impl InferenceProvider for DummyProvider {
         requests: &'a [ModelInferenceRequest<'a>],
         _client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<BatchProviderInferenceResponse, Error> {
+    ) -> Result<StartBatchProviderInferenceResponse, Error> {
         let inference_ids: Vec<Uuid> = requests.iter().map(|_| Uuid::now_v7()).collect();
         let file_id = Uuid::now_v7();
         let batch_id = Uuid::now_v7();
-        Ok(BatchProviderInferenceResponse {
+        Ok(StartBatchProviderInferenceResponse {
             batch_id,
             inference_ids,
             batch_params: json!({"file_id": file_id, "batch_id": batch_id}),
             status: BatchStatus::Pending,
         })
+    }
+
+    async fn poll_batch_inference<'a>(
+        &'a self,
+        _batch_request: &'a BatchRequest,
+        _http_client: &'a reqwest::Client,
+        _dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<PollBatchInferenceResponse, Error> {
+        Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
+            provider_type: "Dummy".to_string(),
+        }
+        .into())
     }
 }
 lazy_static! {

@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
 use serde_json::{json, Value};
+use uuid::Uuid;
 
 #[derive(Debug, PartialEq)]
 // As long as the struct member is private, we force people to use the `new` method and log the error.
@@ -78,10 +79,16 @@ pub enum ErrorDetails {
         index: usize,
         message: String,
     },
+    BatchNotFound {
+        id: Uuid,
+    },
     ChannelWrite {
         message: String,
     },
     ClickHouseConnection {
+        message: String,
+    },
+    ClickHouseDeserialization {
         message: String,
     },
     ClickHouseMigration {
@@ -132,6 +139,9 @@ pub enum ErrorDetails {
     },
     InputValidation {
         source: Box<Error>,
+    },
+    InvalidBatchParams {
+        message: String,
     },
     InvalidBaseUrl {
         message: String,
@@ -290,8 +300,10 @@ impl ErrorDetails {
             ErrorDetails::AzureServer { .. } => tracing::Level::ERROR,
             ErrorDetails::BadCredentialsPreInference { .. } => tracing::Level::ERROR,
             ErrorDetails::BatchInputValidation { .. } => tracing::Level::WARN,
+            ErrorDetails::BatchNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::ChannelWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseConnection { .. } => tracing::Level::ERROR,
+            ErrorDetails::ClickHouseDeserialization { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseMigration { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseQuery { .. } => tracing::Level::ERROR,
             ErrorDetails::Config { .. } => tracing::Level::ERROR,
@@ -308,6 +320,7 @@ impl ErrorDetails {
             ErrorDetails::InferenceTimeout { .. } => tracing::Level::WARN,
             ErrorDetails::InputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidBaseUrl { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidBatchParams { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidCandidate { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidDiclConfig { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidEpisodeId { .. } => tracing::Level::WARN,
@@ -368,8 +381,10 @@ impl ErrorDetails {
             ErrorDetails::AzureServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::BadCredentialsPreInference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::BatchInputValidation { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::BatchNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ClickHouseDeserialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -387,6 +402,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidEpisodeId { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InputValidation { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidBaseUrl { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidBatchParams { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidDiclConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -494,11 +510,17 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::BatchInputValidation { index, message } => {
                 write!(f, "Input at index {} failed validation: {}", index, message,)
             }
+            ErrorDetails::BatchNotFound { id } => {
+                write!(f, "Batch request not found for id: {}", id)
+            }
             ErrorDetails::ChannelWrite { message } => {
                 write!(f, "Error writing to channel: {}", message)
             }
             ErrorDetails::ClickHouseConnection { message } => {
                 write!(f, "Error connecting to ClickHouse: {}", message)
+            }
+            ErrorDetails::ClickHouseDeserialization { message } => {
+                write!(f, "Error deserializing ClickHouse response: {}", message)
             }
             ErrorDetails::ClickHouseMigration { id, message } => {
                 write!(f, "Error running ClickHouse migration {}: {}", id, message)
@@ -545,7 +567,12 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::InputValidation { source } => {
                 write!(f, "Input validation failed with messages: {}", source)
             }
-            ErrorDetails::InvalidBaseUrl { message } => write!(f, "{}", message),
+            ErrorDetails::InvalidBaseUrl { message } => write!(
+                f,
+                "Invalid batch params retrieved from database: {}",
+                message
+            ),
+            ErrorDetails::InvalidBatchParams { message } => write!(f, "{}", message),
             ErrorDetails::InvalidCandidate {
                 variant_name,
                 message,

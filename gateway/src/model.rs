@@ -22,7 +22,9 @@ use crate::inference::providers::mistral::MistralCredentials;
 use crate::inference::providers::openai::OpenAICredentials;
 use crate::inference::providers::together::TogetherCredentials;
 use crate::inference::providers::vllm::VLLMCredentials;
-use crate::inference::types::batch::{BatchModelInferenceResponse, BatchProviderInferenceResponse};
+use crate::inference::types::batch::{
+    StartBatchModelInferenceResponse, StartBatchProviderInferenceResponse,
+};
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
@@ -131,7 +133,7 @@ impl ModelConfig {
         requests: &'request [ModelInferenceRequest<'request>],
         client: &'request Client,
         api_keys: &'request InferenceCredentials,
-    ) -> Result<BatchModelInferenceResponse, Error> {
+    ) -> Result<StartBatchModelInferenceResponse, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
             let provider_config = self.providers.get(provider_name).ok_or_else(|| {
@@ -144,7 +146,10 @@ impl ModelConfig {
                 .await;
             match response {
                 Ok(response) => {
-                    return Ok(BatchModelInferenceResponse::new(response, provider_name));
+                    return Ok(StartBatchModelInferenceResponse::new(
+                        response,
+                        provider_name,
+                    ));
                 }
                 Err(error) => {
                     provider_errors.insert(provider_name.to_string(), error);
@@ -745,7 +750,7 @@ impl ProviderConfig {
         requests: &'a [ModelInferenceRequest<'a>],
         client: &'a Client,
         api_keys: &'a InferenceCredentials,
-    ) -> Result<BatchProviderInferenceResponse, Error> {
+    ) -> Result<StartBatchProviderInferenceResponse, Error> {
         match self {
             ProviderConfig::Anthropic(provider) => {
                 provider

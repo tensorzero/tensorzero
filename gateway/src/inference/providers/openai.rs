@@ -18,8 +18,9 @@ use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingR
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
+use crate::inference::types::batch::{BatchRequest, PollBatchInferenceResponse};
 use crate::inference::types::{
-    batch::{BatchProviderInferenceResponse, BatchStatus},
+    batch::{BatchStatus, StartBatchProviderInferenceResponse},
     ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     RequestMessage, Role, Text, TextChunk, Usage,
@@ -198,7 +199,7 @@ impl InferenceProvider for OpenAIProvider {
         requests: &'a [ModelInferenceRequest<'_>],
         client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<BatchProviderInferenceResponse, Error> {
+    ) -> Result<StartBatchProviderInferenceResponse, Error> {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let request_url = get_files_url(self.api_base.as_ref())?;
         let inference_ids: Vec<Uuid> = requests.iter().map(|_| Uuid::now_v7()).collect();
@@ -270,12 +271,59 @@ impl InferenceProvider for OpenAIProvider {
                 message: format!("Error parsing JSON response: {e}"),
             })
         })?;
-        Ok(BatchProviderInferenceResponse {
+        let batch_params = OpenAIBatchParams {
+            file_id: Cow::Owned(file_id),
+            batch_id: Cow::Owned(response.id),
+        };
+        let batch_params = serde_json::to_value(batch_params).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Error serializing OpenAI batch params: {e}"),
+            })
+        })?;
+        Ok(StartBatchProviderInferenceResponse {
             batch_id: Uuid::now_v7(),
             inference_ids,
-            batch_params: json!({"file_id": file_id, "batch_id": response.id}),
+            batch_params,
             status: BatchStatus::Pending,
         })
+    }
+
+    async fn poll_batch_inference<'a>(
+        &'a self,
+        batch_request: &'a BatchRequest,
+        http_client: &'a reqwest::Client,
+        dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<PollBatchInferenceResponse, Error> {
+        let batch_params = OpenAIBatchParams::from_ref(&batch_request.batch_params)?;
+        let mut request_url = get_batch_url(self.api_base.as_ref())?;
+        request_url = request_url.join(&batch_params.batch_id).map_err(|e| {
+            Error::new(ErrorDetails::Inference {
+                message: format!("Error parsing batch URL: {e}"),
+            })
+        })?;
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let mut request_builder = http_client
+            .get(request_url)
+            .header("Content-Type", "application/json");
+        if let Some(api_key) = api_key {
+            request_builder = request_builder.bearer_auth(api_key.expose_secret());
+        }
+        let res = request_builder.send().await.map_err(|e| {
+            Error::new(ErrorDetails::InferenceClient {
+                message: format!("Error sending request to OpenAI: {e}"),
+            })
+        })?;
+        let response: OpenAIBatchResponse = res.json().await.map_err(|e| {
+            Error::new(ErrorDetails::OpenAIServer {
+                message: format!("Error parsing JSON response: {e}"),
+            })
+        })?;
+        let status: BatchStatus = response.status.into();
+        match status {
+            BatchStatus::Pending => Ok(PollBatchInferenceResponse::Pending),
+            BatchStatus::Completed => todo!(),
+            BatchStatus::Failed => Ok(PollBatchInferenceResponse::Failed),
+        }
     }
 }
 
@@ -741,6 +789,39 @@ impl<'a> From<&'a ToolConfig> for OpenAITool<'a> {
             },
             strict: tool.strict(),
         }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct OpenAIBatchParams<'a> {
+    file_id: Cow<'a, str>,
+    batch_id: Cow<'a, str>,
+}
+
+impl<'a> OpenAIBatchParams<'a> {
+    fn from_ref(value: &'a Value) -> Result<Self, Error> {
+        let file_id = value
+            .get("file_id")
+            .ok_or(Error::new(ErrorDetails::InvalidBatchParams {
+                message: "Missing file_id in batch params".to_string(),
+            }))?
+            .as_str()
+            .ok_or(Error::new(ErrorDetails::InvalidBatchParams {
+                message: "file_id must be a string".to_string(),
+            }))?;
+        let batch_id = value
+            .get("batch_id")
+            .ok_or(Error::new(ErrorDetails::InvalidBatchParams {
+                message: "Missing batch_id in batch params".to_string(),
+            }))?
+            .as_str()
+            .ok_or(Error::new(ErrorDetails::InvalidBatchParams {
+                message: "batch_id must be a string".to_string(),
+            }))?;
+        Ok(Self {
+            file_id: Cow::Borrowed(file_id),
+            batch_id: Cow::Borrowed(batch_id),
+        })
     }
 }
 
@@ -1291,8 +1372,8 @@ struct OpenAIBatchResponse {
     // errors: OpenAIBatchErrors,
     // input_file_id: String,
     // completion_window: String,
-    // status: String,
-    // output_file_id: String,
+    status: OpenAIBatchStatus,
+    output_file_id: Option<String>,
     // error_file_id: String,
     // created_at: i64,
     // in_progress_at: Option<i64>,
@@ -1308,17 +1389,44 @@ struct OpenAIBatchResponse {
 }
 
 #[derive(Debug, Deserialize)]
+enum OpenAIBatchStatus {
+    Validating,
+    Failed,
+    InProgress,
+    Finalizing,
+    Completed,
+    Expired,
+    Cancelling,
+    Cancelled,
+}
+
+impl From<OpenAIBatchStatus> for BatchStatus {
+    fn from(status: OpenAIBatchStatus) -> Self {
+        match status {
+            OpenAIBatchStatus::Completed => BatchStatus::Completed,
+            OpenAIBatchStatus::Validating
+            | OpenAIBatchStatus::InProgress
+            | OpenAIBatchStatus::Finalizing => BatchStatus::Pending,
+            OpenAIBatchStatus::Failed
+            | OpenAIBatchStatus::Expired
+            | OpenAIBatchStatus::Cancelling
+            | OpenAIBatchStatus::Cancelled => BatchStatus::Failed,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
 struct OpenAIBatchErrors {
-    // object: String,
-    // data: Vec<OpenAIBatchError>,
+    object: String,
+    data: Vec<OpenAIBatchError>,
 }
 
 #[derive(Debug, Deserialize)]
 struct OpenAIBatchError {
-    // code: String,
-    // message: String,
-    // param: Option<String>,
-    // line: Option<i32>,
+    code: String,
+    message: String,
+    param: Option<String>,
+    line: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
