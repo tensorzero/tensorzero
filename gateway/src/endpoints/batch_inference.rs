@@ -18,13 +18,14 @@ use crate::error::{Error, ErrorDetails};
 use crate::function::sample_variant;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::batch::BatchStatus;
+use crate::inference::types::RequestMessage;
 use crate::inference::types::{
     batch::{BatchModelInferenceWithMetadata, BatchRequest},
     ContentBlockOutput, Input, JsonInferenceOutput, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::tool::{
-    BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams,
+    BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams, ToolCallConfig,
     ToolCallConfigDatabaseInsert,
 };
 use crate::uuid_util::validate_episode_id;
@@ -259,6 +260,7 @@ pub async fn start_batch_inference_handler(
             result,
             write_metadata,
             inference_config.clone(),
+            // TODO (#496): remove this extra clone
             // Spent a while fighting the borrow checker here, gave up
             // The issue is that inference_config holds the ToolConfigs and ModelInferenceRequest has lifetimes that conflict with the inference_config
         )
@@ -413,7 +415,6 @@ struct BatchInferenceDatabaseInsertMetadata<'a> {
     pub variant_name: &'a str,
     pub episode_ids: &'a Vec<Uuid>,
     pub tags: Option<Vec<Option<HashMap<String, String>>>>,
-    // pub tool_configs: &'a Vec<Option<ToolCallConfig>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -474,7 +475,17 @@ impl<'a> BatchRequestInsert<'a> {
     }
 }
 
-// Returns the batch ID and the inference IDs that were written to ClickHouse
+struct BatchInferenceRow<'a> {
+    inference_id: &'a Uuid,
+    input: Input,
+    input_messages: &'a Vec<RequestMessage>,
+    system: Option<&'a str>,
+    tool_config: Option<ToolCallConfig>,
+    inference_params: &'a InferenceParams,
+    output_schema: Option<&'a Value>,
+    tags: Option<HashMap<String, String>>,
+}
+
 async fn write_inference<'a>(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inputs: Vec<Input>,
@@ -485,18 +496,8 @@ async fn write_inference<'a>(
     let mut rows = vec![];
     let batch_id = result.batch_id.to_string();
 
-    for (
-        i,
-        inference_id,
-        input,
-        input_messages,
-        system,
-        tool_config,
-        inference_params,
-        output_schema,
-        tags,
-    ) in izip!(
-        0..,
+    // Collect all the data into BatchInferenceRow structs
+    let inference_rows = izip!(
         result.inference_ids.iter(),
         inputs,
         result.input_messages.iter(),
@@ -509,20 +510,46 @@ async fn write_inference<'a>(
             .unwrap_or_default()
             .into_iter()
             .chain(repeat(None)),
-    ) {
-        let input = serde_json::to_string(&input).map_err(|e| {
+    )
+    .map(
+        |(
+            inference_id,
+            input,
+            input_messages,
+            system,
+            tool_config,
+            inference_params,
+            output_schema,
+            tags,
+        )| {
+            BatchInferenceRow {
+                inference_id,
+                input,
+                input_messages,
+                system: system.as_deref(),
+                tool_config,
+                inference_params,
+                output_schema: *output_schema,
+                tags,
+            }
+        },
+    );
+
+    // Process each row
+    for row in inference_rows {
+        let input = serde_json::to_string(&row.input).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: e.to_string(),
             })
         })?;
-        let input_messages = serde_json::to_string(&input_messages).map_err(|e| {
+        let input_messages = serde_json::to_string(&row.input_messages).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: e.to_string(),
             })
         })?;
-        let system = system.as_deref();
-        let tool_params: Option<ToolCallConfigDatabaseInsert> = tool_config.map(|t| t.into());
-        let output_schema = output_schema
+        let tool_params: Option<ToolCallConfigDatabaseInsert> = row.tool_config.map(|t| t.into());
+        let output_schema = row
+            .output_schema
             .map(|s| serde_json::to_string(&s))
             .transpose()
             .map_err(|e| {
@@ -530,23 +557,25 @@ async fn write_inference<'a>(
                     message: e.to_string(),
                 })
             })?;
+
         rows.push(BatchModelInferenceInsert {
-            inference_id: inference_id.to_string(),
+            inference_id: row.inference_id.to_string(),
             batch_id: &batch_id,
             function_name: metadata.function_name,
             variant_name: metadata.variant_name,
-            episode_id: metadata.episode_ids[i].to_string(),
+            episode_id: metadata.episode_ids[rows.len()].to_string(),
             input,
             input_messages,
-            system,
+            system: row.system,
             tool_params,
-            inference_params,
+            inference_params: row.inference_params,
             output_schema,
             model_name: result.model_name,
             model_provider_name: result.model_provider_name,
-            tags: tags.unwrap_or_default(),
+            tags: row.tags.unwrap_or_default(),
         });
     }
+
     clickhouse_connection_info
         .write(&rows, "BatchModelInference")
         .await?;
