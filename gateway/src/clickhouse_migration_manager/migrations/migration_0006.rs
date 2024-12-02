@@ -83,6 +83,7 @@ impl<'a> Migration for Migration0006<'a> {
                 system Nullable(String),
                 tool_params Nullable(String),
                 inference_params String,
+                raw_request String,
                 model_name LowCardinality(String),
                 model_provider_name LowCardinality(String),
                 output_schema Nullable(String),

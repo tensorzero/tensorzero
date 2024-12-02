@@ -363,11 +363,14 @@ impl InferenceProvider for DummyProvider {
         let inference_ids: Vec<Uuid> = requests.iter().map(|_| Uuid::now_v7()).collect();
         let file_id = Uuid::now_v7();
         let batch_id = Uuid::now_v7();
+        let raw_requests: Vec<String> =
+            requests.iter().map(|_| "raw_request".to_string()).collect();
         Ok(StartBatchProviderInferenceResponse {
             batch_id,
             inference_ids,
             batch_params: json!({"file_id": file_id, "batch_id": batch_id}),
             status: BatchStatus::Pending,
+            raw_requests,
         })
     }
 

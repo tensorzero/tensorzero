@@ -259,6 +259,9 @@ pub async fn test_simple_batch_inference_request_with_provider(provider: E2ETest
     assert_eq!(tags.len(), 1);
     assert_eq!(tags.get("key").unwrap().as_str().unwrap(), tag_value);
 
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(!raw_request.is_empty());
+
     // Check if ClickHouse is ok - BatchRequest Table
     let result = select_latest_batch_request_clickhouse(&clickhouse, batch_id)
         .await
@@ -461,6 +464,9 @@ pub async fn test_inference_params_batch_inference_request_with_provider(
 
     let tags = result.get("tags").unwrap().as_object().unwrap();
     assert_eq!(tags.len(), 0);
+
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(!raw_request.is_empty());
 
     // Check if ClickHouse is ok - BatchRequest Table
     let result = select_latest_batch_request_clickhouse(&clickhouse, batch_id)
@@ -952,6 +958,9 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
         let tags = result.get("tags").unwrap().as_object().unwrap();
         assert_eq!(tags.len(), 1);
         assert_eq!(tags.get("test").unwrap(), &payload["tags"][i]["test"]);
+
+        let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+        assert!(!raw_request.is_empty());
     }
 
     // Check if ClickHouse is ok - BatchRequest Table
@@ -1176,6 +1185,9 @@ pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider
     assert_eq!(tags.len(), 1);
     assert_eq!(tags.get("test").unwrap().as_str().unwrap(), "multi_turn");
 
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(!raw_request.is_empty());
+
     // Check if ClickHouse is ok - BatchRequest Table
     let result = select_latest_batch_request_clickhouse(&clickhouse, batch_id)
         .await
@@ -1390,6 +1402,9 @@ pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
     let tags = result.get("tags").unwrap().as_object().unwrap();
     assert_eq!(tags.len(), 0);
 
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(!raw_request.is_empty());
+
     // Check if ClickHouse is ok - BatchRequest Table
     let result = select_latest_batch_request_clickhouse(&clickhouse, batch_id)
         .await
@@ -1601,6 +1616,9 @@ pub async fn test_parallel_tool_use_batch_inference_request_with_provider(
     let tags = result.get("tags").unwrap().as_object().unwrap();
     assert_eq!(tags.len(), 0);
 
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(!raw_request.is_empty());
+
     // Check if ClickHouse is ok - BatchRequest Table
     let result = select_latest_batch_request_clickhouse(&clickhouse, batch_id)
         .await
@@ -1768,6 +1786,9 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
 
     let tags = result.get("tags").unwrap().as_object().unwrap();
     assert_eq!(tags.len(), 0);
+
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(!raw_request.is_empty());
 
     // Check if ClickHouse is ok - BatchRequest Table
     let result = select_latest_batch_request_clickhouse(&clickhouse, batch_id)
@@ -1951,6 +1972,9 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
 
     let tags = result.get("tags").unwrap().as_object().unwrap();
     assert_eq!(tags.len(), 0);
+
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(!raw_request.is_empty());
 
     // Check if ClickHouse is ok - BatchRequest Table
     let result = select_latest_batch_request_clickhouse(&clickhouse, batch_id)
