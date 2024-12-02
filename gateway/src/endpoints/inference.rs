@@ -195,7 +195,7 @@ pub async fn inference(
         .increment(1);
         counter!(
             "inference_count",
-            "endpoint" => "post_batch_inference",
+            "endpoint" => "inference",
             "function_name" => params.function_name.to_string(),
         )
         .increment(1);

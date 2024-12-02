@@ -58,6 +58,8 @@ pub struct BatchProviderInferenceResponse {
     pub batch_id: Uuid,
 }
 
+// Returned from poll_batch_inference from a variant.
+// Includes all the metadata that we need to write to ClickHouse.
 pub struct BatchModelInferenceWithMetadata<'a> {
     pub batch_id: Uuid,
     pub inference_ids: Vec<Uuid>,
