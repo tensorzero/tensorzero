@@ -14,6 +14,7 @@ pub enum BatchStatus {
     Failed,
 }
 
+// Returned from start_batch_inference from an InferenceProvider
 pub struct BatchProviderInferenceResponse {
     pub batch_id: Uuid,
     pub inference_ids: Vec<Uuid>,
@@ -21,6 +22,7 @@ pub struct BatchProviderInferenceResponse {
     pub status: BatchStatus,
 }
 
+// Returned from poll_batch_inference from a model
 pub struct BatchModelInferenceResponse<'a> {
     pub batch_id: Uuid,
     pub inference_ids: Vec<Uuid>,
@@ -44,6 +46,8 @@ impl<'a> BatchModelInferenceResponse<'a> {
     }
 }
 
+// Returned from poll_batch_inference from a variant.
+// Includes all the metadata that we need to write to ClickHouse.
 pub struct BatchModelInferenceWithMetadata<'a> {
     pub batch_id: Uuid,
     pub inference_ids: Vec<Uuid>,
