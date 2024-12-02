@@ -81,9 +81,12 @@ type BatchOutputSchemas = Vec<Option<Value>>;
 
 pub type InferenceCredentials = HashMap<String, SecretString>;
 
-/// A handler for the inference endpoint
+/// This handler starts a batch inference request for a particular function.
+/// The entire batch will use the same variant.
+/// It will fail if we fail to kick off the batch request for any reason.
+/// However, the batch request might still fail.
 #[instrument(
-    name="post_batch_inference",
+    name="start_batch_inference",
     skip_all,
     fields(
         function_name = %params.function_name,
@@ -91,7 +94,7 @@ pub type InferenceCredentials = HashMap<String, SecretString>;
     )
 )]
 #[debug_handler(state = AppStateData)]
-pub async fn prepare_batch_inference_handler(
+pub async fn start_batch_inference_handler(
     State(AppStateData {
         config,
         http_client,
@@ -163,13 +166,13 @@ pub async fn prepare_batch_inference_handler(
     // Increment the request count
     counter!(
         "request_count",
-        "endpoint" => "post_batch_inference",
+        "endpoint" => "batch_inference",
         "function_name" => params.function_name.to_string(),
     )
     .increment(1);
     counter!(
         "inference_count",
-        "endpoint" => "post_batch_inference",
+        "endpoint" => "batch_inference",
         "function_name" => params.function_name.to_string(),
     )
     .increment(num_inferences as u64);

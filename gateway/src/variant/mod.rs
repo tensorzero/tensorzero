@@ -53,26 +53,6 @@ pub enum JsonMode {
 }
 
 /// Maps to the subset of Config that applies to the current inference request.
-/// It doesn't take into account inference-time overrides (e.g. dynamic tools).
-// pub struct OwnedInferenceConfig<'a> {
-//     pub tool_config: Option<ToolCallConfig>,
-//     pub templates: &'a TemplateConfig<'a>,
-//     pub dynamic_output_schema: Option<DynamicJSONSchema>,
-//     pub function_name: String,
-//     pub variant_name: String,
-// }
-
-// pub struct BorrowedInferenceConfig<'a, 'request> {
-//     pub tool_config: Option<&'request ToolCallConfig>,
-//     pub templates: &'a TemplateConfig<'a>,
-//     pub dynamic_output_schema: Option<&'request DynamicJSONSchema>,
-// }
-
-// pub enum InferenceConfig<'a, 'request> {
-//     Owned(&'request OwnedInferenceConfig<'a>),
-//     Borrowed(BorrowedInferenceConfig<'a, 'request>),
-// }
-
 #[derive(Debug)]
 pub struct InferenceConfig<'a, 'request> {
     pub tool_config: Option<&'request ToolCallConfig>,
@@ -83,7 +63,6 @@ pub struct InferenceConfig<'a, 'request> {
 }
 
 /// Maps to the subset of Config that applies to the current inference request.
-/// It doesn't take into account inference-time overrides (e.g. dynamic tools).
 #[derive(Clone, Debug)]
 pub struct BatchInferenceConfig<'a> {
     pub tool_configs: Vec<Option<ToolCallConfig>>,

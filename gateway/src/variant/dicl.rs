@@ -275,6 +275,7 @@ impl Variant for DiclConfig {
         _clients: &'a InferenceClients<'a>,
         _inference_params: Vec<InferenceParams>,
     ) -> Result<BatchModelInferenceWithMetadata<'a>, Error> {
+        // TODO (#493): Implement batch inference for Dicl
         Err(ErrorDetails::UnsupportedVariantForBatchInference { variant_name: None }.into())
     }
 }
