@@ -307,6 +307,7 @@ struct BatchModelInferenceInsert<'a> {
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub inference_params: &'a InferenceParams,
     pub output_schema: Option<String>,
+    pub raw_request: &'a str,
     pub model_name: &'a str,
     pub model_provider_name: &'a str,
     pub tags: HashMap<String, String>,
@@ -360,6 +361,7 @@ struct BatchInferenceRow<'a> {
     tool_config: Option<ToolCallConfig>,
     inference_params: &'a InferenceParams,
     output_schema: Option<&'a Value>,
+    raw_request: &'a str,
     tags: Option<HashMap<String, String>>,
 }
 
@@ -370,7 +372,7 @@ async fn write_inference<'a>(
     metadata: BatchInferenceDatabaseInsertMetadata<'a>,
     inference_config: BatchInferenceConfig<'a>,
 ) -> Result<(Uuid, Vec<Uuid>), Error> {
-    let mut rows = vec![];
+    let mut rows: Vec<BatchModelInferenceInsert<'_>> = vec![];
     let batch_id = result.batch_id.to_string();
 
     // Collect all the data into BatchInferenceRow structs
@@ -382,6 +384,7 @@ async fn write_inference<'a>(
         inference_config.tool_configs,
         result.inference_params.iter(),
         result.output_schemas.iter(),
+        result.raw_requests.iter(),
         metadata
             .tags
             .unwrap_or_default()
@@ -397,6 +400,7 @@ async fn write_inference<'a>(
             tool_config,
             inference_params,
             output_schema,
+            raw_request,
             tags,
         )| {
             BatchInferenceRow {
@@ -407,6 +411,7 @@ async fn write_inference<'a>(
                 tool_config,
                 inference_params,
                 output_schema: *output_schema,
+                raw_request,
                 tags,
             }
         },
@@ -447,6 +452,7 @@ async fn write_inference<'a>(
             tool_params,
             inference_params: row.inference_params,
             output_schema,
+            raw_request: row.raw_request,
             model_name: result.model_name,
             model_provider_name: result.model_provider_name,
             tags: row.tags.unwrap_or_default(),

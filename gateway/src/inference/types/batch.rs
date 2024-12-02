@@ -18,6 +18,7 @@ pub enum BatchStatus {
 pub struct BatchProviderInferenceResponse {
     pub batch_id: Uuid,
     pub inference_ids: Vec<Uuid>,
+    pub raw_requests: Vec<String>,
     pub batch_params: Value,
     pub status: BatchStatus,
 }
@@ -26,6 +27,7 @@ pub struct BatchProviderInferenceResponse {
 pub struct BatchModelInferenceResponse<'a> {
     pub batch_id: Uuid,
     pub inference_ids: Vec<Uuid>,
+    pub raw_requests: Vec<String>,
     pub batch_params: Value,
     pub model_provider_name: &'a str,
     pub status: BatchStatus,
@@ -39,6 +41,7 @@ impl<'a> BatchModelInferenceResponse<'a> {
         Self {
             batch_id: provider_batch_response.batch_id,
             inference_ids: provider_batch_response.inference_ids,
+            raw_requests: provider_batch_response.raw_requests,
             batch_params: provider_batch_response.batch_params,
             model_provider_name,
             status: provider_batch_response.status,
@@ -56,6 +59,7 @@ pub struct BatchModelInferenceWithMetadata<'a> {
     pub tool_configs: Vec<Option<Cow<'a, ToolCallConfig>>>,
     pub inference_params: Vec<InferenceParams>,
     pub output_schemas: Vec<Option<&'a Value>>,
+    pub raw_requests: Vec<String>,
     pub batch_params: Value,
     pub model_provider_name: &'a str,
     pub model_name: &'a str,
@@ -87,6 +91,7 @@ impl<'a> BatchModelInferenceWithMetadata<'a> {
             tool_configs,
             inference_params,
             output_schemas,
+            raw_requests: model_batch_response.raw_requests,
             batch_params: model_batch_response.batch_params,
             model_provider_name: model_batch_response.model_provider_name,
             model_name,

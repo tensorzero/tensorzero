@@ -210,6 +210,15 @@ impl InferenceProvider for OpenAIProvider {
             })
             .collect();
         let batch_requests = batch_requests?;
+        let raw_requests: Result<Vec<String>, serde_json::Error> = batch_requests
+            .iter()
+            .map(|b| serde_json::to_string(&b.body))
+            .collect();
+        let raw_requests = raw_requests.map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: e.to_string(),
+            })
+        })?;
         let mut jsonl_data = Vec::new();
         for item in batch_requests {
             serde_json::to_writer(&mut jsonl_data, &item).map_err(|e| {
@@ -274,6 +283,7 @@ impl InferenceProvider for OpenAIProvider {
             batch_id: Uuid::now_v7(),
             inference_ids,
             batch_params: json!({"file_id": file_id, "batch_id": response.id}),
+            raw_requests,
             status: BatchStatus::Pending,
         })
     }
