@@ -140,7 +140,7 @@ pub async fn test_simple_batch_inference_request_with_provider(provider: E2ETest
     });
 
     let response = Client::new()
-        .post(get_gateway_endpoint("/batch_inference"))
+        .post(get_gateway_endpoint("/start_batch_inference"))
         .json(&payload)
         .send()
         .await
@@ -325,7 +325,7 @@ pub async fn test_inference_params_batch_inference_request_with_provider(
     });
 
     let response = Client::new()
-        .post(get_gateway_endpoint("/batch_inference"))
+        .post(get_gateway_endpoint("/start_batch_inference"))
         .json(&payload)
         .send()
         .await
@@ -576,7 +576,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
     });
 
     let response = Client::new()
-        .post(get_gateway_endpoint("/batch_inference"))
+        .post(get_gateway_endpoint("/start_batch_inference"))
         .json(&payload)
         .send()
         .await
@@ -1025,7 +1025,7 @@ pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider
     });
 
     let response = Client::new()
-        .post(get_gateway_endpoint("/batch_inference"))
+        .post(get_gateway_endpoint("/start_batch_inference"))
         .json(&payload)
         .send()
         .await
@@ -1069,7 +1069,7 @@ pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider
 
     println!("ClickHouse - BatchModelInference: {result:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
+    let id = result.get("inference_id").unwrap().as_str().unwrap();
     let id = Uuid::parse_str(id).unwrap();
     assert_eq!(id, inference_id);
 
@@ -1249,7 +1249,7 @@ pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
     });
 
     let response = Client::new()
-        .post(get_gateway_endpoint("/batch_inference"))
+        .post(get_gateway_endpoint("/start_batch_inference"))
         .json(&payload)
         .send()
         .await
@@ -1441,7 +1441,7 @@ pub async fn test_parallel_tool_use_batch_inference_request_with_provider(
     });
 
     let response = Client::new()
-        .post(get_gateway_endpoint("/batch_inference"))
+        .post(get_gateway_endpoint("/start_batch_inference"))
         .json(&payload)
         .send()
         .await
@@ -1649,7 +1649,7 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
     });
 
     let response = Client::new()
-        .post(get_gateway_endpoint("/batch_inference"))
+        .post(get_gateway_endpoint("/start_batch_inference"))
         .json(&payload)
         .send()
         .await
@@ -1692,7 +1692,7 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
 
     println!("ClickHouse - BatchModelInference: {result:#?}");
 
-    let id = result.get("id").unwrap().as_str().unwrap();
+    let id = result.get("inference_id").unwrap().as_str().unwrap();
     let id = Uuid::parse_str(id).unwrap();
     assert_eq!(id, inference_id);
 
@@ -1832,7 +1832,7 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
     });
 
     let response = Client::new()
-        .post(get_gateway_endpoint("/batch_inference"))
+        .post(get_gateway_endpoint("/start_batch_inference"))
         .json(&payload)
         .send()
         .await

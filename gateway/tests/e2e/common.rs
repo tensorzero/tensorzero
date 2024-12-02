@@ -163,7 +163,7 @@ pub(crate) async fn select_batch_model_inference_clickhouse(
         r#"
         SELECT bmi.*
         FROM BatchModelInference bmi
-        INNER JOIN BatchIdByInferenceId bid ON bmi.id = bid.inference_id
+        INNER JOIN BatchIdByInferenceId bid ON bmi.inference_id = bid.inference_id
         WHERE bid.inference_id = '{}'
         FORMAT JSONEachRow"#,
         inference_id
