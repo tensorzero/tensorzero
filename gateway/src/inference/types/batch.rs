@@ -1,6 +1,6 @@
 use crate::{endpoints::inference::InferenceParams, tool::ToolCallConfig};
 
-use super::{ModelInferenceRequest, RequestMessage};
+use super::{ContentBlock, ModelInferenceRequest, RequestMessage, Usage};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
@@ -49,7 +49,7 @@ impl<'a> StartBatchModelInferenceResponse<'a> {
 #[derive(Debug)]
 pub enum PollBatchInferenceResponse {
     Pending,
-    Completed(BatchProviderInferenceResponse),
+    Completed(ProviderBatchInferenceResponse),
     Failed,
 }
 
@@ -124,4 +124,21 @@ where
 {
     let json_str = String::deserialize(deserializer)?;
     serde_json::from_str(&json_str).map_err(serde::de::Error::custom)
+}
+
+#[derive(Debug)]
+pub struct ProviderBatchInferenceOutput {
+    pub id: Uuid,
+    pub created: u64,
+    pub output: Vec<ContentBlock>,
+    pub system: Option<String>,
+    pub input_messages: Vec<RequestMessage>,
+    pub raw_response: String,
+    pub usage: Usage,
+}
+
+#[derive(Debug)]
+pub struct ProviderBatchInferenceResponse {
+    // Inference ID -> Output
+    pub elements: HashMap<Uuid, ProviderBatchInferenceOutput>,
 }

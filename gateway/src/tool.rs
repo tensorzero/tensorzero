@@ -79,7 +79,7 @@ pub struct ToolCallConfig {
 
 /// ToolCallConfigDatabaseInsert is a lightweight version of ToolCallConfig that can be serialized and cloned.
 /// It is used to insert the ToolCallConfig into the database.
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 pub struct ToolCallConfigDatabaseInsert {
     pub tools_available: Vec<Tool>,
     pub tool_choice: ToolChoice,

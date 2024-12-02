@@ -207,6 +207,9 @@ pub enum ErrorDetails {
         template_name: String,
         message: String,
     },
+    MissingBatchInferenceResponse {
+        inference_id: Uuid,
+    },
     MistralClient {
         message: String,
         status_code: StatusCode,
@@ -347,6 +350,7 @@ impl ErrorDetails {
             ErrorDetails::MiniJinjaTemplate { .. } => tracing::Level::ERROR,
             ErrorDetails::MiniJinjaTemplateMissing { .. } => tracing::Level::ERROR,
             ErrorDetails::MiniJinjaTemplateRender { .. } => tracing::Level::ERROR,
+            ErrorDetails::MissingBatchInferenceResponse { .. } => tracing::Level::WARN,
             ErrorDetails::MistralClient { .. } => tracing::Level::WARN,
             ErrorDetails::MistralServer { .. } => tracing::Level::ERROR,
             ErrorDetails::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
@@ -430,6 +434,7 @@ impl ErrorDetails {
             ErrorDetails::MiniJinjaTemplate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::MiniJinjaTemplateMissing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::MiniJinjaTemplateRender { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::MissingBatchInferenceResponse { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::MistralClient { status_code, .. } => *status_code,
             ErrorDetails::MistralServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -666,6 +671,13 @@ impl std::fmt::Display for ErrorDetails {
                 message,
             } => {
                 write!(f, "Error rendering template {}: {}", template_name, message)
+            }
+            ErrorDetails::MissingBatchInferenceResponse { inference_id } => {
+                write!(
+                    f,
+                    "Missing batch inference response for inference id: {}",
+                    inference_id
+                )
             }
             ErrorDetails::MistralClient { message, .. } => {
                 write!(f, "Error from Mistral client: {}", message)

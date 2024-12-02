@@ -2,11 +2,12 @@ use axum::body::Body;
 use axum::extract::{Query, State};
 use axum::response::{IntoResponse, Response};
 use axum::{debug_handler, Json};
-use itertools::izip;
+use itertools::{izip, Itertools};
 use metrics::counter;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::iter::repeat;
 use tracing::instrument;
@@ -18,7 +19,9 @@ use crate::error::{Error, ErrorDetails};
 use crate::function::sample_variant;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::providers::provider_trait::InferenceProvider;
-use crate::inference::types::batch::BatchStatus;
+use crate::inference::types::batch::{
+    BatchStatus, PollBatchInferenceResponse, ProviderBatchInferenceResponse,
+};
 use crate::inference::types::RequestMessage;
 use crate::inference::types::{
     batch::{BatchModelInferenceWithMetadata, BatchRequest},
@@ -40,7 +43,7 @@ use super::inference::{
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Params {
+pub struct StartBatchInferenceParams {
     // the function name
     pub function_name: String,
     // the episode IDs for each inference (if not provided, it'll be set to inference_id)
@@ -105,7 +108,7 @@ pub async fn start_batch_inference_handler(
         http_client,
         clickhouse_connection_info,
     }): AppState,
-    StructuredJson(params): StructuredJson<Params>,
+    StructuredJson(params): StructuredJson<StartBatchInferenceParams>,
 ) -> Result<Response<Body>, Error> {
     // Get the function config or return an error if it doesn't exist
     let function = config.get_function(&params.function_name)?;
@@ -256,7 +259,7 @@ pub async fn start_batch_inference_handler(
             tags: params.tags,
         };
 
-        let (batch_id, inference_ids) = write_inference(
+        let (batch_id, inference_ids) = write_start_batch_inference(
             &clickhouse_connection_info,
             params.inputs,
             result,
@@ -284,9 +287,13 @@ pub async fn start_batch_inference_handler(
 }
 
 #[derive(Debug, Deserialize)]
-pub struct PollInferenceQueryParams {
+pub struct PollBatchInferenceParams {
+    #[serde(default)]
     batch_id: Option<Uuid>,
+    #[serde(default)]
     inference_id: Option<Uuid>,
+    #[serde(default)]
+    credentials: InferenceCredentials,
 }
 
 enum PollInferenceQuery {
@@ -302,9 +309,9 @@ pub async fn poll_batch_inference_handler(
         http_client,
         clickhouse_connection_info,
     }): AppState,
-    Query(query): Query<PollInferenceQueryParams>,
+    StructuredJson(params): StructuredJson<PollBatchInferenceParams>,
 ) -> Result<Response<Body>, Error> {
-    let query = query.validate()?;
+    let query = PollInferenceQuery::try_from(&params)?;
     let batch_request = get_batch_request(&clickhouse_connection_info, query).await?;
     match batch_request.status {
         BatchStatus::Pending => todo!(),
@@ -321,9 +328,10 @@ enum PollInferenceResponse {
     Failed { message: &'static str },
 }
 
-impl PollInferenceQueryParams {
-    fn validate(self) -> Result<PollInferenceQuery, Error> {
-        match (self.batch_id, self.inference_id) {
+impl TryFrom<&'_ PollBatchInferenceParams> for PollInferenceQuery {
+    type Error = Error;
+    fn try_from(value: &'_ PollBatchInferenceParams) -> Result<Self, Self::Error> {
+        match (value.batch_id, value.inference_id) {
             (Some(batch_id), None) => Ok(PollInferenceQuery::Batch(batch_id)),
             (None, Some(inference_id)) => Ok(PollInferenceQuery::Inference(inference_id)),
             _ => Err(ErrorDetails::InvalidRequest {
@@ -397,6 +405,7 @@ async fn poll_batch_request(
     http_client: reqwest::Client,
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     models: &HashMap<String, ModelConfig>,
+    credentials: InferenceCredentials,
 ) -> Result<PollInferenceResponse, Error> {
     // Retrieve the relevant model provider
     // Call model.poll_batch_inference on it
@@ -416,9 +425,9 @@ async fn poll_batch_request(
                 provider_name: batch_request.model_provider_name.to_string(),
             })
         })?;
-    model_provider
-        .poll_batch_inference(&batch_request, &http_client, &batch_request.credentials)
-        .await;
+    let response = model_provider
+        .poll_batch_inference(&batch_request, &http_client, &credentials)
+        .await?;
     todo!()
 }
 
@@ -437,21 +446,21 @@ struct BatchInferenceDatabaseInsertMetadata<'a> {
     pub tags: Option<Vec<Option<HashMap<String, String>>>>,
 }
 
-#[derive(Debug, Serialize)]
-struct BatchModelInferenceInsert<'a> {
+#[derive(Debug, Deserialize, Serialize)]
+struct BatchModelInferenceRow<'a> {
     pub inference_id: String,
-    pub batch_id: &'a str,
-    pub function_name: &'a str,
-    pub variant_name: &'a str,
+    pub batch_id: Cow<'a, str>,
+    pub function_name: Cow<'a, str>,
+    pub variant_name: Cow<'a, str>,
     pub episode_id: String,
     pub input: String,
     pub input_messages: String,
-    pub system: Option<&'a str>,
+    pub system: Option<Cow<'a, str>>,
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
-    pub inference_params: &'a InferenceParams,
+    pub inference_params: Cow<'a, InferenceParams>,
     pub output_schema: Option<String>,
-    pub model_name: &'a str,
-    pub model_provider_name: &'a str,
+    pub model_name: Cow<'a, str>,
+    pub model_provider_name: Cow<'a, str>,
     pub tags: HashMap<String, String>,
 }
 
@@ -469,7 +478,7 @@ struct BatchRequestInsert<'a> {
 impl<'a> BatchRequestInsert<'a> {
     fn new(
         batch_id: &'a str,
-        batch_params: Value,
+        batch_params: &'a Value,
         model_name: &'a str,
         model_provider_name: &'a str,
         status: BatchStatus,
@@ -480,7 +489,7 @@ impl<'a> BatchRequestInsert<'a> {
         Self {
             batch_id,
             id,
-            batch_params: serde_json::to_string(&batch_params)
+            batch_params: serde_json::to_string(batch_params)
                 .map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
                         message: e.to_string(),
@@ -506,7 +515,7 @@ struct BatchInferenceRow<'a> {
     tags: Option<HashMap<String, String>>,
 }
 
-async fn write_inference<'a>(
+async fn write_start_batch_inference<'a>(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inputs: Vec<Input>,
     result: BatchModelInferenceWithMetadata<'a>,
@@ -578,20 +587,20 @@ async fn write_inference<'a>(
                 })
             })?;
 
-        rows.push(BatchModelInferenceInsert {
+        rows.push(BatchModelInferenceRow {
             inference_id: row.inference_id.to_string(),
-            batch_id: &batch_id,
-            function_name: metadata.function_name,
-            variant_name: metadata.variant_name,
+            batch_id: Cow::Borrowed(&batch_id),
+            function_name: Cow::Borrowed(metadata.function_name),
+            variant_name: Cow::Borrowed(metadata.variant_name),
             episode_id: metadata.episode_ids[rows.len()].to_string(),
             input,
             input_messages,
-            system: row.system,
+            system: row.system.map(Cow::Borrowed),
             tool_params,
-            inference_params: row.inference_params,
+            inference_params: Cow::Borrowed(row.inference_params),
             output_schema,
-            model_name: result.model_name,
-            model_provider_name: result.model_provider_name,
+            model_name: Cow::Borrowed(result.model_name),
+            model_provider_name: Cow::Borrowed(result.model_provider_name),
             tags: row.tags.unwrap_or_default(),
         });
     }
@@ -602,7 +611,7 @@ async fn write_inference<'a>(
 
     let batch_request_insert = BatchRequestInsert::new(
         &batch_id,
-        result.batch_params,
+        &result.batch_params,
         result.model_name,
         result.model_provider_name,
         BatchStatus::Pending,
@@ -613,6 +622,104 @@ async fn write_inference<'a>(
         .await?;
 
     Ok((result.batch_id, result.inference_ids))
+}
+
+async fn write_poll_batch_inference<'a>(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    batch_request: &BatchRequest,
+    response: &PollBatchInferenceResponse,
+) -> Result<(), Error> {
+    match response {
+        PollBatchInferenceResponse::Pending => {
+            write_batch_request_status_update(
+                clickhouse_connection_info,
+                batch_request,
+                BatchStatus::Pending,
+            )
+            .await
+        }
+        PollBatchInferenceResponse::Completed(response) => {
+            write_completed_batch_inference(clickhouse_connection_info, batch_request, response)
+                .await
+        }
+        PollBatchInferenceResponse::Failed => {
+            write_batch_request_status_update(
+                clickhouse_connection_info,
+                batch_request,
+                BatchStatus::Failed,
+            )
+            .await
+        }
+    }
+}
+
+async fn write_batch_request_status_update(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    batch_request: &BatchRequest,
+    status: BatchStatus,
+) -> Result<(), Error> {
+    let batch_id = batch_request.batch_id.to_string();
+    let batch_request_insert = BatchRequestInsert::new(
+        &batch_id,
+        &batch_request.batch_params,
+        &batch_request.model_name,
+        &batch_request.model_provider_name,
+        status,
+        None, // There should not be errors for the batch request on initialization
+    );
+    clickhouse_connection_info
+        .write(&[batch_request_insert], "BatchRequest")
+        .await?;
+    Ok(())
+}
+
+async fn write_completed_batch_inference(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    batch_request: &BatchRequest,
+    response: &ProviderBatchInferenceResponse,
+) -> Result<(), Error> {
+    let inference_ids: Vec<String> = response.elements.keys().map(|id| id.to_string()).collect();
+    let batch_model_inferences = get_batch_inferences(
+        clickhouse_connection_info,
+        batch_request.batch_id,
+        &inference_ids,
+    )
+    .await?;
+    for batch_model_inference in batch_model_inferences {
+        let inference_id = Uuid::parse_str(&batch_model_inference.inference_id).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: e.to_string(),
+            })
+        })?;
+        let inference_response = match response.elements.get(&inference_id) {
+            Some(inference_response) => inference_response,
+            None => {
+                Error::new(ErrorDetails::MissingBatchInferenceResponse { inference_id });
+                continue;
+            }
+        };
+        todo!()
+    }
+    Ok(())
+}
+
+async fn get_batch_inferences(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    batch_id: Uuid,
+    inference_ids: &Vec<String>,
+) -> Result<Vec<BatchModelInferenceRow<'static>>, Error> {
+    let query = format!(
+        "SELECT * FROM BatchModelInference WHERE batch_id = '{}' AND inference_id IN ({}) FORMAT JSONEachRow",
+        batch_id,
+        inference_ids.iter().map(|id| format!("'{}'", id)).join(",")
+    );
+    let response = clickhouse_connection_info.run_query(query).await?;
+    let rows = serde_json::from_str::<Vec<BatchModelInferenceRow>>(&response).map_err(|e| {
+        Error::new(ErrorDetails::ClickHouseDeserialization {
+            message: e.to_string(),
+        })
+    })?;
+    Ok(rows)
 }
 
 /// InferenceResponse and InferenceResultChunk determine what gets serialized and sent to the client
