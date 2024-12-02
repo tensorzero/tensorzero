@@ -33,7 +33,7 @@ You can start a discussion (GitHub, Slack, or Discord) or open an issue as a sta
 The team will be happy to provide feedback and guidance.
 
 > [!TIP]
-> See the [`good-first-issue` label](https://github.com/tensorzero/tensorzero/issues?q=is%3Aopen+is%3Aissue+label%3Agood-first-issue) for simpler issues that are a great starting point for new contributors.
+> See the [`good-first-issue`](https://github.com/tensorzero/tensorzero/issues?q=is%3Aopen+is%3Aissue+label%3Agood-first-issue) label for simpler issues that might be a good starting point for new contributors.
 
 ### Documentation
 
