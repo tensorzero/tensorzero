@@ -162,6 +162,13 @@ pub enum ErrorDetails {
     InvalidMessage {
         message: String,
     },
+    InvalidModel {
+        model_name: String,
+    },
+    InvalidModelProvider {
+        model_name: String,
+        provider_name: String,
+    },
     InvalidOpenAICompatibleRequest {
         message: String,
     },
@@ -326,6 +333,8 @@ impl ErrorDetails {
             ErrorDetails::InvalidEpisodeId { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidMessage { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidModel { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidModelProvider { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidOpenAICompatibleRequest { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidProviderConfig { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidRequest { .. } => tracing::Level::WARN,
@@ -407,6 +416,8 @@ impl ErrorDetails {
             ErrorDetails::InvalidDiclConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidModel { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidModelProvider { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidOpenAICompatibleRequest { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidProviderConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidRequest { .. } => StatusCode::BAD_REQUEST,
@@ -591,6 +602,19 @@ impl std::fmt::Display for ErrorDetails {
                 write!(f, "Invalid Episode ID: {}", message)
             }
             ErrorDetails::InvalidMessage { message } => write!(f, "{}", message),
+            ErrorDetails::InvalidModel { model_name } => {
+                write!(f, "Invalid model: {}", model_name)
+            }
+            ErrorDetails::InvalidModelProvider {
+                model_name,
+                provider_name,
+            } => {
+                write!(
+                    f,
+                    "Invalid model provider: {} for model: {}",
+                    provider_name, model_name
+                )
+            }
             ErrorDetails::InvalidOpenAICompatibleRequest { message } => write!(
                 f,
                 "Invalid request to OpenAI-compatible endpoint: {}",

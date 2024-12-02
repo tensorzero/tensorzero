@@ -17,6 +17,7 @@ use crate::config_parser::Config;
 use crate::error::{Error, ErrorDetails};
 use crate::function::sample_variant;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
+use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchStatus;
 use crate::inference::types::RequestMessage;
 use crate::inference::types::{
@@ -24,6 +25,7 @@ use crate::inference::types::{
     ContentBlockOutput, Input, JsonInferenceOutput, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
+use crate::model::ModelConfig;
 use crate::tool::{
     BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams, ToolCallConfig,
     ToolCallConfigDatabaseInsert,
@@ -394,11 +396,29 @@ async fn poll_batch_request(
     batch_request: BatchRequest,
     http_client: reqwest::Client,
     clickhouse_connection_info: &ClickHouseConnectionInfo,
-    config: &Config<'_>,
+    models: &HashMap<String, ModelConfig>,
 ) -> Result<PollInferenceResponse, Error> {
     // Retrieve the relevant model provider
     // Call model.poll_batch_inference on it
-    //
+    let model_config = models
+        .get(batch_request.model_name.as_str())
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::InvalidModel {
+                model_name: batch_request.model_name.to_string(),
+            })
+        })?;
+    let model_provider = model_config
+        .providers
+        .get(batch_request.model_provider_name.as_str())
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::InvalidModelProvider {
+                model_name: batch_request.model_name.to_string(),
+                provider_name: batch_request.model_provider_name.to_string(),
+            })
+        })?;
+    model_provider
+        .poll_batch_inference(&batch_request, &http_client, &batch_request.credentials)
+        .await;
     todo!()
 }
 
