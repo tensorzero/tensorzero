@@ -372,7 +372,6 @@ async fn write_inference<'a>(
     metadata: BatchInferenceDatabaseInsertMetadata<'a>,
     inference_config: BatchInferenceConfig<'a>,
 ) -> Result<(Uuid, Vec<Uuid>), Error> {
-    let mut rows: Vec<BatchModelInferenceInsert<'_>> = vec![];
     let batch_id = result.batch_id.to_string();
 
     // Collect all the data into BatchInferenceRow structs
@@ -416,6 +415,7 @@ async fn write_inference<'a>(
             }
         },
     );
+    let mut rows: Vec<BatchModelInferenceInsert<'_>> = vec![];
 
     // Process each row
     for row in inference_rows {
