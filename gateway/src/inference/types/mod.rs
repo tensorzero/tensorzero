@@ -172,6 +172,7 @@ pub enum Latency {
     NonStreaming {
         response_time: Duration,
     },
+    Batch,
 }
 
 /// After a ProviderInferenceResponse is returned to the Model,
@@ -347,7 +348,7 @@ pub struct ModelInferenceDatabaseInsert {
     pub output: String,
     pub input_tokens: u32,
     pub output_tokens: u32,
-    pub response_time_ms: u32,
+    pub response_time_ms: Option<u32>,
     pub model_name: String,
     pub model_provider_name: String,
     pub ttft_ms: Option<u32>,
@@ -477,10 +478,13 @@ impl ModelInferenceDatabaseInsert {
                 ttft,
                 response_time,
             } => (
-                response_time.as_millis() as u32,
+                Some(response_time.as_millis() as u32),
                 Some(ttft.as_millis() as u32),
             ),
-            Latency::NonStreaming { response_time } => (response_time.as_millis() as u32, None),
+            Latency::NonStreaming { response_time } => {
+                (Some(response_time.as_millis() as u32), None)
+            }
+            Latency::Batch => (None, None),
         };
         let serialized_input_messages = serialize_or_log(&result.input_messages);
         let serialized_output = serialize_or_log(&result.output);

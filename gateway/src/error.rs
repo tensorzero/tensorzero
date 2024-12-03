@@ -208,7 +208,7 @@ pub enum ErrorDetails {
         message: String,
     },
     MissingBatchInferenceResponse {
-        inference_id: Uuid,
+        inference_id: Option<Uuid>,
     },
     MistralClient {
         message: String,
@@ -672,13 +672,14 @@ impl std::fmt::Display for ErrorDetails {
             } => {
                 write!(f, "Error rendering template {}: {}", template_name, message)
             }
-            ErrorDetails::MissingBatchInferenceResponse { inference_id } => {
-                write!(
+            ErrorDetails::MissingBatchInferenceResponse { inference_id } => match inference_id {
+                Some(inference_id) => write!(
                     f,
                     "Missing batch inference response for inference id: {}",
                     inference_id
-                )
-            }
+                ),
+                None => write!(f, "Missing batch inference response"),
+            },
             ErrorDetails::MistralClient { message, .. } => {
                 write!(f, "Error from Mistral client: {}", message)
             }

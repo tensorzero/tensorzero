@@ -16,17 +16,17 @@ use uuid::Uuid;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::Config;
 use crate::error::{Error, ErrorDetails};
-use crate::function::sample_variant;
+use crate::function::{sample_variant, FunctionConfig};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{
     BatchStatus, PollBatchInferenceResponse, ProviderBatchInferenceResponse,
 };
-use crate::inference::types::RequestMessage;
 use crate::inference::types::{
     batch::{BatchModelInferenceWithMetadata, BatchRequest},
     ContentBlockOutput, Input, JsonInferenceOutput, Usage,
 };
+use crate::inference::types::{current_timestamp, InferenceResult, Latency, RequestMessage};
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelConfig;
 use crate::tool::{
@@ -34,7 +34,7 @@ use crate::tool::{
     ToolCallConfigDatabaseInsert,
 };
 use crate::uuid_util::validate_episode_id;
-use crate::variant::{BatchInferenceConfig, Variant};
+use crate::variant::{BatchInferenceConfig, InferenceConfig, Variant};
 
 use super::inference::{
     ChatCompletionInferenceParams, InferenceClients, InferenceModels, InferenceParams,
@@ -314,7 +314,23 @@ pub async fn poll_batch_inference_handler(
     let query = PollInferenceQuery::try_from(&params)?;
     let batch_request = get_batch_request(&clickhouse_connection_info, query).await?;
     match batch_request.status {
-        BatchStatus::Pending => todo!(),
+        BatchStatus::Pending => {
+            let response = poll_batch_inference(
+                &batch_request,
+                http_client,
+                &config.models,
+                &params.credentials,
+            )
+            .await?;
+            write_poll_batch_inference(
+                &clickhouse_connection_info,
+                &batch_request,
+                &response,
+                &config,
+            )
+            .await?;
+            todo!()
+        }
         BatchStatus::Completed => todo!(),
         BatchStatus::Failed => todo!(),
     }
@@ -400,13 +416,12 @@ async fn get_batch_request(
     Ok(batch_request)
 }
 
-async fn poll_batch_request(
-    batch_request: BatchRequest,
+async fn poll_batch_inference(
+    batch_request: &BatchRequest,
     http_client: reqwest::Client,
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
     models: &HashMap<String, ModelConfig>,
-    credentials: InferenceCredentials,
-) -> Result<PollInferenceResponse, Error> {
+    credentials: &InferenceCredentials,
+) -> Result<PollBatchInferenceResponse, Error> {
     // Retrieve the relevant model provider
     // Call model.poll_batch_inference on it
     let model_config = models
@@ -425,10 +440,9 @@ async fn poll_batch_request(
                 provider_name: batch_request.model_provider_name.to_string(),
             })
         })?;
-    let response = model_provider
+    model_provider
         .poll_batch_inference(&batch_request, &http_client, &credentials)
-        .await?;
-    todo!()
+        .await
 }
 
 #[derive(Debug, Serialize)]
@@ -459,10 +473,108 @@ struct BatchModelInferenceRow<'a> {
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub inference_params: Cow<'a, InferenceParams>,
     pub output_schema: Option<String>,
-    pub raw_request: &'a str,
+    pub raw_request: Cow<'a, str>,
     pub model_name: Cow<'a, str>,
     pub model_provider_name: Cow<'a, str>,
     pub tags: HashMap<String, String>,
+}
+
+impl<'a> BatchModelInferenceRow<'a> {
+    fn from_string(s: String) -> Result<BatchModelInferenceRow<'static>, Error> {
+        let mut value: serde_json::Map<String, Value> = serde_json::from_str(&s).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to parse batch model inference row: {}", e),
+            })
+        })?;
+
+        let get_string = |map: &mut serde_json::Map<String, Value>, key: &str| {
+            map.remove(key)
+                .ok_or_else(|| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Missing {}", key),
+                    })
+                })
+                .and_then(|v| {
+                    v.as_str().map(|s| s.to_string()).ok_or_else(|| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!("{} is not a string", key),
+                        })
+                    })
+                })
+        };
+
+        let inference_id = get_string(&mut value, "inference_id")?;
+        let batch_id = get_string(&mut value, "batch_id")?.into();
+        let function_name = get_string(&mut value, "function_name")?.into();
+        let variant_name = get_string(&mut value, "variant_name")?.into();
+        let episode_id = get_string(&mut value, "episode_id")?;
+        let input = get_string(&mut value, "input")?;
+        let input_messages = get_string(&mut value, "input_messages")?;
+
+        let system = value
+            .remove("system")
+            .and_then(|v| v.as_str().map(|s| s.to_string().into()));
+
+        let tool_params = value
+            .remove("tool_params")
+            .and_then(|v| serde_json::from_value(v).ok());
+
+        let inference_params: InferenceParams = value
+            .remove("inference_params")
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::Serialization {
+                    message: "Missing inference_params".to_string(),
+                })
+            })
+            .and_then(|v| {
+                serde_json::from_value(v).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Failed to parse inference_params: {}", e),
+                    })
+                })
+            })?;
+
+        let output_schema = value
+            .remove("output_schema")
+            .and_then(|v| v.as_str().map(|s| s.to_string()));
+
+        let raw_request = get_string(&mut value, "raw_request")?.into();
+        let model_name = get_string(&mut value, "model_name")?.into();
+        let model_provider_name = get_string(&mut value, "model_provider_name")?.into();
+
+        let tags = value
+            .remove("tags")
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::Serialization {
+                    message: "Missing tags".to_string(),
+                })
+            })
+            .and_then(|v| {
+                serde_json::from_value(v).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Failed to parse tags: {}", e),
+                    })
+                })
+            })?;
+
+        Ok(BatchModelInferenceRow {
+            inference_id,
+            batch_id,
+            function_name,
+            variant_name,
+            episode_id,
+            input,
+            input_messages,
+            system,
+            tool_params,
+            inference_params: Cow::Owned(inference_params),
+            output_schema,
+            raw_request,
+            model_name,
+            model_provider_name,
+            tags,
+        })
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -524,7 +636,6 @@ async fn write_start_batch_inference<'a>(
     metadata: BatchInferenceDatabaseInsertMetadata<'a>,
     inference_config: BatchInferenceConfig<'a>,
 ) -> Result<(Uuid, Vec<Uuid>), Error> {
-    let mut rows: Vec<BatchInferenceRow<'a>> = vec![];
     let batch_id = result.batch_id.to_string();
 
     // Collect all the data into BatchInferenceRow structs
@@ -569,6 +680,7 @@ async fn write_start_batch_inference<'a>(
         },
     );
 
+    let mut rows: Vec<BatchModelInferenceRow<'_>> = vec![];
     // Process each row
     for row in inference_rows {
         let input = serde_json::to_string(&row.input).map_err(|e| {
@@ -604,7 +716,7 @@ async fn write_start_batch_inference<'a>(
             tool_params,
             inference_params: Cow::Borrowed(row.inference_params),
             output_schema,
-            raw_request: row.raw_request,
+            raw_request: Cow::Borrowed(row.raw_request),
             model_name: Cow::Borrowed(result.model_name),
             model_provider_name: Cow::Borrowed(result.model_provider_name),
             tags: row.tags.unwrap_or_default(),
@@ -634,6 +746,7 @@ async fn write_poll_batch_inference<'a>(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     batch_request: &BatchRequest,
     response: &PollBatchInferenceResponse,
+    config: &Config<'a>,
 ) -> Result<(), Error> {
     match response {
         PollBatchInferenceResponse::Pending => {
@@ -645,8 +758,13 @@ async fn write_poll_batch_inference<'a>(
             .await
         }
         PollBatchInferenceResponse::Completed(response) => {
-            write_completed_batch_inference(clickhouse_connection_info, batch_request, response)
-                .await
+            write_completed_batch_inference(
+                clickhouse_connection_info,
+                batch_request,
+                response,
+                config,
+            )
+            .await
         }
         PollBatchInferenceResponse::Failed => {
             write_batch_request_status_update(
@@ -683,6 +801,7 @@ async fn write_completed_batch_inference(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     batch_request: &BatchRequest,
     response: &ProviderBatchInferenceResponse,
+    config: &Config<'_>,
 ) -> Result<(), Error> {
     let inference_ids: Vec<String> = response.elements.keys().map(|id| id.to_string()).collect();
     let batch_model_inferences = get_batch_inferences(
@@ -691,20 +810,93 @@ async fn write_completed_batch_inference(
         &inference_ids,
     )
     .await?;
+    let function_name = &batch_model_inferences
+        .first()
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::MissingBatchInferenceResponse { inference_id: None })
+        })?
+        .function_name;
+    let function = config.get_function(&function_name)?;
+    let mut results: Vec<InferenceResult> = Vec::new();
     for batch_model_inference in batch_model_inferences {
-        let inference_id = Uuid::parse_str(&batch_model_inference.inference_id).map_err(|e| {
+        let BatchModelInferenceRow {
+            inference_id,
+            batch_id: _,
+            function_name: _,
+            variant_name: _,
+            episode_id: _,
+            input: _,
+            input_messages,
+            system,
+            tool_params,
+            inference_params,
+            output_schema,
+            raw_request,
+            model_name: _,
+            model_provider_name: _,
+            tags: _,
+        } = batch_model_inference;
+        let inference_id = Uuid::parse_str(&inference_id).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: e.to_string(),
             })
         })?;
-        let inference_response = match response.elements.get(&inference_id) {
+        let inference_response = match response.elements.remove(&inference_id) {
             Some(inference_response) => inference_response,
             None => {
-                Error::new(ErrorDetails::MissingBatchInferenceResponse { inference_id });
+                Error::new(ErrorDetails::MissingBatchInferenceResponse {
+                    inference_id: Some(inference_id),
+                });
                 continue;
             }
         };
-        todo!()
+        let input_messages: Vec<RequestMessage> = match serde_json::from_str(&input_messages)
+            .map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: e.to_string(),
+                })
+            }) {
+            Ok(m) => m,
+            Err(e) => continue,
+        };
+        // TODO: make model_inference_results: Vec<ModelInferenceResponseWithMetadata> from inputs
+        let model_inference_response = ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            created: current_timestamp(),
+            output: inference_response.output.clone(),
+            system: inference_response.system,
+            input_messages: input_messages,
+            raw_request,
+            raw_response: inference_response.raw_response,
+            usage: inference_response.usage,
+            latency: Latency::new(0, 0), // TODO: make latency optional
+            model_provider_name: &batch_request.model_provider_name,
+        };
+        let tool_config: Option<ToolCallConfig> = tool_params.map(|t| t.into());
+        let output_schema = match output_schema
+            .map(|s| DynamicJSONSchema::from_str(&s))
+            .transpose()
+        {
+            Ok(s) => s,
+            Err(e) => continue,
+        };
+        let inference_config = InferenceConfig {
+            tool_config: tool_config.as_ref(),
+            dynamic_output_schema: output_schema.as_ref(),
+            templates: &config.templates,
+            function_name,
+            variant_name: None,
+        };
+        let inference_params = function
+            .prepare_response(
+                inference_id,
+                inference_response.output,
+                inference_response.usage,
+                inference_response,
+                &inference_config,
+                inference_params,
+            )
+            .await?;
     }
     Ok(())
 }
@@ -720,11 +912,12 @@ async fn get_batch_inferences(
         inference_ids.iter().map(|id| format!("'{}'", id)).join(",")
     );
     let response = clickhouse_connection_info.run_query(query).await?;
-    let rows = serde_json::from_str::<Vec<BatchModelInferenceRow>>(&response).map_err(|e| {
-        Error::new(ErrorDetails::ClickHouseDeserialization {
-            message: e.to_string(),
-        })
-    })?;
+    let rows = response
+        .lines()
+        .filter(|line| !line.is_empty())
+        .map(|line| BatchModelInferenceRow::from_string(line.to_string()))
+        .collect::<Result<Vec<_>, _>>()?;
+
     Ok(rows)
 }
 
