@@ -8,7 +8,9 @@ use tokio::time::{timeout, Duration};
 
 use crate::embeddings::EmbeddingModelConfig;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
-use crate::inference::types::{ModelInferenceRequest, RequestMessage, Role, Usage};
+use crate::inference::types::{
+    batch::BatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role, Usage,
+};
 use crate::{
     endpoints::inference::InferenceParams,
     error::{Error, ErrorDetails},
@@ -50,7 +52,7 @@ impl Variant for MixtureOfNConfig {
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
+        inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<InferenceResult<'a>, Error> {
@@ -73,7 +75,7 @@ impl Variant for MixtureOfNConfig {
         _input: &Input,
         _models: &'request InferenceModels<'static>,
         _function: &'static FunctionConfig,
-        _inference_config: &'request InferenceConfig<'request>,
+        _inference_config: &'request InferenceConfig<'static, 'request>,
         _clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<
@@ -140,6 +142,18 @@ impl Variant for MixtureOfNConfig {
     fn get_all_template_paths(&self) -> Vec<&PathBuf> {
         self.fuser.inner.get_all_template_paths()
     }
+
+    async fn start_batch_inference<'a>(
+        &'a self,
+        _input: &[Input],
+        _models: &'a InferenceModels<'a>,
+        _function: &'a FunctionConfig,
+        _inference_configs: &'a [InferenceConfig<'a, 'a>],
+        _clients: &'a InferenceClients<'a>,
+        _inference_params: Vec<InferenceParams>,
+    ) -> Result<BatchModelInferenceWithMetadata<'a>, Error> {
+        Err(ErrorDetails::UnsupportedVariantForBatchInference { variant_name: None }.into())
+    }
 }
 
 impl MixtureOfNConfig {
@@ -149,7 +163,7 @@ impl MixtureOfNConfig {
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
+        inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
     ) -> Result<Vec<InferenceResult<'a>>, Error> {
         // Get all the variants we are going to infer
@@ -222,7 +236,7 @@ impl MixtureOfNConfig {
         input: &Input,
         function: &'a FunctionConfig,
         models: &'a HashMap<String, ModelConfig>,
-        inference_config: &'request InferenceConfig<'request>,
+        inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
         mut candidates: Vec<InferenceResult<'a>>,
     ) -> Result<InferenceResult<'a>, Error> {
@@ -290,7 +304,7 @@ async fn inner_fuse_candidates<'a, 'request>(
     input: &'request Input,
     models: &'a HashMap<String, ModelConfig>,
     function: &'a FunctionConfig,
-    inference_config: &'request InferenceConfig<'request>,
+    inference_config: &'request InferenceConfig<'a, 'request>,
     clients: &'request InferenceClients<'request>,
     candidates: &[InferenceResult<'request>],
 ) -> Result<InferenceResult<'a>, Error> {
@@ -434,7 +448,7 @@ impl FuserConfig {
         &'a self,
         input: &'request Input,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
+        inference_config: &'request InferenceConfig<'a, 'request>,
         candidates: &[InferenceResult<'request>],
         inference_params: &mut InferenceParams,
     ) -> Result<(ModelInferenceRequest<'request>, Vec<usize>), Error>
@@ -469,7 +483,6 @@ impl FuserConfig {
                 self.inner.presence_penalty,
                 self.inner.frequency_penalty,
             );
-
         let model_inference_request = prepare_model_inference_request(
             messages,
             system,
@@ -947,8 +960,8 @@ mod tests {
             templates: &templates,
             tool_config: None,
             dynamic_output_schema: None,
-            function_name: "".to_string(),
-            variant_name: "".to_string(),
+            function_name: "",
+            variant_name: Some(""),
         };
 
         let fused = mixture_of_n_variant

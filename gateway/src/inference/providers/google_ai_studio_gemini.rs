@@ -14,8 +14,9 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
-    serialize_or_log, ModelInferenceRequest, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, ProviderInferenceResponseStream, RequestMessage, Usage,
+    batch::BatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
+    ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
+    RequestMessage, Usage,
 };
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequestJsonMode, Role, Text, TextChunk,
@@ -164,6 +165,18 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             }
         };
         Ok((chunk, stream, raw_request))
+    }
+
+    async fn start_batch_inference<'a>(
+        &'a self,
+        _requests: &'a [ModelInferenceRequest<'a>],
+        _client: &'a reqwest::Client,
+        _dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<BatchProviderInferenceResponse, Error> {
+        Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
+            provider_type: "Google AI Studio Gemini".to_string(),
+        }
+        .into())
     }
 }
 
