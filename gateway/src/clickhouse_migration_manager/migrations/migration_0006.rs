@@ -2,6 +2,8 @@ use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::clickhouse_migration_manager::migration_trait::Migration;
 use crate::error::{Error, ErrorDetails};
 
+use super::check_table_exists;
+
 /// This migration is used to set up the ClickHouse database for batch inference
 /// We will add two main tables: `BatchModelInference` and `BatchRequest` as well as a
 /// materialized view `BatchIdByInferenceId` that maps inference ids to batch ids.
@@ -31,8 +33,6 @@ impl<'a> Migration for Migration0006<'a> {
 
     /// Check if the migration has already been applied by checking if the new tables exist or the new view exists
     async fn should_apply(&self) -> Result<bool, Error> {
-        let database = self.clickhouse.database();
-
         let tables = vec![
             "BatchModelInference",
             "BatchRequest",
@@ -40,27 +40,8 @@ impl<'a> Migration for Migration0006<'a> {
             "BatchIdByInferenceIdView",
         ];
         for table in tables {
-            let query = format!(
-                r#"SELECT EXISTS(
-                    SELECT 1
-                    FROM system.tables
-                    WHERE database = '{database}' AND name = '{table}'
-                )"#
-            );
-
-            match self.clickhouse.run_query(query).await {
-                Err(e) => {
-                    return Err(ErrorDetails::ClickHouseMigration {
-                        id: "0006".to_string(),
-                        message: e.to_string(),
-                    }
-                    .into())
-                }
-                Ok(response) => {
-                    if response.trim() != "1" {
-                        return Ok(true);
-                    }
-                }
+            if !check_table_exists(self.clickhouse, table, "0006").await? {
+                return Ok(true);
             }
         }
 
