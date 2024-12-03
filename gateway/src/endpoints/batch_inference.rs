@@ -1,5 +1,5 @@
 use axum::body::Body;
-use axum::extract::{Query, State};
+use axum::extract::State;
 use axum::response::{IntoResponse, Response};
 use axum::{debug_handler, Json};
 use itertools::{izip, Itertools};
@@ -18,15 +18,17 @@ use crate::config_parser::Config;
 use crate::error::{Error, ErrorDetails};
 use crate::function::{sample_variant, FunctionConfig};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
-use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{
     BatchStatus, PollBatchInferenceResponse, ProviderBatchInferenceResponse,
 };
 use crate::inference::types::{
     batch::{BatchModelInferenceWithMetadata, BatchRequest},
-    ContentBlockOutput, Input, JsonInferenceOutput, Usage,
+    Input,
 };
-use crate::inference::types::{current_timestamp, InferenceResult, Latency, RequestMessage};
+use crate::inference::types::{
+    current_timestamp, ChatInferenceDatabaseInsert, InferenceDatabaseInsert, InferenceResult,
+    JsonInferenceDatabaseInsert, Latency, ModelInferenceResponseWithMetadata, RequestMessage,
+};
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelConfig;
 use crate::tool::{
@@ -37,7 +39,8 @@ use crate::uuid_util::validate_episode_id;
 use crate::variant::{BatchInferenceConfig, InferenceConfig, Variant};
 
 use super::inference::{
-    ChatCompletionInferenceParams, InferenceClients, InferenceModels, InferenceParams,
+    ChatCompletionInferenceParams, InferenceClients, InferenceDatabaseInsertMetadata,
+    InferenceModels, InferenceParams, InferenceResponse,
 };
 
 /// The expected payload is a JSON object with the following fields:
@@ -312,7 +315,7 @@ pub async fn poll_batch_inference_handler(
     StructuredJson(params): StructuredJson<PollBatchInferenceParams>,
 ) -> Result<Response<Body>, Error> {
     let query = PollInferenceQuery::try_from(&params)?;
-    let batch_request = get_batch_request(&clickhouse_connection_info, query).await?;
+    let batch_request = get_batch_request(&clickhouse_connection_info, &query).await?;
     match batch_request.status {
         BatchStatus::Pending => {
             let response = poll_batch_inference(
@@ -322,17 +325,27 @@ pub async fn poll_batch_inference_handler(
                 &params.credentials,
             )
             .await?;
-            write_poll_batch_inference(
+            let response = write_poll_batch_inference(
                 &clickhouse_connection_info,
                 &batch_request,
                 &response,
                 &config,
             )
             .await?;
-            todo!()
+            Ok(Json(response.filter_by_query(query)).into_response())
         }
-        BatchStatus::Completed => todo!(),
-        BatchStatus::Failed => todo!(),
+        BatchStatus::Completed => {
+            let function = config.get_function(&batch_request.function_name)?;
+            let response = get_completed_batch_inference_response(
+                &clickhouse_connection_info,
+                &batch_request,
+                function,
+            )
+            .await?;
+            let response = PollInferenceResponse::Completed(response);
+            Ok(Json(response.filter_by_query(query)).into_response())
+        }
+        BatchStatus::Failed => Ok(Json(PollInferenceResponse::Failed).into_response()),
     }
 }
 
@@ -340,8 +353,44 @@ pub async fn poll_batch_inference_handler(
 #[serde(rename_all = "snake_case", tag = "status")]
 enum PollInferenceResponse {
     Pending,
-    Completed,
-    Failed { message: &'static str },
+    Completed(CompletedBatchInferenceResponse),
+    Failed,
+}
+
+impl PollInferenceResponse {
+    fn filter_by_query(self, query: PollInferenceQuery) -> PollInferenceResponse {
+        match self {
+            PollInferenceResponse::Completed(response) => {
+                PollInferenceResponse::Completed(response.filter_by_query(query))
+            }
+            other => other,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct CompletedBatchInferenceResponse {
+    batch_id: Uuid,
+    responses: Vec<InferenceResponse>,
+}
+
+impl CompletedBatchInferenceResponse {
+    fn filter_by_query(self, query: PollInferenceQuery) -> CompletedBatchInferenceResponse {
+        match query {
+            PollInferenceQuery::Batch(_) => self,
+            PollInferenceQuery::Inference(inference_id) => {
+                let responses = self
+                    .responses
+                    .into_iter()
+                    .filter(|r| r.inference_id() == inference_id)
+                    .collect();
+                CompletedBatchInferenceResponse {
+                    batch_id: self.batch_id,
+                    responses,
+                }
+            }
+        }
+    }
 }
 
 impl TryFrom<&'_ PollBatchInferenceParams> for PollInferenceQuery {
@@ -360,7 +409,7 @@ impl TryFrom<&'_ PollBatchInferenceParams> for PollInferenceQuery {
 
 async fn get_batch_request(
     clickhouse: &ClickHouseConnectionInfo,
-    query: PollInferenceQuery,
+    query: &PollInferenceQuery,
 ) -> Result<BatchRequest, Error> {
     let response = match query {
         PollInferenceQuery::Batch(batch_id) => {
@@ -383,7 +432,7 @@ async fn get_batch_request(
             );
             let response = clickhouse.run_query(query).await?;
             if response.is_empty() {
-                return Err(ErrorDetails::BatchNotFound { id: batch_id }.into());
+                return Err(ErrorDetails::BatchNotFound { id: *batch_id }.into());
             }
             response
         }
@@ -402,7 +451,7 @@ async fn get_batch_request(
             );
             let response = clickhouse.run_query(query).await?;
             if response.is_empty() {
-                return Err(ErrorDetails::BatchNotFound { id: inference_id }.into());
+                return Err(ErrorDetails::BatchNotFound { id: *inference_id }.into());
             }
             response
         }
@@ -582,6 +631,8 @@ struct BatchRequestInsert<'a> {
     batch_id: &'a str,
     id: String,
     batch_params: String,
+    function_name: &'a str,
+    variant_name: &'a str,
     model_name: &'a str,
     model_provider_name: &'a str,
     status: BatchStatus,
@@ -592,6 +643,8 @@ impl<'a> BatchRequestInsert<'a> {
     fn new(
         batch_id: &'a str,
         batch_params: &'a Value,
+        function_name: &'a str,
+        variant_name: &'a str,
         model_name: &'a str,
         model_provider_name: &'a str,
         status: BatchStatus,
@@ -609,6 +662,8 @@ impl<'a> BatchRequestInsert<'a> {
                     })
                 })
                 .unwrap_or_default(),
+            function_name,
+            variant_name,
             model_name,
             model_provider_name,
             status,
@@ -730,6 +785,8 @@ async fn write_start_batch_inference<'a>(
     let batch_request_insert = BatchRequestInsert::new(
         &batch_id,
         &result.batch_params,
+        metadata.function_name,
+        metadata.variant_name,
         result.model_name,
         result.model_provider_name,
         BatchStatus::Pending,
@@ -747,7 +804,7 @@ async fn write_poll_batch_inference<'a>(
     batch_request: &BatchRequest,
     response: &PollBatchInferenceResponse,
     config: &Config<'a>,
-) -> Result<(), Error> {
+) -> Result<PollInferenceResponse, Error> {
     match response {
         PollBatchInferenceResponse::Pending => {
             write_batch_request_status_update(
@@ -755,16 +812,23 @@ async fn write_poll_batch_inference<'a>(
                 batch_request,
                 BatchStatus::Pending,
             )
-            .await
+            .await?;
+            Ok(PollInferenceResponse::Pending)
         }
         PollBatchInferenceResponse::Completed(response) => {
-            write_completed_batch_inference(
+            let responses = write_completed_batch_inference(
                 clickhouse_connection_info,
                 batch_request,
                 response,
                 config,
             )
-            .await
+            .await?;
+            Ok(PollInferenceResponse::Completed(
+                CompletedBatchInferenceResponse {
+                    batch_id: batch_request.batch_id,
+                    responses,
+                },
+            ))
         }
         PollBatchInferenceResponse::Failed => {
             write_batch_request_status_update(
@@ -772,7 +836,8 @@ async fn write_poll_batch_inference<'a>(
                 batch_request,
                 BatchStatus::Failed,
             )
-            .await
+            .await?;
+            Ok(PollInferenceResponse::Failed)
         }
     }
 }
@@ -786,6 +851,8 @@ async fn write_batch_request_status_update(
     let batch_request_insert = BatchRequestInsert::new(
         &batch_id,
         &batch_request.batch_params,
+        &batch_request.function_name,
+        &batch_request.variant_name,
         &batch_request.model_name,
         &batch_request.model_provider_name,
         status,
@@ -797,12 +864,15 @@ async fn write_batch_request_status_update(
     Ok(())
 }
 
-async fn write_completed_batch_inference(
+/// TODO(Viraj): this function has a large number of Clones that are not necessary.
+/// To avoid these, the types that are calling for clones must be changed to Cows and then the code in the non-batch inference
+/// handler must be adjusted to deal with it and also the lifetimes associated there.
+async fn write_completed_batch_inference<'a>(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
-    batch_request: &BatchRequest,
+    batch_request: &'a BatchRequest,
     response: &ProviderBatchInferenceResponse,
-    config: &Config<'_>,
-) -> Result<(), Error> {
+    config: &'a Config<'a>,
+) -> Result<Vec<InferenceResponse>, Error> {
     let inference_ids: Vec<String> = response.elements.keys().map(|id| id.to_string()).collect();
     let batch_model_inferences = get_batch_inferences(
         clickhouse_connection_info,
@@ -815,17 +885,20 @@ async fn write_completed_batch_inference(
         .ok_or_else(|| {
             Error::new(ErrorDetails::MissingBatchInferenceResponse { inference_id: None })
         })?
-        .function_name;
+        .function_name
+        .clone();
     let function = config.get_function(&function_name)?;
-    let mut results: Vec<InferenceResult> = Vec::new();
+    let mut responses: Vec<InferenceResponse> = Vec::new();
+    let mut inference_rows_to_write: Vec<InferenceDatabaseInsert> = Vec::new();
+    let mut model_inference_rows_to_write: Vec<Value> = Vec::new();
     for batch_model_inference in batch_model_inferences {
         let BatchModelInferenceRow {
             inference_id,
             batch_id: _,
             function_name: _,
-            variant_name: _,
-            episode_id: _,
-            input: _,
+            variant_name,
+            episode_id,
+            input,
             input_messages,
             system,
             tool_params,
@@ -836,12 +909,17 @@ async fn write_completed_batch_inference(
             model_provider_name: _,
             tags: _,
         } = batch_model_inference;
+        let episode_id = Uuid::parse_str(&episode_id).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: e.to_string(),
+            })
+        })?;
         let inference_id = Uuid::parse_str(&inference_id).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: e.to_string(),
             })
         })?;
-        let inference_response = match response.elements.remove(&inference_id) {
+        let inference_response = match response.elements.get(&inference_id) {
             Some(inference_response) => inference_response,
             None => {
                 Error::new(ErrorDetails::MissingBatchInferenceResponse {
@@ -857,19 +935,19 @@ async fn write_completed_batch_inference(
                 })
             }) {
             Ok(m) => m,
-            Err(e) => continue,
+            Err(_) => continue,
         };
-        // TODO: make model_inference_results: Vec<ModelInferenceResponseWithMetadata> from inputs
         let model_inference_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: current_timestamp(),
             output: inference_response.output.clone(),
-            system: inference_response.system,
+            system: system.map(|s| s.into_owned()),
             input_messages: input_messages,
-            raw_request,
-            raw_response: inference_response.raw_response,
-            usage: inference_response.usage,
-            latency: Latency::new(0, 0), // TODO: make latency optional
+            raw_request: raw_request.into_owned(),
+            raw_response: inference_response.raw_response.clone(),
+            usage: inference_response.usage.clone(),
+            latency: Latency::Batch,
+            model_name: &batch_request.model_name,
             model_provider_name: &batch_request.model_provider_name,
         };
         let tool_config: Option<ToolCallConfig> = tool_params.map(|t| t.into());
@@ -878,7 +956,7 @@ async fn write_completed_batch_inference(
             .transpose()
         {
             Ok(s) => s,
-            Err(e) => continue,
+            Err(_) => continue,
         };
         let inference_config = InferenceConfig {
             tool_config: tool_config.as_ref(),
@@ -887,18 +965,61 @@ async fn write_completed_batch_inference(
             function_name,
             variant_name: None,
         };
-        let inference_params = function
+        let inference_result = function
             .prepare_response(
                 inference_id,
-                inference_response.output,
-                inference_response.usage,
-                inference_response,
+                inference_response.output.clone(),
+                inference_response.usage.clone(),
+                vec![model_inference_response],
                 &inference_config,
-                inference_params,
+                inference_params.into_owned(),
             )
             .await?;
+        let inference_response = InferenceResponse::new(
+            inference_result.clone(),
+            episode_id,
+            variant_name.to_string(),
+        );
+        responses.push(inference_response);
+        let metadata = InferenceDatabaseInsertMetadata {
+            function_name: function_name.to_string(),
+            variant_name: variant_name.to_string(),
+            episode_id,
+            tool_config,
+            processing_time: None,
+            tags: HashMap::new(),
+        };
+        model_inference_rows_to_write.extend(inference_result.get_serialized_model_inferences());
+        match inference_result {
+            InferenceResult::Chat(chat_result) => {
+                let chat_inference = ChatInferenceDatabaseInsert::new(chat_result, input, metadata);
+                inference_rows_to_write.push(InferenceDatabaseInsert::Chat(chat_inference));
+            }
+            InferenceResult::Json(json_result) => {
+                let json_inference = JsonInferenceDatabaseInsert::new(json_result, input, metadata);
+                inference_rows_to_write.push(InferenceDatabaseInsert::Json(json_inference));
+            }
+        }
     }
-    Ok(())
+    // Write all the *Inference rows to the database
+    match function {
+        FunctionConfig::Chat(_chat_function) => {
+            clickhouse_connection_info
+                .write(&inference_rows_to_write, "ChatInference")
+                .await?;
+        }
+        FunctionConfig::Json(_json_function) => {
+            clickhouse_connection_info
+                .write(&inference_rows_to_write, "JsonInference")
+                .await?;
+        }
+    }
+    // Write all the ModelInference rows to the database
+    clickhouse_connection_info
+        .write(&model_inference_rows_to_write, "ModelInference")
+        .await?;
+
+    Ok(responses)
 }
 
 async fn get_batch_inferences(
@@ -917,35 +1038,18 @@ async fn get_batch_inferences(
         .filter(|line| !line.is_empty())
         .map(|line| BatchModelInferenceRow::from_string(line.to_string()))
         .collect::<Result<Vec<_>, _>>()?;
-
     Ok(rows)
 }
 
-/// InferenceResponse and InferenceResultChunk determine what gets serialized and sent to the client
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(untagged, rename_all = "snake_case")]
-pub enum InferenceResponse {
-    Chat(ChatInferenceResponse),
-    Json(JsonInferenceResponse),
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct ChatInferenceResponse {
-    pub inference_id: Uuid,
-    pub episode_id: Uuid,
-    pub variant_name: String,
-    pub content: Vec<ContentBlockOutput>,
-    pub usage: Usage,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct JsonInferenceResponse {
-    pub inference_id: Uuid,
-    pub episode_id: Uuid,
-    pub variant_name: String,
-    pub output: JsonInferenceOutput,
-    pub usage: Usage,
+async fn get_completed_batch_inference_response(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    batch_request: &BatchRequest,
+    function: &FunctionConfig,
+) -> Result<CompletedBatchInferenceResponse, Error> {
+    match function {
+        FunctionConfig::Chat(_chat_function) => {}
+        FunctionConfig::Json(_json_function) => {}
+    }
 }
 
 struct BatchEpisodeIdsWithSize(Option<BatchEpisodeIdInput>, usize);

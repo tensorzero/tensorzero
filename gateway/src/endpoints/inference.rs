@@ -329,7 +329,7 @@ pub async fn inference(
                     variant_name: variant_name.to_string(),
                     episode_id,
                     tool_config,
-                    processing_time: start_time.elapsed(),
+                    processing_time: Some(start_time.elapsed()),
                     tags: params.tags,
                 };
 
@@ -439,7 +439,7 @@ fn create_stream<'a>(
                     variant_name,
                     episode_id,
                     tool_config,
-                    processing_time: start_time.elapsed(),
+                    processing_time: Some(start_time.elapsed()),
                     tags,
                 };
                 tokio::spawn(async move {
@@ -488,7 +488,7 @@ pub struct InferenceDatabaseInsertMetadata {
     pub variant_name: String,
     pub episode_id: Uuid,
     pub tool_config: Option<ToolCallConfig>,
-    pub processing_time: Duration,
+    pub processing_time: Option<Duration>,
     pub tags: HashMap<String, String>,
 }
 
@@ -562,7 +562,7 @@ pub struct JsonInferenceResponse {
 }
 
 impl InferenceResponse {
-    fn new(inference_result: InferenceResult, episode_id: Uuid, variant_name: String) -> Self {
+    pub fn new(inference_result: InferenceResult, episode_id: Uuid, variant_name: String) -> Self {
         match inference_result {
             InferenceResult::Chat(result) => InferenceResponse::Chat(ChatInferenceResponse {
                 inference_id: result.inference_id,
@@ -578,6 +578,13 @@ impl InferenceResponse {
                 output: result.output,
                 usage: result.usage,
             }),
+        }
+    }
+
+    pub fn inference_id(&self) -> Uuid {
+        match self {
+            InferenceResponse::Chat(c) => c.inference_id,
+            InferenceResponse::Json(j) => j.inference_id,
         }
     }
 }

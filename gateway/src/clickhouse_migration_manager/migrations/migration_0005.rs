@@ -2,6 +2,8 @@ use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::clickhouse_migration_manager::migration_trait::Migration;
 use crate::error::{Error, ErrorDetails};
 
+use super::check_table_exists;
+
 /// This migration is used to set up the ClickHouse database for tagged inferences
 /// The primary queries we contemplate are: Select all inferences for a given tag, or select all tags for a given inference
 /// We will store the tags in a new table `InferenceTag` and create a materialized view for each original inference table that writes them
@@ -26,29 +28,12 @@ impl<'a> Migration for Migration0005<'a> {
                 message: e.to_string(),
             })
         })?;
-        let database = self.clickhouse.database();
 
         let tables = vec!["ChatInference", "JsonInference"];
-
         for table in tables {
-            let query = format!(
-                r#"SELECT EXISTS(
-                        SELECT 1
-                        FROM system.tables
-                        WHERE database = '{database}' AND name = '{table}'
-                    )"#
-            );
-
-            match self.clickhouse.run_query(query).await {
-                Err(e) => {
-                    return Err((ErrorDetails::ClickHouseMigration {
-                        id: "0005".to_string(),
-                        message: e.to_string(),
-                    })
-                    .into());
-                }
-                Ok(response) => {
-                    if response.trim() != "1" {
+            match check_table_exists(self.clickhouse, table, "0005").await {
+                Ok(exists) => {
+                    if !exists {
                         return Err(ErrorDetails::ClickHouseMigration {
                             id: "0005".to_string(),
                             message: format!("Table {} does not exist", table),
@@ -56,6 +41,7 @@ impl<'a> Migration for Migration0005<'a> {
                         .into());
                     }
                 }
+                Err(e) => return Err(e),
             }
         }
 
@@ -66,27 +52,8 @@ impl<'a> Migration for Migration0005<'a> {
     async fn should_apply(&self) -> Result<bool, Error> {
         let database = self.clickhouse.database();
 
-        let query = format!(
-            r#"SELECT EXISTS(
-                SELECT 1
-                FROM system.tables
-                WHERE database = '{database}' AND name = 'InferenceTag'
-            )"#
-        );
-
-        match self.clickhouse.run_query(query).await {
-            Err(e) => {
-                return Err(ErrorDetails::ClickHouseMigration {
-                    id: "0005".to_string(),
-                    message: e.to_string(),
-                }
-                .into())
-            }
-            Ok(response) => {
-                if response.trim() != "1" {
-                    return Ok(true);
-                }
-            }
+        if !check_table_exists(self.clickhouse, "InferenceTag", "0005").await? {
+            return Ok(true);
         }
 
         // Check each of the original inference tables for a `tags` column
@@ -123,26 +90,8 @@ impl<'a> Migration for Migration0005<'a> {
         let views = vec!["ChatInferenceTagView", "JsonInferenceTagView"];
 
         for view in views {
-            let query = format!(
-                r#"SELECT EXISTS(
-                    SELECT 1
-                    FROM system.tables
-                    WHERE database = '{database}' AND name = '{view}'
-                )"#,
-            );
-            match self.clickhouse.run_query(query).await {
-                Err(e) => {
-                    return Err(ErrorDetails::ClickHouseMigration {
-                        id: "0005".to_string(),
-                        message: e.to_string(),
-                    }
-                    .into());
-                }
-                Ok(response) => {
-                    if response.trim() != "1" {
-                        return Ok(true);
-                    }
-                }
+            if !check_table_exists(self.clickhouse, view, "0005").await? {
+                return Ok(true);
             }
         }
         // Everything is in place, so we should not apply the migration

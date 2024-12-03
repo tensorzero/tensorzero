@@ -319,7 +319,7 @@ pub struct ChatInferenceDatabaseInsert {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub inference_params: InferenceParams,
-    pub processing_time_ms: u32,
+    pub processing_time_ms: Option<u32>,
     pub tags: HashMap<String, String>,
 }
 
@@ -332,9 +332,16 @@ pub struct JsonInferenceDatabaseInsert {
     pub input: String,
     pub output: String,
     pub inference_params: InferenceParams,
-    pub processing_time_ms: u32,
+    pub processing_time_ms: Option<u32>,
     pub output_schema: String,
     pub tags: HashMap<String, String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+pub enum InferenceDatabaseInsert {
+    Chat(ChatInferenceDatabaseInsert),
+    Json(JsonInferenceDatabaseInsert),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -668,7 +675,9 @@ impl ChatInferenceDatabaseInsert {
         input: String,
         metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
-        let processing_time_ms = metadata.processing_time.as_millis() as u32;
+        let processing_time_ms = metadata
+            .processing_time
+            .map(|duration| duration.as_millis() as u32);
 
         let tool_params = metadata.tool_config.map(ToolCallConfigDatabaseInsert::from);
         let inference_params = chat_result.inference_params;
@@ -701,7 +710,9 @@ impl JsonInferenceDatabaseInsert {
         input: String,
         metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
-        let processing_time_ms = metadata.processing_time.as_millis() as u32;
+        let processing_time_ms = metadata
+            .processing_time
+            .map(|duration| duration.as_millis() as u32);
 
         let inference_params = json_result.inference_params;
 

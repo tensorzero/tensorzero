@@ -120,6 +120,8 @@ pub struct BatchRequest {
     pub model_name: String,
     pub model_provider_name: String,
     pub status: BatchStatus,
+    pub function_name: String,
+    pub variant_name: String,
     pub errors: HashMap<String, String>,
 }
 

@@ -1577,16 +1577,16 @@ impl TryFrom<OpenAIBatchFileRow> for ProviderBatchInferenceOutput {
 
 #[derive(Debug, Deserialize)]
 struct OpenAIBatchErrors {
-    object: String,
-    data: Vec<OpenAIBatchError>,
+    // object: String,
+    // data: Vec<OpenAIBatchError>,
 }
 
 #[derive(Debug, Deserialize)]
 struct OpenAIBatchError {
-    code: String,
-    message: String,
-    param: Option<String>,
-    line: Option<i32>,
+    // code: String,
+    // message: String,
+    // param: Option<String>,
+    // line: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1605,8 +1605,8 @@ struct OpenAIBatchFileRow {
 
 #[derive(Debug, Deserialize)]
 struct OpenAIBatchFileResponse {
-    status_code: u16,
-    request_id: String,
+    // status_code: u16,
+    // request_id: String,
     body: OpenAIResponse,
 }
 
