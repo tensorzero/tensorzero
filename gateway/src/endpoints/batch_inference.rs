@@ -4,7 +4,6 @@ use axum::response::{IntoResponse, Response};
 use axum::{debug_handler, Json};
 use itertools::{izip, Itertools};
 use metrics::counter;
-use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
@@ -40,7 +39,7 @@ use crate::uuid_util::validate_episode_id;
 use crate::variant::{BatchInferenceConfig, InferenceConfig, Variant};
 
 use super::inference::{
-    ChatCompletionInferenceParams, ChatInferenceResponse, InferenceClients,
+    ChatCompletionInferenceParams, ChatInferenceResponse, InferenceClients, InferenceCredentials,
     InferenceDatabaseInsertMetadata, InferenceModels, InferenceParams, InferenceResponse,
     JsonInferenceResponse,
 };
@@ -91,8 +90,6 @@ type BatchEpisodeIdInput = Vec<Option<Uuid>>;
 type BatchEpisodeIds = Vec<Uuid>;
 type BatchTags = Vec<Option<HashMap<String, String>>>;
 type BatchOutputSchemas = Vec<Option<Value>>;
-
-pub type InferenceCredentials = HashMap<String, SecretString>;
 
 /// This handler starts a batch inference request for a particular function.
 /// The entire batch will use the same variant.
@@ -292,6 +289,7 @@ pub async fn start_batch_inference_handler(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PollBatchInferenceParams {
     #[serde(default)]
     batch_id: Option<Uuid>,
