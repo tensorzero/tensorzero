@@ -2,6 +2,8 @@ use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::clickhouse_migration_manager::migration_trait::Migration;
 use crate::error::{Error, ErrorDetails};
 
+use super::check_table_exists;
+
 /// This migration is used to create the initial tables in the ClickHouse database.
 ///
 /// It is used to create the following tables:
@@ -30,8 +32,6 @@ impl<'a> Migration for Migration0000<'a> {
 
     /// Check if the tables exist
     async fn should_apply(&self) -> Result<bool, Error> {
-        let database = self.clickhouse.database();
-
         let tables = vec![
             "BooleanMetricFeedback",
             "CommentFeedback",
@@ -41,24 +41,14 @@ impl<'a> Migration for Migration0000<'a> {
             "JsonInference",
             "ModelInference",
         ];
-
         for table in tables {
-            let query = format!(
-                r#"SELECT EXISTS(
-                    SELECT 1
-                    FROM system.tables
-                    WHERE database = '{database}' AND name = '{table}'
-                )"#
-            );
-
-            match self.clickhouse.run_query(query).await {
-                // If `can_apply` succeeds but this fails, it likely means the database does not exist
-                Err(_) => return Ok(true),
-                Ok(response) => {
-                    if response.trim() != "1" {
+            match check_table_exists(self.clickhouse, table, "0000").await {
+                Ok(exists) => {
+                    if !exists {
                         return Ok(true);
                     }
                 }
+                Err(_) => return Ok(true),
             }
         }
 
