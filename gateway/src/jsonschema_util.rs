@@ -207,7 +207,7 @@ impl DynamicJSONSchema {
         Ok(())
     }
 
-    pub fn from_str(s: &str) -> Result<Self, Error> {
+    pub fn parse_from_str(s: &str) -> Result<Self, Error> {
         let schema = serde_json::from_str(s).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: e.to_string(),

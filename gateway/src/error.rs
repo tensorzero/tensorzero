@@ -131,6 +131,9 @@ pub enum ErrorDetails {
     Inference {
         message: String,
     },
+    InferenceNotFound {
+        inference_id: Uuid,
+    },
     InferenceClient {
         message: String,
     },
@@ -327,6 +330,7 @@ impl ErrorDetails {
             ErrorDetails::GoogleAIStudioServer { .. } => tracing::Level::ERROR,
             ErrorDetails::Inference { .. } => tracing::Level::ERROR,
             ErrorDetails::InferenceClient { .. } => tracing::Level::ERROR,
+            ErrorDetails::InferenceNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::InferenceTimeout { .. } => tracing::Level::WARN,
             ErrorDetails::InputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidBaseUrl { .. } => tracing::Level::ERROR,
@@ -411,6 +415,7 @@ impl ErrorDetails {
             ErrorDetails::GoogleAIStudioServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Inference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceClient { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InferenceNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::InferenceTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             ErrorDetails::InvalidEpisodeId { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InputValidation { .. } => StatusCode::BAD_REQUEST,
@@ -577,6 +582,9 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::Inference { message } => write!(f, "{}", message),
             ErrorDetails::InferenceClient { message } => write!(f, "{}", message),
+            ErrorDetails::InferenceNotFound { inference_id } => {
+                write!(f, "Inference not found for id: {}", inference_id)
+            }
             ErrorDetails::InferenceTimeout { variant_name } => {
                 write!(f, "Inference timed out for variant: {}", variant_name)
             }

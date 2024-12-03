@@ -308,7 +308,7 @@ pub enum InferenceResultChunk {
 /// For this we convert the InferenceResult into a ChatInferenceDatabaseInsert or JsonInferenceDatabaseInsert and ModelInferenceDatabaseInserts,
 /// which are written to ClickHouse tables of the same name asynchronously.
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ChatInferenceDatabaseInsert {
     pub id: Uuid,
     pub function_name: String,
@@ -323,7 +323,7 @@ pub struct ChatInferenceDatabaseInsert {
     pub tags: HashMap<String, String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct JsonInferenceDatabaseInsert {
     pub id: Uuid,
     pub function_name: String,

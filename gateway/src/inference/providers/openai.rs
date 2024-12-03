@@ -23,6 +23,7 @@ use crate::inference::types::batch::{BatchRequest, PollBatchInferenceResponse};
 use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
 };
+use crate::inference::types::current_timestamp;
 use crate::inference::types::{
     batch::{BatchStatus, StartBatchProviderInferenceResponse},
     ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
@@ -342,7 +343,7 @@ impl InferenceProvider for OpenAIProvider {
                     })
                 })?;
                 let response = self
-                    .collect_finished_batch(&output_file_id, http_client, dynamic_api_keys)
+                    .collect_finished_batch(output_file_id, http_client, dynamic_api_keys)
                     .await?;
                 Ok(PollBatchInferenceResponse::Completed(response))
             }
@@ -1562,10 +1563,7 @@ impl TryFrom<OpenAIBatchFileRow> for ProviderBatchInferenceOutput {
 
         Ok(Self {
             id: row.inference_id,
-            created: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
+            created: current_timestamp(),
             output: content,
             system: None,               // This would need to come from elsewhere
             input_messages: Vec::new(), // This would need to come from elsewhere
