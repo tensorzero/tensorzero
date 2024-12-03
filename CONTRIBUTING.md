@@ -32,6 +32,9 @@ For larger changes, please communicate with us first to avoid duplicate work or 
 You can start a discussion (GitHub, Slack, or Discord) or open an issue as a starting point.
 The team will be happy to provide feedback and guidance.
 
+> [!TIP]
+> See the [`good-first-issue`](https://github.com/tensorzero/tensorzero/issues?q=is%3Aopen+is%3Aissue+label%3Agood-first-issue) label for simpler issues that might be a good starting point for new contributors.
+
 ### Documentation
 
 We're planning to open-source our documentation pages soon. See [issue #432](https://github.com/tensorzero/tensorzero/issues/432) for more details.

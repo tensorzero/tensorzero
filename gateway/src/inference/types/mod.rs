@@ -314,8 +314,8 @@ pub struct ChatInferenceDatabaseInsert {
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
-    pub input: String,
-    pub output: String,
+    pub input: Input,
+    pub output: Vec<ContentBlockOutput>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub inference_params: InferenceParams,
@@ -329,11 +329,11 @@ pub struct JsonInferenceDatabaseInsert {
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
-    pub input: String,
-    pub output: String,
+    pub input: Input,
+    pub output: JsonInferenceOutput,
     pub inference_params: InferenceParams,
     pub processing_time_ms: Option<u32>,
-    pub output_schema: String,
+    pub output_schema: Value,
     pub tags: HashMap<String, String>,
 }
 
@@ -672,7 +672,7 @@ pub async fn parse_chat_output(
 impl ChatInferenceDatabaseInsert {
     pub fn new(
         chat_result: ChatInferenceResult,
-        input: String,
+        input: Input,
         metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
         let processing_time_ms = metadata
@@ -681,13 +681,6 @@ impl ChatInferenceDatabaseInsert {
 
         let tool_params = metadata.tool_config.map(ToolCallConfigDatabaseInsert::from);
         let inference_params = chat_result.inference_params;
-        let output = serde_json::to_string(&chat_result.content)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!("Failed to serialize output: {}", e),
-                })
-            })
-            .unwrap_or_else(|_| String::new());
 
         Self {
             id: chat_result.inference_id,
@@ -697,7 +690,7 @@ impl ChatInferenceDatabaseInsert {
             input,
             tool_params,
             inference_params,
-            output,
+            output: chat_result.content,
             processing_time_ms,
             tags: metadata.tags,
         }
@@ -707,7 +700,7 @@ impl ChatInferenceDatabaseInsert {
 impl JsonInferenceDatabaseInsert {
     pub fn new(
         json_result: JsonInferenceResult,
-        input: String,
+        input: Input,
         metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
         let processing_time_ms = metadata
@@ -716,8 +709,6 @@ impl JsonInferenceDatabaseInsert {
 
         let inference_params = json_result.inference_params;
 
-        let output = serialize_or_log(&json_result.output);
-        let output_schema = serialize_or_log(&json_result.output_schema);
         Self {
             id: json_result.inference_id,
             function_name: metadata.function_name,
@@ -725,9 +716,9 @@ impl JsonInferenceDatabaseInsert {
             episode_id: metadata.episode_id,
             input,
             inference_params,
-            output,
+            output: json_result.output,
             processing_time_ms,
-            output_schema,
+            output_schema: json_result.output_schema,
             tags: metadata.tags,
         }
     }

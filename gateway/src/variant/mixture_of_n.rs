@@ -9,7 +9,7 @@ use tokio::time::{timeout, Duration};
 use crate::embeddings::EmbeddingModelConfig;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::inference::types::{
-    batch::BatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role, Usage,
+    batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role, Usage,
 };
 use crate::{
     endpoints::inference::InferenceParams,
@@ -151,7 +151,7 @@ impl Variant for MixtureOfNConfig {
         _inference_configs: &'a [InferenceConfig<'a, 'a>],
         _clients: &'a InferenceClients<'a>,
         _inference_params: Vec<InferenceParams>,
-    ) -> Result<BatchModelInferenceWithMetadata<'a>, Error> {
+    ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
         Err(ErrorDetails::UnsupportedVariantForBatchInference { variant_name: None }.into())
     }
 }

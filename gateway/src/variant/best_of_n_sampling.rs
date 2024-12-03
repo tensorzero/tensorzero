@@ -12,7 +12,7 @@ use crate::embeddings::EmbeddingModelConfig;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
 use crate::inference::types::{
-    batch::BatchModelInferenceWithMetadata, ContentBlock, FunctionType, ModelInferenceRequest,
+    batch::StartBatchModelInferenceWithMetadata, ContentBlock, FunctionType, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
@@ -168,7 +168,7 @@ impl Variant for BestOfNSamplingConfig {
         _inference_configs: &'a [InferenceConfig<'a, 'a>],
         _clients: &'a InferenceClients<'a>,
         _inference_params: Vec<InferenceParams>,
-    ) -> Result<BatchModelInferenceWithMetadata<'a>, Error> {
+    ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
         Err(ErrorDetails::UnsupportedVariantForBatchInference { variant_name: None }.into())
     }
 }

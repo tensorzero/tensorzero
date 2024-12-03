@@ -15,7 +15,7 @@ use crate::endpoints::inference::{InferenceClients, InferenceModels, InferencePa
 use crate::error::Error;
 use crate::error::ErrorDetails;
 use crate::function::FunctionConfig;
-use crate::inference::types::batch::BatchModelInferenceWithMetadata;
+use crate::inference::types::batch::StartBatchModelInferenceWithMetadata;
 use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, Input, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, ModelInferenceResponseWithMetadata, RequestMessage,
@@ -147,7 +147,7 @@ pub trait Variant {
         inference_configs: &'a [InferenceConfig<'a, 'a>],
         clients: &'a InferenceClients<'a>,
         inference_params: Vec<InferenceParams>,
-    ) -> Result<BatchModelInferenceWithMetadata<'a>, Error>;
+    ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error>;
 }
 
 impl VariantConfig {
@@ -309,7 +309,7 @@ impl Variant for VariantConfig {
         inference_configs: &'a [InferenceConfig<'a, 'a>],
         clients: &'a InferenceClients<'a>,
         inference_params: Vec<InferenceParams>,
-    ) -> Result<BatchModelInferenceWithMetadata<'a>, Error> {
+    ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
         match self {
             VariantConfig::ChatCompletion(params) => {
                 params

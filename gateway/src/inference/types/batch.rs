@@ -1,10 +1,18 @@
-use crate::{endpoints::inference::InferenceParams, tool::ToolCallConfig};
+use crate::{
+    endpoints::{
+        batch_inference::{BatchEpisodeIdInput, BatchOutputSchemas},
+        inference::{ChatCompletionInferenceParams, InferenceParams},
+    },
+    error::{Error, ErrorDetails},
+    jsonschema_util::DynamicJSONSchema,
+    tool::{ToolCallConfig, ToolCallConfigDatabaseInsert},
+    uuid_util::validate_episode_id,
+};
 
-use super::{ContentBlock, ModelInferenceRequest, RequestMessage, Usage};
+use super::{ContentBlock, Input, ModelInferenceRequest, RequestMessage, Usage};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::borrow::Cow;
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap};
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -15,6 +23,10 @@ pub enum BatchStatus {
     Failed,
 }
 
+/// Returned from start_batch_inference from an InferenceProvider
+/// This is the original response type for start_batch_inference.
+/// The types below add additional context to the response as it is returned
+/// through the call stack.
 pub struct StartBatchProviderInferenceResponse {
     pub batch_id: Uuid,
     pub inference_ids: Vec<Uuid>,
@@ -23,6 +35,8 @@ pub struct StartBatchProviderInferenceResponse {
     pub status: BatchStatus,
 }
 
+/// Returned from start_batch_inference from a model
+/// Adds the model provider name to the response
 pub struct StartBatchModelInferenceResponse<'a> {
     pub batch_id: Uuid,
     pub inference_ids: Vec<Uuid>,
@@ -61,9 +75,9 @@ pub struct BatchProviderInferenceResponse {
     pub batch_id: Uuid,
 }
 
-// Returned from poll_batch_inference from a variant.
-// Includes all the metadata that we need to write to ClickHouse.
-pub struct BatchModelInferenceWithMetadata<'a> {
+/// Here, we add context from the variant, such as the original inputs, templated input messages,
+/// systems, tool configs, inference params, model_name, and output schemas.
+pub struct StartBatchModelInferenceWithMetadata<'a> {
     pub batch_id: Uuid,
     pub inference_ids: Vec<Uuid>,
     pub input_messages: Vec<Vec<RequestMessage>>,
@@ -78,7 +92,7 @@ pub struct BatchModelInferenceWithMetadata<'a> {
     pub status: BatchStatus,
 }
 
-impl<'a> BatchModelInferenceWithMetadata<'a> {
+impl<'a> StartBatchModelInferenceWithMetadata<'a> {
     pub fn new(
         model_batch_response: StartBatchModelInferenceResponse<'a>,
         model_inference_requests: Vec<ModelInferenceRequest<'a>>,
@@ -148,4 +162,651 @@ pub struct ProviderBatchInferenceOutput {
 pub struct ProviderBatchInferenceResponse {
     // Inference ID -> Output
     pub elements: HashMap<Uuid, ProviderBatchInferenceOutput>,
+}
+
+/// Additional metadata needed to write to ClickHouse that isn't available at the variant level
+#[derive(Debug)]
+pub struct BatchInferenceDatabaseInsertMetadata<'a> {
+    pub function_name: &'a str,
+    pub variant_name: &'a str,
+    pub episode_ids: &'a Vec<Uuid>,
+    pub tags: Option<Vec<Option<HashMap<String, String>>>>,
+}
+
+/// Data needed to write to the `BatchModelInference` table in ClickHouse
+///
+/// Design constraint: this should contain all the information needed from
+/// starting batch inference to eventually populate ChatInference, JsonInference, and ModelInference
+/// tables.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct BatchModelInferenceRow<'a> {
+    pub inference_id: Uuid,
+    pub batch_id: Uuid,
+    pub function_name: Cow<'a, str>,
+    pub variant_name: Cow<'a, str>,
+    pub episode_id: Uuid,
+    pub input: Input,
+    pub input_messages: Vec<RequestMessage>,
+    pub system: Option<Cow<'a, str>>,
+    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    pub inference_params: Cow<'a, InferenceParams>,
+    pub output_schema: Option<String>,
+    pub raw_request: Cow<'a, str>,
+    pub model_name: Cow<'a, str>,
+    pub model_provider_name: Cow<'a, str>,
+    pub tags: HashMap<String, String>,
+}
+
+impl<'a> BatchModelInferenceRow<'a> {
+    pub fn from_string(s: String) -> Result<BatchModelInferenceRow<'static>, Error> {
+        let mut value: serde_json::Map<String, Value> = serde_json::from_str(&s).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to parse batch model inference row: {}", e),
+            })
+        })?;
+
+        // Since this function consumes the string, we need to take ownership of the strings that we're keeping around
+        let get_string = |map: &mut serde_json::Map<String, Value>, key: &str| {
+            map.remove(key)
+                .ok_or_else(|| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Missing {}", key),
+                    })
+                })
+                .and_then(|v| {
+                    v.as_str().map(|s| s.to_string()).ok_or_else(|| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!("{} is not a string", key),
+                        })
+                    })
+                })
+        };
+
+        let inference_id =
+            Uuid::parse_str(&get_string(&mut value, "inference_id")?).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Failed to parse inference_id: {}", e),
+                })
+            })?;
+        let batch_id = Uuid::parse_str(&get_string(&mut value, "batch_id")?).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to parse batch_id: {}", e),
+            })
+        })?;
+        let function_name = get_string(&mut value, "function_name")?.into();
+        let variant_name = get_string(&mut value, "variant_name")?.into();
+        let episode_id = Uuid::parse_str(&get_string(&mut value, "episode_id")?).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to parse episode_id: {}", e),
+            })
+        })?;
+        let system = value
+            .remove("system")
+            .and_then(|v| v.as_str().map(|s| s.to_string().into()));
+
+        let tool_params = value
+            .remove("tool_params")
+            .and_then(|v| serde_json::from_value(v).ok());
+
+        let inference_params: InferenceParams = value
+            .remove("inference_params")
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::Serialization {
+                    message: "Missing inference_params".to_string(),
+                })
+            })
+            .and_then(|v| {
+                serde_json::from_value(v).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Failed to parse inference_params: {}", e),
+                    })
+                })
+            })?;
+
+        let output_schema = value
+            .remove("output_schema")
+            .and_then(|v| v.as_str().map(|s| s.to_string()));
+        let input: Input = value
+            .remove("input")
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::Serialization {
+                    message: "Missing input".to_string(),
+                })
+            })
+            .and_then(|v| {
+                serde_json::from_value(v).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Failed to parse input: {}", e),
+                    })
+                })
+            })?;
+
+        let raw_request = get_string(&mut value, "raw_request")?.into();
+        let model_name = get_string(&mut value, "model_name")?.into();
+        let model_provider_name = get_string(&mut value, "model_provider_name")?.into();
+
+        let tags = value
+            .remove("tags")
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::Serialization {
+                    message: "Missing tags".to_string(),
+                })
+            })
+            .and_then(|v| {
+                serde_json::from_value(v).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Failed to parse tags: {}", e),
+                    })
+                })
+            })?;
+        let input_messages = value
+            .remove("input_messages")
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::Serialization {
+                    message: "Missing input_messages".to_string(),
+                })
+            })
+            .and_then(|v| {
+                serde_json::from_value(v).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Failed to parse input_messages: {}", e),
+                    })
+                })
+            })?;
+
+        Ok(BatchModelInferenceRow {
+            inference_id,
+            batch_id,
+            function_name,
+            variant_name,
+            episode_id,
+            input,
+            input_messages,
+            system,
+            tool_params,
+            inference_params: Cow::Owned(inference_params),
+            output_schema,
+            raw_request,
+            model_name,
+            model_provider_name,
+            tags,
+        })
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct BatchRequestRow<'a> {
+    batch_id: Uuid,
+    id: Uuid,
+    batch_params: &'a Value,
+    function_name: &'a str,
+    variant_name: &'a str,
+    model_name: &'a str,
+    model_provider_name: &'a str,
+    status: BatchStatus,
+    errors: HashMap<String, String>,
+}
+
+pub struct UnparsedBatchRequestRow<'a> {
+    pub batch_id: Uuid,
+    pub batch_params: &'a Value,
+    pub function_name: &'a str,
+    pub variant_name: &'a str,
+    pub model_name: &'a str,
+    pub model_provider_name: &'a str,
+    pub status: BatchStatus,
+    pub errors: Option<HashMap<String, String>>,
+}
+
+impl<'a> BatchRequestRow<'a> {
+    pub fn new(unparsed: UnparsedBatchRequestRow<'a>) -> Self {
+        let UnparsedBatchRequestRow {
+            batch_id,
+            batch_params,
+            function_name,
+            variant_name,
+            model_name,
+            model_provider_name,
+            status,
+            errors,
+        } = unparsed;
+        let id = Uuid::now_v7();
+        let errors = errors.unwrap_or_default();
+        Self {
+            batch_id,
+            id,
+            batch_params,
+            function_name,
+            variant_name,
+            model_name,
+            model_provider_name,
+            status,
+            errors,
+        }
+    }
+}
+
+/// Below are types required for parsing and processing inputs for batch inference requests.
+/// The idea here is that we need to get a vector of the length of the number of inferences
+/// so that we can use existing code.
+
+pub struct BatchEpisodeIdsWithSize(pub Option<BatchEpisodeIdInput>, pub usize);
+pub type BatchEpisodeIds = Vec<Uuid>;
+
+impl TryFrom<BatchEpisodeIdsWithSize> for BatchEpisodeIds {
+    type Error = Error;
+
+    fn try_from(
+        BatchEpisodeIdsWithSize(episode_ids, num_inferences): BatchEpisodeIdsWithSize,
+    ) -> Result<Self, Self::Error> {
+        let episode_ids = match episode_ids {
+            Some(episode_ids) => {
+                if episode_ids.len() != num_inferences {
+                    return Err(ErrorDetails::InvalidRequest {
+                        message: format!(
+                            "Number of episode_ids ({}) does not match number of inputs ({})",
+                            episode_ids.len(),
+                            num_inferences
+                        ),
+                    }
+                    .into());
+                }
+
+                episode_ids
+                    .into_iter()
+                    .map(|id| id.unwrap_or_else(Uuid::now_v7))
+                    .collect()
+            }
+            None => vec![Uuid::now_v7(); num_inferences],
+        };
+        episode_ids.iter().enumerate().try_for_each(|(i, id)| {
+            validate_episode_id(*id).map_err(|e| {
+                Error::new(ErrorDetails::BatchInputValidation {
+                    index: i,
+                    message: e.to_string(),
+                })
+            })
+        })?;
+        Ok(episode_ids)
+    }
+}
+
+/// InferenceParams is the top-level struct for inference parameters.
+/// We backfill these from the configs given in the variants used and ultimately write them to the database.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+pub struct BatchInferenceParams {
+    pub chat_completion: BatchChatCompletionInferenceParams,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+pub struct BatchChatCompletionInferenceParams {
+    #[serde(default)]
+    pub temperature: Option<Vec<Option<f32>>>,
+    #[serde(default)]
+    pub max_tokens: Option<Vec<Option<u32>>>,
+    #[serde(default)]
+    pub seed: Option<Vec<Option<u32>>>,
+    #[serde(default)]
+    pub top_p: Option<Vec<Option<f32>>>,
+    #[serde(default)]
+    pub presence_penalty: Option<Vec<Option<f32>>>,
+    #[serde(default)]
+    pub frequency_penalty: Option<Vec<Option<f32>>>,
+}
+
+pub struct BatchInferenceParamsWithSize(pub BatchInferenceParams, pub usize);
+
+impl TryFrom<BatchInferenceParamsWithSize> for Vec<InferenceParams> {
+    type Error = Error;
+
+    fn try_from(
+        BatchInferenceParamsWithSize(params, num_inferences): BatchInferenceParamsWithSize,
+    ) -> Result<Self, Self::Error> {
+        let BatchInferenceParams { chat_completion } = params;
+        let chat_completion_params: Vec<ChatCompletionInferenceParams> =
+            BatchChatCompletionParamsWithSize(chat_completion, num_inferences).try_into()?;
+        Ok(chat_completion_params
+            .into_iter()
+            .map(|p| InferenceParams { chat_completion: p })
+            .collect())
+    }
+}
+
+pub struct BatchChatCompletionParamsWithSize(BatchChatCompletionInferenceParams, usize);
+
+impl TryFrom<BatchChatCompletionParamsWithSize> for Vec<ChatCompletionInferenceParams> {
+    type Error = Error;
+
+    fn try_from(
+        BatchChatCompletionParamsWithSize(params, num_inferences): BatchChatCompletionParamsWithSize,
+    ) -> Result<Self, Self::Error> {
+        let BatchChatCompletionInferenceParams {
+            temperature,
+            max_tokens,
+            seed,
+            top_p,
+            presence_penalty,
+            frequency_penalty,
+        } = params;
+        // Verify all provided Vecs have the same length
+        if let Some(temperature) = &temperature {
+            if temperature.len() != num_inferences {
+                return Err(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "temperature vector length ({}) does not match number of inferences ({})",
+                        temperature.len(),
+                        num_inferences
+                    ),
+                }
+                .into());
+            }
+        }
+
+        if let Some(max_tokens) = &max_tokens {
+            if max_tokens.len() != num_inferences {
+                return Err(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "max_tokens vector length ({}) does not match number of inferences ({})",
+                        max_tokens.len(),
+                        num_inferences
+                    ),
+                }
+                .into());
+            }
+        }
+
+        if let Some(seed) = &seed {
+            if seed.len() != num_inferences {
+                return Err(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "seed vector length ({}) does not match number of inferences ({})",
+                        seed.len(),
+                        num_inferences
+                    ),
+                }
+                .into());
+            }
+        }
+
+        if let Some(top_p) = &top_p {
+            if top_p.len() != num_inferences {
+                return Err(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "top_p vector length ({}) does not match number of inferences ({})",
+                        top_p.len(),
+                        num_inferences
+                    ),
+                }
+                .into());
+            }
+        }
+
+        if let Some(presence_penalty) = &presence_penalty {
+            if presence_penalty.len() != num_inferences {
+                return Err(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "presence_penalty vector length ({}) does not match number of inferences ({})",
+                        presence_penalty.len(),
+                        num_inferences
+                    ),
+                }
+                .into());
+            }
+        }
+
+        if let Some(frequency_penalty) = &frequency_penalty {
+            if frequency_penalty.len() != num_inferences {
+                return Err(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "frequency_penalty vector length ({}) does not match number of inferences ({})",
+                        frequency_penalty.len(),
+                        num_inferences
+                    ),
+                }
+                .into());
+            }
+        }
+
+        // Convert Option<Vec<Option<T>>> into Vec<Option<T>> by unwrapping or creating empty vec
+        let temperature = temperature.unwrap_or_default();
+        let max_tokens = max_tokens.unwrap_or_default();
+        let seed = seed.unwrap_or_default();
+        let top_p = top_p.unwrap_or_default();
+        let presence_penalty = presence_penalty.unwrap_or_default();
+        let frequency_penalty = frequency_penalty.unwrap_or_default();
+
+        // Create iterators that take ownership
+        let mut temperature_iter = temperature.into_iter();
+        let mut max_tokens_iter = max_tokens.into_iter();
+        let mut seed_iter = seed.into_iter();
+        let mut top_p_iter = top_p.into_iter();
+        let mut presence_penalty_iter = presence_penalty.into_iter();
+        let mut frequency_penalty_iter = frequency_penalty.into_iter();
+
+        // Build params using the iterators
+        let mut all_inference_params = Vec::with_capacity(num_inferences);
+        for _ in 0..num_inferences {
+            all_inference_params.push(ChatCompletionInferenceParams {
+                temperature: temperature_iter.next().unwrap_or(None),
+                max_tokens: max_tokens_iter.next().unwrap_or(None),
+                seed: seed_iter.next().unwrap_or(None),
+                top_p: top_p_iter.next().unwrap_or(None),
+                presence_penalty: presence_penalty_iter.next().unwrap_or(None),
+                frequency_penalty: frequency_penalty_iter.next().unwrap_or(None),
+            });
+        }
+        Ok(all_inference_params)
+    }
+}
+
+pub struct BatchOutputSchemasWithSize(pub Option<BatchOutputSchemas>, pub usize);
+
+impl TryFrom<BatchOutputSchemasWithSize> for Vec<Option<DynamicJSONSchema>> {
+    type Error = Error;
+
+    fn try_from(
+        BatchOutputSchemasWithSize(schemas, num_inferences): BatchOutputSchemasWithSize,
+    ) -> Result<Self, Self::Error> {
+        if let Some(schemas) = schemas {
+            if schemas.len() != num_inferences {
+                Err(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "output_schemas vector length ({}) does not match number of inferences ({})",
+                        schemas.len(),
+                        num_inferences
+                    ),
+                }
+                .into())
+            } else {
+                Ok(schemas
+                    .into_iter()
+                    .map(|schema| schema.map(DynamicJSONSchema::new))
+                    .collect())
+            }
+        } else {
+            Ok(vec![None; num_inferences])
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use uuid::Timestamp;
+
+    use super::*;
+
+    #[test]
+    fn test_try_from_batch_episode_ids_with_size() {
+        let batch_episode_ids_with_size = BatchEpisodeIdsWithSize(None, 3);
+        let batch_episode_ids = BatchEpisodeIds::try_from(batch_episode_ids_with_size).unwrap();
+        assert_eq!(batch_episode_ids.len(), 3);
+
+        let batch_episode_ids_with_size = BatchEpisodeIdsWithSize(Some(vec![None, None, None]), 3);
+        let batch_episode_ids = BatchEpisodeIds::try_from(batch_episode_ids_with_size).unwrap();
+        assert_eq!(batch_episode_ids.len(), 3);
+
+        let episode_id_0 = Uuid::now_v7();
+        let episode_id_1 = Uuid::now_v7();
+        let batch_episode_ids_with_size =
+            BatchEpisodeIdsWithSize(Some(vec![Some(episode_id_0), Some(episode_id_1), None]), 3);
+        let batch_episode_ids = BatchEpisodeIds::try_from(batch_episode_ids_with_size).unwrap();
+        assert_eq!(batch_episode_ids.len(), 3);
+        assert_eq!(batch_episode_ids[0], episode_id_0);
+        assert_eq!(batch_episode_ids[1], episode_id_1);
+
+        let early_uuid = Uuid::new_v7(Timestamp::from_unix_time(946766218, 0, 0, 0));
+        let batch_episode_ids_with_size =
+            BatchEpisodeIdsWithSize(Some(vec![Some(early_uuid), None, None]), 3);
+        let err = BatchEpisodeIds::try_from(batch_episode_ids_with_size).unwrap_err();
+        assert_eq!(
+            err,
+            ErrorDetails::BatchInputValidation {
+                index: 0,
+                message: "Invalid Episode ID: Timestamp is too early".to_string(),
+            }
+            .into()
+        );
+    }
+
+    #[test]
+    fn test_batch_inference_params_with_size() {
+        // Try with default params
+        let batch_inference_params_with_size =
+            BatchInferenceParamsWithSize(BatchInferenceParams::default(), 3);
+        let inference_params =
+            Vec::<InferenceParams>::try_from(batch_inference_params_with_size).unwrap();
+        assert_eq!(inference_params.len(), 3);
+        assert_eq!(
+            inference_params[0].chat_completion,
+            ChatCompletionInferenceParams::default()
+        );
+
+        // Try with some overridden params
+        let batch_inference_params_with_size = BatchInferenceParamsWithSize(
+            BatchInferenceParams {
+                chat_completion: BatchChatCompletionInferenceParams {
+                    temperature: Some(vec![Some(0.5), None, None]),
+                    max_tokens: Some(vec![None, None, Some(30)]),
+                    seed: Some(vec![None, Some(2), Some(3)]),
+                    top_p: None,
+                    presence_penalty: Some(vec![Some(0.5), Some(0.6), Some(0.7)]),
+                    frequency_penalty: Some(vec![Some(0.5), Some(0.6), Some(0.7)]),
+                },
+            },
+            3,
+        );
+
+        let inference_params =
+            Vec::<InferenceParams>::try_from(batch_inference_params_with_size).unwrap();
+        assert_eq!(inference_params.len(), 3);
+        assert_eq!(inference_params[0].chat_completion.temperature, Some(0.5));
+        assert_eq!(inference_params[1].chat_completion.max_tokens, None);
+        assert_eq!(inference_params[2].chat_completion.seed, Some(3));
+        // Check top_p is None for all since it wasn't specified
+        assert_eq!(inference_params[0].chat_completion.top_p, None);
+        assert_eq!(inference_params[1].chat_completion.top_p, None);
+        assert_eq!(inference_params[2].chat_completion.top_p, None);
+
+        // Check presence_penalty values
+        assert_eq!(
+            inference_params[0].chat_completion.presence_penalty,
+            Some(0.5)
+        );
+        assert_eq!(
+            inference_params[1].chat_completion.presence_penalty,
+            Some(0.6)
+        );
+        assert_eq!(
+            inference_params[2].chat_completion.presence_penalty,
+            Some(0.7)
+        );
+
+        // Check frequency_penalty values
+        assert_eq!(
+            inference_params[0].chat_completion.frequency_penalty,
+            Some(0.5)
+        );
+        assert_eq!(
+            inference_params[1].chat_completion.frequency_penalty,
+            Some(0.6)
+        );
+        assert_eq!(
+            inference_params[2].chat_completion.frequency_penalty,
+            Some(0.7)
+        );
+
+        // Verify temperature is None for indices 1 and 2
+        assert_eq!(inference_params[1].chat_completion.temperature, None);
+        assert_eq!(inference_params[2].chat_completion.temperature, None);
+
+        // Verify max_tokens is 30 for last item and None for first
+        assert_eq!(inference_params[0].chat_completion.max_tokens, None);
+        assert_eq!(inference_params[2].chat_completion.max_tokens, Some(30));
+
+        // Verify seed is None for first item and 2 for second
+        assert_eq!(inference_params[0].chat_completion.seed, None);
+        assert_eq!(inference_params[1].chat_completion.seed, Some(2));
+
+        // Test with ragged arrays (arrays of different lengths)
+        let batch_inference_params_with_size = BatchInferenceParamsWithSize(
+            BatchInferenceParams {
+                chat_completion: BatchChatCompletionInferenceParams {
+                    temperature: Some(vec![Some(0.5), None]), // Too short
+                    max_tokens: Some(vec![None, None, Some(30), Some(40)]), // Too long
+                    seed: Some(vec![]),                       // Empty array
+                    top_p: None,
+                    presence_penalty: Some(vec![Some(0.5)]), // Too short
+                    frequency_penalty: Some(vec![Some(0.5), Some(0.6), Some(0.7), Some(0.8)]), // Too long
+                },
+            },
+            3,
+        );
+
+        let err = Vec::<InferenceParams>::try_from(batch_inference_params_with_size).unwrap_err();
+        match err.get_details() {
+            ErrorDetails::InvalidRequest { message } => assert_eq!(
+                message,
+                "temperature vector length (2) does not match number of inferences (3)"
+            ),
+            _ => panic!("Expected InvalidRequest error"),
+        }
+
+        // Test with wrong size specified
+        let batch_inference_params_with_size = BatchInferenceParamsWithSize(
+            BatchInferenceParams {
+                chat_completion: BatchChatCompletionInferenceParams {
+                    temperature: Some(vec![Some(0.5), None, None, None]),
+                    max_tokens: Some(vec![None, None, Some(30)]),
+                    seed: Some(vec![None, Some(2), Some(3)]),
+                    top_p: None,
+                    presence_penalty: Some(vec![Some(0.5), Some(0.6), Some(0.7)]),
+                    frequency_penalty: Some(vec![Some(0.5), Some(0.6), Some(0.7)]),
+                },
+            },
+            4, // Wrong size - arrays are length 3 but size is 4
+        );
+
+        let err = Vec::<InferenceParams>::try_from(batch_inference_params_with_size).unwrap_err();
+        match err.get_details() {
+            ErrorDetails::InvalidRequest { message } => assert_eq!(
+                message,
+                "max_tokens vector length (3) does not match number of inferences (4)"
+            ),
+            _ => panic!("Expected InvalidRequest error"),
+        }
+    }
+
+    #[test]
+    fn test_batch_output_schemas_with_size() {
+        let batch_output_schemas_with_size = BatchOutputSchemasWithSize(None, 3);
+        let batch_output_schemas =
+            Vec::<Option<DynamicJSONSchema>>::try_from(batch_output_schemas_with_size).unwrap();
+        assert_eq!(batch_output_schemas.len(), 3);
+
+        let batch_output_schemas_with_size =
+            BatchOutputSchemasWithSize(Some(vec![None, None, None]), 3);
+        let batch_output_schemas =
+            Vec::<Option<DynamicJSONSchema>>::try_from(batch_output_schemas_with_size).unwrap();
+        assert_eq!(batch_output_schemas.len(), 3);
+    }
 }
