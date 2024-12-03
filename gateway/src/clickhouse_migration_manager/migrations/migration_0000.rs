@@ -48,6 +48,7 @@ impl<'a> Migration for Migration0000<'a> {
                         return Ok(true);
                     }
                 }
+                // If `can_apply` succeeds but this fails, it likely means the database does not exist
                 Err(_) => return Ok(true),
             }
         }
