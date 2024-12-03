@@ -187,6 +187,10 @@ impl<'a> BatchRequestRow<'a> {
     }
 }
 
+/// Below are types required for parsing and processing inputs for batch inference requests.
+/// The idea here is that we need to get a vector of the length of the number of inferences
+/// so that we can use existing code.
+
 pub struct BatchEpisodeIdsWithSize(pub Option<BatchEpisodeIdInput>, pub usize);
 pub type BatchEpisodeIds = Vec<Uuid>;
 
