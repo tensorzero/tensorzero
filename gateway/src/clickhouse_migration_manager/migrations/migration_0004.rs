@@ -2,6 +2,8 @@ use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::clickhouse_migration_manager::migration_trait::Migration;
 use crate::error::{Error, ErrorDetails};
 
+use super::check_table_exists;
+
 /// This migration adds additional columns to the `ModelInference` table
 /// The goal of this is to improve observability of each model inference at an intermediate level of granularity.
 /// Prior to this migration, we only stored the raw request and response, which vary by provider and are therefore
@@ -25,32 +27,13 @@ impl<'a> Migration for Migration0004<'a> {
                 message: e.to_string(),
             })
         })?;
-        let database = self.clickhouse.database();
-        let query = format!(
-            r#"SELECT EXISTS(
-                SELECT 1
-                FROM system.tables
-                WHERE database = '{database}' AND name = 'ModelInference'
-            )"#
-        );
 
-        match self.clickhouse.run_query(query).await {
-            Ok(response) => {
-                if response.trim() != "1" {
-                    return Err(ErrorDetails::ClickHouseMigration {
-                        id: "0004".to_string(),
-                        message: "ModelInference table does not exist".to_string(),
-                    }
-                    .into());
-                }
+        if !check_table_exists(self.clickhouse, "ModelInference", "0004").await? {
+            return Err(ErrorDetails::ClickHouseMigration {
+                id: "0004".to_string(),
+                message: "ModelInference table does not exist".to_string(),
             }
-            Err(e) => {
-                return Err(ErrorDetails::ClickHouseMigration {
-                    id: "0004".to_string(),
-                    message: format!("Failed to check ModelInference table: {}", e),
-                }
-                .into());
-            }
+            .into());
         }
 
         Ok(())

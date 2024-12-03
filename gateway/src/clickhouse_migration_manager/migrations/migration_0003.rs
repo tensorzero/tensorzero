@@ -2,6 +2,8 @@ use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::clickhouse_migration_manager::migration_trait::Migration;
 use crate::error::{Error, ErrorDetails};
 
+use super::check_table_exists;
+
 /// This migration is used to set up the ClickHouse database for tagged feedback.
 /// The primary queries we contemplate are: Select all feedback for a given tag, or select all tags for a given feedback item.
 /// We will store the tags in a new table `FeedbackTag` and create a materialized view for each original feedback table that writes them
@@ -27,7 +29,6 @@ impl<'a> Migration for Migration0003<'a> {
                 message: e.to_string(),
             })
         })?;
-        let database = self.clickhouse.database();
 
         let tables = vec![
             "BooleanMetricFeedback",
@@ -37,31 +38,12 @@ impl<'a> Migration for Migration0003<'a> {
         ];
 
         for table in tables {
-            let query = format!(
-                r#"SELECT EXISTS(
-                        SELECT 1
-                        FROM system.tables
-                        WHERE database = '{database}' AND name = '{table}'
-                    )"#
-            );
-
-            match self.clickhouse.run_query(query).await {
-                Err(e) => {
-                    return Err(ErrorDetails::ClickHouseMigration {
-                        id: "0003".to_string(),
-                        message: e.to_string(),
-                    }
-                    .into())
+            if !check_table_exists(self.clickhouse, table, "0003").await? {
+                return Err(ErrorDetails::ClickHouseMigration {
+                    id: "0003".to_string(),
+                    message: format!("Table {} does not exist", table),
                 }
-                Ok(response) => {
-                    if response.trim() != "1" {
-                        return Err(ErrorDetails::ClickHouseMigration {
-                            id: "0003".to_string(),
-                            message: format!("Table {} does not exist", table),
-                        }
-                        .into());
-                    }
-                }
+                .into());
             }
         }
 
@@ -71,29 +53,9 @@ impl<'a> Migration for Migration0003<'a> {
     /// Check if the migration has already been applied
     /// This should be equivalent to checking if `FeedbackTag` exists
     async fn should_apply(&self) -> Result<bool, Error> {
-        let database = self.clickhouse.database();
-
-        let query = format!(
-            r#"SELECT EXISTS(
-                SELECT 1
-                FROM system.tables
-                WHERE database = '{database}' AND name = 'FeedbackTag'
-            )"#
-        );
-
-        match self.clickhouse.run_query(query).await {
-            Err(e) => {
-                return Err(ErrorDetails::ClickHouseMigration {
-                    id: "0003".to_string(),
-                    message: e.to_string(),
-                }
-                .into())
-            }
-            Ok(response) => {
-                if response.trim() != "1" {
-                    return Ok(true);
-                }
-            }
+        // Check if FeedbackTag table exists
+        if !check_table_exists(self.clickhouse, "FeedbackTag", "0003").await? {
+            return Ok(true);
         }
 
         // Check each of the original feedback tables for a `tags` column
@@ -103,6 +65,8 @@ impl<'a> Migration for Migration0003<'a> {
             "DemonstrationFeedback",
             "FloatMetricFeedback",
         ];
+
+        let database = self.clickhouse.database();
 
         for table in tables {
             let query = format!(
@@ -140,26 +104,8 @@ impl<'a> Migration for Migration0003<'a> {
         ];
 
         for view in views {
-            let query = format!(
-                r#"SELECT EXISTS(
-                    SELECT 1
-                    FROM system.tables
-                    WHERE database = '{database}' AND name = '{view}'
-                )"#,
-            );
-            match self.clickhouse.run_query(query).await {
-                Err(e) => {
-                    return Err(ErrorDetails::ClickHouseMigration {
-                        id: "0003".to_string(),
-                        message: e.to_string(),
-                    }
-                    .into());
-                }
-                Ok(response) => {
-                    if response.trim() != "1" {
-                        return Ok(true);
-                    }
-                }
+            if !check_table_exists(self.clickhouse, view, "0003").await? {
+                return Ok(true);
             }
         }
         // Everything is in place, so we should not apply the migration
