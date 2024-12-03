@@ -1492,6 +1492,7 @@ struct OpenAIBatchResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
 enum OpenAIBatchStatus {
     Validating,
     Failed,
