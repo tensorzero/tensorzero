@@ -16,7 +16,8 @@ use super::check_table_exists;
 /// Each time the batch is polled by either inference_id or batch_id, a row will be written to this table.
 /// This allows us to know and also to know the history of actions which have been taken here.
 ///
-/// It also changes the `response_time_ms` column of `ModelInference` to be a nullable column.
+/// It also changes the `response_time_ms` column of `ModelInference` and the `processing_time_ms` columns of
+/// `ChatInference` and `JsonInference` to be nullable.
 /// This is required since we don't really get latency measurements for batch requests.
 pub struct Migration0006<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
