@@ -13,6 +13,7 @@ use super::{ContentBlock, Input, ModelInferenceRequest, RequestMessage, Usage};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{borrow::Cow, collections::HashMap};
+use tracing::instrument;
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -196,6 +197,7 @@ pub struct BatchModelInferenceRow<'a> {
 }
 
 impl<'a> BatchModelInferenceRow<'a> {
+    #[instrument(skip_all)]
     pub fn from_string(s: String) -> Result<BatchModelInferenceRow<'static>, Error> {
         let mut value: serde_json::Map<String, Value> = serde_json::from_str(&s).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -240,11 +242,27 @@ impl<'a> BatchModelInferenceRow<'a> {
         })?;
         let system = value
             .remove("system")
-            .and_then(|v| v.as_str().map(|s| s.to_string().into()));
+            .map(|v| {
+                v.as_str()
+                    .ok_or_else(|| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: "system is not a string".to_string(),
+                        })
+                    })
+                    .map(|s| s.to_string().into())
+            })
+            .transpose()?;
 
         let tool_params = value
             .remove("tool_params")
-            .and_then(|v| serde_json::from_value(v).ok());
+            .map(|v| {
+                serde_json::from_value(v).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Failed to parse tool_params: {}", e),
+                    })
+                })
+            })
+            .transpose()?;
 
         let inference_params: InferenceParams = value
             .remove("inference_params")
@@ -793,5 +811,248 @@ mod tests {
         let batch_output_schemas =
             Vec::<Option<DynamicJSONSchema>>::try_from(batch_output_schemas_with_size).unwrap();
         assert_eq!(batch_output_schemas.len(), 3);
+    }
+
+    #[test]
+    fn test_batch_model_inference_row_from_str() {
+        // Test successful parsing of a complete row
+        let valid_row = r#"{
+            "inference_id": "00000000-0000-7000-0000-000000000001",
+            "batch_id": "00000000-0000-7000-0000-000000000002",
+            "function_name": "test_function",
+            "variant_name": "test_variant",
+            "episode_id": "00000000-0000-7000-0000-000000000003",
+            "input": {
+                "system": "test system",
+                "messages": [{"role": "user", "content": [{"type": "text", "value": "test message"}]}]
+            },
+            "input_messages": [
+                {"role": "user", "content": [{"type": "text", "text": "test message"}]}
+            ],
+            "system": "test system",
+            "tool_params": {
+                "tool_choice": "auto",
+                "parallel_tool_calls": true,
+                "tools_available": [{"name": "a", "description": "b", "parameters": {}}]
+            },
+            "inference_params": {
+                "chat_completion": {
+                    "temperature": 0.7,
+                    "max_tokens": 100,
+                    "top_p": null,
+                    "presence_penalty": null,
+                    "frequency_penalty": null,
+                    "seed": null
+                }
+            },
+            "output_schema": "test schema",
+            "raw_request": "test request",
+            "model_name": "test_model",
+            "model_provider_name": "test_provider",
+            "tags": {
+                "key": "value"
+            }
+        }"#
+        .to_string();
+
+        let row = BatchModelInferenceRow::from_string(valid_row).unwrap();
+        assert_eq!(row.function_name, "test_function");
+        assert_eq!(row.variant_name, "test_variant");
+        assert_eq!(row.system.unwrap(), "test system");
+        assert_eq!(row.output_schema.unwrap(), "test schema");
+        assert_eq!(row.model_name, "test_model");
+        assert_eq!(row.model_provider_name, "test_provider");
+        assert_eq!(row.tags.get("key").unwrap(), "value");
+
+        // Test missing required field
+        let missing_field = r#"{
+            "inference_id": "00000000-0000-7000-0000-000000000001",
+            "batch_id": "00000000-0000-7000-0000-000000000002",
+            "function_name": "test_function",
+            "variant_name": "test_variant",
+            "episode_id": "00000000-0000-7000-0000-000000000003",
+            "input": {
+                "system": "test system",
+                "messages": [{"role": "user", "content": [{"type": "text", "value": "test message"}]}]
+            },
+            "input_messages": [],
+            "inference_params": {
+                "chat_completion": {
+                    "temperature": 0.7,
+                    "max_tokens": 100,
+                    "top_p": null,
+                    "presence_penalty": null,
+                    "frequency_penalty": null,
+                    "seed": null
+                }
+            },
+            "tags": {}
+        }"#
+        .to_string();
+
+        let err = BatchModelInferenceRow::from_string(missing_field).unwrap_err();
+        match err.get_details() {
+            ErrorDetails::Serialization { message } => {
+                assert_eq!(message, "Missing raw_request")
+            }
+            _ => panic!("Expected Serialization error"),
+        }
+
+        // Test invalid UUID
+        let invalid_uuid = r#"{
+            "inference_id": "not-a-uuid",
+            "batch_id": "00000000-0000-7000-0000-000000000002",
+            "function_name": "test_function",
+            "variant_name": "test_variant",
+            "episode_id": "00000000-0000-7000-0000-000000000003",
+            "input": {
+                "type": "text",
+                "value": "test input"
+            },
+            "input_messages": [],
+            "inference_params": {
+                "chat_completion": {
+                    "temperature": 0.7,
+                    "max_tokens": 100,
+                    "top_p": null,
+                    "presence_penalty": null,
+                    "frequency_penalty": null,
+                    "seed": null
+                }
+            },
+            "raw_request": "test",
+            "model_name": "test",
+            "model_provider_name": "test",
+            "tags": {}
+        }"#
+        .to_string();
+
+        let err = BatchModelInferenceRow::from_string(invalid_uuid).unwrap_err();
+        match err.get_details() {
+            ErrorDetails::Serialization { message } => {
+                assert!(message.contains("Failed to parse inference_id"))
+            }
+            _ => panic!("Expected Serialization error"),
+        }
+
+        // Test invalid JSON
+        let invalid_json = "not json".to_string();
+        let err = BatchModelInferenceRow::from_string(invalid_json).unwrap_err();
+        match err.get_details() {
+            ErrorDetails::Serialization { message } => {
+                assert!(message.contains("Failed to parse batch model inference row"))
+            }
+            _ => panic!("Expected Serialization error"),
+        }
+
+        // Test invalid input type
+        let invalid_input = r#"{
+            "inference_id": "00000000-0000-7000-0000-000000000001",
+            "batch_id": "00000000-0000-7000-0000-000000000002",
+            "function_name": "test_function",
+            "variant_name": "test_variant",
+            "episode_id": "00000000-0000-7000-0000-000000000003",
+            "input": {
+                "type": "invalid_type",
+                "value": "test input"
+            },
+            "input_messages": [],
+            "inference_params": {
+                "chat_completion": {
+                    "temperature": 0.7,
+                    "max_tokens": 100,
+                    "top_p": null,
+                    "presence_penalty": null,
+                    "frequency_penalty": null,
+                    "seed": null
+                }
+            },
+            "raw_request": "test",
+            "model_name": "test",
+            "model_provider_name": "test",
+            "tags": {}
+        }"#
+        .to_string();
+
+        let err = BatchModelInferenceRow::from_string(invalid_input).unwrap_err();
+        match err.get_details() {
+            ErrorDetails::Serialization { message } => {
+                assert!(message.contains("Failed to parse input"))
+            }
+            _ => panic!("Expected Serialization error"),
+        }
+
+        // Test invalid inference params
+        let invalid_params = r#"{
+            "inference_id": "00000000-0000-7000-0000-000000000001",
+            "batch_id": "00000000-0000-7000-0000-000000000002",
+            "function_name": "test_function",
+            "variant_name": "test_variant",
+            "episode_id": "00000000-0000-7000-0000-000000000003",
+            "input": {
+                "type": "text",
+                "value": "test input"
+            },
+            "input_messages": [],
+            "inference_params": {
+                "chat_completion": {
+                    "temperature": "invalid"
+                }
+            },
+            "raw_request": "test",
+            "model_name": "test",
+            "model_provider_name": "test",
+            "tags": {}
+        }"#
+        .to_string();
+
+        let err = BatchModelInferenceRow::from_string(invalid_params).unwrap_err();
+        match err.get_details() {
+            ErrorDetails::Serialization { message } => {
+                assert!(message.contains("Failed to parse inference_params"))
+            }
+            _ => panic!("Expected Serialization error"),
+        }
+
+        // Test invalid tool params
+        let invalid_tools = r#"{
+            "inference_id": "00000000-0000-7000-0000-000000000001",
+            "batch_id": "00000000-0000-7000-0000-000000000002",
+            "function_name": "test_function",
+            "variant_name": "test_variant",
+            "episode_id": "00000000-0000-7000-0000-000000000003",
+            "input": {
+                "type": "text",
+                "value": "test input"
+            },
+            "input_messages": [],
+            "tool_params": {
+                "tool_choice": "invalid_choice",
+                "tools": []
+            },
+            "inference_params": {
+                "chat_completion": {
+                    "temperature": 0.7,
+                    "max_tokens": 100,
+                    "top_p": null,
+                    "presence_penalty": null,
+                    "frequency_penalty": null,
+                    "seed": null
+                }
+            },
+            "raw_request": "test",
+            "model_name": "test",
+            "model_provider_name": "test",
+            "tags": {}
+        }"#
+        .to_string();
+
+        let err = BatchModelInferenceRow::from_string(invalid_tools).unwrap_err();
+        match err.get_details() {
+            ErrorDetails::Serialization { message } => {
+                assert!(message.contains("Failed to parse tool_params"))
+            }
+            _ => panic!("Expected Serialization error"),
+        }
     }
 }
