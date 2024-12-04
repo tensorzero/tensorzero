@@ -15,7 +15,7 @@ use super::openai::{
 use super::provider_trait::InferenceProvider;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
-use crate::inference::types::batch::{BatchRequest, PollBatchInferenceResponse};
+use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
@@ -186,7 +186,7 @@ impl InferenceProvider for VLLMProvider {
 
     async fn poll_batch_inference<'a>(
         &'a self,
-        _batch_request: &'a BatchRequest,
+        _batch_request: &'a BatchRequestRow<'a>,
         _http_client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {

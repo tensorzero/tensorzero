@@ -15,7 +15,7 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
     inference::types::{
-        batch::{BatchRequest, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
+        batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
         ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest,
         ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
         ProviderInferenceResponseStream, TextChunk, Usage,
@@ -194,7 +194,7 @@ impl InferenceProvider for MistralProvider {
 
     async fn poll_batch_inference<'a>(
         &'a self,
-        _batch_request: &'a BatchRequest,
+        _batch_request: &'a BatchRequestRow<'a>,
         _http_client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {

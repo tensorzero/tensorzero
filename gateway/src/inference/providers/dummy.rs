@@ -14,7 +14,7 @@ use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingR
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::batch::PollBatchInferenceResponse;
-use crate::inference::types::batch::{BatchRequest, BatchStatus};
+use crate::inference::types::batch::{BatchRequestRow, BatchStatus};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, current_timestamp, ContentBlock, ContentBlockChunk,
     Latency, ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
@@ -376,7 +376,7 @@ impl InferenceProvider for DummyProvider {
 
     async fn poll_batch_inference<'a>(
         &'a self,
-        _batch_request: &'a BatchRequest,
+        _batch_request: &'a BatchRequestRow<'a>,
         _http_client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {

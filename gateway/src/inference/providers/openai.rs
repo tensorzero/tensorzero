@@ -19,11 +19,10 @@ use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingR
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
-use crate::inference::types::batch::{BatchRequest, PollBatchInferenceResponse};
+use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
 };
-use crate::inference::types::current_timestamp;
 use crate::inference::types::{
     batch::{BatchStatus, StartBatchProviderInferenceResponse},
     ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
@@ -305,7 +304,7 @@ impl InferenceProvider for OpenAIProvider {
 
     async fn poll_batch_inference<'a>(
         &'a self,
-        batch_request: &'a BatchRequest,
+        batch_request: &'a BatchRequestRow<'a>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
@@ -1564,10 +1563,7 @@ impl TryFrom<OpenAIBatchFileRow> for ProviderBatchInferenceOutput {
 
         Ok(Self {
             id: row.inference_id,
-            created: current_timestamp(),
             output: content,
-            system: None,               // This would need to come from elsewhere
-            input_messages: Vec::new(), // This would need to come from elsewhere
             raw_response,
             usage: response.usage.into(),
         })

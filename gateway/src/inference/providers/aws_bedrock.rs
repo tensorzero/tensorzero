@@ -21,7 +21,7 @@ use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
-use crate::inference::types::batch::BatchRequest;
+use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType,
@@ -292,7 +292,7 @@ impl InferenceProvider for AWSBedrockProvider {
 
     async fn poll_batch_inference<'a>(
         &'a self,
-        _batch_request: &'a BatchRequest,
+        _batch_request: &'a BatchRequestRow<'a>,
         _http_client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {

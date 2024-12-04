@@ -22,7 +22,7 @@ use crate::inference::providers::mistral::MistralCredentials;
 use crate::inference::providers::openai::OpenAICredentials;
 use crate::inference::providers::together::TogetherCredentials;
 use crate::inference::providers::vllm::VLLMCredentials;
-use crate::inference::types::batch::BatchRequest;
+use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::batch::{
     StartBatchModelInferenceResponse, StartBatchProviderInferenceResponse,
@@ -820,7 +820,7 @@ impl ProviderConfig {
 
     pub async fn poll_batch_inference<'a>(
         &self,
-        batch_request: &'a BatchRequest,
+        batch_request: &'a BatchRequestRow<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {

@@ -24,8 +24,8 @@ use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::batch::{
     BatchEpisodeIds, BatchEpisodeIdsWithSize, BatchInferenceDatabaseInsertMetadata,
     BatchInferenceParams, BatchInferenceParamsWithSize, BatchModelInferenceRow,
-    BatchOutputSchemasWithSize, BatchRequest, BatchRequestRow, BatchStatus,
-    PollBatchInferenceResponse, ProviderBatchInferenceResponse, UnparsedBatchRequestRow,
+    BatchOutputSchemasWithSize, BatchRequestRow, BatchStatus, PollBatchInferenceResponse,
+    ProviderBatchInferenceOutput, ProviderBatchInferenceResponse, UnparsedBatchRequestRow,
 };
 use crate::inference::types::RequestMessage;
 use crate::inference::types::{batch::StartBatchModelInferenceWithMetadata, Input};
@@ -336,7 +336,7 @@ pub async fn poll_batch_inference_handler(
             let response = write_poll_batch_inference(
                 &clickhouse_connection_info,
                 &batch_request,
-                &response,
+                response,
                 config,
             )
             .await?;
@@ -419,7 +419,7 @@ impl TryFrom<&'_ PollBatchInferenceParams> for PollInferenceQuery {
 async fn get_batch_request(
     clickhouse: &ClickHouseConnectionInfo,
     query: &PollInferenceQuery,
-) -> Result<BatchRequest, Error> {
+) -> Result<BatchRequestRow<'static>, Error> {
     let response = match query {
         PollInferenceQuery::Batch(batch_id) => {
             let query = format!(
@@ -466,7 +466,7 @@ async fn get_batch_request(
         }
     };
 
-    let batch_request = serde_json::from_str::<BatchRequest>(&response).map_err(|e| {
+    let batch_request = serde_json::from_str::<BatchRequestRow>(&response).map_err(|e| {
         Error::new(ErrorDetails::ClickHouseDeserialization {
             message: e.to_string(),
         })
@@ -474,8 +474,13 @@ async fn get_batch_request(
     Ok(batch_request)
 }
 
+/// Polls a batch inference request from the model provider that
+/// the original request was sent to
+///
+/// Returns: a `PollBatchInferenceResponse` which is the current status of the batch
+/// and if it's newly completed, the response.
 async fn poll_batch_inference(
-    batch_request: &BatchRequest,
+    batch_request: &BatchRequestRow<'static>,
     http_client: reqwest::Client,
     models: &HashMap<String, ModelConfig>,
     credentials: &InferenceCredentials,
@@ -483,7 +488,7 @@ async fn poll_batch_inference(
     // Retrieve the relevant model provider
     // Call model.poll_batch_inference on it
     let model_config = models
-        .get(batch_request.model_name.as_str())
+        .get(batch_request.model_name.as_ref())
         .ok_or_else(|| {
             Error::new(ErrorDetails::InvalidModel {
                 model_name: batch_request.model_name.to_string(),
@@ -491,7 +496,7 @@ async fn poll_batch_inference(
         })?;
     let model_provider = model_config
         .providers
-        .get(batch_request.model_provider_name.as_str())
+        .get(batch_request.model_provider_name.as_ref())
         .ok_or_else(|| {
             Error::new(ErrorDetails::InvalidModelProvider {
                 model_name: batch_request.model_name.to_string(),
@@ -578,7 +583,7 @@ async fn write_start_batch_inference<'a>(
             episode_id: metadata.episode_ids[rows.len()],
             input: row.input,
             input_messages: row.input_messages,
-            system: row.system.map(|s| s.into()),
+            system: row.system.map(Cow::Borrowed),
             tool_params,
             inference_params: Cow::Borrowed(row.inference_params),
             output_schema: row.output_schema.map(|s| s.to_string()),
@@ -612,8 +617,8 @@ async fn write_start_batch_inference<'a>(
 
 async fn write_poll_batch_inference<'a>(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
-    batch_request: &BatchRequest,
-    response: &PollBatchInferenceResponse,
+    batch_request: &BatchRequestRow<'a>,
+    response: PollBatchInferenceResponse,
     config: &Config<'a>,
 ) -> Result<PollInferenceResponse, Error> {
     match response {
@@ -655,7 +660,7 @@ async fn write_poll_batch_inference<'a>(
 
 async fn write_batch_request_status_update(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
-    batch_request: &BatchRequest,
+    batch_request: &BatchRequestRow<'_>,
     status: BatchStatus,
 ) -> Result<(), Error> {
     let batch_request_insert = BatchRequestRow::new(UnparsedBatchRequestRow {
@@ -679,8 +684,8 @@ async fn write_batch_request_status_update(
 /// handler must be adjusted to deal with it and also the lifetimes associated there.
 async fn write_completed_batch_inference<'a>(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
-    batch_request: &'a BatchRequest,
-    response: &ProviderBatchInferenceResponse,
+    batch_request: &'a BatchRequestRow<'a>,
+    mut response: ProviderBatchInferenceResponse,
     config: &'a Config<'a>,
 ) -> Result<Vec<InferenceResponse>, Error> {
     let inference_ids: Vec<String> = response.elements.keys().map(|id| id.to_string()).collect();
@@ -719,7 +724,12 @@ async fn write_completed_batch_inference<'a>(
             model_provider_name: _,
             tags: _,
         } = batch_model_inference;
-        let inference_response = match response.elements.get(&inference_id) {
+        let ProviderBatchInferenceOutput {
+            id: _,
+            output,
+            raw_response,
+            usage,
+        } = match response.elements.remove(&inference_id) {
             Some(inference_response) => inference_response,
             None => {
                 Error::new(ErrorDetails::MissingBatchInferenceResponse {
@@ -731,12 +741,12 @@ async fn write_completed_batch_inference<'a>(
         let model_inference_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
             created: current_timestamp(),
-            output: inference_response.output.clone(),
+            output: output.clone(),
             system: system.map(|s| s.into_owned()),
             input_messages,
             raw_request: raw_request.into_owned(),
-            raw_response: inference_response.raw_response.clone(),
-            usage: inference_response.usage.clone(),
+            raw_response,
+            usage: usage.clone(),
             latency: Latency::Batch,
             model_name: &batch_request.model_name,
             model_provider_name: &batch_request.model_provider_name,
@@ -759,8 +769,8 @@ async fn write_completed_batch_inference<'a>(
         let inference_result = function
             .prepare_response(
                 inference_id,
-                inference_response.output.clone(),
-                inference_response.usage.clone(),
+                output,
+                usage,
                 vec![model_inference_response],
                 &inference_config,
                 inference_params.into_owned(),
@@ -834,7 +844,7 @@ async fn get_batch_inferences(
 
 async fn get_completed_batch_inference_response(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
-    batch_request: &BatchRequest,
+    batch_request: &BatchRequestRow<'_>,
     query: &PollInferenceQuery,
     function: &FunctionConfig,
 ) -> Result<CompletedBatchInferenceResponse, Error> {

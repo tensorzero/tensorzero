@@ -62,19 +62,6 @@ impl<'a> StartBatchModelInferenceResponse<'a> {
     }
 }
 
-// TODO: add errors and stuff
-#[derive(Debug)]
-pub enum PollBatchInferenceResponse {
-    Pending,
-    Completed(ProviderBatchInferenceResponse),
-    Failed,
-}
-
-#[derive(Debug)]
-pub struct BatchProviderInferenceResponse {
-    pub batch_id: Uuid,
-}
-
 /// Here, we add context from the variant, such as the original inputs, templated input messages,
 /// systems, tool configs, inference params, model_name, and output schemas.
 pub struct StartBatchModelInferenceWithMetadata<'a> {
@@ -126,34 +113,44 @@ impl<'a> StartBatchModelInferenceWithMetadata<'a> {
     }
 }
 
-#[derive(Debug, Deserialize)]
-pub struct BatchRequest {
+// TODO (#503): add errors even for Pending batches and Failed batches
+// this will require those variants to wrap structs of their own
+#[derive(Debug)]
+pub enum PollBatchInferenceResponse {
+    Pending,
+    Completed(ProviderBatchInferenceResponse),
+    Failed,
+}
+
+/// Data retrieved from the BatchRequest table in ClickHouse
+#[derive(Debug, Deserialize, Serialize)]
+pub struct BatchRequestRow<'a> {
     pub batch_id: Uuid,
+    pub id: Uuid,
     #[serde(deserialize_with = "deserialize_json_string")]
-    pub batch_params: Value,
-    pub model_name: String,
-    pub model_provider_name: String,
+    pub batch_params: Cow<'a, Value>,
+    pub model_name: Cow<'a, str>,
+    pub model_provider_name: Cow<'a, str>,
     pub status: BatchStatus,
-    pub function_name: String,
-    pub variant_name: String,
+    pub function_name: Cow<'a, str>,
+    pub variant_name: Cow<'a, str>,
     pub errors: HashMap<String, String>,
 }
 
-fn deserialize_json_string<'de, D>(deserializer: D) -> Result<Value, D::Error>
+fn deserialize_json_string<'de, D>(deserializer: D) -> Result<Cow<'static, Value>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     let json_str = String::deserialize(deserializer)?;
-    serde_json::from_str(&json_str).map_err(serde::de::Error::custom)
+    Ok(Cow::Owned(
+        serde_json::from_str(&json_str).map_err(serde::de::Error::custom)?,
+    ))
 }
 
 #[derive(Debug)]
 pub struct ProviderBatchInferenceOutput {
     pub id: Uuid,
-    pub created: u64,
     pub output: Vec<ContentBlock>,
-    pub system: Option<String>,
-    pub input_messages: Vec<RequestMessage>,
     pub raw_response: String,
     pub usage: Usage,
 }
@@ -162,6 +159,7 @@ pub struct ProviderBatchInferenceOutput {
 pub struct ProviderBatchInferenceResponse {
     // Inference ID -> Output
     pub elements: HashMap<Uuid, ProviderBatchInferenceOutput>,
+    // TODO (#503): add errors
 }
 
 /// Additional metadata needed to write to ClickHouse that isn't available at the variant level
@@ -334,19 +332,6 @@ impl<'a> BatchModelInferenceRow<'a> {
     }
 }
 
-#[derive(Debug, Serialize)]
-pub struct BatchRequestRow<'a> {
-    batch_id: Uuid,
-    id: Uuid,
-    batch_params: &'a Value,
-    function_name: &'a str,
-    variant_name: &'a str,
-    model_name: &'a str,
-    model_provider_name: &'a str,
-    status: BatchStatus,
-    errors: HashMap<String, String>,
-}
-
 pub struct UnparsedBatchRequestRow<'a> {
     pub batch_id: Uuid,
     pub batch_params: &'a Value,
@@ -375,11 +360,11 @@ impl<'a> BatchRequestRow<'a> {
         Self {
             batch_id,
             id,
-            batch_params,
-            function_name,
-            variant_name,
-            model_name,
-            model_provider_name,
+            batch_params: Cow::Borrowed(batch_params),
+            function_name: Cow::Borrowed(function_name),
+            variant_name: Cow::Borrowed(variant_name),
+            model_name: Cow::Borrowed(model_name),
+            model_provider_name: Cow::Borrowed(model_provider_name),
             status,
             errors,
         }

@@ -14,7 +14,7 @@ use crate::{
     error::{Error, ErrorDetails},
     inference::types::batch::PollBatchInferenceResponse,
     inference::types::{
-        batch::{BatchRequest, StartBatchProviderInferenceResponse},
+        batch::{BatchRequestRow, StartBatchProviderInferenceResponse},
         ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
         ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     },
@@ -202,7 +202,7 @@ impl InferenceProvider for FireworksProvider {
 
     async fn poll_batch_inference<'a>(
         &'a self,
-        _batch_request: &'a BatchRequest,
+        _batch_request: &'a BatchRequestRow<'a>,
         _http_client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
