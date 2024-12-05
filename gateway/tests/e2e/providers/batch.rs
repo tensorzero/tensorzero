@@ -12,11 +12,15 @@ use gateway::{
 };
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
+use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
-use crate::common::{
-    get_clickhouse, get_gateway_endpoint, select_batch_model_inference_clickhouse,
-    select_latest_batch_request_clickhouse,
+use crate::{
+    common::{
+        get_clickhouse, get_gateway_endpoint, select_batch_model_inference_clickhouse,
+        select_latest_batch_request_clickhouse,
+    },
+    providers::common::{check_inference_params_response, check_simple_inference_response},
 };
 
 use super::common::E2ETestProvider;
@@ -26,31 +30,79 @@ macro_rules! generate_batch_inference_tests {
     ($func:ident) => {
         use $crate::providers::batch::test_dynamic_json_mode_batch_inference_request_with_provider;
         use $crate::providers::batch::test_dynamic_tool_use_batch_inference_request_with_provider;
-        use $crate::providers::batch::test_inference_params_batch_inference_request_with_provider;
+        use $crate::providers::batch::test_start_inference_params_batch_inference_request_with_provider;
         use $crate::providers::batch::test_json_mode_batch_inference_request_with_provider;
         use $crate::providers::batch::test_parallel_tool_use_batch_inference_request_with_provider;
-        use $crate::providers::batch::test_simple_batch_inference_request_with_provider;
+        use $crate::providers::batch::test_start_simple_batch_inference_request_with_provider;
         use $crate::providers::batch::test_tool_multi_turn_batch_inference_request_with_provider;
         use $crate::providers::batch::test_tool_use_batch_inference_request_with_provider;
+        use $crate::providers::batch::test_poll_existing_simple_batch_inference_request_with_provider;
+        use $crate::providers::batch::test_poll_completed_simple_batch_inference_request_with_provider;
+        use $crate::providers::batch::test_poll_existing_inference_params_batch_inference_request_with_provider;
+        use $crate::providers::batch::test_poll_completed_inference_params_batch_inference_request_with_provider;
 
         #[tokio::test]
-        async fn test_simple_batch_inference_request() {
+        async fn test_start_simple_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.simple_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
-                    test_simple_batch_inference_request_with_provider(provider).await;
+                    test_start_simple_batch_inference_request_with_provider(provider).await;
                 }
             }
         }
 
         #[tokio::test]
-        async fn test_inference_params_batch_inference_request() {
+        async fn test_poll_existing_simple_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.simple_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
-                    test_inference_params_batch_inference_request_with_provider(provider).await;
+                    test_poll_existing_simple_batch_inference_request_with_provider(provider).await;
+                }
+            }
+        }
+
+        #[tokio::test]
+        async fn test_poll_completed_simple_batch_inference_request() {
+            let all_providers = $func().await;
+            let providers = all_providers.simple_inference;
+            if all_providers.supports_batch_inference {
+                for provider in providers {
+                    test_poll_completed_simple_batch_inference_request_with_provider(provider).await;
+                }
+            }
+        }
+
+        #[tokio::test]
+        async fn test_start_inference_params_batch_inference_request() {
+            let all_providers = $func().await;
+            let providers = all_providers.simple_inference;
+            if all_providers.supports_batch_inference {
+                for provider in providers {
+                    test_start_inference_params_batch_inference_request_with_provider(provider).await;
+                }
+            }
+        }
+
+        #[tokio::test]
+        async fn test_poll_existing_inference_params_batch_inference_request() {
+            let all_providers = $func().await;
+            let providers = all_providers.simple_inference;
+            if all_providers.supports_batch_inference {
+                for provider in providers {
+                    test_poll_existing_inference_params_batch_inference_request_with_provider(provider).await;
+                }
+            }
+        }
+
+        #[tokio::test]
+        async fn test_poll_completed_inference_params_batch_inference_request() {
+            let all_providers = $func().await;
+            let providers = all_providers.simple_inference;
+            if all_providers.supports_batch_inference {
+                for provider in providers {
+                    test_poll_completed_inference_params_batch_inference_request_with_provider(provider).await;
                 }
             }
         }
@@ -131,35 +183,54 @@ macro_rules! generate_batch_inference_tests {
 ///     - do the same thing again and test polling by inference_id and then by batch_id
 ///
 
-async fn get_previous_batch_inference(
+// TODO: do a join so we can select by tag, use the tag to identify which batch to grab
+async fn get_latest_batch_inference(
     clickhouse: &ClickHouseConnectionInfo,
     function_name: &str,
     variant_name: &str,
     status: &str,
+    tags: Option<HashMap<String, String>>,
 ) -> Option<BatchRequestRow<'static>> {
     assert!(
         status == "pending" || status == "completed",
         "Status must be either 'pending' or 'completed'"
     );
+    let tags = tags.unwrap_or_default();
+    let tag_conditions = tags
+        .iter()
+        .map(|(k, v)| format!("tags['{}'] = '{}'", k, v))
+        .collect::<Vec<_>>()
+        .join(" AND ");
+
+    let tag_filter = if !tags.is_empty() {
+        format!("AND bmi.{}", tag_conditions)
+    } else {
+        String::new()
+    };
+
     let query = format!(
         r#"
-            SELECT
-                batch_id,
-                id,
-                batch_params,
-                model_name,
-                model_provider_name,
-                status,
-                function_name,
-                variant_name,
-                errors
-            FROM BatchRequest
-            WHERE function_name = '{}' AND variant_name = '{}' AND status = '{}'
-            ORDER BY timestamp DESC
+            SELECT DISTINCT
+                br.batch_id,
+                br.id,
+                br.batch_params,
+                br.model_name,
+                br.model_provider_name,
+                br.status,
+                br.function_name,
+                br.variant_name,
+                br.errors
+            FROM BatchRequest br
+            INNER JOIN BatchModelInference bmi ON br.batch_id = bmi.batch_id
+            WHERE br.function_name = '{}'
+                AND br.variant_name = '{}'
+                AND br.status = '{}'
+                {}
+            ORDER BY br.timestamp DESC
             LIMIT 1
             FORMAT JSONEachRow
         "#,
-        function_name, variant_name, status
+        function_name, variant_name, status, tag_filter
     );
     let response = clickhouse.run_query(query).await.unwrap();
     if response.is_empty() {
@@ -187,31 +258,34 @@ async fn get_all_batch_inferences(
     rows
 }
 
+struct InsertedFakeDataIds {
+    batch_id: Uuid,
+    inference_id: Uuid,
+}
+
 /// If there are already completed batch inferences for the given function and variant,
 /// this will create new pending batch inferences with new batch and inference IDs.
 /// This will test polling in a short-term way if possible (there is already data in the DB with valid params).
+///
+/// If `tags` is provided, it will only duplicate batch inferences that match the provided tags.
 async fn insert_fake_pending_batch_inference_data(
     clickhouse: &ClickHouseConnectionInfo,
     function_name: &str,
     variant_name: &str,
-) -> Result<(), String> {
+    tags: Option<HashMap<String, String>>,
+) -> Option<InsertedFakeDataIds> {
     let batch_request =
-        get_previous_batch_inference(clickhouse, function_name, variant_name, "completed").await;
+        get_latest_batch_inference(clickhouse, function_name, variant_name, "completed", tags)
+            .await;
     let mut batch_request = match batch_request {
         None => {
-            return Err(format!(
-                "No previous completed batch inference found for function_name: {}, variant_name: {}",
-                function_name, variant_name
-            ));
+            return None;
         }
         Some(batch_request) => batch_request,
     };
     let mut batch_inferences = get_all_batch_inferences(clickhouse, batch_request.batch_id).await;
     if batch_inferences.is_empty() {
-        return Err(format!(
-            "No batch inferences found for batch_id: {}",
-            batch_request.batch_id
-        ));
+        return None;
     }
     let new_batch_id = Uuid::now_v7();
     batch_request.batch_id = new_batch_id;
@@ -229,12 +303,14 @@ async fn insert_fake_pending_batch_inference_data(
         .await
         .unwrap();
 
-    Ok(())
+    Some(InsertedFakeDataIds {
+        batch_id: new_batch_id,
+        inference_id: batch_inferences[0].inference_id,
+    })
 }
 
-pub async fn test_simple_batch_inference_request_with_provider(provider: E2ETestProvider) {
+pub async fn test_start_simple_batch_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
-    let tag_value = Uuid::now_v7().to_string();
 
     let payload = json!({
         "function_name": "basic_test",
@@ -249,7 +325,7 @@ pub async fn test_simple_batch_inference_request_with_provider(provider: E2ETest
                     "content": "What is the capital city of Japan?"
                 }
             ]}],
-        "tags": [{"key": tag_value, "test_type": "batch", "variant_name": provider.variant_name}],
+        "tags": [{"foo": "bar", "test_type": "batch_simple", "variant_name": provider.variant_name}],
     });
 
     let response = Client::new()
@@ -369,8 +445,7 @@ pub async fn test_simple_batch_inference_request_with_provider(provider: E2ETest
     assert_eq!(output_schema, Some(&Value::Null));
 
     let tags = result.get("tags").unwrap().as_object().unwrap();
-    assert_eq!(tags.len(), 1);
-    assert_eq!(tags.get("key").unwrap().as_str().unwrap(), tag_value);
+    assert_eq!(tags.get("foo").unwrap().as_str().unwrap(), "bar");
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(!raw_request.is_empty());
@@ -405,7 +480,167 @@ pub async fn test_simple_batch_inference_request_with_provider(provider: E2ETest
     assert_eq!(errors.len(), 0);
 }
 
-pub async fn test_inference_params_batch_inference_request_with_provider(
+/// If there is a pending batch inference for the function, variant, and tags
+/// that are used for the simple batch inference tests,
+/// this will poll the batch inference and check that the response is correct.
+///
+/// This test polls by batch_id then by inference id.
+pub async fn test_poll_existing_simple_batch_inference_request_with_provider(
+    provider: E2ETestProvider,
+) {
+    let clickhouse = get_clickhouse().await;
+    let function_name = "basic_test";
+    let latest_pending_batch_inference = get_latest_batch_inference(
+        &clickhouse,
+        function_name,
+        &provider.variant_name,
+        "pending",
+        Some(HashMap::from([(
+            "test_type".to_string(),
+            "batch_simple".to_string(),
+        )])),
+    )
+    .await;
+    let batch_inference = match latest_pending_batch_inference {
+        None => return, // No pending batch inference found, so we can't test polling
+        Some(batch_inference) => batch_inference,
+    };
+    let batch_id = batch_inference.batch_id;
+    let response = Client::new()
+        .post(get_gateway_endpoint("/poll_batch_inference"))
+        .json(&json!({ "batch_id": batch_id }))
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("API response: {response_json:#?}");
+    match response_json.get("status").unwrap().as_str().unwrap() {
+        "pending" => return,
+        "completed" => (),
+        _ => panic!("Batch inference failed"),
+    }
+    let returned_batch_id = response_json.get("batch_id").unwrap().as_str().unwrap();
+    let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
+    assert_eq!(returned_batch_id, batch_id);
+
+    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    assert_eq!(inferences_json.len(), 1);
+    // Check the response from polling by batch_id
+    check_simple_inference_response(inferences_json[0].clone(), None, &provider).await;
+
+    // Check the response from polling by inference_id
+    let inference_id = inferences_json[0]
+        .get("inference_id")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    let response = Client::new()
+        .post(get_gateway_endpoint("/poll_batch_inference"))
+        .json(&json!({ "inference_id": inference_id }))
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("API response: {response_json:#?}");
+
+    let returned_batch_id = response_json.get("batch_id").unwrap().as_str().unwrap();
+    let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
+    assert_eq!(returned_batch_id, batch_id);
+
+    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    assert_eq!(inferences_json.len(), 1);
+    check_simple_inference_response(inferences_json[0].clone(), None, &provider).await;
+}
+
+/// If there is a completed batch inference for the function, variant, and tags
+/// that are used for the simple batch inference tests,
+/// this test will create fake pending data that uses the same API params but with new IDs
+/// and then poll the batch inference and check that the response is correct.
+///
+/// This way the gateway will actually poll the inference data from the inference provider.
+///
+/// This test polls by inference_id then by batch_id.
+pub async fn test_poll_completed_simple_batch_inference_request_with_provider(
+    provider: E2ETestProvider,
+) {
+    let clickhouse = get_clickhouse().await;
+    let function_name = "basic_test";
+    let latest_pending_batch_inference = insert_fake_pending_batch_inference_data(
+        &clickhouse,
+        function_name,
+        &provider.variant_name,
+        Some(HashMap::from([(
+            "test_type".to_string(),
+            "batch_simple".to_string(),
+        )])),
+    )
+    .await;
+    let ids = match latest_pending_batch_inference {
+        None => return, // No completed batch inference found, so we can't test polling
+        Some(batch_inference) => batch_inference,
+    };
+    sleep(Duration::from_millis(200)).await;
+
+    // Poll by inference_id
+    let response = Client::new()
+        .post(get_gateway_endpoint("/poll_batch_inference"))
+        .json(&json!({ "inference_id": ids.inference_id}))
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("API response: {response_json:#?}");
+    match response_json.get("status").unwrap().as_str().unwrap() {
+        "pending" => panic!("Batch inference is pending"),
+        "completed" => (),
+        _ => panic!("Batch inference failed"),
+    }
+    let returned_batch_id = response_json.get("batch_id").unwrap().as_str().unwrap();
+    let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
+    assert_eq!(returned_batch_id, ids.batch_id);
+
+    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    assert_eq!(inferences_json.len(), 1);
+
+    check_simple_inference_response(inferences_json[0].clone(), None, &provider).await;
+
+    // Poll by batch_id
+    let response = Client::new()
+        .post(get_gateway_endpoint("/poll_batch_inference"))
+        .json(&json!({ "batch_id": ids.batch_id }))
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("API response: {response_json:#?}");
+    match response_json.get("status").unwrap().as_str().unwrap() {
+        "pending" => panic!("Batch inference is pending"),
+        "completed" => (),
+        _ => panic!("Batch inference failed"),
+    }
+    let returned_batch_id = response_json.get("batch_id").unwrap().as_str().unwrap();
+    let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
+    assert_eq!(returned_batch_id, ids.batch_id);
+
+    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    assert_eq!(inferences_json.len(), 1);
+
+    check_simple_inference_response(inferences_json[0].clone(), None, &provider).await;
+}
+
+pub async fn test_start_inference_params_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
     let episode_id = Uuid::now_v7();
@@ -437,7 +672,10 @@ pub async fn test_inference_params_batch_inference_request_with_provider(
                 "seed": [7331],
                 "max_tokens": [80],
             }
-        }
+        },
+        "tags": [{
+            "test_type": "batch_inference_params"
+        }]
     });
 
     let response = Client::new()
@@ -609,6 +847,166 @@ pub async fn test_inference_params_batch_inference_request_with_provider(
 
     let errors = result.get("errors").unwrap().as_object().unwrap();
     assert_eq!(errors.len(), 0);
+}
+
+/// If there is a pending batch inference for the function, variant, and tags
+/// that are used for the inference params batch inference tests,
+/// this will poll the batch inference and check that the response is correct.
+///
+/// This test polls by batch_id then by inference id.
+pub async fn test_poll_existing_inference_params_batch_inference_request_with_provider(
+    provider: E2ETestProvider,
+) {
+    let clickhouse = get_clickhouse().await;
+    let function_name = "basic_test";
+    let latest_pending_batch_inference = get_latest_batch_inference(
+        &clickhouse,
+        function_name,
+        &provider.variant_name,
+        "pending",
+        Some(HashMap::from([(
+            "test_type".to_string(),
+            "batch_inference_params".to_string(),
+        )])),
+    )
+    .await;
+    let batch_inference = match latest_pending_batch_inference {
+        None => return, // No pending batch inference found, so we can't test polling
+        Some(batch_inference) => batch_inference,
+    };
+    let batch_id = batch_inference.batch_id;
+    let response = Client::new()
+        .post(get_gateway_endpoint("/poll_batch_inference"))
+        .json(&json!({ "batch_id": batch_id }))
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("API response: {response_json:#?}");
+    match response_json.get("status").unwrap().as_str().unwrap() {
+        "pending" => return,
+        "completed" => (),
+        _ => panic!("Batch inference failed"),
+    }
+    let returned_batch_id = response_json.get("batch_id").unwrap().as_str().unwrap();
+    let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
+    assert_eq!(returned_batch_id, batch_id);
+
+    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    assert_eq!(inferences_json.len(), 1);
+    // Check the response from polling by batch_id
+    check_simple_inference_response(inferences_json[0].clone(), None, &provider).await;
+
+    // Check the response from polling by inference_id
+    let inference_id = inferences_json[0]
+        .get("inference_id")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    let response = Client::new()
+        .post(get_gateway_endpoint("/poll_batch_inference"))
+        .json(&json!({ "inference_id": inference_id }))
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("API response: {response_json:#?}");
+
+    let returned_batch_id = response_json.get("batch_id").unwrap().as_str().unwrap();
+    let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
+    assert_eq!(returned_batch_id, batch_id);
+
+    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    assert_eq!(inferences_json.len(), 1);
+    check_simple_inference_response(inferences_json[0].clone(), None, &provider).await;
+}
+
+/// If there is a completed batch inference for the function, variant, and tags
+/// that are used for the inference params batch inference tests,
+/// this test will create fake pending data that uses the same API params but with new IDs
+/// and then poll the batch inference and check that the response is correct.
+///
+/// This way the gateway will actually poll the inference data from the inference provider.
+///
+/// This test polls by inference_id then by batch_id.
+pub async fn test_poll_completed_inference_params_batch_inference_request_with_provider(
+    provider: E2ETestProvider,
+) {
+    let clickhouse = get_clickhouse().await;
+    let function_name = "basic_test";
+    let latest_pending_batch_inference = insert_fake_pending_batch_inference_data(
+        &clickhouse,
+        function_name,
+        &provider.variant_name,
+        Some(HashMap::from([(
+            "test_type".to_string(),
+            "batch_inference_params".to_string(),
+        )])),
+    )
+    .await;
+    let ids = match latest_pending_batch_inference {
+        None => return, // No completed batch inference found, so we can't test polling
+        Some(batch_inference) => batch_inference,
+    };
+    sleep(Duration::from_millis(200)).await;
+
+    // Poll by inference_id
+    let response = Client::new()
+        .post(get_gateway_endpoint("/poll_batch_inference"))
+        .json(&json!({ "inference_id": ids.inference_id}))
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("API response: {response_json:#?}");
+    match response_json.get("status").unwrap().as_str().unwrap() {
+        "pending" => panic!("Batch inference is pending"),
+        "completed" => (),
+        _ => panic!("Batch inference failed"),
+    }
+    let returned_batch_id = response_json.get("batch_id").unwrap().as_str().unwrap();
+    let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
+    assert_eq!(returned_batch_id, ids.batch_id);
+
+    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    assert_eq!(inferences_json.len(), 1);
+
+    check_simple_inference_response(inferences_json[0].clone(), None, &provider).await;
+
+    // Poll by batch_id
+    let response = Client::new()
+        .post(get_gateway_endpoint("/poll_batch_inference"))
+        .json(&json!({ "batch_id": ids.batch_id }))
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("API response: {response_json:#?}");
+    match response_json.get("status").unwrap().as_str().unwrap() {
+        "pending" => panic!("Batch inference is pending"),
+        "completed" => (),
+        _ => panic!("Batch inference failed"),
+    }
+    let returned_batch_id = response_json.get("batch_id").unwrap().as_str().unwrap();
+    let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
+    assert_eq!(returned_batch_id, ids.batch_id);
+
+    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    assert_eq!(inferences_json.len(), 1);
+
+    check_inference_params_response(inferences_json[0].clone(), &provider, None).await;
 }
 
 /// Tests that the tool use works as expected in a batch inference request.

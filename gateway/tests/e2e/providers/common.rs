@@ -274,7 +274,6 @@ macro_rules! generate_provider_tests {
 
 pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
-    let tag_value = Uuid::now_v7().to_string();
 
     let payload = json!({
         "function_name": "basic_test",
@@ -290,7 +289,7 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
                 }
             ]},
         "stream": false,
-        "tags": {"key": tag_value},
+        "tags": {"foo": "bar"},
     });
 
     let response = Client::new()
@@ -306,12 +305,23 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
 
     println!("API response: {response_json:#?}");
 
+    check_simple_inference_response(response_json, Some(episode_id), &provider).await;
+}
+
+pub async fn check_simple_inference_response(
+    response_json: Value,
+    episode_id: Option<Uuid>,
+    provider: &E2ETestProvider,
+) {
+    let hardcoded_function_name = "basic_test";
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
     let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
     let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    if let Some(episode_id) = episode_id {
+        assert_eq!(episode_id_response, episode_id);
+    }
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -346,14 +356,16 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     assert_eq!(id, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
+    assert_eq!(function_name, hardcoded_function_name);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
+    if let Some(episode_id) = episode_id {
+        assert_eq!(retrieved_episode_id, episode_id);
+    }
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
@@ -378,8 +390,7 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     assert_eq!(clickhouse_content, content);
 
     let tags = result.get("tags").unwrap().as_object().unwrap();
-    assert_eq!(tags.len(), 1);
-    assert_eq!(tags.get("key").unwrap().as_str().unwrap(), tag_value);
+    assert_eq!(tags.get("foo").unwrap().as_str().unwrap(), "bar");
 
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
     assert!(tool_params.is_empty());
@@ -450,9 +461,10 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     assert_eq!(output.len(), 1);
 
     // Check the InferenceTag Table
-    let result = select_inference_tags_clickhouse(&clickhouse, "basic_test", "key", &tag_value)
-        .await
-        .unwrap();
+    let result =
+        select_inference_tags_clickhouse(&clickhouse, hardcoded_function_name, "foo", "bar")
+            .await
+            .unwrap();
     let id = result.get("inference_id").unwrap().as_str().unwrap();
     let id = Uuid::parse_str(id).unwrap();
     assert_eq!(id, inference_id);
@@ -745,12 +757,23 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
 
     println!("API response: {response_json:#?}");
 
+    check_inference_params_response(response_json, &provider, Some(episode_id)).await;
+}
+
+pub async fn check_inference_params_response(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+) {
+    let hardcoded_function_name = "basic_test";
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+        assert_eq!(episode_id_response, episode_id);
+    }
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -785,14 +808,16 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
     assert_eq!(id, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
+    assert_eq!(function_name, hardcoded_function_name);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
+    if let Some(episode_id) = episode_id {
+        let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+        let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+        assert_eq!(retrieved_episode_id, episode_id);
+    }
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
