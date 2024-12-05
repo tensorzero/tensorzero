@@ -3,7 +3,11 @@
 use std::collections::HashMap;
 
 use gateway::{
-    inference::types::{ContentBlock, RequestMessage, Role},
+    clickhouse::ClickHouseConnectionInfo,
+    inference::types::{
+        batch::{BatchModelInferenceRow, BatchRequestRow},
+        ContentBlock, RequestMessage, Role,
+    },
     tool::{ToolCall, ToolResult},
 };
 use reqwest::{Client, StatusCode};
@@ -119,6 +123,115 @@ macro_rules! generate_batch_inference_tests {
     };
 }
 
+/// tests we need:
+/// - launch a new batch inference (done)
+/// - if there is a pending batch inference already in the DB for this function and variant, poll it by batch_id
+/// - assuming there is a completed batch inference already in DB, duplicate it using `insert_fake_pending_batch_inference_data`
+///     - test polling by batch_id and then by inference_id
+///     - do the same thing again and test polling by inference_id and then by batch_id
+///
+
+async fn get_previous_batch_inference(
+    clickhouse: &ClickHouseConnectionInfo,
+    function_name: &str,
+    variant_name: &str,
+    status: &str,
+) -> Option<BatchRequestRow<'static>> {
+    assert!(
+        status == "pending" || status == "completed",
+        "Status must be either 'pending' or 'completed'"
+    );
+    let query = format!(
+        r#"
+            SELECT
+                batch_id,
+                id,
+                batch_params,
+                model_name,
+                model_provider_name,
+                status,
+                function_name,
+                variant_name,
+                errors
+            FROM BatchRequest
+            WHERE function_name = '{}' AND variant_name = '{}' AND status = '{}'
+            ORDER BY timestamp DESC
+            LIMIT 1
+            FORMAT JSONEachRow
+        "#,
+        function_name, variant_name, status
+    );
+    let response = clickhouse.run_query(query).await.unwrap();
+    if response.is_empty() {
+        return None;
+    }
+    let batch_request = serde_json::from_str::<BatchRequestRow>(&response).unwrap();
+    Some(batch_request)
+}
+
+async fn get_all_batch_inferences(
+    clickhouse: &ClickHouseConnectionInfo,
+    batch_id: Uuid,
+) -> Vec<BatchModelInferenceRow> {
+    let query = format!(
+        "SELECT * FROM BatchModelInference WHERE batch_id = '{}' FORMAT JSONEachRow",
+        batch_id,
+    );
+    let response = clickhouse.run_query(query).await.unwrap();
+    let rows = response
+        .lines()
+        .filter(|line| !line.is_empty())
+        .map(serde_json::from_str::<BatchModelInferenceRow>)
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    rows
+}
+
+/// If there are already completed batch inferences for the given function and variant,
+/// this will create new pending batch inferences with new batch and inference IDs.
+/// This will test polling in a short-term way if possible (there is already data in the DB with valid params).
+async fn insert_fake_pending_batch_inference_data(
+    clickhouse: &ClickHouseConnectionInfo,
+    function_name: &str,
+    variant_name: &str,
+) -> Result<(), String> {
+    let batch_request =
+        get_previous_batch_inference(clickhouse, function_name, variant_name, "completed").await;
+    let mut batch_request = match batch_request {
+        None => {
+            return Err(format!(
+                "No previous completed batch inference found for function_name: {}, variant_name: {}",
+                function_name, variant_name
+            ));
+        }
+        Some(batch_request) => batch_request,
+    };
+    let mut batch_inferences = get_all_batch_inferences(clickhouse, batch_request.batch_id).await;
+    if batch_inferences.is_empty() {
+        return Err(format!(
+            "No batch inferences found for batch_id: {}",
+            batch_request.batch_id
+        ));
+    }
+    let new_batch_id = Uuid::now_v7();
+    batch_request.batch_id = new_batch_id;
+    for inference in batch_inferences.iter_mut() {
+        inference.batch_id = new_batch_id;
+        inference.inference_id = Uuid::now_v7();
+    }
+
+    clickhouse
+        .write(&batch_inferences, "BatchModelInference")
+        .await
+        .unwrap();
+    clickhouse
+        .write(&[batch_request], "BatchRequest")
+        .await
+        .unwrap();
+
+    Ok(())
+}
+
 pub async fn test_simple_batch_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
@@ -136,7 +249,7 @@ pub async fn test_simple_batch_inference_request_with_provider(provider: E2ETest
                     "content": "What is the capital city of Japan?"
                 }
             ]}],
-        "tags": [{"key": tag_value}],
+        "tags": [{"key": tag_value, "test_type": "batch", "variant_name": provider.variant_name}],
     });
 
     let response = Client::new()
