@@ -390,8 +390,8 @@ impl PollInferenceResponse {
 
 #[derive(Debug, PartialEq, Serialize)]
 pub struct CompletedBatchInferenceResponse {
-    batch_id: Uuid,
-    responses: Vec<InferenceResponse>,
+    pub batch_id: Uuid,
+    pub responses: Vec<InferenceResponse>,
 }
 
 impl CompletedBatchInferenceResponse {
@@ -909,7 +909,7 @@ pub async fn get_batch_inferences(
     Ok(rows)
 }
 
-async fn get_completed_batch_inference_response(
+pub async fn get_completed_batch_inference_response(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     batch_request: &BatchRequestRow<'_>,
     query: &PollInferenceQuery,
@@ -919,21 +919,21 @@ async fn get_completed_batch_inference_response(
         FunctionConfig::Chat(_chat_function) => match query {
             PollInferenceQuery::Batch(batch_id) => {
                 let query = format!(
-                    "WITH (
+                    "WITH batch_inferences AS (
                         SELECT inference_id
                         FROM BatchModelInference
                         WHERE batch_id = '{}'
-                    ) as batch_inferences
+                    )
                     SELECT
                         ci.id as inference_id,
-                        ci.episode_id,
-                        ci.variant_name,
-                        ci.output,
-                        SUM(mi.input_tokens) as input_tokens,
-                        SUM(mi.output_tokens) as output_tokens
+                        ci.episode_id as episode_id,
+                        ci.variant_name as variant_name,
+                        ci.output as output,
+                        toUInt32(SUM(mi.input_tokens)) as input_tokens,
+                        toUInt32(SUM(mi.output_tokens)) as output_tokens
                     FROM ChatInference ci
                     LEFT JOIN ModelInference mi ON ci.id = mi.inference_id
-                    WHERE ci.id IN batch_inferences
+                    WHERE ci.id IN (SELECT inference_id FROM batch_inferences)
                     AND ci.function_name = '{}'
                     AND ci.variant_name = '{}'
                     GROUP BY ci.id, ci.episode_id, ci.variant_name, ci.output
@@ -959,26 +959,31 @@ async fn get_completed_batch_inference_response(
             }
             PollInferenceQuery::Inference(inference_id) => {
                 let query = format!(
-                        "WITH (
-                            SELECT episode_id
-                            FROM InferenceById
-                            WHERE id = '{}'
-                        ) as inf_lookup
-                        SELECT ci.id as inference_id, ci.episode_id, ci.variant_name, ci.output, \
-                        SUM(mi.input_tokens) as input_tokens, SUM(mi.output_tokens) as output_tokens \
-                        FROM ChatInference ci \
-                        LEFT JOIN ModelInference mi ON ci.id = mi.inference_id \
-                        WHERE ci.id = '{}' \
-                        AND ci.function_name = '{}' \
-                        AND ci.variant_name = '{}' \
-                        AND ci.episode_id = inf_lookup.episode_id \
-                        GROUP BY ci.id, ci.episode_id, ci.variant_name, ci.output \
-                        FORMAT JSONEachRow",
-                        inference_id,
-                        inference_id,
-                        batch_request.function_name,
-                        batch_request.variant_name
-                    );
+                    "WITH inf_lookup AS (
+                        SELECT episode_id
+                        FROM InferenceById
+                        WHERE id = '{}'
+                    )
+                    SELECT
+                        ci.id as inference_id,
+                        ci.episode_id as episode_id,
+                        ci.variant_name as variant_name,
+                        ci.output as output,
+                        toUInt32(SUM(mi.input_tokens)) as input_tokens,
+                        toUInt32(SUM(mi.output_tokens)) as output_tokens
+                    FROM ChatInference ci \
+                    LEFT JOIN ModelInference mi ON ci.id = mi.inference_id \
+                    JOIN inf_lookup ON ci.episode_id = inf_lookup.episode_id \
+                    WHERE ci.id = '{}' \
+                    AND ci.function_name = '{}' \
+                    AND ci.variant_name = '{}' \
+                    GROUP BY ci.id, ci.episode_id, ci.variant_name, ci.output \
+                    FORMAT JSONEachRow",
+                    inference_id,
+                    inference_id,
+                    batch_request.function_name,
+                    batch_request.variant_name
+                );
                 let response = clickhouse_connection_info.run_query(query).await?;
                 if response.is_empty() {
                     return Err(ErrorDetails::InferenceNotFound {
@@ -1002,21 +1007,21 @@ async fn get_completed_batch_inference_response(
         FunctionConfig::Json(_json_function) => match query {
             PollInferenceQuery::Batch(batch_id) => {
                 let query = format!(
-                    "WITH (
+                    "WITH batch_inferences AS (
                         SELECT inference_id
                         FROM BatchModelInference
                         WHERE batch_id = '{}'
-                    ) as batch_inferences
+                    )
                     SELECT
                         ji.id as inference_id,
-                        ji.episode_id,
-                        ji.variant_name,
-                        ji.output,
-                        SUM(mi.input_tokens) as input_tokens,
-                        SUM(mi.output_tokens) as output_tokens
+                        ji.episode_id as episode_id,
+                        ji.variant_name as variant_name,
+                        ji.output as output,
+                        toUInt32(SUM(mi.input_tokens)) as input_tokens,
+                        toUInt32(SUM(mi.output_tokens)) as output_tokens
                     FROM JsonInference ji
                     LEFT JOIN ModelInference mi ON ji.id = mi.inference_id
-                    WHERE ji.id IN batch_inferences
+                    WHERE ji.id IN (SELECT inference_id FROM batch_inferences)
                     AND ji.function_name = '{}'
                     AND ji.variant_name = '{}'
                     GROUP BY ji.id, ji.episode_id, ji.variant_name, ji.output
@@ -1042,19 +1047,24 @@ async fn get_completed_batch_inference_response(
             }
             PollInferenceQuery::Inference(inference_id) => {
                 let query = format!(
-                    "WITH (
+                    "WITH inf_lookup AS (
                         SELECT episode_id
                         FROM InferenceById
                         WHERE id = '{}'
-                    ) as inf_lookup
-                    SELECT ji.id as inference_id, ji.episode_id, ji.variant_name, ji.output, \
-                    SUM(mi.input_tokens) as input_tokens, SUM(mi.output_tokens) as output_tokens \
+                    )
+                    SELECT
+                        ji.id as inference_id,
+                        ji.episode_id as episode_id,
+                        ji.variant_name as variant_name,
+                        ji.output as output,
+                        toUInt32(SUM(mi.input_tokens)) as input_tokens,
+                        toUInt32(SUM(mi.output_tokens)) as output_tokens
                     FROM JsonInference ji \
                     LEFT JOIN ModelInference mi ON ji.id = mi.inference_id \
+                    JOIN inf_lookup ON ji.episode_id = inf_lookup.episode_id \
                     WHERE ji.id = '{}' \
                     AND ji.function_name = '{}' \
                     AND ji.variant_name = '{}' \
-                    AND ji.episode_id = inf_lookup.episode_id \
                     GROUP BY ji.id, ji.episode_id, ji.variant_name, ji.output \
                     FORMAT JSONEachRow",
                     inference_id,
