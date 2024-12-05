@@ -524,14 +524,14 @@ async fn write_inference<'a>(
 
 /// InferenceResponse and InferenceResultChunk determine what gets serialized and sent to the client
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(untagged, rename_all = "snake_case")]
 pub enum InferenceResponse {
     Chat(ChatInferenceResponse),
     Json(JsonInferenceResponse),
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ChatInferenceResponse {
     pub inference_id: Uuid,
     pub episode_id: Uuid,
@@ -540,7 +540,7 @@ pub struct ChatInferenceResponse {
     pub usage: Usage,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct JsonInferenceResponse {
     pub inference_id: Uuid,
     pub episode_id: Uuid,

@@ -366,9 +366,9 @@ pub async fn poll_batch_inference_handler(
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case", tag = "status")]
-enum PollInferenceResponse {
+pub enum PollInferenceResponse {
     Pending,
     Completed(CompletedBatchInferenceResponse),
     Failed,
@@ -388,8 +388,8 @@ impl PollInferenceResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
-struct CompletedBatchInferenceResponse {
+#[derive(Debug, PartialEq, Serialize)]
+pub struct CompletedBatchInferenceResponse {
     batch_id: Uuid,
     responses: Vec<InferenceResponse>,
 }
@@ -662,7 +662,14 @@ pub async fn write_batch_request_row(
         .await
 }
 
-async fn write_poll_batch_inference<'a>(
+/// Writes the status of a batch inference request to the database
+/// This is a light operation unless the batch is freshly completed, in which case it writes
+/// ChatInferences / JsonInferences and ModelInferences as well as updating the
+/// BatchRequest table with a new row.
+///
+/// Note: only call this function if the batch was Pending prior to being polled.
+/// We don't need to poll if the batch is failed or completed because the status will not change.
+pub async fn write_poll_batch_inference<'a>(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     batch_request: &BatchRequestRow<'a>,
     response: PollBatchInferenceResponse,
@@ -726,16 +733,24 @@ async fn write_batch_request_status_update(
     Ok(())
 }
 
+/// This function writes ChatInferences / JsonInferences and ModelInferences to the database
+/// and updates the BatchRequest table with a new row.
+///
+/// It takes a `ProviderBatchInferenceResponse` which is the response from the model provider
+/// and converts it into a `Vec<InferenceResponse>` which is what gets written to the database.
+/// As part of this, it also constructs the `ModelInferenceResponseWithMetadata` struct which is
+/// used to serialize the `ModelInference` table.
+///
 /// TODO(Viraj): this function has a large number of Clones that are not necessary.
 /// To avoid these, the types that are calling for clones must be changed to Cows and then the code in the non-batch inference
 /// handler must be adjusted to deal with it and also the lifetimes associated there.
-async fn write_completed_batch_inference<'a>(
+pub async fn write_completed_batch_inference<'a>(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     batch_request: &'a BatchRequestRow<'a>,
     mut response: ProviderBatchInferenceResponse,
     config: &'a Config<'a>,
 ) -> Result<Vec<InferenceResponse>, Error> {
-    let inference_ids: Vec<String> = response.elements.keys().map(|id| id.to_string()).collect();
+    let inference_ids: Vec<Uuid> = response.elements.keys().copied().collect();
     let batch_model_inferences = get_batch_inferences(
         clickhouse_connection_info,
         batch_request.batch_id,
@@ -870,10 +885,10 @@ async fn write_completed_batch_inference<'a>(
     Ok(responses)
 }
 
-async fn get_batch_inferences(
+pub async fn get_batch_inferences(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     batch_id: Uuid,
-    inference_ids: &[String],
+    inference_ids: &[Uuid],
 ) -> Result<Vec<BatchModelInferenceRow<'static>>, Error> {
     let query = format!(
         "SELECT * FROM BatchModelInference WHERE batch_id = '{}' AND inference_id IN ({}) FORMAT JSONEachRow",
@@ -884,8 +899,13 @@ async fn get_batch_inferences(
     let rows = response
         .lines()
         .filter(|line| !line.is_empty())
-        .map(|line| BatchModelInferenceRow::from_string(line.to_string()))
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(serde_json::from_str::<BatchModelInferenceRow>)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to deserialize batch model inference row: {}", e),
+            })
+        })?;
     Ok(rows)
 }
 
