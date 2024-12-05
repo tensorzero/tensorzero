@@ -142,12 +142,13 @@ pub(crate) async fn select_inference_tags_clickhouse(
     function_name: &str,
     tag_key: &str,
     tag_value: &str,
+    inference_id: Uuid,
 ) -> Option<Value> {
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
-        "SELECT * FROM InferenceTag WHERE function_name = '{}' AND key = '{}' AND value = '{}' FORMAT JSONEachRow",
-        function_name, tag_key, tag_value
+        "SELECT * FROM InferenceTag WHERE function_name = '{}' AND key = '{}' AND value = '{}' AND inference_id = '{}' FORMAT JSONEachRow",
+        function_name, tag_key, tag_value, inference_id
     );
 
     let text = clickhouse_connection_info.run_query(query).await.unwrap();

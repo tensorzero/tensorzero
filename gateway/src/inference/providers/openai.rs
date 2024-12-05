@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::time::Duration;
 use tokio::time::Instant;
+use tracing::instrument;
 use url::Url;
 use uuid::Uuid;
 
@@ -302,6 +303,7 @@ impl InferenceProvider for OpenAIProvider {
         })
     }
 
+    #[instrument(skip_all, fields(batch_request = ?batch_request))]
     async fn poll_batch_inference<'a>(
         &'a self,
         batch_request: &'a BatchRequestRow<'a>,
@@ -310,11 +312,14 @@ impl InferenceProvider for OpenAIProvider {
     ) -> Result<PollBatchInferenceResponse, Error> {
         let batch_params = OpenAIBatchParams::from_ref(&batch_request.batch_params)?;
         let mut request_url = get_batch_url(self.api_base.as_ref())?;
-        request_url = request_url.join(&batch_params.batch_id).map_err(|e| {
-            Error::new(ErrorDetails::Inference {
-                message: format!("Error parsing batch URL: {e}"),
-            })
-        })?;
+        request_url
+            .path_segments_mut()
+            .map_err(|_| {
+                Error::new(ErrorDetails::Inference {
+                    message: "Failed to get mutable path segments".to_string(),
+                })
+            })?
+            .push(&batch_params.batch_id);
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let mut request_builder = http_client
             .get(request_url)
@@ -901,25 +906,34 @@ struct OpenAIBatchParams<'a> {
 }
 
 impl<'a> OpenAIBatchParams<'a> {
+    #[instrument(name = "OpenAIBatchParams::from_ref", skip_all, fields(%value))]
     fn from_ref(value: &'a Value) -> Result<Self, Error> {
         let file_id = value
             .get("file_id")
-            .ok_or(Error::new(ErrorDetails::InvalidBatchParams {
-                message: "Missing file_id in batch params".to_string(),
-            }))?
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::InvalidBatchParams {
+                    message: "Missing file_id in batch params".to_string(),
+                })
+            })?
             .as_str()
-            .ok_or(Error::new(ErrorDetails::InvalidBatchParams {
-                message: "file_id must be a string".to_string(),
-            }))?;
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::InvalidBatchParams {
+                    message: "file_id must be a string".to_string(),
+                })
+            })?;
         let batch_id = value
             .get("batch_id")
-            .ok_or(Error::new(ErrorDetails::InvalidBatchParams {
-                message: "Missing batch_id in batch params".to_string(),
-            }))?
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::InvalidBatchParams {
+                    message: "Missing batch_id in batch params".to_string(),
+                })
+            })?
             .as_str()
-            .ok_or(Error::new(ErrorDetails::InvalidBatchParams {
-                message: "batch_id must be a string".to_string(),
-            }))?;
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::InvalidBatchParams {
+                    message: "batch_id must be a string".to_string(),
+                })
+            })?;
         Ok(Self {
             file_id: Cow::Borrowed(file_id),
             batch_id: Cow::Borrowed(batch_id),

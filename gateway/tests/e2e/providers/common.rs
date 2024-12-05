@@ -461,10 +461,15 @@ pub async fn check_simple_inference_response(
     assert_eq!(output.len(), 1);
 
     // Check the InferenceTag Table
-    let result =
-        select_inference_tags_clickhouse(&clickhouse, hardcoded_function_name, "foo", "bar")
-            .await
-            .unwrap();
+    let result = select_inference_tags_clickhouse(
+        &clickhouse,
+        hardcoded_function_name,
+        "foo",
+        "bar",
+        inference_id,
+    )
+    .await
+    .unwrap();
     let id = result.get("inference_id").unwrap().as_str().unwrap();
     let id = Uuid::parse_str(id).unwrap();
     assert_eq!(id, inference_id);
@@ -702,9 +707,15 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 1);
     // Check the InferenceTag Table
-    let result = select_inference_tags_clickhouse(&clickhouse, "basic_test", "key", &tag_value)
-        .await
-        .unwrap();
+    let result = select_inference_tags_clickhouse(
+        &clickhouse,
+        "basic_test",
+        "key",
+        &tag_value,
+        inference_id,
+    )
+    .await
+    .unwrap();
     let id = result.get("inference_id").unwrap().as_str().unwrap();
     let id = Uuid::parse_str(id).unwrap();
     assert_eq!(id, inference_id);
@@ -1206,6 +1217,7 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
             ]},
         "stream": false,
         "variant_name": provider.variant_name,
+        "tags": {"test_type": "auto_used"}
     });
 
     let response = Client::new()
@@ -1220,13 +1232,27 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
     let response_json = response.json::<Value>().await.unwrap();
 
     println!("API response: {response_json:#?}");
+    check_tool_use_tool_choice_auto_used_inference_response(
+        response_json,
+        &provider,
+        Some(episode_id),
+    )
+    .await;
+}
 
+pub async fn check_tool_use_tool_choice_auto_used_inference_response(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+        assert_eq!(episode_id_response, episode_id);
+    }
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -1296,9 +1322,11 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
+        assert_eq!(episode_id_result, episode_id);
+    }
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
@@ -1810,12 +1838,27 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
 
     println!("API response: {response_json:#?}");
 
+    check_tool_use_tool_choice_auto_unused_inference_response(
+        response_json,
+        &provider,
+        Some(episode_id),
+    )
+    .await;
+}
+
+pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+        assert_eq!(episode_id_response, episode_id);
+    }
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -1857,9 +1900,11 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
+        assert_eq!(episode_id_result, episode_id);
+    }
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
@@ -2316,13 +2361,21 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     let response_json = response.json::<Value>().await.unwrap();
 
     println!("API response: {response_json:#?}");
+}
 
+pub async fn check_tool_use_tool_choice_required_inference_response(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+        assert_eq!(episode_id_response, episode_id);
+    }
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -2394,9 +2447,11 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
+        assert_eq!(episode_id_result, episode_id);
+    }
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
@@ -2907,12 +2962,23 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
 
     println!("API response: {response_json:#?}");
 
+    check_tool_use_tool_choice_none_inference_response(response_json, &provider, Some(episode_id))
+        .await;
+}
+
+pub async fn check_tool_use_tool_choice_none_inference_response(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+        assert_eq!(episode_id_response, episode_id);
+    }
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -2953,9 +3019,11 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
+        assert_eq!(episode_id_result, episode_id);
+    }
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
@@ -3440,13 +3508,27 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     let response_json = response.json::<Value>().await.unwrap();
 
     println!("API response: {response_json:#?}");
+    check_tool_use_tool_choice_specific_inference_response(
+        response_json,
+        &provider,
+        Some(episode_id),
+    )
+    .await;
+}
 
+pub async fn check_tool_use_tool_choice_specific_inference_response(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+        assert_eq!(episode_id_response, episode_id);
+    }
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -3510,9 +3592,11 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
+        assert_eq!(episode_id_result, episode_id);
+    }
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
@@ -4117,13 +4201,27 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     let response_json = response.json::<Value>().await.unwrap();
 
     println!("API response: {response_json:#?}");
+    check_tool_use_tool_choice_allowed_tools_inference_response(
+        response_json,
+        &provider,
+        Some(episode_id),
+    )
+    .await;
+}
 
+pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+        assert_eq!(episode_id_response, episode_id);
+    }
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -4187,9 +4285,11 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
+        assert_eq!(episode_id_result, episode_id);
+    }
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
@@ -4685,13 +4785,22 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
     let response_json = response.json::<Value>().await.unwrap();
 
     println!("API response: {response_json:#?}");
+    check_tool_use_multi_turn_inference_response(response_json, &provider, Some(episode_id)).await;
+}
 
+pub async fn check_tool_use_multi_turn_inference_response(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+        assert_eq!(episode_id_response, episode_id);
+    }
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -4731,9 +4840,11 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
+    if let Some(episode_id) = episode_id {
+        let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+        let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+        assert_eq!(retrieved_episode_id, episode_id);
+    }
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
@@ -5243,13 +5354,23 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
     let response_json = response.json::<Value>().await.unwrap();
 
     println!("API response: {response_json:#?}");
+    check_dynamic_tool_use_inference_response(response_json, &provider, Some(episode_id)).await;
+}
 
+pub async fn check_dynamic_tool_use_inference_response(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+) {
+    let hardcoded_function_name = "basic_test";
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+        assert_eq!(episode_id_response, episode_id);
+    }
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -5314,14 +5435,16 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
+    assert_eq!(function_name, hardcoded_function_name);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
+        assert_eq!(episode_id_result, episode_id);
+    }
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
@@ -5824,13 +5947,23 @@ pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2
     let response_json = response.json::<Value>().await.unwrap();
 
     println!("API response: {response_json:#?}");
+    check_parallel_tool_use_inference_response(response_json, &provider, Some(episode_id)).await;
+}
 
+pub async fn check_parallel_tool_use_inference_response(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+) {
+    let hardcoded_function_name = "weather_helper_parallel";
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+        assert_eq!(episode_id_response, episode_id);
+    }
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -5926,14 +6059,16 @@ pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
+    assert_eq!(function_name, hardcoded_function_name);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
+        assert_eq!(episode_id_result, episode_id);
+    }
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
@@ -6531,12 +6666,22 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
 
     println!("API response: {response_json:#?}");
 
+    check_json_mode_inference_response(response_json, &provider, Some(episode_id)).await;
+}
+
+pub async fn check_json_mode_inference_response(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+        assert_eq!(episode_id_response, episode_id);
+    }
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -6582,9 +6727,11 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
+    if let Some(episode_id) = episode_id {
+        let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+        let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+        assert_eq!(retrieved_episode_id, episode_id);
+    }
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
@@ -6751,12 +6898,29 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
 
     println!("API response: {response_json:#?}");
 
+    check_dynamic_json_mode_inference_response(
+        response_json,
+        &provider,
+        Some(episode_id),
+        Some(output_schema),
+    )
+    .await;
+}
+
+pub async fn check_dynamic_json_mode_inference_response(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+    output_schema: Option<Value>,
+) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+        assert_eq!(episode_id_response, episode_id);
+    }
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -6802,22 +6966,27 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
+    if let Some(episode_id) = episode_id {
+        let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+        let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+        assert_eq!(retrieved_episode_id, episode_id);
+    }
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    let correct_input = json!({
-        "system": {"assistant_name": "Dr. Mehta", "schema": serialized_output_schema},
-        "messages": [
-            {
-                "role": "user",
-                "content": [{"type": "text", "value": {"country": "Japan"}}]
-            }
-        ]
-    });
-    assert_eq!(input, correct_input);
+    if let Some(output_schema) = &output_schema {
+        let serialized_output_schema = serde_json::to_string(&output_schema).unwrap();
+        let input: Value =
+            serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        let correct_input = json!({
+            "system": {"assistant_name": "Dr. Mehta", "schema": serialized_output_schema},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "value": {"country": "Japan"}}]
+                }
+            ]
+        });
+        assert_eq!(input, correct_input);
+    }
 
     let output_clickhouse = result.get("output").unwrap().as_str().unwrap();
     let output_clickhouse: Value = serde_json::from_str(output_clickhouse).unwrap();
@@ -6841,9 +7010,11 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
 
-    let retrieved_output_schema = result.get("output_schema").unwrap().as_str().unwrap();
-    let retrieved_output_schema: Value = serde_json::from_str(retrieved_output_schema).unwrap();
-    assert_eq!(retrieved_output_schema, output_schema);
+    if let Some(output_schema) = &output_schema {
+        let retrieved_output_schema = result.get("output_schema").unwrap().as_str().unwrap();
+        let retrieved_output_schema: Value = serde_json::from_str(retrieved_output_schema).unwrap();
+        assert_eq!(retrieved_output_schema, *output_schema);
+    }
 
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
