@@ -307,11 +307,19 @@ pub struct PollBatchInferenceParams {
     credentials: InferenceCredentials,
 }
 
-enum PollInferenceQuery {
+pub enum PollInferenceQuery {
     Batch(Uuid),
     Inference(Uuid),
 }
 
+/// Polls a batch inference request that was made using the `/start_batch_inference` endpoint
+/// Semantics: if the batch is pending, it will actually poll the model provider
+/// If the batch is failed, it will return a failed response immediately
+/// If the batch is completed, it will return the appropriate response immediately from ClickHouse
+///
+/// We expect exactly one of `batch_id` or `inference_id` to be provided
+/// If the `inference_id` is provided, we'll still poll and insert the entire batch if it is pending.
+/// But, we will only return a single inference that matches the `inference_id`.
 #[instrument(name = "poll_batch_inference", skip_all, fields(query))]
 #[debug_handler(state = AppStateData)]
 pub async fn poll_batch_inference_handler(
@@ -367,6 +375,9 @@ enum PollInferenceResponse {
 }
 
 impl PollInferenceResponse {
+    /// Filters the response by the provided query
+    /// If the query is by an inference ID, it will return a single inference response
+    /// Otherwise, it will return the entire batch
     fn filter_by_query(self, query: PollInferenceQuery) -> PollInferenceResponse {
         match self {
             PollInferenceResponse::Completed(response) => {
@@ -384,6 +395,9 @@ struct CompletedBatchInferenceResponse {
 }
 
 impl CompletedBatchInferenceResponse {
+    /// Filters the response by the provided query
+    /// If the query is by an inference ID, it will return a single inference response
+    /// Otherwise, it will return the entire batch
     fn filter_by_query(self, query: PollInferenceQuery) -> CompletedBatchInferenceResponse {
         match query {
             PollInferenceQuery::Batch(_) => self,
@@ -402,6 +416,8 @@ impl CompletedBatchInferenceResponse {
     }
 }
 
+/// Handles the conversion from the `PollBatchInferenceParams` to a `PollInferenceQuery`
+/// This should error if both `batch_id` and `inference_id` are provided or if neither are provided
 impl TryFrom<&'_ PollBatchInferenceParams> for PollInferenceQuery {
     type Error = Error;
     fn try_from(value: &'_ PollBatchInferenceParams) -> Result<Self, Self::Error> {
@@ -416,7 +432,7 @@ impl TryFrom<&'_ PollBatchInferenceParams> for PollInferenceQuery {
     }
 }
 
-async fn get_batch_request(
+pub async fn get_batch_request(
     clickhouse: &ClickHouseConnectionInfo,
     query: &PollInferenceQuery,
 ) -> Result<BatchRequestRow<'static>, Error> {
@@ -426,13 +442,16 @@ async fn get_batch_request(
                 r#"
                     SELECT
                         batch_id,
+                        id,
                         batch_params,
                         model_name,
                         model_provider_name,
                         status,
+                        function_name,
+                        variant_name,
                         errors
                     FROM BatchRequest
-                    WHERE batch_id = {}
+                    WHERE batch_id = '{}'
                     ORDER BY timestamp DESC
                     LIMIT 1
                     FORMAT JSONEachRow
@@ -448,10 +467,18 @@ async fn get_batch_request(
         PollInferenceQuery::Inference(inference_id) => {
             let query = format!(
                 r#"
-                    SELECT br.*
+                    SELECT br.batch_id as batch_id,
+                        br.id as id,
+                        br.batch_params as batch_params,
+                        br.model_name as model_name,
+                        br.model_provider_name as model_provider_name,
+                        br.status as status,
+                        br.function_name as function_name,
+                        br.variant_name as variant_name,
+                        br.errors as errors
                     FROM BatchIdByInferenceId bi
                     JOIN BatchRequest br ON bi.batch_id = br.batch_id
-                    WHERE bi.inference_id = {}
+                    WHERE bi.inference_id = '{}'
                     ORDER BY br.timestamp DESC
                     LIMIT 1
                     FORMAT JSONEachRow
@@ -465,7 +492,6 @@ async fn get_batch_request(
             response
         }
     };
-
     let batch_request = serde_json::from_str::<BatchRequestRow>(&response).map_err(|e| {
         Error::new(ErrorDetails::ClickHouseDeserialization {
             message: e.to_string(),
@@ -598,21 +624,42 @@ async fn write_start_batch_inference<'a>(
         .write(&rows, "BatchModelInference")
         .await?;
 
+    write_batch_request_row(
+        clickhouse_connection_info,
+        result.batch_id,
+        &result.batch_params,
+        metadata.function_name,
+        metadata.variant_name,
+        result.model_name,
+        result.model_provider_name,
+    )
+    .await?;
+
+    Ok((result.batch_id, result.inference_ids))
+}
+
+pub async fn write_batch_request_row(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    batch_id: Uuid,
+    batch_params: &Value,
+    function_name: &str,
+    variant_name: &str,
+    model_name: &str,
+    model_provider_name: &str,
+) -> Result<(), Error> {
     let batch_request_insert = BatchRequestRow::new(UnparsedBatchRequestRow {
-        batch_id: result.batch_id,
-        batch_params: &result.batch_params,
-        function_name: metadata.function_name,
-        variant_name: metadata.variant_name,
-        model_name: result.model_name,
-        model_provider_name: result.model_provider_name,
+        batch_id,
+        batch_params,
+        function_name,
+        variant_name,
+        model_name,
+        model_provider_name,
         status: BatchStatus::Pending,
         errors: None,
     });
     clickhouse_connection_info
         .write(&[batch_request_insert], "BatchRequest")
-        .await?;
-
-    Ok((result.batch_id, result.inference_ids))
+        .await
 }
 
 async fn write_poll_batch_inference<'a>(
