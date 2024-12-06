@@ -15,7 +15,6 @@ use super::check_table_exists;
 /// a materialized view that is indexed by inference ID and maps to the function_name that was used.
 /// Since we also would like to be able to get the original row from the inference ID we will keep the function_name,
 /// variant_name and episode_id in the materialized view so that we can use them to query the original table.
-
 pub struct Migration0001<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
     pub clean_start: bool,

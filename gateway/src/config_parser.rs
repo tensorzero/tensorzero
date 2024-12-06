@@ -290,7 +290,6 @@ struct UninitializedConfig {
 
 impl UninitializedConfig {
     /// Load and validate the TensorZero config file
-
     /// Use a path provided as a CLI argument (`./gateway path/to/tensorzero.toml`), or default to
     /// `tensorzero.toml` in the current directory if no path is provided.
     fn get_config_path() -> String {

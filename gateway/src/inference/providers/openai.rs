@@ -656,7 +656,7 @@ pub(super) struct SpecificToolFunction<'a> {
     pub(super) name: &'a str,
 }
 
-impl<'a> Default for OpenAIToolChoice<'a> {
+impl Default for OpenAIToolChoice<'_> {
     fn default() -> Self {
         OpenAIToolChoice::String(OpenAIToolChoiceString::None)
     }

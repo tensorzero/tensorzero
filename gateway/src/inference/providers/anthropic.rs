@@ -186,7 +186,6 @@ impl InferenceProvider for AnthropicProvider {
 /// Maps events from Anthropic into the TensorZero format
 /// Modified from the example [here](https://github.com/64bit/async-openai/blob/5c9c817b095e3bacb2b6c9804864cdf8b15c795e/async-openai/src/client.rs#L433)
 /// At a high level, this function is handling low-level EventSource details and mapping the objects returned by Anthropic into our `InferenceResultChunk` type
-
 fn stream_anthropic(
     mut event_source: EventSource,
     start_time: Instant,
