@@ -14,7 +14,6 @@ use super::check_table_exists;
 /// - ChatInference
 /// - JsonInference
 /// - ModelInference
-
 pub struct Migration0000<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }

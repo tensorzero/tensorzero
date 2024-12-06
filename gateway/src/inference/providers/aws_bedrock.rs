@@ -568,7 +568,7 @@ struct ConverseOutputWithMetadata<'a> {
     json_mode: &'a ModelInferenceRequestJsonMode,
 }
 
-impl<'a> TryFrom<ConverseOutputWithMetadata<'a>> for ProviderInferenceResponse {
+impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
     type Error = Error;
 
     fn try_from(value: ConverseOutputWithMetadata) -> Result<Self, Self::Error> {

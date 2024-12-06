@@ -75,7 +75,7 @@ impl Variant for DiclConfig {
         inference_config: &'request InferenceConfig<'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
-    ) -> Result<InferenceResult, Error> {
+    ) -> Result<InferenceResult<'a>, Error> {
         // So this can be mutably borrowed by the prepare_request function
         let mut inference_params = inference_params;
 
