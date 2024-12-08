@@ -20,10 +20,12 @@ use crate::{jsonschema_util::DynamicJSONSchema, tool::ToolCallConfigDatabaseInse
 
 pub mod batch;
 
-/// Data flow in TensorZero
-///
-/// The flow of an inference request through TensorZero can be viewed as a series of transformations between types.
-/// Most of them are defined below.
+/*
+ * Data flow in TensorZero
+ *
+ * The flow of an inference request through TensorZero can be viewed as a series of transformations between types.
+ * Most of them are defined below.
+ */
 
 /// A request is made that contains an Input
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -208,10 +210,11 @@ pub struct ModelInferenceResponseWithMetadata<'a> {
     pub model_name: &'a str,
 }
 
-/// As a Variant might make use of multiple model inferences, we then combine
-/// one or more ModelInferenceResults into a single InferenceResult (but we keep the original ModelInferenceResults around for storage).
-/// In the non-streaming case, this InferenceResult is converted into an InferenceResponse and sent to the client.
-/// See below for streaming case.
+/* As a Variant might make use of multiple model inferences, we then combine
+ * one or more ModelInferenceResults into a single InferenceResult (but we keep the original ModelInferenceResults around for storage).
+ * In the non-streaming case, this InferenceResult is converted into an InferenceResponse and sent to the client.
+ * See below for streaming case.
+ */
 
 /// This type contains the result of running a variant of a function
 #[derive(Clone, Debug, Serialize)]

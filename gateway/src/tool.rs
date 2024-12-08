@@ -8,14 +8,15 @@ use crate::{
     jsonschema_util::{DynamicJSONSchema, JSONSchemaFromPath},
 };
 
-/// A Tool is a function that can be called by an LLM
-/// We represent them in various ways depending on how they are configured by the user.
-/// The primary difficulty is that tools require an input signature that we represent as a JSONSchema.
-/// JSONSchema compilation takes time so we want to do it at startup if the tool is in the config.
-/// We also don't want to clone compiled JSON schemas.
-/// If the tool is dynamic we want to run compilation while LLM inference is happening so that we can validate the tool call arguments.
-///
-/// If we are doing an implicit tool call for JSON schema enforcement, we can use the compiled schema from the output signature.
+/* A Tool is a function that can be called by an LLM
+ * We represent them in various ways depending on how they are configured by the user.
+ * The primary difficulty is that tools require an input signature that we represent as a JSONSchema.
+ * JSONSchema compilation takes time so we want to do it at startup if the tool is in the config.
+ * We also don't want to clone compiled JSON schemas.
+ * If the tool is dynamic we want to run compilation while LLM inference is happening so that we can validate the tool call arguments.
+ *
+ * If we are doing an implicit tool call for JSON schema enforcement, we can use the compiled schema from the output signature.
+ */
 
 /// A Tool object describes how a tool can be dynamically configured by the user.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
