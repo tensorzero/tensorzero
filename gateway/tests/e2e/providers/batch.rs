@@ -16,16 +16,19 @@ use std::collections::HashSet;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
-use crate::providers::common::{
-    check_dynamic_json_mode_inference_response, check_dynamic_tool_use_inference_response,
-    check_json_mode_inference_response, check_parallel_tool_use_inference_response,
-    check_tool_use_multi_turn_inference_response,
-    check_tool_use_tool_choice_allowed_tools_inference_response,
-    check_tool_use_tool_choice_auto_unused_inference_response,
-    check_tool_use_tool_choice_auto_used_inference_response,
-    check_tool_use_tool_choice_none_inference_response,
-    check_tool_use_tool_choice_required_inference_response,
-    check_tool_use_tool_choice_specific_inference_response,
+use crate::{
+    common::select_batch_model_inferences_clickhouse,
+    providers::common::{
+        check_dynamic_json_mode_inference_response, check_dynamic_tool_use_inference_response,
+        check_json_mode_inference_response, check_parallel_tool_use_inference_response,
+        check_tool_use_multi_turn_inference_response,
+        check_tool_use_tool_choice_allowed_tools_inference_response,
+        check_tool_use_tool_choice_auto_unused_inference_response,
+        check_tool_use_tool_choice_auto_used_inference_response,
+        check_tool_use_tool_choice_none_inference_response,
+        check_tool_use_tool_choice_required_inference_response,
+        check_tool_use_tool_choice_specific_inference_response,
+    },
 };
 use crate::{
     common::{
@@ -65,6 +68,7 @@ macro_rules! generate_batch_inference_tests {
         use $crate::providers::batch::test_poll_existing_dynamic_json_mode_batch_inference_request_with_provider;
         use $crate::providers::batch::test_poll_completed_dynamic_json_mode_batch_inference_request_with_provider;
 
+        #[cfg(feature = "batch_tests")]
         #[tokio::test]
         async fn test_start_simple_batch_inference_request() {
             let all_providers = $func().await;
@@ -76,6 +80,7 @@ macro_rules! generate_batch_inference_tests {
             }
         }
 
+        #[cfg(feature = "batch_tests")]
         #[tokio::test]
         async fn test_poll_existing_simple_batch_inference_request() {
             let all_providers = $func().await;
@@ -87,6 +92,7 @@ macro_rules! generate_batch_inference_tests {
             }
         }
 
+        #[cfg(feature = "batch_tests")]
         #[tokio::test]
         async fn test_poll_completed_simple_batch_inference_request() {
             let all_providers = $func().await;
@@ -98,10 +104,11 @@ macro_rules! generate_batch_inference_tests {
             }
         }
 
+        #[cfg(feature = "batch_tests")]
         #[tokio::test]
         async fn test_start_inference_params_batch_inference_request() {
             let all_providers = $func().await;
-            let providers = all_providers.simple_inference;
+            let providers = all_providers.inference_params_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
                     test_start_inference_params_batch_inference_request_with_provider(provider).await;
@@ -109,10 +116,11 @@ macro_rules! generate_batch_inference_tests {
             }
         }
 
+        #[cfg(feature = "batch_tests")]
         #[tokio::test]
         async fn test_poll_existing_inference_params_batch_inference_request() {
             let all_providers = $func().await;
-            let providers = all_providers.simple_inference;
+            let providers = all_providers.inference_params_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
                     test_poll_existing_inference_params_batch_inference_request_with_provider(provider).await;
@@ -120,10 +128,11 @@ macro_rules! generate_batch_inference_tests {
             }
         }
 
+        #[cfg(feature = "batch_tests")]
         #[tokio::test]
         async fn test_poll_completed_inference_params_batch_inference_request() {
             let all_providers = $func().await;
-            let providers = all_providers.simple_inference;
+            let providers = all_providers.inference_params_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
                     test_poll_completed_inference_params_batch_inference_request_with_provider(provider).await;
@@ -131,10 +140,11 @@ macro_rules! generate_batch_inference_tests {
             }
         }
 
+        #[cfg(feature = "batch_tests")]
         #[tokio::test]
         async fn test_start_tool_use_batch_inference_request() {
             let all_providers = $func().await;
-            let providers = all_providers.simple_inference;
+            let providers = all_providers.tool_use_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
                     test_tool_use_batch_inference_request_with_provider(provider).await;
@@ -142,10 +152,11 @@ macro_rules! generate_batch_inference_tests {
             }
         }
 
+        #[cfg(feature = "batch_tests")]
         #[tokio::test]
         async fn test_poll_existing_tool_choice_batch_inference_request() {
             let all_providers = $func().await;
-            let providers = all_providers.simple_inference;
+            let providers = all_providers.tool_use_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
                     test_poll_existing_tool_choice_batch_inference_request_with_provider(provider).await;
@@ -153,10 +164,11 @@ macro_rules! generate_batch_inference_tests {
             }
         }
 
+        #[cfg(feature = "batch_tests")]
         #[tokio::test]
         async fn test_poll_completed_tool_use_batch_inference_request() {
             let all_providers = $func().await;
-            let providers = all_providers.simple_inference;
+            let providers = all_providers.tool_use_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
                     test_poll_completed_tool_use_batch_inference_request_with_provider(provider).await;
@@ -164,10 +176,11 @@ macro_rules! generate_batch_inference_tests {
             }
         }
 
+        #[cfg(feature = "batch_tests")]
         #[tokio::test]
         async fn test_start_tool_multi_turn_batch_inference_request() {
             let all_providers = $func().await;
-            let providers = all_providers.simple_inference;
+            let providers = all_providers.tool_multi_turn_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
                     test_tool_multi_turn_batch_inference_request_with_provider(provider).await;
@@ -175,10 +188,11 @@ macro_rules! generate_batch_inference_tests {
             }
         }
 
+        #[cfg(feature = "batch_tests")]
         #[tokio::test]
         async fn test_poll_existing_multi_turn_batch_inference_request() {
             let all_providers = $func().await;
-            let providers = all_providers.simple_inference;
+            let providers = all_providers.tool_multi_turn_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
                     test_poll_existing_multi_turn_batch_inference_request_with_provider(provider).await;
@@ -186,10 +200,11 @@ macro_rules! generate_batch_inference_tests {
             }
         }
 
+        #[cfg(feature = "batch_tests")]
         #[tokio::test]
         async fn test_poll_completed_multi_turn_batch_inference_request() {
             let all_providers = $func().await;
-            let providers = all_providers.simple_inference;
+            let providers = all_providers.tool_multi_turn_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
                     test_poll_completed_multi_turn_batch_inference_request_with_provider(provider).await;
@@ -197,10 +212,11 @@ macro_rules! generate_batch_inference_tests {
             }
         }
 
+        #[cfg(feature = "batch_tests")]
         #[tokio::test]
         async fn test_start_dynamic_tool_use_batch_inference_request() {
             let all_providers = $func().await;
-            let providers = all_providers.simple_inference;
+            let providers = all_providers.dynamic_tool_use_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
                     test_dynamic_tool_use_batch_inference_request_with_provider(provider).await;
@@ -208,10 +224,11 @@ macro_rules! generate_batch_inference_tests {
             }
         }
 
+        #[cfg(feature = "batch_tests")]
         #[tokio::test]
         async fn test_poll_existing_dynamic_tool_use_batch_inference_request() {
             let all_providers = $func().await;
-            let providers = all_providers.simple_inference;
+            let providers = all_providers.dynamic_tool_use_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
                     test_poll_existing_dynamic_tool_use_batch_inference_request_with_provider(provider).await;
@@ -219,10 +236,11 @@ macro_rules! generate_batch_inference_tests {
             }
         }
 
+        #[cfg(feature = "batch_tests")]
         #[tokio::test]
         async fn test_poll_completed_dynamic_tool_use_batch_inference_request() {
             let all_providers = $func().await;
-            let providers = all_providers.simple_inference;
+            let providers = all_providers.dynamic_tool_use_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
                     test_poll_completed_dynamic_tool_use_batch_inference_request_with_provider(provider).await;
@@ -230,10 +248,11 @@ macro_rules! generate_batch_inference_tests {
             }
         }
 
+        #[cfg(feature = "batch_tests")]
         #[tokio::test]
         async fn test_start_parallel_tool_use_batch_inference_request() {
             let all_providers = $func().await;
-            let providers = all_providers.simple_inference;
+            let providers = all_providers.parallel_tool_use_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
                     test_parallel_tool_use_batch_inference_request_with_provider(provider).await;
@@ -241,10 +260,11 @@ macro_rules! generate_batch_inference_tests {
             }
         }
 
+        #[cfg(feature = "batch_tests")]
         #[tokio::test]
         async fn test_poll_existing_parallel_tool_use_batch_inference_request() {
             let all_providers = $func().await;
-            let providers = all_providers.simple_inference;
+            let providers = all_providers.parallel_tool_use_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
                     test_poll_existing_parallel_tool_use_batch_inference_request_with_provider(provider).await;
@@ -252,10 +272,11 @@ macro_rules! generate_batch_inference_tests {
             }
         }
 
+        #[cfg(feature = "batch_tests")]
         #[tokio::test]
         async fn test_poll_completed_parallel_tool_use_batch_inference_request() {
             let all_providers = $func().await;
-            let providers = all_providers.simple_inference;
+            let providers = all_providers.parallel_tool_use_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
                     test_poll_completed_parallel_tool_use_batch_inference_request_with_provider(provider).await;
@@ -263,10 +284,11 @@ macro_rules! generate_batch_inference_tests {
             }
         }
 
+        #[cfg(feature = "batch_tests")]
         #[tokio::test]
         async fn test_start_json_mode_batch_inference_request() {
             let all_providers = $func().await;
-            let providers = all_providers.simple_inference;
+            let providers = all_providers.json_mode_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
                     test_json_mode_batch_inference_request_with_provider(provider).await;
@@ -274,10 +296,11 @@ macro_rules! generate_batch_inference_tests {
             }
         }
 
+        #[cfg(feature = "batch_tests")]
         #[tokio::test]
         async fn test_poll_existing_json_mode_batch_inference_request() {
             let all_providers = $func().await;
-            let providers = all_providers.simple_inference;
+            let providers = all_providers.json_mode_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
                     test_poll_existing_json_mode_batch_inference_request_with_provider(provider).await;
@@ -285,10 +308,11 @@ macro_rules! generate_batch_inference_tests {
             }
         }
 
+        #[cfg(feature = "batch_tests")]
         #[tokio::test]
         async fn test_poll_completed_json_mode_batch_inference_request() {
             let all_providers = $func().await;
-            let providers = all_providers.simple_inference;
+            let providers = all_providers.json_mode_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
                     test_poll_completed_json_mode_batch_inference_request_with_provider(provider).await;
@@ -296,10 +320,11 @@ macro_rules! generate_batch_inference_tests {
             }
         }
 
+        #[cfg(feature = "batch_tests")]
         #[tokio::test]
         async fn test_start_dynamic_json_mode_batch_inference_request() {
             let all_providers = $func().await;
-            let providers = all_providers.simple_inference;
+            let providers = all_providers.json_mode_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
                     test_dynamic_json_mode_batch_inference_request_with_provider(provider).await;
@@ -307,10 +332,11 @@ macro_rules! generate_batch_inference_tests {
             }
         }
 
+        #[cfg(feature = "batch_tests")]
         #[tokio::test]
         async fn test_poll_existing_dynamic_json_mode_batch_inference_request() {
             let all_providers = $func().await;
-            let providers = all_providers.simple_inference;
+            let providers = all_providers.json_mode_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
                     test_poll_existing_dynamic_json_mode_batch_inference_request_with_provider(provider).await;
@@ -318,10 +344,11 @@ macro_rules! generate_batch_inference_tests {
             }
         }
 
+        #[cfg(feature = "batch_tests")]
         #[tokio::test]
         async fn test_poll_completed_dynamic_json_mode_batch_inference_request() {
             let all_providers = $func().await;
-            let providers = all_providers.simple_inference;
+            let providers = all_providers.json_mode_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
                     test_poll_completed_dynamic_json_mode_batch_inference_request_with_provider(provider).await;
@@ -338,8 +365,6 @@ macro_rules! generate_batch_inference_tests {
 ///     - test polling by batch_id and then by inference_id
 ///     - do the same thing again and test polling by inference_id and then by batch_id
 ///
-
-// TODO: do a join so we can select by tag, use the tag to identify which batch to grab
 async fn get_latest_batch_inference(
     clickhouse: &ClickHouseConnectionInfo,
     function_name: &str,
@@ -451,7 +476,7 @@ async fn insert_fake_pending_batch_inference_data(
     }
 
     clickhouse
-        .write(&batch_inferences, "BatchModelInference")
+        .write(batch_inferences.as_slice(), "BatchModelInference")
         .await
         .unwrap();
     clickhouse
@@ -1667,8 +1692,7 @@ async fn get_tags_for_batch_inferences(
     batch_id: Uuid,
 ) -> Option<HashMap<Uuid, HashMap<String, String>>> {
     let batch_model_inferences =
-        select_batch_model_inference_clickhouse(clickhouse, batch_id).await?;
-    let batch_model_inferences: Vec<Value> = batch_model_inferences.as_array().unwrap().to_vec();
+        select_batch_model_inferences_clickhouse(clickhouse, batch_id).await?;
     let mut inference_tags = HashMap::new();
     for batch_model_inference in batch_model_inferences {
         let inference_id = batch_model_inference
@@ -1711,6 +1735,7 @@ pub async fn test_poll_existing_tool_choice_batch_inference_request_with_provide
         )])),
     )
     .await;
+    println!("latest_pending_batch_inference: {latest_pending_batch_inference:#?}");
     let batch_inference = match latest_pending_batch_inference {
         None => return, // No pending batch inference found, so we can't test polling
         Some(batch_inference) => batch_inference,
@@ -2499,7 +2524,7 @@ pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
     assert_eq!(output_schema, Some(&Value::Null));
 
     let tags = result.get("tags").unwrap().as_object().unwrap();
-    assert_eq!(tags.len(), 0);
+    assert_eq!(tags.len(), 1);
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(!raw_request.is_empty());
@@ -2874,7 +2899,7 @@ pub async fn test_parallel_tool_use_batch_inference_request_with_provider(
     assert_eq!(output_schema, Some(&Value::Null));
 
     let tags = result.get("tags").unwrap().as_object().unwrap();
-    assert_eq!(tags.len(), 0);
+    assert_eq!(tags.len(), 1);
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(!raw_request.is_empty());
@@ -3206,7 +3231,7 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
     assert_eq!(output_schema, expected_output_schema);
 
     let tags = result.get("tags").unwrap().as_object().unwrap();
-    assert_eq!(tags.len(), 0);
+    assert_eq!(tags.len(), 1);
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(!raw_request.is_empty());
@@ -3553,7 +3578,7 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
     assert_eq!(output_schema, expected_output_schema);
 
     let tags = result.get("tags").unwrap().as_object().unwrap();
-    assert_eq!(tags.len(), 0);
+    assert_eq!(tags.len(), 1);
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(!raw_request.is_empty());

@@ -3,19 +3,25 @@ use gateway::{
     endpoints::inference::InferenceCredentials,
     inference::types::Latency,
 };
-use reqwest::{Client, StatusCode};
-use serde_json::{json, Value};
+use reqwest::Client;
+#[cfg(feature = "e2e_tests")]
+use reqwest::StatusCode;
+#[cfg(feature = "e2e_tests")]
+use serde_json::json;
+use serde_json::Value;
+#[cfg(feature = "e2e_tests")]
 use uuid::Uuid;
 
-use crate::{
-    common::{
-        get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
-        select_model_inference_clickhouse,
-    },
-    providers::common::{E2ETestProvider, E2ETestProviders},
+#[cfg(feature = "e2e_tests")]
+use crate::common::{
+    get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
+    select_model_inference_clickhouse,
 };
+use crate::providers::common::{E2ETestProvider, E2ETestProviders};
 
+#[cfg(feature = "e2e_tests")]
 crate::generate_provider_tests!(get_providers);
+#[cfg(feature = "batch_tests")]
 crate::generate_batch_inference_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
@@ -51,10 +57,12 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: standard_providers.clone(),
         parallel_tool_use_inference: standard_providers.clone(),
         json_mode_inference: json_providers.clone(),
+        #[cfg(feature = "batch_tests")]
         supports_batch_inference: true,
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 #[tokio::test]
 async fn test_o1_mini_inference() {
     let client = Client::new();
@@ -237,6 +245,7 @@ async fn test_embedding_request() {
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 #[tokio::test]
 async fn test_embedding_sanity_check() {
     let provider_config_serialized = r#"
@@ -288,6 +297,7 @@ async fn test_embedding_sanity_check() {
     );
 }
 
+#[cfg(feature = "e2e_tests")]
 fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     let dot_product: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
     let magnitude_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();

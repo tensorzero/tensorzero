@@ -1,19 +1,23 @@
 #![allow(clippy::print_stdout)]
 
+#[cfg(feature = "e2e_tests")]
 use futures::StreamExt;
 use gateway::{
     inference::types::{ContentBlock, RequestMessage, Role},
     tool::{ToolCall, ToolResult},
 };
+#[cfg(feature = "e2e_tests")]
 use reqwest::{Client, StatusCode};
+#[cfg(feature = "e2e_tests")]
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
+#[cfg(feature = "e2e_tests")]
+use crate::common::get_gateway_endpoint;
 use crate::common::{
-    get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
-    select_inference_tags_clickhouse, select_json_inference_clickhouse,
-    select_model_inference_clickhouse,
+    get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
+    select_json_inference_clickhouse, select_model_inference_clickhouse,
 };
 
 #[derive(Clone, Debug)]
@@ -38,6 +42,7 @@ pub struct E2ETestProviders {
     pub dynamic_tool_use_inference: Vec<E2ETestProvider>,
     pub parallel_tool_use_inference: Vec<E2ETestProvider>,
     pub json_mode_inference: Vec<E2ETestProvider>,
+    #[cfg(feature = "batch_tests")]
     pub supports_batch_inference: bool,
 }
 
@@ -70,6 +75,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_tool_use_tool_choice_specific_inference_request_with_provider;
         use $crate::providers::common::test_tool_use_tool_choice_specific_streaming_inference_request_with_provider;
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_simple_inference_request() {
             let providers = $func().await.simple_inference;
@@ -78,6 +84,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_simple_streaming_inference_request() {
             let providers = $func().await.simple_inference;
@@ -86,6 +93,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_inference_params_inference_request() {
             let providers = $func().await.inference_params_inference;
@@ -94,6 +102,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_inference_params_streaming_inference_request() {
             let providers = $func().await.inference_params_inference;
@@ -102,6 +111,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_use_tool_choice_auto_used_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -110,6 +120,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_use_tool_choice_auto_used_streaming_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -118,6 +129,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_use_tool_choice_auto_unused_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -126,6 +138,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -134,6 +147,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_use_tool_choice_required_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -142,6 +156,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_use_tool_choice_required_streaming_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -150,6 +165,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_use_tool_choice_none_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -158,6 +174,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_use_tool_choice_none_streaming_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -166,6 +183,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_use_tool_choice_specific_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -174,6 +192,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_use_tool_choice_specific_streaming_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -182,6 +201,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_use_allowed_tools_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -190,6 +210,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_use_allowed_tools_streaming_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -198,6 +219,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_multi_turn_inference_request() {
             let providers = $func().await.tool_multi_turn_inference;
@@ -206,6 +228,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_multi_turn_streaming_inference_request() {
             let providers = $func().await.tool_multi_turn_inference;
@@ -214,6 +237,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_dynamic_tool_use_inference_request() {
             let providers = $func().await.dynamic_tool_use_inference;
@@ -222,6 +246,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_dynamic_tool_use_streaming_inference_request() {
             let providers = $func().await.dynamic_tool_use_inference;
@@ -230,6 +255,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_parallel_tool_use_inference_request() {
             let providers = $func().await.parallel_tool_use_inference;
@@ -238,6 +264,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_parallel_tool_use_streaming_inference_request() {
             let providers = $func().await.parallel_tool_use_inference;
@@ -246,6 +273,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_json_mode_inference_request() {
             let providers = $func().await.json_mode_inference;
@@ -254,6 +282,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_dynamic_json_mode_inference_request() {
             let providers = $func().await.json_mode_inference;
@@ -262,6 +291,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_json_mode_streaming_inference_request() {
             let providers = $func().await.json_mode_inference;
@@ -272,6 +302,7 @@ macro_rules! generate_provider_tests {
     };
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
 
@@ -475,6 +506,7 @@ pub async fn check_simple_inference_response(
     assert_eq!(id, inference_id);
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_simple_streaming_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
@@ -721,6 +753,7 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     assert_eq!(id, inference_id);
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_inference_params_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
 
@@ -939,6 +972,7 @@ pub async fn check_inference_params_response(
     assert_eq!(output.len(), 1);
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_inference_params_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -1199,6 +1233,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     assert_eq!(output.len(), 1);
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -1476,6 +1511,7 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -1805,6 +1841,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
 
 /// This test is similar to `test_tool_use_tool_choice_auto_used_inference_request_with_provider`, but it steers the model to not use the tool.
 /// This ensures that ToolChoice::Auto is working as expected.
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -2035,6 +2072,7 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
 
 /// This test is similar to `test_tool_use_tool_choice_auto_used_streaming_inference_request_with_provider`, but it steers the model to not use the tool.
 /// This ensures that ToolChoice::Auto is working as expected.
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -2316,6 +2354,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -2361,6 +2400,12 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     let response_json = response.json::<Value>().await.unwrap();
 
     println!("API response: {response_json:#?}");
+    check_tool_use_tool_choice_required_inference_response(
+        response_json,
+        &provider,
+        Some(episode_id),
+    )
+    .await;
 }
 
 pub async fn check_tool_use_tool_choice_required_inference_response(
@@ -2589,6 +2634,7 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -2918,6 +2964,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -3156,6 +3203,7 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -3449,6 +3497,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -3770,6 +3819,7 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -4159,6 +4209,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -4416,6 +4467,7 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -4733,6 +4785,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
 
@@ -4995,6 +5048,7 @@ pub async fn check_tool_use_multi_turn_inference_response(
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -5301,6 +5355,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
 
@@ -5580,6 +5635,7 @@ pub async fn check_dynamic_tool_use_inference_response(
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -5916,6 +5972,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
 
@@ -6239,6 +6296,7 @@ pub async fn check_parallel_tool_use_inference_response(
     assert!(tool_call_names.contains(&"get_humidity".to_string()));
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -6634,6 +6692,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     assert!(tool_call_names.contains(&"get_humidity".to_string()));
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
 
@@ -6854,6 +6913,7 @@ pub async fn check_json_mode_inference_response(
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
     let output_schema = json!({
@@ -7088,6 +7148,7 @@ pub async fn check_dynamic_json_mode_inference_response(
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_json_mode_streaming_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
 

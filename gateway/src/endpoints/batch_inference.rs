@@ -621,7 +621,7 @@ async fn write_start_batch_inference<'a>(
     }
 
     clickhouse_connection_info
-        .write(&rows, "BatchModelInference")
+        .write(rows.as_slice(), "BatchModelInference")
         .await?;
 
     write_batch_request_row(

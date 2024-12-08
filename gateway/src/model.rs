@@ -135,7 +135,7 @@ impl ModelConfig {
         requests: &'request [ModelInferenceRequest<'request>],
         client: &'request Client,
         api_keys: &'request InferenceCredentials,
-    ) -> Result<StartBatchModelInferenceResponse, Error> {
+    ) -> Result<StartBatchModelInferenceResponse<'a>, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
             let provider_config = self.providers.get(provider_name).ok_or_else(|| {

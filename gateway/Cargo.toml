@@ -6,12 +6,18 @@ edition = "2021"
 
 [features]
 e2e_tests = []
+batch_tests = []
 
 
 [[test]]
 name = "e2e"
 path = "tests/e2e/tests.rs"
 required-features = ["e2e_tests"]
+
+[[test]]
+name = "batch"
+path = "tests/e2e/batch.rs"
+required-features = ["batch_tests"]
 
 
 [lints]
