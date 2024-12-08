@@ -3,14 +3,14 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 
 #[derive(Debug)]
 pub struct TemplateConfig<'c> {
     env: minijinja::Environment<'c>,
 }
 
-impl<'c> TemplateConfig<'c> {
+impl TemplateConfig<'_> {
     pub fn new() -> Self {
         let mut env = Environment::new();
         env.set_undefined_behavior(UndefinedBehavior::Strict);
@@ -23,17 +23,20 @@ impl<'c> TemplateConfig<'c> {
         self.env.set_undefined_behavior(UndefinedBehavior::Strict);
 
         for (template_name, path) in template_paths {
-            let template_content =
-                std::fs::read_to_string(&path).map_err(|e| Error::MiniJinjaTemplate {
+            let template_content = std::fs::read_to_string(&path).map_err(|e| {
+                Error::new(ErrorDetails::MiniJinjaTemplate {
                     template_name: path.display().to_string(),
                     message: format!("Failed to read template file: {}", e),
-                })?;
+                })
+            })?;
 
             self.env
                 .add_template_owned(template_name, template_content)
-                .map_err(|e| Error::MiniJinjaTemplate {
-                    template_name: path.display().to_string(),
-                    message: format!("Failed to add template: {}", e),
+                .map_err(|e| {
+                    Error::new(ErrorDetails::MiniJinjaTemplate {
+                        template_name: path.display().to_string(),
+                        message: format!("Failed to add template: {}", e),
+                    })
                 })?;
         }
         self.add_hardcoded_templates()?;
@@ -42,39 +45,37 @@ impl<'c> TemplateConfig<'c> {
 
     // Templates a message with a MiniJinja template.
     pub fn template_message(&self, template_name: &str, context: &Value) -> Result<String, Error> {
-        let template =
-            self.env
-                .get_template(template_name)
-                .map_err(|_| Error::MiniJinjaTemplateMissing {
-                    template_name: template_name.to_string(),
-                })?;
+        let template = self.env.get_template(template_name).map_err(|_| {
+            Error::new(ErrorDetails::MiniJinjaTemplateMissing {
+                template_name: template_name.to_string(),
+            })
+        })?;
         let maybe_message = template.render(context);
         match maybe_message {
             Ok(message) => Ok(message),
             Err(err) => {
-                let mut message = err.to_string();
+                let mut message = format!("Could not render template: {:#}", err);
                 let mut err = &err as &dyn std::error::Error;
                 while let Some(next_err) = err.source() {
-                    message.push_str("\nCaused by: ");
-                    message.push_str(&next_err.to_string());
+                    message.push_str(&format!("\nCaused by: {:#}", next_err));
                     err = next_err;
                 }
-                Err(Error::MiniJinjaTemplateRender {
+                Err(ErrorDetails::MiniJinjaTemplateRender {
                     template_name: template_name.to_string(),
                     message,
-                })
+                }
+                .into())
             }
         }
     }
 
     // Checks if a template needs any variables (i.e. needs a schema)
     pub fn template_needs_variables(&self, template_name: &str) -> Result<bool, Error> {
-        let template =
-            self.env
-                .get_template(template_name)
-                .map_err(|_| Error::MiniJinjaTemplateMissing {
-                    template_name: template_name.to_string(),
-                })?;
+        let template = self.env.get_template(template_name).map_err(|_| {
+            Error::new(ErrorDetails::MiniJinjaTemplateMissing {
+                template_name: template_name.to_string(),
+            })
+        })?;
 
         let template_needs_variables = !template.undeclared_variables(true).is_empty();
 
@@ -84,39 +85,47 @@ impl<'c> TemplateConfig<'c> {
     pub fn add_hardcoded_templates(&mut self) -> Result<(), Error> {
         self.env
             .add_template("t0:best_of_n_evaluator_system", BEST_OF_N_EVALUATOR_SYSTEM)
-            .map_err(|e| Error::MiniJinjaTemplate {
-                template_name: "t0:best_of_n_evaluator_system".to_string(),
-                message: format!("Failed to add template: {}", e),
+            .map_err(|e| {
+                Error::new(ErrorDetails::MiniJinjaTemplate {
+                    template_name: "t0:best_of_n_evaluator_system".to_string(),
+                    message: format!("Failed to add template: {}", e),
+                })
             })?;
         self.env
             .add_template(
                 "t0:best_of_n_evaluator_candidates",
                 BEST_OF_N_EVALUATOR_CANDIDATES,
             )
-            .map_err(|e| Error::MiniJinjaTemplate {
-                template_name: "t0:best_of_n_evaluator_candidates".to_string(),
-                message: format!("Failed to add template: {}", e),
+            .map_err(|e| {
+                Error::new(ErrorDetails::MiniJinjaTemplate {
+                    template_name: "t0:best_of_n_evaluator_candidates".to_string(),
+                    message: format!("Failed to add template: {}", e),
+                })
             })?;
         self.env
             .add_template("t0:mixture_of_n_fuser_system", MIXTURE_OF_N_FUSER_SYSTEM)
-            .map_err(|e| Error::MiniJinjaTemplate {
-                template_name: "t0:mixture_of_n_fuser_system".to_string(),
-                message: format!("Failed to add template: {}", e),
+            .map_err(|e| {
+                Error::new(ErrorDetails::MiniJinjaTemplate {
+                    template_name: "t0:mixture_of_n_fuser_system".to_string(),
+                    message: format!("Failed to add template: {}", e),
+                })
             })?;
         self.env
             .add_template(
                 "t0:mixture_of_n_fuser_candidates",
                 MIXTURE_OF_N_FUSER_CANDIDATES,
             )
-            .map_err(|e| Error::MiniJinjaTemplate {
-                template_name: "t0:mixture_of_n_fuser_candidates".to_string(),
-                message: format!("Failed to add template: {}", e),
+            .map_err(|e| {
+                Error::new(ErrorDetails::MiniJinjaTemplate {
+                    template_name: "t0:mixture_of_n_fuser_candidates".to_string(),
+                    message: format!("Failed to add template: {}", e),
+                })
             })?;
         Ok(())
     }
 }
 
-impl<'c> Default for TemplateConfig<'c> {
+impl Default for TemplateConfig<'_> {
     fn default() -> Self {
         Self::new()
     }
@@ -200,7 +209,15 @@ pub(crate) mod tests {
             "name": "Bob"
         });
         let result = templates.template_message(template_name, &context);
-        assert!(result.is_err());
+        let err = result.unwrap_err();
+        match err.get_details() {
+            ErrorDetails::MiniJinjaTemplateRender { message, .. } => {
+                assert!(message.contains("Referenced variables"));
+            }
+            _ => {
+                panic!("Should be a MiniJinjaTemplateRender error");
+            }
+        }
 
         // Test with incorrect input type
         let context = serde_json::json!({
@@ -221,11 +238,11 @@ pub(crate) mod tests {
         let result = template_config.initialize(template_paths);
         assert_eq!(
             result.unwrap_err(),
-            Error::MiniJinjaTemplate {
+            Error::new(ErrorDetails::MiniJinjaTemplate {
                 template_name: nonexistent_path.display().to_string(),
                 message: "Failed to read template file: No such file or directory (os error 2)"
                     .to_string(),
-            }
+            })
         );
     }
 

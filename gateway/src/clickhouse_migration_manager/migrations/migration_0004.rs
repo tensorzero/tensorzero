@@ -1,6 +1,8 @@
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::clickhouse_migration_manager::migration_trait::Migration;
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
+
+use super::check_table_exists;
 
 /// This migration adds additional columns to the `ModelInference` table
 /// The goal of this is to improve observability of each model inference at an intermediate level of granularity.
@@ -19,37 +21,19 @@ impl<'a> Migration for Migration0004<'a> {
     /// Check if you can connect to the database and if the ModelInference table exists
     /// If all of this is OK, then we can apply the migration
     async fn can_apply(&self) -> Result<(), Error> {
-        self.clickhouse
-            .health()
-            .await
-            .map_err(|e| Error::ClickHouseMigration {
+        self.clickhouse.health().await.map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseMigration {
                 id: "0004".to_string(),
                 message: e.to_string(),
-            })?;
-        let database = self.clickhouse.database();
-        let query = format!(
-            r#"SELECT EXISTS(
-                SELECT 1
-                FROM system.tables
-                WHERE database = '{database}' AND name = 'ModelInference'
-            )"#
-        );
+            })
+        })?;
 
-        match self.clickhouse.run_query(query).await {
-            Ok(response) => {
-                if response.trim() != "1" {
-                    return Err(Error::ClickHouseMigration {
-                        id: "0004".to_string(),
-                        message: "ModelInference table does not exist".to_string(),
-                    });
-                }
+        if !check_table_exists(self.clickhouse, "ModelInference", "0004").await? {
+            return Err(ErrorDetails::ClickHouseMigration {
+                id: "0004".to_string(),
+                message: "ModelInference table does not exist".to_string(),
             }
-            Err(e) => {
-                return Err(Error::ClickHouseMigration {
-                    id: "0004".to_string(),
-                    message: format!("Failed to check ModelInference table: {}", e),
-                });
-            }
+            .into());
         }
 
         Ok(())
@@ -62,14 +46,12 @@ impl<'a> Migration for Migration0004<'a> {
             "SELECT name FROM system.columns WHERE database = '{}' AND table = 'ModelInference'",
             database
         );
-        let response =
-            self.clickhouse
-                .run_query(query)
-                .await
-                .map_err(|e| Error::ClickHouseMigration {
-                    id: "0004".to_string(),
-                    message: format!("Failed to fetch columns for ModelInference: {}", e),
-                })?;
+        let response = self.clickhouse.run_query(query).await.map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseMigration {
+                id: "0004".to_string(),
+                message: format!("Failed to fetch columns for ModelInference: {}", e),
+            })
+        })?;
         let present_columns: Vec<&str> = response.lines().map(|line| line.trim()).collect();
         if present_columns.contains(&"system")
             && present_columns.contains(&"input_messages")

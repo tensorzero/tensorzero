@@ -1,3 +1,4 @@
+# type: ignore
 """
 Tests for the TensorZero client
 
@@ -17,6 +18,7 @@ uv run pytest
 ```
 """
 
+from copy import deepcopy
 from time import sleep, time
 from uuid import UUID
 
@@ -44,15 +46,19 @@ async def async_client():
 
 @pytest.mark.asyncio
 async def test_async_basic_inference(async_client):
+    input = {
+        "system": {"assistant_name": "Alfred Pennyworth"},
+        "messages": [{"role": "user", "content": [Text(type="text", text="Hello")]}],
+    }
+    input_copy = deepcopy(input)
     result = await async_client.inference(
         function_name="basic_test",
-        input={
-            "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": "Hello"}],
-        },
+        input=input,
         episode_id=uuid7(),  # This would not typically be done but this partially verifies that uuid7 is using a correct implementation
         # because the gateway validates some of the properties needed
+        tags={"key": "value"},
     )
+    assert input == input_copy, "Input should not be modified by the client"
     assert result.variant_name == "test"
     assert isinstance(result, ChatInferenceResponse)
     content = result.content
@@ -69,23 +75,27 @@ async def test_async_basic_inference(async_client):
 
 @pytest.mark.asyncio
 async def test_async_inference_streaming(async_client):
-    start_time = time()
     stream = await async_client.inference(
         function_name="basic_test",
         input={
             "system": {"assistant_name": "Alfred Pennyworth"},
             "messages": [{"role": "user", "content": "Hello"}],
         },
+        tags={"key": "value"},
         stream=True,
     )
-    first_chunk_duration = None
+
     chunks = []
+    previous_chunk_timestamp = None
+    last_chunk_duration = None
     async for chunk in stream:
+        if previous_chunk_timestamp is not None:
+            last_chunk_duration = time() - previous_chunk_timestamp
+        previous_chunk_timestamp = time()
         chunks.append(chunk)
-        if first_chunk_duration is None:
-            first_chunk_duration = time() - start_time
-    last_chunk_duration = time() - start_time - first_chunk_duration
-    assert last_chunk_duration > first_chunk_duration + 0.1
+
+    assert last_chunk_duration > 0.01
+
     expected_text = [
         "Wally,",
         " the",
@@ -128,7 +138,7 @@ async def test_async_inference_streaming(async_client):
 @pytest.mark.asyncio
 async def test_async_inference_streaming_nonexistent_function(async_client):
     with pytest.raises(TensorZeroError) as exc_info:
-        await async_client.inference(
+        stream = await async_client.inference(
             function_name="does_not_exist",
             input={
                 "system": {"assistant_name": "Alfred Pennyworth"},
@@ -136,7 +146,39 @@ async def test_async_inference_streaming_nonexistent_function(async_client):
             },
             stream=True,
         )
+
+        # The httpx client won't make a request until you start consuming the stream
+        async for chunk in stream:
+            pass
+
     assert exc_info.value.status_code == 404
+    assert (
+        str(exc_info.value)
+        == 'TensorZeroError (status code 404): {"error":"Unknown function: does_not_exist"}'
+    )
+
+
+@pytest.mark.asyncio
+async def test_async_inference_streaming_malformed_input(async_client):
+    with pytest.raises(TensorZeroError) as exc_info:
+        stream = await async_client.inference(
+            function_name="basic_test",
+            input={
+                "system": {"name_of_assistant": "Alfred Pennyworth"},  # WRONG
+                "messages": [{"role": "user", "content": "Hello"}],
+            },
+            stream=True,
+        )
+
+        # The httpx client won't make a request until you start consuming the stream
+        async for chunk in stream:
+            pass
+
+    assert exc_info.value.status_code == 400
+    assert (
+        str(exc_info.value)
+        == 'TensorZeroError (status code 400): {"error":"JSON Schema validation failed for Function:\\n\\n\\"assistant_name\\" is a required property\\nData: {\\"name_of_assistant\\":\\"Alfred Pennyworth\\"}Schema: {\\"type\\":\\"object\\",\\"properties\\":{\\"assistant_name\\":{\\"type\\":\\"string\\"}},\\"required\\":[\\"assistant_name\\"]}"}'
+    )
 
 
 @pytest.mark.asyncio
@@ -358,6 +400,7 @@ async def test_async_feedback(async_client):
         metric_name="demonstration",
         value="hi how are you",
         inference_id=result.inference_id,
+        tags={"author": "Alice"},
     )
     assert isinstance(result, FeedbackResponse)
 
@@ -389,6 +432,31 @@ async def test_async_tensorzero_error(async_client):
     )
 
 
+@pytest.mark.asyncio
+async def test_async_dynamic_credentials(async_client):
+    result = await async_client.inference(
+        function_name="basic_test",
+        variant_name="test_dynamic_api_key",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+        credentials={"DUMMY_API_KEY": "good_key"},
+    )
+    assert result.variant_name == "test_dynamic_api_key"
+    assert isinstance(result, ChatInferenceResponse)
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert (
+        content[0].text
+        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    )
+    usage = result.usage
+    assert usage.input_tokens == 10
+    assert usage.output_tokens == 10
+
+
 @pytest.fixture
 def sync_client():
     with TensorZeroGateway("http://localhost:3000") as client:
@@ -402,6 +470,7 @@ def test_sync_basic_inference(sync_client):
             "system": {"assistant_name": "Alfred Pennyworth"},
             "messages": [{"role": "user", "content": "Hello"}],
         },
+        tags={"key": "value"},
     )
     assert result.variant_name == "test"
     assert isinstance(result, ChatInferenceResponse)
@@ -417,8 +486,19 @@ def test_sync_basic_inference(sync_client):
     assert usage.output_tokens == 10
 
 
+def test_sync_malformed_inference(sync_client):
+    with pytest.raises(TensorZeroError) as exc_info:
+        sync_client.inference(
+            function_name="basic_test",
+            input={
+                "system": {"name_of_assistant": "Alfred Pennyworth"},  # WRONG
+                "messages": [{"role": "user", "content": "Hello"}],
+            },
+        )
+    assert exc_info.value.status_code == 400
+
+
 def test_sync_inference_streaming(sync_client):
-    start_time = time()
     stream = sync_client.inference(
         function_name="basic_test",
         input={
@@ -426,15 +506,19 @@ def test_sync_inference_streaming(sync_client):
             "messages": [{"role": "user", "content": "Hello"}],
         },
         stream=True,
+        tags={"key": "value"},
     )
-    first_chunk_duration = None
+
     chunks = []
+    previous_chunk_timestamp = None
+    last_chunk_duration = None
     for chunk in stream:
+        if previous_chunk_timestamp is not None:
+            last_chunk_duration = time() - previous_chunk_timestamp
+        previous_chunk_timestamp = time()
         chunks.append(chunk)
-        if first_chunk_duration is None:
-            first_chunk_duration = time() - start_time
-    last_chunk_duration = time() - start_time - first_chunk_duration
-    assert last_chunk_duration > first_chunk_duration + 0.1
+
+    assert last_chunk_duration > 0.01
 
     expected_text = [
         "Wally,",
@@ -477,7 +561,7 @@ def test_sync_inference_streaming(sync_client):
 
 def test_sync_inference_streaming_nonexistent_function(sync_client):
     with pytest.raises(TensorZeroError) as exc_info:
-        sync_client.inference(
+        stream = sync_client.inference(
             function_name="does_not_exist",
             input={
                 "system": {"assistant_name": "Alfred Pennyworth"},
@@ -485,7 +569,34 @@ def test_sync_inference_streaming_nonexistent_function(sync_client):
             },
             stream=True,
         )
+
+        # The httpx client won't make a request until you start consuming the stream
+        for chunk in stream:
+            pass
+
     assert exc_info.value.status_code == 404
+
+
+def test_sync_inference_streaming_malformed_input(sync_client):
+    with pytest.raises(TensorZeroError) as exc_info:
+        stream = sync_client.inference(
+            function_name="basic_test",
+            input={
+                "system": {"name_of_assistant": "Alfred Pennyworth"},  # WRONG
+                "messages": [{"role": "user", "content": "Hello"}],
+            },
+            stream=True,
+        )
+
+        # The httpx client won't make a request until you start consuming the stream
+        for chunk in stream:
+            pass
+
+    assert exc_info.value.status_code == 400
+    assert (
+        str(exc_info.value)
+        == 'TensorZeroError (status code 400): {"error":"JSON Schema validation failed for Function:\\n\\n\\"assistant_name\\" is a required property\\nData: {\\"name_of_assistant\\":\\"Alfred Pennyworth\\"}Schema: {\\"type\\":\\"object\\",\\"properties\\":{\\"assistant_name\\":{\\"type\\":\\"string\\"}},\\"required\\":[\\"assistant_name\\"]}"}'
+    )
 
 
 def test_sync_tool_call_inference(sync_client):
@@ -699,6 +810,7 @@ def test_sync_feedback(sync_client):
         metric_name="demonstration",
         value="hi how are you",
         inference_id=result.inference_id,
+        tags={"author": "Alice"},
     )
     assert isinstance(result, FeedbackResponse)
 
@@ -755,6 +867,133 @@ def test_sync_basic_inference_with_content_block(sync_client):
         },
     )
     assert result.variant_name == "test"
+    assert isinstance(result, ChatInferenceResponse)
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert (
+        content[0].text
+        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    )
+    usage = result.usage
+    assert usage.input_tokens == 10
+    assert usage.output_tokens == 10
+
+
+def test_prepare_inference_request(sync_client):
+    # Test a simple request with string input and a structured system message
+    request = sync_client._prepare_inference_request(
+        function_name="basic_test",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+    )
+    assert request["input"]["messages"][0]["content"] == "Hello"
+    assert request["input"]["system"] == {"assistant_name": "Alfred Pennyworth"}
+    assert request["function_name"] == "basic_test"
+
+    # Test a complex request that covers every argument of the client
+    episode_id = uuid7()
+    request = sync_client._prepare_inference_request(
+        function_name="basic_test",
+        input={
+            "system": "you are the bad guy",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        ToolCall(
+                            type="tool_call",
+                            id="1",
+                            name="test",
+                            raw_arguments={"arg": "value"},
+                            raw_name="test_tool",
+                            arguments={"arg": "value"},
+                        )
+                    ],
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        ToolResult(
+                            name="test",
+                            result="success",
+                            id="1",
+                        )
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        Text(type="text", text={"foo": "bar"}),
+                        ToolResult(name="drill", result="screwed", id="aaaa"),
+                    ],
+                },
+            ],
+        },
+        stream=True,
+        dryrun=False,
+        episode_id=episode_id,
+        variant_name="baz",
+        params={"chat_completion": {"temperature": 0.1}},
+        tool_choice="auto",
+        parallel_tool_calls=True,
+        additional_tools=[
+            {"name": "drill", "arguments": '{"foo": "bar"}', "description": "drills"}
+        ],
+    )
+
+    assert request["input"]["messages"][0]["content"][0] == {
+        "type": "tool_call",
+        "id": "1",
+        "name": "test_tool",
+        "arguments": '{"arg": "value"}',
+    }
+    assert request["input"]["messages"][1]["content"][0] == {
+        "type": "tool_result",
+        "name": "test",
+        "result": "success",
+        "id": "1",
+    }
+    assert request["input"]["messages"][2]["content"][0] == {
+        "type": "text",
+        "value": {"foo": "bar"},
+    }
+    assert request["input"]["messages"][2]["content"][1] == {
+        "type": "tool_result",
+        "name": "drill",
+        "result": "screwed",
+        "id": "aaaa",
+    }
+    assert request["input"]["system"] == "you are the bad guy"
+    assert request["stream"]
+    assert not request["dryrun"]
+    assert request["episode_id"] == str(episode_id)
+    assert request["params"]["chat_completion"]["temperature"] == 0.1
+    assert request["tool_choice"] == "auto"
+    assert request["additional_tools"][0] == {
+        "name": "drill",
+        "arguments": '{"foo": "bar"}',
+        "description": "drills",
+    }
+    assert len(request["additional_tools"]) == 1
+    assert request["variant_name"] == "baz"
+    assert request["function_name"] == "basic_test"
+    assert request["parallel_tool_calls"]
+
+
+def test_sync_dynamic_credentials(sync_client):
+    result = sync_client.inference(
+        function_name="basic_test",
+        variant_name="test_dynamic_api_key",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+        credentials={"DUMMY_API_KEY": "good_key"},
+    )
+    assert result.variant_name == "test_dynamic_api_key"
     assert isinstance(result, ChatInferenceResponse)
     content = result.content
     assert len(content) == 1

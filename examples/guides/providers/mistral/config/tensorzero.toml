@@ -1,0 +1,17 @@
+[models.ministral_8b_2410]
+routing = ["mistral"]
+
+[models.ministral_8b_2410.providers.mistral]
+type = "mistral"
+model_name = "ministral-8b-2410"
+
+[functions.my_function_name]
+type = "chat"
+
+[functions.my_function_name.variants.my_variant_name]
+type = "chat_completion"
+model = "ministral_8b_2410"
+
+# Disable observability to keep this example minimal (not recommended in production)
+[gateway]
+disable_observability = true

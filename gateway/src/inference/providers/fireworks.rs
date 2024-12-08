@@ -11,12 +11,12 @@ use url::Url;
 
 use crate::{
     endpoints::inference::InferenceCredentials,
-    error::Error,
+    error::{Error, ErrorDetails},
     inference::types::{
         ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
         ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     },
-    model::ProviderCredentials,
+    model::CredentialLocation,
 };
 
 use super::{
@@ -25,7 +25,7 @@ use super::{
         tensorzero_to_openai_messages, OpenAIFunction, OpenAIRequestMessage, OpenAIResponse,
         OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice, OpenAIToolType,
     },
-    provider_trait::{HasCredentials, InferenceProvider},
+    provider_trait::InferenceProvider,
 };
 
 lazy_static! {
@@ -39,12 +39,36 @@ lazy_static! {
 #[derive(Debug)]
 pub struct FireworksProvider {
     pub model_name: String,
-    pub api_key: Option<SecretString>,
+    pub credentials: FireworksCredentials,
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct FireworksCredentials<'a> {
-    pub api_key: Cow<'a, SecretString>,
+pub enum FireworksCredentials {
+    Static(SecretString),
+    Dynamic(String),
+}
+
+impl FireworksCredentials {
+    fn get_api_key<'a>(
+        &'a self,
+        dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<&'a SecretString, Error> {
+        match self {
+            FireworksCredentials::Static(api_key) => Ok(api_key),
+            FireworksCredentials::Dynamic(key_name) => {
+                dynamic_api_keys.get(key_name).ok_or_else(|| {
+                    ErrorDetails::ApiKeyMissing {
+                        provider_name: "Fireworks".to_string(),
+                    }
+                    .into()
+                })
+            }
+        }
+    }
+}
+
+pub fn default_api_key_location() -> CredentialLocation {
+    CredentialLocation::Env("FIREWORKS_API_KEY".to_string())
 }
 
 /// Key differences between Fireworks and OpenAI inference:
@@ -57,19 +81,12 @@ impl InferenceProvider for FireworksProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: ProviderCredentials<'a>,
+        api_key: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = FireworksRequest::new(&self.model_name, request);
         let request_url = get_chat_url(Some(&FIREWORKS_API_BASE))?;
         let start_time = Instant::now();
-        let api_key = match &api_key {
-            ProviderCredentials::Fireworks(credentials) => &credentials.api_key,
-            _ => {
-                return Err(Error::BadCredentialsPreInference {
-                    provider_name: "Fireworks".to_string(),
-                })
-            }
-        };
+        let api_key = self.credentials.get_api_key(api_key)?;
         let res = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
@@ -77,19 +94,25 @@ impl InferenceProvider for FireworksProvider {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| Error::InferenceClient {
-                message: format!("Error sending request to Fireworks: {e}"),
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    message: format!("Error sending request to Fireworks: {e}"),
+                })
             })?;
         let latency = Latency::NonStreaming {
             response_time: start_time.elapsed(),
         };
         if res.status().is_success() {
-            let response = res.text().await.map_err(|e| Error::FireworksServer {
-                message: format!("Error parsing text response: {e}"),
+            let response = res.text().await.map_err(|e| {
+                Error::new(ErrorDetails::FireworksServer {
+                    message: format!("Error parsing text response: {e}"),
+                })
             })?;
 
-            let response = serde_json::from_str(&response).map_err(|e| Error::FireworksServer {
-                message: format!("Error parsing JSON response: {e}: {response}"),
+            let response = serde_json::from_str(&response).map_err(|e| {
+                Error::new(ErrorDetails::FireworksServer {
+                    message: format!("Error parsing JSON response: {e}: {response}"),
+                })
             })?;
 
             Ok(FireworksResponseWithMetadata {
@@ -103,8 +126,10 @@ impl InferenceProvider for FireworksProvider {
         } else {
             Err(map_openai_to_fireworks_error(handle_openai_error(
                 res.status(),
-                &res.text().await.map_err(|e| Error::FireworksServer {
-                    message: format!("Error parsing error response: {e}"),
+                &res.text().await.map_err(|e| {
+                    Error::new(ErrorDetails::FireworksServer {
+                        message: format!("Error parsing error response: {e}"),
+                    })
                 })?,
             )))
         }
@@ -114,7 +139,7 @@ impl InferenceProvider for FireworksProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: ProviderCredentials<'a>,
+        api_key: &'a InferenceCredentials,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -124,19 +149,13 @@ impl InferenceProvider for FireworksProvider {
         Error,
     > {
         let request_body = FireworksRequest::new(&self.model_name, request);
-        let raw_request =
-            serde_json::to_string(&request_body).map_err(|e| Error::FireworksServer {
+        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
+            Error::new(ErrorDetails::FireworksServer {
                 message: format!("Error serializing request body: {e}"),
-            })?;
+            })
+        })?;
         let request_url = get_chat_url(Some(&FIREWORKS_API_BASE))?;
-        let api_key = match &api_key {
-            ProviderCredentials::Fireworks(credentials) => &credentials.api_key,
-            _ => {
-                return Err(Error::BadCredentialsPreInference {
-                    provider_name: "Fireworks".to_string(),
-                })
-            }
-        };
+        let api_key = self.credentials.get_api_key(api_key)?;
         let start_time = Instant::now();
         let event_source = http_client
             .post(request_url)
@@ -144,8 +163,10 @@ impl InferenceProvider for FireworksProvider {
             .bearer_auth(api_key.expose_secret())
             .json(&request_body)
             .eventsource()
-            .map_err(|e| Error::InferenceClient {
-                message: format!("Error sending request to Fireworks: {e}"),
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    message: format!("Error sending request to Fireworks: {e}"),
+                })
             })?;
         let mut stream = Box::pin(
             stream_openai(event_source, start_time).map_err(map_openai_to_fireworks_error),
@@ -156,58 +177,30 @@ impl InferenceProvider for FireworksProvider {
             Some(Ok(chunk)) => chunk,
             Some(Err(e)) => return Err(e),
             None => {
-                return Err(Error::FireworksServer {
+                return Err(ErrorDetails::FireworksServer {
                     message: "Stream ended before first chunk".to_string(),
-                })
+                }
+                .into())
             }
         };
         Ok((chunk, stream, raw_request))
     }
 }
 
-impl HasCredentials for FireworksProvider {
-    fn has_credentials(&self) -> bool {
-        self.api_key.is_some()
-    }
-
-    fn get_credentials<'a>(
-        &'a self,
-        credentials: &'a InferenceCredentials,
-    ) -> Result<ProviderCredentials<'a>, Error> {
-        if let Some(api_key) = &self.api_key {
-            if credentials.fireworks.is_some() {
-                return Err(Error::UnexpectedDynamicCredentials {
-                    provider_name: "Fireworks".to_string(),
-                });
-            }
-            return Ok(ProviderCredentials::Fireworks(Cow::Owned(
-                FireworksCredentials {
-                    api_key: Cow::Borrowed(api_key),
-                },
-            )));
-        } else {
-            match &credentials.fireworks {
-                Some(credentials) => Ok(ProviderCredentials::Fireworks(Cow::Borrowed(credentials))),
-                None => Err(Error::ApiKeyMissing {
-                    provider_name: "Fireworks".to_string(),
-                }),
-            }
-        }
-    }
-}
-
 fn map_openai_to_fireworks_error(e: Error) -> Error {
-    match e {
-        Error::OpenAIServer { message } => Error::FireworksServer { message },
-        Error::OpenAIClient {
+    let details = e.get_owned_details();
+    match details {
+        ErrorDetails::OpenAIServer { message } => ErrorDetails::FireworksServer { message },
+        ErrorDetails::OpenAIClient {
             message,
             status_code,
-        } => Error::FireworksClient {
+        } => ErrorDetails::FireworksClient {
             message,
             status_code,
         },
-        _ => e,
+        e => e,
     }
+    .into()
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
@@ -339,24 +332,28 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
             request: request_body,
             generic_request,
         } = value;
-        let raw_response = serde_json::to_string(&response).map_err(|e| Error::OpenAIServer {
-            message: format!("Error parsing response: {e}"),
+        let raw_response = serde_json::to_string(&response).map_err(|e| {
+            Error::new(ErrorDetails::FireworksServer {
+                message: format!("Error parsing response: {e}"),
+            })
         })?;
         if response.choices.len() != 1 {
-            return Err(Error::OpenAIServer {
+            return Err(ErrorDetails::FireworksServer {
                 message: format!(
                     "Response has invalid number of choices: {}. Expected 1.",
                     response.choices.len()
                 ),
-            });
+            }
+            .into());
         }
         let usage = response.usage.into();
         let message = response
             .choices
             .pop()
-            .ok_or(Error::OpenAIServer {
+            .ok_or_else(|| Error::new(ErrorDetails::FireworksServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
-            })?
+            }
+            ))?
             .message;
         let mut content: Vec<ContentBlock> = Vec::new();
         if let Some(text) = message.content {
@@ -367,10 +364,11 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                 content.push(ContentBlock::ToolCall(tool_call.into()));
             }
         }
-        let raw_request =
-            serde_json::to_string(&request_body).map_err(|e| Error::FireworksServer {
+        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
+            Error::new(ErrorDetails::FireworksServer {
                 message: format!("Error serializing request body as JSON: {e}"),
-            })?;
+            })
+        })?;
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
@@ -459,62 +457,5 @@ mod tests {
             FIREWORKS_API_BASE.as_str(),
             "https://api.fireworks.ai/inference/v1/"
         );
-    }
-
-    #[test]
-    fn test_get_credentials() {
-        let provider_no_credentials = FireworksProvider {
-            api_key: None,
-            model_name: "fireworks-model-v1".to_string(),
-        };
-        let credentials = InferenceCredentials::default();
-        let result = provider_no_credentials
-            .get_credentials(&credentials)
-            .unwrap_err();
-        assert_eq!(
-            result,
-            Error::ApiKeyMissing {
-                provider_name: "Fireworks".to_string(),
-            }
-        );
-        let credentials = InferenceCredentials {
-            fireworks: Some(FireworksCredentials {
-                api_key: Cow::Owned(SecretString::from("test_api_key".to_string())),
-            }),
-            ..Default::default()
-        };
-        let result = provider_no_credentials
-            .get_credentials(&credentials)
-            .unwrap();
-        match result {
-            ProviderCredentials::Fireworks(creds) => {
-                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
-            }
-            _ => panic!("Expected Fireworks credentials"),
-        }
-
-        let provider_with_credentials = FireworksProvider {
-            api_key: Some(SecretString::from("test_api_key".to_string())),
-            model_name: "fireworks-model-v1".to_string(),
-        };
-        let result = provider_with_credentials
-            .get_credentials(&credentials)
-            .unwrap_err();
-        assert_eq!(
-            result,
-            Error::UnexpectedDynamicCredentials {
-                provider_name: "Fireworks".to_string(),
-            }
-        );
-        let credentials = InferenceCredentials::default();
-        let result = provider_with_credentials
-            .get_credentials(&credentials)
-            .unwrap();
-        match result {
-            ProviderCredentials::Fireworks(creds) => {
-                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
-            }
-            _ => panic!("Expected Fireworks credentials"),
-        }
     }
 }
