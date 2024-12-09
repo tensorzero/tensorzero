@@ -1,5 +1,8 @@
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
+use crate::inference::types::batch::BatchRequestRow;
+use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::batch::StartBatchProviderInferenceResponse;
 use crate::inference::types::ModelInferenceRequest;
 use crate::inference::types::ProviderInferenceResponse;
 use crate::inference::types::ProviderInferenceResponseChunk;
@@ -31,4 +34,18 @@ pub trait InferenceProvider {
         >,
     > + Send
            + 'a;
+
+    fn start_batch_inference<'a>(
+        &'a self,
+        requests: &'a [ModelInferenceRequest],
+        client: &'a Client,
+        dynamic_api_keys: &'a InferenceCredentials,
+    ) -> impl Future<Output = Result<StartBatchProviderInferenceResponse, Error>> + Send + 'a;
+
+    fn poll_batch_inference<'a>(
+        &'a self,
+        batch_request: &'a BatchRequestRow,
+        http_client: &'a reqwest::Client,
+        dynamic_api_keys: &'a InferenceCredentials,
+    ) -> impl Future<Output = Result<PollBatchInferenceResponse, Error>> + Send + 'a;
 }
