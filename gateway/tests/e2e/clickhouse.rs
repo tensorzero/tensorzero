@@ -34,6 +34,9 @@ fn get_clean_clickhouse() -> ClickHouseConnectionInfo {
 #[tokio::test]
 async fn test_clickhouse_migration_manager() {
     let clickhouse = get_clean_clickhouse();
+    clickhouse.create_database().await.unwrap();
+    // Run it twice to test that it is a no-op the second time
+    clickhouse.create_database().await.unwrap();
     // NOTE:
     // We need to split the test into sub-functions so we can reset `traced_test`'s subscriber between each call.
     // Otherwise, `logs_contain` will return true if the first call triggers a log message that the second call shouldn't trigger.
@@ -52,6 +55,7 @@ async fn test_clickhouse_migration_manager() {
         assert!(!logs_contain("Failed to apply migration"));
         assert!(!logs_contain("Failed migration success check"));
         assert!(!logs_contain("Failed to verify migration"));
+        assert!(!logs_contain("ERROR"));
     }
 
     #[traced_test]
@@ -78,6 +82,7 @@ async fn test_clickhouse_migration_manager() {
         assert!(!logs_contain("Migration succeeded: Migration0000"));
         assert!(logs_contain("Applying migration: Migration0001"));
         assert!(logs_contain("Migration succeeded: Migration0001"));
+        assert!(!logs_contain("ERROR"));
     }
 
     #[traced_test]
@@ -109,6 +114,7 @@ async fn test_clickhouse_migration_manager() {
         assert!(!logs_contain("Migration succeeded: Migration0001"));
         assert!(logs_contain("Applying migration: Migration0002"));
         assert!(logs_contain("Migration succeeded: Migration0002"));
+        assert!(!logs_contain("ERROR"));
     }
 
     #[traced_test]
@@ -144,6 +150,7 @@ async fn test_clickhouse_migration_manager() {
         assert!(!logs_contain("Migration succeeded: Migration0002"));
         assert!(logs_contain("Applying migration: Migration0003"));
         assert!(logs_contain("Migration succeeded: Migration0003"));
+        assert!(!logs_contain("ERROR"));
     }
 
     #[traced_test]
@@ -184,6 +191,7 @@ async fn test_clickhouse_migration_manager() {
         assert!(!logs_contain("Migration succeeded: Migration0003"));
         assert!(logs_contain("Applying migration: Migration0004"));
         assert!(logs_contain("Migration succeeded: Migration0004"));
+        assert!(!logs_contain("ERROR"));
     }
 
     #[traced_test]
@@ -230,6 +238,7 @@ async fn test_clickhouse_migration_manager() {
         assert!(!logs_contain("Migration succeeded: Migration0004"));
         assert!(logs_contain("Applying migration: Migration0005"));
         assert!(logs_contain("Migration succeeded: Migration0005"));
+        assert!(!logs_contain("ERROR"));
     }
 
     #[traced_test]
@@ -276,6 +285,7 @@ async fn test_clickhouse_migration_manager() {
         assert!(!logs_contain("Migration succeeded: Migration0004"));
         assert!(!logs_contain("Applying migration: Migration0005"));
         assert!(!logs_contain("Migration succeeded: Migration0005"));
+        assert!(!logs_contain("ERROR"));
     }
 
     first(&clickhouse).await;
