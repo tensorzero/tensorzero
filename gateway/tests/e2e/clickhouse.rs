@@ -35,6 +35,8 @@ fn get_clean_clickhouse() -> ClickHouseConnectionInfo {
 async fn test_clickhouse_migration_manager() {
     let clickhouse = get_clean_clickhouse();
     clickhouse.create_database().await.unwrap();
+    // Run it twice to test that it is a no-op the second time
+    clickhouse.create_database().await.unwrap();
     // NOTE:
     // We need to split the test into sub-functions so we can reset `traced_test`'s subscriber between each call.
     // Otherwise, `logs_contain` will return true if the first call triggers a log message that the second call shouldn't trigger.
