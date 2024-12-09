@@ -34,6 +34,7 @@ pub(crate) async fn select_chat_inference_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
 ) -> Option<Value> {
+    #[cfg(feature = "e2e_tests")]
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
@@ -50,6 +51,7 @@ pub(crate) async fn select_json_inference_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
 ) -> Option<Value> {
+    #[cfg(feature = "e2e_tests")]
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
@@ -66,6 +68,7 @@ pub(crate) async fn select_model_inference_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
 ) -> Option<Value> {
+    #[cfg(feature = "e2e_tests")]
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
@@ -82,6 +85,7 @@ pub(crate) async fn select_model_inferences_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
 ) -> Option<Vec<Value>> {
+    #[cfg(feature = "e2e_tests")]
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(

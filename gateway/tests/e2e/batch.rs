@@ -1,3 +1,4 @@
+#![allow(clippy::print_stdout)]
 #![cfg(test)]
 mod common;
 mod providers;
@@ -142,7 +143,7 @@ async fn test_write_poll_batch_inference() {
     .await
     .unwrap();
     assert_eq!(poll_inference_response, PollInferenceResponse::Pending);
-    sleep(Duration::from_millis(200)).await;
+    sleep(Duration::from_millis(1200)).await;
     let query = PollInferenceQuery::Batch(batch_id);
     let batch_request = get_batch_request(&clickhouse, &query).await.unwrap();
     assert_eq!(batch_request.batch_id, batch_id);
@@ -502,6 +503,10 @@ async fn test_write_read_completed_batch_inference_json() {
     assert_eq!(inference_responses.len(), 2);
     let inference_response_1 = &inference_responses[0];
     let inference_response_2 = &inference_responses[1];
+    println!("inference_response_1: {:?}", inference_response_1);
+    println!("inference_response_2: {:?}", inference_response_2);
+    println!("inference id 1: {}", inference_id1);
+    println!("inference id 2: {}", inference_id2);
     match inference_response_1 {
         InferenceResponse::Json(json_inference_response) => {
             assert_eq!(json_inference_response.inference_id, inference_id1);
