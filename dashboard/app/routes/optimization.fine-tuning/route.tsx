@@ -88,6 +88,8 @@ export default function FineTuning() {
   const config = useConfig();
   const form = useForm<FormValues>({
     defaultValues: {
+      function: searchParams.get("function") || "",
+      metric: searchParams.get("metric") || "",
       validationSplit: 20,
       maxSamples: 100000,
       threshold: 0.5,

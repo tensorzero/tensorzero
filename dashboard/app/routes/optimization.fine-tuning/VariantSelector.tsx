@@ -20,6 +20,8 @@ export function VariantSelector({
   control,
   chatCompletionVariants,
 }: VariantSelectorProps) {
+  const hasVariants = Object.keys(chatCompletionVariants).length > 0;
+
   return (
     <FormField
       control={control}
@@ -28,9 +30,19 @@ export function VariantSelector({
         <FormItem>
           <FormLabel>Variant Name (for prompt templating)</FormLabel>
           <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
-            <Select onValueChange={field.onChange} defaultValue={field.value}>
+            <Select
+              onValueChange={field.onChange}
+              defaultValue={field.value}
+              disabled={!hasVariants}
+            >
               <SelectTrigger>
-                <SelectValue placeholder="Select a variant name" />
+                <SelectValue
+                  placeholder={
+                    hasVariants
+                      ? "Select a variant name"
+                      : "No variants available"
+                  }
+                />
               </SelectTrigger>
               <SelectContent>
                 {Object.entries(chatCompletionVariants).map(([name]) => (
