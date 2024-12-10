@@ -158,6 +158,30 @@ export async function getCuratedInferences(
   }
 }
 
+export async function countCuratedInferences(
+  function_name: string,
+  function_config: FunctionConfig,
+  metric_name: string,
+  metric_config: MetricConfig,
+) {
+  const inference_table_name = getInferenceTableName(function_config);
+  const inference_join_key = getInferenceJoinKey(metric_config);
+
+  switch (metric_config.type) {
+    case "boolean":
+      return countGoodBooleanMetricData(
+        function_name,
+        metric_name,
+        inference_table_name,
+        inference_join_key,
+        metric_config.optimize === "max",
+        undefined,
+      );
+    default:
+      throw new Error(`Unsupported metric type: ${metric_config.type}`);
+  }
+}
+
 export async function queryGoodBooleanMetricData(
   function_name: string,
   metric_name: string,
@@ -204,6 +228,50 @@ export async function queryGoodBooleanMetricData(
   });
   const rows = await resultSet.json<InferenceRow>();
   return parseInferenceRows(rows, inference_table_name);
+}
+
+export async function countGoodBooleanMetricData(
+  function_name: string,
+  metric_name: string,
+  inference_table_name: InferenceTableName,
+  inference_join_key: InferenceJoinKey,
+  maximize: boolean,
+  max_samples: number | undefined,
+): Promise<number> {
+  const comparison_operator = maximize ? "= 1" : "= 0"; // Changed from "IS TRUE"/"IS FALSE"
+  const limitClause = max_samples ? `LIMIT ${max_samples}` : "";
+
+  const query = `
+    SELECT
+      COUNT(*) as count
+    FROM
+      ${inference_table_name} i
+    JOIN
+      (SELECT
+        target_id,
+        value,
+        ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC) as rn
+      FROM
+        BooleanMetricFeedback
+      WHERE
+        metric_name = {metric_name:String}
+        AND value ${comparison_operator}
+      ) f ON i.${inference_join_key} = f.target_id and f.rn = 1
+    WHERE
+      i.function_name = {function_name:String}
+    ${limitClause}
+  `;
+
+  const resultSet = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: {
+      metric_name,
+      function_name,
+    },
+  });
+  const rows = await resultSet.json<{ count: number }>();
+  return rows[0].count;
 }
 
 export const roleSchema = z.enum(["user", "assistant"]);

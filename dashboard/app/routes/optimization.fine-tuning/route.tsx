@@ -14,7 +14,7 @@ import { useConfig } from "~/context/config";
 import {
   countFeedbacksForMetric,
   countInferencesForFunction,
-  getCuratedInferences,
+  countCuratedInferences,
 } from "~/utils/clickhouse";
 import { getConfig } from "~/utils/config.server";
 import { useLoaderData, useSearchParams } from "@remix-run/react";
@@ -55,7 +55,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   let inferenceCount = null;
   let feedbackCount = null;
-  let curatedInferences = null;
+  let curatedInferenceCount = null;
   const config = await getConfig();
   if (functionName) {
     inferenceCount = await countInferencesForFunction(
@@ -69,19 +69,20 @@ export async function loader({ request }: LoaderFunctionArgs) {
       config.metrics[metricName],
     );
   }
+  // TODO: count the curated inferences but don't actually return them
   if (functionName && metricName) {
-    curatedInferences = await getCuratedInferences(
+    curatedInferenceCount = await countCuratedInferences(
       functionName,
       config.functions[functionName],
       metricName,
       config.metrics[metricName],
     );
   }
-  return json({ inferenceCount, feedbackCount, curatedInferences });
+  return json({ inferenceCount, feedbackCount, curatedInferenceCount });
 }
 
 export default function FineTuning() {
-  const { inferenceCount, feedbackCount, curatedInferences } =
+  const { inferenceCount, feedbackCount, curatedInferenceCount } =
     useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -227,20 +228,6 @@ export default function FineTuning() {
     // }
   }
 
-  // Helper function to format provider name
-  function formatProvider(provider: string): string {
-    switch (provider) {
-      case "openai":
-        return "OpenAI";
-      case "anthropic":
-        return "Anthropic";
-      case "mistral":
-        return "Mistral";
-      default:
-        return provider;
-    }
-  }
-
   function getButtonText() {
     switch (submissionPhase) {
       case "submitting":
@@ -274,7 +261,7 @@ export default function FineTuning() {
                 <MetricSelector
                   control={form.control}
                   feedbackCount={feedbackCount}
-                  curatedInferenceCount={curatedInferences?.length ?? null}
+                  curatedInferenceCount={curatedInferenceCount}
                   config={config}
                   onMetricChange={handleMetricChange}
                 />
