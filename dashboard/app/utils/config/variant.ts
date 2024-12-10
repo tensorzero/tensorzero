@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { jsonModeSchema, retryConfigSchema } from "./types";
+import { create_env } from "../minijinja/pkg/minijinja_bindings";
 
 const BaseChatCompletionConfig = z.object({
   weight: z.number().default(0),
   model: z.string(),
-  system_template: z.string().optional(),
-  user_template: z.string().optional(),
-  assistant_template: z.string().optional(),
+  system_template: z.string().optional(), // should be the path here not the actual system template
+  user_template: z.string().optional(), // should be the path here not the actual user template
+  assistant_template: z.string().optional(), // should be the path here not the actual assistant template
   temperature: z.number().optional(),
   top_p: z.number().optional(),
   max_tokens: z.number().int().optional(),
@@ -84,3 +85,25 @@ export const VariantConfig = z.discriminatedUnion("type", [
 ]);
 
 export type VariantConfig = z.infer<typeof VariantConfig>;
+
+export async function get_template_env(variant: VariantConfig) {
+  const env: {
+    system?: string;
+    user?: string;
+    assistant?: string;
+  } = {};
+
+  if ("system_template" in variant && variant.system_template) {
+    env.system = variant.system_template;
+  }
+
+  if ("user_template" in variant && variant.user_template) {
+    env.user = variant.user_template;
+  }
+
+  if ("assistant_template" in variant && variant.assistant_template) {
+    env.assistant = variant.assistant_template;
+  }
+
+  return await create_env(env);
+}

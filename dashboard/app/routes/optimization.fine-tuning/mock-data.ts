@@ -115,6 +115,10 @@ export const models: ModelOption[] = [
     name: "gpt-4o-turbo",
     provider: "openai",
   },
+  {
+    name: "gpt-4o-mini-2024-07-18",
+    provider: "openai",
+  },
 ];
 
 export const promptTemplates: Record<string, VariantConfig> = {

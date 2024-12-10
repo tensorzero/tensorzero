@@ -1,6 +1,7 @@
 import { createClient } from "@clickhouse/client";
 import { z } from "zod";
 import { FunctionConfig } from "./config/function";
+import { MetricConfig } from "./config/metric";
 
 export const clickhouseClient = createClient({
   url: process.env.CLICKHOUSE_URL,
@@ -39,7 +40,7 @@ export type ParsedInferenceRow =
 
 export function parseInferenceRows(
   rows: InferenceRow[],
-  tableName: string
+  tableName: string,
 ): ParsedChatInferenceRow[] | ParsedJsonInferenceRow[] {
   if (tableName === "ChatInference") {
     return rows.map((row) => ({
@@ -71,7 +72,7 @@ export type InferenceJoinKey =
   (typeof InferenceJoinKey)[keyof typeof InferenceJoinKey];
 
 function getInferenceTableName(
-  function_config: FunctionConfig
+  function_config: FunctionConfig,
 ): InferenceTableName {
   switch (function_config.type) {
     case "chat":
@@ -81,9 +82,31 @@ function getInferenceTableName(
   }
 }
 
+function getMetricTableName(metric_config: MetricConfig): string {
+  switch (metric_config.type) {
+    case "boolean":
+      return "BooleanMetricFeedback";
+    case "float":
+      return "FloatMetricFeedback";
+    case "comment":
+      return "CommentFeedback";
+    case "demonstration":
+      return "DemonstrationFeedback";
+  }
+}
+
+function getInferenceJoinKey(metric_config: MetricConfig): InferenceJoinKey {
+  switch (metric_config.level) {
+    case "inference":
+      return InferenceJoinKey.ID;
+    case "episode":
+      return InferenceJoinKey.EPISODE_ID;
+  }
+}
+
 export async function countInferencesForFunction(
   function_name: string,
-  function_config: FunctionConfig
+  function_config: FunctionConfig,
 ): Promise<number> {
   const inference_table_name = getInferenceTableName(function_config);
   const query = `SELECT COUNT() AS count FROM ${inference_table_name} WHERE function_name = {function_name:String}`;
@@ -96,13 +119,52 @@ export async function countInferencesForFunction(
   return Number(rows[0].count);
 }
 
+export async function countFeedbacksForMetric(
+  metric_name: string,
+  metric_config: MetricConfig,
+): Promise<number> {
+  const metric_table_name = getMetricTableName(metric_config);
+  const query = `SELECT COUNT() AS count FROM ${metric_table_name} WHERE metric_name = {metric_name:String}`;
+  const resultSet = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: { metric_name },
+  });
+  const rows = await resultSet.json<{ count: string }>();
+  return Number(rows[0].count);
+}
+
+export async function getCuratedInferences(
+  function_name: string,
+  function_config: FunctionConfig,
+  metric_name: string,
+  metric_config: MetricConfig,
+) {
+  const inference_table_name = getInferenceTableName(function_config);
+  const inference_join_key = getInferenceJoinKey(metric_config);
+
+  switch (metric_config.type) {
+    case "boolean":
+      return queryGoodBooleanMetricData(
+        function_name,
+        metric_name,
+        inference_table_name,
+        inference_join_key,
+        metric_config.optimize === "max",
+        undefined,
+      );
+    default:
+      throw new Error(`Unsupported metric type: ${metric_config.type}`);
+  }
+}
+
 export async function queryGoodBooleanMetricData(
   function_name: string,
   metric_name: string,
   inference_table_name: InferenceTableName,
   inference_join_key: InferenceJoinKey,
   maximize: boolean,
-  max_samples: number | undefined
+  max_samples: number | undefined,
 ): Promise<ParsedInferenceRow[]> {
   const comparison_operator = maximize ? "= 1" : "= 0"; // Changed from "IS TRUE"/"IS FALSE"
   const limitClause = max_samples ? `LIMIT ${max_samples}` : "";

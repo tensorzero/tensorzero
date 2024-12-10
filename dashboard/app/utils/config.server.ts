@@ -1,6 +1,7 @@
 import { loadConfig } from "~/utils/config";
 
-const CONFIG_PATH = process.env.CONFIG_PATH || "config/tensorzero.toml";
+const CONFIG_PATH =
+  process.env.CONFIG_PATH || "fixtures/config/tensorzero.toml";
 
 // Create singleton
 let configPromise: ReturnType<typeof loadConfig>;
