@@ -6,33 +6,9 @@ import {
 import { Form } from "~/components/ui/form";
 import { Button } from "~/components/ui/button";
 import { models } from "./mock-data";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "~/components/ui/select";
 import { useForm } from "react-hook-form";
-import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 // import { functions, metrics, models, promptTemplates } from "./mock-data";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "~/components/ui/accordion";
-import { Skeleton } from "~/components/ui/skeleton";
-import { Input } from "~/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "~/components/ui/dialog";
 import { Textarea } from "~/components/ui/textarea";
-import { promptTemplateDetails } from "./mock-data";
 import { useEffect, useMemo, useState } from "react";
 import { useConfig } from "~/context/config";
 import {
@@ -50,6 +26,11 @@ import { ChatCompletionConfig, get_template_env } from "~/utils/config/variant";
 // upload_examples_to_openai,
 // } from "~/utils/fine_tuning/openai";
 import OpenAI from "openai";
+import { FunctionSelector } from "./FunctionSelector";
+import { MetricSelector } from "./MetricSelector";
+import { VariantSelector } from "./VariantSelector";
+import { ModelSelector } from "./ModelSelector";
+import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 export const meta: MetaFunction = () => {
   return [
     { title: "TensorZeroFine-Tuning Dashboard" },
@@ -57,7 +38,7 @@ export const meta: MetaFunction = () => {
   ];
 };
 
-type FormValues = {
+export type FormValues = {
   function: string;
   metric: string;
   model: string;
@@ -281,391 +262,29 @@ export default function FineTuning() {
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               <div className="space-y-6">
-                <FormField
+                <FunctionSelector
                   control={form.control}
-                  name="function"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Function</FormLabel>
-                      <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
-                        <Select
-                          onValueChange={(value) => {
-                            field.onChange(value);
-                            handleFunctionChange(value);
-                          }}
-                          value={field.value}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a function" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {Object.entries(config.functions).map(
-                              ([name, fn]) => {
-                                return (
-                                  <SelectItem key={name} value={name}>
-                                    <div className="flex items-center justify-between w-full">
-                                      <span>{name}</span>
-                                      <span
-                                        className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
-                                    ${
-                                      fn.type === "chat"
-                                        ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300"
-                                        : "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300"
-                                    }`}
-                                      >
-                                        {fn.type === "chat"
-                                          ? "Chat"
-                                          : fn.type === "json"
-                                            ? "JSON"
-                                            : "Unknown"}
-                                      </span>
-                                    </div>
-                                  </SelectItem>
-                                );
-                              },
-                            )}
-                          </SelectContent>
-                        </Select>
-                        <div className="text-sm text-muted-foreground">
-                          Inferences:{" "}
-                          {field.value ? (
-                            <span className="font-medium">
-                              {inferenceCount ?? (
-                                <Skeleton className="inline-block h-4 w-16 align-middle" />
-                              )}
-                            </span>
-                          ) : (
-                            <Skeleton className="inline-block h-4 w-16 align-middle" />
-                          )}
-                        </div>
-                      </div>
-                    </FormItem>
-                  )}
+                  inferenceCount={inferenceCount}
+                  config={config}
+                  onFunctionChange={handleFunctionChange}
                 />
 
-                <FormField
+                <MetricSelector
                   control={form.control}
-                  name="metric"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Metric</FormLabel>
-                      <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
-                        <div className="space-y-2">
-                          <Select
-                            onValueChange={(value) => {
-                              field.onChange(value);
-                              handleMetricChange(value);
-                            }}
-                            defaultValue={field.value}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select a metric" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {Object.entries(config.metrics).map(
-                                ([name, metric]) => (
-                                  <SelectItem key={name} value={name}>
-                                    <div className="flex items-center justify-between w-full">
-                                      <span>{name}</span>
-                                      <div className="ml-2 flex gap-1.5">
-                                        <span
-                                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
-                                        ${
-                                          metric.type === "boolean"
-                                            ? "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300"
-                                            : "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-300"
-                                        }`}
-                                        >
-                                          {metric.type}
-                                        </span>
-                                        <span
-                                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
-                                        ${
-                                          metric.optimize === "max"
-                                            ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
-                                            : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"
-                                        }`}
-                                        >
-                                          {metric.optimize}
-                                        </span>
-                                        <span
-                                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
-                                        ${
-                                          metric.level === "episode"
-                                            ? "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300"
-                                            : "bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-300"
-                                        }`}
-                                        >
-                                          {metric.level}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </SelectItem>
-                                ),
-                              )}
-                            </SelectContent>
-                          </Select>
-
-                          {field.value &&
-                            config.metrics[field.value]?.type === "float" && (
-                              <FormField
-                                control={form.control}
-                                name="threshold"
-                                render={({ field: thresholdField }) => (
-                                  <div className="p-4 bg-gray-100 rounded-lg">
-                                    <FormLabel>Threshold</FormLabel>
-                                    <Input
-                                      type="number"
-                                      step="0.01"
-                                      min={0}
-                                      max={1}
-                                      {...thresholdField}
-                                      className="bg-transparent border-none focus:ring-0"
-                                      onChange={(e) =>
-                                        thresholdField.onChange(
-                                          Number(e.target.value),
-                                        )
-                                      }
-                                    />
-                                  </div>
-                                )}
-                              />
-                            )}
-                        </div>
-
-                        <div className="space-y-1 text-sm text-muted-foreground">
-                          <div>
-                            Feedbacks:{" "}
-                            {field.value ? (
-                              <span className="font-medium">
-                                {feedbackCount}
-                              </span>
-                            ) : (
-                              <Skeleton className="inline-block h-4 w-16 align-middle" />
-                            )}
-                          </div>
-                          <div>
-                            Curated Inferences:{" "}
-                            {field.value && form.watch("function") ? (
-                              <span className="font-medium">
-                                {curatedInferences?.length}
-                              </span>
-                            ) : (
-                              <Skeleton className="inline-block h-4 w-16 align-middle" />
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </FormItem>
-                  )}
+                  feedbackCount={feedbackCount}
+                  curatedInferenceCount={curatedInferences?.length ?? null}
+                  config={config}
+                  onMetricChange={handleMetricChange}
                 />
 
-                <FormField
+                <VariantSelector
                   control={form.control}
-                  name="variant"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Prompt Template</FormLabel>
-                      <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
-                        <Select
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a prompt template" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {Object.entries(
-                              getChatCompletionVariantsForFunction,
-                            ).map(([name]) => (
-                              <SelectItem key={name} value={name}>
-                                <span>{name}</span>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <div className="flex">
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <Button variant="outline" disabled={!field.value}>
-                                Details
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent className="sm:max-w-[625px] p-0 overflow-hidden">
-                              <div className="max-h-[90vh] overflow-y-auto p-6 rounded-lg">
-                                <DialogHeader>
-                                  <DialogTitle>Template Details</DialogTitle>
-                                </DialogHeader>
-                                <div className="grid gap-4 py-4">
-                                  <div className="space-y-4">
-                                    {field.value && (
-                                      <>
-                                        <div className="space-y-2">
-                                          <h4 className="font-medium leading-none">
-                                            System Template
-                                          </h4>
-                                          {getChatCompletionVariantsForFunction[
-                                            field.value
-                                          ]?.system_template ? (
-                                            <Textarea
-                                              readOnly
-                                              value={
-                                                getChatCompletionVariantsForFunction[
-                                                  field.value
-                                                ]?.system_template
-                                              }
-                                              className="h-[200px] resize-none"
-                                            />
-                                          ) : (
-                                            <p className="text-sm text-muted-foreground">
-                                              No system template.
-                                            </p>
-                                          )}
-                                        </div>
-
-                                        <div className="space-y-2">
-                                          <h4 className="font-medium leading-none">
-                                            User Template
-                                          </h4>
-                                          {getChatCompletionVariantsForFunction[
-                                            field.value
-                                          ]?.user_template ? (
-                                            <Textarea
-                                              readOnly
-                                              value={
-                                                getChatCompletionVariantsForFunction[
-                                                  field.value
-                                                ]?.user_template
-                                              }
-                                              className="h-[200px] resize-none"
-                                            />
-                                          ) : (
-                                            <p className="text-sm text-muted-foreground">
-                                              No user template.
-                                            </p>
-                                          )}
-                                        </div>
-                                      </>
-                                    )}
-
-                                    <div className="space-y-2">
-                                      <h4 className="font-medium leading-none">
-                                        Assistant Template
-                                      </h4>
-                                      {promptTemplateDetails.assistant ? (
-                                        <Textarea
-                                          readOnly
-                                          value={
-                                            promptTemplateDetails.assistant
-                                          }
-                                          className="h-[200px] resize-none"
-                                        />
-                                      ) : (
-                                        <p className="text-sm text-muted-foreground">
-                                          No assistant template.
-                                        </p>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </DialogContent>
-                          </Dialog>
-                        </div>
-                      </div>
-                    </FormItem>
-                  )}
+                  chatCompletionVariants={getChatCompletionVariantsForFunction}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="model"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Model</FormLabel>
-                      <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
-                        <Select
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a model" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {Object.entries(models).map(([name, model]) => (
-                              <SelectItem key={name} value={name}>
-                                <div className="flex items-center justify-between w-full">
-                                  <span>{model.name}</span>
-                                  <span className="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300">
-                                    {formatProvider(model.provider)}
-                                  </span>
-                                </div>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <div></div>
-                      </div>
-                    </FormItem>
-                  )}
-                />
+                <ModelSelector control={form.control} models={models} />
 
-                <Accordion type="single" collapsible className="w-full">
-                  <AccordionItem value="advanced-parameters">
-                    <AccordionTrigger className="hover:no-underline">
-                      <div className="flex items-center gap-2">
-                        <span>Advanced Parameters</span>
-                      </div>
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <div className="space-y-6 pt-3 px-3">
-                        <FormField
-                          control={form.control}
-                          name="validationSplit"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Validation Split (%)</FormLabel>
-                              <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
-                                <Input
-                                  type="number"
-                                  min={0}
-                                  max={100}
-                                  {...field}
-                                  onChange={(e) =>
-                                    field.onChange(Number(e.target.value))
-                                  }
-                                />
-                                <div></div>
-                              </div>
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name="maxSamples"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Max. Samples</FormLabel>
-                              <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
-                                <Input
-                                  type="number"
-                                  min={1}
-                                  step={1}
-                                  {...field}
-                                  onChange={(e) =>
-                                    field.onChange(Number(e.target.value))
-                                  }
-                                />
-                                <div></div>
-                              </div>
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                </Accordion>
+                <AdvancedParametersAccordion control={form.control} />
               </div>
 
               <div className="space-y-4">
