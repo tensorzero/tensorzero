@@ -721,11 +721,6 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
                 "top_p": 0.9,
                 "presence_penalty": 0.1,
                 "frequency_penalty": 0.2,
-            },
-            "fake_variant_type": {
-                "temperature": 0.8,
-                "seed": 7331,
-                "max_tokens": 80,
             }
         },
         "stream": false,
@@ -739,10 +734,12 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
         .unwrap();
 
     // Check that the API response is ok
-    assert_eq!(response.status(), StatusCode::OK);
+    let response_status = response.status();
     let response_json = response.json::<Value>().await.unwrap();
 
     println!("API response: {response_json:#?}");
+
+    assert_eq!(response_status, StatusCode::OK);
 
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
@@ -925,14 +922,6 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
                 "temperature": 0.9,
                 "seed": 1337,
                 "max_tokens": 120,
-                "top_p": 0.9,
-                "presence_penalty": 0.1,
-                "frequency_penalty": 0.2,
-            },
-            "fake_variant_type": {
-                "temperature": 0.8,
-                "seed": 7331,
-                "max_tokens": 80,
                 "top_p": 0.9,
                 "presence_penalty": 0.1,
                 "frequency_penalty": 0.2,
