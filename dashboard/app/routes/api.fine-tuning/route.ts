@@ -19,7 +19,7 @@ function splitValidationData(
 ) {
   const splitIndex =
     validationSplit > 0
-      ? Math.floor(messages.length * (validationSplit / 100))
+      ? Math.floor(messages.length * (1 - validationSplit / 100))
       : messages.length;
 
   const trainMessages = messages.slice(0, splitIndex);
