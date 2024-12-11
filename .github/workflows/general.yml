@@ -61,7 +61,6 @@ jobs:
           uv venv
           uv pip install -e .
           uv pip install pyright
-          uv pip sync
 
       - name: Run pyright type checking
         working-directory: clients/python
