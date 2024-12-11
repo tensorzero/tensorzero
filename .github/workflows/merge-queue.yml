@@ -148,6 +148,11 @@ jobs:
           docker compose -f examples/production-deployment/docker-compose.yml down
           docker compose -f gateway/tests/e2e/docker-compose.yml down
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.9.0"
+
       - name: Install npm dependencies
         working-directory: dashboard
         run: npm install --platform=linux
