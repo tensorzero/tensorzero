@@ -1150,7 +1150,6 @@ system_template = "../../fixtures/config/functions/basic_test/prompt/system_temp
 type = "experimental_mixture_of_n"
 weight = 1
 candidates = ["variant0", "variant1"]
-system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
 [functions.mixture_of_n.variants.mixture_of_n_variant.fuser]
 model = "gpt-4o-mini-2024-07-18"
