@@ -104,6 +104,27 @@ export const ProviderConfig = z.discriminatedUnion("type", [
 ]);
 
 export type ProviderConfig = z.infer<typeof ProviderConfig>;
+export type ProviderType = ProviderConfig["type"];
+
+export function createProviderConfig(
+  type: ProviderType,
+  model_name: string,
+): ProviderConfig {
+  switch (type) {
+    case "anthropic":
+    case "dummy":
+    case "fireworks":
+    case "mistral":
+    case "together":
+    case "google_ai_studio_gemini":
+    case "openai":
+      return { type, model_name };
+    case "aws_bedrock":
+      return { type, model_id: model_name };
+    default:
+      throw new Error(`Provider ${type} requires additional configuration`);
+  }
+}
 
 // Model config schema
 export const ModelConfig = z.object({

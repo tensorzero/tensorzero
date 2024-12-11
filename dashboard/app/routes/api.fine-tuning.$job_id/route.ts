@@ -18,6 +18,7 @@ export async function loader({ params }: LoaderFunctionArgs) {
       return json({
         status: job.status,
         fine_tuned_model: job.fine_tuned_model,
+        job: job,
       });
     } else {
       return json({ error: "Job not found" }, { status: 404 });

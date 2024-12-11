@@ -1,23 +1,11 @@
-import {
-  json,
-  type LoaderFunctionArgs,
-  type MetaFunction,
-} from "@remix-run/node";
+import { type MetaFunction } from "@remix-run/node";
 import { Form } from "~/components/ui/form";
 import { Button } from "~/components/ui/button";
 import { ModelOption, models } from "./mock-data";
 import { useForm } from "react-hook-form";
-// import { functions, metrics, models, promptTemplates } from "./mock-data";
 import { Textarea } from "~/components/ui/textarea";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useConfig } from "~/context/config";
-import {
-  countFeedbacksForMetric,
-  countInferencesForFunction,
-  countCuratedInferences,
-} from "~/utils/clickhouse";
-import { getConfig } from "~/utils/config.server";
-import { useLoaderData, useSearchParams } from "@remix-run/react";
 import { ChatCompletionConfig } from "~/utils/config/variant";
 
 import { FunctionSelector } from "./FunctionSelector";
@@ -25,14 +13,17 @@ import { MetricSelector } from "./MetricSelector";
 import { VariantSelector } from "./VariantSelector";
 import { ModelSelector } from "./ModelSelector";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
-import { get_fine_tuned_model_config } from "~/utils/fine_tuning/openai";
+import {
+  dump_model_config,
+  get_fine_tuned_model_config,
+  create_dump_variant_config,
+} from "~/utils/fine_tuning/config_block";
 export const meta: MetaFunction = () => {
   return [
     { title: "TensorZeroFine-Tuning Dashboard" },
     { name: "description", content: "Fine Tuning Optimization Dashboard" },
   ];
 };
-import { stringify } from "smol-toml";
 
 export type FormValues = {
   function: string;
@@ -44,49 +35,12 @@ export type FormValues = {
   threshold?: number;
 };
 
-export async function loader({ request }: LoaderFunctionArgs) {
-  const url = new URL(request.url);
-  const functionName = url.searchParams.get("function");
-  const metricName = url.searchParams.get("metric");
-
-  let inferenceCount = null;
-  let feedbackCount = null;
-  let curatedInferenceCount = null;
-  const config = await getConfig();
-  if (functionName) {
-    inferenceCount = await countInferencesForFunction(
-      functionName,
-      config.functions[functionName],
-    );
-  }
-  if (metricName) {
-    feedbackCount = await countFeedbacksForMetric(
-      metricName,
-      config.metrics[metricName],
-    );
-  }
-  // TODO: count the curated inferences but don't actually return them
-  if (functionName && metricName) {
-    curatedInferenceCount = await countCuratedInferences(
-      functionName,
-      config.functions[functionName],
-      metricName,
-      config.metrics[metricName],
-    );
-  }
-  return json({ inferenceCount, feedbackCount, curatedInferenceCount });
-}
-
 export default function FineTuning() {
-  const { inferenceCount, feedbackCount, curatedInferenceCount } =
-    useLoaderData<typeof loader>();
-  const [searchParams, setSearchParams] = useSearchParams();
-
   const config = useConfig();
   const form = useForm<FormValues>({
     defaultValues: {
-      function: searchParams.get("function") || "",
-      metric: searchParams.get("metric") || "",
+      function: "",
+      metric: "",
       validationSplit: 20,
       maxSamples: 100000,
       threshold: 0.5,
@@ -100,35 +54,39 @@ export default function FineTuning() {
     "idle" | "submitting" | "pending" | "complete"
   >("idle");
 
+  const [counts, setCounts] = useState<{
+    inferenceCount: number | null;
+    feedbackCount: number | null;
+    curatedInferenceCount: number | null;
+  }>({
+    inferenceCount: null,
+    feedbackCount: null,
+    curatedInferenceCount: null,
+  });
+
+  const fetchCounts = async (functionName?: string, metricName?: string) => {
+    const params = new URLSearchParams();
+    if (functionName) params.set("function", functionName);
+    if (metricName) params.set("metric", metricName);
+
+    const response = await fetch(`/api/curated_inferences/count?${params}`);
+    const data = await response.json();
+    setCounts(data);
+  };
+
   const handleFunctionChange = (value: string) => {
-    setSearchParams(
-      (prev) => {
-        if (value) {
-          prev.set("function", value);
-        } else {
-          prev.delete("function");
-        }
-        return prev;
-      },
-      { replace: true },
-    );
+    fetchCounts(value, form.getValues("metric") || undefined);
   };
 
   const handleMetricChange = (value: string) => {
-    setSearchParams(
-      (prev) => {
-        prev.set("metric", value);
-        return prev;
-      },
-      { replace: true },
-    );
+    fetchCounts(form.getValues("function") || undefined, value);
   };
 
-  const getChatCompletionVariantsForFunction = useMemo((): Record<
+  const getChatCompletionVariantsForFunction = (): Record<
     string,
     ChatCompletionConfig
   > => {
-    const selectedFunction = searchParams.get("function");
+    const selectedFunction = form.getValues("function");
 
     if (!selectedFunction || !config?.functions[selectedFunction]) {
       return {};
@@ -141,13 +99,13 @@ export default function FineTuning() {
           entry[1].type === "chat_completion",
       ),
     );
-  }, [config, searchParams]);
+  };
 
   useEffect(() => {
-    if (inferenceCount !== null) {
-      form.setValue("maxSamples", Math.min(100000, inferenceCount));
+    if (counts.inferenceCount !== null) {
+      form.setValue("maxSamples", Math.min(100000, counts.inferenceCount));
     }
-  }, [inferenceCount, form]);
+  }, [counts.inferenceCount, form]);
 
   async function onSubmit(data: FormValues) {
     try {
@@ -183,7 +141,13 @@ export default function FineTuning() {
         const jobResponse = await fetch(`/api/fine-tuning/${job_id}`);
         const jobResult = await jobResponse.json();
         jobStatus = jobResult.status;
-        setSubmissionResult(`Current job status: ${jobStatus}`);
+        setSubmissionResult(
+          `Current job status: ${jobStatus}\nJob: ${JSON.stringify(
+            jobResult.job,
+            null,
+            2,
+          )}`,
+        );
 
         finished =
           jobStatus === "succeeded" ||
@@ -192,26 +156,18 @@ export default function FineTuning() {
       }
       setSubmissionPhase("complete");
 
-      const modelConfig = await get_fine_tuned_model_config(data.model.name);
-      const fullModelConfig = { models: { [data.model.name]: modelConfig } };
+      const modelConfig = await get_fine_tuned_model_config(
+        data.model.name,
+        data.model.provider,
+      );
+      const modelConfigToml = dump_model_config(modelConfig);
       const oldVariantConfig =
-        getChatCompletionVariantsForFunction[data.variant];
-      const newVariantConfig = {
-        ...oldVariantConfig,
-        weight: 0,
-        model_name: data.model.name,
-      };
-      const fullNewVariantConfig = {
-        functions: {
-          [data.function]: {
-            variants: {
-              [data.model.name]: newVariantConfig,
-            },
-          },
-        },
-      };
-      const modelConfigToml = stringify(fullModelConfig);
-      const newVariantConfigToml = stringify(fullNewVariantConfig);
+        getChatCompletionVariantsForFunction()[data.variant];
+      const newVariantConfigToml = create_dump_variant_config(
+        oldVariantConfig,
+        data.model.name,
+        data.function,
+      );
 
       setFinalResult(
         `Model Configuration:\n\n${modelConfigToml}\n\n` +
@@ -222,55 +178,6 @@ export default function FineTuning() {
       setSubmissionPhase("complete");
       setFinalResult(`Error during fine-tuning: ${error.message}`);
     }
-
-    //   setSubmissionResult(
-    //     `Training data uploaded (File ID: ${file_id})\nStarting fine-tuning job...`
-    //   );
-    //   const job_id = await create_fine_tuning_job(data.model, file_id);
-
-    //   setSubmissionPhase("pending");
-    //   let finished = false;
-    //   let job: OpenAI.FineTuning.FineTuningJob | undefined;
-    //   let counter = 1;
-
-    //   while (!finished) {
-    //     await new Promise((resolve) => setTimeout(resolve, 10000));
-    //     job = await poll_fine_tuning_job(job_id);
-
-    //     // Update UI with current status
-    //     counter++;
-    //     setCounter(counter);
-    //     setSubmissionResult(
-    //       `Attempt ${counter}\n\nFine-tuning job status: ${job.status}\n` +
-    //         `Training progress: ${job.trained_tokens ?? 0} tokens\n` +
-    //         `${job.status === "running" ? "Training in progress..." : ""}`
-    //     );
-
-    //     finished =
-    //       job.status === "succeeded" ||
-    //       job.status === "failed" ||
-    //       job.status === "cancelled";
-    //   }
-    //   if (!job) {
-    //     throw new Error("No job found after fine-tuning");
-    //   }
-
-    //   setSubmissionPhase("complete");
-    //   setFinalResult(
-    //     job.status === "succeeded"
-    //       ? `Fine-tuning completed successfully!\n\n` +
-    //           `Model ID: ${job.fine_tuned_model}\n` +
-    //           `Training tokens: ${job.trained_tokens}\n` +
-    //           `Training file: ${job.training_file}\n` +
-    //           `Validation file: ${job.validation_file ?? "None"}`
-    //       : `Fine-tuning failed with status: ${job.status}\n` +
-    //           `${job.error?.message ?? "No error message provided"}`
-    //   );
-    // } catch (err) {
-    //   const error = err as Error;
-    //   setSubmissionPhase("complete");
-    //   setFinalResult(`Error during fine-tuning: ${error.message}`);
-    // }
   }
 
   function getButtonText() {
@@ -298,22 +205,22 @@ export default function FineTuning() {
               <div className="space-y-6">
                 <FunctionSelector
                   control={form.control}
-                  inferenceCount={inferenceCount}
+                  inferenceCount={counts.inferenceCount}
                   config={config}
                   onFunctionChange={handleFunctionChange}
                 />
 
                 <MetricSelector
                   control={form.control}
-                  feedbackCount={feedbackCount}
-                  curatedInferenceCount={curatedInferenceCount}
+                  feedbackCount={counts.feedbackCount}
+                  curatedInferenceCount={counts.curatedInferenceCount}
                   config={config}
                   onMetricChange={handleMetricChange}
                 />
 
                 <VariantSelector
                   control={form.control}
-                  chatCompletionVariants={getChatCompletionVariantsForFunction}
+                  chatCompletionVariants={getChatCompletionVariantsForFunction()}
                 />
 
                 <ModelSelector control={form.control} models={models} />

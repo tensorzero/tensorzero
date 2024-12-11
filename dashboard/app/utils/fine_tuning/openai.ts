@@ -7,7 +7,6 @@ import {
   Role,
 } from "~/utils/clickhouse";
 import { render_message } from "./rendering";
-import { ModelConfig, ProviderConfig } from "../config/models";
 
 type OpenAIRole = "system" | "user" | "assistant" | "tool";
 
@@ -104,18 +103,4 @@ function content_block_to_openai_message(
         content: content.result,
       };
   }
-}
-
-export async function get_fine_tuned_model_config(model: string) {
-  const providerConfig: ProviderConfig = {
-    type: "openai",
-    model_name: model,
-  };
-  const modelConfig: ModelConfig = {
-    routing: [model],
-    providers: {
-      [model]: providerConfig,
-    },
-  };
-  return modelConfig;
 }
