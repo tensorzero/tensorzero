@@ -113,6 +113,11 @@ jobs:
           echo "Killing gateway with pid $GATEWAY_PID"
           kill -9 $GATEWAY_PID
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.9.0"
+
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
