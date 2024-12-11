@@ -4,11 +4,32 @@ import { getCuratedInferences } from "~/utils/clickhouse";
 import type { FormValues } from "~/routes/optimization.fine-tuning/route";
 import { get_template_env } from "~/utils/config/variant";
 import { ChatCompletionConfig } from "~/utils/config/variant";
-import { tensorzero_inference_to_openai_messages } from "~/utils/fine_tuning/openai";
+import {
+  OpenAIMessage,
+  tensorzero_inference_to_openai_messages,
+} from "~/utils/fine_tuning/openai";
 import {
   upload_examples_to_openai,
   create_fine_tuning_job,
 } from "~/utils/fine_tuning/openai.server";
+
+function splitValidationData(
+  messages: OpenAIMessage[][],
+  validationSplit: number,
+) {
+  const splitIndex =
+    validationSplit > 0
+      ? Math.floor(messages.length * (validationSplit / 100))
+      : messages.length;
+
+  const trainMessages = messages.slice(0, splitIndex);
+  const valMessages = validationSplit > 0 ? messages.slice(splitIndex) : [];
+
+  return {
+    trainMessages,
+    valMessages,
+  };
+}
 
 export async function action({ request }: ActionFunctionArgs) {
   if (request.method !== "POST") {
@@ -41,14 +62,10 @@ export async function action({ request }: ActionFunctionArgs) {
       tensorzero_inference_to_openai_messages(inference, template_env),
     );
 
-    const splitIndex =
-      data.validationSplit > 0
-        ? Math.floor(messages.length * (data.validationSplit / 100))
-        : messages.length;
-
-    const trainMessages = messages.slice(0, splitIndex);
-    const valMessages =
-      data.validationSplit > 0 ? messages.slice(splitIndex) : [];
+    const { trainMessages, valMessages } = splitValidationData(
+      messages,
+      data.validationSplit,
+    );
 
     const file_id = await upload_examples_to_openai(trainMessages);
     console.log("file_id", file_id);
