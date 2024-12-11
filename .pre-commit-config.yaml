@@ -56,6 +56,9 @@ repos:
       - id: pyright
         name: pyright type checking
         files: ^clients/python/
+        additional_dependencies:
+          - httpx>=0.28.1
+          - uuid-utils>=0.10.0
 
   - repo: https://github.com/srstevenson/nb-clean
     rev: 3.2.0

@@ -83,12 +83,17 @@ jobs:
         working-directory: clients
         run: uv run pytest
 
+      - name: Install pyright and dependencies
+        working-directory: clients/python
+        run: |
+          uv venv
+          uv pip install -e .
+          uv pip install pyright
+          uv pip sync
+
       - name: Run pyright type checking
-        uses: jakebailey/pyright-action@v2.3.2
-        with:
-          working-directory: clients/python
-          version: latest
-          install-dependencies: true
+        working-directory: clients/python
+        run: pyright src/tensorzero/
 
       - name: Install dependencies for python recipes tests
         working-directory: recipes/tests

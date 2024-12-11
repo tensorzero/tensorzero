@@ -62,7 +62,7 @@ class ToolResult:
 @dataclass
 class JsonInferenceOutput:
     raw: str
-    parsed: Optional[Dict[str, Any]]
+    parsed: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -88,19 +88,21 @@ InferenceResponse = Union[ChatInferenceResponse, JsonInferenceResponse]
 
 def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
     if "content" in data and isinstance(data["content"], list):
+        content_blocks: List[Dict[str, Any]] = data["content"]
         return ChatInferenceResponse(
             inference_id=UUID(data["inference_id"]),
             episode_id=UUID(data["episode_id"]),
             variant_name=data["variant_name"],
-            content=[parse_content_block(block) for block in data["content"]],
+            content=[parse_content_block(block) for block in content_blocks],
             usage=Usage(**data["usage"]),
         )
     elif "output" in data and isinstance(data["output"], dict):
+        output_data: Dict[str, Any] = data["output"]
         return JsonInferenceResponse(
             inference_id=UUID(data["inference_id"]),
             episode_id=UUID(data["episode_id"]),
             variant_name=data["variant_name"],
-            output=JsonInferenceOutput(**data["output"]),
+            output=JsonInferenceOutput(**output_data),
             usage=Usage(**data["usage"]),
         )
     else:
@@ -108,7 +110,7 @@ def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
 
 
 def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
-    block_type = block["type"]
+    block_type: str = block["type"]
     if block_type == "text":
         return Text(text=block["text"], type=block_type)
     elif block_type == "tool_call":

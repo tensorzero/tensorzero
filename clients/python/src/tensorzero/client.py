@@ -42,6 +42,7 @@ from uuid import UUID
 import httpx
 
 from .types import (
+    ContentBlock,
     FeedbackResponse,
     InferenceChunk,
     InferenceResponse,
@@ -87,10 +88,11 @@ class BaseTensorZeroGateway(ABC):
         input = deepcopy(input)
         # Convert content blocks to dicts if necessary
         for message in input.get("messages", []):
-            if isinstance(message["content"], list):
-                for i, item in enumerate(message["content"]):
-                    if hasattr(item, "to_dict"):
-                        message["content"][i] = item.to_dict()
+            if isinstance(message.get("content", []), list):
+                message["content"] = [
+                    item.to_dict() if isinstance(item, ContentBlock) else item
+                    for item in message["content"]
+                ]
         data: Dict[str, Any] = {
             "function_name": function_name,
             "input": input,

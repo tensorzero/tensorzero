@@ -46,9 +46,23 @@ jobs:
           ruff format --check .
           ruff check --output-format=github --extend-select I .
 
-      - name: Run pyright type checking
-        uses: jakebailey/pyright-action@v2.3.2
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          working-directory: clients/python
-          version: latest
-          install-dependencies: true
+          python-version: "3.12"
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Install pyright and dependencies
+        working-directory: clients/python
+        run: |
+          uv venv
+          uv pip install -e .
+          uv pip install pyright
+          uv pip sync
+
+      - name: Run pyright type checking
+        working-directory: clients/python
+        run: pyright src/tensorzero/
