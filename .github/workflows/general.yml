@@ -51,3 +51,4 @@ jobs:
         with:
           working-directory: clients/python
           version: latest
+          install-dependencies: true

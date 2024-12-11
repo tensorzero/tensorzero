@@ -88,6 +88,7 @@ jobs:
         with:
           working-directory: clients/python
           version: latest
+          install-dependencies: true
 
       - name: Install dependencies for python recipes tests
         working-directory: recipes/tests
