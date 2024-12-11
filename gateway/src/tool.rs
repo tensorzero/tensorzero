@@ -20,6 +20,7 @@ use crate::{
 
 /// A Tool object describes how a tool can be dynamically configured by the user.
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Tool {
     pub description: String,
     pub parameters: Value,
@@ -188,6 +189,7 @@ impl ToolCallConfig {
 /// `tool_choice` and `parallel_tool_calls` are optional and will override the function-level values.
 #[derive(Debug, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(Default))]
+#[serde(deny_unknown_fields)]
 pub struct DynamicToolParams {
     pub allowed_tools: Option<Vec<String>>,
     pub additional_tools: Option<Vec<Tool>>,
@@ -197,6 +199,7 @@ pub struct DynamicToolParams {
 
 /// A ToolCall is a request by a model to call a Tool
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ToolCall {
     pub name: String,
     pub arguments: String,
@@ -263,6 +266,7 @@ impl ToolCallConfig {
 
 /// A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct ToolResult {
     pub name: String,
     pub result: String,
@@ -275,6 +279,7 @@ pub struct ToolResult {
 /// This enum is used to denote this tool choice.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
+#[serde(deny_unknown_fields)]
 pub enum ToolChoice {
     None,
     #[default]
