@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use futures::{StreamExt, TryStreamExt};
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value;
 use tokio::time::Instant;
 use url::Url;
@@ -12,25 +12,50 @@ use super::openai::{
     get_chat_url, handle_openai_error, stream_openai, tensorzero_to_openai_messages,
     OpenAIRequestMessage, OpenAIResponse, OpenAISystemRequestMessage, StreamOptions,
 };
-use super::provider_trait::{HasCredentials, InferenceProvider};
+use super::provider_trait::InferenceProvider;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{
     ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
 };
-use crate::model::ProviderCredentials;
+use crate::model::CredentialLocation;
 
 #[derive(Debug)]
 pub struct VLLMProvider {
     pub model_name: String,
-    pub api_key: Option<SecretString>,
     pub api_base: Url,
+    pub credentials: VLLMCredentials,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-pub struct VLLMCredentials<'a> {
-    pub api_key: Cow<'a, SecretString>,
+pub fn default_api_key_location() -> CredentialLocation {
+    CredentialLocation::Env("VLLM_API_KEY".to_string())
+}
+
+#[derive(Debug)]
+pub enum VLLMCredentials {
+    Static(SecretString),
+    Dynamic(String),
+    None,
+}
+
+impl VLLMCredentials {
+    fn get_api_key<'a>(
+        &'a self,
+        dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<Option<&'a SecretString>, Error> {
+        match self {
+            VLLMCredentials::Static(api_key) => Ok(Some(api_key)),
+            VLLMCredentials::Dynamic(key_name) => {
+                Ok(Some(dynamic_api_keys.get(key_name).ok_or_else(|| {
+                    Error::new(ErrorDetails::ApiKeyMissing {
+                        provider_name: "vLLM".to_string(),
+                    })
+                })?))
+            }
+            VLLMCredentials::None => Ok(None),
+        }
+    }
 }
 
 /// Key differences between vLLM and OpenAI inference:
@@ -42,39 +67,36 @@ impl InferenceProvider for VLLMProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: ProviderCredentials<'a>,
+        dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = VLLMRequest::new(&self.model_name, request)?;
         let request_url = get_chat_url(Some(&self.api_base))?;
         let start_time = Instant::now();
-        let api_key = match &api_key {
-            ProviderCredentials::VLLM(credentials) => &credentials.api_key,
-            _ => {
-                return Err(Error::ApiKeyMissing {
-                    provider_name: "vLLM".to_string(),
-                })
-            }
-        };
-        let res = http_client
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let mut request_builder = http_client
             .post(request_url)
-            .header("Content-Type", "application/json")
-            .bearer_auth(api_key.expose_secret())
+            .header("Content-Type", "application/json");
+        if let Some(key) = api_key {
+            request_builder = request_builder.bearer_auth(key.expose_secret());
+        }
+        let res = request_builder
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| Error::InferenceClient {
-                message: format!("Error sending request to vLLM: {e}"),
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    message: format!("Error sending request to vLLM: {e}"),
+                })
             })?;
         let latency = Latency::NonStreaming {
             response_time: start_time.elapsed(),
         };
         if res.status().is_success() {
-            let response_body =
-                res.json::<OpenAIResponse>()
-                    .await
-                    .map_err(|e| Error::VLLMServer {
-                        message: format!("Error parsing response: {e}"),
-                    })?;
+            let response_body = res.json::<OpenAIResponse>().await.map_err(|e| {
+                Error::new(ErrorDetails::VLLMServer {
+                    message: format!("Error parsing response: {e}"),
+                })
+            })?;
             Ok(VLLMResponseWithMetadata {
                 response: response_body,
                 latency,
@@ -86,8 +108,10 @@ impl InferenceProvider for VLLMProvider {
         } else {
             Err(map_openai_to_vllm_error(handle_openai_error(
                 res.status(),
-                &res.text().await.map_err(|e| Error::VLLMServer {
-                    message: format!("Error parsing error response: {e}"),
+                &res.text().await.map_err(|e| {
+                    Error::new(ErrorDetails::VLLMServer {
+                        message: format!("Error parsing error response: {e}"),
+                    })
                 })?,
             )))
         }
@@ -97,7 +121,7 @@ impl InferenceProvider for VLLMProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: ProviderCredentials<'a>,
+        dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -107,27 +131,27 @@ impl InferenceProvider for VLLMProvider {
         Error,
     > {
         let request_body = VLLMRequest::new(&self.model_name, request)?;
-        let raw_request = serde_json::to_string(&request_body).map_err(|e| Error::VLLMServer {
-            message: format!("Error serializing request: {e}"),
+        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
+            Error::new(ErrorDetails::VLLMServer {
+                message: format!("Error serializing request: {e}"),
+            })
         })?;
-        let api_key = match &api_key {
-            ProviderCredentials::VLLM(credentials) => &credentials.api_key,
-            _ => {
-                return Err(Error::BadCredentialsPreInference {
-                    provider_name: "vLLM".to_string(),
-                })
-            }
-        };
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let request_url = get_chat_url(Some(&self.api_base))?;
         let start_time = Instant::now();
-        let event_source = http_client
+        let mut request_builder = http_client
             .post(request_url)
-            .header("Content-Type", "application/json")
-            .bearer_auth(api_key.expose_secret())
+            .header("Content-Type", "application/json");
+        if let Some(key) = api_key {
+            request_builder = request_builder.bearer_auth(key.expose_secret());
+        }
+        let event_source = request_builder
             .json(&request_body)
             .eventsource()
-            .map_err(|e| Error::InferenceClient {
-                message: format!("Error sending request to vLLM: {e}"),
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    message: format!("Error sending request to vLLM: {e}"),
+                })
             })?;
         let mut stream =
             Box::pin(stream_openai(event_source, start_time).map_err(map_openai_to_vllm_error));
@@ -137,54 +161,28 @@ impl InferenceProvider for VLLMProvider {
             Some(Ok(chunk)) => chunk,
             Some(Err(e)) => return Err(e),
             None => {
-                return Err(Error::VLLMServer {
+                return Err(ErrorDetails::VLLMServer {
                     message: "Stream ended before first chunk".to_string(),
-                })
+                }
+                .into())
             }
         };
         Ok((chunk, stream, raw_request))
     }
 }
 
-impl HasCredentials for VLLMProvider {
-    fn has_credentials(&self) -> bool {
-        self.api_key.is_some()
-    }
-    fn get_credentials<'a>(
-        &'a self,
-        credentials: &'a InferenceCredentials,
-    ) -> Result<ProviderCredentials<'a>, Error> {
-        if let Some(api_key) = &self.api_key {
-            if credentials.vllm.is_some() {
-                return Err(Error::UnexpectedDynamicCredentials {
-                    provider_name: "vLLM".to_string(),
-                });
-            }
-            return Ok(ProviderCredentials::VLLM(Cow::Owned(VLLMCredentials {
-                api_key: Cow::Borrowed(api_key),
-            })));
-        } else {
-            match &credentials.vllm {
-                Some(credentials) => Ok(ProviderCredentials::VLLM(Cow::Borrowed(credentials))),
-                None => Err(Error::ApiKeyMissing {
-                    provider_name: "vLLM".to_string(),
-                }),
-            }
-        }
-    }
-}
-
 fn map_openai_to_vllm_error(e: Error) -> Error {
-    match e {
-        Error::OpenAIServer { message } => Error::VLLMServer { message },
-        Error::OpenAIClient {
+    match e.get_owned_details() {
+        ErrorDetails::OpenAIServer { message } => Error::new(ErrorDetails::VLLMServer { message }),
+        ErrorDetails::OpenAIClient {
             message,
             status_code,
-        } => Error::VLLMClient {
+        } => ErrorDetails::VLLMClient {
             message,
             status_code,
-        },
-        _ => e,
+        }
+        .into(),
+        e => e.into(),
     }
 }
 
@@ -236,10 +234,10 @@ impl<'a> VLLMRequest<'a> {
         let messages = prepare_vllm_messages(request);
         // TODO (#169): Implement tool calling.
         if request.tool_config.is_some() {
-            return Err(Error::VLLMClient {
+            return Err(ErrorDetails::VLLMClient {
                 status_code: reqwest::StatusCode::BAD_REQUEST,
                 message: "TensorZero does not support tool use with vLLM. Please use a different provider.".to_string(),
-            });
+            }.into());
         }
 
         Ok(VLLMRequest {
@@ -274,24 +272,27 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
             request: request_body,
             generic_request,
         } = value;
-        let raw_response = serde_json::to_string(&response).map_err(|e| Error::OpenAIServer {
-            message: format!("Error parsing response: {e}"),
+        let raw_response = serde_json::to_string(&response).map_err(|e| {
+            Error::new(ErrorDetails::OpenAIServer {
+                message: format!("Error parsing response: {e}"),
+            })
         })?;
         if response.choices.len() != 1 {
-            return Err(Error::OpenAIServer {
+            return Err(ErrorDetails::OpenAIServer {
                 message: format!(
                     "Response has invalid number of choices: {}. Expected 1.",
                     response.choices.len()
                 ),
-            });
+            }
+            .into());
         }
         let usage = response.usage.into();
         let message = response
             .choices
             .pop()
-            .ok_or(Error::VLLMServer {
+            .ok_or_else(|| Error::new(ErrorDetails::VLLMServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
-            })?
+            }))?
             .message;
         let mut content: Vec<ContentBlock> = Vec::new();
         if let Some(text) = message.content {
@@ -302,10 +303,11 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 content.push(ContentBlock::ToolCall(tool_call.into()));
             }
         }
-        let raw_request =
-            serde_json::to_string(&request_body).map_err(|e| Error::FireworksServer {
+        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
+            Error::new(ErrorDetails::VLLMServer {
                 message: format!("Error serializing request body as JSON: {e}"),
-            })?;
+            })
+        })?;
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
@@ -422,64 +424,5 @@ mod tests {
         assert!(err
             .to_string()
             .contains("TensorZero does not support tool use with vLLM"));
-    }
-
-    #[test]
-    fn test_get_credentials() {
-        let provider_no_credentials = VLLMProvider {
-            api_key: None,
-            api_base: Url::parse("https://example.com").unwrap(),
-            model_name: "llama-v3-8b".to_string(),
-        };
-        let credentials = InferenceCredentials::default();
-        let result = provider_no_credentials
-            .get_credentials(&credentials)
-            .unwrap_err();
-        assert_eq!(
-            result,
-            Error::ApiKeyMissing {
-                provider_name: "vLLM".to_string(),
-            }
-        );
-        let credentials = InferenceCredentials {
-            vllm: Some(VLLMCredentials {
-                api_key: Cow::Owned(SecretString::from("test_api_key".to_string())),
-            }),
-            ..Default::default()
-        };
-        let result = provider_no_credentials
-            .get_credentials(&credentials)
-            .unwrap();
-        match result {
-            ProviderCredentials::VLLM(creds) => {
-                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
-            }
-            _ => panic!("Expected vLLM credentials"),
-        }
-
-        let provider_with_credentials = VLLMProvider {
-            api_key: Some(SecretString::from("test_api_key".to_string())),
-            api_base: Url::parse("https://example.com").unwrap(),
-            model_name: "llama-v3-8b".to_string(),
-        };
-        let result = provider_with_credentials
-            .get_credentials(&credentials)
-            .unwrap_err();
-        assert_eq!(
-            result,
-            Error::UnexpectedDynamicCredentials {
-                provider_name: "vLLM".to_string(),
-            }
-        );
-        let credentials = InferenceCredentials::default();
-        let result = provider_with_credentials
-            .get_credentials(&credentials)
-            .unwrap();
-        match result {
-            ProviderCredentials::VLLM(creds) => {
-                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
-            }
-            _ => panic!("Expected vLLM credentials"),
-        }
     }
 }

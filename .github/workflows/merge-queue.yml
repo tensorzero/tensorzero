@@ -72,12 +72,30 @@ jobs:
       - name: Install Python for python async client tests
         run: uv python install 3.10
 
-      - name: Install dependencies for python async client tests
-        working-directory: clients/python
-        run: uv sync --all-extras --dev
+      - name: Install dependencies for python client tests
+        working-directory: clients
+        run: |
+          uv venv
+          uv pip sync requirements.txt
 
-      - name: Run python async client tests
-        working-directory: clients/python
+      - name: Run python client tests
+        working-directory: clients
+        run: uv run pytest
+
+      - name: Run mypy type checking
+        working-directory: clients
+        run: |
+          uv pip install mypy
+          uv run mypy python --strict
+
+      - name: Install dependencies for python recipes tests
+        working-directory: recipes/tests
+        run: |
+          uv venv
+          uv pip sync requirements.txt
+
+      - name: Run python recipes tests
+        working-directory: recipes/tests
         run: uv run pytest
 
       - name: Install dependencies for python recipes tests
@@ -94,6 +112,11 @@ jobs:
         run: |
           echo "Killing gateway with pid $GATEWAY_PID"
           kill -9 $GATEWAY_PID
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.9.0"
 
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh

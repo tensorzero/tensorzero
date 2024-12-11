@@ -1,11 +1,12 @@
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use tracing::instrument;
 use uuid::Uuid;
 
 use crate::embeddings::EmbeddingModelConfig;
 use crate::endpoints::inference::InferenceParams;
-use crate::error::{Error, ResultExt};
+use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{
     ChatInferenceResult, ContentBlock, InferenceResult, Input, InputMessageContent,
     JsonInferenceResult, ModelInferenceResponseWithMetadata, Role, Usage,
@@ -100,30 +101,35 @@ impl FunctionConfig {
             )?),
             FunctionConfig::Json(_) => {
                 if dynamic_tool_params.allowed_tools.is_some() {
-                    return Err(Error::InvalidRequest {
+                    return Err(ErrorDetails::InvalidRequest {
                         message: "Cannot pass `allowed_tools` to a JSON function.".to_string(),
-                    });
+                    }
+                    .into());
                 }
                 if dynamic_tool_params.additional_tools.is_some() {
-                    return Err(Error::InvalidRequest {
+                    return Err(ErrorDetails::InvalidRequest {
                         message: "Cannot pass `additional_tools` to a JSON function.".to_string(),
-                    });
+                    }
+                    .into());
                 }
                 if dynamic_tool_params.tool_choice.is_some() {
-                    return Err(Error::InvalidRequest {
+                    return Err(ErrorDetails::InvalidRequest {
                         message: "Cannot pass `tool_choice` to a JSON function".to_string(),
-                    });
+                    }
+                    .into());
                 }
                 if dynamic_tool_params.parallel_tool_calls.is_some() {
-                    return Err(Error::InvalidRequest {
+                    return Err(ErrorDetails::InvalidRequest {
                         message: "Cannot pass `parallel_tool_calls` to a JSON function".to_string(),
-                    });
+                    }
+                    .into());
                 }
                 Ok(None)
             }
         }
     }
 
+    #[instrument(skip_all, fields(inference_id))]
     pub async fn prepare_response<'a, 'request>(
         &self,
         inference_id: Uuid,
@@ -157,19 +163,23 @@ impl FunctionConfig {
                         ContentBlock::ToolCall(tool_call) => Some(tool_call.arguments),
                         _ => None,
                     })
-                    .ok_or(Error::Inference {
-                        message: "No valid content blocks found in JSON function response"
-                            .to_string(),
+                    .ok_or_else(|| {
+                        Error::new(ErrorDetails::Inference {
+                            message: "No valid content blocks found in JSON function response"
+                                .to_string(),
+                        })
                     })?;
                 let parsed_output = serde_json::from_str::<Value>(&raw)
-                    .map_err(|e| Error::OutputParsing {
-                        message: format!(
-                            "Failed to parse output from JSON function response {}",
-                            e
-                        ),
-                        raw_output: raw.clone(),
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::OutputParsing {
+                            message: format!(
+                                "Failed to parse output from JSON function response {}",
+                                e
+                            ),
+                            raw_output: raw.clone(),
+                        })
                     })
-                    .ok_or_log();
+                    .ok();
                 let output_schema = match &inference_config.dynamic_output_schema {
                     Some(schema) => JsonSchemaRef::Dynamic(schema),
                     None => JsonSchemaRef::Static(&params.output_schema),
@@ -179,10 +189,7 @@ impl FunctionConfig {
                 let parsed_output = match parsed_output {
                     Some(parsed_output) => match output_schema.validate(&parsed_output).await {
                         Ok(_) => Some(parsed_output),
-                        Err(e) => {
-                            e.log();
-                            None
-                        }
+                        Err(_) => None,
                     },
                     None => None,
                 };
@@ -220,6 +227,7 @@ impl FunctionConfig {
         }
     }
 
+    #[instrument(skip_all, fields(function_name = %function_name))]
     pub fn validate(
         &self,
         static_tools: &HashMap<String, StaticToolConfig>,
@@ -242,9 +250,9 @@ impl FunctionConfig {
         match self {
             FunctionConfig::Chat(params) => {
                 for tool in params.tools.iter() {
-                    static_tools.get(tool).ok_or(Error::Config {
+                    static_tools.get(tool).ok_or_else(|| Error::new(ErrorDetails::Config {
                         message: format!("`functions.{function_name}.tools`: tool `{tool}` is not present in the config"),
-                    })?;
+                    }))?;
                 }
                 Ok(())
             }
@@ -270,9 +278,9 @@ fn validate_all_text_input(
         // If there is no system message and no schema we accept
         (None, None) => Ok(()),
         // If no system message is passed and we have a schema we fail
-        (None, Some(_)) => Err(Error::InvalidMessage {
+        (None, Some(_)) => Err(Error::new(ErrorDetails::InvalidMessage {
             message: "`input.system` is empty but a system template is present.".to_string(),
-        }),
+        })),
     }?;
     for (index, message) in input.messages.iter().enumerate() {
         let mut content: Option<&Value> = None;
@@ -280,11 +288,11 @@ fn validate_all_text_input(
             if let InputMessageContent::Text { value } = block {
                 // Throw an error if we have multiple text blocks in a message
                 if content.is_some() {
-                    return Err(Error::InvalidMessage {
+                    return Err(Error::new(ErrorDetails::InvalidMessage {
                         message: format!(
                             "Message at index {index} has multiple text content blocks"
                         ),
-                    });
+                    }));
                 }
                 content = Some(value);
             }
@@ -320,10 +328,12 @@ fn validate_single_message(
                 Ok(())
             } else {
                 Err(match index_role {
-                    Some(index_role) => Error::InvalidMessage {
+                    Some(index_role) => Error::new(ErrorDetails::InvalidMessage {
                         message: format!("Message at index {} has non-string content but there is no schema given for role {}.", index_role.0, index_role.1),
-                    },
-                    None => Error::InvalidMessage {message:"Message has non-string content but there is no schema given for role system.".to_string()},
+                    }),
+                    None => Error::new(ErrorDetails::InvalidMessage {
+                        message: "Message has non-string content but there is no schema given for role system.".to_string(),
+                    }),
                 })
             }
         }
@@ -350,9 +360,9 @@ pub fn sample_variant<'a>(
     //       This check also ensures that we catch any regressions we might introduce in the future.
     if total_weight <= 0. {
         if candidate_variant_names.is_empty() {
-            return Err(Error::InvalidFunctionVariants {
+            return Err(Error::new(ErrorDetails::InvalidFunctionVariants {
                 message: format!("Function `{function_name}` has no variants"),
-            });
+            }));
         }
         // Perform uniform sampling if total weight is non-positive
         let random_index = (get_uniform_value(function_name, episode_id)
@@ -364,23 +374,22 @@ pub fn sample_variant<'a>(
             // could panic if random_index is out of bounds
             candidate_variant_names.swap_remove(random_index)
         } else {
-            return Err(Error::InvalidFunctionVariants {
+            return Err(Error::new(ErrorDetails::InvalidFunctionVariants {
                 message: format!(
                     "Invalid index {} for function `{}` with {} variants",
                     random_index,
                     function_name,
                     candidate_variant_names.len()
                 ),
-            });
+            }));
         };
-        let variant =
-            variants
-                .get(sampled_variant_name)
-                .ok_or_else(|| Error::InvalidFunctionVariants {
-                    message: format!(
-                        "Function `{function_name}` has no variant `{sampled_variant_name}`"
-                    ),
-                })?;
+        let variant = variants.get(sampled_variant_name).ok_or_else(|| {
+            Error::new(ErrorDetails::InvalidFunctionVariants {
+                message: format!(
+                    "Function `{function_name}` has no variant `{sampled_variant_name}`"
+                ),
+            })
+        })?;
         return Ok((sampled_variant_name, variant));
     }
 
@@ -391,12 +400,11 @@ pub fn sample_variant<'a>(
     let mut cumulative_weight = 0.;
     let mut sampled_variant_name = "";
     for (i, variant_name) in candidate_variant_names.iter().enumerate() {
-        let variant =
-            variants
-                .get(*variant_name)
-                .ok_or_else(|| Error::InvalidFunctionVariants {
-                    message: format!("Function `{function_name}` has no variant `{variant_name}`"),
-                })?;
+        let variant = variants.get(*variant_name).ok_or_else(|| {
+            Error::new(ErrorDetails::InvalidFunctionVariants {
+                message: format!("Function `{function_name}` has no variant `{variant_name}`"),
+            })
+        })?;
         cumulative_weight += variant.weight();
         if cumulative_weight > random_threshold {
             sampled_variant_name = candidate_variant_names.swap_remove(i);
@@ -410,11 +418,11 @@ pub fn sample_variant<'a>(
         sampled_variant_name = candidate_variant_names.swap_remove(variants.len() - 1);
     }
 
-    let variant = variants
-        .get(sampled_variant_name)
-        .ok_or(Error::InvalidFunctionVariants {
+    let variant = variants.get(sampled_variant_name).ok_or_else(|| {
+        Error::new(ErrorDetails::InvalidFunctionVariants {
             message: format!("Function `{function_name}` has no variant `{sampled_variant_name}`"),
-        })?;
+        })
+    })?;
     Ok((sampled_variant_name, variant))
 }
 
@@ -514,9 +522,9 @@ mod tests {
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
             validation_result.unwrap_err(),
-            Error::InvalidMessage {
-                message: "Message at index 1 has non-string content but there is no schema given for role assistant.".to_string()
-            }
+            Error::new(ErrorDetails::InvalidMessage {
+                message: "Message at index 1 has non-string content but there is no schema given for role assistant.".to_string(),
+            })
         );
 
         // Test case for multiple text content blocks in one message
@@ -541,9 +549,9 @@ mod tests {
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
             validation_result.unwrap_err(),
-            Error::InvalidMessage {
-                message: "Message at index 0 has multiple text content blocks".to_string()
-            }
+            Error::new(ErrorDetails::InvalidMessage {
+                message: "Message at index 0 has multiple text content blocks".to_string(),
+            })
         );
     }
 
@@ -579,11 +587,11 @@ mod tests {
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
             validation_result.unwrap_err(),
-            Error::JsonSchemaValidation {
+            Error::new(ErrorDetails::JsonSchemaValidation {
                 messages: vec!["\"system content\" is not of type \"object\"".to_string()],
                 data: Box::new(json!("system content")),
                 schema: Box::new(system_value),
-            }
+            })
         );
 
         let messages = vec![
@@ -635,11 +643,12 @@ mod tests {
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
             validation_result.unwrap_err(),
-            Error::JsonSchemaValidation {
+            ErrorDetails::JsonSchemaValidation {
                 messages: vec!["\"user content\" is not of type \"object\"".to_string()],
                 data: Box::new(json!("user content")),
                 schema: Box::new(user_value),
             }
+            .into()
         );
 
         let messages = vec![
@@ -691,11 +700,12 @@ mod tests {
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
             validation_result.unwrap_err(),
-            Error::JsonSchemaValidation {
+            ErrorDetails::JsonSchemaValidation {
                 messages: vec!["\"assistant content\" is not of type \"object\"".to_string()],
                 data: Box::new(json!("assistant content")),
                 schema: Box::new(assistant_value),
             }
+            .into()
         );
 
         let messages = vec![
@@ -751,11 +761,12 @@ mod tests {
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
             validation_result.unwrap_err(),
-            Error::JsonSchemaValidation {
+            ErrorDetails::JsonSchemaValidation {
                 messages: vec!["\"system content\" is not of type \"object\"".to_string()],
                 data: Box::new(json!("system content")),
                 schema: Box::new(system_value),
             }
+            .into()
         );
 
         let messages = vec![
@@ -828,9 +839,9 @@ mod tests {
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
             validation_result.unwrap_err(),
-            Error::InvalidMessage {
+            ErrorDetails::InvalidMessage {
                 message: "Message at index 0 has non-string content but there is no schema given for role user.".to_string()
-            }
+            }.into()
         );
     }
 
@@ -869,11 +880,12 @@ mod tests {
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
             validation_result.unwrap_err(),
-            Error::JsonSchemaValidation {
+            ErrorDetails::JsonSchemaValidation {
                 messages: vec!["\"system content\" is not of type \"object\"".to_string()],
                 data: Box::new(json!("system content")),
                 schema: Box::new(system_value),
             }
+            .into()
         );
 
         let messages = vec![
@@ -930,11 +942,12 @@ mod tests {
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
             validation_result.unwrap_err(),
-            Error::JsonSchemaValidation {
+            ErrorDetails::JsonSchemaValidation {
                 messages: vec!["\"user content\" is not of type \"object\"".to_string()],
                 data: Box::new(json!("user content")),
                 schema: Box::new(user_value),
             }
+            .into()
         );
 
         let messages = vec![
@@ -989,11 +1002,12 @@ mod tests {
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
             validation_result.unwrap_err(),
-            Error::JsonSchemaValidation {
+            ErrorDetails::JsonSchemaValidation {
                 messages: vec!["\"assistant content\" is not of type \"object\"".to_string()],
                 data: Box::new(json!("assistant content")),
                 schema: Box::new(assistant_value),
             }
+            .into()
         );
 
         let messages = vec![
@@ -1050,11 +1064,12 @@ mod tests {
         let validation_result = function_config.validate_input(&input);
         assert_eq!(
             validation_result.unwrap_err(),
-            Error::JsonSchemaValidation {
+            ErrorDetails::JsonSchemaValidation {
                 messages: vec!["\"system content\" is not of type \"object\"".to_string()],
                 data: Box::new(json!("system content")),
                 schema: Box::new(system_value),
             }
+            .into()
         );
 
         let messages = vec![
@@ -1525,9 +1540,10 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             error,
-            Error::Inference {
+            ErrorDetails::Inference {
                 message: "No valid content blocks found in JSON function response".to_string()
             }
+            .into()
         );
 
         let dynamic_output_schema = DynamicJSONSchema::new(serde_json::json!({

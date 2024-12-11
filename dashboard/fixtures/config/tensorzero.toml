@@ -8,7 +8,7 @@ routing = ["openai"]
 [models."gpt-4o-mini-2024-07-18".providers.openai]
 type = "openai"
 model_name = "gpt-4o-mini-2024-07-18"
-dynamic_credentials = true
+api_key_location = "dynamic::openai_api_key"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │

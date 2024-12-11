@@ -27,8 +27,7 @@ async fn main() {
     ));
 
     // Initialize AppState
-    let app_state =
-        gateway_util::AppStateData::new(config).expect_pretty("Failed to initialize AppState");
+    let app_state = gateway_util::AppStateData::new(config).await;
 
     // Run ClickHouse migrations (if any)
     if !config.gateway.disable_observability {
@@ -39,6 +38,10 @@ async fn main() {
 
     let router = Router::new()
         .route("/inference", post(endpoints::inference::inference_handler))
+        .route(
+            "/openai/v1/chat/completions",
+            post(endpoints::openai_compatible::inference_handler),
+        )
         .route("/feedback", post(endpoints::feedback::feedback_handler))
         .route("/status", get(endpoints::status::status_handler))
         .route("/health", get(endpoints::status::health_handler))
@@ -106,7 +109,7 @@ pub async fn shutdown_signal() {
 /// ┌──────────────────────────────────────────────────────────────────────────┐
 /// │                           MAIN.RS ESCAPE HATCH                           │
 /// └──────────────────────────────────────────────────────────────────────────┘
-
+///
 /// We don't allow panic, escape, unwrap, or similar methods in the codebase,
 /// except for the private `expect_pretty` method, which is to be used only in
 /// main.rs during initialization. After initialization, we expect all code to
@@ -114,7 +117,6 @@ pub async fn shutdown_signal() {
 ///
 /// We use `expect_pretty` for better DX when handling errors in main.rs.
 /// `expect_pretty` will print an error message and exit with a status code of 1.
-
 trait ExpectPretty<T> {
     fn expect_pretty(self, msg: &str) -> T;
 }

@@ -1,0 +1,19 @@
+[models.llama3_1_8b_instruct]
+routing = ["ollama"]
+
+[models.llama3_1_8b_instruct.providers.ollama]
+type = "openai"
+api_base = "http://host.docker.internal:11434/v1" # for Ollama running locally on the host
+model_name = "llama3.1"
+api_key_location = "none"
+
+[functions.my_function_name]
+type = "chat"
+
+[functions.my_function_name.variants.my_variant_name]
+type = "chat_completion"
+model = "llama3_1_8b_instruct"
+
+# Disable observability to keep this example minimal (not recommended in production)
+[gateway]
+disable_observability = true

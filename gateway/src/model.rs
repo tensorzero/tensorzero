@@ -1,11 +1,11 @@
 use reqwest::Client;
-use secrecy::SecretString;
 use serde::de::Error as SerdeError;
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::env;
+use tracing::instrument;
 use url::Url;
 
+use crate::inference::providers;
 use crate::inference::providers::anthropic::AnthropicCredentials;
 use crate::inference::providers::azure::AzureCredentials;
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -13,17 +13,18 @@ use crate::inference::providers::dummy::DummyCredentials;
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::inference::providers::dummy::DummyProvider;
 use crate::inference::providers::fireworks::FireworksCredentials;
-use crate::inference::providers::gcp_vertex_anthropic::GCPVertexAnthropicCredentials;
-use crate::inference::providers::gcp_vertex_gemini::GCPVertexGeminiCredentials;
-use crate::inference::providers::google_ai_studio_gemini::GoogleAIStudioGeminiCredentials;
-use crate::inference::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
+use crate::inference::providers::gcp_vertex_gemini::GCPVertexCredentials;
+use crate::inference::providers::google_ai_studio_gemini::{
+    GoogleAIStudioCredentials, GoogleAIStudioGeminiProvider,
+};
+
 use crate::inference::providers::mistral::MistralCredentials;
 use crate::inference::providers::openai::OpenAICredentials;
 use crate::inference::providers::together::TogetherCredentials;
 use crate::inference::providers::vllm::VLLMCredentials;
 use crate::{
     endpoints::inference::InferenceCredentials,
-    error::Error,
+    error::{Error, ErrorDetails},
     inference::{
         providers::{
             anthropic::AnthropicProvider,
@@ -31,10 +32,10 @@ use crate::{
             azure::AzureProvider,
             fireworks::FireworksProvider,
             gcp_vertex_anthropic::GCPVertexAnthropicProvider,
-            gcp_vertex_gemini::{GCPCredentials, GCPVertexGeminiProvider},
+            gcp_vertex_gemini::{GCPServiceAccountCredentials, GCPVertexGeminiProvider},
             mistral::MistralProvider,
             openai::OpenAIProvider,
-            provider_trait::{HasCredentials, InferenceProvider},
+            provider_trait::InferenceProvider,
             together::TogetherProvider,
             vllm::VLLMProvider,
         },
@@ -58,22 +59,18 @@ impl ModelConfig {
         &'a self,
         request: &'request ModelInferenceRequest<'request>,
         client: &'request Client,
-        api_keys: &'request InferenceCredentials<'request>,
+        api_keys: &'request InferenceCredentials,
     ) -> Result<ModelInferenceResponse<'a>, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
-            let provider_config =
-                self.providers
-                    .get(provider_name)
-                    .ok_or(Error::ProviderNotFound {
-                        provider_name: provider_name.clone(),
-                    })?;
+            let provider_config = self.providers.get(provider_name).ok_or_else(|| {
+                Error::new(ErrorDetails::ProviderNotFound {
+                    provider_name: provider_name.clone(),
+                })
+            })?;
             let response = provider_config.infer(request, client, api_keys).await;
             match response {
                 Ok(response) => {
-                    for error in provider_errors.values() {
-                        error.log();
-                    }
                     let model_inference_response =
                         ModelInferenceResponse::new(response, provider_name);
                     return Ok(model_inference_response);
@@ -83,14 +80,17 @@ impl ModelConfig {
                 }
             }
         }
-        Err(Error::ModelProvidersExhausted { provider_errors })
+        Err(Error::new(ErrorDetails::ModelProvidersExhausted {
+            provider_errors,
+        }))
     }
 
+    #[instrument(skip_all)]
     pub async fn infer_stream<'a, 'request>(
         &'a self,
         request: &'request ModelInferenceRequest<'request>,
         client: &'request Client,
-        api_keys: &'request InferenceCredentials<'request>,
+        api_keys: &'request InferenceCredentials,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -102,20 +102,16 @@ impl ModelConfig {
     > {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
-            let provider_config =
-                self.providers
-                    .get(provider_name)
-                    .ok_or(Error::ProviderNotFound {
-                        provider_name: provider_name.clone(),
-                    })?;
+            let provider_config = self.providers.get(provider_name).ok_or_else(|| {
+                Error::new(ErrorDetails::ProviderNotFound {
+                    provider_name: provider_name.clone(),
+                })
+            })?;
             let response = provider_config
                 .infer_stream(request, client, api_keys)
                 .await;
             match response {
                 Ok(response) => {
-                    for error in provider_errors.values() {
-                        error.log();
-                    }
                     let (chunk, stream, raw_request) = response;
                     return Ok((chunk, stream, raw_request, provider_name));
                 }
@@ -124,20 +120,13 @@ impl ModelConfig {
                 }
             }
         }
-        Err(Error::ModelProvidersExhausted { provider_errors })
+        Err(Error::new(ErrorDetails::ModelProvidersExhausted {
+            provider_errors,
+        }))
     }
 
     pub fn validate(&self) -> Result<(), Error> {
-        // Ensure that all providers have credentials
-        if !self
-            .providers
-            .values()
-            .all(|provider| provider.has_credentials())
-        {
-            return Err(Error::ModelValidation {
-                message: "At least one provider lacks credentials".to_string(),
-            });
-        }
+        // Placeholder in case we want to add validation in the future
         Ok(())
     }
 }
@@ -159,23 +148,6 @@ pub enum ProviderConfig {
     Dummy(DummyProvider),
 }
 
-#[derive(Debug)]
-pub enum ProviderCredentials<'a> {
-    Anthropic(Cow<'a, AnthropicCredentials<'a>>),
-    AWSBedrock,
-    Azure(Cow<'a, AzureCredentials<'a>>),
-    #[cfg(any(test, feature = "e2e_tests"))]
-    Dummy(Cow<'a, DummyCredentials<'a>>),
-    Fireworks(Cow<'a, FireworksCredentials<'a>>),
-    GCPVertexAnthropic(Cow<'a, GCPVertexAnthropicCredentials>),
-    GCPVertexGemini(Cow<'a, GCPVertexGeminiCredentials>),
-    GoogleAIStudioGemini(Cow<'a, GoogleAIStudioGeminiCredentials<'a>>),
-    Mistral(Cow<'a, MistralCredentials<'a>>),
-    OpenAI(Cow<'a, OpenAICredentials<'a>>),
-    Together(Cow<'a, TogetherCredentials<'a>>),
-    VLLM(Cow<'a, VLLMCredentials<'a>>),
-}
-
 impl<'de> Deserialize<'de> for ProviderConfig {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -192,8 +164,8 @@ impl<'de> Deserialize<'de> for ProviderConfig {
         enum ProviderConfigHelper {
             Anthropic {
                 model_name: String,
-                #[serde(default)]
-                dynamic_credentials: bool,
+                #[serde(default = "providers::anthropic::default_api_key_location")]
+                api_key_location: CredentialLocation,
             },
             #[serde(rename = "aws_bedrock")]
             AWSBedrock {
@@ -203,64 +175,64 @@ impl<'de> Deserialize<'de> for ProviderConfig {
             Azure {
                 deployment_id: String,
                 endpoint: Url,
-                #[serde(default)]
-                dynamic_credentials: bool,
+                #[serde(default = "providers::azure::default_api_key_location")]
+                api_key_location: CredentialLocation,
             },
             #[serde(rename = "gcp_vertex_anthropic")]
             GCPVertexAnthropic {
                 model_id: String,
                 location: String,
                 project_id: String,
-                #[serde(default)]
-                dynamic_credentials: bool,
+                #[serde(default = "providers::gcp_vertex_gemini::default_api_key_location")]
+                credential_location: CredentialLocation,
             },
             #[serde(rename = "gcp_vertex_gemini")]
             GCPVertexGemini {
                 model_id: String,
                 location: String,
                 project_id: String,
-                #[serde(default)]
-                dynamic_credentials: bool,
+                #[serde(default = "providers::gcp_vertex_gemini::default_api_key_location")]
+                credential_location: CredentialLocation,
             },
             #[serde(rename = "google_ai_studio_gemini")]
             GoogleAIStudioGemini {
                 model_name: String,
-                #[serde(default)]
-                dynamic_credentials: bool,
+                #[serde(default = "providers::google_ai_studio_gemini::default_api_key_location")]
+                api_key_location: CredentialLocation,
             },
             Fireworks {
                 model_name: String,
-                #[serde(default)]
-                dynamic_credentials: bool,
+                #[serde(default = "providers::fireworks::default_api_key_location")]
+                api_key_location: CredentialLocation,
             },
             Mistral {
                 model_name: String,
-                #[serde(default)]
-                dynamic_credentials: bool,
+                #[serde(default = "providers::mistral::default_api_key_location")]
+                api_key_location: CredentialLocation,
             },
             OpenAI {
                 model_name: String,
                 api_base: Option<Url>,
-                #[serde(default)]
-                dynamic_credentials: bool,
+                #[serde(default = "providers::openai::default_api_key_location")]
+                api_key_location: CredentialLocation,
             },
             Together {
                 model_name: String,
-                #[serde(default)]
-                dynamic_credentials: bool,
+                #[serde(default = "providers::together::default_api_key_location")]
+                api_key_location: CredentialLocation,
             },
             #[allow(clippy::upper_case_acronyms)]
             VLLM {
                 model_name: String,
                 api_base: Url,
-                #[serde(default)]
-                dynamic_credentials: bool,
+                #[serde(default = "providers::vllm::default_api_key_location")]
+                api_key_location: CredentialLocation,
             },
             #[cfg(any(test, feature = "e2e_tests"))]
             Dummy {
                 model_name: String,
-                #[serde(default)]
-                dynamic_credentials: bool,
+                #[serde(default = "providers::dummy::default_api_key_location")]
+                api_key_location: CredentialLocation,
             },
         }
 
@@ -269,20 +241,32 @@ impl<'de> Deserialize<'de> for ProviderConfig {
         Ok(match helper {
             ProviderConfigHelper::Anthropic {
                 model_name,
-                dynamic_credentials,
+                api_key_location,
             } => {
-                let api_key = env::var("ANTHROPIC_API_KEY").ok().map(SecretString::from);
-                if api_key.is_none() && !dynamic_credentials {
-                    return Err(D::Error::custom(
-                        Error::ApiKeyMissing {
-                            provider_name: "Anthropic".to_string(),
-                        }
-                        .to_string(),
-                    ));
-                }
+                let credentials = match api_key_location {
+                    CredentialLocation::Env(key_name) => {
+                        let api_key = env::var(key_name)
+                            .map_err(|_| {
+                                serde::de::Error::custom(
+                                    Error::new(ErrorDetails::ApiKeyMissing {
+                                        provider_name: "Anthropic".to_string(),
+                                    })
+                                    .to_string(),
+                                )
+                            })?
+                            .into();
+                        AnthropicCredentials::Static(api_key)
+                    }
+                    CredentialLocation::Dynamic(key_name) => {
+                        AnthropicCredentials::Dynamic(key_name)
+                    }
+                    _ => Err(serde::de::Error::custom(
+                        "Invalid api_key_location for Anthropic provider".to_string(),
+                    ))?,
+                };
                 ProviderConfig::Anthropic(AnthropicProvider {
                     model_name,
-                    api_key,
+                    credentials,
                 })
             }
             ProviderConfigHelper::AWSBedrock { model_id, region } => {
@@ -305,69 +289,103 @@ impl<'de> Deserialize<'de> for ProviderConfig {
             ProviderConfigHelper::Azure {
                 deployment_id,
                 endpoint,
-                dynamic_credentials,
+                api_key_location,
             } => {
-                let api_key = env::var("AZURE_OPENAI_API_KEY")
-                    .ok()
-                    .map(SecretString::from);
-                if api_key.is_none() && !dynamic_credentials {
-                    return Err(D::Error::custom(
-                        Error::ApiKeyMissing {
-                            provider_name: "Azure".to_string(),
-                        }
-                        .to_string(),
-                    ));
-                }
+                let credentials = match api_key_location {
+                    CredentialLocation::Env(key_name) => {
+                        let api_key = env::var(key_name)
+                            .map_err(|_| {
+                                serde::de::Error::custom(
+                                    ErrorDetails::ApiKeyMissing {
+                                        provider_name: "Azure".to_string(),
+                                    }
+                                    .to_string(),
+                                )
+                            })?
+                            .into();
+                        AzureCredentials::Static(api_key)
+                    }
+                    CredentialLocation::Dynamic(key_name) => AzureCredentials::Dynamic(key_name),
+                    _ => Err(serde::de::Error::custom(
+                        "Invalid api_key_location for Azure provider".to_string(),
+                    ))?,
+                };
                 ProviderConfig::Azure(AzureProvider {
                     deployment_id,
                     endpoint,
-                    api_key,
+                    credentials,
                 })
             }
             ProviderConfigHelper::Fireworks {
                 model_name,
-                dynamic_credentials,
+                api_key_location,
             } => {
-                let api_key = env::var("FIREWORKS_API_KEY").ok().map(SecretString::from);
-                if api_key.is_none() && !dynamic_credentials {
-                    return Err(D::Error::custom(
-                        Error::ApiKeyMissing {
-                            provider_name: "Fireworks".to_string(),
-                        }
-                        .to_string(),
-                    ));
-                }
+                let credentials = match api_key_location {
+                    CredentialLocation::Env(key_name) => {
+                        let api_key = env::var(key_name)
+                            .map_err(|_| {
+                                serde::de::Error::custom(
+                                    ErrorDetails::ApiKeyMissing {
+                                        provider_name: "Fireworks".to_string(),
+                                    }
+                                    .to_string(),
+                                )
+                            })?
+                            .into();
+                        FireworksCredentials::Static(api_key)
+                    }
+                    CredentialLocation::Dynamic(key_name) => {
+                        FireworksCredentials::Dynamic(key_name)
+                    }
+                    _ => Err(serde::de::Error::custom(
+                        "Invalid api_key_location for Fireworks provider".to_string(),
+                    ))?,
+                };
                 ProviderConfig::Fireworks(FireworksProvider {
                     model_name,
-                    api_key: env::var("FIREWORKS_API_KEY").ok().map(SecretString::from),
+                    credentials,
                 })
             }
             ProviderConfigHelper::GCPVertexAnthropic {
                 model_id,
                 location,
                 project_id,
-                dynamic_credentials,
+                credential_location: api_key_location,
             } => {
-                // If the environment variable is not set or is empty, we will have None as our credentials.
-                let credentials_path = env::var("GCP_VERTEX_CREDENTIALS_PATH")
-                    .ok()
-                    .filter(|s| !s.is_empty());
-                // If the environment variable is set and non-empty, we will load and validate (as much as possible)
-                // the credentials from the path. If this fails, we will throw an error and stop the startup.
-                let credentials = match credentials_path {
-                    Some(path) => Some(GCPCredentials::from_env(path.as_str()).map_err(|e| {
-                        serde::de::Error::custom(format!("Failed to load GCP credentials: {}", e))
-                    })?),
-                    None => None,
+                let credentials = match api_key_location {
+                    CredentialLocation::Env(key_name) => {
+                        let path = env::var(key_name).map_err(|e| {
+                            serde::de::Error::custom(format!(
+                                "Failed to load GCP credentials from environment variable: {}",
+                                e
+                            ))
+                        })?;
+                        GCPVertexCredentials::Static(
+                            GCPServiceAccountCredentials::from_path(path.as_str()).map_err(
+                                |e| {
+                                    serde::de::Error::custom(format!(
+                                        "Failed to load GCP credentials: {}",
+                                        e
+                                    ))
+                                },
+                            )?,
+                        )
+                    }
+                    CredentialLocation::Path(path) => GCPVertexCredentials::Static(
+                        GCPServiceAccountCredentials::from_path(path.as_str()).map_err(|e| {
+                            serde::de::Error::custom(format!(
+                                "Failed to load GCP credentials: {}",
+                                e
+                            ))
+                        })?,
+                    ),
+                    CredentialLocation::Dynamic(key_name) => {
+                        GCPVertexCredentials::Dynamic(key_name)
+                    }
+                    _ => Err(serde::de::Error::custom(
+                        "Invalid credential_location for GCPVertexAnthropic provider".to_string(),
+                    ))?,
                 };
-                if credentials.is_none() && !dynamic_credentials {
-                    return Err(D::Error::custom(
-                        Error::ApiKeyMissing {
-                            provider_name: "GCPVertexAnthropic".to_string(),
-                        }
-                        .to_string(),
-                    ));
-                }
                 let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:rawPredict");
                 let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:streamRawPredict");
                 let audience = format!("https://{location}-aiplatform.googleapis.com/");
@@ -378,35 +396,48 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                     audience,
                     credentials,
                     model_id,
-                    dynamic_credentials,
                 })
             }
             ProviderConfigHelper::GCPVertexGemini {
                 model_id,
                 location,
                 project_id,
-                dynamic_credentials,
+                credential_location: api_key_location,
             } => {
-                // If the environment variable is not set or is empty, we will have None as our credentials.
-                let credentials_path = env::var("GCP_VERTEX_CREDENTIALS_PATH")
-                    .ok()
-                    .filter(|s| !s.is_empty());
-                // If the environment variable is set and non-empty, we will load and validate (as much as possible)
-                // the credentials from the path. If this fails, we will throw an error and stop the startup.
-                let credentials = match credentials_path {
-                    Some(path) => Some(GCPCredentials::from_env(path.as_str()).map_err(|e| {
-                        serde::de::Error::custom(format!("Failed to load GCP credentials: {}", e))
-                    })?),
-                    None => None,
+                let credentials = match api_key_location {
+                    CredentialLocation::Env(key_name) => {
+                        let path = env::var(key_name).map_err(|e| {
+                            serde::de::Error::custom(format!(
+                                "Failed to load GCP credentials from environment variable: {}",
+                                e
+                            ))
+                        })?;
+                        GCPVertexCredentials::Static(
+                            GCPServiceAccountCredentials::from_path(path.as_str()).map_err(
+                                |e| {
+                                    serde::de::Error::custom(format!(
+                                        "Failed to load GCP credentials: {}",
+                                        e
+                                    ))
+                                },
+                            )?,
+                        )
+                    }
+                    CredentialLocation::Path(path) => GCPVertexCredentials::Static(
+                        GCPServiceAccountCredentials::from_path(path.as_str()).map_err(|e| {
+                            serde::de::Error::custom(format!(
+                                "Failed to load GCP credentials: {}",
+                                e
+                            ))
+                        })?,
+                    ),
+                    CredentialLocation::Dynamic(key_name) => {
+                        GCPVertexCredentials::Dynamic(key_name)
+                    }
+                    _ => Err(serde::de::Error::custom(
+                        "Invalid credential_location for GCPVertexGemini provider".to_string(),
+                    ))?,
                 };
-                if credentials.is_none() && !dynamic_credentials {
-                    return Err(D::Error::custom(
-                        Error::ApiKeyMissing {
-                            provider_name: "GCPVertexGemini".to_string(),
-                        }
-                        .to_string(),
-                    ));
-                }
                 let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:generateContent");
                 let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:streamGenerateContent?alt=sse");
                 let audience = format!("https://{location}-aiplatform.googleapis.com/");
@@ -421,19 +452,28 @@ impl<'de> Deserialize<'de> for ProviderConfig {
             }
             ProviderConfigHelper::GoogleAIStudioGemini {
                 model_name,
-                dynamic_credentials,
+                api_key_location,
             } => {
-                let api_key = env::var("GOOGLE_AI_STUDIO_API_KEY")
-                    .ok()
-                    .map(SecretString::from);
-                if api_key.is_none() && !dynamic_credentials {
-                    return Err(D::Error::custom(
-                        Error::ApiKeyMissing {
-                            provider_name: "Google AI Studio Gemini".to_string(),
-                        }
-                        .to_string(),
-                    ));
-                }
+                let credentials = match api_key_location {
+                    CredentialLocation::Env(key_name) => GoogleAIStudioCredentials::Static(
+                        env::var(key_name)
+                            .map_err(|_| {
+                                serde::de::Error::custom(
+                                    ErrorDetails::ApiKeyMissing {
+                                        provider_name: "Google AI Studio Gemini".to_string(),
+                                    }
+                                    .to_string(),
+                                )
+                            })?
+                            .into(),
+                    ),
+                    CredentialLocation::Dynamic(key_name) => {
+                        GoogleAIStudioCredentials::Dynamic(key_name)
+                    }
+                    _ => Err(serde::de::Error::custom(
+                        "Invalid api_key_location for Google AI Studio Gemini provider".to_string(),
+                    ))?,
+                };
                 let request_url = Url::parse(&format!(
                     "https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent",
                 )).map_err(|e| D::Error::custom(format!("Failed to parse request URL: {}", e)))?;
@@ -443,93 +483,144 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 ProviderConfig::GoogleAIStudioGemini(GoogleAIStudioGeminiProvider {
                     request_url,
                     streaming_request_url,
-                    api_key,
+                    credentials,
                 })
             }
             ProviderConfigHelper::Mistral {
                 model_name,
-                dynamic_credentials,
+                api_key_location,
             } => {
-                let api_key = env::var("MISTRAL_API_KEY").ok().map(SecretString::from);
-                if api_key.is_none() && !dynamic_credentials {
-                    return Err(D::Error::custom(
-                        Error::ApiKeyMissing {
-                            provider_name: "Mistral".to_string(),
-                        }
-                        .to_string(),
-                    ));
-                }
+                let credentials = match api_key_location {
+                    CredentialLocation::Env(key_name) => {
+                        let api_key = env::var(key_name)
+                            .map_err(|_| {
+                                serde::de::Error::custom(
+                                    ErrorDetails::ApiKeyMissing {
+                                        provider_name: "Mistral".to_string(),
+                                    }
+                                    .to_string(),
+                                )
+                            })?
+                            .into();
+                        MistralCredentials::Static(api_key)
+                    }
+                    CredentialLocation::Dynamic(key_name) => MistralCredentials::Dynamic(key_name),
+                    _ => Err(serde::de::Error::custom(
+                        "Invalid api_key_location for Mistral provider".to_string(),
+                    ))?,
+                };
                 ProviderConfig::Mistral(MistralProvider {
                     model_name,
-                    api_key,
+                    credentials,
                 })
             }
             ProviderConfigHelper::OpenAI {
                 model_name,
                 api_base,
-                dynamic_credentials,
+                api_key_location,
             } => {
-                let api_key = env::var("OPENAI_API_KEY").ok().map(SecretString::from);
-                if api_key.is_none() && !dynamic_credentials {
-                    return Err(D::Error::custom(
-                        Error::ApiKeyMissing {
-                            provider_name: "OpenAI".to_string(),
-                        }
-                        .to_string(),
-                    ));
-                }
+                let credentials = match api_key_location {
+                    CredentialLocation::Env(key_name) => {
+                        let api_key = env::var(key_name)
+                            .map_err(|_| {
+                                serde::de::Error::custom(
+                                    ErrorDetails::ApiKeyMissing {
+                                        provider_name: "OpenAI".to_string(),
+                                    }
+                                    .to_string(),
+                                )
+                            })?
+                            .into();
+                        OpenAICredentials::Static(api_key)
+                    }
+                    CredentialLocation::Dynamic(key_name) => OpenAICredentials::Dynamic(key_name),
+                    CredentialLocation::None => OpenAICredentials::None,
+                    _ => Err(serde::de::Error::custom(
+                        "Invalid api_key_location for OpenAI provider".to_string(),
+                    ))?,
+                };
                 ProviderConfig::OpenAI(OpenAIProvider {
                     model_name,
                     api_base,
-                    api_key,
+                    credentials,
                 })
             }
             ProviderConfigHelper::Together {
                 model_name,
-                dynamic_credentials,
+                api_key_location,
             } => {
-                let api_key = env::var("TOGETHER_API_KEY").ok().map(SecretString::from);
-                if api_key.is_none() && !dynamic_credentials {
-                    return Err(D::Error::custom(
-                        Error::ApiKeyMissing {
-                            provider_name: "Together".to_string(),
-                        }
-                        .to_string(),
-                    ));
-                }
+                let credentials = match api_key_location {
+                    CredentialLocation::Env(key_name) => {
+                        let api_key = env::var(key_name)
+                            .map_err(|_| {
+                                serde::de::Error::custom(
+                                    ErrorDetails::ApiKeyMissing {
+                                        provider_name: "Together".to_string(),
+                                    }
+                                    .to_string(),
+                                )
+                            })?
+                            .into();
+                        TogetherCredentials::Static(api_key)
+                    }
+                    CredentialLocation::Dynamic(key_name) => TogetherCredentials::Dynamic(key_name),
+                    _ => Err(serde::de::Error::custom(
+                        "Invalid api_key_location for Together provider".to_string(),
+                    ))?,
+                };
                 ProviderConfig::Together(TogetherProvider {
                     model_name,
-                    api_key,
+                    credentials,
                 })
             }
             ProviderConfigHelper::VLLM {
                 model_name,
                 api_base,
-                dynamic_credentials,
+                api_key_location,
             } => {
-                let api_key = env::var("VLLM_API_KEY").ok().map(SecretString::from);
-                if api_key.is_none() && !dynamic_credentials {
-                    return Err(D::Error::custom(
-                        Error::ApiKeyMissing {
-                            provider_name: "VLLM".to_string(),
-                        }
-                        .to_string(),
-                    ));
-                }
+                let credentials = match api_key_location {
+                    CredentialLocation::Env(key_name) => {
+                        let api_key = env::var(key_name)
+                            .map_err(|_| {
+                                serde::de::Error::custom(
+                                    ErrorDetails::ApiKeyMissing {
+                                        provider_name: "VLLM".to_string(),
+                                    }
+                                    .to_string(),
+                                )
+                            })?
+                            .into();
+                        VLLMCredentials::Static(api_key)
+                    }
+                    CredentialLocation::Dynamic(key_name) => VLLMCredentials::Dynamic(key_name),
+                    CredentialLocation::None => VLLMCredentials::None,
+                    _ => Err(serde::de::Error::custom(
+                        "Invalid api_key_location for VLLM provider".to_string(),
+                    ))?,
+                };
                 ProviderConfig::VLLM(VLLMProvider {
                     model_name,
                     api_base,
-                    api_key,
+                    credentials,
                 })
             }
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfigHelper::Dummy {
                 model_name,
-                dynamic_credentials,
-            } => ProviderConfig::Dummy(DummyProvider {
-                model_name,
-                dynamic_credentials,
-            }),
+                api_key_location,
+            } => match api_key_location {
+                CredentialLocation::Dynamic(key_name) => ProviderConfig::Dummy(DummyProvider {
+                    model_name,
+                    credentials: DummyCredentials::Dynamic(key_name),
+                }),
+                CredentialLocation::None => ProviderConfig::Dummy(DummyProvider {
+                    model_name,
+                    credentials: DummyCredentials::None,
+                }),
+                _ => Err(serde::de::Error::custom(
+                    "Invalid api_key_location for Dummy provider".to_string(),
+                ))?,
+            },
         })
     }
 }
@@ -539,29 +630,28 @@ impl ProviderConfig {
         &self,
         request: &ModelInferenceRequest<'_>,
         client: &Client,
-        api_keys: &InferenceCredentials<'_>,
+        api_keys: &InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let api_key = self.get_credentials(api_keys)?;
         match self {
-            ProviderConfig::Anthropic(provider) => provider.infer(request, client, api_key).await,
-            ProviderConfig::AWSBedrock(provider) => provider.infer(request, client, api_key).await,
-            ProviderConfig::Azure(provider) => provider.infer(request, client, api_key).await,
-            ProviderConfig::Fireworks(provider) => provider.infer(request, client, api_key).await,
+            ProviderConfig::Anthropic(provider) => provider.infer(request, client, api_keys).await,
+            ProviderConfig::AWSBedrock(provider) => provider.infer(request, client, api_keys).await,
+            ProviderConfig::Azure(provider) => provider.infer(request, client, api_keys).await,
+            ProviderConfig::Fireworks(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::GCPVertexAnthropic(provider) => {
-                provider.infer(request, client, api_key).await
+                provider.infer(request, client, api_keys).await
             }
             ProviderConfig::GCPVertexGemini(provider) => {
-                provider.infer(request, client, api_key).await
+                provider.infer(request, client, api_keys).await
             }
             ProviderConfig::GoogleAIStudioGemini(provider) => {
-                provider.infer(request, client, api_key).await
+                provider.infer(request, client, api_keys).await
             }
-            ProviderConfig::Mistral(provider) => provider.infer(request, client, api_key).await,
-            ProviderConfig::OpenAI(provider) => provider.infer(request, client, api_key).await,
-            ProviderConfig::Together(provider) => provider.infer(request, client, api_key).await,
-            ProviderConfig::VLLM(provider) => provider.infer(request, client, api_key).await,
+            ProviderConfig::Mistral(provider) => provider.infer(request, client, api_keys).await,
+            ProviderConfig::OpenAI(provider) => provider.infer(request, client, api_keys).await,
+            ProviderConfig::Together(provider) => provider.infer(request, client, api_keys).await,
+            ProviderConfig::VLLM(provider) => provider.infer(request, client, api_keys).await,
             #[cfg(any(test, feature = "e2e_tests"))]
-            ProviderConfig::Dummy(provider) => provider.infer(request, client, api_key).await,
+            ProviderConfig::Dummy(provider) => provider.infer(request, client, api_keys).await,
         }
     }
 
@@ -569,7 +659,7 @@ impl ProviderConfig {
         &self,
         request: &ModelInferenceRequest<'_>,
         client: &Client,
-        api_keys: &InferenceCredentials<'_>,
+        api_keys: &InferenceCredentials,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -578,84 +668,74 @@ impl ProviderConfig {
         ),
         Error,
     > {
-        let api_key = self.get_credentials(api_keys)?;
         match self {
             ProviderConfig::Anthropic(provider) => {
-                provider.infer_stream(request, client, api_key).await
+                provider.infer_stream(request, client, api_keys).await
             }
             ProviderConfig::AWSBedrock(provider) => {
-                provider.infer_stream(request, client, api_key).await
+                provider.infer_stream(request, client, api_keys).await
             }
             ProviderConfig::Azure(provider) => {
-                provider.infer_stream(request, client, api_key).await
+                provider.infer_stream(request, client, api_keys).await
             }
             ProviderConfig::Fireworks(provider) => {
-                provider.infer_stream(request, client, api_key).await
+                provider.infer_stream(request, client, api_keys).await
             }
             ProviderConfig::GCPVertexAnthropic(provider) => {
-                provider.infer_stream(request, client, api_key).await
+                provider.infer_stream(request, client, api_keys).await
             }
             ProviderConfig::GCPVertexGemini(provider) => {
-                provider.infer_stream(request, client, api_key).await
+                provider.infer_stream(request, client, api_keys).await
             }
             ProviderConfig::GoogleAIStudioGemini(provider) => {
-                provider.infer_stream(request, client, api_key).await
+                provider.infer_stream(request, client, api_keys).await
             }
             ProviderConfig::Mistral(provider) => {
-                provider.infer_stream(request, client, api_key).await
+                provider.infer_stream(request, client, api_keys).await
             }
             ProviderConfig::OpenAI(provider) => {
-                provider.infer_stream(request, client, api_key).await
+                provider.infer_stream(request, client, api_keys).await
             }
             ProviderConfig::Together(provider) => {
-                provider.infer_stream(request, client, api_key).await
+                provider.infer_stream(request, client, api_keys).await
             }
-            ProviderConfig::VLLM(provider) => provider.infer_stream(request, client, api_key).await,
+            ProviderConfig::VLLM(provider) => {
+                provider.infer_stream(request, client, api_keys).await
+            }
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => {
-                provider.infer_stream(request, client, api_key).await
+                provider.infer_stream(request, client, api_keys).await
             }
         }
     }
 }
 
-impl HasCredentials for ProviderConfig {
-    fn has_credentials(&self) -> bool {
-        match self {
-            ProviderConfig::Anthropic(provider) => provider.has_credentials(),
-            ProviderConfig::AWSBedrock(provider) => provider.has_credentials(),
-            ProviderConfig::Azure(provider) => provider.has_credentials(),
-            ProviderConfig::Fireworks(provider) => provider.has_credentials(),
-            ProviderConfig::GCPVertexAnthropic(provider) => provider.has_credentials(),
-            ProviderConfig::GCPVertexGemini(provider) => provider.has_credentials(),
-            ProviderConfig::GoogleAIStudioGemini(provider) => provider.has_credentials(),
-            ProviderConfig::Mistral(provider) => provider.has_credentials(),
-            ProviderConfig::OpenAI(provider) => provider.has_credentials(),
-            ProviderConfig::Together(provider) => provider.has_credentials(),
-            ProviderConfig::VLLM(provider) => provider.has_credentials(),
-            #[cfg(any(test, feature = "e2e_tests"))]
-            ProviderConfig::Dummy(provider) => provider.has_credentials(),
-        }
-    }
+pub enum CredentialLocation {
+    Env(String),
+    Dynamic(String),
+    Path(String),
+    None,
+}
 
-    fn get_credentials<'a>(
-        &'a self,
-        api_keys: &'a InferenceCredentials,
-    ) -> Result<ProviderCredentials<'a>, Error> {
-        match self {
-            ProviderConfig::Anthropic(provider) => provider.get_credentials(api_keys),
-            ProviderConfig::AWSBedrock(provider) => provider.get_credentials(api_keys),
-            ProviderConfig::Azure(provider) => provider.get_credentials(api_keys),
-            ProviderConfig::Fireworks(provider) => provider.get_credentials(api_keys),
-            ProviderConfig::GCPVertexAnthropic(provider) => provider.get_credentials(api_keys),
-            ProviderConfig::GCPVertexGemini(provider) => provider.get_credentials(api_keys),
-            ProviderConfig::GoogleAIStudioGemini(provider) => provider.get_credentials(api_keys),
-            ProviderConfig::Mistral(provider) => provider.get_credentials(api_keys),
-            ProviderConfig::OpenAI(provider) => provider.get_credentials(api_keys),
-            ProviderConfig::Together(provider) => provider.get_credentials(api_keys),
-            ProviderConfig::VLLM(provider) => provider.get_credentials(api_keys),
-            #[cfg(any(test, feature = "e2e_tests"))]
-            ProviderConfig::Dummy(provider) => provider.get_credentials(api_keys),
+impl<'de> Deserialize<'de> for CredentialLocation {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        if let Some(inner) = s.strip_prefix("env::") {
+            Ok(CredentialLocation::Env(inner.to_string()))
+        } else if let Some(inner) = s.strip_prefix("dynamic::") {
+            Ok(CredentialLocation::Dynamic(inner.to_string()))
+        } else if let Some(inner) = s.strip_prefix("path::") {
+            Ok(CredentialLocation::Path(inner.to_string()))
+        } else if s == "none" {
+            Ok(CredentialLocation::None)
+        } else {
+            Err(serde::de::Error::custom(format!(
+                "Invalid ApiKeyLocation format: {}",
+                s
+            )))
         }
     }
 }
@@ -672,6 +752,7 @@ mod tests {
         types::{ContentBlockChunk, FunctionType, ModelInferenceRequestJsonMode, TextChunk},
     };
     use crate::tool::{ToolCallConfig, ToolChoice};
+    use secrecy::SecretString;
     use tokio_stream::StreamExt;
     use tracing_test::traced_test;
 
@@ -681,11 +762,11 @@ mod tests {
     async fn test_model_config_infer_routing() {
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".to_string(),
-            dynamic_credentials: false,
+            credentials: DummyCredentials::None,
         });
         let bad_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "error".to_string(),
-            dynamic_credentials: false,
+            credentials: DummyCredentials::None,
         });
         let model_config = ModelConfig {
             routing: vec!["good_provider".to_string()],
@@ -740,14 +821,16 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             response,
-            Error::ModelProvidersExhausted {
+            ErrorDetails::ModelProvidersExhausted {
                 provider_errors: HashMap::from([(
                     "error".to_string(),
-                    Error::InferenceClient {
+                    ErrorDetails::InferenceClient {
                         message: "Error sending request to Dummy provider.".to_string()
                     }
+                    .into()
                 )])
             }
+            .into()
         );
     }
 
@@ -758,11 +841,11 @@ mod tests {
 
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".to_string(),
-            dynamic_credentials: false,
+            credentials: DummyCredentials::None,
         });
         let bad_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "error".to_string(),
-            dynamic_credentials: false,
+            credentials: DummyCredentials::None,
         });
         let api_keys = InferenceCredentials::default();
         // Try inferring the good model only
@@ -812,11 +895,11 @@ mod tests {
     async fn test_model_config_infer_stream_routing() {
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".to_string(),
-            dynamic_credentials: false,
+            credentials: DummyCredentials::None,
         });
         let bad_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "error".to_string(),
-            dynamic_credentials: false,
+            credentials: DummyCredentials::None,
         });
         let api_keys = InferenceCredentials::default();
         let request = ModelInferenceRequest {
@@ -890,14 +973,16 @@ mod tests {
         };
         assert_eq!(
             error,
-            Error::ModelProvidersExhausted {
+            ErrorDetails::ModelProvidersExhausted {
                 provider_errors: HashMap::from([(
                     "error".to_string(),
-                    Error::InferenceClient {
+                    ErrorDetails::InferenceClient {
                         message: "Error sending request to Dummy provider.".to_string()
                     }
+                    .into()
                 )])
             }
+            .into()
         );
     }
 
@@ -908,11 +993,11 @@ mod tests {
 
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".to_string(),
-            dynamic_credentials: false,
+            credentials: DummyCredentials::None,
         });
         let bad_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "error".to_string(),
-            dynamic_credentials: false,
+            credentials: DummyCredentials::None,
         });
         let api_keys = InferenceCredentials::default();
         let request = ModelInferenceRequest {
@@ -979,7 +1064,7 @@ mod tests {
     async fn test_dynamic_api_keys() {
         let provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "test_key".to_string(),
-            ..Default::default()
+            credentials: DummyCredentials::Dynamic("TEST_KEY".to_string()),
         });
         let model_config = ModelConfig {
             routing: vec!["model".to_string()],
@@ -1013,41 +1098,43 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             error,
-            Error::ModelProvidersExhausted {
+            ErrorDetails::ModelProvidersExhausted {
                 provider_errors: HashMap::from([(
                     "model".to_string(),
-                    Error::InferenceClient {
-                        message: "Invalid API key for Dummy provider".to_string()
+                    ErrorDetails::ApiKeyMissing {
+                        provider_name: "Dummy".to_string()
                     }
+                    .into()
                 )])
             }
+            .into()
         );
 
-        let api_keys = InferenceCredentials {
-            dummy: Some(DummyCredentials {
-                api_key: Cow::Owned(SecretString::from("good_key".to_string())),
-            }),
-            ..Default::default()
-        };
+        let api_keys = HashMap::from([(
+            "TEST_KEY".to_string(),
+            SecretString::from("notgoodkey".to_string()),
+        )]);
         let response = model_config
             .infer(&request, &Client::new(), &api_keys)
             .await
             .unwrap_err();
         assert_eq!(
             response,
-            Error::ModelProvidersExhausted {
+            ErrorDetails::ModelProvidersExhausted {
                 provider_errors: HashMap::from([(
                     "model".to_string(),
-                    Error::UnexpectedDynamicCredentials {
-                        provider_name: "Dummy".to_string(),
+                    ErrorDetails::InferenceClient {
+                        message: "Invalid API key for Dummy provider".to_string()
                     }
+                    .into()
                 )])
             }
+            .into()
         );
 
         let provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "test_key".to_string(),
-            dynamic_credentials: true,
+            credentials: DummyCredentials::Dynamic("TEST_KEY".to_string()),
         });
         let model_config = ModelConfig {
             routing: vec!["model".to_string()],
@@ -1081,22 +1168,22 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             error,
-            Error::ModelProvidersExhausted {
+            ErrorDetails::ModelProvidersExhausted {
                 provider_errors: HashMap::from([(
                     "model".to_string(),
-                    Error::ApiKeyMissing {
+                    ErrorDetails::ApiKeyMissing {
                         provider_name: "Dummy".to_string()
                     }
+                    .into()
                 )])
             }
+            .into()
         );
 
-        let api_keys = InferenceCredentials {
-            dummy: Some(DummyCredentials {
-                api_key: Cow::Owned(SecretString::from("good_key".to_string())),
-            }),
-            ..Default::default()
-        };
+        let api_keys = HashMap::from([(
+            "TEST_KEY".to_string(),
+            SecretString::from("good_key".to_string()),
+        )]);
         let response = model_config
             .infer(&request, &Client::new(), &api_keys)
             .await
