@@ -112,26 +112,29 @@ impl InferenceProvider for AWSBedrockProvider {
         }
 
         if let Some(tool_config) = &request.tool_config {
-            let tools: Vec<Tool> = tool_config
-                .tools_available
-                .iter()
-                .map(Tool::try_from)
-                .collect::<Result<Vec<_>, _>>()?;
+            if !matches!(tool_config.tool_choice, ToolChoice::None) {
+                let tools: Vec<Tool> = tool_config
+                    .tools_available
+                    .iter()
+                    .map(Tool::try_from)
+                    .collect::<Result<Vec<_>, _>>()?;
 
-            let tool_choice: AWSBedrockToolChoice = tool_config.tool_choice.clone().try_into()?;
+                let tool_choice: AWSBedrockToolChoice =
+                    tool_config.tool_choice.clone().try_into()?;
 
-            let aws_bedrock_tool_config = ToolConfiguration::builder()
-                .set_tools(Some(tools))
-                .tool_choice(tool_choice)
-                .build()
-                .map_err(|e| {
-                    Error::new(ErrorDetails::AWSBedrockClient {
-                        status_code: StatusCode::INTERNAL_SERVER_ERROR,
-                        message: format!("Error configuring AWS Bedrock tool config: {e}"),
-                    })
-                })?;
+                let aws_bedrock_tool_config = ToolConfiguration::builder()
+                    .set_tools(Some(tools))
+                    .tool_choice(tool_choice)
+                    .build()
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::AWSBedrockClient {
+                            status_code: StatusCode::INTERNAL_SERVER_ERROR,
+                            message: format!("Error configuring AWS Bedrock tool config: {e}"),
+                        })
+                    })?;
 
-            bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
+                bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
+            }
         }
 
         // We serialize here because the ConverseFluidBuilder type is not one you can import I guess
@@ -218,26 +221,29 @@ impl InferenceProvider for AWSBedrockProvider {
         }
 
         if let Some(tool_config) = &request.tool_config {
-            let tools: Vec<Tool> = tool_config
-                .tools_available
-                .iter()
-                .map(Tool::try_from)
-                .collect::<Result<Vec<_>, _>>()?;
+            if !matches!(tool_config.tool_choice, ToolChoice::None) {
+                let tools: Vec<Tool> = tool_config
+                    .tools_available
+                    .iter()
+                    .map(Tool::try_from)
+                    .collect::<Result<Vec<_>, _>>()?;
 
-            let tool_choice: AWSBedrockToolChoice = tool_config.tool_choice.clone().try_into()?;
+                let tool_choice: AWSBedrockToolChoice =
+                    tool_config.tool_choice.clone().try_into()?;
 
-            let aws_bedrock_tool_config = ToolConfiguration::builder()
-                .set_tools(Some(tools))
-                .tool_choice(tool_choice)
-                .build()
-                .map_err(|e| {
-                    Error::new(ErrorDetails::AWSBedrockClient {
-                        status_code: StatusCode::INTERNAL_SERVER_ERROR,
-                        message: format!("Error configuring AWS Bedrock tool config: {e}"),
-                    })
-                })?;
+                let aws_bedrock_tool_config = ToolConfiguration::builder()
+                    .set_tools(Some(tools))
+                    .tool_choice(tool_choice)
+                    .build()
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::AWSBedrockClient {
+                            status_code: StatusCode::INTERNAL_SERVER_ERROR,
+                            message: format!("Error configuring AWS Bedrock tool config: {e}"),
+                        })
+                    })?;
 
-            bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
+                bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
+            }
         }
 
         let raw_request = serialize_aws_bedrock_struct(&bedrock_request)?;
@@ -689,12 +695,12 @@ impl TryFrom<ToolChoice> for AWSBedrockToolChoice {
 
     fn try_from(tool_choice: ToolChoice) -> Result<Self, Error> {
         match tool_choice {
-            // TODO (#204): Implement ToolChoice::None workaround for AWS Bedrock.
-            //              MAKE SURE TO UPDATE THE E2E TESTS WHEN THIS IS DONE.
-            ToolChoice::None => Err(ErrorDetails::InvalidTool {
-                message: "Tool choice is None. AWS Bedrock does not support tool choice None."
-                    .to_string(),
-            }.into()),
+            // Workaround for AWS Bedrock API limitation: they don't support explicitly specifying "none"
+            // for tool choice. Instead, we return Auto but the request construction will ensure
+            // that no tools are sent in the request payload. This achieves the same effect
+            // as explicitly telling the model not to use tools, since without any tools
+            // being provided, the model cannot make tool calls.
+            ToolChoice::None => Ok(AWSBedrockToolChoice::Auto(AutoToolChoice::builder().build())),
             ToolChoice::Auto => Ok(AWSBedrockToolChoice::Auto(
                 AutoToolChoice::builder().build(),
             )),
