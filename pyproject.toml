@@ -1,7 +1,7 @@
 [tool.pyright]
 include = ["clients/python"]
 typeCheckingMode = "strict"
-venvPath = "."
+venvPath = "clients/python"
 venv = ".venv"
 useLibraryCodeForTypes = true
 reportMissingImports = true

@@ -45,3 +45,9 @@ jobs:
           python -m pip install ruff
           ruff format --check .
           ruff check --output-format=github --extend-select I .
+
+      - name: Run pyright type checking
+        uses: jakebailey/pyright-action@v2.3.2
+        with:
+          working-directory: clients/python
+          version: latest
