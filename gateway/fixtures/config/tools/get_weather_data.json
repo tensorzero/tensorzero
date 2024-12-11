@@ -1,0 +1,17 @@
+{
+  "type": "object",
+  "properties": {
+    "location": {
+      "type": "string",
+      "description": "The location to get weather data for (city name or coordinates)"
+    },
+    "units": {
+      "type": "string",
+      "enum": ["metric", "imperial"],
+      "description": "The unit system to use for temperature and measurements",
+      "default": "metric"
+    }
+  },
+  "required": ["location"],
+  "additionalProperties": false
+}

@@ -90,3 +90,9 @@ level = "episode"
 [tools.example_query_articles]
 description = "Query articles from Wikipedia"
 parameters = "tools/example_query_articles.json"
+name = "queryArticles"  # Optional: Override the name provided to models
+
+[tools.get_weather_data]
+description = "Get current weather data for a location"
+parameters = "tools/get_weather_data.json"
+# No 'name' specified - will use 'get_weather_data' as the name

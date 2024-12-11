@@ -18,6 +18,10 @@ use crate::{
  * If we are doing an implicit tool call for JSON schema enforcement, we can use the compiled schema from the output signature.
  */
 
+fn default_strict() -> bool {
+    false
+}
+
 /// A Tool object describes how a tool can be dynamically configured by the user.
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
 pub struct Tool {
@@ -32,40 +36,55 @@ pub struct Tool {
 pub enum ToolConfig {
     Static(&'static StaticToolConfig),
     Dynamic(DynamicToolConfig),
-    Implicit(ImplicitToolConfig),
+    Implicit(&'static ImplicitToolConfig),
     DynamicImplicit(DynamicImplicitToolConfig),
 }
 
 /// Contains the configuration information for a specific tool
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct StaticToolConfig {
+    #[serde(skip_serializing)]
+    pub id: String, // This is the key from TOML
+    #[serde(default)]
+    pub name: Option<String>, // Optional display name for the model
     pub description: String,
     pub parameters: JSONSchemaFromPath,
-    pub name: String,
+    #[serde(default = "default_strict")]
     pub strict: bool,
 }
 
 /// Contains the configuration information for a tool defined at runtime
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct DynamicToolConfig {
     pub description: String,
     pub parameters: DynamicJSONSchema,
-    pub name: String,
+    #[serde(skip_serializing)]
+    pub id: String, // Internal identifier
+    #[serde(default)]
+    pub name: Option<String>, // Optional display name
     pub strict: bool,
 }
 
 /// Contains the configuration information for a tool used in implicit tool calling for
 /// JSON schema enforcement
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ImplicitToolConfig {
+    pub id: String,
+    pub name: Option<String>,
+    pub description: String,
     pub parameters: JSONSchemaFromPath,
+    pub strict: bool,
 }
 
 /// Contains the configuration information for a tool used in implicit tool calling for
 /// JSON schema enforcement for a JSON schema that is dynamically passed at inference time
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct DynamicImplicitToolConfig {
+    pub id: String,
+    pub name: Option<String>,
+    pub description: String,
     pub parameters: DynamicJSONSchema,
+    pub strict: bool,
 }
 
 /// Contains all information required to tell an LLM what tools it can call
@@ -128,7 +147,8 @@ impl ToolCallConfig {
                     ToolConfig::Dynamic(DynamicToolConfig {
                         description: tool.description,
                         parameters: DynamicJSONSchema::new(tool.parameters),
-                        name: tool.name,
+                        id: tool.name.clone(),
+                        name: None,
                         strict: tool.strict,
                     })
                 })
@@ -142,8 +162,12 @@ impl ToolCallConfig {
         // If the tool choice is a specific tool, make sure it's in the list of available tools
         if let ToolChoice::Specific(tool_name) = &tool_choice {
             if !tools_available.iter().any(|tool| match tool {
-                ToolConfig::Static(config) => config.name == *tool_name,
-                ToolConfig::Dynamic(config) => config.name == *tool_name,
+                ToolConfig::Static(config) => {
+                    config.name.as_deref().unwrap_or(&config.id) == tool_name
+                }
+                ToolConfig::Dynamic(config) => {
+                    config.name.as_deref().unwrap_or(&config.id) == tool_name
+                }
                 ToolConfig::Implicit(_) => false,
                 ToolConfig::DynamicImplicit(_) => false,
             }) {
@@ -172,8 +196,8 @@ impl ToolCallConfig {
 
     pub fn get_tool(&self, name: &str) -> Option<&ToolConfig> {
         self.tools_available.iter().find(|tool_cfg| match tool_cfg {
-            ToolConfig::Static(config) => config.name == name,
-            ToolConfig::Dynamic(config) => config.name == name,
+            ToolConfig::Static(config) => config.name.as_deref().unwrap_or(&config.id) == name,
+            ToolConfig::Dynamic(config) => config.name.as_deref().unwrap_or(&config.id) == name,
             ToolConfig::Implicit(_config) => false,
             ToolConfig::DynamicImplicit(_config) => false,
         })
@@ -252,7 +276,13 @@ impl ToolCallConfig {
     #[cfg(test)]
     pub fn implicit_from_value(value: &Value) -> Self {
         let parameters = JSONSchemaFromPath::from_value(value).unwrap();
-        let implicit_tool_config = ToolConfig::Implicit(ImplicitToolConfig { parameters });
+        let implicit_tool_config = ToolConfig::Implicit(Box::leak(Box::new(ImplicitToolConfig {
+            id: "implicit".to_string(),
+            name: None,
+            description: "Implicit tool for JSON schema enforcement".to_string(),
+            parameters,
+            strict: false,
+        })));
         Self {
             tools_available: vec![implicit_tool_config],
             tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
@@ -324,10 +354,12 @@ impl ToolConfig {
 
     pub fn name(&self) -> &str {
         match self {
-            ToolConfig::Static(config) => &config.name,
-            ToolConfig::Dynamic(config) => &config.name,
-            ToolConfig::Implicit(_config) => IMPLICIT_TOOL_NAME,
-            ToolConfig::DynamicImplicit(_config) => IMPLICIT_TOOL_NAME,
+            ToolConfig::Static(config) => config.name.as_deref().unwrap_or(&config.id),
+            ToolConfig::Dynamic(config) => config.name.as_deref().unwrap_or(&config.id),
+            ToolConfig::Implicit(config) => config.name.as_deref().unwrap_or(IMPLICIT_TOOL_NAME),
+            ToolConfig::DynamicImplicit(config) => {
+                config.name.as_deref().unwrap_or(IMPLICIT_TOOL_NAME)
+            }
         }
     }
 
@@ -366,14 +398,17 @@ impl From<ToolConfig> for Tool {
     }
 }
 
-pub fn create_dynamic_implicit_tool_config(schema: Value) -> ToolCallConfig {
-    let tool_schema = DynamicJSONSchema::new(schema);
-    let implicit_tool = ToolConfig::DynamicImplicit(DynamicImplicitToolConfig {
-        parameters: tool_schema,
+pub fn create_dynamic_implicit_tool_config(parameters: DynamicJSONSchema) -> ToolCallConfig {
+    let tool = ToolConfig::DynamicImplicit(DynamicImplicitToolConfig {
+        id: "json_schema_enforcer".to_string(),
+        name: None,
+        description: "Enforce JSON schema for output".to_string(),
+        parameters,
+        strict: false,
     });
     ToolCallConfig {
-        tools_available: vec![implicit_tool],
-        tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
+        tools_available: vec![tool],
+        tool_choice: ToolChoice::Specific("json_schema_enforcer".to_string()),
         parallel_tool_calls: false,
     }
 }
@@ -389,7 +424,8 @@ mod tests {
             map.insert(
                 "get_temperature".to_string(),
                 StaticToolConfig {
-                    name: "get_temperature".to_string(),
+                    id: "get_temperature".to_string(),
+                    name: None,
                     description: "Get the current temperature in a given location".to_string(),
                     #[allow(clippy::expect_used)]
                     parameters: JSONSchemaFromPath::from_value(&json!({
@@ -407,7 +443,8 @@ mod tests {
             map.insert(
                 "query_articles".to_string(),
                 StaticToolConfig {
-                    name: "query_articles".to_string(),
+                    id: "query_articles".to_string(),
+                    name: None,
                     description: "Query articles from a database based on given criteria"
                         .to_string(),
                     #[allow(clippy::expect_used)]
@@ -728,5 +765,63 @@ mod tests {
             tool_call_output.arguments,
             Some(json!({"location": "Lucky Dog"}))
         );
+    }
+
+    #[tokio::test]
+    async fn test_tool_name_field() {
+        // Test that name field is used when provided
+        let static_tool = StaticToolConfig {
+            id: "tool_id".to_string(),
+            name: Some("tool_name".to_string()),
+            description: "description".to_string(),
+            parameters: JSONSchemaFromPath::default(),
+            strict: false,
+        };
+        let config = ToolConfig::Static(Box::leak(Box::new(static_tool)));
+        assert_eq!(config.name(), "tool_name");
+
+        // Test that id is used when name is not provided
+        let static_tool_no_name = StaticToolConfig {
+            id: "tool_id".to_string(),
+            name: None,
+            description: "description".to_string(),
+            parameters: JSONSchemaFromPath::default(),
+            strict: false,
+        };
+        let config = ToolConfig::Static(Box::leak(Box::new(static_tool_no_name)));
+        assert_eq!(config.name(), "tool_id");
+
+        // Test DynamicToolConfig with name override
+        let dynamic_tool = DynamicToolConfig {
+            id: "tool_id".to_string(),
+            name: Some("dynamic_name".to_string()),
+            description: "description".to_string(),
+            parameters: DynamicJSONSchema::new(serde_json::json!({})),
+            strict: false,
+        };
+        let config = ToolConfig::Dynamic(dynamic_tool.clone());
+        assert_eq!(config.name(), "dynamic_name");
+
+        // Test ImplicitToolConfig
+        let implicit_config = ImplicitToolConfig {
+            id: "tool_id".to_string(),
+            name: Some("implicit_name".to_string()),
+            description: "description".to_string(),
+            parameters: JSONSchemaFromPath::default(),
+            strict: false,
+        };
+        let config = ToolConfig::Implicit(Box::leak(Box::new(implicit_config)));
+        assert_eq!(config.name(), "implicit_name");
+
+        // Test DynamicImplicitToolConfig
+        let dynamic_implicit_config = DynamicImplicitToolConfig {
+            id: "tool_id".to_string(),
+            name: Some("dynamic_implicit_name".to_string()),
+            description: "description".to_string(),
+            parameters: DynamicJSONSchema::new(serde_json::json!({})),
+            strict: false,
+        };
+        let config = ToolConfig::DynamicImplicit(dynamic_implicit_config.clone());
+        assert_eq!(config.name(), "dynamic_implicit_name");
     }
 }

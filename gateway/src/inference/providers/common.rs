@@ -6,7 +6,8 @@ use serde_json::json;
 lazy_static! {
     /// These are useful for tests which don't need mutable tools.
     pub static ref WEATHER_TOOL_CONFIG_STATIC: StaticToolConfig = StaticToolConfig {
-        name: "get_temperature".to_string(),
+        id: "get_temperature".to_string(),
+        name: Some("get_temperature".to_string()),
         description: "Get the current temperature in a given location".to_string(),
         parameters: JSONSchemaFromPath::from_value(&json!({
             "type": "object",
@@ -26,7 +27,8 @@ lazy_static! {
         parallel_tool_calls: false,
     };
     pub static ref QUERY_TOOL_CONFIG_STATIC: StaticToolConfig = StaticToolConfig {
-        name: "query_articles".to_string(),
+        id: "query_articles".to_string(),
+        name: Some("query_articles".to_string()),
         description: "Query articles from Wikipedia".to_string(),
         parameters: JSONSchemaFromPath::from_value(&json!({
             "type": "object",

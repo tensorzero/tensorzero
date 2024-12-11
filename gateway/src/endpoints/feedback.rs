@@ -916,7 +916,8 @@ mod tests {
     #[tokio::test]
     async fn test_validate_parse_demonstration() {
         let weather_tool_config_static = StaticToolConfig {
-            name: "get_temperature".to_string(),
+            id: "get_temperature".to_string(),
+            name: Some("get_temperature".to_string()),
             description: "Get the current temperature in a given location".to_string(),
             parameters: JSONSchemaFromPath::from_value(&json!({
                 "type": "object",

@@ -934,7 +934,8 @@ mod tests {
             "required": ["location", "unit"]
         });
         let tool = ToolConfig::Dynamic(DynamicToolConfig {
-            name: "test".to_string(),
+            id: "test".to_string(),
+            name: Some("test".to_string()),
             description: "test".to_string(),
             parameters: DynamicJSONSchema::new(parameters.clone()),
             strict: false,

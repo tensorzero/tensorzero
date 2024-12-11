@@ -1,5 +1,5 @@
 use jsonschema::JSONSchema;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -35,7 +35,25 @@ impl<'a> JsonSchemaRef<'a> {
 pub struct JSONSchemaFromPath {
     #[serde(skip)]
     pub compiled: Arc<JSONSchema>,
+    #[serde(skip)]
     pub value: &'static serde_json::Value,
+}
+
+impl<'de> Deserialize<'de> for JSONSchemaFromPath {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value: Value = Value::deserialize(deserializer)?;
+        // We can 'leak' memory here because we want the schema to exist for the duration of the process
+        let value_static: &'static Value = Box::leak(Box::new(value));
+        let compiled_schema =
+            JSONSchema::compile(value_static).map_err(serde::de::Error::custom)?;
+        Ok(Self {
+            compiled: Arc::new(compiled_schema),
+            value: value_static,
+        })
+    }
 }
 
 impl PartialEq for JSONSchemaFromPath {
@@ -129,7 +147,7 @@ type CompilationTask = Arc<RwLock<Option<JoinHandle<Result<Arc<JSONSchema>, Erro
 ///
 /// The public API of this struct should look very normal except validation is `async`
 /// There are just `new` and `validate` methods.
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DynamicJSONSchema {
     pub value: Value,
     #[serde(skip)]

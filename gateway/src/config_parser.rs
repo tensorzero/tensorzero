@@ -9,15 +9,14 @@ use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelConfig;
-use crate::tool::{
-    ImplicitToolConfig, StaticToolConfig, ToolCallConfig, ToolChoice, ToolConfig,
-    IMPLICIT_TOOL_NAME,
-};
+use crate::tool::{ImplicitToolConfig, StaticToolConfig, ToolCallConfig, ToolChoice, ToolConfig};
 use crate::variant::best_of_n_sampling::BestOfNSamplingConfig;
 use crate::variant::chat_completion::ChatCompletionConfig;
 use crate::variant::dicl::UninitializedDiclConfig;
 use crate::variant::mixture_of_n::MixtureOfNConfig;
 use crate::variant::{Variant, VariantConfig};
+
+pub const IMPLICIT_TOOL_NAME: &str = "json_schema_enforcer";
 
 #[derive(Debug, Default)]
 pub struct Config<'c> {
@@ -414,9 +413,13 @@ impl UninitializedFunctionConfig {
                     Some(path) => JSONSchemaFromPath::new(path, base_path.as_ref())?,
                     None => JSONSchemaFromPath::default(),
                 };
-                let implicit_tool = ToolConfig::Implicit(ImplicitToolConfig {
+                let implicit_tool = ToolConfig::Implicit(Box::leak(Box::new(ImplicitToolConfig {
+                    id: IMPLICIT_TOOL_NAME.to_string(),
+                    name: None,
+                    description: "Enforce JSON schema for output".to_string(),
                     parameters: output_schema.clone(),
-                });
+                    strict: false,
+                })));
                 let implicit_tool_call_config = ToolCallConfig {
                     tools_available: vec![implicit_tool],
                     tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
@@ -487,7 +490,8 @@ impl UninitializedToolConfig {
     ) -> Result<StaticToolConfig, Error> {
         let parameters = JSONSchemaFromPath::new(self.parameters, base_path.as_ref())?;
         Ok(StaticToolConfig {
-            name,
+            id: name.clone(),
+            name: Some(name),
             description: self.description,
             parameters,
             strict: self.strict,

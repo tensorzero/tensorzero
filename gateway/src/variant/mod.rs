@@ -343,7 +343,7 @@ where
             let tool_config = match json_mode {
                 JsonMode::ImplicitTool => match &inference_config.dynamic_output_schema {
                     Some(schema) => Some(Cow::Owned(create_dynamic_implicit_tool_config(
-                        schema.value.clone(),
+                        DynamicJSONSchema::new(schema.value.clone()),
                     ))),
                     None => Some(Cow::Borrowed(&json_config.implicit_tool_call_config)),
                 },
@@ -669,7 +669,7 @@ mod tests {
         assert_eq!(
             result.tool_config,
             Some(Cow::Owned(create_dynamic_implicit_tool_config(
-                dynamic_output_schema_value.clone(),
+                DynamicJSONSchema::new(dynamic_output_schema_value.clone()),
             )))
         );
         assert_eq!(result.output_schema, Some(&dynamic_output_schema_value));
