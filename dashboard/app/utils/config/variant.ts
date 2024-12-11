@@ -2,8 +2,6 @@ import { z } from "zod";
 import { jsonModeSchema, retryConfigSchema } from "./types";
 import { create_env } from "../minijinja/pkg/minijinja_bindings";
 import { stringify } from "smol-toml";
-import { promises as fs } from "fs";
-import path from "path";
 
 // Runtime-only type for internal use
 export interface TemplateWithContent {
@@ -192,6 +190,24 @@ export function create_dump_variant_config(
   return stringify(fullNewVariantConfig);
 }
 
+const isServer = typeof window === "undefined";
+
+async function loadTemplateContent(
+  templatePath: string,
+  configPath: string,
+): Promise<string> {
+  if (isServer) {
+    // Dynamic import to prevent bundling fs module
+    const { promises: fs } = await import("fs");
+    const { default: path } = await import("path");
+    return await fs.readFile(
+      path.join(path.dirname(configPath), templatePath),
+      "utf-8",
+    );
+  }
+  return ""; // or return undefined/throw error for client
+}
+
 export async function convertRawVariantConfig(
   variantConfig: Omit<RawVariantConfig, "load">,
   configPath: string,
@@ -204,36 +220,27 @@ export async function convertRawVariantConfig(
       system_template: rawChatCompletionConfig.system_template
         ? {
             path: rawChatCompletionConfig.system_template,
-            content: await fs.readFile(
-              path.join(
-                path.dirname(configPath),
-                rawChatCompletionConfig.system_template,
-              ),
-              "utf-8",
+            content: await loadTemplateContent(
+              rawChatCompletionConfig.system_template,
+              configPath,
             ),
           }
         : undefined,
       user_template: rawChatCompletionConfig.user_template
         ? {
             path: rawChatCompletionConfig.user_template,
-            content: await fs.readFile(
-              path.join(
-                path.dirname(configPath),
-                rawChatCompletionConfig.user_template,
-              ),
-              "utf-8",
+            content: await loadTemplateContent(
+              rawChatCompletionConfig.user_template,
+              configPath,
             ),
           }
         : undefined,
       assistant_template: rawChatCompletionConfig.assistant_template
         ? {
             path: rawChatCompletionConfig.assistant_template,
-            content: await fs.readFile(
-              path.join(
-                path.dirname(configPath),
-                rawChatCompletionConfig.assistant_template,
-              ),
-              "utf-8",
+            content: await loadTemplateContent(
+              rawChatCompletionConfig.assistant_template,
+              configPath,
             ),
           }
         : undefined,
