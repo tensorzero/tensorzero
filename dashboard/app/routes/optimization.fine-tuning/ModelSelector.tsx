@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 import { FormValues } from "./route";
-import { ModelOption } from "./mock-data";
+import { ModelOption } from "./model-options";
 
 type ModelSelectorProps = {
   control: Control<FormValues>;

@@ -1,7 +1,7 @@
 import { type MetaFunction } from "@remix-run/node";
 import { Form } from "~/components/ui/form";
 import { Button } from "~/components/ui/button";
-import { ModelOption, models } from "./mock-data";
+import { ModelOption, models } from "./model-options";
 import { useForm } from "react-hook-form";
 import { Textarea } from "~/components/ui/textarea";
 import { useEffect, useState } from "react";
