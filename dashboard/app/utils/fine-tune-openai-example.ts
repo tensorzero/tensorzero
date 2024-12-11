@@ -7,12 +7,12 @@ You will need to have the docker compose for dashboard running.
 
 import { create_env } from "./minijinja/pkg/minijinja_bindings.js";
 import { queryGoodBooleanMetricData } from "./clickhouse";
+import { tensorzero_inference_to_openai_messages } from "./fine_tuning/openai";
 import {
-  tensorzero_inference_to_openai_messages,
   upload_examples_to_openai,
   create_fine_tuning_job,
   poll_fine_tuning_job,
-} from "./fine_tuning/openai";
+} from "./fine_tuning/openai.server";
 import OpenAI from "openai";
 
 const result = await queryGoodBooleanMetricData(

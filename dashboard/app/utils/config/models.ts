@@ -1,73 +1,91 @@
 import { z } from "zod";
 
 // Base provider configs
-const AnthropicProviderConfig = z.object({
+export const AnthropicProviderConfig = z.object({
   type: z.literal("anthropic"),
   model_name: z.string(),
 });
+export type AnthropicProviderConfig = z.infer<typeof AnthropicProviderConfig>;
 
-const AWSBedrockProviderConfig = z.object({
+export const AWSBedrockProviderConfig = z.object({
   type: z.literal("aws_bedrock"),
   model_id: z.string(),
   region: z.string().optional(),
 });
+export type AWSBedrockProviderConfig = z.infer<typeof AWSBedrockProviderConfig>;
 
-const AzureProviderConfig = z.object({
+export const AzureProviderConfig = z.object({
   type: z.literal("azure"),
   deployment_id: z.string(),
   endpoint: z.string().url(),
 });
+export type AzureProviderConfig = z.infer<typeof AzureProviderConfig>;
 
-const DummyProviderConfig = z.object({
+export const DummyProviderConfig = z.object({
   type: z.literal("dummy"),
   model_name: z.string(),
 });
+export type DummyProviderConfig = z.infer<typeof DummyProviderConfig>;
 
-const FireworksProviderConfig = z.object({
+export const FireworksProviderConfig = z.object({
   type: z.literal("fireworks"),
   model_name: z.string(),
 });
+export type FireworksProviderConfig = z.infer<typeof FireworksProviderConfig>;
 
-const GCPVertexAnthropicProviderConfig = z.object({
+export const GCPVertexAnthropicProviderConfig = z.object({
   type: z.literal("gcp_vertex_anthropic"),
   model_id: z.string(),
   location: z.string(),
   project_id: z.string(),
 });
+export type GCPVertexAnthropicProviderConfig = z.infer<
+  typeof GCPVertexAnthropicProviderConfig
+>;
 
-const GCPVertexGeminiProviderConfig = z.object({
+export const GCPVertexGeminiProviderConfig = z.object({
   type: z.literal("gcp_vertex_gemini"),
   model_id: z.string(),
   location: z.string(),
   project_id: z.string(),
 });
+export type GCPVertexGeminiProviderConfig = z.infer<
+  typeof GCPVertexGeminiProviderConfig
+>;
 
-const GoogleAIStudioGeminiProviderConfig = z.object({
+export const GoogleAIStudioGeminiProviderConfig = z.object({
   type: z.literal("google_ai_studio_gemini"),
   model_name: z.string(),
 });
+export type GoogleAIStudioGeminiProviderConfig = z.infer<
+  typeof GoogleAIStudioGeminiProviderConfig
+>;
 
-const MistralProviderConfig = z.object({
+export const MistralProviderConfig = z.object({
   type: z.literal("mistral"),
   model_name: z.string(),
 });
+export type MistralProviderConfig = z.infer<typeof MistralProviderConfig>;
 
-const OpenAIProviderConfig = z.object({
+export const OpenAIProviderConfig = z.object({
   type: z.literal("openai"),
   model_name: z.string(),
   api_base: z.string().url().optional(),
 });
+export type OpenAIProviderConfig = z.infer<typeof OpenAIProviderConfig>;
 
-const TogetherProviderConfig = z.object({
+export const TogetherProviderConfig = z.object({
   type: z.literal("together"),
   model_name: z.string(),
 });
+export type TogetherProviderConfig = z.infer<typeof TogetherProviderConfig>;
 
-const VLLMProviderConfig = z.object({
+export const VLLMProviderConfig = z.object({
   type: z.literal("vllm"),
   model_name: z.string(),
   api_base: z.string().url(),
 });
+export type VLLMProviderConfig = z.infer<typeof VLLMProviderConfig>;
 
 // Union of all provider configs
 export const ProviderConfig = z.discriminatedUnion("type", [

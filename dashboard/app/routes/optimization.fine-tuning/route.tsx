@@ -5,7 +5,7 @@ import {
 } from "@remix-run/node";
 import { Form } from "~/components/ui/form";
 import { Button } from "~/components/ui/button";
-import { models } from "./mock-data";
+import { ModelOption, models } from "./mock-data";
 import { useForm } from "react-hook-form";
 // import { functions, metrics, models, promptTemplates } from "./mock-data";
 import { Textarea } from "~/components/ui/textarea";
@@ -18,30 +18,26 @@ import {
 } from "~/utils/clickhouse";
 import { getConfig } from "~/utils/config.server";
 import { useLoaderData, useSearchParams } from "@remix-run/react";
-import { ChatCompletionConfig, get_template_env } from "~/utils/config/variant";
-// import {
-// create_fine_tuning_job,
-// poll_fine_tuning_job,
-// tensorzero_inference_to_openai_messages,
-// upload_examples_to_openai,
-// } from "~/utils/fine_tuning/openai";
-import OpenAI from "openai";
+import { ChatCompletionConfig } from "~/utils/config/variant";
+
 import { FunctionSelector } from "./FunctionSelector";
 import { MetricSelector } from "./MetricSelector";
 import { VariantSelector } from "./VariantSelector";
 import { ModelSelector } from "./ModelSelector";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
+import { get_fine_tuned_model_config } from "~/utils/fine_tuning/openai";
 export const meta: MetaFunction = () => {
   return [
     { title: "TensorZeroFine-Tuning Dashboard" },
     { name: "description", content: "Fine Tuning Optimization Dashboard" },
   ];
 };
+import { stringify } from "smol-toml";
 
 export type FormValues = {
   function: string;
   metric: string;
-  model: string;
+  model: ModelOption;
   variant: string;
   validationSplit: number;
   maxSamples: number;
@@ -98,7 +94,6 @@ export default function FineTuning() {
   });
 
   const [submissionResult, setSubmissionResult] = useState<string | null>(null);
-  const [, setCounter] = useState<number | null>(null);
   const [finalResult, setFinalResult] = useState<string | null>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submissionPhase, setSubmissionPhase] = useState<
@@ -159,19 +154,69 @@ export default function FineTuning() {
       setIsSubmitted(true);
       setSubmissionPhase("submitting");
       setSubmissionResult("Preparing training data...");
+      console.log("data", data);
+      console.log("data.model", data.model);
 
-      const current_variant =
+      // Call the API route for fine-tuning
+      const response = await fetch("/api/fine-tuning", {
+        method: "POST",
+        body: JSON.stringify(data),
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to start fine-tuning job");
+      }
+
+      const result = await response.json();
+      console.log(result);
+      setSubmissionResult("Job started. Polling for job status...");
+
+      const job_id = result.job_id;
+      let finished = false;
+      let jobStatus = "";
+
+      while (!finished) {
+        await new Promise((resolve) => setTimeout(resolve, 10000));
+        const jobResponse = await fetch(`/api/fine-tuning/${job_id}`);
+        const jobResult = await jobResponse.json();
+        jobStatus = jobResult.status;
+        setSubmissionResult(`Current job status: ${jobStatus}`);
+
+        finished =
+          jobStatus === "succeeded" ||
+          jobStatus === "failed" ||
+          jobStatus === "cancelled";
+      }
+      setSubmissionPhase("complete");
+
+      const modelConfig = await get_fine_tuned_model_config(data.model.name);
+      const fullModelConfig = { models: { [data.model.name]: modelConfig } };
+      const oldVariantConfig =
         getChatCompletionVariantsForFunction[data.variant];
-      // const template_env = await get_template_env(current_variant);
-      // const messages = curatedInferences?.map((inference) =>
-      //   tensorzero_inference_to_openai_messages(inference, template_env)
-      // );
-      // if (!messages) {
-      //   throw new Error("No messages found");
-      // }
+      const newVariantConfig = {
+        ...oldVariantConfig,
+        weight: 0,
+        model_name: data.model.name,
+      };
+      const fullNewVariantConfig = {
+        functions: {
+          [data.function]: {
+            variants: {
+              [data.model.name]: newVariantConfig,
+            },
+          },
+        },
+      };
+      const modelConfigToml = stringify(fullModelConfig);
+      const newVariantConfigToml = stringify(fullNewVariantConfig);
 
-      setSubmissionResult("Uploading training data to OpenAI...");
-      // const file_id = await upload_examples_to_openai(messages);
+      setFinalResult(
+        `Model Configuration:\n\n${modelConfigToml}\n\n` +
+          `New Variant Configuration:\n\n${newVariantConfigToml}`,
+      );
     } catch (err) {
       const error = err as Error;
       setSubmissionPhase("complete");

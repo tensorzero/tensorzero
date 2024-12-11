@@ -37,13 +37,23 @@ export function ModelSelector({ control, models }: ModelSelectorProps) {
         <FormItem>
           <FormLabel>Model</FormLabel>
           <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
-            <Select onValueChange={field.onChange} defaultValue={field.value}>
+            <Select
+              onValueChange={(value) => {
+                const selectedModel = models.find(
+                  (model) => model.name === value,
+                );
+                if (selectedModel) {
+                  field.onChange(selectedModel);
+                }
+              }}
+              defaultValue={field.value?.name}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Select a model" />
               </SelectTrigger>
               <SelectContent>
-                {Object.entries(models).map(([name, model]) => (
-                  <SelectItem key={name} value={name}>
+                {models.map((model) => (
+                  <SelectItem key={model.name} value={model.name}>
                     <div className="flex items-center justify-between w-full">
                       <span>{model.name}</span>
                       <span className="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300">
