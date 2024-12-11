@@ -50,13 +50,12 @@ repos:
         pass_filenames: false
         always_run: true
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.8.0
+  - repo: https://github.com/RobertCraigie/pyright-python
+    rev: v1.1.390
     hooks:
-      - id: mypy
-        name: mypy type checking
+      - id: pyright
+        name: pyright type checking
         files: ^clients/python/
-        args: [--strict]
 
   - repo: https://github.com/srstevenson/nb-clean
     rev: 3.2.0

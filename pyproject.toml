@@ -1,0 +1,9 @@
+[tool.pyright]
+include = ["clients/python"]
+typeCheckingMode = "strict"
+venvPath = "."
+venv = ".venv"
+useLibraryCodeForTypes = true
+reportMissingImports = true
+reportMissingTypeStubs = true
+pythonVersion = "3.10"
