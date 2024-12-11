@@ -19,7 +19,7 @@ use crate::{
  */
 
 /// A Tool object describes how a tool can be dynamically configured by the user.
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Tool {
     pub description: String,
@@ -29,7 +29,7 @@ pub struct Tool {
     pub strict: bool,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ToolConfig {
     Static(&'static StaticToolConfig),
     Dynamic(DynamicToolConfig),
@@ -187,7 +187,7 @@ impl ToolCallConfig {
 /// if `allowed_tools` is not provided, all tools are allowed.
 /// `additional_tools` are the tools that are provided at runtime, which we compile on the fly.
 /// `tool_choice` and `parallel_tool_calls` are optional and will override the function-level values.
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(Default))]
 #[serde(deny_unknown_fields)]
 pub struct DynamicToolParams {
@@ -196,6 +196,18 @@ pub struct DynamicToolParams {
     pub tool_choice: Option<ToolChoice>,
     pub parallel_tool_calls: Option<bool>,
 }
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(Default))]
+pub struct BatchDynamicToolParams {
+    pub allowed_tools: Option<Vec<Option<Vec<String>>>>,
+    pub additional_tools: Option<Vec<Option<Vec<Tool>>>>,
+    pub tool_choice: Option<Vec<Option<ToolChoice>>>,
+    pub parallel_tool_calls: Option<Vec<Option<bool>>>,
+}
+
+// Helper type for converting BatchDynamicToolParams into a Vec<DynamicToolParams>
+pub struct BatchDynamicToolParamsWithSize(pub BatchDynamicToolParams, pub usize);
 
 /// A ToolCall is a request by a model to call a Tool
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -380,6 +392,109 @@ pub fn create_dynamic_implicit_tool_config(schema: Value) -> ToolCallConfig {
         tools_available: vec![implicit_tool],
         tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
         parallel_tool_calls: false,
+    }
+}
+
+impl TryFrom<BatchDynamicToolParamsWithSize> for Vec<DynamicToolParams> {
+    type Error = Error;
+
+    fn try_from(
+        batch_dynamic_tool_params_with_size: BatchDynamicToolParamsWithSize,
+    ) -> Result<Self, Self::Error> {
+        let BatchDynamicToolParamsWithSize(batch_dynamic_tool_params, num_inferences) =
+            batch_dynamic_tool_params_with_size;
+        if num_inferences == 0 {
+            return Ok(vec![
+                DynamicToolParams {
+                    allowed_tools: None,
+                    additional_tools: None,
+                    tool_choice: None,
+                    parallel_tool_calls: None,
+                };
+                num_inferences
+            ]);
+        }
+        let BatchDynamicToolParams {
+            allowed_tools,
+            additional_tools,
+            tool_choice,
+            parallel_tool_calls,
+        } = batch_dynamic_tool_params;
+
+        // Verify all provided Vecs have the same length
+        if let Some(allowed_tools) = &allowed_tools {
+            if allowed_tools.len() != num_inferences {
+                return Err(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "allowed_tools vector length ({}) does not match number of inferences ({})",
+                        allowed_tools.len(),
+                        num_inferences
+                    ),
+                }
+                .into());
+            }
+        }
+        if let Some(additional_tools) = &additional_tools {
+            if additional_tools.len() != num_inferences {
+                return Err(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "additional_tools vector length ({}) does not match number of inferences ({})",
+                        additional_tools.len(),
+                        num_inferences
+                    ),
+                }
+                .into());
+            }
+        }
+        if let Some(tool_choice) = &tool_choice {
+            if tool_choice.len() != num_inferences {
+                return Err(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "tool_choice vector length ({}) does not match number of inferences ({})",
+                        tool_choice.len(),
+                        num_inferences
+                    ),
+                }
+                .into());
+            }
+        }
+        if let Some(parallel_tool_calls) = &parallel_tool_calls {
+            if parallel_tool_calls.len() != num_inferences {
+                return Err(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "parallel_tool_calls vector length ({}) does not match number of inferences ({})",
+                        parallel_tool_calls.len(),
+                        num_inferences
+                    ),
+                }
+                .into());
+            }
+        }
+        // Convert Option<Vec<Option<T>>> into Vec<Option<T>> by unwrapping or creating empty vec
+        let allowed_tools = allowed_tools.unwrap_or_default();
+        let additional_tools = additional_tools.unwrap_or_default();
+        let tool_choice = tool_choice.unwrap_or_default();
+        let parallel_tool_calls = parallel_tool_calls.unwrap_or_default();
+
+        // Create iterators that take ownership
+        let mut allowed_tools_iter = allowed_tools.into_iter();
+        let mut additional_tools_iter = additional_tools.into_iter();
+        let mut tool_choice_iter = tool_choice.into_iter();
+        let mut parallel_tool_calls_iter = parallel_tool_calls.into_iter();
+
+        // Build params using the iterators
+        let mut all_dynamic_tool_params = Vec::with_capacity(num_inferences);
+        // Since we already verified that the vectors that were Some were the same length,
+        // it is safe to do .next().unwrap_or() since we'll either be taking real elements or using an empty vector.
+        for _ in 0..num_inferences {
+            all_dynamic_tool_params.push(DynamicToolParams {
+                allowed_tools: allowed_tools_iter.next().unwrap_or(None),
+                additional_tools: additional_tools_iter.next().unwrap_or(None),
+                tool_choice: tool_choice_iter.next().unwrap_or(None),
+                parallel_tool_calls: parallel_tool_calls_iter.next().unwrap_or(None),
+            });
+        }
+        Ok(all_dynamic_tool_params)
     }
 }
 

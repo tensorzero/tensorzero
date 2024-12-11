@@ -16,6 +16,7 @@ use crate::{
 };
 
 crate::generate_provider_tests!(get_providers);
+crate::generate_batch_inference_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
     let standard_providers = vec![E2ETestProvider {
@@ -50,6 +51,7 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: standard_providers.clone(),
         parallel_tool_use_inference: standard_providers.clone(),
         json_mode_inference: json_providers.clone(),
+        supports_batch_inference: true,
     }
 }
 
