@@ -34,4 +34,7 @@ dist/
 # Misc
 .ruff_cache/
 credentials/
-node_modules
+
+# Node
+node_modules/
+

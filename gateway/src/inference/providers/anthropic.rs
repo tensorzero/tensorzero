@@ -483,46 +483,19 @@ impl<'a> AnthropicRequestBody<'a> {
     }
 }
 
-/// Anthropic API doesn't support consecutive messages from the same role.
-/// This function consolidates messages from the same role into a single message
-/// so as to satisfy the API.
-/// It also makes modifications to the messages to make Anthropic happy.
-/// For example, it will prepend a default User message if the first message is an Assistant message.
-/// It will also append a default User message if the last message is an Assistant message.
-fn prepare_messages(messages: Vec<AnthropicMessage>) -> Result<Vec<AnthropicMessage>, Error> {
-    let mut consolidated_messages: Vec<AnthropicMessage> = Vec::new();
-    let mut last_role: Option<AnthropicRole> = None;
-    for message in messages {
-        let this_role = message.role.clone();
-        match last_role {
-            Some(role) => {
-                if role == this_role {
-                    let mut last_message =
-                        consolidated_messages.pop().ok_or_else(|| Error::new(ErrorDetails::InvalidRequest {
-                            message: "Last message is missing (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
-                                .to_string(),
-                        }))?;
-                    last_message.content.extend(message.content);
-                    consolidated_messages.push(last_message);
-                } else {
-                    consolidated_messages.push(message);
-                }
-            }
-            None => {
-                consolidated_messages.push(message);
-            }
-        }
-        last_role = Some(this_role)
-    }
+/// Modifies the message array to satisfy Anthropic API requirements by:
+/// - Prepending a default User message with "[listening]" if the first message is not from a User
+/// - Appending a default User message with "[listening]" if the last message is from an Assistant
+fn prepare_messages(mut messages: Vec<AnthropicMessage>) -> Result<Vec<AnthropicMessage>, Error> {
     // Anthropic also requires that there is at least one message and it is a User message.
     // If it's not we will prepend a default User message.
-    match consolidated_messages.first() {
+    match messages.first() {
         Some(&AnthropicMessage {
             role: AnthropicRole::User,
             ..
         }) => {}
         _ => {
-            consolidated_messages.insert(
+            messages.insert(
                 0,
                 AnthropicMessage {
                     role: AnthropicRole::User,
@@ -533,12 +506,13 @@ fn prepare_messages(messages: Vec<AnthropicMessage>) -> Result<Vec<AnthropicMess
             );
         }
     }
+
     // Anthropic will continue any assistant messages passed in.
     // Since we don't want to do that, we'll append a default User message in the case that the last message was
     // an assistant message
-    if let Some(last_message) = consolidated_messages.last() {
+    if let Some(last_message) = messages.last() {
         if last_message.role == AnthropicRole::Assistant {
-            consolidated_messages.push(AnthropicMessage {
+            messages.push(AnthropicMessage {
                 role: AnthropicRole::User,
                 content: vec![AnthropicMessageContent::Text {
                     text: "[listening]",
@@ -546,7 +520,7 @@ fn prepare_messages(messages: Vec<AnthropicMessage>) -> Result<Vec<AnthropicMess
             });
         }
     }
-    Ok(consolidated_messages)
+    Ok(messages)
 }
 
 fn prefill_json_message(messages: Vec<AnthropicMessage>) -> Vec<AnthropicMessage> {
@@ -963,7 +937,7 @@ mod tests {
     use std::borrow::Cow;
 
     use super::*;
-    use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
+    use crate::inference::providers::common::WEATHER_TOOL_CONFIG;
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::tool::{DynamicToolConfig, ToolConfig, ToolResult};
@@ -1117,6 +1091,7 @@ mod tests {
                 text: "[listening]",
             }],
         };
+
         // Test Case 1: Empty message list
         let inference_request = ModelInferenceRequest {
             messages: vec![],
@@ -1142,19 +1117,13 @@ mod tests {
             }
         );
 
-        // Test Case 2: Messages with System message
-        let messages = vec![
-            RequestMessage {
-                role: Role::User,
-                content: vec!["test_user".to_string().into()],
-            },
-            RequestMessage {
-                role: Role::Assistant,
-                content: vec!["test_assistant".to_string().into()],
-            },
-        ];
+        // Test Case 2: Messages starting with Assistant - should prepend and append listening message
+        let messages = vec![RequestMessage {
+            role: Role::Assistant,
+            content: vec!["test_assistant".to_string().into()],
+        }];
         let inference_request = ModelInferenceRequest {
-            messages: messages.clone(),
+            messages,
             system: Some("test_system".to_string()),
             tool_config: None,
             temperature: None,
@@ -1175,8 +1144,8 @@ mod tests {
             AnthropicRequestBody {
                 model: &model,
                 messages: vec![
-                    AnthropicMessage::try_from(&messages[0]).unwrap(),
-                    AnthropicMessage::try_from(&messages[1]).unwrap(),
+                    listening_message.clone(),
+                    AnthropicMessage::try_from(&inference_request.messages[0]).unwrap(),
                     listening_message.clone(),
                 ],
                 max_tokens: 4096,
@@ -1189,16 +1158,11 @@ mod tests {
             }
         );
 
-        // Test case 3: Messages with system message that require consolidation
-        // also some of the optional fields are tested
+        // Test Case 3: Messages ending with Assistant - should append listening message
         let messages = vec![
             RequestMessage {
                 role: Role::User,
                 content: vec!["test_user".to_string().into()],
-            },
-            RequestMessage {
-                role: Role::User,
-                content: vec!["test_user2".to_string().into()],
             },
             RequestMessage {
                 role: Role::Assistant,
@@ -1206,17 +1170,17 @@ mod tests {
             },
         ];
         let inference_request = ModelInferenceRequest {
-            messages: messages.clone(),
+            messages,
             system: Some("test_system".to_string()),
             tool_config: None,
             temperature: Some(0.5),
-            max_tokens: Some(100),
             top_p: None,
             presence_penalty: None,
             frequency_penalty: None,
+            max_tokens: Some(100),
             seed: None,
             stream: true,
-            json_mode: ModelInferenceRequestJsonMode::On,
+            json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -1227,14 +1191,8 @@ mod tests {
             AnthropicRequestBody {
                 model: &model,
                 messages: vec![
-                    AnthropicMessage {
-                        role: AnthropicRole::User,
-                        content: vec![
-                            AnthropicMessageContent::Text { text: "test_user" },
-                            AnthropicMessageContent::Text { text: "test_user2" }
-                        ],
-                    },
-                    AnthropicMessage::try_from(&messages[2]).unwrap(),
+                    AnthropicMessage::try_from(&inference_request.messages[0]).unwrap(),
+                    AnthropicMessage::try_from(&inference_request.messages[1]).unwrap(),
                     listening_message.clone(),
                 ],
                 max_tokens: 100,
@@ -1247,7 +1205,7 @@ mod tests {
             }
         );
 
-        // Test case 4: Tool use & choice
+        // Test Case 4: Valid message sequence - no changes needed
         let messages = vec![
             RequestMessage {
                 role: Role::User,
@@ -1259,95 +1217,176 @@ mod tests {
             },
             RequestMessage {
                 role: Role::User,
-                content: vec![ContentBlock::ToolResult(ToolResult {
-                    id: "tool_call_id".to_string(),
-                    name: "test_tool_name".to_string(),
-                    result: "tool_response".to_string(),
-                })],
+                content: vec!["test_user2".to_string().into()],
             },
         ];
-
         let inference_request = ModelInferenceRequest {
-            messages: messages.clone(),
-            system: Some("test_system".to_string()),
-            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
-            temperature: Some(0.5),
-            top_p: Some(0.9),
+            messages,
+            system: None,
+            tool_config: None,
+            temperature: None,
+            top_p: None,
             presence_penalty: None,
             frequency_penalty: None,
-            max_tokens: Some(100),
+            max_tokens: None,
             seed: None,
-            stream: true,
-            json_mode: ModelInferenceRequestJsonMode::On,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
         };
-
         let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
         assert!(anthropic_request_body.is_ok());
         assert_eq!(
             anthropic_request_body.unwrap(),
             AnthropicRequestBody {
                 model: &model,
-                messages: vec![
-                    AnthropicMessage::try_from(&messages[0]).unwrap(),
-                    AnthropicMessage::try_from(&messages[1]).unwrap(),
-                    AnthropicMessage::try_from(&messages[2]).unwrap(),
-                ],
-                max_tokens: 100,
-                stream: Some(true),
-                system: Some("test_system"),
-                temperature: Some(0.5),
-                top_p: Some(0.9),
-                tool_choice: Some(AnthropicToolChoice::Tool {
-                    name: "get_temperature",
-                }),
-                tools: Some(vec![AnthropicTool {
-                    name: WEATHER_TOOL.name(),
-                    description: Some(WEATHER_TOOL.description()),
-                    input_schema: WEATHER_TOOL.parameters(),
-                }]),
+                messages: inference_request
+                    .messages
+                    .iter()
+                    .map(|m| AnthropicMessage::try_from(m).unwrap())
+                    .collect(),
+                max_tokens: 4096,
+                stream: Some(false),
+                system: None,
+                temperature: None,
+                top_p: None,
+                tool_choice: None,
+                tools: None,
+            }
+        );
+
+        // Test Case 5: Tool use with JSON mode
+        let messages = vec![
+            RequestMessage {
+                role: Role::User,
+                content: vec!["test_user".to_string().into()],
+            },
+            RequestMessage {
+                role: Role::Assistant,
+                content: vec![ContentBlock::ToolCall(ToolCall {
+                    id: "test_id".to_string(),
+                    name: "get_temperature".to_string(),
+                    arguments: r#"{"location":"London"}"#.to_string(),
+                })],
+            },
+        ];
+        let inference_request = ModelInferenceRequest {
+            messages,
+            system: None,
+            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::On,
+            function_type: FunctionType::Json,
+            output_schema: None,
+        };
+        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
+        assert!(anthropic_request_body.is_ok());
+        let result = anthropic_request_body.unwrap();
+        assert_eq!(result.messages.len(), 4); // Original 2 messages + listening message + JSON prefill
+        assert_eq!(
+            result.messages[0],
+            AnthropicMessage::try_from(&inference_request.messages[0]).unwrap()
+        );
+        assert_eq!(
+            result.messages[1],
+            AnthropicMessage::try_from(&inference_request.messages[1]).unwrap()
+        );
+        assert_eq!(result.messages[2], listening_message);
+        assert_eq!(
+            result.messages[3],
+            AnthropicMessage {
+                role: AnthropicRole::Assistant,
+                content: vec![AnthropicMessageContent::Text {
+                    text: "Here is the JSON requested:\n{",
+                }],
             }
         );
     }
 
     #[test]
-    fn test_consolidate_messages() {
+    fn test_prepare_messages() {
         let listening_message = AnthropicMessage {
             role: AnthropicRole::User,
             content: vec![AnthropicMessageContent::Text {
                 text: "[listening]",
             }],
         };
-        // Test case 1: No consolidation needed
-        let messages = vec![
-            AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![AnthropicMessageContent::Text { text: "Hello" }],
-            },
-            AnthropicMessage {
-                role: AnthropicRole::Assistant,
-                content: vec![AnthropicMessageContent::Text { text: "Hi" }],
-            },
-        ];
-        let expected = vec![
-            AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![AnthropicMessageContent::Text { text: "Hello" }],
-            },
-            AnthropicMessage {
-                role: AnthropicRole::Assistant,
-                content: vec![AnthropicMessageContent::Text { text: "Hi" }],
-            },
-            listening_message.clone(),
-        ];
-        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
 
-        // Test case 2: Consolidation needed
+        // Test case 1: Empty messages - should add listening message
+        let messages = vec![];
+        let result = prepare_messages(messages).unwrap();
+        assert_eq!(result, vec![listening_message.clone()]);
+
+        // Test case 2: First message is Assistant - should prepend listening message
+        let messages = vec![
+            AnthropicMessage {
+                role: AnthropicRole::Assistant,
+                content: vec![AnthropicMessageContent::Text { text: "Hi" }],
+            },
+            AnthropicMessage {
+                role: AnthropicRole::User,
+                content: vec![AnthropicMessageContent::Text { text: "Hello" }],
+            },
+        ];
+        let result = prepare_messages(messages).unwrap();
+        assert_eq!(
+            result,
+            vec![
+                listening_message.clone(),
+                AnthropicMessage {
+                    role: AnthropicRole::Assistant,
+                    content: vec![AnthropicMessageContent::Text { text: "Hi" }],
+                },
+                AnthropicMessage {
+                    role: AnthropicRole::User,
+                    content: vec![AnthropicMessageContent::Text { text: "Hello" }],
+                },
+            ]
+        );
+
+        // Test case 3: Last message is Assistant - should append listening message
         let messages = vec![
             AnthropicMessage {
                 role: AnthropicRole::User,
                 content: vec![AnthropicMessageContent::Text { text: "Hello" }],
+            },
+            AnthropicMessage {
+                role: AnthropicRole::Assistant,
+                content: vec![AnthropicMessageContent::Text { text: "Hi" }],
+            },
+        ];
+        let result = prepare_messages(messages).unwrap();
+        assert_eq!(
+            result,
+            vec![
+                AnthropicMessage {
+                    role: AnthropicRole::User,
+                    content: vec![AnthropicMessageContent::Text { text: "Hello" }],
+                },
+                AnthropicMessage {
+                    role: AnthropicRole::Assistant,
+                    content: vec![AnthropicMessageContent::Text { text: "Hi" }],
+                },
+                listening_message.clone(),
+            ]
+        );
+
+        // Test case 4: Valid message sequence - no changes needed
+        let messages = vec![
+            AnthropicMessage {
+                role: AnthropicRole::User,
+                content: vec![AnthropicMessageContent::Text { text: "Hello" }],
+            },
+            AnthropicMessage {
+                role: AnthropicRole::Assistant,
+                content: vec![AnthropicMessageContent::Text { text: "Hi" }],
             },
             AnthropicMessage {
                 role: AnthropicRole::User,
@@ -1355,173 +1394,75 @@ mod tests {
                     text: "How are you?",
                 }],
             },
-            AnthropicMessage {
-                role: AnthropicRole::Assistant,
-                content: vec![AnthropicMessageContent::Text { text: "Hi" }],
-            },
         ];
-        let expected = vec![
-            AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![
-                    AnthropicMessageContent::Text { text: "Hello" },
-                    AnthropicMessageContent::Text {
-                        text: "How are you?",
-                    },
-                ],
-            },
-            AnthropicMessage {
-                role: AnthropicRole::Assistant,
-                content: vec![AnthropicMessageContent::Text { text: "Hi" }],
-            },
-            listening_message.clone(),
-        ];
-        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
+        let result = prepare_messages(messages.clone()).unwrap();
+        assert_eq!(result, messages);
 
-        // Test case 3: Multiple consolidations needed
+        // Test case 5: Both first Assistant and last Assistant - should add listening messages at both ends
         let messages = vec![
+            AnthropicMessage {
+                role: AnthropicRole::Assistant,
+                content: vec![AnthropicMessageContent::Text { text: "Hi" }],
+            },
             AnthropicMessage {
                 role: AnthropicRole::User,
                 content: vec![AnthropicMessageContent::Text { text: "Hello" }],
             },
             AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![AnthropicMessageContent::Text {
-                    text: "How are you?",
-                }],
-            },
-            AnthropicMessage {
-                role: AnthropicRole::Assistant,
-                content: vec![AnthropicMessageContent::Text { text: "Hi" }],
-            },
-            AnthropicMessage {
                 role: AnthropicRole::Assistant,
                 content: vec![AnthropicMessageContent::Text {
-                    text: "I am here to help.",
+                    text: "How can I help?",
                 }],
             },
         ];
-        let expected = vec![
-            AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![
-                    AnthropicMessageContent::Text { text: "Hello" },
-                    AnthropicMessageContent::Text {
-                        text: "How are you?",
-                    },
-                ],
-            },
-            AnthropicMessage {
-                role: AnthropicRole::Assistant,
-                content: vec![
-                    AnthropicMessageContent::Text { text: "Hi" },
-                    AnthropicMessageContent::Text {
-                        text: "I am here to help.",
-                    },
-                ],
-            },
-            listening_message.clone(),
-        ];
-        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
+        let result = prepare_messages(messages).unwrap();
+        assert_eq!(
+            result,
+            vec![
+                listening_message.clone(),
+                AnthropicMessage {
+                    role: AnthropicRole::Assistant,
+                    content: vec![AnthropicMessageContent::Text { text: "Hi" }],
+                },
+                AnthropicMessage {
+                    role: AnthropicRole::User,
+                    content: vec![AnthropicMessageContent::Text { text: "Hello" }],
+                },
+                AnthropicMessage {
+                    role: AnthropicRole::Assistant,
+                    content: vec![AnthropicMessageContent::Text {
+                        text: "How can I help?"
+                    }],
+                },
+                listening_message.clone(),
+            ]
+        );
 
-        // Test case 4: No messages
-        let messages: Vec<AnthropicMessage> = vec![];
-        let expected: Vec<AnthropicMessage> = vec![listening_message.clone()];
-        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
+        // Test case 6: Single Assistant message - should add listening messages at both ends
+        let messages = vec![AnthropicMessage {
+            role: AnthropicRole::Assistant,
+            content: vec![AnthropicMessageContent::Text { text: "Hi" }],
+        }];
+        let result = prepare_messages(messages).unwrap();
+        assert_eq!(
+            result,
+            vec![
+                listening_message.clone(),
+                AnthropicMessage {
+                    role: AnthropicRole::Assistant,
+                    content: vec![AnthropicMessageContent::Text { text: "Hi" }],
+                },
+                listening_message.clone(),
+            ]
+        );
 
-        // Test case 5: Single message
+        // Test case 7: Single User message - no changes needed
         let messages = vec![AnthropicMessage {
             role: AnthropicRole::User,
             content: vec![AnthropicMessageContent::Text { text: "Hello" }],
         }];
-        let expected = vec![AnthropicMessage {
-            role: AnthropicRole::User,
-            content: vec![AnthropicMessageContent::Text { text: "Hello" }],
-        }];
-        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
-
-        // Test case 6: Consolidate tool uses
-        let messages = vec![
-            AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![AnthropicMessageContent::ToolResult {
-                    tool_use_id: "tool1",
-                    content: vec![AnthropicMessageContent::Text {
-                        text: "Tool call 1",
-                    }],
-                }],
-            },
-            AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![AnthropicMessageContent::ToolResult {
-                    tool_use_id: "tool2",
-                    content: vec![AnthropicMessageContent::Text {
-                        text: "Tool call 2",
-                    }],
-                }],
-            },
-        ];
-        let expected = vec![AnthropicMessage {
-            role: AnthropicRole::User,
-            content: vec![
-                AnthropicMessageContent::ToolResult {
-                    tool_use_id: "tool1",
-                    content: vec![AnthropicMessageContent::Text {
-                        text: "Tool call 1",
-                    }],
-                },
-                AnthropicMessageContent::ToolResult {
-                    tool_use_id: "tool2",
-                    content: vec![AnthropicMessageContent::Text {
-                        text: "Tool call 2",
-                    }],
-                },
-            ],
-        }];
-        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
-
-        // Test case 7: Consolidate mixed text and tool use
-        let messages = vec![
-            AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![AnthropicMessageContent::Text {
-                    text: "User message 1",
-                }],
-            },
-            AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![AnthropicMessageContent::ToolResult {
-                    tool_use_id: "tool1",
-                    content: vec![AnthropicMessageContent::Text {
-                        text: "Tool call 1",
-                    }],
-                }],
-            },
-            AnthropicMessage {
-                role: AnthropicRole::User,
-                content: vec![AnthropicMessageContent::Text {
-                    text: "User message 2",
-                }],
-            },
-        ];
-        let expected = vec![AnthropicMessage {
-            role: AnthropicRole::User,
-            content: vec![
-                AnthropicMessageContent::Text {
-                    text: "User message 1",
-                },
-                AnthropicMessageContent::ToolResult {
-                    tool_use_id: "tool1",
-                    content: vec![AnthropicMessageContent::Text {
-                        text: "Tool call 1",
-                    }],
-                },
-                AnthropicMessageContent::Text {
-                    text: "User message 2",
-                },
-            ],
-        }];
-        assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
+        let result = prepare_messages(messages.clone()).unwrap();
+        assert_eq!(result, messages);
     }
 
     #[test]
