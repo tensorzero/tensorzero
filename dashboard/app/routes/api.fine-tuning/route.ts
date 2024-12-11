@@ -41,9 +41,28 @@ export async function action({ request }: ActionFunctionArgs) {
       tensorzero_inference_to_openai_messages(inference, template_env),
     );
 
-    const file_id = await upload_examples_to_openai(messages);
+    const splitIndex =
+      data.validationSplit > 0
+        ? Math.floor(messages.length * (data.validationSplit / 100))
+        : messages.length;
+
+    const trainMessages = messages.slice(0, splitIndex);
+    const valMessages =
+      data.validationSplit > 0 ? messages.slice(splitIndex) : [];
+
+    const file_id = await upload_examples_to_openai(trainMessages);
     console.log("file_id", file_id);
-    const job_id = await create_fine_tuning_job(data.model.name, file_id);
+
+    let val_file_id: string | null = null;
+    if (valMessages.length > 0) {
+      val_file_id = await upload_examples_to_openai(valMessages);
+      console.log("val_file_id", val_file_id);
+    }
+    const job_id = await create_fine_tuning_job(
+      data.model.name,
+      file_id,
+      val_file_id ?? undefined,
+    );
     console.log("job_id", job_id);
 
     console.log("started?");

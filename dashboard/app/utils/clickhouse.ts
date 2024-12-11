@@ -139,6 +139,7 @@ export async function getCuratedInferences(
   function_config: FunctionConfig,
   metric_name: string,
   metric_config: MetricConfig,
+  max_samples?: number,
 ) {
   const inference_table_name = getInferenceTableName(function_config);
   const inference_join_key = getInferenceJoinKey(metric_config);
@@ -151,7 +152,7 @@ export async function getCuratedInferences(
         inference_table_name,
         inference_join_key,
         metric_config.optimize === "max",
-        undefined,
+        max_samples,
       );
     default:
       throw new Error(`Unsupported metric type: ${metric_config.type}`);
@@ -175,7 +176,6 @@ export async function countCuratedInferences(
         inference_table_name,
         inference_join_key,
         metric_config.optimize === "max",
-        undefined,
       );
     default:
       throw new Error(`Unsupported metric type: ${metric_config.type}`);
@@ -236,10 +236,8 @@ export async function countGoodBooleanMetricData(
   inference_table_name: InferenceTableName,
   inference_join_key: InferenceJoinKey,
   maximize: boolean,
-  max_samples: number | undefined,
 ): Promise<number> {
   const comparison_operator = maximize ? "= 1" : "= 0"; // Changed from "IS TRUE"/"IS FALSE"
-  const limitClause = max_samples ? `LIMIT ${max_samples}` : "";
 
   const query = `
     SELECT
@@ -259,7 +257,6 @@ export async function countGoodBooleanMetricData(
       ) f ON i.${inference_join_key} = f.target_id and f.rn = 1
     WHERE
       i.function_name = {function_name:String}
-    ${limitClause}
   `;
 
   const resultSet = await clickhouseClient.query({
