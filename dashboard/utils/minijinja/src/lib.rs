@@ -31,6 +31,10 @@ impl JsExposedEnv {
         let context: serde_json::Value = serde_wasm_bindgen::from_value(context)?;
         tmpl.render(context).map_err(annotate_error)
     }
+
+    pub fn has_template(&self, template: &str) -> bool {
+        self.env.get_template(template).is_ok()
+    }
 }
 
 #[wasm_bindgen]
@@ -70,6 +74,9 @@ mod tests {
         // Render the template
         let result = env.render("hello", context).unwrap();
         assert_eq!(result, "Hello, World!");
+
+        assert!(env.has_template("hello"));
+        assert!(!env.has_template("goodbye"));
     }
 
     #[wasm_bindgen_test]
