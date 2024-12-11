@@ -1952,4 +1952,105 @@ mod tests {
         let result = prefill_json_chunk_response(chunk.clone());
         assert_eq!(result, chunk);
     }
+
+    #[test]
+    fn test_handle_anthropic_error() {
+        // Test client errors
+        let error_body = AnthropicErrorBody {
+            r#type: "error".to_string(),
+            message: "test_message".to_string(),
+        };
+
+        // Test BAD_REQUEST
+        let response_code = StatusCode::BAD_REQUEST;
+        let result = handle_anthropic_error(response_code, error_body.clone());
+        let details = result.unwrap_err().get_owned_details();
+        assert_eq!(
+            details,
+            ErrorDetails::AnthropicClient {
+                message: "test_message".to_string(),
+                status_code: response_code,
+            }
+        );
+
+        // Test UNAUTHORIZED
+        let response_code = StatusCode::UNAUTHORIZED;
+        let result = handle_anthropic_error(response_code, error_body.clone());
+        let details = result.unwrap_err().get_owned_details();
+        assert_eq!(
+            details,
+            ErrorDetails::AnthropicClient {
+                message: "test_message".to_string(),
+                status_code: response_code,
+            }
+        );
+
+        // Test TOO_MANY_REQUESTS
+        let response_code = StatusCode::TOO_MANY_REQUESTS;
+        let result = handle_anthropic_error(response_code, error_body.clone());
+        let details = result.unwrap_err().get_owned_details();
+        assert_eq!(
+            details,
+            ErrorDetails::AnthropicClient {
+                message: "test_message".to_string(),
+                status_code: response_code,
+            }
+        );
+
+        // Test server errors
+        let response_code = StatusCode::INTERNAL_SERVER_ERROR;
+        let result = handle_anthropic_error(response_code, error_body.clone());
+        let details = result.unwrap_err().get_owned_details();
+        assert_eq!(
+            details,
+            ErrorDetails::AnthropicServer {
+                message: "test_message".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn test_tool_use_messages() {
+        // Test tool use messages
+        let messages = vec![
+            AnthropicMessage {
+                role: AnthropicRole::User,
+                content: vec![AnthropicMessageContent::ToolResult {
+                    tool_use_id: "tool1",
+                    content: vec![AnthropicMessageContent::Text {
+                        text: "Tool call 1",
+                    }],
+                }],
+            },
+            AnthropicMessage {
+                role: AnthropicRole::User,
+                content: vec![AnthropicMessageContent::Text {
+                    text: "User message",
+                }],
+            },
+        ];
+        let result = prepare_messages(messages.clone()).unwrap();
+        assert_eq!(result, messages, "Tool use messages should be preserved");
+
+        // Test mixed content (text and tool use)
+        let mixed_messages = vec![AnthropicMessage {
+            role: AnthropicRole::User,
+            content: vec![
+                AnthropicMessageContent::Text {
+                    text: "User message",
+                },
+                AnthropicMessageContent::ToolResult {
+                    tool_use_id: "tool1",
+                    content: vec![AnthropicMessageContent::Text {
+                        text: "Tool call 1",
+                    }],
+                },
+            ],
+        }];
+        let result = prepare_messages(mixed_messages.clone()).unwrap();
+        assert_eq!(
+            result, mixed_messages,
+            "Mixed content messages should be preserved"
+        );
+    }
 }
