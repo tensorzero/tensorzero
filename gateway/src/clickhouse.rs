@@ -274,22 +274,25 @@ async fn write_production(
     row: &(impl Serialize + Send + Sync),
     table: &str,
 ) -> Result<(), Error> {
-    let row_json = serde_json::to_string(row).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: e.to_string(),
-        })
-    })?;
-
-    // We can wait for the async insert since we're spawning a new tokio task to do the insert
+    // Format the query with settings and JSONEachRow format
     let query = format!(
         "INSERT INTO {table}\n\
         SETTINGS async_insert=1, wait_for_async_insert=1\n\
-        FORMAT JSONEachRow\n\
-        {row_json}"
+        FORMAT JSONEachRow"
     );
+
+    // Send the query and let ClickHouse handle the JSON serialization directly
     let response = client
         .post(database_url.clone())
-        .body(query)
+        .header("Content-Type", "text/plain") // Use text/plain for raw query
+        .body(format!(
+            "{query}\n{}",
+            serde_json::to_string(row).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: e.to_string(),
+                })
+            })?
+        ))
         .send()
         .await
         .map_err(|e| {

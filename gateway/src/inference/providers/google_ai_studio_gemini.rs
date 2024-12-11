@@ -69,7 +69,16 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body: GeminiRequest = GeminiRequest::new(request)?;
+        let model_name = self
+            .request_url
+            .path_segments()
+            .and_then(|segments| segments.last())
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::InferenceClient {
+                    message: "Invalid model URL: missing model name".to_string(),
+                })
+            })?;
+        let request_body: GeminiRequest = GeminiRequest::new(request, model_name)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut url = self.request_url.clone();
@@ -132,7 +141,16 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         ),
         Error,
     > {
-        let request_body: GeminiRequest = GeminiRequest::new(request)?;
+        let model_name = self
+            .streaming_request_url
+            .path_segments()
+            .and_then(|segments| segments.last())
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::InferenceClient {
+                    message: "Invalid model URL: missing model name".to_string(),
+                })
+            })?;
+        let request_body: GeminiRequest = GeminiRequest::new(request, model_name)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::GoogleAIStudioServer {
                 message: format!("Error serializing request: {e}"),
@@ -396,8 +414,14 @@ struct GoogleAIStudioGeminiToolConfig<'a> {
     function_calling_config: GeminiFunctionCallingConfig<'a>,
 }
 
-impl<'a> From<&'a ToolChoice> for GoogleAIStudioGeminiToolConfig<'a> {
-    fn from(tool_choice: &'a ToolChoice) -> Self {
+// Auto is the default mode where a tool could be called but it isn't required.
+// Any is a mode where a tool is required and if allowed_function_names is Some it has to be from that list.
+// See [the documentation](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/ToolConfig) for details.
+const MODELS_SUPPORTING_ANY_MODE: &[&str] = &["gemini-1.5-pro-001"];
+
+impl<'a> From<(&'a ToolChoice, &'a str)> for GoogleAIStudioGeminiToolConfig<'a> {
+    fn from(input: (&'a ToolChoice, &'a str)) -> Self {
+        let (tool_choice, model_name) = input;
         match tool_choice {
             ToolChoice::None => GoogleAIStudioGeminiToolConfig {
                 function_calling_config: GeminiFunctionCallingConfig {
@@ -411,18 +435,40 @@ impl<'a> From<&'a ToolChoice> for GoogleAIStudioGeminiToolConfig<'a> {
                     allowed_function_names: None,
                 },
             },
-            ToolChoice::Required => GoogleAIStudioGeminiToolConfig {
-                function_calling_config: GeminiFunctionCallingConfig {
-                    mode: GeminiFunctionCallingMode::Any,
-                    allowed_function_names: None,
-                },
-            },
-            ToolChoice::Specific(tool_name) => GoogleAIStudioGeminiToolConfig {
-                function_calling_config: GeminiFunctionCallingConfig {
-                    mode: GeminiFunctionCallingMode::Any,
-                    allowed_function_names: Some(vec![tool_name]),
-                },
-            },
+            ToolChoice::Required => {
+                if MODELS_SUPPORTING_ANY_MODE.contains(&model_name) {
+                    GoogleAIStudioGeminiToolConfig {
+                        function_calling_config: GeminiFunctionCallingConfig {
+                            mode: GeminiFunctionCallingMode::Any,
+                            allowed_function_names: None,
+                        },
+                    }
+                } else {
+                    GoogleAIStudioGeminiToolConfig {
+                        function_calling_config: GeminiFunctionCallingConfig {
+                            mode: GeminiFunctionCallingMode::Auto,
+                            allowed_function_names: None,
+                        },
+                    }
+                }
+            }
+            ToolChoice::Specific(tool_name) => {
+                if MODELS_SUPPORTING_ANY_MODE.contains(&model_name) {
+                    GoogleAIStudioGeminiToolConfig {
+                        function_calling_config: GeminiFunctionCallingConfig {
+                            mode: GeminiFunctionCallingMode::Any,
+                            allowed_function_names: Some(vec![tool_name]),
+                        },
+                    }
+                } else {
+                    GoogleAIStudioGeminiToolConfig {
+                        function_calling_config: GeminiFunctionCallingConfig {
+                            mode: GeminiFunctionCallingMode::Auto,
+                            allowed_function_names: None,
+                        },
+                    }
+                }
+            }
         }
     }
 }
@@ -462,7 +508,7 @@ struct GeminiRequest<'a> {
 }
 
 impl<'a> GeminiRequest<'a> {
-    pub fn new(request: &'a ModelInferenceRequest<'a>) -> Result<Self, Error> {
+    pub fn new(request: &'a ModelInferenceRequest<'a>, model_name: &'a str) -> Result<Self, Error> {
         if request.messages.is_empty() {
             return Err(ErrorDetails::InvalidRequest {
                 message: "Google AI Studio Gemini requires at least one message".to_string(),
@@ -481,7 +527,7 @@ impl<'a> GeminiRequest<'a> {
             .iter()
             .map(GeminiContent::try_from)
             .collect::<Result<_, _>>()?;
-        let (tools, tool_config) = prepare_tools(request);
+        let (tools, tool_config) = prepare_tools(request, model_name);
         let (response_mime_type, response_schema) = match request.json_mode {
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
                 match request.output_schema {
@@ -520,6 +566,7 @@ impl<'a> GeminiRequest<'a> {
 
 fn prepare_tools<'a>(
     request: &'a ModelInferenceRequest<'a>,
+    model_name: &'a str,
 ) -> (
     Option<Vec<GeminiTool<'a>>>,
     Option<GoogleAIStudioGeminiToolConfig<'a>>,
@@ -530,7 +577,7 @@ fn prepare_tools<'a>(
                 return (None, None);
             }
             let tools = Some(vec![(&tool_config.tools_available).into()]);
-            let tool_config = Some((&tool_config.tool_choice).into());
+            let tool_config = Some((&tool_config.tool_choice, model_name).into());
             (tools, tool_config)
         }
         None => (None, None),
@@ -923,7 +970,8 @@ mod tests {
     #[test]
     fn test_from_tool_choice() {
         let tool_choice = ToolChoice::Auto;
-        let tool_config = GoogleAIStudioGeminiToolConfig::from(&tool_choice);
+        let tool_config =
+            GoogleAIStudioGeminiToolConfig::from((&tool_choice, "gemini-1.5-pro-001"));
         assert_eq!(
             tool_config,
             GoogleAIStudioGeminiToolConfig {
@@ -935,7 +983,8 @@ mod tests {
         );
 
         let tool_choice = ToolChoice::Required;
-        let tool_config = GoogleAIStudioGeminiToolConfig::from(&tool_choice);
+        let tool_config =
+            GoogleAIStudioGeminiToolConfig::from((&tool_choice, "gemini-1.5-pro-001"));
         assert_eq!(
             tool_config,
             GoogleAIStudioGeminiToolConfig {
@@ -947,7 +996,8 @@ mod tests {
         );
 
         let tool_choice = ToolChoice::Specific("get_temperature".to_string());
-        let tool_config = GoogleAIStudioGeminiToolConfig::from(&tool_choice);
+        let tool_config =
+            GoogleAIStudioGeminiToolConfig::from((&tool_choice, "gemini-1.5-pro-001"));
         assert_eq!(
             tool_config,
             GoogleAIStudioGeminiToolConfig {
@@ -959,7 +1009,8 @@ mod tests {
         );
 
         let tool_choice = ToolChoice::None;
-        let tool_config = GoogleAIStudioGeminiToolConfig::from(&tool_choice);
+        let tool_config =
+            GoogleAIStudioGeminiToolConfig::from((&tool_choice, "gemini-1.5-pro-001"));
         assert_eq!(
             tool_config,
             GoogleAIStudioGeminiToolConfig {
@@ -972,7 +1023,7 @@ mod tests {
     }
 
     #[test]
-    fn test_google_ai_studio_gemini_request_try_from() {
+    fn test_google_ai_studio_gemini_request_try_from() -> Result<(), Box<dyn std::error::Error>> {
         // Test Case 1: Empty message list
         let tool_config = ToolCallConfig {
             tools_available: vec![],
@@ -994,7 +1045,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
         };
-        let result = GeminiRequest::new(&inference_request);
+        let result = GeminiRequest::new(&inference_request, "gemini-1.5-pro-001");
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
@@ -1029,7 +1080,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
         };
-        let result = GeminiRequest::new(&inference_request);
+        let result = GeminiRequest::new(&inference_request, "gemini-1.5-pro-001");
         let request = result.unwrap();
         assert_eq!(request.contents.len(), 2);
         assert_eq!(request.contents[0].role, GeminiRole::User);
@@ -1078,7 +1129,7 @@ mod tests {
             output_schema: Some(&output_schema),
         };
         // JSON schema should be supported for Gemini Pro models
-        let result = GeminiRequest::new(&inference_request);
+        let result = GeminiRequest::new(&inference_request, "gemini-1.5-pro-001");
         let request = result.unwrap();
         assert_eq!(request.contents.len(), 3);
         assert_eq!(request.contents[0].role, GeminiRole::User);
@@ -1139,10 +1190,11 @@ mod tests {
             request.generation_config.as_ref().unwrap().response_schema,
             Some(output_schema.clone())
         );
+        Ok(())
     }
 
     #[test]
-    fn test_google_ai_studio_gemini_to_t0_response() {
+    fn test_google_ai_studio_gemini_to_t0_response() -> Result<(), Box<dyn std::error::Error>> {
         let part = GeminiResponseContentPart::Text("test_assistant".to_string());
         let content = GeminiResponseContent { parts: vec![part] };
         let candidate = GeminiResponseCandidate {
@@ -1176,13 +1228,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
         };
-        let request_body = GeminiRequest {
-            contents: vec![],
-            generation_config: None,
-            tools: None,
-            tool_config: None,
-            system_instruction: None,
-        };
+        let request_body = GeminiRequest::new(&generic_request, "gemini-1.5-pro-001")?;
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let response_with_latency = GeminiResponseWithMetadata {
             response,
@@ -1254,13 +1300,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
         };
-        let request_body = GeminiRequest {
-            contents: vec![],
-            generation_config: None,
-            tools: None,
-            tool_config: None,
-            system_instruction: None,
-        };
+        let request_body = GeminiRequest::new(&generic_request, "gemini-1.5-pro-001")?;
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let response_with_latency = GeminiResponseWithMetadata {
             response,
@@ -1340,13 +1380,7 @@ mod tests {
         let latency = Latency::NonStreaming {
             response_time: Duration::from_secs(3),
         };
-        let request_body = GeminiRequest {
-            contents: vec![],
-            generation_config: None,
-            tools: None,
-            tool_config: None,
-            system_instruction: None,
-        };
+        let request_body = GeminiRequest::new(&generic_request, "gemini-1.5-pro-001")?;
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let response_with_latency = GeminiResponseWithMetadata {
             response,
@@ -1399,10 +1433,16 @@ mod tests {
                 content: vec!["test_assistant".to_string().into()],
             }]
         );
+        Ok(())
     }
 
     #[test]
     fn test_prepare_tools() {
+        let tool_config = ToolCallConfig {
+            tools_available: MULTI_TOOL_CONFIG.tools_available.clone(),
+            tool_choice: ToolChoice::Required,
+            parallel_tool_calls: false,
+        };
         let request_with_tools = ModelInferenceRequest {
             messages: vec![RequestMessage {
                 role: Role::User,
@@ -1417,11 +1457,11 @@ mod tests {
             frequency_penalty: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&tool_config)),
             function_type: FunctionType::Chat,
             output_schema: None,
         };
-        let (tools, tool_choice) = prepare_tools(&request_with_tools);
+        let (tools, tool_choice) = prepare_tools(&request_with_tools, "gemini-1.5-pro-001");
         let tools = tools.unwrap();
         let tool_config = tool_choice.unwrap();
         assert_eq!(
@@ -1443,6 +1483,13 @@ mod tests {
             function_declarations[1].parameters,
             QUERY_TOOL.parameters().clone()
         );
+
+        // Test with flash model
+        let tool_config = ToolCallConfig {
+            tools_available: MULTI_TOOL_CONFIG.tools_available.clone(),
+            tool_choice: ToolChoice::Required,
+            parallel_tool_calls: false,
+        };
         let request_with_tools = ModelInferenceRequest {
             messages: vec![RequestMessage {
                 role: Role::User,
@@ -1457,18 +1504,17 @@ mod tests {
             frequency_penalty: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&tool_config)),
             function_type: FunctionType::Chat,
             output_schema: None,
         };
-        let (tools, tool_choice) = prepare_tools(&request_with_tools);
+        let (tools, tool_choice) = prepare_tools(&request_with_tools, "gemini-1.5-flash-001");
         let tools = tools.unwrap();
         let tool_config = tool_choice.unwrap();
         // Flash models do not support function calling mode Any
         assert_eq!(
             tool_config.function_calling_config.mode,
-            // GeminiFunctionCallingMode::Auto,
-            GeminiFunctionCallingMode::Any,
+            GeminiFunctionCallingMode::Auto,
         );
         assert_eq!(tools.len(), 1);
         let GeminiTool {

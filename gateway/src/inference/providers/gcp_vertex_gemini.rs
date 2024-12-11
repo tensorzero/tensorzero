@@ -1681,6 +1681,11 @@ mod tests {
 
     #[test]
     fn test_prepare_tools() {
+        let tool_config = ToolCallConfig {
+            tools_available: MULTI_TOOL_CONFIG.tools_available.clone(),
+            tool_choice: ToolChoice::Required,
+            parallel_tool_calls: false,
+        };
         let request_with_tools = ModelInferenceRequest {
             messages: vec![RequestMessage {
                 role: Role::User,
@@ -1695,7 +1700,7 @@ mod tests {
             frequency_penalty: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&tool_config)),
             function_type: FunctionType::Chat,
             output_schema: None,
         };
@@ -1722,6 +1727,11 @@ mod tests {
                 );
             }
         }
+        let tool_config = ToolCallConfig {
+            tools_available: MULTI_TOOL_CONFIG.tools_available.clone(),
+            tool_choice: ToolChoice::Required,
+            parallel_tool_calls: false,
+        };
         let request_with_tools = ModelInferenceRequest {
             messages: vec![RequestMessage {
                 role: Role::User,
@@ -1736,7 +1746,7 @@ mod tests {
             frequency_penalty: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::On,
-            tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&tool_config)),
             function_type: FunctionType::Chat,
             output_schema: None,
         };

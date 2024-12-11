@@ -18,10 +18,10 @@ lazy_static! {
         })).unwrap(),
         strict: false,
     };
-    pub static ref WEATHER_TOOL: ToolConfig = ToolConfig::Static(&WEATHER_TOOL_CONFIG_STATIC);
+    pub static ref WEATHER_TOOL: ToolConfig = ToolConfig::Static(WEATHER_TOOL_CONFIG_STATIC.clone());
     pub static ref WEATHER_TOOL_CHOICE: ToolChoice = ToolChoice::Specific("get_temperature".to_string());
     pub static ref WEATHER_TOOL_CONFIG: ToolCallConfig = ToolCallConfig {
-        tools_available: vec![ToolConfig::Static(&WEATHER_TOOL_CONFIG_STATIC)],
+        tools_available: vec![ToolConfig::Static(WEATHER_TOOL_CONFIG_STATIC.clone())],
         tool_choice: ToolChoice::Specific("get_temperature".to_string()),
         parallel_tool_calls: false,
     };
@@ -38,12 +38,12 @@ lazy_static! {
         })).unwrap(),
         strict: true,
     };
-    pub static ref QUERY_TOOL: ToolConfig = ToolConfig::Static(&QUERY_TOOL_CONFIG_STATIC);
-    pub static ref ANY_TOOL_CHOICE: ToolChoice = ToolChoice::Required;
+    pub static ref QUERY_TOOL: ToolConfig = ToolConfig::Static(QUERY_TOOL_CONFIG_STATIC.clone());
+    pub static ref ANY_TOOL_CHOICE: ToolChoice = ToolChoice::Auto;
     pub static ref MULTI_TOOL_CONFIG: ToolCallConfig = ToolCallConfig {
         tools_available: vec![
-            ToolConfig::Static(&WEATHER_TOOL_CONFIG_STATIC),
-            ToolConfig::Static(&QUERY_TOOL_CONFIG_STATIC)
+            ToolConfig::Static(WEATHER_TOOL_CONFIG_STATIC.clone()),
+            ToolConfig::Static(QUERY_TOOL_CONFIG_STATIC.clone())
         ],
         tool_choice: ToolChoice::Required,
         parallel_tool_calls: true,
@@ -52,7 +52,7 @@ lazy_static! {
 
 // For use in tests which need a mutable tool config.
 pub fn get_temperature_tool_config() -> ToolCallConfig {
-    let weather_tool = ToolConfig::Static(&WEATHER_TOOL_CONFIG_STATIC);
+    let weather_tool = ToolConfig::Static(WEATHER_TOOL_CONFIG_STATIC.clone());
     ToolCallConfig {
         tools_available: vec![weather_tool],
         tool_choice: ToolChoice::Specific("get_temperature".to_string()),

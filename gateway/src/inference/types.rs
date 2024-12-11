@@ -12,7 +12,6 @@ use std::{
 use uuid::Uuid;
 
 use crate::function::FunctionConfig;
-use crate::tool::ToolCallConfigDatabaseInsert;
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolResult};
 use crate::{endpoints::inference::InferenceDatabaseInsertMetadata, variant::InferenceConfig};
 use crate::{endpoints::inference::InferenceParams, error::ErrorDetails};
@@ -314,10 +313,10 @@ pub struct ChatInferenceDatabaseInsert {
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
-    pub input: String,
-    pub output: String,
+    pub input: Input,                    // Changed from String to Input
+    pub output: Vec<ContentBlockOutput>, // Changed from String to Vec<ContentBlockOutput>
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    pub tool_params: Option<ToolCallConfig>, // Changed from ToolCallConfigDatabaseInsert
     pub inference_params: InferenceParams,
     pub processing_time_ms: u32,
     pub tags: HashMap<String, String>,
@@ -329,11 +328,11 @@ pub struct JsonInferenceDatabaseInsert {
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
-    pub input: String,
-    pub output: String,
+    pub input: Input,                // Changed from String to Input
+    pub output: JsonInferenceOutput, // Changed from String to JsonInferenceOutput
     pub inference_params: InferenceParams,
     pub processing_time_ms: u32,
-    pub output_schema: String,
+    pub output_schema: Value, // Changed from String to Value
     pub tags: HashMap<String, String>,
 }
 
@@ -662,20 +661,11 @@ pub async fn parse_chat_output(
 impl ChatInferenceDatabaseInsert {
     pub fn new(
         chat_result: ChatInferenceResult,
-        input: String,
+        input: Input, // Changed from String to Input
         metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
         let processing_time_ms = metadata.processing_time.as_millis() as u32;
-
-        let tool_params = metadata.tool_params.map(ToolCallConfigDatabaseInsert::from);
-        let inference_params = chat_result.inference_params;
-        let output = serde_json::to_string(&chat_result.content)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!("Failed to serialize output: {}", e),
-                })
-            })
-            .unwrap_or_else(|_| String::new());
+        let tool_params = metadata.tool_params; // No need to convert to DatabaseInsert type
 
         Self {
             id: chat_result.inference_id,
@@ -684,8 +674,8 @@ impl ChatInferenceDatabaseInsert {
             episode_id: metadata.episode_id,
             input,
             tool_params,
-            inference_params,
-            output,
+            inference_params: chat_result.inference_params,
+            output: chat_result.content, // No need for serialization
             processing_time_ms,
             tags: metadata.tags,
         }
@@ -695,25 +685,21 @@ impl ChatInferenceDatabaseInsert {
 impl JsonInferenceDatabaseInsert {
     pub fn new(
         json_result: JsonInferenceResult,
-        input: String,
+        input: Input, // Changed from String to Input
         metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
         let processing_time_ms = metadata.processing_time.as_millis() as u32;
 
-        let inference_params = json_result.inference_params;
-
-        let output = serialize_or_log(&json_result.output);
-        let output_schema = serialize_or_log(&json_result.output_schema);
         Self {
             id: json_result.inference_id,
             function_name: metadata.function_name,
             variant_name: metadata.variant_name,
             episode_id: metadata.episode_id,
             input,
-            inference_params,
-            output,
+            output: json_result.output, // No serialization needed
+            inference_params: json_result.inference_params,
             processing_time_ms,
-            output_schema,
+            output_schema: json_result.output_schema, // No serialization needed
             tags: metadata.tags,
         }
     }

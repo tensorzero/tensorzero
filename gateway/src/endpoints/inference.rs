@@ -476,16 +476,6 @@ async fn write_inference<'a>(
     result: InferenceResult<'a>,
     metadata: InferenceDatabaseInsertMetadata,
 ) {
-    let serialized_input = match serde_json::to_string(&input).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: e.to_string(),
-        })
-    }) {
-        Ok(serialized_input) => serialized_input,
-        Err(_) => {
-            return;
-        }
-    };
     let model_responses: Vec<serde_json::Value> = result.get_serialized_model_inferences();
     // Write the model responses to the ModelInference table
     for response in model_responses {
@@ -496,15 +486,13 @@ async fn write_inference<'a>(
     // Write the inference to the Inference table
     match result {
         InferenceResult::Chat(result) => {
-            let chat_inference =
-                ChatInferenceDatabaseInsert::new(result, serialized_input, metadata);
+            let chat_inference = ChatInferenceDatabaseInsert::new(result, input, metadata);
             let _ = clickhouse_connection_info
                 .write(&chat_inference, "ChatInference")
                 .await;
         }
         InferenceResult::Json(result) => {
-            let json_inference =
-                JsonInferenceDatabaseInsert::new(result, serialized_input, metadata);
+            let json_inference = JsonInferenceDatabaseInsert::new(result, input, metadata);
             let _ = clickhouse_connection_info
                 .write(&json_inference, "JsonInference")
                 .await;

@@ -28,16 +28,16 @@ pub struct Tool {
     pub strict: bool,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 pub enum ToolConfig {
-    Static(&'static StaticToolConfig),
+    Static(StaticToolConfig),
     Dynamic(DynamicToolConfig),
     Implicit(ImplicitToolConfig),
     DynamicImplicit(DynamicImplicitToolConfig),
 }
 
 /// Contains the configuration information for a specific tool
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct StaticToolConfig {
     pub description: String,
     pub parameters: JSONSchemaFromPath,
@@ -46,7 +46,7 @@ pub struct StaticToolConfig {
 }
 
 /// Contains the configuration information for a tool defined at runtime
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct DynamicToolConfig {
     pub description: String,
     pub parameters: DynamicJSONSchema,
@@ -56,14 +56,14 @@ pub struct DynamicToolConfig {
 
 /// Contains the configuration information for a tool used in implicit tool calling for
 /// JSON schema enforcement
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ImplicitToolConfig {
     pub parameters: JSONSchemaFromPath,
 }
 
 /// Contains the configuration information for a tool used in implicit tool calling for
 /// JSON schema enforcement for a JSON schema that is dynamically passed at inference time
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DynamicImplicitToolConfig {
     pub parameters: DynamicJSONSchema,
 }
@@ -71,18 +71,9 @@ pub struct DynamicImplicitToolConfig {
 /// Contains all information required to tell an LLM what tools it can call
 /// and what sorts of tool calls (parallel, none, etc) it is allowed to respond with.
 /// Most inference providers can convert this into their desired tool format.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct ToolCallConfig {
     pub tools_available: Vec<ToolConfig>,
-    pub tool_choice: ToolChoice,
-    pub parallel_tool_calls: bool,
-}
-
-/// ToolCallConfigDatabaseInsert is a lightweight version of ToolCallConfig that can be serialized and cloned.
-/// It is used to insert the ToolCallConfig into the database.
-#[derive(Debug, PartialEq, Serialize)]
-pub struct ToolCallConfigDatabaseInsert {
-    pub tools_available: Vec<Tool>,
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: bool,
 }
@@ -108,7 +99,7 @@ impl ToolCallConfig {
             .map(|tool_name| {
                 static_tools
                     .get(tool_name)
-                    .map(ToolConfig::Static)
+                    .map(|config| ToolConfig::Static(config.clone()))
                     .ok_or_else(|| {
                         Error::new(ErrorDetails::ToolNotFound {
                             name: tool_name.clone(),
@@ -337,20 +328,6 @@ impl ToolConfig {
             ToolConfig::Dynamic(config) => config.strict,
             ToolConfig::Implicit(_config) => false,
             ToolConfig::DynamicImplicit(_config) => false,
-        }
-    }
-}
-
-impl From<ToolCallConfig> for ToolCallConfigDatabaseInsert {
-    fn from(tool_call_config: ToolCallConfig) -> Self {
-        Self {
-            tools_available: tool_call_config
-                .tools_available
-                .into_iter()
-                .map(|tool| tool.into())
-                .collect(),
-            tool_choice: tool_call_config.tool_choice,
-            parallel_tool_calls: tool_call_config.parallel_tool_calls,
         }
     }
 }
