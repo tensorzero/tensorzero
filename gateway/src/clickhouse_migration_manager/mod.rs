@@ -12,6 +12,8 @@ use migrations::migration_0004::Migration0004;
 use migrations::migration_0005::Migration0005;
 
 pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
+    // This is a no-op if the database already exists
+    clickhouse.create_database().await?;
     // If the first migration needs to run, we are starting from scratch and don't need to wait for data to migrate
     let clean_start = run_migration(&Migration0000 { clickhouse }).await?;
     run_migration(&Migration0001 {
