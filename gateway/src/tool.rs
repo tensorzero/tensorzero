@@ -4,18 +4,19 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    error::Error,
+    error::{Error, ErrorDetails},
     jsonschema_util::{DynamicJSONSchema, JSONSchemaFromPath},
 };
 
-/// A Tool is a function that can be called by an LLM
-/// We represent them in various ways depending on how they are configured by the user.
-/// The primary difficulty is that tools require an input signature that we represent as a JSONSchema.
-/// JSONSchema compilation takes time so we want to do it at startup if the tool is in the config.
-/// We also don't want to clone compiled JSON schemas.
-/// If the tool is dynamic we want to run compilation while LLM inference is happening so that we can validate the tool call arguments.
-///
-/// If we are doing an implicit tool call for JSON schema enforcement, we can use the compiled schema from the output signature.
+/* A Tool is a function that can be called by an LLM
+ * We represent them in various ways depending on how they are configured by the user.
+ * The primary difficulty is that tools require an input signature that we represent as a JSONSchema.
+ * JSONSchema compilation takes time so we want to do it at startup if the tool is in the config.
+ * We also don't want to clone compiled JSON schemas.
+ * If the tool is dynamic we want to run compilation while LLM inference is happening so that we can validate the tool call arguments.
+ *
+ * If we are doing an implicit tool call for JSON schema enforcement, we can use the compiled schema from the output signature.
+ */
 
 /// A Tool object describes how a tool can be dynamically configured by the user.
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
@@ -108,8 +109,10 @@ impl ToolCallConfig {
                 static_tools
                     .get(tool_name)
                     .map(ToolConfig::Static)
-                    .ok_or(Error::ToolNotFound {
-                        name: tool_name.clone(),
+                    .ok_or_else(|| {
+                        Error::new(ErrorDetails::ToolNotFound {
+                            name: tool_name.clone(),
+                        })
                     })
             })
             .collect();
@@ -144,9 +147,10 @@ impl ToolCallConfig {
                 ToolConfig::Implicit(_) => false,
                 ToolConfig::DynamicImplicit(_) => false,
             }) {
-                return Err(Error::ToolNotFound {
+                return Err(ErrorDetails::ToolNotFound {
                     name: tool_name.clone(),
-                });
+                }
+                .into());
             }
         }
 
@@ -477,9 +481,10 @@ mod tests {
         .unwrap_err();
         assert_eq!(
             err,
-            Error::ToolNotFound {
+            ErrorDetails::ToolNotFound {
                 name: "get_temperature".to_string()
             }
+            .into()
         );
 
         // Dynamic tool config specifies a particular tool to call and it's in the function tools list
@@ -518,9 +523,10 @@ mod tests {
         .unwrap_err();
         assert_eq!(
             err,
-            Error::ToolNotFound {
+            ErrorDetails::ToolNotFound {
                 name: "establish_campground".to_string()
             }
+            .into()
         );
 
         // We pass an empty list of allowed tools and then configure a new tool

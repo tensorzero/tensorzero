@@ -6,7 +6,7 @@ use tokio::sync::RwLock;
 use tokio::sync::RwLockWriteGuard;
 use url::Url;
 
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 
 #[derive(Debug, Clone)]
 pub enum ClickHouseConnectionInfo {
@@ -28,11 +28,16 @@ impl ClickHouseConnectionInfo {
     /// don't test specific ClickHouse behavior.
     /// For e2e tests, you should use the `get_clickhouse` function.
     ///
+    /// This function returns an error if anything is malformed but if the connection is unhealthy it logs that and
+    /// returns Ok(Production{ ... })
+    ///
     /// However, for tests that directly test ClickHouse behavior, you can directly create the struct.
-    pub fn new(database_url: &str) -> Result<Self, Error> {
+    pub async fn new(database_url: &str) -> Result<Self, Error> {
         // Add a query string for the database using the URL crate
-        let mut database_url = Url::parse(database_url).map_err(|e| Error::Config {
-            message: format!("Invalid ClickHouse database URL: {}", e),
+        let mut database_url = Url::parse(database_url).map_err(|e| {
+            Error::new(ErrorDetails::Config {
+                message: format!("Invalid ClickHouse database URL: {}", e),
+            })
         })?;
 
         #[allow(unused_variables)]
@@ -53,12 +58,15 @@ impl ClickHouseConnectionInfo {
         set_clickhouse_format_settings(&mut database_url);
 
         let client = Client::new();
-
-        Ok(Self::Production {
+        let connection_info = Self::Production {
             database_url,
             database,
             client,
-        })
+        };
+        // Error will be constructed and logged in health()
+        // Don't need to do anything with the error here
+        let _ = connection_info.health().await;
+        Ok(connection_info)
     }
 
     pub fn new_mock(healthy: bool) -> Self {
@@ -122,23 +130,35 @@ impl ClickHouseConnectionInfo {
         }
     }
 
-    pub async fn health(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn health(&self) -> Result<(), Error> {
         match self {
             Self::Disabled => Ok(()),
             Self::Mock { healthy, .. } => {
                 if *healthy {
                     Ok(())
                 } else {
-                    Err("Mock ClickHouse is not healthy".into())
+                    Err(ErrorDetails::ClickHouseConnection {
+                        message: "Mock ClickHouse is not healthy".to_string(),
+                    }
+                    .into())
                 }
             }
             Self::Production {
                 database_url,
                 client,
                 ..
-            } => match client.get(database_url.clone()).send().await {
+            } => match client
+                .get(database_url.clone())
+                // If ClickHouse is healthy, it should respond within 500ms
+                .timeout(std::time::Duration::from_millis(500))
+                .send()
+                .await
+            {
                 Ok(_) => Ok(()),
-                Err(e) => Err(format!("ClickHouse is not healthy: {}", e).into()),
+                Err(e) => Err(ErrorDetails::ClickHouseConnection {
+                    message: format!("ClickHouse is not healthy: {}", e),
+                }
+                .into()),
             },
         }
     }
@@ -157,21 +177,25 @@ impl ClickHouseConnectionInfo {
                     .body(query)
                     .send()
                     .await
-                    .map_err(|e| Error::ClickHouseQuery {
-                        message: e.to_string(),
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::ClickHouseQuery {
+                            message: e.to_string(),
+                        })
                     })?;
 
                 let status = response.status();
 
-                let response_body = response.text().await.map_err(|e| Error::ClickHouseQuery {
-                    message: e.to_string(),
+                let response_body = response.text().await.map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseQuery {
+                        message: e.to_string(),
+                    })
                 })?;
 
                 match status {
                     reqwest::StatusCode::OK => Ok(response_body),
-                    _ => Err(Error::ClickHouseQuery {
+                    _ => Err(Error::new(ErrorDetails::ClickHouseQuery {
                         message: response_body,
-                    }),
+                    })),
                 }
             }
         }
@@ -205,21 +229,25 @@ impl ClickHouseConnectionInfo {
                     .body(query)
                     .send()
                     .await
-                    .map_err(|e| Error::ClickHouseQuery {
-                        message: e.to_string(),
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::ClickHouseQuery {
+                            message: e.to_string(),
+                        })
                     })?;
 
                 let status = response.status();
 
-                let response_body = response.text().await.map_err(|e| Error::ClickHouseQuery {
-                    message: e.to_string(),
+                let response_body = response.text().await.map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseQuery {
+                        message: e.to_string(),
+                    })
                 })?;
 
                 match status {
                     reqwest::StatusCode::OK => Ok(()),
-                    _ => Err(Error::ClickHouseQuery {
+                    _ => Err(Error::new(ErrorDetails::ClickHouseQuery {
                         message: response_body,
-                    }),
+                    })),
                 }
             }
         }
@@ -231,8 +259,10 @@ async fn write_mock(
     table: &str,
     tables: &mut RwLockWriteGuard<'_, HashMap<String, Vec<serde_json::Value>>>,
 ) -> Result<(), Error> {
-    let row_value = serde_json::to_value(row).map_err(|e| Error::Serialization {
-        message: e.to_string(),
+    let row_value = serde_json::to_value(row).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: e.to_string(),
+        })
     })?;
     tables.entry(table.to_string()).or_default().push(row_value);
     Ok(())
@@ -244,8 +274,10 @@ async fn write_production(
     row: &(impl Serialize + Send + Sync),
     table: &str,
 ) -> Result<(), Error> {
-    let row_json = serde_json::to_string(row).map_err(|e| Error::Serialization {
-        message: e.to_string(),
+    let row_json = serde_json::to_string(row).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: e.to_string(),
+        })
     })?;
 
     // We can wait for the async insert since we're spawning a new tokio task to do the insert
@@ -260,17 +292,19 @@ async fn write_production(
         .body(query)
         .send()
         .await
-        .map_err(|e| Error::ClickHouseQuery {
-            message: e.to_string(),
+        .map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseQuery {
+                message: e.to_string(),
+            })
         })?;
     match response.status() {
         reqwest::StatusCode::OK => Ok(()),
-        _ => Err(Error::ClickHouseQuery {
+        _ => Err(Error::new(ErrorDetails::ClickHouseQuery {
             message: response
                 .text()
                 .await
                 .unwrap_or_else(|e| format!("Failed to get response text: {}", e)),
-        }),
+        })),
     }
 }
 
@@ -310,42 +344,47 @@ fn validate_clickhouse_url_get_db_name(url: &Url) -> Result<Option<String>, Erro
     match url.scheme() {
         "http" | "https" => {}
         "clickhouse" | "clickhousedb" => {
-            return Err(Error::Config {
+            return Err(ErrorDetails::Config {
                 message: format!(
                     "Invalid scheme in ClickHouse URL: '{}'. Use 'http' or 'https' instead.",
                     url.scheme()
                 ),
-            })
+            }
+            .into())
         }
         _ => {
-            return Err(Error::Config {
+            return Err(ErrorDetails::Config {
                 message: format!(
                 "Invalid scheme in ClickHouse URL: '{}'. Only 'http' and 'https' are supported.",
-                url.scheme()
-            ),
-            })
+                    url.scheme()
+                ),
+            }
+            .into())
         }
     }
 
     // Validate the host
     if url.host().is_none() {
-        return Err(Error::Config {
+        return Err(ErrorDetails::Config {
             message: "Missing hostname in ClickHouse URL".to_string(),
-        });
+        }
+        .into());
     }
 
     // Validate the port
     if url.port().is_none() {
-        return Err(Error::Config {
+        return Err(ErrorDetails::Config {
             message: "Missing port in ClickHouse URL".to_string(),
-        });
+        }
+        .into());
     }
 
     // Validate that none of the query strings have key "database"
     if url.query_pairs().any(|(key, _)| key == "database") {
-        return Err(Error::Config {
+        return Err(ErrorDetails::Config {
             message: "The query string 'database' is not allowed in the ClickHouse URL".to_string(),
-        });
+        }
+        .into());
     }
     // username, password, and query-strings are optional, so we don't need to validate them
 
@@ -360,15 +399,17 @@ fn validate_clickhouse_url_get_db_name(url: &Url) -> Result<Option<String>, Erro
         0 => None, // Empty path is valid
         1 => {
             if path_segments[0].is_empty() {
-                return Err(Error::Config {
+                return Err(ErrorDetails::Config {
                     message: "The database name in the path of the ClickHouse URL cannot be empty".to_string(),
-                });
+                }
+                .into());
             }
             Some(path_segments[0].to_string())
         }
-        _ => return Err(Error::Config {
+        _ => return Err(ErrorDetails::Config {
             message: "The path of the ClickHouse URL must be of length 0 or 1, and end with the database name if set".to_string(),
-        }),
+        }
+        .into()),
     })
 }
 
@@ -398,11 +439,12 @@ mod tests {
         let err = validate_clickhouse_url_get_db_name(&database_url).unwrap_err();
         assert_eq!(
             err,
-            Error::Config {
+            ErrorDetails::Config {
                 message:
                     "Invalid scheme in ClickHouse URL: 'clickhouse'. Use 'http' or 'https' instead."
                         .to_string(),
             }
+            .into()
         );
 
         let database_url = Url::parse("https://localhost:8123/").unwrap();
@@ -418,9 +460,10 @@ mod tests {
         let err = validate_clickhouse_url_get_db_name(&database_url).unwrap_err();
         assert_eq!(
             err,
-            Error::Config {
+            ErrorDetails::Config {
                 message: "Missing port in ClickHouse URL".to_string(),
             }
+            .into()
         );
 
         let database_url = Url::parse("http://localhost:8123").unwrap();
@@ -431,10 +474,11 @@ mod tests {
         let err = validate_clickhouse_url_get_db_name(&database_url).unwrap_err();
         assert_eq!(
             err,
-            Error::Config {
+            ErrorDetails::Config {
                 message: "The query string 'database' is not allowed in the ClickHouse URL"
                     .to_string(),
             }
+            .into()
         );
 
         let database_url =
@@ -442,9 +486,10 @@ mod tests {
         let err = validate_clickhouse_url_get_db_name(&database_url).unwrap_err();
         assert_eq!(
             err,
-            Error::Config {
+            ErrorDetails::Config {
                 message: "The path of the ClickHouse URL must be of length 0 or 1, and end with the database name if set".to_string(),
             }
+            .into()
         );
 
         let database_url = Url::parse("http://localhost:8123/database?foo=bar").unwrap();

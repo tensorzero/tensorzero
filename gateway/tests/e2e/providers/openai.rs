@@ -1,5 +1,6 @@
 use gateway::{
     embeddings::{EmbeddingProvider, EmbeddingProviderConfig, EmbeddingRequest},
+    endpoints::inference::InferenceCredentials,
     inference::types::Latency,
 };
 use reqwest::{Client, StatusCode};
@@ -182,7 +183,11 @@ async fn test_embedding_request() {
     let request = EmbeddingRequest {
         input: "This is a test input".to_string(),
     };
-    let response = provider_config.embed(&request, &client).await.unwrap();
+    let api_keys = InferenceCredentials::default();
+    let response = provider_config
+        .embed(&request, &client, &api_keys)
+        .await
+        .unwrap();
     assert_eq!(response.embedding.len(), 1536);
     // Calculate the L2 norm of the embedding
     let norm: f32 = response
@@ -250,12 +255,13 @@ async fn test_embedding_sanity_check() {
     let embedding_request_c = EmbeddingRequest {
         input: "My favorite systems programming language is Rust".to_string(),
     };
+    let api_keys = InferenceCredentials::default();
 
     // Compute all 3 embeddings concurrently
     let (response_a, response_b, response_c) = tokio::join!(
-        provider_config.embed(&embedding_request_a, &client),
-        provider_config.embed(&embedding_request_b, &client),
-        provider_config.embed(&embedding_request_c, &client)
+        provider_config.embed(&embedding_request_a, &client, &api_keys),
+        provider_config.embed(&embedding_request_b, &client, &api_keys),
+        provider_config.embed(&embedding_request_c, &client, &api_keys)
     );
 
     // Unwrap the results

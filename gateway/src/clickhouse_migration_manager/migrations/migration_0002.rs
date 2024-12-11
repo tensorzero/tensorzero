@@ -1,6 +1,8 @@
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::clickhouse_migration_manager::migration_trait::Migration;
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
+
+use super::check_table_exists;
 
 /// This migration is used to set up the ClickHouse database to store examples
 /// for dynamic in-context learning.
@@ -11,40 +13,21 @@ pub struct Migration0002<'a> {
 impl<'a> Migration for Migration0002<'a> {
     /// Check if you can connect to the database
     async fn can_apply(&self) -> Result<(), Error> {
-        self.clickhouse
-            .health()
-            .await
-            .map_err(|e| Error::ClickHouseMigration {
+        self.clickhouse.health().await.map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseMigration {
                 id: "0002".to_string(),
                 message: e.to_string(),
             })
+        })
     }
 
     /// Check if the migration has already been applied
     /// This should be equivalent to checking if `DynamicInContextLearningExample` exists
     async fn should_apply(&self) -> Result<bool, Error> {
-        let database = self.clickhouse.database();
-
-        let query = format!(
-            r#"SELECT EXISTS(
-                SELECT 1
-                FROM system.tables
-                WHERE database = '{database}' AND name = 'DynamicInContextLearningExample'
-            )"#
-        );
-
-        match self.clickhouse.run_query(query).await {
-            Err(e) => {
-                return Err(Error::ClickHouseMigration {
-                    id: "0001".to_string(),
-                    message: e.to_string(),
-                })
-            }
-            Ok(response) => {
-                if response.trim() != "1" {
-                    return Ok(true);
-                }
-            }
+        let exists =
+            check_table_exists(self.clickhouse, "DynamicInContextLearningExample", "0002").await?;
+        if !exists {
+            return Ok(true);
         }
 
         Ok(false)

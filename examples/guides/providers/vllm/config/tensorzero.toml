@@ -1,0 +1,19 @@
+[models.llama3_1_8b_instruct]
+routing = ["vllm"]
+
+[models.llama3_1_8b_instruct.providers.vllm]
+type = "vllm"
+api_base = "http://host.docker.internal:8000/v1/" # for vLLM running locally on the host
+model_name = "meta-llama/Llama-3.1-8B-Instruct"
+api_key_location = "none"
+
+[functions.my_function_name]
+type = "chat"
+
+[functions.my_function_name.variants.my_variant_name]
+type = "chat_completion"
+model = "llama3_1_8b_instruct"
+
+# Disable observability to keep this example minimal (not recommended in production)
+[gateway]
+disable_observability = true

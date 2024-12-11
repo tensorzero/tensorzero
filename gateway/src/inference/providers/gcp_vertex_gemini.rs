@@ -12,7 +12,7 @@ use tokio::time::Instant;
 use uuid::Uuid;
 
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
     serialize_or_log, ModelInferenceRequest, ProviderInferenceResponse,
@@ -21,10 +21,8 @@ use crate::inference::types::{
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequestJsonMode, Role, Text, TextChunk,
 };
-use crate::model::ProviderCredentials;
+use crate::model::CredentialLocation;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
-
-use super::provider_trait::HasCredentials;
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
@@ -34,13 +32,39 @@ pub struct GCPVertexGeminiProvider {
     pub request_url: String,
     pub streaming_request_url: String,
     pub audience: String,
-    pub credentials: Option<GCPCredentials>,
+    pub credentials: GCPVertexCredentials,
     pub model_id: String,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-pub struct GCPVertexGeminiCredentials {
-    pub token: SecretString,
+pub fn default_api_key_location() -> CredentialLocation {
+    CredentialLocation::Env("GCP_VERTEX_CREDENTIALS_PATH".to_string())
+}
+
+#[derive(Debug)]
+pub enum GCPVertexCredentials {
+    Static(GCPServiceAccountCredentials),
+    Dynamic(String),
+}
+
+impl GCPVertexCredentials {
+    pub fn get_api_key<'a>(
+        &'a self,
+        audience: &'a str,
+        dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<Cow<'a, SecretString>, Error> {
+        match self {
+            GCPVertexCredentials::Static(credentials) => {
+                Ok(Cow::Owned(credentials.get_jwt_token(audience)?.into()))
+            }
+            GCPVertexCredentials::Dynamic(key_name) => Ok(Cow::Borrowed(
+                dynamic_api_keys.get(key_name).ok_or_else(|| {
+                    Error::new(ErrorDetails::ApiKeyMissing {
+                        provider_name: "GCP Vertex Gemini".to_string(),
+                    })
+                })?,
+            )),
+        }
+    }
 }
 
 /// Auth
@@ -50,13 +74,13 @@ pub struct GCPVertexGeminiCredentials {
 /// GCPCredentials contains the pieces of information required to successfully make a request using a service account JWT
 /// key. The way this works is that there are "claims" about who is making the request and we sign those claims using the key.
 #[derive(Clone)]
-pub struct GCPCredentials {
+pub struct GCPServiceAccountCredentials {
     pub private_key_id: String,
     pub private_key: EncodingKey,
     pub client_email: String,
 }
 
-impl std::fmt::Debug for GCPCredentials {
+impl std::fmt::Debug for GCPServiceAccountCredentials {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("GCPCredentials")
             .field("private_key_id", &self.private_key_id)
@@ -94,49 +118,63 @@ impl<'a> Claims<'a> {
     }
 }
 
-impl GCPCredentials {
+impl GCPServiceAccountCredentials {
     /// Given a path to a JSON key taken from a GCP service account, load the credentials needed to sign requests.
-    pub fn from_env(path: &str) -> Result<Self, Error> {
-        let credential_str = std::fs::read_to_string(path).map_err(|e| Error::GCPCredentials {
-            message: format!("Failed to read GCP Vertex Gemini credentials: {e}"),
+    pub fn from_path(path: &str) -> Result<Self, Error> {
+        let credential_str = std::fs::read_to_string(path).map_err(|e| {
+            Error::new(ErrorDetails::GCPCredentials {
+                message: format!("Failed to read GCP Vertex Gemini credentials: {e}"),
+            })
         })?;
-        let credential_value: Value =
-            serde_json::from_str(&credential_str).map_err(|e| Error::GCPCredentials {
+        let credential_value: Value = serde_json::from_str(&credential_str).map_err(|e| {
+            Error::new(ErrorDetails::GCPCredentials {
                 message: format!("Failed to parse GCP Vertex Gemini credentials: {e}"),
-            })?;
+            })
+        })?;
         match (
             credential_value
                 .get("private_key_id")
-                .ok_or(Error::GCPCredentials {
-                    message: "GCP Vertex Gemini: missing private_key_id".to_string(),
+                .ok_or_else(|| {
+                    Error::new(ErrorDetails::GCPCredentials {
+                        message: "GCP Vertex Gemini: missing private_key_id".to_string(),
+                    })
                 })?
                 .as_str(),
             credential_value
                 .get("private_key")
-                .ok_or(Error::GCPCredentials {
-                    message: "GCP Vertex Gemini: missing private_key".to_string(),
+                .ok_or_else(|| {
+                    Error::new(ErrorDetails::GCPCredentials {
+                        message: "GCP Vertex Gemini: missing private_key".to_string(),
+                    })
                 })?
                 .as_str(),
             credential_value
                 .get("client_email")
-                .ok_or(Error::GCPCredentials {
-                    message: "GCP Vertex Gemini: missing client_email".to_string(),
+                .ok_or_else(|| {
+                    Error::new(ErrorDetails::GCPCredentials {
+                        message: "GCP Vertex Gemini: missing client_email".to_string(),
+                    })
                 })?
                 .as_str(),
         ) {
-            (Some(private_key_id), Some(private_key), Some(client_email)) => Ok(GCPCredentials {
-                private_key_id: private_key_id.to_string(),
-                private_key: EncodingKey::from_rsa_pem(private_key.as_bytes()).map_err(|_| {
-                    Error::GCPCredentials {
-                        message: "GCP Vertex Gemini: private_key failed to parse as RSA"
-                            .to_string(),
-                    }
-                })?,
-                client_email: client_email.to_string(),
-            }),
-            _ => Err(Error::GCPCredentials {
+            (Some(private_key_id), Some(private_key), Some(client_email)) => {
+                Ok(GCPServiceAccountCredentials {
+                    private_key_id: private_key_id.to_string(),
+                    private_key: EncodingKey::from_rsa_pem(private_key.as_bytes()).map_err(
+                        |_| {
+                            Error::new(ErrorDetails::GCPCredentials {
+                                message: "GCP Vertex Gemini: private_key failed to parse as RSA"
+                                    .to_string(),
+                            })
+                        },
+                    )?,
+                    client_email: client_email.to_string(),
+                })
+            }
+            _ => Err(ErrorDetails::GCPCredentials {
                 message: "GCP Vertex Gemini: missing required credentials".to_string(),
-            }),
+            }
+            .into()),
         }
     }
 
@@ -145,10 +183,11 @@ impl GCPCredentials {
         let mut header = Header::new(Algorithm::RS256);
         header.kid = Some(self.private_key_id.clone());
         let claims = Claims::new(&self.client_email, &self.client_email, audience);
-        let token =
-            encode(&header, &claims, &self.private_key).map_err(|e| Error::GCPCredentials {
+        let token = encode(&header, &claims, &self.private_key).map_err(|e| {
+            Error::new(ErrorDetails::GCPCredentials {
                 message: format!("Failed to encode JWT: {e}"),
-            })?;
+            })
+        })?;
         Ok(token)
     }
 }
@@ -159,18 +198,13 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: ProviderCredentials<'a>,
+        dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body: GCPVertexGeminiRequest =
             GCPVertexGeminiRequest::new(request, &self.model_id)?;
-        let api_key = match &api_key {
-            ProviderCredentials::GCPVertexGemini(credentials) => &credentials.token,
-            _ => {
-                return Err(Error::BadCredentialsPreInference {
-                    provider_name: "GCP Vertex Gemini".to_string(),
-                })
-            }
-        };
+        let api_key = self
+            .credentials
+            .get_api_key(&self.audience, dynamic_api_keys)?;
         let start_time = Instant::now();
         let res = http_client
             .post(&self.request_url)
@@ -178,19 +212,25 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| Error::InferenceClient {
-                message: format!("Error sending request: {e}"),
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    message: format!("Error sending request: {e}"),
+                })
             })?;
         let latency = Latency::NonStreaming {
             response_time: start_time.elapsed(),
         };
         if res.status().is_success() {
-            let response = res.text().await.map_err(|e| Error::GCPVertexServer {
-                message: format!("Error parsing text response: {e}"),
+            let response = res.text().await.map_err(|e| {
+                Error::new(ErrorDetails::GCPVertexServer {
+                    message: format!("Error parsing text response: {e}"),
+                })
             })?;
 
-            let response = serde_json::from_str(&response).map_err(|e| Error::GCPVertexServer {
-                message: format!("Error parsing JSON response: {e}: {response}"),
+            let response = serde_json::from_str(&response).map_err(|e| {
+                Error::new(ErrorDetails::GCPVertexServer {
+                    message: format!("Error parsing JSON response: {e}: {response}"),
+                })
             })?;
             let response_with_latency = GCPVertexGeminiResponseWithMetadata {
                 response,
@@ -201,8 +241,10 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             Ok(response_with_latency.try_into()?)
         } else {
             let response_code = res.status();
-            let error_body = res.text().await.map_err(|e| Error::GCPVertexServer {
-                message: format!("Error parsing text response: {e}"),
+            let error_body = res.text().await.map_err(|e| {
+                Error::new(ErrorDetails::GCPVertexServer {
+                    message: format!("Error parsing text response: {e}"),
+                })
             })?;
             handle_gcp_vertex_gemini_error(response_code, error_body)
         }
@@ -213,7 +255,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: ProviderCredentials<'a>,
+        dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -224,70 +266,37 @@ impl InferenceProvider for GCPVertexGeminiProvider {
     > {
         let request_body: GCPVertexGeminiRequest =
             GCPVertexGeminiRequest::new(request, &self.model_id)?;
-        let raw_request =
-            serde_json::to_string(&request_body).map_err(|e| Error::GCPVertexServer {
+        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
+            Error::new(ErrorDetails::GCPVertexServer {
                 message: format!("Error serializing request: {e}"),
-            })?;
-        let api_key = match &api_key {
-            ProviderCredentials::GCPVertexGemini(credentials) => &credentials.token,
-            _ => {
-                return Err(Error::BadCredentialsPreInference {
-                    provider_name: "GCP Vertex Gemini".to_string(),
-                })
-            }
-        };
+            })
+        })?;
+        let api_key = self
+            .credentials
+            .get_api_key(&self.audience, dynamic_api_keys)?;
         let start_time = Instant::now();
         let event_source = http_client
             .post(&self.streaming_request_url)
             .bearer_auth(api_key.expose_secret())
             .json(&request_body)
             .eventsource()
-            .map_err(|e| Error::InferenceClient {
-                message: format!("Error sending request to GCP Vertex Gemini: {e}"),
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    message: format!("Error sending request to GCP Vertex Gemini: {e}"),
+                })
             })?;
         let mut stream = Box::pin(stream_gcp_vertex_gemini(event_source, start_time));
         let chunk = match stream.next().await {
             Some(Ok(chunk)) => chunk,
             Some(Err(e)) => return Err(e),
             None => {
-                return Err(Error::GCPVertexServer {
+                return Err(ErrorDetails::GCPVertexServer {
                     message: "Stream ended before first chunk".to_string(),
-                })
+                }
+                .into())
             }
         };
         Ok((chunk, stream, raw_request))
-    }
-}
-
-impl HasCredentials for GCPVertexGeminiProvider {
-    fn has_credentials(&self) -> bool {
-        self.credentials.is_some()
-    }
-
-    fn get_credentials<'a>(
-        &'a self,
-        api_keys: &'a InferenceCredentials,
-    ) -> Result<ProviderCredentials<'a>, Error> {
-        if let Some(credentials) = &self.credentials {
-            if api_keys.gcp_vertex_gemini.is_some() {
-                return Err(Error::UnexpectedDynamicCredentials {
-                    provider_name: "GCP Vertex Gemini".to_string(),
-                });
-            }
-            let token = SecretString::from(credentials.get_jwt_token(&self.audience)?);
-            return Ok(ProviderCredentials::GCPVertexGemini(Cow::Owned(
-                GCPVertexGeminiCredentials { token },
-            )));
-        } else {
-            match &api_keys.gcp_vertex_gemini {
-                Some(credentials) => Ok(ProviderCredentials::GCPVertexGemini(Cow::Borrowed(
-                    credentials,
-                ))),
-                None => Err(Error::ApiKeyMissing {
-                    provider_name: "GCP Vertex Gemini".to_string(),
-                }),
-            }
-        }
     }
 }
 
@@ -303,15 +312,18 @@ fn stream_gcp_vertex_gemini(
                     if matches!(e, reqwest_eventsource::Error::StreamEnded) {
                         break;
                     }
-                    yield Err(Error::GCPVertexServer {
+                    yield Err(ErrorDetails::GCPVertexServer {
                         message: e.to_string(),
-                    })
+                    }
+                    .into());
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
                     Event::Message(message) => {
-                        let data: Result<GCPVertexGeminiResponse, Error> = serde_json::from_str(&message.data).map_err(|e| Error::GCPVertexServer {
-                            message: format!("Error parsing streaming JSON response: {e}"),
+                        let data: Result<GCPVertexGeminiResponse, Error> = serde_json::from_str(&message.data).map_err(|e| {
+                            Error::new(ErrorDetails::GCPVertexServer {
+                                message: format!("Error parsing streaming JSON response: {e}"),
+                            })
                         });
                         let data = match data {
                             Ok(data) => data,
@@ -387,10 +399,10 @@ impl<'a> TryFrom<&'a ContentBlock> for GCPVertexGeminiContentPart<'a> {
             ContentBlock::ToolResult(tool_result) => {
                 // Convert the tool result from String to JSON Value (GCP expects an object)
                 let response: Value = serde_json::from_str(&tool_result.result).map_err(|e| {
-                    Error::GCPVertexClient {
+                    Error::new(ErrorDetails::GCPVertexClient {
                         status_code: StatusCode::BAD_REQUEST,
                         message: format!("Error parsing tool result as JSON Value: {e}"),
-                    }
+                    })
                 })?;
 
                 // GCP expects the format below according to [the documentation](https://ai.google.dev/gemini-api/docs/function-calling#multi-turn-example-1)
@@ -409,18 +421,19 @@ impl<'a> TryFrom<&'a ContentBlock> for GCPVertexGeminiContentPart<'a> {
             ContentBlock::ToolCall(tool_call) => {
                 // Convert the tool call arguments from String to JSON Value (GCP expects an object)
                 let args: Value = serde_json::from_str(&tool_call.arguments).map_err(|e| {
-                    Error::GCPVertexClient {
+                    Error::new(ErrorDetails::GCPVertexClient {
                         status_code: StatusCode::BAD_REQUEST,
                         message: format!("Error parsing tool call arguments as JSON Value: {e}"),
-                    }
+                    })
                 })?;
 
                 if !args.is_object() {
-                    return Err(Error::GCPVertexClient {
+                    return Err(ErrorDetails::GCPVertexClient {
                         status_code: StatusCode::BAD_REQUEST,
                         message: "Tool call arguments must be a JSON object".to_string(),
-                    });
-                }
+                    }
+                    .into());
+                };
 
                 Ok(GCPVertexGeminiContentPart::FunctionCall {
                     function_call: GCPVertexGeminiFunctionCall {
@@ -613,9 +626,10 @@ struct GCPVertexGeminiRequest<'a> {
 impl<'a> GCPVertexGeminiRequest<'a> {
     pub fn new(request: &'a ModelInferenceRequest<'a>, model_name: &'a str) -> Result<Self, Error> {
         if request.messages.is_empty() {
-            return Err(Error::InvalidRequest {
+            return Err(ErrorDetails::InvalidRequest {
                 message: "GCP Vertex Gemini requires at least one message".to_string(),
-            });
+            }
+            .into());
         }
         let system_instruction =
             request
@@ -770,11 +784,11 @@ impl TryFrom<GCPVertexGeminiResponseContentPart> for ContentBlock {
                 Ok(ContentBlock::ToolCall(ToolCall {
                     name: function_call.name,
                     arguments: serde_json::to_string(&function_call.args).map_err(|e| {
-                        Error::Serialization {
+                        Error::new(ErrorDetails::Serialization {
                             message: format!(
                                 "Error serializing function call arguments returned from GCP: {e}"
                             ),
-                        }
+                        })
                     })?,
                     // GCP doesn't have the concept of tool call ID so we generate one for our bookkeeping
                     id: Uuid::now_v7().to_string(),
@@ -798,7 +812,7 @@ struct GCPVertexGeminiResponseCandidate {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiUsageMetadata {
-    prompt_token_count: u32,
+    prompt_token_count: Option<u32>,
     // GCP doesn't return output tokens in certain edge cases (e.g. generation blocked by safety settings)
     #[serde(skip_serializing_if = "Option::is_none")]
     candidates_token_count: Option<u32>,
@@ -807,7 +821,7 @@ struct GCPVertexGeminiUsageMetadata {
 impl From<GCPVertexGeminiUsageMetadata> for Usage {
     fn from(usage_metadata: GCPVertexGeminiUsageMetadata) -> Self {
         Usage {
-            input_tokens: usage_metadata.prompt_token_count,
+            input_tokens: usage_metadata.prompt_token_count.unwrap_or(0),
             output_tokens: usage_metadata.candidates_token_count.unwrap_or(0),
         }
     }
@@ -837,21 +851,19 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
             request: request_body,
             generic_request,
         } = response;
-        let raw_response =
-            serde_json::to_string(&response).map_err(|e| Error::GCPVertexServer {
+        let raw_response = serde_json::to_string(&response).map_err(|e| {
+            Error::new(ErrorDetails::GCPVertexServer {
                 message: format!("Error serializing response from GCP Vertex Gemini: {e}"),
-            })?;
+            })
+        })?;
 
         // GCP Vertex Gemini response can contain multiple candidates and each of these can contain
         // multiple content parts. We will only use the first candidate but handle all parts of the response therein.
-        let first_candidate =
-            response
-                .candidates
-                .into_iter()
-                .next()
-                .ok_or(Error::GCPVertexServer {
-                    message: "GCP Vertex Gemini response has no candidates".to_string(),
-                })?;
+        let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
+            Error::new(ErrorDetails::GCPVertexServer {
+                message: "GCP Vertex Gemini response has no candidates".to_string(),
+            })
+        })?;
 
         // GCP sometimes doesn't return content in the response (e.g. safety settings blocked the generation).
         let content: Vec<ContentBlock> = match first_candidate.content {
@@ -865,15 +877,18 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
 
         let usage = response
             .usage_metadata
-            .ok_or(Error::GCPVertexServer {
-                message: "GCP Vertex Gemini non-streaming response has no usage metadata"
-                    .to_string(),
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::GCPVertexServer {
+                    message: "GCP Vertex Gemini non-streaming response has no usage metadata"
+                        .to_string(),
+                })
             })?
             .into();
-        let raw_request =
-            serde_json::to_string(&request_body).map_err(|e| Error::GCPVertexServer {
+        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
+            Error::new(ErrorDetails::GCPVertexServer {
                 message: format!("Error serializing request: {e}"),
-            })?;
+            })
+        })?;
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
 
@@ -904,18 +919,19 @@ impl TryFrom<GCPVertexGeminiStreamResponseWithMetadata> for ProviderInferenceRes
             inference_id,
         } = response;
 
-        let raw = serde_json::to_string(&response).map_err(|e| Error::GCPVertexServer {
-            message: format!("Error serializing streaming response from GCP Vertex Gemini: {e}"),
+        let raw = serde_json::to_string(&response).map_err(|e| {
+            Error::new(ErrorDetails::GCPVertexServer {
+                message: format!(
+                    "Error serializing streaming response from GCP Vertex Gemini: {e}"
+                ),
+            })
         })?;
 
-        let first_candidate =
-            response
-                .candidates
-                .into_iter()
-                .next()
-                .ok_or(Error::GCPVertexServer {
-                    message: "GCP Vertex Gemini response has no candidates".to_string(),
-                })?;
+        let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
+            Error::new(ErrorDetails::GCPVertexServer {
+                message: "GCP Vertex Gemini response has no candidates".to_string(),
+            })
+        })?;
 
         // GCP sometimes returns chunks without content (e.g. they might have usage only).
         let mut content: Vec<ContentBlockChunk> = match first_candidate.content {
@@ -948,15 +964,15 @@ fn handle_gcp_vertex_gemini_error(
         StatusCode::UNAUTHORIZED
         | StatusCode::BAD_REQUEST
         | StatusCode::PAYLOAD_TOO_LARGE
-        | StatusCode::TOO_MANY_REQUESTS => Err(Error::GCPVertexClient {
+        | StatusCode::TOO_MANY_REQUESTS => Err(Error::new(ErrorDetails::GCPVertexClient {
             message: response_body,
             status_code: response_code,
-        }),
+        })),
         // StatusCode::NOT_FOUND | StatusCode::FORBIDDEN | StatusCode::INTERNAL_SERVER_ERROR | 529: Overloaded
         // These are all captured in _ since they have the same error behavior
-        _ => Err(Error::GCPVertexServer {
+        _ => Err(Error::new(ErrorDetails::GCPVertexServer {
             message: response_body,
-        }),
+        })),
     }
 }
 
@@ -1203,10 +1219,10 @@ mod tests {
             output_schema: None,
         };
         let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro");
-        let error = result.unwrap_err();
+        let details = result.unwrap_err().get_owned_details();
         assert_eq!(
-            error,
-            Error::InvalidRequest {
+            details,
+            ErrorDetails::InvalidRequest {
                 message: "GCP Vertex Gemini requires at least one message".to_string()
             }
         );
@@ -1424,8 +1440,8 @@ mod tests {
         let response = GCPVertexGeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
-                prompt_token_count: 10,
-                candidates_token_count: Some(10),
+                prompt_token_count: None,
+                candidates_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -1469,8 +1485,8 @@ mod tests {
         assert_eq!(
             model_inference_response.usage,
             Usage {
-                input_tokens: 10,
-                output_tokens: 10,
+                input_tokens: 0,
+                output_tokens: 0,
             }
         );
         assert_eq!(model_inference_response.latency, latency);
@@ -1496,7 +1512,7 @@ mod tests {
         let response = GCPVertexGeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
-                prompt_token_count: 15,
+                prompt_token_count: Some(15),
                 candidates_token_count: Some(20),
             }),
         };
@@ -1598,7 +1614,7 @@ mod tests {
         let response = GCPVertexGeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
-                prompt_token_count: 25,
+                prompt_token_count: Some(25),
                 candidates_token_count: Some(40),
             }),
         };
@@ -1842,41 +1858,5 @@ mod tests {
         });
         let processed_schema_recursive = process_output_schema(&output_schema_recursive).unwrap();
         assert_eq!(processed_schema_recursive, expected_processed_schema);
-    }
-
-    #[test]
-    fn test_get_credentials() {
-        let provider_no_credentials = GCPVertexGeminiProvider {
-            request_url: "https://example.com".to_string(),
-            streaming_request_url: "https://example.com/stream".to_string(),
-            audience: "audience".to_string(),
-            credentials: None,
-            model_id: "model_id".to_string(),
-        };
-        let credentials = InferenceCredentials::default();
-        let result = provider_no_credentials
-            .get_credentials(&credentials)
-            .unwrap_err();
-        assert_eq!(
-            result,
-            Error::ApiKeyMissing {
-                provider_name: "GCP Vertex Gemini".to_string(),
-            }
-        );
-        let credentials = InferenceCredentials {
-            gcp_vertex_gemini: Some(GCPVertexGeminiCredentials {
-                token: SecretString::from("test_api_key".to_string()),
-            }),
-            ..Default::default()
-        };
-        let result = provider_no_credentials
-            .get_credentials(&credentials)
-            .unwrap();
-        match result {
-            ProviderCredentials::GCPVertexGemini(creds) => {
-                assert_eq!(creds.token.expose_secret(), "test_api_key".to_string());
-            }
-            _ => panic!("Expected GCP Vertex Gemini credentials"),
-        }
     }
 }

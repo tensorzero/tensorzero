@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use futures::{StreamExt, TryStreamExt};
 use reqwest::StatusCode;
 use reqwest_eventsource::RequestBuilderExt;
@@ -9,30 +7,54 @@ use tokio::time::Instant;
 use url::Url;
 
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{
     ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
 };
-use crate::model::ProviderCredentials;
+use crate::model::CredentialLocation;
 
 use super::openai::{
     handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
     OpenAIRequestMessage, OpenAIResponse, OpenAITool, OpenAIToolChoice, OpenAIToolChoiceString,
     SpecificToolChoice,
 };
-use super::provider_trait::{HasCredentials, InferenceProvider};
+use super::provider_trait::InferenceProvider;
 
 #[derive(Debug)]
 pub struct AzureProvider {
     pub deployment_id: String,
     pub endpoint: Url,
-    pub api_key: Option<SecretString>,
+    pub credentials: AzureCredentials,
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct AzureCredentials<'a> {
-    pub api_key: Cow<'a, SecretString>,
+pub enum AzureCredentials {
+    Static(SecretString),
+    Dynamic(String),
+}
+
+impl AzureCredentials {
+    fn get_api_key<'a>(
+        &'a self,
+        dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<&'a SecretString, Error> {
+        match self {
+            AzureCredentials::Static(api_key) => Ok(api_key),
+            AzureCredentials::Dynamic(key_name) => {
+                dynamic_api_keys.get(key_name).ok_or_else(|| {
+                    ErrorDetails::ApiKeyMissing {
+                        provider_name: "Azure".to_string(),
+                    }
+                    .into()
+                })
+            }
+        }
+    }
+}
+
+pub fn default_api_key_location() -> CredentialLocation {
+    CredentialLocation::Env("AZURE_OPENAI_API_KEY".to_string())
 }
 
 impl InferenceProvider for AzureProvider {
@@ -40,19 +62,12 @@ impl InferenceProvider for AzureProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: ProviderCredentials<'a>,
+        api_key: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = AzureRequest::new(request);
         let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id)?;
         let start_time = Instant::now();
-        let api_key = match &api_key {
-            ProviderCredentials::Azure(credentials) => &credentials.api_key,
-            _ => {
-                return Err(Error::BadCredentialsPreInference {
-                    provider_name: "Azure".to_string(),
-                })
-            }
-        };
+        let api_key = self.credentials.get_api_key(api_key)?;
         let res = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
@@ -60,21 +75,27 @@ impl InferenceProvider for AzureProvider {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| Error::AzureClient {
-                message: e.to_string(),
-                status_code: e.status().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
+            .map_err(|e| {
+                Error::new(ErrorDetails::AzureClient {
+                    message: e.to_string(),
+                    status_code: e.status().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
+                })
             })?;
         if res.status().is_success() {
             let latency = Latency::NonStreaming {
                 response_time: start_time.elapsed(),
             };
 
-            let response = res.text().await.map_err(|e| Error::AnthropicServer {
-                message: format!("Error parsing text response: {e}"),
+            let response = res.text().await.map_err(|e| {
+                Error::new(ErrorDetails::AzureServer {
+                    message: format!("Error parsing text response: {e}"),
+                })
             })?;
 
-            let response = serde_json::from_str(&response).map_err(|e| Error::AnthropicServer {
-                message: format!("Error parsing JSON response: {e}: {response}"),
+            let response = serde_json::from_str(&response).map_err(|e| {
+                Error::new(ErrorDetails::AzureServer {
+                    message: format!("Error parsing JSON response: {e}: {response}"),
+                })
             })?;
 
             Ok(AzureResponseWithMetadata {
@@ -88,8 +109,10 @@ impl InferenceProvider for AzureProvider {
         } else {
             Err(map_openai_to_azure_error(handle_openai_error(
                 res.status(),
-                &res.text().await.map_err(|e| Error::AzureServer {
-                    message: format!("Error parsing error response: {e}"),
+                &res.text().await.map_err(|e| {
+                    Error::new(ErrorDetails::AzureServer {
+                        message: format!("Error parsing error response: {e}"),
+                    })
                 })?,
             )))
         }
@@ -99,7 +122,7 @@ impl InferenceProvider for AzureProvider {
         &'a self,
         request: &'a ModelInferenceRequest<'a>,
         http_client: &'a reqwest::Client,
-        api_key: ProviderCredentials<'a>,
+        dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<
         (
             ProviderInferenceResponseChunk,
@@ -109,18 +132,13 @@ impl InferenceProvider for AzureProvider {
         Error,
     > {
         let request_body = AzureRequest::new(request);
-        let raw_request = serde_json::to_string(&request_body).map_err(|e| Error::AzureServer {
-            message: format!("Error serializing request body as JSON: {e}"),
+        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
+            Error::new(ErrorDetails::AzureServer {
+                message: format!("Error serializing request body as JSON: {e}"),
+            })
         })?;
         let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id)?;
-        let api_key = match &api_key {
-            ProviderCredentials::Azure(credentials) => &credentials.api_key,
-            _ => {
-                return Err(Error::BadCredentialsPreInference {
-                    provider_name: "Azure".to_string(),
-                })
-            }
-        };
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let event_source = http_client
             .post(request_url)
@@ -128,8 +146,10 @@ impl InferenceProvider for AzureProvider {
             .header("api-key", api_key.expose_secret())
             .json(&request_body)
             .eventsource()
-            .map_err(|e| Error::InferenceClient {
-                message: format!("Error sending request to Azure: {e}"),
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceClient {
+                    message: format!("Error sending request to Azure: {e}"),
+                })
             })?;
         let mut stream =
             Box::pin(stream_openai(event_source, start_time).map_err(map_openai_to_azure_error));
@@ -139,63 +159,39 @@ impl InferenceProvider for AzureProvider {
             Some(Ok(chunk)) => chunk,
             Some(Err(e)) => return Err(e),
             None => {
-                return Err(Error::TogetherServer {
+                return Err(ErrorDetails::TogetherServer {
                     message: "Stream ended before first chunk".to_string(),
-                })
+                }
+                .into())
             }
         };
         Ok((chunk, stream, raw_request))
     }
 }
 
-impl HasCredentials for AzureProvider {
-    fn has_credentials(&self) -> bool {
-        self.api_key.is_some()
-    }
-
-    fn get_credentials<'a>(
-        &'a self,
-        api_keys: &'a InferenceCredentials,
-    ) -> Result<ProviderCredentials<'a>, Error> {
-        if let Some(api_key) = &self.api_key {
-            if api_keys.azure.is_some() {
-                return Err(Error::UnexpectedDynamicCredentials {
-                    provider_name: "Azure".to_string(),
-                });
-            }
-            return Ok(ProviderCredentials::Azure(Cow::Owned(AzureCredentials {
-                api_key: Cow::Borrowed(api_key),
-            })));
-        } else {
-            match &api_keys.azure {
-                Some(credentials) => Ok(ProviderCredentials::Azure(Cow::Borrowed(credentials))),
-                None => Err(Error::ApiKeyMissing {
-                    provider_name: "Azure".to_string(),
-                }),
-            }
-        }
-    }
-}
-
 fn map_openai_to_azure_error(e: Error) -> Error {
-    match e {
-        Error::OpenAIServer { message } => Error::AzureServer { message },
-        Error::OpenAIClient {
+    let details = e.get_owned_details();
+    match details {
+        ErrorDetails::OpenAIServer { message } => ErrorDetails::AzureServer { message },
+        ErrorDetails::OpenAIClient {
             message,
             status_code,
-        } => Error::AzureClient {
+        } => ErrorDetails::AzureClient {
             message,
             status_code,
         },
-        _ => e,
+        e => e,
     }
+    .into()
 }
 
 fn get_azure_chat_url(endpoint: &Url, deployment_id: &str) -> Result<Url, Error> {
     let mut url = endpoint.clone();
     url.path_segments_mut()
-        .map_err(|e| Error::AzureServer {
-            message: format!("Error parsing URL: {e:?}"),
+        .map_err(|e| {
+            Error::new(ErrorDetails::AzureServer {
+                message: format!("Error parsing URL: {e:?}"),
+            })
         })?
         .push("openai")
         .push("deployments")
@@ -324,16 +320,19 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
             request: request_body,
             generic_request,
         } = value;
-        let raw_response = serde_json::to_string(&response).map_err(|e| Error::OpenAIServer {
-            message: format!("Error parsing response: {e}"),
+        let raw_response = serde_json::to_string(&response).map_err(|e| {
+            Error::new(ErrorDetails::OpenAIServer {
+                message: format!("Error parsing response: {e}"),
+            })
         })?;
         if response.choices.len() != 1 {
-            return Err(Error::OpenAIServer {
+            return Err(ErrorDetails::OpenAIServer {
                 message: format!(
                     "Response has invalid number of choices: {}. Expected 1.",
                     response.choices.len()
                 ),
-            });
+            }
+            .into());
         }
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
@@ -341,8 +340,10 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let message = response
             .choices
             .pop()
-            .ok_or(Error::OpenAIServer {
-                message: "Response has no choices (this should never happen)".to_string(),
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::OpenAIServer {
+                    message: "Response has no choices (this should never happen)".to_string(),
+                })
             })?
             .message;
         let mut content: Vec<ContentBlock> = Vec::new();
@@ -354,8 +355,10 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 content.push(ContentBlock::ToolCall(tool_call.into()));
             }
         }
-        let raw_request = serde_json::to_string(&request_body).map_err(|e| Error::AzureServer {
-            message: format!("Error serializing request body as JSON: {e}"),
+        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
+            Error::new(ErrorDetails::AzureServer {
+                message: format!("Error serializing request body as JSON: {e}"),
+            })
         })?;
 
         Ok(ProviderInferenceResponse::new(
@@ -520,64 +523,5 @@ mod tests {
             azure_auto_tool_choice,
             AzureToolChoice::String(AzureToolChoiceString::Auto)
         );
-    }
-
-    #[test]
-    fn test_get_credentials() {
-        let provider_no_credentials = AzureProvider {
-            api_key: None,
-            endpoint: Url::parse("https://example.com").unwrap(),
-            deployment_id: "deployment_id".to_string(),
-        };
-        let credentials = InferenceCredentials::default();
-        let result = provider_no_credentials
-            .get_credentials(&credentials)
-            .unwrap_err();
-        assert_eq!(
-            result,
-            Error::ApiKeyMissing {
-                provider_name: "Azure".to_string(),
-            }
-        );
-        let credentials = InferenceCredentials {
-            azure: Some(AzureCredentials {
-                api_key: Cow::Owned(SecretString::from("test_api_key".to_string())),
-            }),
-            ..Default::default()
-        };
-        let result = provider_no_credentials
-            .get_credentials(&credentials)
-            .unwrap();
-        match result {
-            ProviderCredentials::Azure(creds) => {
-                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
-            }
-            _ => panic!("Expected Azure credentials"),
-        }
-
-        let provider_with_credentials = AzureProvider {
-            api_key: Some(SecretString::from("test_api_key".to_string())),
-            endpoint: Url::parse("https://example.com").unwrap(),
-            deployment_id: "deployment_id".to_string(),
-        };
-        let result = provider_with_credentials
-            .get_credentials(&credentials)
-            .unwrap_err();
-        assert_eq!(
-            result,
-            Error::UnexpectedDynamicCredentials {
-                provider_name: "Azure".to_string(),
-            }
-        );
-        let credentials = InferenceCredentials::default();
-        let result = provider_with_credentials
-            .get_credentials(&credentials)
-            .unwrap();
-        match result {
-            ProviderCredentials::Azure(creds) => {
-                assert_eq!(creds.api_key.expose_secret(), "test_api_key".to_string());
-            }
-            _ => panic!("Expected Azure credentials"),
-        }
     }
 }

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tokio::sync::{OnceCell, RwLock};
 use tokio::task::JoinHandle;
 
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 
 #[derive(Debug, Serialize)]
 pub enum JsonSchemaRef<'a> {
@@ -69,18 +69,23 @@ impl JSONSchemaFromPath {
     /// You should call `load` to load the schema
     pub fn new<P: AsRef<Path>>(path: PathBuf, base_path: P) -> Result<Self, Error> {
         let path = base_path.as_ref().join(path);
-        let content = fs::read_to_string(&path).map_err(|e| Error::JsonSchema {
-            message: format!("Failed to read JSON Schema `{}`: {}", path.display(), e),
+        let content = fs::read_to_string(&path).map_err(|e| {
+            Error::new(ErrorDetails::JsonSchema {
+                message: format!("Failed to read JSON Schema `{}`: {}", path.display(), e),
+            })
         })?;
 
-        let schema: serde_json::Value =
-            serde_json::from_str(&content).map_err(|e| Error::JsonSchema {
+        let schema: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
+            Error::new(ErrorDetails::JsonSchema {
                 message: format!("Failed to parse JSON Schema `{}`: {}", path.display(), e),
-            })?;
+            })
+        })?;
         // We can 'leak' memory here because we want the schema to exist for the duration of the process
         let schema_boxed: &'static serde_json::Value = Box::leak(Box::new(schema));
-        let compiled_schema = JSONSchema::compile(schema_boxed).map_err(|e| Error::JsonSchema {
-            message: format!("Failed to compile JSON Schema `{}`: {}", path.display(), e),
+        let compiled_schema = JSONSchema::compile(schema_boxed).map_err(|e| {
+            Error::new(ErrorDetails::JsonSchema {
+                message: format!("Failed to compile JSON Schema `{}`: {}", path.display(), e),
+            })
         })?;
         let compiled = Arc::new(compiled_schema);
         let value = schema_boxed;
@@ -90,8 +95,10 @@ impl JSONSchemaFromPath {
     // NOTE: This function is to be used only for tests and constants
     pub fn from_value(value: &serde_json::Value) -> Result<Self, Error> {
         let schema_boxed: &'static serde_json::Value = Box::leak(Box::new(value.clone()));
-        let compiled_schema = JSONSchema::compile(schema_boxed).map_err(|e| Error::JsonSchema {
-            message: format!("Failed to compile JSON Schema: {}", e),
+        let compiled_schema = JSONSchema::compile(schema_boxed).map_err(|e| {
+            Error::new(ErrorDetails::JsonSchema {
+                message: format!("Failed to compile JSON Schema: {}", e),
+            })
         })?;
         Ok(Self {
             compiled: Arc::new(compiled_schema),
@@ -100,9 +107,8 @@ impl JSONSchemaFromPath {
     }
 
     pub fn validate(&self, instance: &serde_json::Value) -> Result<(), Error> {
-        self.compiled
-            .validate(instance)
-            .map_err(|e| Error::JsonSchemaValidation {
+        self.compiled.validate(instance).map_err(|e| {
+            Error::new(ErrorDetails::JsonSchemaValidation {
                 messages: e
                     .into_iter()
                     .map(|error| error.to_string())
@@ -110,6 +116,7 @@ impl JSONSchemaFromPath {
                 data: Box::new(instance.clone()),
                 schema: Box::new(self.value.clone()),
             })
+        })
     }
 }
 
@@ -142,8 +149,10 @@ impl DynamicJSONSchema {
         let schema_clone = schema.clone();
         let compilation_task = tokio::task::spawn_blocking(move || {
             JSONSchema::compile(&schema_clone)
-                .map_err(|e| Error::DynamicJsonSchema {
-                    message: e.to_string(),
+                .map_err(|e| {
+                    Error::new(ErrorDetails::DynamicJsonSchema {
+                        message: e.to_string(),
+                    })
                 })
                 .map(Arc::new)
         });
@@ -162,19 +171,19 @@ impl DynamicJSONSchema {
         let compiled_schema = match self.compiled_schema.get() {
             Some(compiled_schema) => compiled_schema,
             None => {
-                return Err(Error::DynamicJsonSchema {
+                return Err(Error::new(ErrorDetails::DynamicJsonSchema {
                     message: "Schema compilation failed".to_string(),
-                })
+                }))
             }
         };
 
         compiled_schema.validate(instance).map_err(|e| {
             let messages = e.into_iter().map(|error| error.to_string()).collect();
-            Error::JsonSchemaValidation {
+            Error::new(ErrorDetails::JsonSchemaValidation {
                 messages,
                 data: Box::new(instance.clone()),
                 schema: Box::new(self.value.clone()),
-            }
+            })
         })
     }
 
@@ -183,13 +192,15 @@ impl DynamicJSONSchema {
             .get_or_try_init(|| async {
                 let mut task_guard = self.compilation_task.write().await;
                 if let Some(task) = task_guard.take() {
-                    task.await.map_err(|e| Error::JsonSchema {
-                        message: format!("Task join error in DynamicJSONSchema: {}", e),
+                    task.await.map_err(|e| {
+                        Error::new(ErrorDetails::JsonSchema {
+                            message: format!("Task join error in DynamicJSONSchema: {}", e),
+                        })
                     })?
                 } else {
-                    Err(Error::JsonSchema {
+                    Err(Error::new(ErrorDetails::JsonSchema {
                         message: "Schema compilation already completed.".to_string(),
-                    })?
+                    }))
                 }
             })
             .await?;

@@ -4,6 +4,7 @@ use futures::StreamExt;
 use gateway::{
     clickhouse::ClickHouseConnectionInfo,
     embeddings::{EmbeddingProvider, EmbeddingProviderConfig, EmbeddingRequest},
+    endpoints::inference::InferenceCredentials,
     inference::types::{
         ContentBlock, ContentBlockOutput, Input, InputMessage, InputMessageContent,
         JsonInferenceOutput, RequestMessage, Role,
@@ -251,7 +252,11 @@ async fn embed_insert_example(
     let request = EmbeddingRequest {
         input: serde_json::to_string(&input).unwrap(),
     };
-    let response = provider_config.embed(&request, &client).await.unwrap();
+    let api_keys = InferenceCredentials::default();
+    let response = provider_config
+        .embed(&request, &client, &api_keys)
+        .await
+        .unwrap();
 
     let id = Uuid::now_v7();
     let embedding = response.embedding;

@@ -2,15 +2,18 @@ pub mod migration_trait;
 pub mod migrations;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::error::Error;
+use crate::error::{Error, ErrorDetails};
 use migration_trait::Migration;
 use migrations::migration_0000::Migration0000;
 use migrations::migration_0001::Migration0001;
 use migrations::migration_0002::Migration0002;
 use migrations::migration_0003::Migration0003;
 use migrations::migration_0004::Migration0004;
+use migrations::migration_0005::Migration0005;
 
 pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
+    // This is a no-op if the database already exists
+    clickhouse.create_database().await?;
     // If the first migration needs to run, we are starting from scratch and don't need to wait for data to migrate
     let clean_start = run_migration(&Migration0000 { clickhouse }).await?;
     run_migration(&Migration0001 {
@@ -21,6 +24,7 @@ pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     run_migration(&Migration0002 { clickhouse }).await?;
     run_migration(&Migration0003 { clickhouse }).await?;
     run_migration(&Migration0004 { clickhouse }).await?;
+    run_migration(&Migration0005 { clickhouse }).await?;
     // NOTE:
     // When we add more migrations, we need to add a test that applies them in a cumulative (N^2) way.
     //
@@ -70,10 +74,11 @@ pub async fn run_migration(migration: &impl Migration) -> Result<bool, Error> {
                     "Failed migration success check: {migration_name}\n\n===== Rollback Instructions =====\n\n{}",
                     migration.rollback_instructions()
                 );
-                return Err(Error::ClickHouseMigration {
+                return Err(ErrorDetails::ClickHouseMigration {
                     id: migration_name.to_string(),
                     message: "Migration success check failed".to_string(),
-                });
+                }
+                .into());
             }
             Err(e) => {
                 tracing::error!(
@@ -124,10 +129,11 @@ mod tests {
             if self.can_apply_result {
                 Ok(())
             } else {
-                Err(Error::ClickHouseMigration {
+                Err(ErrorDetails::ClickHouseMigration {
                     id: "0000".to_string(),
                     message: "MockMigration can_apply failed".to_string(),
-                })
+                }
+                .into())
             }
         }
 
@@ -143,10 +149,11 @@ mod tests {
             if self.apply_result {
                 Ok(())
             } else {
-                Err(Error::ClickHouseMigration {
+                Err(ErrorDetails::ClickHouseMigration {
                     id: "0000".to_string(),
                     message: "MockMigration apply failed".to_string(),
-                })
+                }
+                .into())
             }
         }
 

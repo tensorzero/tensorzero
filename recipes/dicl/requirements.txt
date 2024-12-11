@@ -6,8 +6,6 @@ anyio==4.6.0
     # via
     #   httpx
     #   openai
-appnope==0.1.4
-    # via ipykernel
 asttokens==2.4.1
     # via stack-data
 certifi==2024.8.30
@@ -25,10 +23,6 @@ decorator==5.1.1
     # via ipython
 distro==1.9.0
     # via openai
-exceptiongroup==1.2.2
-    # via
-    #   anyio
-    #   ipython
 executing==2.1.0
     # via stack-data
 h11==0.14.0
@@ -116,7 +110,7 @@ stack-data==0.6.3
     # via ipython
 toml==0.10.2
     # via -r requirements.in
-tornado==6.4.1
+tornado==6.4.2
     # via
     #   ipykernel
     #   jupyter-client
@@ -134,8 +128,6 @@ traitlets==5.14.3
     #   matplotlib-inline
 typing-extensions==4.12.2
     # via
-    #   anyio
-    #   ipython
     #   openai
     #   pydantic
     #   pydantic-core
