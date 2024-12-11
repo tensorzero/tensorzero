@@ -30,7 +30,7 @@ services:
     container_name: tensorzero-gateway-dashboard-tests
     image: tensorzero/gateway
     volumes:
-      - ./fixtures/config:/app/config:ro
+      - ./config:/app/config:ro
     environment:
       - CLICKHOUSE_URL=http://tensorzero-clickhouse-dashboard-tests:8123/tensorzero
     env_file:
@@ -58,7 +58,7 @@ services:
     container_name: tensorzero-fixtures-dashboard-tests
     image: clickhouse/clickhouse-server:latest
     volumes:
-      - ./fixtures:/fixtures:ro
+      - .:/fixtures:ro
     environment:
       - CLICKHOUSE_HOST=tensorzero-clickhouse-dashboard-tests
     depends_on:
