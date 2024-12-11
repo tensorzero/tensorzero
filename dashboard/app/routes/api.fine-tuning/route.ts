@@ -34,7 +34,6 @@ export async function action({ request }: ActionFunctionArgs) {
   if (request.method !== "POST") {
     return json({ error: "Method not allowed" }, { status: 405 });
   }
-  console.log("got request?");
 
   try {
     const data = (await request.json()) as FormValues;
@@ -42,8 +41,6 @@ export async function action({ request }: ActionFunctionArgs) {
     const current_variant = config.functions[data.function].variants[
       data.variant
     ] as ChatCompletionConfig;
-    console.log("data", data);
-    console.log("data.model", data.model);
     if (data.model.provider !== "openai") {
       return json({ error: "Unsupported model provider" }, { status: 400 });
     }
@@ -67,21 +64,17 @@ export async function action({ request }: ActionFunctionArgs) {
     );
 
     const file_id = await upload_examples_to_openai(trainMessages);
-    console.log("file_id", file_id);
 
     let val_file_id: string | null = null;
     if (valMessages.length > 0) {
       val_file_id = await upload_examples_to_openai(valMessages);
-      console.log("val_file_id", val_file_id);
     }
     const job_id = await create_fine_tuning_job(
       data.model.name,
       file_id,
       val_file_id ?? undefined,
     );
-    console.log("job_id", job_id);
 
-    console.log("started?");
     return json({
       status: "success",
       message: "Fine-tuning job started",

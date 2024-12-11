@@ -55,7 +55,6 @@ export async function create_fine_tuning_job(
 
   try {
     const job = await client.fineTuning.jobs.create(params);
-    console.log("job", job);
     return job.id;
   } catch (error) {
     console.error("Error creating fine-tuning job:", error);

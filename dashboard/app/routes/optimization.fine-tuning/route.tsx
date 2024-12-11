@@ -114,8 +114,6 @@ export default function FineTuning() {
       setIsSubmitted(true);
       setSubmissionPhase("submitting");
       setSubmissionResult("Preparing training data...");
-      console.log("data", data);
-      console.log("data.model", data.model);
 
       // Call the API route for fine-tuning
       const response = await fetch("/api/fine-tuning", {
@@ -131,7 +129,6 @@ export default function FineTuning() {
       }
 
       const result = await response.json();
-      console.log(result);
       setSubmissionResult("Job started. Polling for job status...");
 
       const job_id = result.job_id;
