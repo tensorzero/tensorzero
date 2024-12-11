@@ -12,8 +12,8 @@ use crate::embeddings::EmbeddingModelConfig;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
 use crate::inference::types::{
-    ContentBlock, FunctionType, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-    ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
+    batch::BatchModelInferenceWithMetadata, ContentBlock, FunctionType, ModelInferenceRequest,
+    ModelInferenceRequestJsonMode, ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::{
@@ -72,7 +72,7 @@ impl Variant for BestOfNSamplingConfig {
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
+        inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<InferenceResult<'a>, Error> {
@@ -94,7 +94,7 @@ impl Variant for BestOfNSamplingConfig {
         _input: &Input,
         _models: &'request InferenceModels<'static>,
         _function: &'static FunctionConfig,
-        _inference_config: &'request InferenceConfig<'request>,
+        _inference_config: &'request InferenceConfig<'static, 'request>,
         _clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<
@@ -161,6 +161,18 @@ impl Variant for BestOfNSamplingConfig {
     fn get_all_template_paths(&self) -> Vec<&PathBuf> {
         self.evaluator.inner.get_all_template_paths()
     }
+
+    async fn start_batch_inference<'a>(
+        &'a self,
+        _input: &[Input],
+        _models: &'a InferenceModels<'a>,
+        _function: &'a FunctionConfig,
+        _inference_configs: &'a [InferenceConfig<'a, 'a>],
+        _clients: &'a InferenceClients<'a>,
+        _inference_params: Vec<InferenceParams>,
+    ) -> Result<BatchModelInferenceWithMetadata<'a>, Error> {
+        Err(ErrorDetails::UnsupportedVariantForBatchInference { variant_name: None }.into())
+    }
 }
 
 impl BestOfNSamplingConfig {
@@ -170,7 +182,7 @@ impl BestOfNSamplingConfig {
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
+        inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
     ) -> Result<Vec<InferenceResult<'a>>, Error> {
         // Get all the variants we are going to infer
@@ -243,7 +255,7 @@ impl BestOfNSamplingConfig {
         &'a self,
         input: &Input,
         models: &'a HashMap<String, ModelConfig>,
-        inference_config: &'request InferenceConfig<'request>,
+        inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
         candidates: Vec<InferenceResult<'a>>,
     ) -> Result<InferenceResult<'a>, Error> {
@@ -329,7 +341,7 @@ async fn inner_select_best_candidate<'a, 'request>(
     evaluator: &'a EvaluatorConfig,
     input: &'request Input,
     models: &'a HashMap<String, ModelConfig>,
-    inference_config: &'request InferenceConfig<'request>,
+    inference_config: &'request InferenceConfig<'a, 'request>,
     clients: &'request InferenceClients<'request>,
     candidates: &[InferenceResult<'request>],
 ) -> Result<
@@ -548,7 +560,7 @@ impl EvaluatorConfig {
     fn prepare_request(
         &self,
         input: &Input,
-        inference_config: &InferenceConfig,
+        inference_config: &InferenceConfig<'_, '_>,
         candidates: &[InferenceResult],
         inference_params: &mut InferenceParams,
     ) -> Result<(ModelInferenceRequest, Vec<usize>), Error> {
@@ -1107,8 +1119,8 @@ mod tests {
             templates: &templates,
             tool_config: None,
             dynamic_output_schema: None,
-            function_name: "".to_string(),
-            variant_name: "".to_string(),
+            function_name: "",
+            variant_name: Some(""),
         };
 
         let selected = best_of_n_variant

@@ -11,12 +11,14 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::function::FunctionConfig;
-use crate::tool::ToolCallConfigDatabaseInsert;
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolResult};
 use crate::{endpoints::inference::InferenceDatabaseInsertMetadata, variant::InferenceConfig};
 use crate::{endpoints::inference::InferenceParams, error::ErrorDetails};
 use crate::{error::Error, variant::JsonMode};
+use crate::{function::FunctionConfig, minijinja_util::TemplateConfig};
+use crate::{jsonschema_util::DynamicJSONSchema, tool::ToolCallConfigDatabaseInsert};
+
+pub mod batch;
 
 /*
  * Data flow in TensorZero
@@ -667,7 +669,7 @@ impl ChatInferenceDatabaseInsert {
     ) -> Self {
         let processing_time_ms = metadata.processing_time.as_millis() as u32;
 
-        let tool_params = metadata.tool_params.map(ToolCallConfigDatabaseInsert::from);
+        let tool_params = metadata.tool_config.map(ToolCallConfigDatabaseInsert::from);
         let inference_params = chat_result.inference_params;
         let output = serde_json::to_string(&chat_result.content)
             .map_err(|e| {
@@ -844,22 +846,26 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
 }
 
 // Define the CollectChunksArgs struct with existing and new fields
-pub struct CollectChunksArgs<'a> {
+pub struct CollectChunksArgs<'a, 'b> {
     pub value: Vec<InferenceResultChunk>,
     pub function: &'a FunctionConfig,
     pub model_name: &'a str,
     pub model_provider_name: &'a str,
     pub raw_request: String,
     pub inference_params: InferenceParams,
-    pub system: Option<String>,              // New field
-    pub input_messages: Vec<RequestMessage>, // New field
+    pub system: Option<String>,
+    pub input_messages: Vec<RequestMessage>,
+    pub function_name: &'b str,
+    pub variant_name: &'b str,
+    pub dynamic_output_schema: Option<DynamicJSONSchema>,
+    pub templates: &'a TemplateConfig<'a>,
+    pub tool_config: Option<&'b ToolCallConfig>,
 }
 
 // Modify the collect_chunks function to accept CollectChunksArgs
 // 'a ends up as static and 'b ends up as stack allocated in the caller (endpoints::inference::create_stream)
 pub async fn collect_chunks<'a, 'b>(
-    args: CollectChunksArgs<'a>,
-    inference_config: &'b InferenceConfig<'a>,
+    args: CollectChunksArgs<'a, 'b>,
 ) -> Result<InferenceResult<'a>, Error> {
     let CollectChunksArgs {
         value,
@@ -870,6 +876,11 @@ pub async fn collect_chunks<'a, 'b>(
         inference_params,
         system,
         input_messages,
+        function_name,
+        variant_name,
+        dynamic_output_schema,
+        templates,
+        tool_config,
     } = args;
 
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
@@ -1002,13 +1013,20 @@ pub async fn collect_chunks<'a, 'b>(
     let model_inference_response = ModelInferenceResponse::new(model_response, model_provider_name);
     let model_inference_result =
         ModelInferenceResponseWithMetadata::new(model_inference_response, model_name);
+    let inference_config = InferenceConfig {
+        function_name,
+        variant_name: Some(variant_name),
+        tool_config,
+        templates,
+        dynamic_output_schema: dynamic_output_schema.as_ref(),
+    };
     function
         .prepare_response(
             inference_id,
             content_blocks,
             usage,
             vec![model_inference_result],
-            inference_config,
+            &inference_config,
             inference_params,
         )
         .await
@@ -1078,7 +1096,7 @@ mod tests {
     use super::*;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::providers::common::get_temperature_tool_config;
-    use crate::jsonschema_util::{DynamicJSONSchema, JSONSchemaFromPath};
+    use crate::jsonschema_util::JSONSchemaFromPath;
     use crate::minijinja_util::TemplateConfig;
     use crate::tool::{DynamicToolConfig, ToolCallConfig, ToolChoice, ToolConfig};
     use serde_json::json;
@@ -1677,18 +1695,8 @@ mod tests {
     #[tokio::test]
     async fn test_collect_chunks() {
         // Test case 1: empty chunks (should error)
-        let tool_config = ToolCallConfig {
-            tools_available: vec![],
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
-        };
-        let inference_config = InferenceConfig {
-            tool_config: Some(tool_config),
-            templates: &TemplateConfig::default(),
-            function_name: "".to_string(),
-            variant_name: "".to_string(),
-            dynamic_output_schema: None,
-        };
+        let templates = TemplateConfig::default();
+
         let chunks = vec![];
         let function_config = FunctionConfig::Chat(FunctionConfigChat::default());
         let model_name = "test_model";
@@ -1703,8 +1711,13 @@ mod tests {
             model_provider_name,
             raw_request: raw_request.clone(),
             inference_params: InferenceParams::default(),
+            function_name: "",
+            variant_name: "",
+            dynamic_output_schema: None,
+            templates: &templates,
+            tool_config: None,
         };
-        let result = collect_chunks(collect_chunks_args, &inference_config).await;
+        let result = collect_chunks(collect_chunks_args).await;
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::TypeConversion {
@@ -1756,10 +1769,13 @@ mod tests {
             model_provider_name,
             raw_request: raw_request.clone(),
             inference_params: InferenceParams::default(),
+            function_name: "",
+            variant_name: "",
+            dynamic_output_schema: None,
+            templates: &templates,
+            tool_config: None,
         };
-        let result = collect_chunks(collect_chunks_args, &inference_config)
-            .await
-            .unwrap();
+        let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
             InferenceResult::Chat(chat_result) => chat_result,
             _ => panic!("Expected Chat inference response"),
@@ -1840,10 +1856,13 @@ mod tests {
             model_provider_name,
             raw_request: raw_request.clone(),
             inference_params: InferenceParams::default(),
+            function_name: "",
+            variant_name: "",
+            dynamic_output_schema: None,
+            templates: &templates,
+            tool_config: None,
         };
-        let response = collect_chunks(collect_chunks_args, &inference_config)
-            .await
-            .unwrap();
+        let response = collect_chunks(collect_chunks_args).await.unwrap();
         match response {
             InferenceResult::Json(json_result) => {
                 assert_eq!(json_result.inference_id, inference_id);
@@ -1908,8 +1927,13 @@ mod tests {
             model_provider_name,
             raw_request: raw_request.clone(),
             inference_params: InferenceParams::default(),
+            function_name: "",
+            variant_name: "",
+            dynamic_output_schema: None,
+            templates: &templates,
+            tool_config: None,
         };
-        let result = collect_chunks(collect_chunks_args, &inference_config).await;
+        let result = collect_chunks(collect_chunks_args).await;
         assert!(result.is_ok());
         match result {
             Ok(InferenceResult::Json(json_result)) => {
@@ -1972,8 +1996,13 @@ mod tests {
             model_provider_name,
             raw_request: raw_request.clone(),
             inference_params: InferenceParams::default(),
+            function_name: "",
+            variant_name: "",
+            dynamic_output_schema: None,
+            templates: &templates,
+            tool_config: None,
         };
-        let result = collect_chunks(collect_chunks_args, &inference_config).await;
+        let result = collect_chunks(collect_chunks_args).await;
         if let Ok(InferenceResult::Chat(chat_response)) = result {
             assert_eq!(chat_response.inference_id, inference_id);
             assert_eq!(chat_response.created, created);
@@ -2050,10 +2079,13 @@ mod tests {
             model_provider_name,
             raw_request: raw_request.clone(),
             inference_params: InferenceParams::default(),
+            function_name: "",
+            variant_name: "",
+            dynamic_output_schema: None,
+            templates: &templates,
+            tool_config: None,
         };
-        let response = collect_chunks(collect_chunks_args, &inference_config)
-            .await
-            .unwrap();
+        let response = collect_chunks(collect_chunks_args).await.unwrap();
         match response {
             InferenceResult::Json(json_result) => {
                 assert_eq!(json_result.inference_id, inference_id);
@@ -2118,13 +2150,7 @@ mod tests {
             },
             "required": ["name", "age"]
         }));
-        let inference_config = InferenceConfig {
-            tool_config: None,
-            function_name: "".to_string(),
-            variant_name: "".to_string(),
-            templates: &TemplateConfig::default(),
-            dynamic_output_schema: Some(dynamic_output_schema),
-        };
+        let templates = TemplateConfig::default();
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
                 inference_id,
@@ -2152,10 +2178,13 @@ mod tests {
             model_provider_name,
             raw_request: raw_request.clone(),
             inference_params: InferenceParams::default(),
+            function_name: "",
+            variant_name: "",
+            dynamic_output_schema: Some(dynamic_output_schema),
+            templates: &templates,
+            tool_config: None,
         };
-        let response = collect_chunks(collect_chunks_args, &inference_config)
-            .await
-            .unwrap();
+        let response = collect_chunks(collect_chunks_args).await.unwrap();
         match response {
             InferenceResult::Json(json_result) => {
                 assert_eq!(json_result.inference_id, inference_id);
