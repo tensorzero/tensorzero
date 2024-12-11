@@ -5,7 +5,12 @@ import {
   createProviderConfig,
 } from "../config/models";
 import { stringify } from "smol-toml";
-import { VariantConfig } from "../config/variant";
+
+export type FullyQualifiedModelConfig = {
+  models: {
+    [key: string]: ModelConfig;
+  };
+};
 
 export async function get_fine_tuned_model_config(
   model_name: string,
@@ -21,31 +26,14 @@ export async function get_fine_tuned_model_config(
       [model_name]: providerConfig,
     },
   };
-  return modelConfig;
-}
-
-export function dump_model_config(model_config: ModelConfig) {
-  return stringify(model_config);
-}
-
-export function create_dump_variant_config(
-  oldVariant: VariantConfig,
-  model_name: string,
-  function_name: string,
-) {
-  const newVariantConfig = {
-    ...oldVariant,
-    weight: 0,
-    model_name: model_name,
-  };
-  const fullNewVariantConfig = {
-    functions: {
-      [function_name]: {
-        variants: {
-          [model_name]: newVariantConfig,
-        },
-      },
+  const fullyQualifiedModelConfig: FullyQualifiedModelConfig = {
+    models: {
+      [model_name]: modelConfig,
     },
   };
-  return stringify(fullNewVariantConfig);
+  return fullyQualifiedModelConfig;
+}
+
+export function dump_model_config(model_config: FullyQualifiedModelConfig) {
+  return stringify(model_config);
 }

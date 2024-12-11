@@ -46,6 +46,7 @@ export function TemplateDetailsDialog({
                           readOnly
                           value={
                             chatCompletionVariants[variant]?.system_template
+                              ?.content
                           }
                           className="h-[200px] resize-none"
                         />
@@ -63,7 +64,10 @@ export function TemplateDetailsDialog({
                       {chatCompletionVariants[variant]?.user_template ? (
                         <Textarea
                           readOnly
-                          value={chatCompletionVariants[variant]?.user_template}
+                          value={
+                            chatCompletionVariants[variant]?.user_template
+                              ?.content
+                          }
                           className="h-[200px] resize-none"
                         />
                       ) : (
@@ -84,6 +88,7 @@ export function TemplateDetailsDialog({
                       readOnly
                       value={
                         chatCompletionVariants[variant]?.assistant_template
+                          ?.content
                       }
                       className="h-[200px] resize-none"
                     />

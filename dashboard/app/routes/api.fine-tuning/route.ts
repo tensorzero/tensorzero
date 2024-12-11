@@ -2,8 +2,7 @@ import { json, type ActionFunctionArgs } from "@remix-run/node";
 import { getConfig } from "~/utils/config.server";
 import { getCuratedInferences } from "~/utils/clickhouse";
 import type { FormValues } from "~/routes/optimization.fine-tuning/route";
-import { get_template_env } from "~/utils/config/variant";
-import { ChatCompletionConfig } from "~/utils/config/variant";
+import { ChatCompletionConfig, get_template_env } from "~/utils/config/variant";
 import {
   OpenAIMessage,
   tensorzero_inference_to_openai_messages,

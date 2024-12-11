@@ -6,7 +6,10 @@ import { useForm } from "react-hook-form";
 import { Textarea } from "~/components/ui/textarea";
 import { useEffect, useState } from "react";
 import { useConfig } from "~/context/config";
-import { ChatCompletionConfig } from "~/utils/config/variant";
+import {
+  ChatCompletionConfig,
+  create_dump_variant_config,
+} from "~/utils/config/variant";
 
 import { FunctionSelector } from "./FunctionSelector";
 import { MetricSelector } from "./MetricSelector";
@@ -16,7 +19,6 @@ import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 import {
   dump_model_config,
   get_fine_tuned_model_config,
-  create_dump_variant_config,
 } from "~/utils/fine_tuning/config_block";
 export const meta: MetaFunction = () => {
   return [
