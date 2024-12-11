@@ -113,7 +113,7 @@ pub async fn shutdown_signal() {
 /// ┌──────────────────────────────────────────────────────────────────────────┐
 /// │                           MAIN.RS ESCAPE HATCH                           │
 /// └──────────────────────────────────────────────────────────────────────────┘
-
+///
 /// We don't allow panic, escape, unwrap, or similar methods in the codebase,
 /// except for the private `expect_pretty` method, which is to be used only in
 /// main.rs during initialization. After initialization, we expect all code to
@@ -121,7 +121,6 @@ pub async fn shutdown_signal() {
 ///
 /// We use `expect_pretty` for better DX when handling errors in main.rs.
 /// `expect_pretty` will print an error message and exit with a status code of 1.
-
 trait ExpectPretty<T> {
     fn expect_pretty(self, msg: &str) -> T;
 }

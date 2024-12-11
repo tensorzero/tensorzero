@@ -29,6 +29,7 @@ use crate::{
 use super::{InferenceConfig, ModelUsedInfo, Variant};
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct BestOfNSamplingConfig {
     #[serde(default)]
     pub weight: f64,
@@ -43,6 +44,7 @@ fn default_timeout() -> f64 {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct EvaluatorConfig {
     #[serde(flatten)]
     inner: ChatCompletionConfig,

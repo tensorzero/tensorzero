@@ -198,7 +198,6 @@ impl InferenceProvider for AnthropicProvider {
 /// Maps events from Anthropic into the TensorZero format
 /// Modified from the example [here](https://github.com/64bit/async-openai/blob/5c9c817b095e3bacb2b6c9804864cdf8b15c795e/async-openai/src/client.rs#L433)
 /// At a high level, this function is handling low-level EventSource details and mapping the objects returned by Anthropic into our `InferenceResultChunk` type
-
 fn stream_anthropic(
     mut event_source: EventSource,
     start_time: Instant,
@@ -290,13 +289,12 @@ impl<'a> TryFrom<&'a ToolChoice> for AnthropicToolChoice<'a> {
             ToolChoice::Auto => Ok(AnthropicToolChoice::Auto),
             ToolChoice::Required => Ok(AnthropicToolChoice::Any),
             ToolChoice::Specific(name) => Ok(AnthropicToolChoice::Tool { name }),
-            // TODO (#205): Implement ToolChoice::None workaround for Anthropic.
-            //              MAKE SURE TO UPDATE THE E2E TESTS WHEN THIS IS DONE.
-            ToolChoice::None => Err(ErrorDetails::InvalidTool {
-                message: "Tool choice is None. Anthropic does not support tool choice None."
-                    .to_string(),
-            }
-            .into()),
+            // Workaround for Anthropic API limitation: they don't support explicitly specifying "none"
+            // for tool choice. Instead, we return Auto but the request construction will ensure
+            // that no tools are sent in the request payload. This achieves the same effect
+            // as explicitly telling the model not to use tools, since without any tools
+            // being provided, the model cannot make tool calls.
+            ToolChoice::None => Ok(AnthropicToolChoice::Auto),
         }
     }
 }
@@ -449,11 +447,21 @@ impl<'a> AnthropicRequestBody<'a> {
         } else {
             messages
         };
-        let tools = request
-            .tool_config
-            .as_ref()
-            .map(|c| &c.tools_available)
-            .map(|tools| tools.iter().map(|tool| tool.into()).collect::<Vec<_>>());
+        // Workaround for Anthropic API limitation: they don't support explicitly specifying "none"
+        // for tool choice. When ToolChoice::None is specified, we don't send any tools in the
+        // request payload to achieve the same effect.
+        let tools = request.tool_config.as_ref().and_then(|c| {
+            if matches!(c.tool_choice, ToolChoice::None) {
+                None
+            } else {
+                Some(
+                    c.tools_available
+                        .iter()
+                        .map(|tool| tool.into())
+                        .collect::<Vec<_>>(),
+                )
+            }
+        });
         // `tool_choice` should only be set if tools are set and non-empty
         let tool_choice: Option<AnthropicToolChoice> = tools
             .as_ref()
@@ -966,15 +974,10 @@ mod tests {
         // Need to cover all 4 cases
         let tool_choice = ToolChoice::None;
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_choice);
-        assert!(anthropic_tool_choice.is_err());
-        let details = anthropic_tool_choice.unwrap_err().get_owned_details();
-        assert_eq!(
-            details,
-            ErrorDetails::InvalidTool {
-                message: "Tool choice is None. Anthropic does not support tool choice None."
-                    .to_string(),
-            }
-        );
+        assert!(matches!(
+            anthropic_tool_choice.unwrap(),
+            AnthropicToolChoice::Auto
+        ));
 
         let tool_choice = ToolChoice::Auto;
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_choice);

@@ -49,6 +49,7 @@ pub struct DiclConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UninitializedDiclConfig {
     #[serde(default)]
     pub weight: f64,

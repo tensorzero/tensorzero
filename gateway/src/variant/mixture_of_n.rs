@@ -27,6 +27,7 @@ use super::{
 };
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct MixtureOfNConfig {
     #[serde(default)]
     pub weight: f64,
@@ -41,6 +42,7 @@ fn default_timeout() -> f64 {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct FuserConfig {
     #[serde(flatten)]
     inner: ChatCompletionConfig,

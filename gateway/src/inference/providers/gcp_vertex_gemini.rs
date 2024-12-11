@@ -825,7 +825,7 @@ struct GCPVertexGeminiResponseCandidate {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiUsageMetadata {
-    prompt_token_count: u32,
+    prompt_token_count: Option<u32>,
     // GCP doesn't return output tokens in certain edge cases (e.g. generation blocked by safety settings)
     #[serde(skip_serializing_if = "Option::is_none")]
     candidates_token_count: Option<u32>,
@@ -834,7 +834,7 @@ struct GCPVertexGeminiUsageMetadata {
 impl From<GCPVertexGeminiUsageMetadata> for Usage {
     fn from(usage_metadata: GCPVertexGeminiUsageMetadata) -> Self {
         Usage {
-            input_tokens: usage_metadata.prompt_token_count,
+            input_tokens: usage_metadata.prompt_token_count.unwrap_or(0),
             output_tokens: usage_metadata.candidates_token_count.unwrap_or(0),
         }
     }
@@ -1453,8 +1453,8 @@ mod tests {
         let response = GCPVertexGeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
-                prompt_token_count: 10,
-                candidates_token_count: Some(10),
+                prompt_token_count: None,
+                candidates_token_count: None,
             }),
         };
         let latency = Latency::NonStreaming {
@@ -1498,8 +1498,8 @@ mod tests {
         assert_eq!(
             model_inference_response.usage,
             Usage {
-                input_tokens: 10,
-                output_tokens: 10,
+                input_tokens: 0,
+                output_tokens: 0,
             }
         );
         assert_eq!(model_inference_response.latency, latency);
@@ -1525,7 +1525,7 @@ mod tests {
         let response = GCPVertexGeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
-                prompt_token_count: 15,
+                prompt_token_count: Some(15),
                 candidates_token_count: Some(20),
             }),
         };
@@ -1627,7 +1627,7 @@ mod tests {
         let response = GCPVertexGeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GCPVertexGeminiUsageMetadata {
-                prompt_token_count: 25,
+                prompt_token_count: Some(25),
                 candidates_token_count: Some(40),
             }),
         };

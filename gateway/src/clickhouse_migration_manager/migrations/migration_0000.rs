@@ -14,7 +14,6 @@ use super::check_table_exists;
 /// - ChatInference
 /// - JsonInference
 /// - ModelInference
-
 pub struct Migration0000<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
@@ -57,9 +56,6 @@ impl<'a> Migration for Migration0000<'a> {
     }
 
     async fn apply(&self) -> Result<(), Error> {
-        // Create the database if it doesn't exist
-        self.clickhouse.create_database().await?;
-
         // Create the `BooleanMetricFeedback` table
         let query = r#"
             CREATE TABLE IF NOT EXISTS BooleanMetricFeedback

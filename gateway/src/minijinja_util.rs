@@ -10,7 +10,7 @@ pub struct TemplateConfig<'c> {
     env: minijinja::Environment<'c>,
 }
 
-impl<'c> TemplateConfig<'c> {
+impl TemplateConfig<'_> {
     pub fn new() -> Self {
         let mut env = Environment::new();
         env.set_undefined_behavior(UndefinedBehavior::Strict);
@@ -125,7 +125,7 @@ impl<'c> TemplateConfig<'c> {
     }
 }
 
-impl<'c> Default for TemplateConfig<'c> {
+impl Default for TemplateConfig<'_> {
     fn default() -> Self {
         Self::new()
     }

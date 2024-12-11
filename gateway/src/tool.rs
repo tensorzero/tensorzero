@@ -8,17 +8,19 @@ use crate::{
     jsonschema_util::{DynamicJSONSchema, JSONSchemaFromPath},
 };
 
-/// A Tool is a function that can be called by an LLM
-/// We represent them in various ways depending on how they are configured by the user.
-/// The primary difficulty is that tools require an input signature that we represent as a JSONSchema.
-/// JSONSchema compilation takes time so we want to do it at startup if the tool is in the config.
-/// We also don't want to clone compiled JSON schemas.
-/// If the tool is dynamic we want to run compilation while LLM inference is happening so that we can validate the tool call arguments.
-///
-/// If we are doing an implicit tool call for JSON schema enforcement, we can use the compiled schema from the output signature.
+/* A Tool is a function that can be called by an LLM
+ * We represent them in various ways depending on how they are configured by the user.
+ * The primary difficulty is that tools require an input signature that we represent as a JSONSchema.
+ * JSONSchema compilation takes time so we want to do it at startup if the tool is in the config.
+ * We also don't want to clone compiled JSON schemas.
+ * If the tool is dynamic we want to run compilation while LLM inference is happening so that we can validate the tool call arguments.
+ *
+ * If we are doing an implicit tool call for JSON schema enforcement, we can use the compiled schema from the output signature.
+ */
 
 /// A Tool object describes how a tool can be dynamically configured by the user.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Tool {
     pub description: String,
     pub parameters: Value,
@@ -187,6 +189,7 @@ impl ToolCallConfig {
 /// `tool_choice` and `parallel_tool_calls` are optional and will override the function-level values.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(Default))]
+#[serde(deny_unknown_fields)]
 pub struct DynamicToolParams {
     pub allowed_tools: Option<Vec<String>>,
     pub additional_tools: Option<Vec<Tool>>,
@@ -208,6 +211,7 @@ pub struct BatchDynamicToolParamsWithSize(pub BatchDynamicToolParams, pub usize)
 
 /// A ToolCall is a request by a model to call a Tool
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ToolCall {
     pub name: String,
     pub arguments: String,
@@ -274,6 +278,7 @@ impl ToolCallConfig {
 
 /// A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct ToolResult {
     pub name: String,
     pub result: String,
@@ -286,6 +291,7 @@ pub struct ToolResult {
 /// This enum is used to denote this tool choice.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
+#[serde(deny_unknown_fields)]
 pub enum ToolChoice {
     None,
     #[default]
