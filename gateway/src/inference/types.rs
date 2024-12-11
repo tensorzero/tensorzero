@@ -1075,17 +1075,14 @@ pub fn serialize_or_log<T: Serialize>(value: &T) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Instant;
-
-    use serde_json::json;
-
+    use super::*;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::providers::common::get_temperature_tool_config;
     use crate::jsonschema_util::{DynamicJSONSchema, JSONSchemaFromPath};
     use crate::minijinja_util::TemplateConfig;
-    use crate::tool::ToolChoice;
-
-    use super::*;
+    use crate::tool::{DynamicToolConfig, ToolCallConfig, ToolChoice, ToolConfig};
+    use serde_json::json;
+    use std::time::{Duration, Instant};
 
     #[tokio::test]
     async fn test_create_chat_inference_response() {
@@ -1274,6 +1271,404 @@ mod tests {
                             .unwrap()
                     )
                 );
+            }
+            _ => panic!("Expected a tool call block"),
+        }
+
+        // Case 5: Parallel tool calls
+        let inference_id = Uuid::now_v7();
+        let content = vec![
+            ContentBlock::ToolCall(ToolCall {
+                name: "get_temperature".to_string(),
+                arguments: r#"{"location": "moon", "units": "celsius"}"#.to_string(),
+                id: "0".to_string(),
+            }),
+            ContentBlock::ToolCall(ToolCall {
+                name: "get_temperature".to_string(),
+                arguments: r#"{"location": "mars", "units": "celsius"}"#.to_string(),
+                id: "1".to_string(),
+            }),
+        ];
+        let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            system: None,
+            input_messages: vec![],
+            output: content.clone(),
+            raw_request: raw_request.clone(),
+            raw_response: "".to_string(),
+            usage: usage.clone(),
+            latency: Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+            model_provider_name: "test_provider",
+            model_name: "test_model",
+        }];
+
+        let chat_inference_response = ChatInferenceResult::new(
+            inference_id,
+            content,
+            usage.clone(),
+            model_inference_responses,
+            Some(&weather_tool_config),
+            InferenceParams::default(),
+        )
+        .await;
+        assert_eq!(chat_inference_response.content.len(), 2);
+
+        // Verify first tool call
+        match &chat_inference_response.content[0] {
+            ContentBlockOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.raw_name, "get_temperature");
+                assert_eq!(
+                    tool_call.raw_arguments,
+                    r#"{"location": "moon", "units": "celsius"}"#
+                );
+                assert_eq!(tool_call.id, "0");
+                assert_eq!(tool_call.name, Some("get_temperature".to_string()));
+                assert_eq!(
+                    tool_call.arguments,
+                    Some(
+                        serde_json::from_str(r#"{"location": "moon", "units": "celsius"}"#)
+                            .unwrap()
+                    )
+                );
+            }
+            _ => panic!("Expected a tool call block"),
+        }
+
+        // Verify second tool call
+        match &chat_inference_response.content[1] {
+            ContentBlockOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.raw_name, "get_temperature");
+                assert_eq!(
+                    tool_call.raw_arguments,
+                    r#"{"location": "mars", "units": "celsius"}"#
+                );
+                assert_eq!(tool_call.id, "1");
+                assert_eq!(tool_call.name, Some("get_temperature".to_string()));
+                assert_eq!(
+                    tool_call.arguments,
+                    Some(
+                        serde_json::from_str(r#"{"location": "mars", "units": "celsius"}"#)
+                            .unwrap()
+                    )
+                );
+            }
+            _ => panic!("Expected a tool call block"),
+        }
+
+        // Case 5b: Parallel tool calls with one invalid call
+        let inference_id = Uuid::now_v7();
+        let content = vec![
+            ContentBlock::ToolCall(ToolCall {
+                name: "get_temperature".to_string(),
+                arguments: r#"{"location": "moon", "units": "celsius"}"#.to_string(),
+                id: "0".to_string(),
+            }),
+            ContentBlock::ToolCall(ToolCall {
+                name: "get_temperature".to_string(),
+                arguments: r#"{"invalid": "args"}"#.to_string(),
+                id: "1".to_string(),
+            }),
+        ];
+        let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            system: None,
+            input_messages: vec![],
+            output: content.clone(),
+            raw_request: raw_request.clone(),
+            raw_response: "".to_string(),
+            usage: usage.clone(),
+            latency: Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+            model_provider_name: "test_provider",
+            model_name: "test_model",
+        }];
+
+        let chat_inference_response = ChatInferenceResult::new(
+            inference_id,
+            content,
+            usage.clone(),
+            model_inference_responses,
+            Some(&weather_tool_config),
+            InferenceParams::default(),
+        )
+        .await;
+        assert_eq!(chat_inference_response.content.len(), 2);
+
+        // Verify first tool call (valid)
+        match &chat_inference_response.content[0] {
+            ContentBlockOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.raw_name, "get_temperature");
+                assert_eq!(
+                    tool_call.raw_arguments,
+                    r#"{"location": "moon", "units": "celsius"}"#
+                );
+                assert_eq!(tool_call.id, "0");
+                assert_eq!(tool_call.name, Some("get_temperature".to_string()));
+                assert_eq!(
+                    tool_call.arguments,
+                    Some(
+                        serde_json::from_str(r#"{"location": "moon", "units": "celsius"}"#)
+                            .unwrap()
+                    )
+                );
+            }
+            _ => panic!("Expected a tool call block"),
+        }
+
+        // Verify second tool call (invalid arguments)
+        match &chat_inference_response.content[1] {
+            ContentBlockOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.raw_name, "get_temperature");
+                assert_eq!(tool_call.raw_arguments, r#"{"invalid": "args"}"#);
+                assert_eq!(tool_call.id, "1");
+                assert_eq!(tool_call.name, Some("get_temperature".to_string()));
+                assert_eq!(tool_call.arguments, None); // Arguments should be None due to validation failure
+            }
+            _ => panic!("Expected a tool call block"),
+        }
+
+        // Case 6: Additional tools
+        let inference_id = Uuid::now_v7();
+        let additional_tool_config = ToolCallConfig {
+            tools_available: vec![ToolConfig::Dynamic(DynamicToolConfig {
+                name: "custom_tool".to_string(),
+                description: "A custom tool".to_string(),
+                parameters: DynamicJSONSchema::new(
+                    serde_json::from_str(
+                        r#"{
+                    "type": "object",
+                    "properties": {
+                        "input": {"type": "string"}
+                    },
+                    "required": ["input"]
+                }"#,
+                    )
+                    .unwrap(),
+                ),
+                strict: true,
+            })],
+            tool_choice: ToolChoice::None,
+            parallel_tool_calls: false,
+        };
+
+        // Test valid arguments for additional tool
+        let content = vec![ContentBlock::ToolCall(ToolCall {
+            name: "custom_tool".to_string(),
+            arguments: r#"{"input": "test"}"#.to_string(),
+            id: "0".to_string(),
+        })];
+        let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            system: None,
+            input_messages: vec![],
+            output: content.clone(),
+            raw_request: raw_request.clone(),
+            raw_response: "".to_string(),
+            usage: usage.clone(),
+            latency: Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+            model_provider_name: "test_provider",
+            model_name: "test_model",
+        }];
+
+        let chat_inference_response = ChatInferenceResult::new(
+            inference_id,
+            content,
+            usage.clone(),
+            model_inference_responses,
+            Some(&additional_tool_config),
+            InferenceParams::default(),
+        )
+        .await;
+        assert_eq!(chat_inference_response.content.len(), 1);
+
+        // Verify valid tool call
+        match &chat_inference_response.content[0] {
+            ContentBlockOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.raw_name, "custom_tool");
+                assert_eq!(tool_call.raw_arguments, r#"{"input": "test"}"#);
+                assert_eq!(tool_call.id, "0");
+                assert_eq!(tool_call.name, Some("custom_tool".to_string()));
+                assert_eq!(
+                    tool_call.arguments,
+                    Some(serde_json::from_str(r#"{"input": "test"}"#).unwrap())
+                );
+            }
+            _ => panic!("Expected a tool call block"),
+        }
+
+        // Test invalid arguments for additional tool
+        let content = vec![ContentBlock::ToolCall(ToolCall {
+            name: "custom_tool".to_string(),
+            arguments: r#"{"wrong": "field"}"#.to_string(),
+            id: "1".to_string(),
+        })];
+        let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            system: None,
+            input_messages: vec![],
+            output: content.clone(),
+            raw_request: raw_request.clone(),
+            raw_response: "".to_string(),
+            usage: usage.clone(),
+            latency: Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+            model_provider_name: "test_provider",
+            model_name: "test_model",
+        }];
+
+        let chat_inference_response = ChatInferenceResult::new(
+            inference_id,
+            content,
+            usage.clone(),
+            model_inference_responses,
+            Some(&additional_tool_config),
+            InferenceParams::default(),
+        )
+        .await;
+        assert_eq!(chat_inference_response.content.len(), 1);
+
+        // Verify invalid tool call
+        match &chat_inference_response.content[0] {
+            ContentBlockOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.raw_name, "custom_tool");
+                assert_eq!(tool_call.raw_arguments, r#"{"wrong": "field"}"#);
+                assert_eq!(tool_call.id, "1");
+                assert_eq!(tool_call.name, Some("custom_tool".to_string()));
+                assert_eq!(tool_call.arguments, None); // Arguments should be None due to validation failure
+            }
+            _ => panic!("Expected a tool call block"),
+        }
+
+        // Case 7: Allowed tools restriction
+        let inference_id = Uuid::now_v7();
+        let restricted_tool_config = ToolCallConfig {
+            tools_available: vec![ToolConfig::Dynamic(DynamicToolConfig {
+                name: "weather_tool".to_string(),
+                description: "Get weather information".to_string(),
+                parameters: DynamicJSONSchema::new(
+                    serde_json::from_str(
+                        r#"{
+                    "type": "object",
+                    "properties": {
+                        "location": {"type": "string"},
+                        "units": {"type": "string", "enum": ["celsius", "fahrenheit"]}
+                    },
+                    "required": ["location"]
+                }"#,
+                    )
+                    .unwrap(),
+                ),
+                strict: true,
+            })],
+            tool_choice: ToolChoice::None,
+            parallel_tool_calls: false,
+        };
+
+        // Test allowed tool call
+        let content = vec![ContentBlock::ToolCall(ToolCall {
+            name: "weather_tool".to_string(),
+            arguments: r#"{"location": "moon", "units": "celsius"}"#.to_string(),
+            id: "0".to_string(),
+        })];
+        let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            system: None,
+            input_messages: vec![],
+            output: content.clone(),
+            raw_request: raw_request.clone(),
+            raw_response: "".to_string(),
+            usage: usage.clone(),
+            latency: Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+            model_provider_name: "test_provider",
+            model_name: "test_model",
+        }];
+
+        let chat_inference_response = ChatInferenceResult::new(
+            inference_id,
+            content,
+            usage.clone(),
+            model_inference_responses,
+            Some(&restricted_tool_config),
+            InferenceParams::default(),
+        )
+        .await;
+        assert_eq!(chat_inference_response.content.len(), 1);
+
+        // Verify allowed tool call
+        match &chat_inference_response.content[0] {
+            ContentBlockOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.raw_name, "weather_tool");
+                assert_eq!(
+                    tool_call.raw_arguments,
+                    r#"{"location": "moon", "units": "celsius"}"#
+                );
+                assert_eq!(tool_call.id, "0");
+                assert_eq!(tool_call.name, Some("weather_tool".to_string()));
+                assert_eq!(
+                    tool_call.arguments,
+                    Some(
+                        serde_json::from_str(r#"{"location": "moon", "units": "celsius"}"#)
+                            .unwrap()
+                    )
+                );
+            }
+            _ => panic!("Expected a tool call block"),
+        }
+
+        // Test disallowed tool call
+        let content = vec![ContentBlock::ToolCall(ToolCall {
+            name: "get_humidity".to_string(), // This tool is not in the restricted config
+            arguments: r#"{"location": "moon"}"#.to_string(),
+            id: "1".to_string(),
+        })];
+        let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
+            id: Uuid::now_v7(),
+            created: Instant::now().elapsed().as_secs(),
+            system: None,
+            input_messages: vec![],
+            output: content.clone(),
+            raw_request: raw_request.clone(),
+            raw_response: "".to_string(),
+            usage: usage.clone(),
+            latency: Latency::NonStreaming {
+                response_time: Duration::default(),
+            },
+            model_provider_name: "test_provider",
+            model_name: "test_model",
+        }];
+
+        let chat_inference_response = ChatInferenceResult::new(
+            inference_id,
+            content,
+            usage.clone(),
+            model_inference_responses,
+            Some(&restricted_tool_config),
+            InferenceParams::default(),
+        )
+        .await;
+        assert_eq!(chat_inference_response.content.len(), 1);
+
+        // Verify disallowed tool call
+        match &chat_inference_response.content[0] {
+            ContentBlockOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.raw_name, "get_humidity");
+                assert_eq!(tool_call.raw_arguments, r#"{"location": "moon"}"#);
+                assert_eq!(tool_call.id, "1");
+                assert_eq!(tool_call.name, None); // Name should be None since tool is not allowed
+                assert_eq!(tool_call.arguments, None); // Arguments should be None since tool is not allowed
             }
             _ => panic!("Expected a tool call block"),
         }
