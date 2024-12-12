@@ -129,8 +129,6 @@ impl<'a> Migration for Migration0006<'a> {
                     batch_id
                 FROM BatchModelInference
             "#;
-
-        //
         let _ = self.clickhouse.run_query(query.to_string()).await?;
 
         // Alter the `response_time_ms` column of `ModelInference` to be a nullable column

@@ -62,6 +62,7 @@ impl<'a> StartBatchModelInferenceResponse<'a> {
     }
 }
 
+/// Returned from poll_batch_inference from a variant.
 /// Here, we add context from the variant, such as the original inputs, templated input messages,
 /// systems, tool configs, inference params, model_name, and output schemas.
 pub struct StartBatchModelInferenceWithMetadata<'a> {
@@ -251,9 +252,11 @@ impl<'a> BatchRequestRow<'a> {
     }
 }
 
-/// Below are types required for parsing and processing inputs for batch inference requests.
-/// The idea here is that we need to get a vector of the length of the number of inferences
-/// so that we can use existing code.
+/*  Below are types required for parsing and processing inputs for batch inference requests.
+ *  The idea here is that we need to get a vector of the length of the number of inferences
+ *  so that we can use existing code.
+ */
+
 pub struct BatchEpisodeIdsWithSize(pub Option<BatchEpisodeIdInput>, pub usize);
 pub type BatchEpisodeIds = Vec<Uuid>;
 

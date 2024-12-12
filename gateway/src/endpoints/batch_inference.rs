@@ -597,7 +597,8 @@ async fn write_start_batch_inference<'a>(
         },
     );
     let mut rows: Vec<BatchModelInferenceRow<'_>> = vec![];
-    // Process each row
+
+    // Process each row by serializing the stuff that needs to be serialized twice
     for row in inference_rows {
         let tool_params: Option<ToolCallConfigDatabaseInsert> = row.tool_config.map(|t| t.into());
 

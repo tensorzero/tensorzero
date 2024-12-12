@@ -15,6 +15,10 @@ impl Error {
         Error(details)
     }
 
+    pub fn new_without_logging(details: ErrorDetails) -> Self {
+        Error(details)
+    }
+
     pub fn status_code(&self) -> StatusCode {
         self.0.status_code()
     }
