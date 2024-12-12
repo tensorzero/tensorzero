@@ -16,6 +16,9 @@ describe("Minijinja Wasm Integration", () => {
     const context = { name: "Alice" };
     const result = await env.render("greeting", context);
     expect(result).toBe("Hello, Alice!");
+    expect(env.has_template("greeting")).toBe(true);
+    expect(env.has_template("farewell")).toBe(true);
+    expect(env.has_template("invalid")).toBe(false);
   });
 
   it("renders farewell template correctly", async () => {
@@ -27,7 +30,7 @@ describe("Minijinja Wasm Integration", () => {
   it("handles invalid template gracefully", async () => {
     const invalidContext = { name: "Charlie" };
     await expect(
-      async () => await env.render("invalid", invalidContext)
+      async () => await env.render("invalid", invalidContext),
     ).rejects.toThrow(/template not found: template "invalid" does not exist/i);
   });
 });

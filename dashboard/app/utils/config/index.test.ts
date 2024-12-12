@@ -1,15 +1,10 @@
-import { readFileSync } from "fs";
-import { parse } from "smol-toml";
 import { expect, test } from "vitest";
-import { Config } from "./index";
+import { loadConfig } from "./index";
 
-test("parse e2e config", () => {
-  const tomlContent = readFileSync(
+test("parse e2e config", async () => {
+  const validatedConfig = await loadConfig(
     "./../gateway/tests/e2e/tensorzero.toml",
-    "utf-8",
   );
-  const parsedConfig = parse(tomlContent);
-  const validatedConfig = Config.parse(parsedConfig);
   expect(validatedConfig).toBeDefined();
   // Test something in the gateway config
   expect(validatedConfig.gateway.bind_address).toBe("0.0.0.0:3000");

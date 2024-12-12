@@ -1,6 +1,11 @@
 import { z } from "zod";
 
-export const MetricConfigType = z.enum(["boolean", "float"]);
+export const MetricConfigType = z.enum([
+  "boolean",
+  "float",
+  "comment",
+  "demonstration",
+]);
 export type MetricConfigType = z.infer<typeof MetricConfigType>;
 
 export const MetricConfigOptimize = z.enum(["min", "max"]);
