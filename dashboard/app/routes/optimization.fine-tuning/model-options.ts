@@ -4,6 +4,9 @@ export type ModelOption = {
   provider: "openai" | "fireworks" | "mistral";
 };
 
+// TODO: make a type per model provider containing
+// what information is needed in order to start a fine-tuning job.
+
 export const models: ModelOption[] = [
   {
     displayName: "gpt-4o",
