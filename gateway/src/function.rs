@@ -136,7 +136,7 @@ impl FunctionConfig {
         content_blocks: Vec<ContentBlock>,
         usage: Usage,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
-        inference_config: &InferenceConfig<'request>,
+        inference_config: &'request InferenceConfig<'a, 'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult<'a>, Error> {
         match self {
@@ -146,7 +146,7 @@ impl FunctionConfig {
                     content_blocks,
                     usage,
                     model_inference_results,
-                    inference_config.tool_config.as_ref(),
+                    inference_config.tool_config,
                     inference_params,
                 )
                 .await,
@@ -1278,11 +1278,12 @@ mod tests {
             model_name: "model_name",
             latency,
         };
+        let templates = TemplateConfig::default();
         let inference_config = InferenceConfig {
             tool_config: None,
-            function_name: "".to_string(),
-            variant_name: "".to_string(),
-            templates: &TemplateConfig::default(),
+            function_name: "",
+            variant_name: Some(""),
+            templates: &templates,
             dynamic_output_schema: None,
         };
         let response = function_config
@@ -1557,10 +1558,10 @@ mod tests {
         }));
         let inference_config = InferenceConfig {
             tool_config: None,
-            function_name: "".to_string(),
-            variant_name: "".to_string(),
-            templates: &TemplateConfig::default(),
-            dynamic_output_schema: Some(dynamic_output_schema),
+            function_name: "",
+            variant_name: Some(""),
+            templates: &templates,
+            dynamic_output_schema: Some(&dynamic_output_schema),
         };
         // Test with a correct content block
         let inference_id = Uuid::now_v7();
