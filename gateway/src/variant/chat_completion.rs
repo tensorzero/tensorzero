@@ -7,7 +7,7 @@ use crate::endpoints::inference::{InferenceClients, InferenceModels, InferencePa
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::{
-    batch::BatchModelInferenceWithMetadata, ContentBlock, InferenceResultChunk,
+    batch::StartBatchModelInferenceWithMetadata, ContentBlock, InferenceResultChunk,
     InferenceResultStream, Input, InputMessageContent, ModelInferenceRequest, RequestMessage, Role,
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
@@ -330,7 +330,7 @@ impl Variant for ChatCompletionConfig {
         inference_configs: &'a [InferenceConfig<'a, 'a>],
         clients: &'a InferenceClients<'a>,
         inference_params: Vec<InferenceParams>,
-    ) -> Result<BatchModelInferenceWithMetadata<'a>, Error> {
+    ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
         // First construct all inference configs so they stick around for the duration of this function body
         let mut inference_params = inference_params;
 
@@ -357,7 +357,7 @@ impl Variant for ChatCompletionConfig {
                 clients.credentials,
             )
             .await?;
-        Ok(BatchModelInferenceWithMetadata::new(
+        Ok(StartBatchModelInferenceWithMetadata::new(
             model_inference_response,
             inference_requests,
             &self.model,

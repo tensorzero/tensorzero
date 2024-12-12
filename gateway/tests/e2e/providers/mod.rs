@@ -1,6 +1,7 @@
 mod anthropic;
 mod aws_bedrock;
 mod azure;
+#[cfg(feature = "batch_tests")]
 mod batch;
 mod common;
 mod fireworks;

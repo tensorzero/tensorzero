@@ -22,7 +22,11 @@ use crate::inference::providers::mistral::MistralCredentials;
 use crate::inference::providers::openai::OpenAICredentials;
 use crate::inference::providers::together::TogetherCredentials;
 use crate::inference::providers::vllm::VLLMCredentials;
-use crate::inference::types::batch::{BatchModelInferenceResponse, BatchProviderInferenceResponse};
+use crate::inference::types::batch::BatchRequestRow;
+use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::batch::{
+    StartBatchModelInferenceResponse, StartBatchProviderInferenceResponse,
+};
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
@@ -131,7 +135,7 @@ impl ModelConfig {
         requests: &'request [ModelInferenceRequest<'request>],
         client: &'request Client,
         api_keys: &'request InferenceCredentials,
-    ) -> Result<BatchModelInferenceResponse<'a>, Error> {
+    ) -> Result<StartBatchModelInferenceResponse<'a>, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
             let provider_config = self.providers.get(provider_name).ok_or_else(|| {
@@ -144,7 +148,10 @@ impl ModelConfig {
                 .await;
             match response {
                 Ok(response) => {
-                    return Ok(BatchModelInferenceResponse::new(response, provider_name));
+                    return Ok(StartBatchModelInferenceResponse::new(
+                        response,
+                        provider_name,
+                    ));
                 }
                 Err(error) => {
                     provider_errors.insert(provider_name.to_string(), error);
@@ -745,7 +752,7 @@ impl ProviderConfig {
         requests: &'a [ModelInferenceRequest<'a>],
         client: &'a Client,
         api_keys: &'a InferenceCredentials,
-    ) -> Result<BatchProviderInferenceResponse, Error> {
+    ) -> Result<StartBatchProviderInferenceResponse, Error> {
         match self {
             ProviderConfig::Anthropic(provider) => {
                 provider
@@ -806,6 +813,77 @@ impl ProviderConfig {
             ProviderConfig::Dummy(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
+        }
+    }
+
+    pub async fn poll_batch_inference<'a>(
+        &self,
+        batch_request: &'a BatchRequestRow<'_>,
+        http_client: &'a reqwest::Client,
+        dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<PollBatchInferenceResponse, Error> {
+        match self {
+            ProviderConfig::Anthropic(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::AWSBedrock(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::Azure(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::Fireworks(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::GCPVertexAnthropic(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::GCPVertexGemini(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::GoogleAIStudioGemini(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::Mistral(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::OpenAI(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::Together(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::VLLM(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            #[cfg(any(test, feature = "e2e_tests"))]
+            ProviderConfig::Dummy(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
             }
         }
