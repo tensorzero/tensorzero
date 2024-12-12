@@ -1,5 +1,5 @@
 import { poll_fine_tuning_job } from "~/utils/fine_tuning/openai.server";
-import { type LoaderFunctionArgs } from "@remix-run/node";
+import { type LoaderFunctionArgs } from "react-router";
 
 export async function loader({ params }: LoaderFunctionArgs) {
   const { job_id } = params;

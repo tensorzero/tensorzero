@@ -1,4 +1,4 @@
-import { type ActionFunctionArgs } from "@remix-run/node";
+import { type ActionFunctionArgs } from "react-router";
 import { getConfig } from "~/utils/config.server";
 import { getCuratedInferences } from "~/utils/clickhouse";
 import type { FormValues } from "~/routes/optimization.fine-tuning/route";

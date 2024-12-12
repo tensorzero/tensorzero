@@ -5,8 +5,8 @@ import {
   Scripts,
   ScrollRestoration,
   useLoaderData,
-} from "@remix-run/react";
-import type { LinksFunction } from "@remix-run/node";
+} from "react-router";
+import type { LinksFunction } from "react-router";
 import { getConfig } from "~/utils/config.server";
 import "./tailwind.css";
 import { ConfigProvider } from "./context/config";

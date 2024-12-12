@@ -1,4 +1,4 @@
-import { type MetaFunction } from "@remix-run/node";
+import { type MetaFunction } from "react-router";
 import { Form } from "~/components/ui/form";
 import { Button } from "~/components/ui/button";
 import { ModelOption, models } from "./model-options";
