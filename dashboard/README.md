@@ -1,40 +1,48 @@
-# Welcome to Remix!
+# TensorZero Dashboard
 
-- 📖 [Remix docs](https://remix.run/docs)
+## Status
 
-## Development
+This dashboard is currently a work in progress.
 
-Run the dev server:
+Our goals for this project are to:
 
-```shellscript
-npm run dev
-```
+- [ ] Allow users to run TensorZero recipes through the dashboard. To start, this will include:
 
-## Deployment
+  - [ ] Supervised fine-tuning
+  - [ ] Dynamic in-context learning
 
-First, build your app for production:
+- [ ] Allow users to review inferences and episodes and provide feedback to either.
+- [ ] Provide an easy dashboard showing the relative performance of different variants for a particular function.
+- [ ] Allow users to edit the configuration through the dashboard.
 
-```sh
-npm run build
-```
+Currently, we are building out the dashboard incrementally.
+We have the beginning of a fine-tuning form that uses the OpenAI fine-tuning API.
 
-Then run the app in production mode:
+## Running the Dashboard
 
-```sh
-npm start
-```
+### Prerequisites
 
-Now you'll need to pick a host to deploy it to.
+- Node.js (we have only tested with v22.9.0)
+- Docker Compose
+- a Rust toolchain
 
-### DIY
+### Setup
 
-If you're familiar with deploying Node applications, the built-in Remix app server is production-ready.
+Currently, the dashboard only runs against hardcoded fixtures in `fixtures/`.
+It depends on a running ClickHouse instance that has been initialized with the TensorZero data model.
+We include some fixture data as well in order to exercise some functionality.
+You will need Docker Compose installed to run the dependencies.
 
-Make sure to deploy the output of `npm run build`
+It also requires a one-time build of a WebAssembly module from Rust source code that is used to ensure consistent templating of messages across the gateway and dashboard.
 
-- `build/server`
-- `build/client`
+Here are the steps in order to run or test the dashboard assuming you have the prerequisites installed and this repository checked out:
 
-## Styling
+1. Install npm dependencies: `npm install`
+2. Build the WebAssembly module following instructions in `app/utils/minijinja/README.md`.
+3. Create a `.env` file in the `dashboard` directory containing `OPENAI_API_KEY=<your-key>` (for the gateway). Also make sure your `OPENAI_API_KEY` environment variable is set (for the server).
+4. Run the dependencies: `docker compose -f fixtures/docker-compose.yml up`
 
-This template comes with [Tailwind CSS](https://tailwindcss.com/) already configured for a simple default starting experience. You can use whatever css framework you prefer. See the [Vite docs on css](https://vitejs.dev/guide/features.html#css) for more information.
+With the dependencies running, you can run the tests with `npm run test`.
+Similarly, you can start a development server with `npm run dev`.
+
+We do not currently have a production build process or any way to change configuration.
