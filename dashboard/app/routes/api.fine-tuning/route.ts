@@ -1,33 +1,46 @@
-import { type ActionFunctionArgs } from "react-router";
+import { type LoaderFunctionArgs, type ActionFunctionArgs } from "react-router";
 import { getConfig } from "~/utils/config.server";
-import { getCuratedInferences } from "~/utils/clickhouse";
+import { getCuratedInferences, ParsedInferenceRow } from "~/utils/clickhouse";
 import type { FormValues } from "~/routes/optimization.fine-tuning/route";
 import { ChatCompletionConfig, get_template_env } from "~/utils/config/variant";
 import {
-  OpenAIMessage,
-  tensorzero_inference_to_openai_messages,
-} from "~/utils/fine_tuning/openai";
-import {
-  upload_examples_to_openai,
-  create_fine_tuning_job,
+  poll_openai_fine_tuning_job,
+  start_sft_openai,
 } from "~/utils/fine_tuning/openai.server";
+import { BadRequestError, ErrorWithStatus, NotFoundError } from "~/utils/error";
 
-function splitValidationData(
-  messages: OpenAIMessage[][],
-  validationSplit: number,
-) {
-  const splitIndex =
-    validationSplit > 0
-      ? Math.floor(messages.length * (1 - validationSplit / 100))
-      : messages.length;
+export async function loader({ request }: LoaderFunctionArgs) {
+  const url = new URL(request.url);
+  const provider_name = url.searchParams.get("provider_name");
+  if (!provider_name) {
+    return Response.json(
+      { error: "Provider name is required" },
+      { status: 400 },
+    );
+  }
+  switch (provider_name) {
+    case "openai":
+      try {
+        const job = await poll_openai_fine_tuning_job(url.searchParams);
 
-  const trainMessages = messages.slice(0, splitIndex);
-  const valMessages = validationSplit > 0 ? messages.slice(splitIndex) : [];
-
-  return {
-    trainMessages,
-    valMessages,
-  };
+        if (job) {
+          return Response.json({
+            status: job.status,
+            fine_tuned_model: job.fine_tuned_model,
+            job: job,
+          });
+        } else {
+          throw new NotFoundError("Job not found");
+        }
+      } catch (error) {
+        return Response.json(
+          { error: (error as Error).message },
+          { status: error instanceof ErrorWithStatus ? error.status : 500 },
+        );
+      }
+    default:
+      return Response.json({ error: "Provider not found" }, { status: 404 });
+  }
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -57,33 +70,57 @@ export async function action({ request }: ActionFunctionArgs) {
     );
 
     const template_env = await get_template_env(current_variant);
-    const messages = curatedInferences?.map((inference) =>
-      tensorzero_inference_to_openai_messages(inference, template_env),
-    );
-
-    const { trainMessages, valMessages } = splitValidationData(
-      messages,
+    const { trainInferences, valInferences } = splitValidationData(
+      curatedInferences,
       data.validationSplit,
     );
-
-    const file_id = await upload_examples_to_openai(trainMessages);
-
-    let val_file_id: string | null = null;
-    if (valMessages.length > 0) {
-      val_file_id = await upload_examples_to_openai(valMessages);
+    let params;
+    switch (data.model.provider) {
+      case "openai": {
+        const job_id = await start_sft_openai(
+          data.model.name,
+          trainInferences,
+          valInferences,
+          template_env,
+        );
+        params = {
+          provider: "openai",
+          job_id: job_id,
+        };
+        break;
+      }
+      // TODO: Add Fireworks here
+      default:
+        throw new BadRequestError("Unsupported model provider");
     }
-    const job_id = await create_fine_tuning_job(
-      data.model.name,
-      file_id,
-      val_file_id ?? undefined,
-    );
 
     return Response.json({
       status: "success",
       message: "Fine-tuning job started",
-      job_id,
+      params,
     });
   } catch (error) {
-    return Response.json({ error: (error as Error).message }, { status: 500 });
+    return Response.json(
+      { error: (error as Error).message },
+      { status: error instanceof ErrorWithStatus ? error.status : 500 },
+    );
   }
+}
+
+function splitValidationData(
+  inferences: ParsedInferenceRow[],
+  validationSplit: number,
+) {
+  const splitIndex =
+    validationSplit > 0
+      ? Math.floor(inferences.length * (1 - validationSplit / 100))
+      : inferences.length;
+
+  const trainInferences = inferences.slice(0, splitIndex);
+  const valInferences = validationSplit > 0 ? inferences.slice(splitIndex) : [];
+
+  return {
+    trainInferences,
+    valInferences,
+  };
 }
