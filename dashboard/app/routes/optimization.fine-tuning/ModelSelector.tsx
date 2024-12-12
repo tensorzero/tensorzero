@@ -15,16 +15,32 @@ type ModelSelectorProps = {
   models: ModelOption[];
 };
 
-function formatProvider(provider: string) {
+function formatProvider(provider: string): { name: string; className: string } {
   switch (provider) {
     case "openai":
-      return "OpenAI";
+      return {
+        name: "OpenAI",
+        className:
+          "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
+      };
     case "anthropic":
-      return "Anthropic";
+      return {
+        name: "Anthropic",
+        className:
+          "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
+      };
     case "mistral":
-      return "Mistral";
+      return {
+        name: "Mistral",
+        className:
+          "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300",
+      };
     default:
-      return provider;
+      return {
+        name: provider,
+        className:
+          "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300",
+      };
   }
 }
 
@@ -40,24 +56,28 @@ export function ModelSelector({ control, models }: ModelSelectorProps) {
             <Select
               onValueChange={(value) => {
                 const selectedModel = models.find(
-                  (model) => model.name === value,
+                  (model) => model.displayName === value,
                 );
                 if (selectedModel) {
                   field.onChange(selectedModel);
                 }
               }}
-              defaultValue={field.value?.name}
+              defaultValue={field.value?.displayName}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select a model" />
               </SelectTrigger>
               <SelectContent>
                 {models.map((model) => (
-                  <SelectItem key={model.name} value={model.name}>
+                  <SelectItem key={model.displayName} value={model.displayName}>
                     <div className="flex items-center justify-between w-full">
-                      <span>{model.name}</span>
-                      <span className="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300">
-                        {formatProvider(model.provider)}
+                      <span>{model.displayName}</span>
+                      <span
+                        className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                          formatProvider(model.provider).className
+                        }`}
+                      >
+                        {formatProvider(model.provider).name}
                       </span>
                     </div>
                   </SelectItem>
