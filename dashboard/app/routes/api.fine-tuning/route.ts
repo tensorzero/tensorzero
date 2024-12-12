@@ -1,4 +1,4 @@
-import { json, type ActionFunctionArgs } from "@remix-run/node";
+import { type ActionFunctionArgs } from "@remix-run/node";
 import { getConfig } from "~/utils/config.server";
 import { getCuratedInferences } from "~/utils/clickhouse";
 import type { FormValues } from "~/routes/optimization.fine-tuning/route";
@@ -32,7 +32,7 @@ function splitValidationData(
 
 export async function action({ request }: ActionFunctionArgs) {
   if (request.method !== "POST") {
-    return json({ error: "Method not allowed" }, { status: 405 });
+    return Response.json({ error: "Method not allowed" }, { status: 405 });
   }
 
   try {
@@ -42,7 +42,10 @@ export async function action({ request }: ActionFunctionArgs) {
       data.variant
     ] as ChatCompletionConfig;
     if (data.model.provider !== "openai") {
-      return json({ error: "Unsupported model provider" }, { status: 400 });
+      return Response.json(
+        { error: "Unsupported model provider" },
+        { status: 400 },
+      );
     }
 
     // Get curated inferences
@@ -75,12 +78,12 @@ export async function action({ request }: ActionFunctionArgs) {
       val_file_id ?? undefined,
     );
 
-    return json({
+    return Response.json({
       status: "success",
       message: "Fine-tuning job started",
       job_id,
     });
   } catch (error) {
-    return json({ error: (error as Error).message }, { status: 500 });
+    return Response.json({ error: (error as Error).message }, { status: 500 });
   }
 }

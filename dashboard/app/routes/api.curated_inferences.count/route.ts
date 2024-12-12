@@ -1,4 +1,3 @@
-import { json } from "@remix-run/node";
 import { LoaderFunctionArgs } from "@remix-run/node";
 import {
   countCuratedInferences,
@@ -42,5 +41,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
       config.metrics[metricName],
     );
   }
-  return json({ inferenceCount, feedbackCount, curatedInferenceCount });
+  return Response.json({
+    inferenceCount,
+    feedbackCount,
+    curatedInferenceCount,
+  });
 }

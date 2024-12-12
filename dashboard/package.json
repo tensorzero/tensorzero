@@ -42,6 +42,8 @@
   "devDependencies": {
     "@eslint/js": "^9.13.0",
     "@remix-run/dev": "^2.15.1",
+    "@remix-run/fs-routes": "^2.15.1",
+    "@remix-run/route-config": "^2.15.1",
     "@types/react": "^18.2.20",
     "@types/react-dom": "^18.2.7",
     "@typescript-eslint/eslint-plugin": "^6.7.4",
