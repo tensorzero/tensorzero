@@ -1647,3 +1647,70 @@ pub async fn e2e_test_dynamic_api_key() {
     );
     // It's not necessary to check ModelInference table given how many other places we do that
 }
+
+#[tokio::test]
+async fn test_inference_invalid_params() {
+    let episode_id = Uuid::now_v7();
+
+    // Test with invalid params structure (including fake_variant_type)
+    let invalid_payload = json!({
+        "function_name": "basic_test",
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the capital city of Japan?"
+                }
+            ]},
+        "params": {
+            "chat_completion": {
+                "temperature": 0.9,
+                "seed": 1337,
+                "max_tokens": 120,
+                "top_p": 0.9,
+                "presence_penalty": 0.1,
+                "frequency_penalty": 0.2,
+            },
+            "fake_variant_type": {
+                "temperature": 0.8,
+                "seed": 7331,
+                "max_tokens": 80,
+                "top_p": 0.9,
+                "presence_penalty": 0.1,
+                "frequency_penalty": 0.2,
+            }
+        },
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&invalid_payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Should fail with 400 Bad Request
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    // Create valid payload by removing the fake_variant_type from params
+    let mut valid_payload = invalid_payload.clone();
+    if let Some(params) = valid_payload
+        .get_mut("params")
+        .and_then(|p| p.as_object_mut())
+    {
+        params.remove("fake_variant_type");
+    }
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&valid_payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Should succeed with 200 OK
+    assert_eq!(response.status(), StatusCode::OK);
+}

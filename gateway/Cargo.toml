@@ -35,6 +35,7 @@ bytes = "1.6.1"
 derive_builder = "0.20.0"
 futures = "0.3.30"
 futures-core = "0.3.30"
+itertools = "0.13.0"
 jsonschema = "0.18.0"
 jsonwebtoken = "9.3.0"
 lazy_static = { version = "1.5.0" }
@@ -47,6 +48,7 @@ minijinja = { version = "2.1.0", features = ["loader", "debug"] }
 rand = "0.8.5"
 reqwest = { version = "0.12.5", features = [
     "json",
+    "multipart",
     "rustls-tls",
 ], default-features = false }
 reqwest-eventsource = "0.6.0"
