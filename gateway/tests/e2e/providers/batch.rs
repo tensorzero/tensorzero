@@ -1095,7 +1095,7 @@ pub async fn test_poll_existing_inference_params_batch_inference_request_with_pr
     let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
     // Check the response from polling by batch_id
-    check_simple_inference_response(inferences_json[0].clone(), None, &provider, true).await;
+    check_inference_params_response(inferences_json[0].clone(), &provider, None, true).await;
 
     // Check the response from polling by inference_id
     let inference_id = inferences_json[0]
@@ -1121,7 +1121,7 @@ pub async fn test_poll_existing_inference_params_batch_inference_request_with_pr
 
     let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
-    check_simple_inference_response(inferences_json[0].clone(), None, &provider, true).await;
+    check_inference_params_response(inferences_json[0].clone(), &provider, None, true).await;
 }
 
 /// If there is a completed batch inference for the function, variant, and tags
