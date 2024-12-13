@@ -161,6 +161,7 @@ async fn test_inference_with_explicit_region() {
     let _ = raw_response_json.get("debug").unwrap().as_str().unwrap();
 }
 
+#[cfg(feature = "e2e_tests")]
 #[tokio::test]
 async fn test_inference_with_explicit_broken_region() {
     let client = Client::new();

@@ -336,13 +336,14 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
 
     println!("API response: {response_json:#?}");
 
-    check_simple_inference_response(response_json, Some(episode_id), &provider).await;
+    check_simple_inference_response(response_json, Some(episode_id), &provider, false).await;
 }
 
 pub async fn check_simple_inference_response(
     response_json: Value,
     episode_id: Option<Uuid>,
     provider: &E2ETestProvider,
+    is_batch: bool,
 ) {
     let hardcoded_function_name = "basic_test";
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
@@ -420,8 +421,10 @@ pub async fn check_simple_inference_response(
     let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
     assert_eq!(clickhouse_content, content);
 
-    let tags = result.get("tags").unwrap().as_object().unwrap();
-    assert_eq!(tags.get("foo").unwrap().as_str().unwrap(), "bar");
+    if !is_batch {
+        let tags = result.get("tags").unwrap().as_object().unwrap();
+        assert_eq!(tags.get("foo").unwrap().as_str().unwrap(), "bar");
+    }
 
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
     assert!(tool_params.is_empty());
@@ -440,8 +443,10 @@ pub async fn check_simple_inference_response(
         100
     );
 
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert!(processing_time_ms > 0);
+    if !is_batch {
+        let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+        assert!(processing_time_ms > 0);
+    }
 
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
@@ -472,9 +477,11 @@ pub async fn check_simple_inference_response(
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
+    if !is_batch {
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
         system,
@@ -797,13 +804,14 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
 
     println!("API response: {response_json:#?}");
 
-    check_inference_params_response(response_json, &provider, Some(episode_id)).await;
+    check_inference_params_response(response_json, &provider, Some(episode_id), false).await;
 }
 
 pub async fn check_inference_params_response(
     response_json: Value,
     provider: &E2ETestProvider,
     episode_id: Option<Uuid>,
+    is_batch: bool,
 ) {
     let hardcoded_function_name = "basic_test";
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
@@ -916,8 +924,12 @@ pub async fn check_inference_params_response(
         .unwrap();
     assert_eq!(frequency_penalty, 0.2);
 
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert!(processing_time_ms > 0);
+    if !is_batch {
+        let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+        assert!(processing_time_ms > 0);
+    } else {
+        assert!(result.get("processing_time_ms").unwrap().is_null());
+    }
 
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
@@ -948,9 +960,14 @@ pub async fn check_inference_params_response(
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
+    if !is_batch {
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    } else {
+        assert!(result.get("response_time_ms").unwrap().is_null());
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
         system,
@@ -1259,6 +1276,7 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
         response_json,
         &provider,
         Some(episode_id),
+        false,
     )
     .await;
 }
@@ -1267,6 +1285,7 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
     response_json: Value,
     provider: &E2ETestProvider,
     episode_id: Option<Uuid>,
+    is_batch: bool,
 ) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
@@ -1453,9 +1472,11 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
+    if !is_batch {
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
 
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
@@ -1867,6 +1888,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
         response_json,
         &provider,
         Some(episode_id),
+        false,
     )
     .await;
 }
@@ -1875,6 +1897,7 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
     response_json: Value,
     provider: &E2ETestProvider,
     episode_id: Option<Uuid>,
+    is_batch: bool,
 ) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
@@ -1983,6 +2006,12 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
         location["description"],
         "The location to get the temperature for (e.g. \"New York\")"
     );
+    if !is_batch {
+        let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+        assert!(processing_time_ms > 0);
+    } else {
+        assert!(result.get("processing_time_ms").unwrap().is_null());
+    }
 
     let units = properties["units"].as_object().unwrap();
     assert_eq!(units["type"], "string");
@@ -2023,6 +2052,14 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
     );
+    if !is_batch {
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    } else {
+        assert!(result.get("response_time_ms").unwrap().is_null());
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("mehta"));
