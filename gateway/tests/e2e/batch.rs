@@ -329,10 +329,14 @@ async fn test_write_read_completed_batch_inference_chat() {
     let response = ProviderBatchInferenceResponse {
         elements: HashMap::from([(inference_id1, output_1), (inference_id2, output_2)]),
     };
-    let inference_responses =
+    let mut inference_responses =
         write_completed_batch_inference(&clickhouse, &batch_request, response, &config)
             .await
             .unwrap();
+
+    // Sort responses by inference_id to ensure consistent ordering
+    inference_responses.sort_by_key(|response| response.inference_id());
+
     assert_eq!(inference_responses.len(), 2);
     let inference_response_1 = &inference_responses[0];
     let inference_response_2 = &inference_responses[1];
@@ -421,8 +425,8 @@ async fn test_write_read_completed_batch_inference_chat() {
         .map(|r| (r.inference_id(), r))
         .collect();
     let original_responses: HashMap<_, _> = [inference_response_1, inference_response_2]
-        .iter()
-        .map(|r| (r.inference_id(), *r))
+        .into_iter()
+        .map(|r| (r.inference_id(), r))
         .collect();
 
     // Compare the HashMaps
@@ -518,14 +522,24 @@ async fn test_write_read_completed_batch_inference_json() {
         write_completed_batch_inference(&clickhouse, &batch_request, response, &config)
             .await
             .unwrap();
+
     assert_eq!(inference_responses.len(), 2);
-    let inference_response_1 = &inference_responses[0];
-    let inference_response_2 = &inference_responses[1];
-    println!("inference_response_1: {:?}", inference_response_1);
-    println!("inference_response_2: {:?}", inference_response_2);
-    println!("inference id 1: {}", inference_id1);
-    println!("inference id 2: {}", inference_id2);
-    match inference_response_1 {
+
+    // Create a map of responses by inference_id for easier lookup
+    let responses_by_id: HashMap<_, _> = inference_responses
+        .iter()
+        .map(|r| (r.inference_id(), r))
+        .collect();
+
+    // Now we can safely access each response by its ID
+    let response_1 = responses_by_id
+        .get(&inference_id1)
+        .expect("Missing response for inference_id1");
+    let response_2 = responses_by_id
+        .get(&inference_id2)
+        .expect("Missing response for inference_id2");
+
+    match response_1 {
         InferenceResponse::Json(json_inference_response) => {
             assert_eq!(json_inference_response.inference_id, inference_id1);
             assert_eq!(
@@ -541,7 +555,7 @@ async fn test_write_read_completed_batch_inference_json() {
         _ => panic!("Unexpected inference response type"),
     }
 
-    match inference_response_2 {
+    match response_2 {
         InferenceResponse::Json(json_inference_response) => {
             assert_eq!(json_inference_response.inference_id, inference_id2);
             assert_eq!(
@@ -632,8 +646,8 @@ async fn test_write_read_completed_batch_inference_json() {
         .iter()
         .map(|r| (r.inference_id(), r))
         .collect();
-    let original_responses: HashMap<_, _> = [inference_response_1, inference_response_2]
-        .iter()
+    let original_responses: HashMap<_, _> = [response_1, response_2]
+        .into_iter()
         .map(|r| (r.inference_id(), *r))
         .collect();
 

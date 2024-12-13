@@ -2434,6 +2434,7 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
         response_json,
         &provider,
         Some(episode_id),
+        false,
     )
     .await;
 }
@@ -2442,6 +2443,7 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
     response_json: Value,
     provider: &E2ETestProvider,
     episode_id: Option<Uuid>,
+    is_batch: bool,
 ) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
@@ -2628,9 +2630,14 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
+    if !is_batch {
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    } else {
+        assert!(result.get("response_time_ms").unwrap().is_null());
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
 
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
@@ -3039,14 +3046,20 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
 
     println!("API response: {response_json:#?}");
 
-    check_tool_use_tool_choice_none_inference_response(response_json, &provider, Some(episode_id))
-        .await;
+    check_tool_use_tool_choice_none_inference_response(
+        response_json,
+        &provider,
+        Some(episode_id),
+        false,
+    )
+    .await;
 }
 
 pub async fn check_tool_use_tool_choice_none_inference_response(
     response_json: Value,
     provider: &E2ETestProvider,
     episode_id: Option<Uuid>,
+    is_batch: bool,
 ) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
@@ -3202,9 +3215,11 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
+    if !is_batch {
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
 
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
@@ -3591,6 +3606,7 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
         response_json,
         &provider,
         Some(episode_id),
+        false,
     )
     .await;
 }
@@ -3599,6 +3615,7 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
     response_json: Value,
     provider: &E2ETestProvider,
     episode_id: Option<Uuid>,
+    is_batch: bool,
 ) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
@@ -3809,9 +3826,11 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
+    if !is_batch {
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
 
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
@@ -4254,7 +4273,7 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
-        "function_name": "basic_test",
+        "function_name": "weather_helper",
         "episode_id": episode_id,
         "input":{
             "system": {"assistant_name": "Dr. Mehta"},
@@ -4286,6 +4305,7 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
         response_json,
         &provider,
         Some(episode_id),
+        false,
     )
     .await;
 }
@@ -4294,6 +4314,7 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
     response_json: Value,
     provider: &E2ETestProvider,
     episode_id: Option<Uuid>,
+    is_batch: bool,
 ) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
@@ -4361,7 +4382,7 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "basic_test");
+    assert_eq!(function_name, "weather_helper");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -4459,9 +4480,11 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
+    if !is_batch {
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
 
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
@@ -4868,13 +4891,15 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
     let response_json = response.json::<Value>().await.unwrap();
 
     println!("API response: {response_json:#?}");
-    check_tool_use_multi_turn_inference_response(response_json, &provider, Some(episode_id)).await;
+    check_tool_use_multi_turn_inference_response(response_json, &provider, Some(episode_id), false)
+        .await;
 }
 
 pub async fn check_tool_use_multi_turn_inference_response(
     response_json: Value,
     provider: &E2ETestProvider,
     episode_id: Option<Uuid>,
+    is_batch: bool,
 ) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
@@ -5026,9 +5051,11 @@ pub async fn check_tool_use_multi_turn_inference_response(
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
+    if !is_batch {
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
 
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
@@ -5439,13 +5466,15 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
     let response_json = response.json::<Value>().await.unwrap();
 
     println!("API response: {response_json:#?}");
-    check_dynamic_tool_use_inference_response(response_json, &provider, Some(episode_id)).await;
+    check_dynamic_tool_use_inference_response(response_json, &provider, Some(episode_id), false)
+        .await;
 }
 
 pub async fn check_dynamic_tool_use_inference_response(
     response_json: Value,
     provider: &E2ETestProvider,
     episode_id: Option<Uuid>,
+    is_batch: bool,
 ) {
     let hardcoded_function_name = "basic_test";
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
@@ -5627,9 +5656,11 @@ pub async fn check_dynamic_tool_use_inference_response(
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
+    if !is_batch {
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
 
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
@@ -7002,6 +7033,7 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
         &provider,
         Some(episode_id),
         Some(output_schema),
+        false,
     )
     .await;
 }
@@ -7011,6 +7043,7 @@ pub async fn check_dynamic_json_mode_inference_response(
     provider: &E2ETestProvider,
     episode_id: Option<Uuid>,
     output_schema: Option<Value>,
+    is_batch: bool,
 ) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
@@ -7149,9 +7182,11 @@ pub async fn check_dynamic_json_mode_inference_response(
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
+    if !is_batch {
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
 
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
