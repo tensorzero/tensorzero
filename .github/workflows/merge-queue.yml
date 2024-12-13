@@ -2,6 +2,7 @@ name: Merge Queue Checks
 
 on:
   merge_group:
+  push:
 
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }} # for E2E tests
@@ -119,3 +120,19 @@ jobs:
 
       - name: Run inference for production deployment tests
         run: examples/production-deployment/run_example_inference.sh
+
+      - name: Tear down production deployment tests
+        run: docker compose -f examples/production-deployment/docker-compose.yml down
+
+      - name: Set up CLICKHOUSE_URL for batch tests
+        run: |
+          echo "CLICKHOUSE_URL=${{ secrets.CLICKHOUSE_CLOUD_URL }}" >> $GITHUB_ENV
+
+      - name: Launch the gateway for batch tests
+        run: |
+          cargo run-e2e &
+          echo "GATEWAY_PID=$!" >> $GITHUB_ENV
+
+      - name: Run batch tests
+        run: |
+          cargo test-batch
