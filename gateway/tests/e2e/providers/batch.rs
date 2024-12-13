@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use gateway::{
     clickhouse::ClickHouseConnectionInfo,
+    endpoints::batch_inference::PollPathParams,
     inference::types::{
         batch::{BatchModelInferenceRow, BatchRequestRow},
         ContentBlock, RequestMessage, Role,
@@ -14,6 +15,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use std::collections::HashSet;
 use tokio::time::{sleep, Duration};
+use url::Url;
 use uuid::Uuid;
 
 use crate::{
@@ -358,13 +360,30 @@ macro_rules! generate_batch_inference_tests {
     };
 }
 
-/// tests we need:
-/// - launch a new batch inference (done)
-/// - if there is a pending batch inference already in the DB for this function and variant, poll it by batch_id
-/// - assuming there is a completed batch inference already in DB, duplicate it using `insert_fake_pending_batch_inference_data`
-///     - test polling by batch_id and then by inference_id
-///     - do the same thing again and test polling by inference_id and then by batch_id
-///
+fn get_poll_batch_inference_url(query: PollPathParams) -> Url {
+    let mut url = get_gateway_endpoint("/batch_inference");
+    match query {
+        PollPathParams {
+            batch_id,
+            inference_id: None,
+        } => {
+            url.path_segments_mut().unwrap().push(&batch_id.to_string());
+            url
+        }
+        PollPathParams {
+            batch_id,
+            inference_id: Some(inference_id),
+        } => {
+            url.path_segments_mut()
+                .unwrap()
+                .push(&batch_id.to_string())
+                .push("inference")
+                .push(&inference_id.to_string());
+            url
+        }
+    }
+}
+
 async fn get_latest_batch_inference(
     clickhouse: &ClickHouseConnectionInfo,
     function_name: &str,
@@ -510,7 +529,7 @@ pub async fn test_start_simple_batch_inference_request_with_provider(provider: E
     });
 
     let response = Client::new()
-        .post(get_gateway_endpoint("/start_batch_inference"))
+        .post(get_gateway_endpoint("/batch_inference"))
         .json(&payload)
         .send()
         .await
@@ -687,15 +706,17 @@ pub async fn test_poll_existing_simple_batch_inference_request_with_provider(
         Some(batch_inference) => batch_inference,
     };
     let batch_id = batch_inference.batch_id;
-    let response = Client::new()
-        .post(get_gateway_endpoint("/poll_batch_inference"))
-        .json(&json!({ "batch_id": batch_id }))
-        .send()
-        .await
-        .unwrap();
+
+    let url = get_poll_batch_inference_url(PollPathParams {
+        batch_id,
+        inference_id: None,
+    });
+    println!("URL: {url}");
+    let response = Client::new().get(url).send().await.unwrap();
 
     // Check that the API response is ok
-    // assert_eq!(response.status(), StatusCode::OK);
+    println!("Response: {response:#?}");
+    assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
     println!("API response: {response_json:#?}");
     match response_json.get("status").unwrap().as_str().unwrap() {
@@ -769,12 +790,11 @@ pub async fn test_poll_completed_simple_batch_inference_request_with_provider(
     sleep(Duration::from_millis(200)).await;
 
     // Poll by inference_id
-    let response = Client::new()
-        .post(get_gateway_endpoint("/poll_batch_inference"))
-        .json(&json!({ "inference_id": ids.inference_id}))
-        .send()
-        .await
-        .unwrap();
+    let url = get_poll_batch_inference_url(PollPathParams {
+        batch_id: ids.batch_id,
+        inference_id: Some(ids.inference_id),
+    });
+    let response = Client::new().get(url).send().await.unwrap();
 
     // Check that the API response is ok
     assert_eq!(response.status(), StatusCode::OK);
@@ -860,7 +880,7 @@ pub async fn test_start_inference_params_batch_inference_request_with_provider(
     });
 
     let response = Client::new()
-        .post(get_gateway_endpoint("/start_batch_inference"))
+        .post(get_gateway_endpoint("/batch_inference"))
         .json(&payload)
         .send()
         .await
@@ -1053,12 +1073,11 @@ pub async fn test_poll_existing_inference_params_batch_inference_request_with_pr
         Some(batch_inference) => batch_inference,
     };
     let batch_id = batch_inference.batch_id;
-    let response = Client::new()
-        .post(get_gateway_endpoint("/poll_batch_inference"))
-        .json(&json!({ "batch_id": batch_id }))
-        .send()
-        .await
-        .unwrap();
+    let url = get_poll_batch_inference_url(PollPathParams {
+        batch_id,
+        inference_id: None,
+    });
+    let response = Client::new().get(url).send().await.unwrap();
 
     // Check that the API response is ok
     assert_eq!(response.status(), StatusCode::OK);
@@ -1135,12 +1154,11 @@ pub async fn test_poll_completed_inference_params_batch_inference_request_with_p
     sleep(Duration::from_millis(200)).await;
 
     // Poll by inference_id
-    let response = Client::new()
-        .post(get_gateway_endpoint("/poll_batch_inference"))
-        .json(&json!({ "inference_id": ids.inference_id}))
-        .send()
-        .await
-        .unwrap();
+    let url = get_poll_batch_inference_url(PollPathParams {
+        batch_id: ids.batch_id,
+        inference_id: Some(ids.inference_id),
+    });
+    let response = Client::new().get(url).send().await.unwrap();
 
     // Check that the API response is ok
     assert_eq!(response.status(), StatusCode::OK);
@@ -1271,7 +1289,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
     });
 
     let response = Client::new()
-        .post(get_gateway_endpoint("/start_batch_inference"))
+        .post(get_gateway_endpoint("/batch_inference"))
         .json(&payload)
         .send()
         .await
@@ -1744,12 +1762,11 @@ pub async fn test_poll_existing_tool_choice_batch_inference_request_with_provide
     let inference_tags = get_tags_for_batch_inferences(&clickhouse, batch_id)
         .await
         .unwrap();
-    let response = Client::new()
-        .post(get_gateway_endpoint("/poll_batch_inference"))
-        .json(&json!({ "batch_id": batch_id }))
-        .send()
-        .await
-        .unwrap();
+    let url = get_poll_batch_inference_url(PollPathParams {
+        batch_id,
+        inference_id: None,
+    });
+    let response = Client::new().get(url).send().await.unwrap();
 
     // Check that the API response is ok
     assert_eq!(response.status(), StatusCode::OK);
@@ -1867,12 +1884,11 @@ pub async fn test_poll_completed_tool_use_batch_inference_request_with_provider(
     sleep(Duration::from_millis(200)).await;
 
     // Poll by batch_id
-    let response = Client::new()
-        .post(get_gateway_endpoint("/poll_batch_inference"))
-        .json(&json!({ "batch_id": ids.batch_id }))
-        .send()
-        .await
-        .unwrap();
+    let url = get_poll_batch_inference_url(PollPathParams {
+        batch_id,
+        inference_id: None,
+    });
+    let response = Client::new().get(url).send().await.unwrap();
 
     // Check that the API response is ok
     assert_eq!(response.status(), StatusCode::OK);
@@ -1997,7 +2013,7 @@ pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider
     });
 
     let response = Client::new()
-        .post(get_gateway_endpoint("/start_batch_inference"))
+        .post(get_gateway_endpoint("/batch_inference"))
         .json(&payload)
         .send()
         .await
@@ -2207,12 +2223,11 @@ pub async fn test_poll_existing_multi_turn_batch_inference_request_with_provider
         Some(batch_inference) => batch_inference,
     };
     let batch_id = batch_inference.batch_id;
-    let response = Client::new()
-        .post(get_gateway_endpoint("/poll_batch_inference"))
-        .json(&json!({ "batch_id": batch_id }))
-        .send()
-        .await
-        .unwrap();
+    let url = get_poll_batch_inference_url(PollPathParams {
+        batch_id,
+        inference_id: None,
+    });
+    let response = Client::new().get(url).send().await.unwrap();
 
     // Check that the API response is ok
     assert_eq!(response.status(), StatusCode::OK);
@@ -2289,12 +2304,11 @@ pub async fn test_poll_completed_multi_turn_batch_inference_request_with_provide
     sleep(Duration::from_millis(200)).await;
 
     // Poll by inference_id
-    let response = Client::new()
-        .post(get_gateway_endpoint("/poll_batch_inference"))
-        .json(&json!({ "inference_id": ids.inference_id}))
-        .send()
-        .await
-        .unwrap();
+    let url = get_poll_batch_inference_url(PollPathParams {
+        batch_id: ids.batch_id,
+        inference_id: Some(ids.inference_id),
+    });
+    let response = Client::new().get(url).send().await.unwrap();
 
     // Check that the API response is ok
     assert_eq!(response.status(), StatusCode::OK);
@@ -2385,7 +2399,7 @@ pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
     });
 
     let response = Client::new()
-        .post(get_gateway_endpoint("/start_batch_inference"))
+        .post(get_gateway_endpoint("/batch_inference"))
         .json(&payload)
         .send()
         .await
@@ -2585,12 +2599,11 @@ pub async fn test_poll_existing_dynamic_tool_use_batch_inference_request_with_pr
         Some(batch_inference) => batch_inference,
     };
     let batch_id = batch_inference.batch_id;
-    let response = Client::new()
-        .post(get_gateway_endpoint("/poll_batch_inference"))
-        .json(&json!({ "batch_id": batch_id }))
-        .send()
-        .await
-        .unwrap();
+    let url = get_poll_batch_inference_url(PollPathParams {
+        batch_id,
+        inference_id: None,
+    });
+    let response = Client::new().get(url).send().await.unwrap();
 
     // Check that the API response is ok
     assert_eq!(response.status(), StatusCode::OK);
@@ -2667,12 +2680,11 @@ pub async fn test_poll_completed_dynamic_tool_use_batch_inference_request_with_p
     sleep(Duration::from_millis(200)).await;
 
     // Poll by inference_id
-    let response = Client::new()
-        .post(get_gateway_endpoint("/poll_batch_inference"))
-        .json(&json!({ "inference_id": ids.inference_id}))
-        .send()
-        .await
-        .unwrap();
+    let url = get_poll_batch_inference_url(PollPathParams {
+        batch_id: ids.batch_id,
+        inference_id: Some(ids.inference_id),
+    });
+    let response = Client::new().get(url).send().await.unwrap();
 
     // Check that the API response is ok
     assert_eq!(response.status(), StatusCode::OK);
@@ -2741,7 +2753,7 @@ pub async fn test_parallel_tool_use_batch_inference_request_with_provider(
     });
 
     let response = Client::new()
-        .post(get_gateway_endpoint("/start_batch_inference"))
+        .post(get_gateway_endpoint("/batch_inference"))
         .json(&payload)
         .send()
         .await
@@ -2960,12 +2972,11 @@ pub async fn test_poll_existing_parallel_tool_use_batch_inference_request_with_p
         Some(batch_inference) => batch_inference,
     };
     let batch_id = batch_inference.batch_id;
-    let response = Client::new()
-        .post(get_gateway_endpoint("/poll_batch_inference"))
-        .json(&json!({ "batch_id": batch_id }))
-        .send()
-        .await
-        .unwrap();
+    let url = get_poll_batch_inference_url(PollPathParams {
+        batch_id,
+        inference_id: None,
+    });
+    let response = Client::new().get(url).send().await.unwrap();
 
     // Check that the API response is ok
     assert_eq!(response.status(), StatusCode::OK);
@@ -3042,12 +3053,11 @@ pub async fn test_poll_completed_parallel_tool_use_batch_inference_request_with_
     sleep(Duration::from_millis(200)).await;
 
     // Poll by inference_id
-    let response = Client::new()
-        .post(get_gateway_endpoint("/poll_batch_inference"))
-        .json(&json!({ "inference_id": ids.inference_id}))
-        .send()
-        .await
-        .unwrap();
+    let url = get_poll_batch_inference_url(PollPathParams {
+        batch_id: ids.batch_id,
+        inference_id: Some(ids.inference_id),
+    });
+    let response = Client::new().get(url).send().await.unwrap();
 
     // Check that the API response is ok
     assert_eq!(response.status(), StatusCode::OK);
@@ -3113,7 +3123,7 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
     });
 
     let response = Client::new()
-        .post(get_gateway_endpoint("/start_batch_inference"))
+        .post(get_gateway_endpoint("/batch_inference"))
         .json(&payload)
         .send()
         .await
@@ -3292,12 +3302,11 @@ pub async fn test_poll_existing_json_mode_batch_inference_request_with_provider(
         Some(batch_inference) => batch_inference,
     };
     let batch_id = batch_inference.batch_id;
-    let response = Client::new()
-        .post(get_gateway_endpoint("/poll_batch_inference"))
-        .json(&json!({ "batch_id": batch_id }))
-        .send()
-        .await
-        .unwrap();
+    let url = get_poll_batch_inference_url(PollPathParams {
+        batch_id,
+        inference_id: None,
+    });
+    let response = Client::new().get(url).send().await.unwrap();
 
     // Check that the API response is ok
     assert_eq!(response.status(), StatusCode::OK);
@@ -3374,12 +3383,11 @@ pub async fn test_poll_completed_json_mode_batch_inference_request_with_provider
     sleep(Duration::from_millis(200)).await;
 
     // Poll by inference_id
-    let response = Client::new()
-        .post(get_gateway_endpoint("/poll_batch_inference"))
-        .json(&json!({ "inference_id": ids.inference_id}))
-        .send()
-        .await
-        .unwrap();
+    let url = get_poll_batch_inference_url(PollPathParams {
+        batch_id: ids.batch_id,
+        inference_id: Some(ids.inference_id),
+    });
+    let response = Client::new().get(url).send().await.unwrap();
 
     // Check that the API response is ok
     assert_eq!(response.status(), StatusCode::OK);
@@ -3460,7 +3468,7 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
     });
 
     let response = Client::new()
-        .post(get_gateway_endpoint("/start_batch_inference"))
+        .post(get_gateway_endpoint("/batch_inference"))
         .json(&payload)
         .send()
         .await
@@ -3639,12 +3647,11 @@ pub async fn test_poll_existing_dynamic_json_mode_batch_inference_request_with_p
         Some(batch_inference) => batch_inference,
     };
     let batch_id = batch_inference.batch_id;
-    let response = Client::new()
-        .post(get_gateway_endpoint("/poll_batch_inference"))
-        .json(&json!({ "batch_id": batch_id }))
-        .send()
-        .await
-        .unwrap();
+    let url = get_poll_batch_inference_url(PollPathParams {
+        batch_id,
+        inference_id: None,
+    });
+    let response = Client::new().get(url).send().await.unwrap();
 
     // Check that the API response is ok
     assert_eq!(response.status(), StatusCode::OK);
@@ -3723,12 +3730,11 @@ pub async fn test_poll_completed_dynamic_json_mode_batch_inference_request_with_
     sleep(Duration::from_millis(200)).await;
 
     // Poll by inference_id
-    let response = Client::new()
-        .post(get_gateway_endpoint("/poll_batch_inference"))
-        .json(&json!({ "inference_id": ids.inference_id}))
-        .send()
-        .await
-        .unwrap();
+    let url = get_poll_batch_inference_url(PollPathParams {
+        batch_id: ids.batch_id,
+        inference_id: Some(ids.inference_id),
+    });
+    let response = Client::new().get(url).send().await.unwrap();
 
     // Check that the API response is ok
     assert_eq!(response.status(), StatusCode::OK);

@@ -13,7 +13,7 @@ use gateway::config_parser::Config;
 use gateway::endpoints::batch_inference::{
     get_batch_inferences, get_batch_request, get_completed_batch_inference_response,
     write_batch_request_row, write_completed_batch_inference, write_poll_batch_inference,
-    PollInferenceQuery, PollInferenceResponse,
+    PollInferenceResponse, PollPathParams,
 };
 use gateway::endpoints::inference::{InferenceParams, InferenceResponse};
 use gateway::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
@@ -57,7 +57,10 @@ async fn test_get_batch_request() {
     sleep(Duration::from_millis(200)).await;
 
     // First, let's query by batch ID
-    let query = PollInferenceQuery::Batch(batch_id);
+    let query = PollPathParams {
+        batch_id,
+        inference_id: None,
+    };
     let batch_request = get_batch_request(&clickhouse, &query).await.unwrap();
     assert_eq!(batch_request.batch_id, batch_id);
     assert_eq!(batch_request.batch_params.into_owned(), batch_params);
@@ -101,7 +104,10 @@ async fn test_get_batch_request() {
     sleep(Duration::from_millis(200)).await;
 
     // Now, let's query by inference ID
-    let query = PollInferenceQuery::Inference(inference_id);
+    let query = PollPathParams {
+        batch_id,
+        inference_id: Some(inference_id),
+    };
     let batch_request = get_batch_request(&clickhouse, &query).await.unwrap();
     assert_eq!(batch_request.batch_id, batch_id);
     assert_eq!(batch_request.function_name, function_name);
@@ -144,7 +150,10 @@ async fn test_write_poll_batch_inference() {
     .unwrap();
     assert_eq!(poll_inference_response, PollInferenceResponse::Pending);
     sleep(Duration::from_millis(1200)).await;
-    let query = PollInferenceQuery::Batch(batch_id);
+    let query = PollPathParams {
+        batch_id,
+        inference_id: None,
+    };
     let batch_request = get_batch_request(&clickhouse, &query).await.unwrap();
     assert_eq!(batch_request.batch_id, batch_id);
     assert_eq!(batch_request.status, BatchStatus::Pending);
@@ -172,7 +181,10 @@ async fn test_write_poll_batch_inference() {
     assert_eq!(poll_inference_response, PollInferenceResponse::Failed);
 
     sleep(Duration::from_millis(200)).await;
-    let query = PollInferenceQuery::Batch(batch_id);
+    let query = PollPathParams {
+        batch_id,
+        inference_id: None,
+    };
     // This should return the failed batch as it is more recent
     let batch_request = get_batch_request(&clickhouse, &query).await.unwrap();
     assert_eq!(batch_request.batch_id, batch_id);
@@ -387,7 +399,10 @@ async fn test_write_read_completed_batch_inference_chat() {
     assert_eq!(model_inference["model_provider_name"], model_provider_name);
 
     // Now, let's read this using `get_completed_batch_inference_response`
-    let query = PollInferenceQuery::Batch(batch_id);
+    let query = PollPathParams {
+        batch_id,
+        inference_id: None,
+    };
     let completed_inference_response = get_completed_batch_inference_response(
         &clickhouse,
         &batch_request,
@@ -414,7 +429,10 @@ async fn test_write_read_completed_batch_inference_chat() {
     assert_eq!(completed_responses, original_responses);
 
     // Now let's read using `get_completed_batch_inference_response` with a `PollInferenceQuery::Inference`
-    let query = PollInferenceQuery::Inference(inference_id1);
+    let query = PollPathParams {
+        batch_id,
+        inference_id: Some(inference_id1),
+    };
     let completed_inference_response = get_completed_batch_inference_response(
         &clickhouse,
         &batch_request,
@@ -593,7 +611,10 @@ async fn test_write_read_completed_batch_inference_json() {
     );
 
     // Now, let's read this using `get_completed_batch_inference_response`
-    let query = PollInferenceQuery::Batch(batch_id);
+    let query = PollPathParams {
+        batch_id,
+        inference_id: None,
+    };
     let completed_inference_response = get_completed_batch_inference_response(
         &clickhouse,
         &batch_request,
@@ -620,7 +641,10 @@ async fn test_write_read_completed_batch_inference_json() {
     assert_eq!(completed_responses, original_responses);
 
     // Now let's read using `get_completed_batch_inference_response` with a `PollInferenceQuery::Inference`
-    let query = PollInferenceQuery::Inference(inference_id1);
+    let query = PollPathParams {
+        batch_id,
+        inference_id: Some(inference_id1),
+    };
     let completed_inference_response = get_completed_batch_inference_response(
         &clickhouse,
         &batch_request,

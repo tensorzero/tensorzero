@@ -1,5 +1,5 @@
 use axum::body::Body;
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
 use axum::{debug_handler, Json};
 use itertools::{izip, Itertools};
@@ -297,29 +297,15 @@ struct PrepareBatchInferenceOutput {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct PollBatchInferenceParams {
-    #[serde(default)]
-    batch_id: Option<Uuid>,
-    #[serde(default)]
-    inference_id: Option<Uuid>,
-    #[serde(default)]
-    credentials: InferenceCredentials,
-}
-
-pub enum PollInferenceQuery {
-    Batch(Uuid),
-    Inference(Uuid),
+pub struct PollPathParams {
+    pub batch_id: Uuid,
+    pub inference_id: Option<Uuid>,
 }
 
 /// Polls a batch inference request that was made using the `/start_batch_inference` endpoint
 /// Semantics: if the batch is pending, it will actually poll the model provider
 /// If the batch is failed, it will return a failed response immediately
 /// If the batch is completed, it will return the appropriate response immediately from ClickHouse
-///
-/// We expect exactly one of `batch_id` or `inference_id` to be provided
-/// If the `inference_id` is provided, we'll still poll and insert the entire batch if it is pending.
-/// But, we will only return a single inference that matches the `inference_id`.
 #[instrument(name = "poll_batch_inference", skip_all, fields(query))]
 #[debug_handler(state = AppStateData)]
 pub async fn poll_batch_inference_handler(
@@ -328,19 +314,16 @@ pub async fn poll_batch_inference_handler(
         http_client,
         clickhouse_connection_info,
     }): AppState,
-    StructuredJson(params): StructuredJson<PollBatchInferenceParams>,
+    Path(path_params): Path<PollPathParams>,
 ) -> Result<Response<Body>, Error> {
-    let query = PollInferenceQuery::try_from(&params)?;
-    let batch_request = get_batch_request(&clickhouse_connection_info, &query).await?;
+    let batch_request = get_batch_request(&clickhouse_connection_info, &path_params).await?;
     match batch_request.status {
         BatchStatus::Pending => {
-            let response = poll_batch_inference(
-                &batch_request,
-                http_client,
-                &config.models,
-                &params.credentials,
-            )
-            .await?;
+            // For now, we don't support dynamic API keys for batch inference
+            let credentials = InferenceCredentials::default();
+            let response =
+                poll_batch_inference(&batch_request, http_client, &config.models, &credentials)
+                    .await?;
             let response = write_poll_batch_inference(
                 &clickhouse_connection_info,
                 &batch_request,
@@ -348,19 +331,19 @@ pub async fn poll_batch_inference_handler(
                 config,
             )
             .await?;
-            Ok(Json(response.filter_by_query(query)).into_response())
+            Ok(Json(response.filter_by_query(path_params)).into_response())
         }
         BatchStatus::Completed => {
             let function = config.get_function(&batch_request.function_name)?;
             let response = get_completed_batch_inference_response(
                 &clickhouse_connection_info,
                 &batch_request,
-                &query,
+                &path_params,
                 function,
             )
             .await?;
             let response = PollInferenceResponse::Completed(response);
-            Ok(Json(response.filter_by_query(query)).into_response())
+            Ok(Json(response.filter_by_query(path_params)).into_response())
         }
         BatchStatus::Failed => Ok(Json(PollInferenceResponse::Failed).into_response()),
     }
@@ -378,10 +361,10 @@ impl PollInferenceResponse {
     /// Filters the response by the provided query
     /// If the query is by an inference ID, it will return a single inference response
     /// Otherwise, it will return the entire batch
-    fn filter_by_query(self, query: PollInferenceQuery) -> PollInferenceResponse {
+    fn filter_by_query(self, path_params: PollPathParams) -> PollInferenceResponse {
         match self {
             PollInferenceResponse::Completed(response) => {
-                PollInferenceResponse::Completed(response.filter_by_query(query))
+                PollInferenceResponse::Completed(response.filter_by_query(path_params))
             }
             other => other,
         }
@@ -398,10 +381,15 @@ impl CompletedBatchInferenceResponse {
     /// Filters the response by the provided query
     /// If the query is by an inference ID, it will return a single inference response
     /// Otherwise, it will return the entire batch
-    fn filter_by_query(self, query: PollInferenceQuery) -> CompletedBatchInferenceResponse {
-        match query {
-            PollInferenceQuery::Batch(_) => self,
-            PollInferenceQuery::Inference(inference_id) => {
+    fn filter_by_query(self, path_params: PollPathParams) -> CompletedBatchInferenceResponse {
+        match path_params {
+            PollPathParams {
+                inference_id: None, ..
+            } => self,
+            PollPathParams {
+                inference_id: Some(inference_id),
+                ..
+            } => {
                 let responses = self
                     .responses
                     .into_iter()
@@ -416,28 +404,15 @@ impl CompletedBatchInferenceResponse {
     }
 }
 
-/// Handles the conversion from the `PollBatchInferenceParams` to a `PollInferenceQuery`
-/// This should error if both `batch_id` and `inference_id` are provided or if neither are provided
-impl TryFrom<&'_ PollBatchInferenceParams> for PollInferenceQuery {
-    type Error = Error;
-    fn try_from(value: &'_ PollBatchInferenceParams) -> Result<Self, Self::Error> {
-        match (value.batch_id, value.inference_id) {
-            (Some(batch_id), None) => Ok(PollInferenceQuery::Batch(batch_id)),
-            (None, Some(inference_id)) => Ok(PollInferenceQuery::Inference(inference_id)),
-            _ => Err(ErrorDetails::InvalidRequest {
-                message: "Exactly one of `batch_id` or `inference_id` must be provided".to_string(),
-            }
-            .into()),
-        }
-    }
-}
-
 pub async fn get_batch_request(
     clickhouse: &ClickHouseConnectionInfo,
-    query: &PollInferenceQuery,
+    path_params: &PollPathParams,
 ) -> Result<BatchRequestRow<'static>, Error> {
-    let response = match query {
-        PollInferenceQuery::Batch(batch_id) => {
+    let response = match path_params {
+        PollPathParams {
+            batch_id,
+            inference_id: None,
+        } => {
             let query = format!(
                 r#"
                     SELECT
@@ -464,7 +439,10 @@ pub async fn get_batch_request(
             }
             response
         }
-        PollInferenceQuery::Inference(inference_id) => {
+        PollPathParams {
+            inference_id: Some(inference_id),
+            ..
+        } => {
             let query = format!(
                 r#"
                     SELECT br.batch_id as batch_id,
@@ -913,12 +891,15 @@ pub async fn get_batch_inferences(
 pub async fn get_completed_batch_inference_response(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     batch_request: &BatchRequestRow<'_>,
-    query: &PollInferenceQuery,
+    path_params: &PollPathParams,
     function: &FunctionConfig,
 ) -> Result<CompletedBatchInferenceResponse, Error> {
     match function {
-        FunctionConfig::Chat(_chat_function) => match query {
-            PollInferenceQuery::Batch(batch_id) => {
+        FunctionConfig::Chat(_chat_function) => match path_params {
+            PollPathParams {
+                batch_id,
+                inference_id: None,
+            } => {
                 let query = format!(
                     "WITH batch_inferences AS (
                         SELECT inference_id
@@ -954,11 +935,14 @@ pub async fn get_completed_batch_inference_response(
                         .push(InferenceResponse::Chat(inference_response.try_into()?));
                 }
                 Ok(CompletedBatchInferenceResponse {
-                    batch_id: batch_request.batch_id,
+                    batch_id: *batch_id,
                     responses: inference_responses,
                 })
             }
-            PollInferenceQuery::Inference(inference_id) => {
+            PollPathParams {
+                inference_id: Some(inference_id),
+                ..
+            } => {
                 let query = format!(
                     "WITH inf_lookup AS (
                         SELECT episode_id
@@ -1005,8 +989,10 @@ pub async fn get_completed_batch_inference_response(
                 })
             }
         },
-        FunctionConfig::Json(_json_function) => match query {
-            PollInferenceQuery::Batch(batch_id) => {
+        FunctionConfig::Json(_json_function) => match path_params {
+            PollPathParams {
+                inference_id: None, ..
+            } => {
                 let query = format!(
                     "WITH batch_inferences AS (
                         SELECT inference_id
@@ -1027,7 +1013,7 @@ pub async fn get_completed_batch_inference_response(
                     AND ji.variant_name = '{}'
                     GROUP BY ji.id, ji.episode_id, ji.variant_name, ji.output
                     FORMAT JSONEachRow",
-                    batch_id, batch_request.function_name, batch_request.variant_name
+                    path_params.batch_id, batch_request.function_name, batch_request.variant_name
                 );
                 let response = clickhouse_connection_info.run_query(query).await?;
                 let mut inference_responses = Vec::new();
@@ -1046,7 +1032,10 @@ pub async fn get_completed_batch_inference_response(
                     responses: inference_responses,
                 })
             }
-            PollInferenceQuery::Inference(inference_id) => {
+            PollPathParams {
+                inference_id: Some(inference_id),
+                ..
+            } => {
                 let query = format!(
                     "WITH inf_lookup AS (
                         SELECT episode_id
