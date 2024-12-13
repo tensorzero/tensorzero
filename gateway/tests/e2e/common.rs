@@ -38,7 +38,7 @@ pub(crate) async fn select_chat_inference_clickhouse(
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
-        "SELECT * FROM ChatInference WHERE id = '{}' FORMAT JSONEachRow",
+        "SELECT * FROM ChatInference WHERE id = '{}' LIMIT 1 FORMAT JSONEachRow",
         inference_id
     );
 
@@ -54,8 +54,9 @@ pub(crate) async fn select_json_inference_clickhouse(
     #[cfg(feature = "e2e_tests")]
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
+    // We limit to 1 in case there are duplicate entries (can be caused by a race condition in polling batch inferences)
     let query = format!(
-        "SELECT * FROM JsonInference WHERE id = '{}' FORMAT JSONEachRow",
+        "SELECT * FROM JsonInference WHERE id = '{}' LIMIT 1 FORMAT JSONEachRow",
         inference_id
     );
 
@@ -71,8 +72,9 @@ pub(crate) async fn select_model_inference_clickhouse(
     #[cfg(feature = "e2e_tests")]
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
+    // We limit to 1 in case there are duplicate entries (can be caused by a race condition in polling batch inferences)
     let query = format!(
-        "SELECT * FROM ModelInference WHERE inference_id = '{}' FORMAT JSONEachRow",
+        "SELECT * FROM ModelInference WHERE inference_id = '{}' LIMIT 1 FORMAT JSONEachRow",
         inference_id
     );
 
@@ -88,6 +90,7 @@ pub(crate) async fn select_model_inferences_clickhouse(
     #[cfg(feature = "e2e_tests")]
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
+    // We limit to 1 in case there are duplicate entries (can be caused by a race condition in polling batch inferences)
     let query = format!(
         "SELECT * FROM ModelInference WHERE inference_id = '{}' FORMAT JSONEachRow",
         inference_id

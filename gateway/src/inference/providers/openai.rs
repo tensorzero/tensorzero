@@ -206,7 +206,7 @@ impl InferenceProvider for OpenAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let request_url = get_files_url(self.api_base.as_ref())?;
+        let request_url = get_file_url(self.api_base.as_ref(), None)?;
         let inference_ids: Vec<Uuid> = requests.iter().map(|_| Uuid::now_v7()).collect();
         let batch_requests: Result<Vec<OpenAIBatchFileInput>, Error> = requests
             .iter()
@@ -468,17 +468,7 @@ impl OpenAIProvider {
         client: &reqwest::Client,
         credentials: &InferenceCredentials,
     ) -> Result<ProviderBatchInferenceResponse, Error> {
-        let mut file_url = get_files_url(self.api_base.as_ref())?;
-        file_url = file_url.join(file_id).map_err(|e| {
-            Error::new(ErrorDetails::Inference {
-                message: format!("Error parsing file URL: {e}"),
-            })
-        })?;
-        file_url = file_url.join("content").map_err(|e| {
-            Error::new(ErrorDetails::Inference {
-                message: format!("Error parsing file URL: {e}"),
-            })
-        })?;
+        let file_url = get_file_url(self.api_base.as_ref(), Some(file_id))?;
         let api_key = self.credentials.get_api_key(credentials)?;
         let mut request_builder = client.get(file_url);
         if let Some(api_key) = api_key {
@@ -507,14 +497,12 @@ impl OpenAIProvider {
             })
         })?;
         let mut elements: HashMap<Uuid, ProviderBatchInferenceOutput> = HashMap::new();
-        for line in std::str::from_utf8(&bytes)
-            .map_err(|e| {
-                Error::new(ErrorDetails::OpenAIServer {
-                    message: format!("Error parsing batch results response: {e}"),
-                })
-            })?
-            .lines()
-        {
+        let text = std::str::from_utf8(&bytes).map_err(|e| {
+            Error::new(ErrorDetails::OpenAIServer {
+                message: format!("Error parsing batch results response: {e}"),
+            })
+        })?;
+        for line in text.lines() {
             let row = match serde_json::from_str::<OpenAIBatchFileRow>(line) {
                 Ok(row) => row,
                 Err(e) => {
@@ -552,13 +540,18 @@ pub(super) fn get_chat_url(base_url: Option<&Url>) -> Result<Url, Error> {
     })
 }
 
-fn get_files_url(base_url: Option<&Url>) -> Result<Url, Error> {
+fn get_file_url(base_url: Option<&Url>, file_id: Option<&str>) -> Result<Url, Error> {
     let base_url = base_url.unwrap_or(&OPENAI_DEFAULT_BASE_URL);
     let mut url = base_url.clone();
     if !url.path().ends_with('/') {
         url.set_path(&format!("{}/", url.path()));
     }
-    url.join("files").map_err(|e| {
+    let path = if let Some(id) = file_id {
+        format!("files/{}/content", id)
+    } else {
+        "files".to_string()
+    };
+    url.join(&path).map_err(|e| {
         Error::new(ErrorDetails::InvalidBaseUrl {
             message: e.to_string(),
         })
@@ -2784,5 +2777,64 @@ mod tests {
         let expected = None;
         let result = tensorzero_to_openai_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_create_file_url() {
+        use url::Url;
+
+        // Test Case 1: Base URL without trailing slash
+        let base_url = Url::parse("https://api.openai.com/v1").unwrap();
+        let file_id = Some("file123");
+        let result = get_file_url(Some(&base_url), file_id).unwrap();
+        assert_eq!(
+            result.as_str(),
+            "https://api.openai.com/v1/files/file123/content"
+        );
+
+        // Test Case 2: Base URL with trailing slash
+        let base_url = Url::parse("https://api.openai.com/v1/").unwrap();
+        let file_id = Some("file456");
+        let result = get_file_url(Some(&base_url), file_id).unwrap();
+        assert_eq!(
+            result.as_str(),
+            "https://api.openai.com/v1/files/file456/content"
+        );
+
+        // Test Case 3: Base URL with custom domain
+        let base_url = Url::parse("https://custom-openai.example.com").unwrap();
+        let file_id = Some("file789");
+        let result = get_file_url(Some(&base_url), file_id).unwrap();
+        assert_eq!(
+            result.as_str(),
+            "https://custom-openai.example.com/files/file789/content"
+        );
+
+        // Test Case 4: None base URL (should use default)
+        let file_id = Some("file101");
+        let result = get_file_url(None, file_id).unwrap();
+        assert_eq!(
+            result.as_str(),
+            "https://api.openai.com/v1/files/file101/content"
+        );
+
+        // Test Case 5: Base URL without trailing slash, no file ID
+        let base_url = Url::parse("https://api.openai.com/v1").unwrap();
+        let result = get_file_url(Some(&base_url), None).unwrap();
+        assert_eq!(result.as_str(), "https://api.openai.com/v1/files");
+
+        // Test Case 6: Base URL with trailing slash, no file ID
+        let base_url = Url::parse("https://api.openai.com/v1/").unwrap();
+        let result = get_file_url(Some(&base_url), None).unwrap();
+        assert_eq!(result.as_str(), "https://api.openai.com/v1/files");
+
+        // Test Case 7: Custom domain base URL, no file ID
+        let base_url = Url::parse("https://custom-openai.example.com").unwrap();
+        let result = get_file_url(Some(&base_url), None).unwrap();
+        assert_eq!(result.as_str(), "https://custom-openai.example.com/files");
+
+        // Test Case 8: None base URL (default), no file ID
+        let result = get_file_url(None, None).unwrap();
+        assert_eq!(result.as_str(), "https://api.openai.com/v1/files");
     }
 }
