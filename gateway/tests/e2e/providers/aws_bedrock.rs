@@ -1,8 +1,13 @@
+#[cfg(feature = "e2e_tests")]
 use reqwest::Client;
+#[cfg(feature = "e2e_tests")]
 use reqwest::StatusCode;
+#[cfg(feature = "e2e_tests")]
 use serde_json::{json, Value};
+#[cfg(feature = "e2e_tests")]
 use uuid::Uuid;
 
+#[cfg(feature = "e2e_tests")]
 use crate::common::get_gateway_endpoint;
 #[cfg(feature = "e2e_tests")]
 use crate::common::{

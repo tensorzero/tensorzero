@@ -462,6 +462,7 @@ pub fn stream_openai(
 }
 
 impl OpenAIProvider {
+    #[instrument(skip_all, fields(file_id = file_id))]
     async fn collect_finished_batch(
         &self,
         file_id: &str,
