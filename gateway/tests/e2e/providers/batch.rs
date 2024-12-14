@@ -1263,7 +1263,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
                             }
                         ]}
              ],
-        "tool_choice": [null, null, "required", "none", {"specific": "self_destruct"}, null],
+        "tool_choice": [null, null, "required", "none", {"specific": "self_destruct"}, "required"],
         "additional_tools": [null, null, null, null, [{
             "name": "self_destruct",
             "description": "Do not call this function under any circumstances.",
@@ -1590,7 +1590,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
                 "name": "get_humidity",
                 "strict": false
             }],
-            "tool_choice": "auto",
+            "tool_choice": "required",
             "parallel_tool_calls": false
         }),
     ];

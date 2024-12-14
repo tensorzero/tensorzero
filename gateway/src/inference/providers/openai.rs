@@ -332,7 +332,13 @@ impl InferenceProvider for OpenAIProvider {
                 message: format!("Error sending request to OpenAI: {e}"),
             })
         })?;
-        let response: OpenAIBatchResponse = res.json().await.map_err(|e| {
+        let text = res.text().await.map_err(|e| {
+            Error::new(ErrorDetails::OpenAIServer {
+                message: format!("Error parsing JSON response: {e}"),
+            })
+        })?;
+        println!("OpenAI batch response: {text}");
+        let response: OpenAIBatchResponse = serde_json::from_str(&text).map_err(|e| {
             Error::new(ErrorDetails::OpenAIServer {
                 message: format!("Error parsing JSON response: {e}"),
             })
