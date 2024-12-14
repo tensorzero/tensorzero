@@ -4273,7 +4273,7 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
-        "function_name": "weather_helper",
+        "function_name": "basic_test",
         "episode_id": episode_id,
         "input":{
             "system": {"assistant_name": "Dr. Mehta"},
@@ -4382,7 +4382,7 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "weather_helper");
+    assert_eq!(function_name, "basic_test");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
