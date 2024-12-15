@@ -101,7 +101,7 @@ impl<'a> Migration for Migration0006<'a> {
                 status Enum('pending' = 1, 'completed' = 2, 'failed' = 3),
                 function_name LowCardinality(String),
                 variant_name LowCardinality(String),
-                errors Map(UUID, String),
+                errors Array(String),
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id),
             ) ENGINE = MergeTree()
             ORDER BY (batch_id, id)

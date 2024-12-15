@@ -715,7 +715,7 @@ pub async fn test_start_simple_batch_inference_request_with_provider(provider: E
     let status = result.get("status").unwrap().as_str().unwrap();
     assert_eq!(status, "pending");
 
-    let errors = result.get("errors").unwrap().as_object().unwrap();
+    let errors = result.get("errors").unwrap().as_array().unwrap();
     assert_eq!(errors.len(), 0);
 }
 
@@ -1079,7 +1079,7 @@ pub async fn test_start_inference_params_batch_inference_request_with_provider(
     let status = result.get("status").unwrap().as_str().unwrap();
     assert_eq!(status, "pending");
 
-    let errors = result.get("errors").unwrap().as_object().unwrap();
+    let errors = result.get("errors").unwrap().as_array().unwrap();
     assert_eq!(errors.len(), 0);
 }
 
@@ -1691,7 +1691,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
     let status = result.get("status").unwrap().as_str().unwrap();
     assert_eq!(status, "pending");
 
-    let errors = result.get("errors").unwrap().as_object().unwrap();
+    let errors = result.get("errors").unwrap().as_array().unwrap();
     assert_eq!(errors.len(), 0);
 }
 
@@ -2147,7 +2147,7 @@ pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: 
     let status = result.get("status").unwrap().as_str().unwrap();
     assert_eq!(status, "pending");
 
-    let errors = result.get("errors").unwrap().as_object().unwrap();
+    let errors = result.get("errors").unwrap().as_array().unwrap();
     assert_eq!(errors.len(), 0);
 }
 
@@ -2552,7 +2552,7 @@ pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider
     let status = result.get("status").unwrap().as_str().unwrap();
     assert_eq!(status, "pending");
 
-    let errors = result.get("errors").unwrap().as_object().unwrap();
+    let errors = result.get("errors").unwrap().as_array().unwrap();
     assert_eq!(errors.len(), 0);
 }
 
@@ -2930,7 +2930,7 @@ pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
     let status = result.get("status").unwrap().as_str().unwrap();
     assert_eq!(status, "pending");
 
-    let errors = result.get("errors").unwrap().as_object().unwrap();
+    let errors = result.get("errors").unwrap().as_array().unwrap();
     assert_eq!(errors.len(), 0);
 }
 
@@ -3305,7 +3305,7 @@ pub async fn test_parallel_tool_use_batch_inference_request_with_provider(
     let status = result.get("status").unwrap().as_str().unwrap();
     assert_eq!(status, "pending");
 
-    let errors = result.get("errors").unwrap().as_object().unwrap();
+    let errors = result.get("errors").unwrap().as_array().unwrap();
     assert_eq!(errors.len(), 0);
 }
 
@@ -3638,7 +3638,7 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
     let status = result.get("status").unwrap().as_str().unwrap();
     assert_eq!(status, "pending");
 
-    let errors = result.get("errors").unwrap().as_object().unwrap();
+    let errors = result.get("errors").unwrap().as_array().unwrap();
     assert_eq!(errors.len(), 0);
 }
 
@@ -3981,7 +3981,7 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
     let status = result.get("status").unwrap().as_str().unwrap();
     assert_eq!(status, "pending");
 
-    let errors = result.get("errors").unwrap().as_object().unwrap();
+    let errors = result.get("errors").unwrap().as_array().unwrap();
     assert_eq!(errors.len(), 0);
 }
 

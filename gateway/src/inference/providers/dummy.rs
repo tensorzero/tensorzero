@@ -371,6 +371,7 @@ impl InferenceProvider for DummyProvider {
             batch_params: json!({"file_id": file_id, "batch_id": batch_id}),
             status: BatchStatus::Pending,
             raw_requests,
+            errors: vec![],
         })
     }
 

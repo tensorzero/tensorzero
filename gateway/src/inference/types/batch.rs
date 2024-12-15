@@ -33,6 +33,7 @@ pub struct StartBatchProviderInferenceResponse {
     pub raw_requests: Vec<String>,
     pub batch_params: Value,
     pub status: BatchStatus,
+    pub errors: Vec<Value>,
 }
 
 /// Returned from start_batch_inference from a model
@@ -44,6 +45,7 @@ pub struct StartBatchModelInferenceResponse<'a> {
     pub batch_params: Value,
     pub model_provider_name: &'a str,
     pub status: BatchStatus,
+    pub errors: Vec<Value>,
 }
 
 impl<'a> StartBatchModelInferenceResponse<'a> {
@@ -58,6 +60,7 @@ impl<'a> StartBatchModelInferenceResponse<'a> {
             batch_params: provider_batch_response.batch_params,
             model_provider_name,
             status: provider_batch_response.status,
+            errors: provider_batch_response.errors,
         }
     }
 }
@@ -68,6 +71,7 @@ impl<'a> StartBatchModelInferenceResponse<'a> {
 pub struct StartBatchModelInferenceWithMetadata<'a> {
     pub batch_id: Uuid,
     pub inference_ids: Vec<Uuid>,
+    pub errors: Vec<Value>,
     pub input_messages: Vec<Vec<RequestMessage>>,
     pub systems: Vec<Option<String>>,
     pub tool_configs: Vec<Option<Cow<'a, ToolCallConfig>>>,
@@ -110,6 +114,7 @@ impl<'a> StartBatchModelInferenceWithMetadata<'a> {
             model_provider_name: model_batch_response.model_provider_name,
             model_name,
             status: model_batch_response.status,
+            errors: model_batch_response.errors,
         }
     }
 }
@@ -135,7 +140,7 @@ pub struct BatchRequestRow<'a> {
     pub status: BatchStatus,
     pub function_name: Cow<'a, str>,
     pub variant_name: Cow<'a, str>,
-    pub errors: HashMap<String, String>,
+    pub errors: Vec<Value>,
 }
 
 fn deserialize_json_string<'de, D, T>(deserializer: D) -> Result<T, D::Error>
@@ -221,7 +226,7 @@ pub struct UnparsedBatchRequestRow<'a> {
     pub model_name: &'a str,
     pub model_provider_name: &'a str,
     pub status: BatchStatus,
-    pub errors: Option<HashMap<String, String>>,
+    pub errors: Vec<Value>,
 }
 
 impl<'a> BatchRequestRow<'a> {
@@ -237,7 +242,6 @@ impl<'a> BatchRequestRow<'a> {
             errors,
         } = unparsed;
         let id = Uuid::now_v7();
-        let errors = errors.unwrap_or_default();
         Self {
             batch_id,
             id,

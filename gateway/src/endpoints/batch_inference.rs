@@ -603,41 +603,27 @@ async fn write_start_batch_inference<'a>(
         .write(rows.as_slice(), "BatchModelInference")
         .await?;
 
-    write_batch_request_row(
-        clickhouse_connection_info,
-        result.batch_id,
-        &result.batch_params,
-        metadata.function_name,
-        metadata.variant_name,
-        result.model_name,
-        result.model_provider_name,
-    )
-    .await?;
+    let batch_request_insert = BatchRequestRow::new(UnparsedBatchRequestRow {
+        batch_id: result.batch_id,
+        batch_params: &result.batch_params,
+        function_name: metadata.function_name,
+        variant_name: metadata.variant_name,
+        model_name: result.model_name,
+        model_provider_name: result.model_provider_name,
+        status: BatchStatus::Pending,
+        errors: result.errors,
+    });
+    write_batch_request_row(clickhouse_connection_info, &batch_request_insert).await?;
 
     Ok((result.batch_id, result.inference_ids))
 }
 
 pub async fn write_batch_request_row(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
-    batch_id: Uuid,
-    batch_params: &Value,
-    function_name: &str,
-    variant_name: &str,
-    model_name: &str,
-    model_provider_name: &str,
+    batch_request: &BatchRequestRow<'_>,
 ) -> Result<(), Error> {
-    let batch_request_insert = BatchRequestRow::new(UnparsedBatchRequestRow {
-        batch_id,
-        batch_params,
-        function_name,
-        variant_name,
-        model_name,
-        model_provider_name,
-        status: BatchStatus::Pending,
-        errors: None,
-    });
     clickhouse_connection_info
-        .write(&[batch_request_insert], "BatchRequest")
+        .write(&[batch_request], "BatchRequest")
         .await
 }
 
@@ -704,7 +690,7 @@ async fn write_batch_request_status_update(
         model_name: &batch_request.model_name,
         model_provider_name: &batch_request.model_provider_name,
         status,
-        errors: None, // TODO(Viraj): make an issue here
+        errors: vec![], // TODO(Viraj): fix
     });
     clickhouse_connection_info
         .write(&[batch_request_insert], "BatchRequest")

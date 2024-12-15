@@ -42,17 +42,19 @@ async fn test_get_batch_request() {
     let variant_name = "test_variant";
     let model_name = "test_model";
     let model_provider_name = "test_model_provider";
-    write_batch_request_row(
-        &clickhouse,
+    let batch_request = BatchRequestRow::new(UnparsedBatchRequestRow {
         batch_id,
-        &batch_params,
+        batch_params: &batch_params,
         function_name,
         variant_name,
         model_name,
         model_provider_name,
-    )
-    .await
-    .unwrap();
+        status: BatchStatus::Pending,
+        errors: vec![],
+    });
+    write_batch_request_row(&clickhouse, &batch_request)
+        .await
+        .unwrap();
     // Sleep a bit to ensure the write has propagated
     sleep(Duration::from_millis(200)).await;
 
@@ -126,7 +128,7 @@ async fn test_write_poll_batch_inference() {
     let model_name = "test_model2";
     let model_provider_name = "test_model_provider2";
     let status = BatchStatus::Pending;
-    let errors = None;
+    let errors = vec![];
     let batch_request = BatchRequestRow::new(UnparsedBatchRequestRow {
         batch_id,
         batch_params: &batch_params,
@@ -168,7 +170,7 @@ async fn test_write_poll_batch_inference() {
         model_name,
         model_provider_name,
         status,
-        errors: None,
+        errors: vec![],
     });
     let poll_inference_response = write_poll_batch_inference(
         &clickhouse,
@@ -285,7 +287,7 @@ async fn test_write_read_completed_batch_inference_chat() {
     let model_name = "test_model";
     let model_provider_name = "test_model_provider";
     let status = BatchStatus::Pending;
-    let errors = None;
+    let errors = vec![];
     let batch_request = BatchRequestRow::new(UnparsedBatchRequestRow {
         batch_id,
         batch_params: &batch_params,
@@ -463,7 +465,6 @@ async fn test_write_read_completed_batch_inference_json() {
     let model_name = "test_model";
     let model_provider_name = "test_model_provider";
     let status = BatchStatus::Pending;
-    let errors = None;
     let batch_request = BatchRequestRow::new(UnparsedBatchRequestRow {
         batch_id,
         batch_params: &batch_params,
@@ -472,7 +473,7 @@ async fn test_write_read_completed_batch_inference_json() {
         model_name,
         model_provider_name,
         status,
-        errors,
+        errors: vec![],
     });
     let output_schema = JSONSchemaFromPath::from_value(&json!({
         "type": "object",

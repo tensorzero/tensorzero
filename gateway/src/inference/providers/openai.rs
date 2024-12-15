@@ -259,9 +259,14 @@ impl InferenceProvider for OpenAIProvider {
                 message: format!("Error sending request to OpenAI: {e}"),
             })
         })?;
-        let response: OpenAIFileResponse = res.json().await.map_err(|e| {
+        let text = res.text().await.map_err(|e| {
             Error::new(ErrorDetails::OpenAIServer {
                 message: format!("Error parsing JSON response: {e}"),
+            })
+        })?;
+        let response: OpenAIFileResponse = serde_json::from_str(&text).map_err(|e| {
+            Error::new(ErrorDetails::OpenAIServer {
+                message: format!("Error parsing JSON response: {e}, text: {text}"),
             })
         })?;
         let file_id = response.id;
@@ -280,9 +285,14 @@ impl InferenceProvider for OpenAIProvider {
                     message: format!("Error sending request to OpenAI: {e}"),
                 })
             })?;
-        let response: OpenAIBatchResponse = res.json().await.map_err(|e| {
+        let text = res.text().await.map_err(|e| {
             Error::new(ErrorDetails::OpenAIServer {
                 message: format!("Error parsing JSON response: {e}"),
+            })
+        })?;
+        let response: OpenAIBatchResponse = serde_json::from_str(&text).map_err(|e| {
+            Error::new(ErrorDetails::OpenAIServer {
+                message: format!("Error parsing JSON response: {e}, text: {text}"),
             })
         })?;
         let batch_params = OpenAIBatchParams {
@@ -294,12 +304,27 @@ impl InferenceProvider for OpenAIProvider {
                 message: format!("Error serializing OpenAI batch params: {e}"),
             })
         })?;
+        let errors = match response.errors {
+            Some(errors) => errors
+                .data
+                .into_iter()
+                .map(|error| {
+                    serde_json::to_value(&error).map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!("Error serializing batch error: {e}"),
+                        })
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+            None => vec![],
+        };
         Ok(StartBatchProviderInferenceResponse {
             batch_id: Uuid::now_v7(),
             inference_ids,
             batch_params,
             raw_requests,
             status: BatchStatus::Pending,
+            errors,
         })
     }
 
@@ -1484,7 +1509,7 @@ struct OpenAIBatchResponse {
     id: String,
     // object: String,
     // endpoint: String,
-    // errors: OpenAIBatchErrors,
+    errors: Option<OpenAIBatchErrors>,
     // input_file_id: String,
     // completion_window: String,
     status: OpenAIBatchStatus,
@@ -1586,15 +1611,15 @@ impl TryFrom<OpenAIBatchFileRow> for ProviderBatchInferenceOutput {
 #[derive(Debug, Deserialize)]
 struct OpenAIBatchErrors {
     // object: String,
-    // data: Vec<OpenAIBatchError>,
+    data: Vec<OpenAIBatchError>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct OpenAIBatchError {
-    // code: String,
-    // message: String,
-    // param: Option<String>,
-    // line: Option<i32>,
+    code: String,
+    message: String,
+    param: Option<String>,
+    line: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]

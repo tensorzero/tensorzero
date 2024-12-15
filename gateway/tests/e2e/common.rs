@@ -155,6 +155,7 @@ pub(crate) async fn select_inference_tags_clickhouse(
     tag_value: &str,
     inference_id: Uuid,
 ) -> Option<Value> {
+    #[cfg(feature = "e2e_tests")]
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
