@@ -34,5 +34,6 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: standard_providers.clone(),
         parallel_tool_use_inference: vec![],
         json_mode_inference: vec![],
+        supports_batch_inference: false,
     }
 }
