@@ -169,7 +169,7 @@ impl InferenceProvider for XAIProvider {
             Some(Ok(chunk)) => chunk,
             Some(Err(e)) => return Err(e),
             None => {
-                return Err(ErrorDetails::OpenAIServer {
+                return Err(ErrorDetails::XAIServer {
                     message: "Stream ended before first chunk".to_string(),
                 }
                 .into())
@@ -236,7 +236,7 @@ impl<'a> XAIRequest<'a> {
 
         if request.json_mode == ModelInferenceRequestJsonMode::Strict {
             return Err(ErrorDetails::InvalidRequest {
-                message: "The X AI Grok beta faily of models does not support strict JSON"
+                message: "The X AI Grok beta family of models does not support strict JSON"
                     .to_string(),
             }
             .into());
@@ -362,7 +362,7 @@ mod tests {
     };
 
     #[test]
-    fn test_azure_request_new() {
+    fn test_xai_request_new() {
         let request_with_tools = ModelInferenceRequest {
             messages: vec![RequestMessage {
                 role: Role::User,
