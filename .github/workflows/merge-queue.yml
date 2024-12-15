@@ -130,9 +130,11 @@ jobs:
 
       - name: Launch the gateway for batch tests
         run: |
-          cargo run-e2e &
+          cargo run-e2e & > output.txt
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
 
       - name: Run batch tests
         run: |
-          cargo test-batch
+          cargo test-batch || EXIT_CODE=$?
+          cat output.txt
+          exit ${EXIT_CODE:-1}
