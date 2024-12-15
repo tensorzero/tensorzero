@@ -841,6 +841,11 @@ impl ProviderConfig {
                     .start_batch_inference(requests, client, api_keys)
                     .await
             }
+            ProviderConfig::XAI(provider) => {
+                provider
+                    .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => {
                 provider
