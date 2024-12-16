@@ -9,12 +9,8 @@ import { startTransition, StrictMode } from "react";
 import { hydrateRoot } from "react-dom/client";
 
 startTransition(() => {
-  const root = document.getElementById("root");
-  if (!root) {
-    throw new Error("Root element not found");
-  }
   hydrateRoot(
-    root,
+    document,
     <StrictMode>
       <HydratedRouter />
     </StrictMode>,
