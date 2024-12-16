@@ -111,7 +111,7 @@ jobs:
       - name: Terminate the gateway
         run: |
           echo "Killing gateway with pid $GATEWAY_PID"
-          kill -9 $GATEWAY_PID
+          kill $GATEWAY_PID
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
