@@ -13,10 +13,50 @@ import {
 } from "../clickhouse";
 import { JsExposedEnv } from "../minijinja/pkg/minijinja_bindings";
 import { render_message } from "./rendering";
+import { splitValidationData } from "./common";
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+export async function poll_sft_openai(params: { job_id?: string }) {
+  const { job_id } = params;
+  if (!job_id) {
+    const error = new BadRequestError("Job ID is required to poll OpenAI SFT");
+    throw error;
+  }
+
+  const job = await client.fineTuning.jobs.retrieve(job_id);
+  return job;
+}
+
+export async function start_sft_openai(
+  modelName: string,
+  inferences: ParsedInferenceRow[],
+  val_split: number,
+  templateEnv: JsExposedEnv,
+) {
+  const { trainInferences, valInferences } = splitValidationData(
+    inferences,
+    val_split,
+  );
+  const trainMessages = trainInferences.map((inference) =>
+    tensorzero_inference_to_openai_messages(inference, templateEnv),
+  );
+  const valMessages = valInferences.map((inference) =>
+    tensorzero_inference_to_openai_messages(inference, templateEnv),
+  );
+  const [file_id, val_file_id] = await Promise.all([
+    upload_examples_to_openai(trainMessages),
+    upload_examples_to_openai(valMessages),
+  ]);
+  const job_id = await create_openai_fine_tuning_job(
+    modelName,
+    file_id,
+    val_file_id ?? undefined,
+  );
+  return { job_id };
+}
 
 async function upload_examples_to_openai(samples: OpenAIMessage[][]) {
   // Convert samples to JSONL format
@@ -71,43 +111,6 @@ async function create_openai_fine_tuning_job(
   }
 }
 
-export async function poll_openai_fine_tuning_job(
-  searchParams: URLSearchParams,
-) {
-  const job_id = searchParams.get("job_id");
-  if (!job_id) {
-    const error = new BadRequestError("Job ID is required");
-    throw error;
-  }
-
-  const job = await client.fineTuning.jobs.retrieve(job_id);
-  return job;
-}
-
-export async function start_sft_openai(
-  modelName: string,
-  trainInferences: ParsedInferenceRow[],
-  valInferences: ParsedInferenceRow[],
-  templateEnv: JsExposedEnv,
-) {
-  const trainMessages = trainInferences.map((inference) =>
-    tensorzero_inference_to_openai_messages(inference, templateEnv),
-  );
-  const valMessages = valInferences.map((inference) =>
-    tensorzero_inference_to_openai_messages(inference, templateEnv),
-  );
-  const [file_id, val_file_id] = await Promise.all([
-    upload_examples_to_openai(trainMessages),
-    upload_examples_to_openai(valMessages),
-  ]);
-  const job_id = await create_openai_fine_tuning_job(
-    modelName,
-    file_id,
-    val_file_id ?? undefined,
-  );
-  return { job_id };
-}
-
 type OpenAIRole = "system" | "user" | "assistant" | "tool";
 
 export type OpenAIMessage = {
@@ -121,6 +124,7 @@ export type OpenAIMessage = {
   tool_call_id?: string;
 };
 
+// TODO(Viraj): write unit tests here
 function tensorzero_inference_to_openai_messages(
   sample: ParsedInferenceRow,
   env: JsExposedEnv,
@@ -174,6 +178,7 @@ function tensorzero_inference_to_openai_messages(
   return messages;
 }
 
+// TODO(Viraj): write unit tests here
 function content_block_to_openai_message(
   content: InputMessageContent,
   role: Role,

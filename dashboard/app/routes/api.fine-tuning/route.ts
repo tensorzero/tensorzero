@@ -1,13 +1,14 @@
 import { type LoaderFunctionArgs, type ActionFunctionArgs } from "react-router";
 import { getConfig } from "~/utils/config.server";
-import { getCuratedInferences, ParsedInferenceRow } from "~/utils/clickhouse";
+import { getCuratedInferences } from "~/utils/clickhouse";
 import type { FormValues } from "~/routes/optimization.fine-tuning/route";
 import { ChatCompletionConfig, get_template_env } from "~/utils/config/variant";
 import {
-  poll_openai_fine_tuning_job,
+  poll_sft_openai,
   start_sft_openai,
 } from "~/utils/fine_tuning/openai.server";
 import { BadRequestError, ErrorWithStatus, NotFoundError } from "~/utils/error";
+import { poll_sft_fireworks } from "~/utils/fine_tuning/fireworks.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
@@ -21,13 +22,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
   switch (provider_name) {
     case "openai":
       try {
-        const job = await poll_openai_fine_tuning_job(url.searchParams);
+        const searchParamsObj = Object.fromEntries(url.searchParams.entries());
+        const job_info = await poll_sft_openai(searchParamsObj);
 
-        if (job) {
+        if (job_info) {
           return Response.json({
-            status: job.status,
-            fine_tuned_model: job.fine_tuned_model,
-            job: job,
+            status: job_info.status,
+            fine_tuned_model: job_info.fine_tuned_model,
+            job: job_info,
           });
         } else {
           throw new NotFoundError("Job not found");
@@ -38,6 +40,19 @@ export async function loader({ request }: LoaderFunctionArgs) {
           { status: error instanceof ErrorWithStatus ? error.status : 500 },
         );
       }
+
+    case "fireworks":
+      try {
+        const searchParamsObj = Object.fromEntries(url.searchParams.entries());
+        const job_info = await poll_sft_fireworks(searchParamsObj);
+        return Response.json(job_info);
+      } catch (error) {
+        return Response.json(
+          { error: (error as Error).message },
+          { status: 500 },
+        );
+      }
+
     default:
       return Response.json({ error: "Provider not found" }, { status: 404 });
   }
@@ -70,17 +85,13 @@ export async function action({ request }: ActionFunctionArgs) {
     );
 
     const template_env = await get_template_env(current_variant);
-    const { trainInferences, valInferences } = splitValidationData(
-      curatedInferences,
-      data.validationSplit,
-    );
     let params;
     switch (data.model.provider) {
       case "openai": {
         const job_id = await start_sft_openai(
           data.model.name,
-          trainInferences,
-          valInferences,
+          curatedInferences,
+          data.validationSplit,
           template_env,
         );
         params = {
@@ -105,22 +116,4 @@ export async function action({ request }: ActionFunctionArgs) {
       { status: error instanceof ErrorWithStatus ? error.status : 500 },
     );
   }
-}
-
-function splitValidationData(
-  inferences: ParsedInferenceRow[],
-  validationSplit: number,
-) {
-  const splitIndex =
-    validationSplit > 0
-      ? Math.floor(inferences.length * (1 - validationSplit / 100))
-      : inferences.length;
-
-  const trainInferences = inferences.slice(0, splitIndex);
-  const valInferences = validationSplit > 0 ? inferences.slice(splitIndex) : [];
-
-  return {
-    trainInferences,
-    valInferences,
-  };
 }

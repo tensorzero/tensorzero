@@ -36,6 +36,7 @@
     "tailwind-merge": "^2.5.4",
     "tailwindcss-animate": "^1.0.7",
     "tsx": "^4.19.2",
+    "uuid": "^11.0.3",
     "vitest": "^2.1.4",
     "zod": "^3.23.8"
   },
