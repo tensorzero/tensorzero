@@ -255,24 +255,30 @@ async fn write_2_batch_model_inference_rows(
 async fn test_get_batch_inferences() {
     let clickhouse = get_clickhouse().await;
     let batch_id = Uuid::now_v7();
-    let batch_rows = write_2_batch_model_inference_rows(&clickhouse, batch_id).await;
+    let mut expected_batch_rows = write_2_batch_model_inference_rows(&clickhouse, batch_id).await;
     let other_batch_id = Uuid::now_v7();
     let other_batch_rows = write_2_batch_model_inference_rows(&clickhouse, other_batch_id).await;
-    let batch_inferences = get_batch_inferences(
+    let mut batch_inferences = get_batch_inferences(
         &clickhouse,
         batch_id,
         &[
-            batch_rows[0].inference_id,
-            batch_rows[1].inference_id,
+            expected_batch_rows[0].inference_id,
+            expected_batch_rows[1].inference_id,
             other_batch_rows[0].inference_id,
             other_batch_rows[1].inference_id,
         ],
     )
     .await
     .unwrap();
+
     assert_eq!(batch_inferences.len(), 2);
-    assert_eq!(batch_inferences[0], batch_rows[0]);
-    assert_eq!(batch_inferences[1], batch_rows[1]);
+
+    // Sort both arrays by inference_id to ensure matching order
+    batch_inferences.sort_by_key(|row| row.inference_id);
+    expected_batch_rows.sort_by_key(|row| row.inference_id);
+
+    assert_eq!(batch_inferences[0], expected_batch_rows[0]);
+    assert_eq!(batch_inferences[1], expected_batch_rows[1]);
 }
 
 /// Tests writing and reading a completed batch inference for a chat function
