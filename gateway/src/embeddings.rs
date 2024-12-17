@@ -22,6 +22,7 @@ use uuid::Uuid;
 use crate::inference::providers::dummy::DummyProvider;
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct EmbeddingModelConfig {
     pub routing: Vec<String>,
     pub providers: HashMap<String, EmbeddingProviderConfig>,

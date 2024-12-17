@@ -8,3 +8,14 @@ retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max
 [profile.unit]
 retries = 0
 slow-timeout = { period = "2s", terminate-after = 1 }
+
+# Note: use the following commands to debug test groups:
+# cargo nextest show-config test-groups
+# cargo nextest show-config test-groups --features e2e_tests
+
+[test-groups]
+e2e-xai = { max-threads = 1 }  # run XAI E2E tests sequentially to avoid rate limits
+
+[[profile.default.overrides]]
+filter = 'test(providers::xai::) and binary(e2e)'
+test-group = 'e2e-xai'

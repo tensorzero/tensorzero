@@ -229,7 +229,7 @@ async fn write_comment(
     });
     if !dryrun {
         tokio::spawn(async move {
-            let _ = connection_info.write(&payload, "CommentFeedback").await;
+            let _ = connection_info.write(&[payload], "CommentFeedback").await;
         });
     }
     Ok(())
@@ -251,7 +251,7 @@ async fn write_demonstration(
     if !dryrun {
         tokio::spawn(async move {
             let _ = connection_info
-                .write(&payload, "DemonstrationFeedback")
+                .write(&[payload], "DemonstrationFeedback")
                 .await;
         });
     }
@@ -275,7 +275,9 @@ async fn write_float(
     let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
     if !dryrun {
         tokio::spawn(async move {
-            let _ = connection_info.write(&payload, "FloatMetricFeedback").await;
+            let _ = connection_info
+                .write(&[payload], "FloatMetricFeedback")
+                .await;
         });
     }
     Ok(())
@@ -299,7 +301,7 @@ async fn write_boolean(
     if !dryrun {
         tokio::spawn(async move {
             let _ = connection_info
-                .write(&payload, "BooleanMetricFeedback")
+                .write(&[payload], "BooleanMetricFeedback")
                 .await;
         });
     }

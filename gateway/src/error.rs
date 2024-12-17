@@ -78,6 +78,10 @@ pub enum ErrorDetails {
     BadCredentialsPreInference {
         provider_name: String,
     },
+    BatchInputValidation {
+        index: usize,
+        message: String,
+    },
     ChannelWrite {
         message: String,
     },
@@ -138,6 +142,9 @@ pub enum ErrorDetails {
     },
     InvalidCandidate {
         variant_name: String,
+        message: String,
+    },
+    InvalidDiclConfig {
         message: String,
     },
     InvalidEpisodeId {
@@ -257,11 +264,24 @@ pub enum ErrorDetails {
     UnknownMetric {
         name: String,
     },
+    UnsupportedModelProviderForBatchInference {
+        provider_type: String,
+    },
+    UnsupportedVariantForBatchInference {
+        variant_name: Option<String>,
+    },
     VLLMClient {
         message: String,
         status_code: StatusCode,
     },
     VLLMServer {
+        message: String,
+    },
+    XAIClient {
+        message: String,
+        status_code: StatusCode,
+    },
+    XAIServer {
         message: String,
     },
 }
@@ -280,6 +300,7 @@ impl ErrorDetails {
             ErrorDetails::AzureClient { .. } => tracing::Level::WARN,
             ErrorDetails::AzureServer { .. } => tracing::Level::ERROR,
             ErrorDetails::BadCredentialsPreInference { .. } => tracing::Level::ERROR,
+            ErrorDetails::BatchInputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::ChannelWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseConnection { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseMigration { .. } => tracing::Level::ERROR,
@@ -299,12 +320,13 @@ impl ErrorDetails {
             ErrorDetails::InputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidBaseUrl { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidCandidate { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidDiclConfig { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidEpisodeId { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidMessage { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidOpenAICompatibleRequest { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidProviderConfig { .. } => tracing::Level::ERROR,
-            ErrorDetails::InvalidRequest { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidRequest { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidTemplatePath => tracing::Level::ERROR,
             ErrorDetails::InvalidTool { .. } => tracing::Level::ERROR,
             ErrorDetails::JsonRequest { .. } => tracing::Level::WARN,
@@ -336,8 +358,12 @@ impl ErrorDetails {
             ErrorDetails::UnknownTool { .. } => tracing::Level::ERROR,
             ErrorDetails::UnknownVariant { .. } => tracing::Level::WARN,
             ErrorDetails::UnknownMetric { .. } => tracing::Level::WARN,
+            ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => tracing::Level::WARN,
+            ErrorDetails::UnsupportedVariantForBatchInference { .. } => tracing::Level::WARN,
             ErrorDetails::VLLMClient { .. } => tracing::Level::WARN,
             ErrorDetails::VLLMServer { .. } => tracing::Level::ERROR,
+            ErrorDetails::XAIClient { .. } => tracing::Level::WARN,
+            ErrorDetails::XAIServer { .. } => tracing::Level::ERROR,
         }
     }
 
@@ -354,6 +380,7 @@ impl ErrorDetails {
             ErrorDetails::AzureClient { status_code, .. } => *status_code,
             ErrorDetails::AzureServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::BadCredentialsPreInference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::BatchInputValidation { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -374,6 +401,7 @@ impl ErrorDetails {
             ErrorDetails::InputValidation { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidBaseUrl { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidDiclConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidOpenAICompatibleRequest { .. } => StatusCode::BAD_REQUEST,
@@ -410,8 +438,14 @@ impl ErrorDetails {
             ErrorDetails::UnknownTool { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::UnknownVariant { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::UnknownMetric { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
+            ErrorDetails::UnsupportedVariantForBatchInference { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::VLLMClient { status_code, .. } => *status_code,
             ErrorDetails::VLLMServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::XAIClient { status_code, .. } => *status_code,
+            ErrorDetails::XAIServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
@@ -471,6 +505,9 @@ impl std::fmt::Display for ErrorDetails {
                     "Bad credentials at inference time for provider: {}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new",
                     provider_name
                 )
+            }
+            ErrorDetails::BatchInputValidation { index, message } => {
+                write!(f, "Input at index {} failed validation: {}", index, message,)
             }
             ErrorDetails::ChannelWrite { message } => {
                 write!(f, "Error writing to channel: {}", message)
@@ -533,6 +570,9 @@ impl std::fmt::Display for ErrorDetails {
                     "Invalid candidate variant as a component of variant {}: {}",
                     variant_name, message
                 )
+            }
+            ErrorDetails::InvalidDiclConfig { message } => {
+                write!(f, "Invalid dynamic in-context learning config: {}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new", message)
             }
             ErrorDetails::InvalidFunctionVariants { message } => write!(f, "{}", message),
             ErrorDetails::InvalidEpisodeId { message } => {
@@ -653,11 +693,34 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::UnknownTool { name } => write!(f, "Unknown tool: {}", name),
             ErrorDetails::UnknownVariant { name } => write!(f, "Unknown variant: {}", name),
             ErrorDetails::UnknownMetric { name } => write!(f, "Unknown metric: {}", name),
+            ErrorDetails::UnsupportedModelProviderForBatchInference { provider_type } => {
+                write!(
+                    f,
+                    "Unsupported model provider for batch inference: {}",
+                    provider_type
+                )
+            }
+            ErrorDetails::UnsupportedVariantForBatchInference { variant_name } => {
+                match variant_name {
+                    Some(variant_name) => write!(
+                        f,
+                        "Unsupported variant for batch inference: {}",
+                        variant_name
+                    ),
+                    None => write!(f, "Unsupported variant for batch inference"),
+                }
+            }
             ErrorDetails::VLLMClient { message, .. } => {
                 write!(f, "Error from vLLM client: {}", message)
             }
             ErrorDetails::VLLMServer { message } => {
                 write!(f, "Error from vLLM server: {}", message)
+            }
+            ErrorDetails::XAIClient { message, .. } => {
+                write!(f, "Error from xAI client: {}", message)
+            }
+            ErrorDetails::XAIServer { message } => {
+                write!(f, "Error from xAI server: {}", message)
             }
         }
     }

@@ -1,6 +1,7 @@
 mod anthropic;
 mod aws_bedrock;
 mod azure;
+mod batch;
 mod common;
 mod fireworks;
 mod gcp_vertex_anthropic;
@@ -10,3 +11,4 @@ mod mistral;
 mod openai;
 mod together;
 mod vllm;
+mod xai;

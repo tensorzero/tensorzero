@@ -69,6 +69,11 @@ const VLLMProviderConfig = z.object({
   api_base: z.string().url(),
 });
 
+const XAIProviderConfig = z.object({
+  type: z.literal("xai"),
+  model_name: z.string(),
+});
+
 // Union of all provider configs
 export const ProviderConfig = z.discriminatedUnion("type", [
   AnthropicProviderConfig,
@@ -83,6 +88,7 @@ export const ProviderConfig = z.discriminatedUnion("type", [
   OpenAIProviderConfig,
   TogetherProviderConfig,
   VLLMProviderConfig,
+  XAIProviderConfig,
 ]);
 
 export type ProviderConfig = z.infer<typeof ProviderConfig>;
