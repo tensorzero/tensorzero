@@ -51,6 +51,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_json_mode_inference_request_with_provider;
         use $crate::providers::common::test_json_mode_streaming_inference_request_with_provider;
         use $crate::providers::common::test_dynamic_json_mode_inference_request_with_provider;
+        use $crate::providers::common::test_json_mode_off_inference_request_with_provider;
         use $crate::providers::common::test_parallel_tool_use_inference_request_with_provider;
         use $crate::providers::common::test_parallel_tool_use_streaming_inference_request_with_provider;
         use $crate::providers::common::test_simple_inference_request_with_provider;
@@ -251,6 +252,14 @@ macro_rules! generate_provider_tests {
             let providers = $func().await.json_mode_inference;
             for provider in providers {
                 test_json_mode_inference_request_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_json_mode_off_inference_request() {
+            let providers = $func().await.json_mode_inference;
+            for provider in providers {
+                test_json_mode_off_inference_request_with_provider(provider).await;
             }
         }
 
@@ -7188,4 +7197,60 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
             panic!("Expected a text block, got {:?}", output[0]);
         }
     }
+}
+
+pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETestProvider) {
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "chat",  // Use chat function since it defaults to json_mode="off"
+        "variant_name": provider.variant_name,
+        "episode_id": episode_id,
+        "input": {
+            "system": {"assistant_name": "Dr. Mehta"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is 2+2?"
+                }
+            ]
+        },
+        "stream": false,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check API response
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    // Verify non-JSON response is allowed
+    let output = response_json.get("output").unwrap().as_object().unwrap();
+    let raw_output = output.get("raw").unwrap().as_str().unwrap();
+    assert!(raw_output.contains("4")); // Basic check that response contains the answer
+
+    // Sleep for ClickHouse
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check ClickHouse records
+    let clickhouse = get_clickhouse().await;
+    let result = select_json_inference_clickhouse(
+        &clickhouse,
+        Uuid::parse_str(response_json.get("inference_id").unwrap().as_str().unwrap()).unwrap(),
+    )
+    .await
+    .unwrap();
+
+    // Verify json_mode was off
+    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
+    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    assert_eq!(
+        inference_params.get("json_mode").unwrap().as_str().unwrap(),
+        "off"
+    );
 }
