@@ -277,6 +277,13 @@ pub enum ErrorDetails {
     VLLMServer {
         message: String,
     },
+    XAIClient {
+        message: String,
+        status_code: StatusCode,
+    },
+    XAIServer {
+        message: String,
+    },
 }
 
 impl ErrorDetails {
@@ -355,6 +362,8 @@ impl ErrorDetails {
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => tracing::Level::WARN,
             ErrorDetails::VLLMClient { .. } => tracing::Level::WARN,
             ErrorDetails::VLLMServer { .. } => tracing::Level::ERROR,
+            ErrorDetails::XAIClient { .. } => tracing::Level::WARN,
+            ErrorDetails::XAIServer { .. } => tracing::Level::ERROR,
         }
     }
 
@@ -435,6 +444,8 @@ impl ErrorDetails {
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::VLLMClient { status_code, .. } => *status_code,
             ErrorDetails::VLLMServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::XAIClient { status_code, .. } => *status_code,
+            ErrorDetails::XAIServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
@@ -704,6 +715,12 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::VLLMServer { message } => {
                 write!(f, "Error from vLLM server: {}", message)
+            }
+            ErrorDetails::XAIClient { message, .. } => {
+                write!(f, "Error from xAI client: {}", message)
+            }
+            ErrorDetails::XAIServer { message } => {
+                write!(f, "Error from xAI server: {}", message)
             }
         }
     }
