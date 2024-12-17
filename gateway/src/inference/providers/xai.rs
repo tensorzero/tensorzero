@@ -56,12 +56,12 @@ impl XAICredentials {
             XAICredentials::Static(api_key) => Ok(api_key),
             XAICredentials::Dynamic(key_name) => dynamic_api_keys.get(key_name).ok_or_else(|| {
                 ErrorDetails::ApiKeyMissing {
-                    provider_name: "X AI".to_string(),
+                    provider_name: "xAI".to_string(),
                 }
                 .into()
             }),
             XAICredentials::None => Err(ErrorDetails::ApiKeyMissing {
-                provider_name: "X AI".to_string(),
+                provider_name: "xAI".to_string(),
             }
             .into()),
         }
@@ -90,7 +90,7 @@ impl InferenceProvider for XAIProvider {
             .await
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to X AI: {e}"),
+                    message: format!("Error sending request to xAI: {e}"),
                 })
             })?;
 
@@ -160,7 +160,7 @@ impl InferenceProvider for XAIProvider {
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to X AI: {e}"),
+                    message: format!("Error sending request to xAI: {e}"),
                 })
             })?;
 
@@ -188,14 +188,14 @@ impl InferenceProvider for XAIProvider {
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<BatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
-            provider_type: "X AI".to_string(),
+            provider_type: "xAI".to_string(),
         }
         .into())
     }
 }
 
-/// This struct defines the supported parameters for the X AI API
-/// See the [X AI API documentation](https://docs.x.ai/api/endpoints#chat-completions)
+/// This struct defines the supported parameters for the xAI API
+/// See the [xAI API documentation](https://docs.x.ai/api/endpoints#chat-completions)
 /// for more details.
 /// We are not handling logprobs, top_logprobs, n,
 /// logit_bias, seed, service_tier, stop, user or response_format.
@@ -251,7 +251,7 @@ impl<'a> XAIRequest<'a> {
 
         if request.json_mode == ModelInferenceRequestJsonMode::Strict {
             return Err(ErrorDetails::InvalidRequest {
-                message: "The X AI Grok beta family of models does not support strict JSON"
+                message: "The xAI Grok beta family of models does not support strict JSON"
                     .to_string(),
             }
             .into());
@@ -398,7 +398,7 @@ mod tests {
         };
 
         let xai_request = XAIRequest::new("grok-beta", &request_with_tools)
-            .expect("failed to create X AI Request during test");
+            .expect("failed to create xAI Request during test");
 
         assert_eq!(xai_request.messages.len(), 1);
         assert_eq!(xai_request.temperature, Some(0.5));
@@ -441,7 +441,7 @@ mod tests {
         };
 
         let xai_request = XAIRequest::new("grok-beta", &request_with_tools)
-            .expect("failed to create X AI Request");
+            .expect("failed to create xAI Request");
 
         assert_eq!(xai_request.messages.len(), 2);
         assert_eq!(xai_request.temperature, Some(0.5));

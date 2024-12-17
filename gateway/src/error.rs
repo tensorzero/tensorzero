@@ -717,10 +717,10 @@ impl std::fmt::Display for ErrorDetails {
                 write!(f, "Error from vLLM server: {}", message)
             }
             ErrorDetails::XAIClient { message, .. } => {
-                write!(f, "Error from X AI client: {}", message)
+                write!(f, "Error from xAI client: {}", message)
             }
             ErrorDetails::XAIServer { message } => {
-                write!(f, "Error from X AI server: {}", message)
+                write!(f, "Error from xAI server: {}", message)
             }
         }
     }
