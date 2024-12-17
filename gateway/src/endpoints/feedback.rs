@@ -484,12 +484,11 @@ mod tests {
     use std::collections::HashMap;
     use tokio::time::{sleep, Duration};
 
-    use crate::config_parser::{
-        Config, GatewayConfig, MetricConfig, MetricConfigOptimize, ModelTable,
-    };
+    use crate::config_parser::{Config, GatewayConfig, MetricConfig, MetricConfigOptimize};
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::JSONSchemaFromPath;
     use crate::minijinja_util::TemplateConfig;
+    use crate::model::ModelTable;
     use crate::testing::get_unit_test_app_state_data;
     use crate::tool::{ToolCallOutput, ToolChoice};
 

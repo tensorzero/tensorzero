@@ -4,12 +4,12 @@ use std::{collections::HashMap, path::PathBuf};
 
 use serde::Deserialize;
 
-use crate::config_parser::ModelTable;
 use crate::embeddings::EmbeddingResponseWithMetadata;
 use crate::endpoints::inference::InferenceModels;
 use crate::inference::types::{
     batch::BatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role,
 };
+use crate::model::ModelTable;
 use crate::{
     embeddings::{EmbeddingModelConfig, EmbeddingRequest},
     endpoints::inference::{InferenceClients, InferenceParams},

@@ -6,12 +6,12 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::time::{timeout, Duration};
 
-use crate::config_parser::ModelTable;
 use crate::embeddings::EmbeddingModelConfig;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::inference::types::{
     batch::BatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role, Usage,
 };
+use crate::model::ModelTable;
 use crate::{
     endpoints::inference::InferenceParams,
     error::{Error, ErrorDetails},

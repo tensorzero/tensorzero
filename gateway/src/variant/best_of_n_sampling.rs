@@ -8,7 +8,6 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::time::{timeout, Duration};
 
-use crate::config_parser::ModelTable;
 use crate::embeddings::EmbeddingModelConfig;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
@@ -17,6 +16,7 @@ use crate::inference::types::{
     ModelInferenceRequestJsonMode, ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
+use crate::model::ModelTable;
 use crate::{
     endpoints::inference::InferenceParams,
     error::Error,

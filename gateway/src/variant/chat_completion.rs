@@ -2,7 +2,6 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::{collections::HashMap, path::PathBuf};
 
-use crate::config_parser::ModelTable;
 use crate::embeddings::EmbeddingModelConfig;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
 use crate::error::{Error, ErrorDetails};
@@ -14,6 +13,7 @@ use crate::inference::types::{
 use crate::inference::types::{InferenceResult, InputMessage};
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
+use crate::model::ModelTable;
 use crate::variant::JsonMode;
 
 use super::{

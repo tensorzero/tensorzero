@@ -887,6 +887,50 @@ impl<'de> Deserialize<'de> for CredentialLocation {
     }
 }
 
+const RESERVED_MODEL_PREFIXES: &[&str] = &[
+    "anthropic::",
+    "aws_bedrock::",
+    "azure::",
+    "fireworks::",
+    "gcp_vertex_anthropic::",
+    "gcp_vertex_gemini::",
+    "google_ai_studio_gemini::",
+    "mistral::",
+    "openai::",
+    "together::",
+    "vllm::",
+    "xai::",
+    "dummy::",
+];
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(try_from = "HashMap<String, ModelConfig>")]
+pub struct ModelTable(HashMap<String, ModelConfig>);
+
+impl TryFrom<HashMap<String, ModelConfig>> for ModelTable {
+    type Error = String;
+
+    fn try_from(map: HashMap<String, ModelConfig>) -> Result<Self, Self::Error> {
+        for key in map.keys() {
+            if RESERVED_MODEL_PREFIXES
+                .iter()
+                .any(|&name| key.starts_with(name))
+            {
+                return Err(format!("Model name '{}' contains a reserved prefix", key));
+            }
+        }
+        Ok(ModelTable(map))
+    }
+}
+
+impl std::ops::Deref for ModelTable {
+    type Target = HashMap<String, ModelConfig>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;

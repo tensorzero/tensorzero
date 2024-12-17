@@ -17,7 +17,7 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::config_parser::{Config, ModelTable};
+use crate::config_parser::Config;
 use crate::embeddings::EmbeddingModelConfig;
 use crate::error::{Error, ErrorDetails};
 use crate::function::sample_variant;
@@ -31,6 +31,7 @@ use crate::inference::types::{
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
+use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, ToolCallConfig};
 use crate::uuid_util::validate_episode_id;
 use crate::variant::{InferenceConfig, Variant};

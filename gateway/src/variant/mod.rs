@@ -10,7 +10,6 @@ use tokio::time::Duration;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::config_parser::ModelTable;
 use crate::embeddings::EmbeddingModelConfig;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
 use crate::error::Error;
@@ -23,6 +22,7 @@ use crate::inference::types::{
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
+use crate::model::ModelTable;
 use crate::tool::{create_dynamic_implicit_tool_config, ToolCallConfig};
 use crate::{inference::types::InferenceResult, model::ModelConfig};
 
