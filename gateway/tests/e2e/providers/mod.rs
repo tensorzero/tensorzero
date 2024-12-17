@@ -11,3 +11,4 @@ mod mistral;
 mod openai;
 mod together;
 mod vllm;
+mod xai;
