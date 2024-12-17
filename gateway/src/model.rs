@@ -162,6 +162,7 @@ impl ModelConfig {
     }
 }
 
+// NOTE: if one adds a new provider, make sure to add it to the set of `BLACKLISTED_NAMES` in `config_parser.rs`
 #[derive(Debug)]
 pub enum ProviderConfig {
     Anthropic(AnthropicProvider),

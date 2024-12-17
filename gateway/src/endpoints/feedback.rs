@@ -484,7 +484,9 @@ mod tests {
     use std::collections::HashMap;
     use tokio::time::{sleep, Duration};
 
-    use crate::config_parser::{Config, GatewayConfig, MetricConfig, MetricConfigOptimize};
+    use crate::config_parser::{
+        Config, GatewayConfig, MetricConfig, MetricConfigOptimize, ModelTable,
+    };
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::JSONSchemaFromPath;
     use crate::minijinja_util::TemplateConfig;
@@ -505,7 +507,7 @@ mod tests {
         );
         let config = Config {
             gateway: GatewayConfig::default(),
-            models: HashMap::new(),
+            models: ModelTable::default(),
             embedding_models: HashMap::new(),
             metrics,
             functions: HashMap::new(),
@@ -627,7 +629,7 @@ mod tests {
         metrics.insert("test_metric".to_string(), metric_config);
         let config = Config {
             gateway: GatewayConfig::default(),
-            models: HashMap::new(),
+            models: ModelTable::default(),
             embedding_models: HashMap::new(),
             metrics,
             functions: HashMap::new(),
@@ -659,7 +661,7 @@ mod tests {
         // Test a Comment Feedback
         let config = Box::leak(Box::new(Config {
             gateway: GatewayConfig::default(),
-            models: HashMap::new(),
+            models: ModelTable::default(),
             embedding_models: HashMap::new(),
             metrics: HashMap::new(),
             functions: HashMap::new(),
@@ -759,7 +761,7 @@ mod tests {
         );
         let config = Box::leak(Box::new(Config {
             gateway: GatewayConfig::default(),
-            models: HashMap::new(),
+            models: ModelTable::default(),
             embedding_models: HashMap::new(),
             metrics,
             functions: HashMap::new(),
@@ -836,7 +838,7 @@ mod tests {
         );
         let config = Box::leak(Box::new(Config {
             gateway: GatewayConfig::default(),
-            models: HashMap::new(),
+            models: ModelTable::default(),
             embedding_models: HashMap::new(),
             metrics,
             functions: HashMap::new(),

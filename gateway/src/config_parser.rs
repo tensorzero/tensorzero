@@ -22,7 +22,7 @@ use crate::variant::{Variant, VariantConfig};
 #[derive(Debug, Default)]
 pub struct Config<'c> {
     pub gateway: GatewayConfig,
-    pub models: HashMap<String, ModelConfig>, // model name => model config
+    pub models: ModelTable, // model name => model config
     pub embedding_models: HashMap<String, EmbeddingModelConfig>, // embedding model name => embedding model config
     pub functions: HashMap<String, FunctionConfig>,              // function name => function config
     pub metrics: HashMap<String, MetricConfig>,                  // metric name => metric config
@@ -138,7 +138,7 @@ impl<'c> Config<'c> {
     #[instrument(skip_all)]
     fn validate(&self) -> Result<(), Error> {
         // Validate each model
-        for (model_name, model) in &self.models {
+        for (model_name, model) in self.models.iter() {
             // Ensure that the model has at least one provider
             if model.routing.is_empty() {
                 return Err(ErrorDetails::Config {
@@ -278,7 +278,7 @@ impl<'c> Config<'c> {
 #[serde(deny_unknown_fields)]
 struct UninitializedConfig {
     pub gateway: Option<GatewayConfig>,
-    pub models: HashMap<String, ModelConfig>, // model name => model config
+    pub models: ModelTable, // model name => model config
     #[serde(default)]
     pub embedding_models: HashMap<String, EmbeddingModelConfig>, // embedding model name => embedding model config
     pub functions: HashMap<String, UninitializedFunctionConfig>, // function name => function config
@@ -492,6 +492,46 @@ impl UninitializedToolConfig {
             parameters,
             strict: self.strict,
         })
+    }
+}
+
+const BLACKLISTED_NAMES: &[&str] = &[
+    "anthropic::",
+    "aws_bedrock::",
+    "azure::",
+    "fireworks::",
+    "gcp_vertex_anthropic::",
+    "gcp_vertex_gemini::",
+    "google_ai_studio_gemini::",
+    "mistral::",
+    "openai::",
+    "together::",
+    "vllm::",
+    "dummy::",
+];
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(try_from = "HashMap<String, ModelConfig>")]
+pub struct ModelTable(HashMap<String, ModelConfig>);
+
+impl TryFrom<HashMap<String, ModelConfig>> for ModelTable {
+    type Error = String;
+
+    fn try_from(map: HashMap<String, ModelConfig>) -> Result<Self, Self::Error> {
+        for key in map.keys() {
+            if BLACKLISTED_NAMES.iter().any(|&name| key.starts_with(name)) {
+                return Err(format!("Model name '{}' contains a blacklisted term", key));
+            }
+        }
+        Ok(ModelTable(map))
+    }
+}
+
+impl std::ops::Deref for ModelTable {
+    type Target = HashMap<String, ModelConfig>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -831,6 +871,29 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("unknown field `enable_agi`, expected"));
+    }
+
+    /// Ensure that the config parsing fails when there models with blacklisted names
+    #[test]
+    fn test_config_from_toml_table_blacklisted_models() {
+        let mut config = get_sample_valid_config();
+
+        let claude_config = config["models"]
+            .as_table_mut()
+            .expect("Failed to get `models` section")
+            .remove("claude-3-haiku-20240307")
+            .expect("Failed to remove claude config");
+        config["models"]
+            .as_table_mut()
+            .expect("Failed to get `models` section")
+            .insert("anthropic::claude-3-haiku-20240307".into(), claude_config);
+
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, base_path);
+        let error = result.unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("Model name 'anthropic::claude-3-haiku-20240307' contains a blacklisted term\nin `models`"));
     }
 
     /// Ensure that the config parsing fails when there are extra variables for providers
@@ -1312,7 +1375,7 @@ mod tests {
     /// Get a sample valid config for testing
     fn get_sample_valid_config() -> toml::Table {
         let config_str = r#"
-        # ┌────────────────────────────────────────────────────────────────────────────┐
+        # ┌───────────────���────────────────────────────────────────────────────────────┐
         # │                                  GENERAL                                   │
         # └────────────────────────────────────────────────────────────────────────────┘
 
@@ -1353,7 +1416,7 @@ mod tests {
         type = "openai"
         model_name = "text-embedding-3-small"
 
-        # ┌────────────────────────────────────────────────────────────────────────────┐
+        # ┌────────────────────────────────────────────��───────────────────────────────┐
         # │                                 FUNCTIONS                                  │
         # └────────────────────────────────────────────────────────────────────────────┘
 
@@ -1479,7 +1542,7 @@ mod tests {
 
         # ┌────────────────────────────────────────────────────────────────────────────┐
         # │                                   TOOLS                                    │
-        # └────────────────────────────────────────────────────────────────────────────┘
+        # └────────────────────────���───────────────────────────────────────────────────┘
         [tools.get_temperature]
         description = "Get the weather for a given location"
         parameters = "fixtures/config/tools/get_temperature.json"
