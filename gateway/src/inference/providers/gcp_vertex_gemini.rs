@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::env;
 use std::time::Duration;
 
 use futures::{Stream, StreamExt};
@@ -35,6 +36,57 @@ pub struct GCPVertexGeminiProvider {
     pub audience: String,
     pub credentials: GCPVertexCredentials,
     pub model_id: String,
+}
+
+impl GCPVertexGeminiProvider {
+    pub fn new(
+        model_id: String,
+        location: String,
+        project_id: String,
+        api_key_location: CredentialLocation,
+    ) -> Result<Self, Error> {
+        let credentials = match api_key_location {
+            CredentialLocation::Env(key_name) => {
+                let path = env::var(key_name).map_err(|e| {
+                    Error::new(ErrorDetails::GCPCredentials {
+                        message: format!(
+                            "Failed to load GCP credentials from environment variable: {}",
+                            e
+                        ),
+                    })
+                })?;
+                GCPVertexCredentials::Static(
+                    GCPServiceAccountCredentials::from_path(path.as_str()).map_err(|e| {
+                        Error::new(ErrorDetails::GCPCredentials {
+                            message: format!("Failed to load GCP credentials: {}", e),
+                        })
+                    })?,
+                )
+            }
+            CredentialLocation::Path(path) => GCPVertexCredentials::Static(
+                GCPServiceAccountCredentials::from_path(path.as_str()).map_err(|e| {
+                    Error::new(ErrorDetails::GCPCredentials {
+                        message: format!("Failed to load GCP credentials: {}", e),
+                    })
+                })?,
+            ),
+            CredentialLocation::Dynamic(key_name) => GCPVertexCredentials::Dynamic(key_name),
+            _ => Err(Error::new(ErrorDetails::GCPCredentials {
+                message: "Invalid credential_location for GCPVertexGemini provider".to_string(),
+            }))?,
+        };
+        let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:generateContent");
+        let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:streamGenerateContent?alt=sse");
+        let audience = format!("https://{location}-aiplatform.googleapis.com/");
+
+        Ok(GCPVertexGeminiProvider {
+            request_url,
+            streaming_request_url,
+            audience,
+            credentials,
+            model_id,
+        })
+    }
 }
 
 pub fn default_api_key_location() -> CredentialLocation {

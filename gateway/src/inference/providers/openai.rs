@@ -8,6 +8,7 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::borrow::Cow;
+use std::env;
 use std::io::Write;
 use std::time::Duration;
 use tokio::time::Instant;
@@ -43,6 +44,37 @@ pub struct OpenAIProvider {
     pub model_name: String,
     pub api_base: Option<Url>,
     pub credentials: OpenAICredentials,
+}
+
+impl OpenAIProvider {
+    pub fn new(
+        model_name: String,
+        api_base: Option<Url>,
+        api_key_location: CredentialLocation,
+    ) -> Result<Self, Error> {
+        let credentials = match api_key_location {
+            CredentialLocation::Env(key_name) => {
+                let api_key = env::var(key_name)
+                    .map_err(|_| {
+                        Error::new(ErrorDetails::ApiKeyMissing {
+                            provider_name: "OpenAI".to_string(),
+                        })
+                    })?
+                    .into();
+                OpenAICredentials::Static(api_key)
+            }
+            CredentialLocation::Dynamic(key_name) => OpenAICredentials::Dynamic(key_name),
+            CredentialLocation::None => OpenAICredentials::None,
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: "Invalid api_key_location for OpenAI provider".to_string(),
+            }))?,
+        };
+        Ok(OpenAIProvider {
+            model_name,
+            api_base,
+            credentials,
+        })
+    }
 }
 
 #[derive(Debug)]

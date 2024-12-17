@@ -1,4 +1,4 @@
-use std::{borrow::Cow, time::Duration};
+use std::{borrow::Cow, env, time::Duration};
 
 use futures::stream::Stream;
 use futures::StreamExt;
@@ -46,6 +46,31 @@ pub fn default_api_key_location() -> CredentialLocation {
 pub struct MistralProvider {
     pub model_name: String,
     pub credentials: MistralCredentials,
+}
+
+impl MistralProvider {
+    pub fn new(model_name: String, api_key_location: CredentialLocation) -> Result<Self, Error> {
+        let credentials = match api_key_location {
+            CredentialLocation::Env(key_name) => {
+                let api_key = env::var(key_name)
+                    .map_err(|_| {
+                        Error::new(ErrorDetails::ApiKeyMissing {
+                            provider_name: "Mistral".to_string(),
+                        })
+                    })?
+                    .into();
+                MistralCredentials::Static(api_key)
+            }
+            CredentialLocation::Dynamic(key_name) => MistralCredentials::Dynamic(key_name),
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: "Invalid api_key_location for Mistral provider".to_string(),
+            }))?,
+        };
+        Ok(MistralProvider {
+            model_name,
+            credentials,
+        })
+    }
 }
 
 #[derive(Debug)]

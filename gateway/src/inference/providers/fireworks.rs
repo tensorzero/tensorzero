@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, env};
 
 use futures::{StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
@@ -41,6 +41,29 @@ lazy_static! {
 pub struct FireworksProvider {
     pub model_name: String,
     pub credentials: FireworksCredentials,
+}
+
+impl FireworksProvider {
+    pub fn new(model_name: String, api_key_location: CredentialLocation) -> Result<Self, Error> {
+        let credentials = match api_key_location {
+            CredentialLocation::Env(key_name) => {
+                let api_key = env::var(key_name)
+                    .map_err(|_| ErrorDetails::ApiKeyMissing {
+                        provider_name: "Fireworks".to_string(),
+                    })?
+                    .into();
+                FireworksCredentials::Static(api_key)
+            }
+            CredentialLocation::Dynamic(key_name) => FireworksCredentials::Dynamic(key_name),
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: "Invalid api_key_location for Fireworks provider".to_string(),
+            }))?,
+        };
+        Ok(FireworksProvider {
+            model_name,
+            credentials,
+        })
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]

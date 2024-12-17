@@ -1,3 +1,4 @@
+use std::env;
 use std::time::Duration;
 
 use futures::{Stream, StreamExt};
@@ -31,6 +32,48 @@ pub struct GoogleAIStudioGeminiProvider {
     pub request_url: Url,
     pub streaming_request_url: Url,
     pub credentials: GoogleAIStudioCredentials,
+}
+
+impl GoogleAIStudioGeminiProvider {
+    pub fn new(model_name: String, api_key_location: CredentialLocation) -> Result<Self, Error> {
+        let credentials = match api_key_location {
+            CredentialLocation::Env(key_name) => GoogleAIStudioCredentials::Static(
+                env::var(key_name)
+                    .map_err(|_| {
+                        Error::new(ErrorDetails::ApiKeyMissing {
+                            provider_name: "Google AI Studio Gemini".to_string(),
+                        })
+                    })?
+                    .into(),
+            ),
+            CredentialLocation::Dynamic(key_name) => GoogleAIStudioCredentials::Dynamic(key_name),
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: "Invalid api_key_location for Google AI Studio Gemini provider"
+                    .to_string(),
+            }))?,
+        };
+        let request_url = Url::parse(&format!(
+            "https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent",
+        ))
+        .map_err(|e| {
+            Error::new(ErrorDetails::Config {
+                message: format!("Failed to parse request URL: {}", e),
+            })
+        })?;
+        let streaming_request_url = Url::parse(&format!(
+            "https://generativelanguage.googleapis.com/v1beta/models/{model_name}:streamGenerateContent?alt=sse",
+        ))
+        .map_err(|e| {
+            Error::new(ErrorDetails::Config {
+                message: format!("Failed to parse streaming request URL: {}", e),
+            })
+        })?;
+        Ok(GoogleAIStudioGeminiProvider {
+            request_url,
+            streaming_request_url,
+            credentials,
+        })
+    }
 }
 
 pub fn default_api_key_location() -> CredentialLocation {

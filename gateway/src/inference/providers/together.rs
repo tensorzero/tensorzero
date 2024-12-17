@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, env};
 
 use futures::{StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
@@ -41,6 +41,31 @@ lazy_static! {
 pub struct TogetherProvider {
     pub model_name: String,
     pub credentials: TogetherCredentials,
+}
+
+impl TogetherProvider {
+    pub fn new(model_name: String, api_key_location: CredentialLocation) -> Result<Self, Error> {
+        let credentials = match api_key_location {
+            CredentialLocation::Env(key_name) => {
+                let api_key = env::var(key_name)
+                    .map_err(|_| {
+                        Error::new(ErrorDetails::ApiKeyMissing {
+                            provider_name: "Together".to_string(),
+                        })
+                    })?
+                    .into();
+                TogetherCredentials::Static(api_key)
+            }
+            CredentialLocation::Dynamic(key_name) => TogetherCredentials::Dynamic(key_name),
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: "Invalid api_key_location for Together provider".to_string(),
+            }))?,
+        };
+        Ok(TogetherProvider {
+            model_name,
+            credentials,
+        })
+    }
 }
 
 pub fn default_api_key_location() -> CredentialLocation {
