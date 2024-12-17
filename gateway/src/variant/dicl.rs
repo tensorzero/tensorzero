@@ -4,6 +4,7 @@ use std::{collections::HashMap, path::PathBuf};
 
 use serde::Deserialize;
 
+use crate::config_parser::ModelTable;
 use crate::embeddings::EmbeddingResponseWithMetadata;
 use crate::endpoints::inference::InferenceModels;
 use crate::inference::types::{
@@ -19,7 +20,6 @@ use crate::{
         InferenceResultStream, Input, JsonInferenceOutput,
     },
     minijinja_util::TemplateConfig,
-    model::ModelConfig,
 };
 
 use super::{
@@ -213,7 +213,7 @@ impl Variant for DiclConfig {
     fn validate(
         &self,
         _function: &FunctionConfig,
-        models: &HashMap<String, ModelConfig>,
+        models: &ModelTable,
         embedding_models: &HashMap<String, EmbeddingModelConfig>,
         _templates: &TemplateConfig,
         function_name: &str,

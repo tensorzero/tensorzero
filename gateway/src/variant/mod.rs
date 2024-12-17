@@ -10,6 +10,7 @@ use tokio::time::Duration;
 use tracing::instrument;
 use uuid::Uuid;
 
+use crate::config_parser::ModelTable;
 use crate::embeddings::EmbeddingModelConfig;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
 use crate::error::Error;
@@ -130,7 +131,7 @@ pub trait Variant {
     fn validate(
         &self,
         function: &FunctionConfig,
-        models: &HashMap<String, ModelConfig>,
+        models: &ModelTable,
         embedding_models: &HashMap<String, EmbeddingModelConfig>,
         templates: &TemplateConfig,
         function_name: &str,
@@ -333,7 +334,7 @@ impl Variant for VariantConfig {
     fn validate(
         &self,
         function: &FunctionConfig,
-        models: &HashMap<String, ModelConfig>,
+        models: &ModelTable,
         embedding_models: &HashMap<String, EmbeddingModelConfig>,
         templates: &TemplateConfig,
         function_name: &str,

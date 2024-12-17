@@ -2,6 +2,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::{collections::HashMap, path::PathBuf};
 
+use crate::config_parser::ModelTable;
 use crate::embeddings::EmbeddingModelConfig;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
 use crate::error::{Error, ErrorDetails};
@@ -10,13 +11,10 @@ use crate::inference::types::{
     batch::BatchModelInferenceWithMetadata, ContentBlock, InferenceResultChunk,
     InferenceResultStream, Input, InputMessageContent, ModelInferenceRequest, RequestMessage, Role,
 };
+use crate::inference::types::{InferenceResult, InputMessage};
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
 use crate::variant::JsonMode;
-use crate::{
-    inference::types::{InferenceResult, InputMessage},
-    model::ModelConfig,
-};
 
 use super::{
     infer_model_request, infer_model_request_stream, prepare_model_inference_request,
@@ -234,7 +232,7 @@ impl Variant for ChatCompletionConfig {
     fn validate(
         &self,
         function: &FunctionConfig,
-        models: &HashMap<String, ModelConfig>,
+        models: &ModelTable,
         _embedding_models: &HashMap<String, EmbeddingModelConfig>,
         templates: &TemplateConfig,
         function_name: &str,
@@ -409,7 +407,7 @@ mod tests {
     use crate::inference::types::{ContentBlockOutput, ModelInferenceRequestJsonMode, Usage};
     use crate::jsonschema_util::{DynamicJSONSchema, JSONSchemaFromPath};
     use crate::minijinja_util::tests::get_test_template_config;
-    use crate::model::ProviderConfig;
+    use crate::model::{ModelConfig, ProviderConfig};
     use crate::tool::{ToolCallConfig, ToolChoice};
     use crate::{
         error::Error,
@@ -792,7 +790,7 @@ mod tests {
             variant_name: Some(""),
             dynamic_output_schema: None,
         };
-        let models = HashMap::new();
+        let models = ModelTable::default();
         let inference_models = InferenceModels {
             models: &models,
             embedding_models: &HashMap::new(),
@@ -826,7 +824,9 @@ mod tests {
             system: Some(json!({"assistant_name": "R2-D2"})),
             messages,
         };
-        let models = HashMap::from([("invalid_model".to_string(), text_model_config)]);
+        let models = HashMap::from([("invalid_model".to_string(), text_model_config)])
+            .try_into()
+            .unwrap();
         let inference_models = InferenceModels {
             models: &models,
             embedding_models: &HashMap::new(),
@@ -865,6 +865,7 @@ mod tests {
         };
         let inference_params = InferenceParams::default();
         let models = HashMap::from([("error".to_string(), error_model_config)]);
+        let models = models.try_into().unwrap();
         let inference_models = InferenceModels {
             models: &models,
             embedding_models: &HashMap::new(),
@@ -917,7 +918,9 @@ mod tests {
             routing: vec!["good_provider".to_string()],
             providers: HashMap::from([("good_provider".to_string(), good_provider_config)]),
         };
-        let models = HashMap::from([("good".to_string(), text_model_config)]);
+        let models = HashMap::from([("good".to_string(), text_model_config)])
+            .try_into()
+            .unwrap();
         let inference_models = InferenceModels {
             models: &models,
             embedding_models: &HashMap::new(),
@@ -986,7 +989,9 @@ mod tests {
                 content: vec!["What is the weather in Brooklyn?".to_string().into()],
             }],
         };
-        let models = HashMap::from([("tool".to_string(), tool_model_config)]);
+        let models = HashMap::from([("tool".to_string(), tool_model_config)])
+            .try_into()
+            .unwrap();
         let inference_models = InferenceModels {
             models: &models,
             embedding_models: &HashMap::new(),
@@ -1120,7 +1125,9 @@ mod tests {
         };
         // Test case 6: JSON output was supposed to happen and it did
         let inference_params = InferenceParams::default();
-        let models = HashMap::from([("json".to_string(), json_model_config)]);
+        let models = HashMap::from([("json".to_string(), json_model_config)])
+            .try_into()
+            .unwrap();
         let inference_models = InferenceModels {
             models: &models,
             embedding_models: &HashMap::new(),
@@ -1422,10 +1429,11 @@ mod tests {
             user_template: Some(user_template_name.into()),
             ..Default::default()
         }));
-        let models = Box::leak(Box::new(HashMap::from([(
-            "error".to_string(),
-            error_model_config,
-        )])));
+        let models = Box::leak(Box::new(
+            HashMap::from([("error".to_string(), error_model_config)])
+                .try_into()
+                .unwrap(),
+        ));
         let embedding_models = Box::leak(Box::new(HashMap::new()));
         let inference_models = InferenceModels {
             models,
@@ -1474,10 +1482,11 @@ mod tests {
             user_template: Some(user_template_name.into()),
             ..Default::default()
         }));
-        let models = Box::leak(Box::new(HashMap::from([(
-            "good".to_string(),
-            text_model_config,
-        )])));
+        let models = Box::leak(Box::new(
+            HashMap::from([("good".to_string(), text_model_config)])
+                .try_into()
+                .unwrap(),
+        ));
         let inference_models = InferenceModels {
             models,
             embedding_models,

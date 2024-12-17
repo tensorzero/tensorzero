@@ -495,7 +495,7 @@ impl UninitializedToolConfig {
     }
 }
 
-const BLACKLISTED_NAMES: &[&str] = &[
+const RESERVED_MODEL_PREFIXES: &[&str] = &[
     "anthropic::",
     "aws_bedrock::",
     "azure::",
@@ -507,6 +507,7 @@ const BLACKLISTED_NAMES: &[&str] = &[
     "openai::",
     "together::",
     "vllm::",
+    "xai::",
     "dummy::",
 ];
 
@@ -519,8 +520,11 @@ impl TryFrom<HashMap<String, ModelConfig>> for ModelTable {
 
     fn try_from(map: HashMap<String, ModelConfig>) -> Result<Self, Self::Error> {
         for key in map.keys() {
-            if BLACKLISTED_NAMES.iter().any(|&name| key.starts_with(name)) {
-                return Err(format!("Model name '{}' contains a blacklisted term", key));
+            if RESERVED_MODEL_PREFIXES
+                .iter()
+                .any(|&name| key.starts_with(name))
+            {
+                return Err(format!("Model name '{}' contains a reserved prefix", key));
             }
         }
         Ok(ModelTable(map))
@@ -893,7 +897,7 @@ mod tests {
         let error = result.unwrap_err();
         assert!(error
             .to_string()
-            .contains("Model name 'anthropic::claude-3-haiku-20240307' contains a blacklisted term\nin `models`"));
+            .contains("Model name 'anthropic::claude-3-haiku-20240307' contains a reserved prefix\nin `models`"));
     }
 
     /// Ensure that the config parsing fails when there are extra variables for providers

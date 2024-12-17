@@ -17,7 +17,7 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::config_parser::Config;
+use crate::config_parser::{Config, ModelTable};
 use crate::embeddings::EmbeddingModelConfig;
 use crate::error::{Error, ErrorDetails};
 use crate::function::sample_variant;
@@ -31,7 +31,6 @@ use crate::inference::types::{
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
-use crate::model::ModelConfig;
 use crate::tool::{DynamicToolParams, ToolCallConfig};
 use crate::uuid_util::validate_episode_id;
 use crate::variant::{InferenceConfig, Variant};
@@ -644,7 +643,7 @@ pub struct InferenceClients<'a> {
 // Carryall struct for models used in inference
 #[derive(Debug)]
 pub struct InferenceModels<'a> {
-    pub models: &'a HashMap<String, ModelConfig>,
+    pub models: &'a ModelTable,
     pub embedding_models: &'a HashMap<String, EmbeddingModelConfig>,
 }
 
