@@ -39,7 +39,14 @@ Here are the steps in order to run or test the dashboard assuming you have the p
 
 1. Install npm dependencies: `npm install`
 2. Build the WebAssembly module following instructions in `app/utils/minijinja/README.md`.
-3. Create a `.env` file in the `dashboard` directory containing `OPENAI_API_KEY=<your-key>` (for the gateway). Also make sure your `OPENAI_API_KEY` environment variable is set (for the server).
+3. Create a `.env` file in the `dashboard` directory and set the following environment variables for the server:
+
+```bash
+OPENAI_API_KEY=<your-key>
+FIREWORKS_API_KEY=<your-key>
+FIREWORKS_ACCOUNT_ID=<your-account-id>
+```
+
 4. Run the dependencies: `docker compose -f fixtures/docker-compose.yml up`
 
 With the dependencies running, you can run the tests with `npm run test`.
