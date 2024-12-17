@@ -1,22 +1,19 @@
-# TensorZero Dashboard
+# TensorZero Dashboard [WIP]
 
 ## Status
 
 This dashboard is currently a work in progress.
 
-Our goals for this project are to:
+The goal of the dashboard is to improve the developer experience for TensorZero.
 
-- [ ] Allow users to run TensorZero recipes through the dashboard. To start, this will include:
+In particular, we want to make it easier to:
 
+- [ ] Run TensorZero recipes through the dashboard.
   - [ ] Supervised fine-tuning
   - [ ] Dynamic in-context learning
-
-- [ ] Allow users to review inferences and episodes and provide feedback to either.
-- [ ] Provide an easy dashboard showing the relative performance of different variants for a particular function.
-- [ ] Allow users to edit the configuration through the dashboard.
-
-Currently, we are building out the dashboard incrementally.
-We have the beginning of a fine-tuning form that uses the OpenAI fine-tuning API.
+- [ ] Review inferences and episodes (incl. providing feedback)
+- [ ] Track the performance of different variants for a particular function
+- [ ] Edit the configuration through the dashboard
 
 ## Running the Dashboard
 
@@ -24,14 +21,13 @@ We have the beginning of a fine-tuning form that uses the OpenAI fine-tuning API
 
 - Node.js (we have only tested with v22.9.0)
 - Docker Compose
-- a Rust toolchain
+- Rust toolchain
 
 ### Setup
 
 Currently, the dashboard only runs against hardcoded fixtures in `fixtures/`.
 It depends on a running ClickHouse instance that has been initialized with the TensorZero data model.
-We include some fixture data as well in order to exercise some functionality.
-You will need Docker Compose installed to run the dependencies.
+We include some fixture data as well to exercise some functionality.
 
 It also requires a one-time build of a WebAssembly module from Rust source code that is used to ensure consistent templating of messages across the gateway and dashboard.
 
