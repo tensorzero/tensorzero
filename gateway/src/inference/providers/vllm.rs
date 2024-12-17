@@ -16,8 +16,9 @@ use super::provider_trait::InferenceProvider;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{
-    ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-    ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
+    batch::BatchProviderInferenceResponse, ContentBlock, Latency, ModelInferenceRequest,
+    ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStream,
 };
 use crate::model::CredentialLocation;
 
@@ -168,6 +169,18 @@ impl InferenceProvider for VLLMProvider {
             }
         };
         Ok((chunk, stream, raw_request))
+    }
+
+    async fn start_batch_inference<'a>(
+        &'a self,
+        _requests: &'a [ModelInferenceRequest<'a>],
+        _client: &'a reqwest::Client,
+        _dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<BatchProviderInferenceResponse, Error> {
+        Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
+            provider_type: "vLLM".to_string(),
+        }
+        .into())
     }
 }
 
