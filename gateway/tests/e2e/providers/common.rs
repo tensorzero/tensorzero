@@ -7203,7 +7203,7 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
-        "function_name": "chat",  // Use chat function since it defaults to json_mode="off"
+        "function_name": "basic_test",
         "variant_name": provider.variant_name,
         "episode_id": episode_id,
         "input": {
@@ -7211,10 +7211,11 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is 2+2?"
+                    "content": "What is 2 + 2?"
                 }
             ]
         },
+        "json_mode": "off",
         "stream": false,
     });
 
@@ -7229,28 +7230,142 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
 
-    // Verify non-JSON response is allowed
-    let output = response_json.get("output").unwrap().as_object().unwrap();
-    let raw_output = output.get("raw").unwrap().as_str().unwrap();
-    assert!(raw_output.contains("4")); // Basic check that response contains the answer
+    println!("API response: {response_json:#?}");
 
-    // Sleep for ClickHouse
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+    assert_eq!(episode_id_response, episode_id);
+
+    let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, provider.variant_name);
+
+    // Validate output format
+    let output = response_json.get("output").unwrap().as_object().unwrap();
+    assert_eq!(output.keys().len(), 2);
+    let raw_output = output.get("raw").unwrap().as_str().unwrap();
+    assert!(raw_output.contains("4")); // Basic answer check
+
+    // Token validation with provider-specific handling
+    let usage = response_json.get("usage").unwrap();
+    let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
+    if provider.model_provider_name.contains("azure") {
+        assert_eq!(input_tokens, 0);
+        assert_eq!(output_tokens, 0);
+    } else {
+        assert!(input_tokens > 0);
+        assert!(output_tokens > 0);
+    }
+
+    // Sleep to allow time for data to be inserted into ClickHouse
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Check ClickHouse records
+    // Check ClickHouse - JsonInference table
     let clickhouse = get_clickhouse().await;
-    let result = select_json_inference_clickhouse(
-        &clickhouse,
-        Uuid::parse_str(response_json.get("inference_id").unwrap().as_str().unwrap()).unwrap(),
-    )
-    .await
-    .unwrap();
+    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
 
-    // Verify json_mode was off
+    println!("ClickHouse - JsonInference: {result:#?}");
+
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id = Uuid::parse_str(id).unwrap();
+    assert_eq!(id, inference_id);
+
+    let function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(function_name, "basic_test");
+
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, provider.variant_name);
+
+    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+    assert_eq!(retrieved_episode_id, episode_id);
+
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let correct_input = json!({
+        "system": {"assistant_name": "Dr. Mehta"},
+        "messages": [
+            {
+                "role": "user",
+                "content": [{"type": "text", "value": "What is 2 + 2?"}]
+            }
+        ]
+    });
+    assert_eq!(input, correct_input);
+
+    let output_clickhouse = result.get("output").unwrap().as_str().unwrap();
+    let output_clickhouse: Value = serde_json::from_str(output_clickhouse).unwrap();
+    let output_clickhouse = output_clickhouse.as_object().unwrap();
+    assert_eq!(output_clickhouse, output);
+
+    // Validate inference parameters
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    let inference_params = inference_params.get("chat_completion").unwrap();
     assert_eq!(
         inference_params.get("json_mode").unwrap().as_str().unwrap(),
         "off"
     );
+    assert!(inference_params.get("temperature").is_none());
+    assert!(inference_params.get("seed").is_none());
+    assert_eq!(
+        inference_params
+            .get("max_tokens")
+            .unwrap()
+            .as_u64()
+            .unwrap(),
+        100
+    );
+
+    // Check ModelInference table
+    let model_result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ModelInference: {model_result:#?}");
+
+    let model_inference_id = model_result.get("id").unwrap().as_str().unwrap();
+    assert!(Uuid::parse_str(model_inference_id).is_ok());
+
+    let inference_id_result = model_result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+
+    let model_name = model_result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = model_result
+        .get("model_provider_name")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
+    // Validate raw request/response
+    let raw_request = model_result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
+
+    let raw_response = model_result.get("raw_response").unwrap().as_str().unwrap();
+    assert!(raw_response.contains("4")); // Basic answer check
+
+    let input_tokens = model_result.get("input_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = model_result.get("output_tokens").unwrap().as_u64().unwrap();
+    if !provider.model_provider_name.contains("azure") {
+        assert!(input_tokens > 0);
+        assert!(output_tokens > 0);
+    }
+    let response_time_ms = model_result
+        .get("response_time_ms")
+        .unwrap()
+        .as_u64()
+        .unwrap();
+    assert!(response_time_ms > 0);
+    assert!(model_result.get("ttft_ms").unwrap().is_null());
 }
