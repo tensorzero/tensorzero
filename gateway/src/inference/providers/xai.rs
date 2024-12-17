@@ -24,14 +24,14 @@ use super::openai::{
 };
 
 lazy_static! {
-    static ref X_AI_DEFAULT_BASE_URL: Url = {
+    static ref XAI_DEFAULT_BASE_URL: Url = {
         #[allow(clippy::expect_used)]
-        Url::parse("https://api.x.ai/v1").expect("Failed to parse X_AI_DEFAULT_BASE_URL")
+        Url::parse("https://api.x.ai/v1").expect("Failed to parse XAI_DEFAULT_BASE_URL")
     };
 }
 
 pub fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("X_AI_API_KEY".to_string())
+    CredentialLocation::Env("XAI_API_KEY".to_string())
 }
 
 #[derive(Debug)]
@@ -76,13 +76,14 @@ impl InferenceProvider for XAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = XAIRequest::new(&self.model_name, request)?;
-        let request_url = get_chat_url(Some(&X_AI_DEFAULT_BASE_URL))?;
+        let request_url = get_chat_url(Some(&XAI_DEFAULT_BASE_URL))?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let request_builder = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
             .bearer_auth(api_key.expose_secret());
+
         let res = request_builder
             .json(&request_body)
             .send()
@@ -92,6 +93,7 @@ impl InferenceProvider for XAIProvider {
                     message: format!("Error sending request to X AI: {e}"),
                 })
             })?;
+
         if res.status().is_success() {
             let response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::XAIServer {
@@ -115,9 +117,9 @@ impl InferenceProvider for XAIProvider {
                 generic_request: request,
             }
             .try_into()
-            .map_err(map_openai_to_x_ai_error)?)
+            .map_err(map_openai_to_xai_error)?)
         } else {
-            Err(map_openai_to_x_ai_error(handle_openai_error(
+            Err(map_openai_to_xai_error(handle_openai_error(
                 res.status(),
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::XAIServer {
@@ -147,7 +149,7 @@ impl InferenceProvider for XAIProvider {
                 message: format!("Error serializing request: {e}"),
             })
         })?;
-        let request_url = get_chat_url(Some(&X_AI_DEFAULT_BASE_URL))?;
+        let request_url = get_chat_url(Some(&XAI_DEFAULT_BASE_URL))?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let event_source = http_client
@@ -163,7 +165,7 @@ impl InferenceProvider for XAIProvider {
             })?;
 
         let mut stream =
-            Box::pin(stream_openai(event_source, start_time).map_err(map_openai_to_x_ai_error));
+            Box::pin(stream_openai(event_source, start_time).map_err(map_openai_to_xai_error));
         // Get a single chunk from the stream and make sure it is OK then send to client.
         // We want to do this here so that we can tell that the request is working.
         let chunk = match stream.next().await {
@@ -344,7 +346,7 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
     }
 }
 
-fn map_openai_to_x_ai_error(e: Error) -> Error {
+fn map_openai_to_xai_error(e: Error) -> Error {
     let details = e.get_owned_details();
     match details {
         ErrorDetails::OpenAIServer { message } => ErrorDetails::XAIServer { message },
@@ -395,22 +397,22 @@ mod tests {
             output_schema: None,
         };
 
-        let x_ai_request = XAIRequest::new("grok-beta", &request_with_tools)
+        let xai_request = XAIRequest::new("grok-beta", &request_with_tools)
             .expect("failed to create X AI Request during test");
 
-        assert_eq!(x_ai_request.messages.len(), 1);
-        assert_eq!(x_ai_request.temperature, Some(0.5));
-        assert_eq!(x_ai_request.max_tokens, Some(100));
-        assert!(!x_ai_request.stream);
-        assert_eq!(x_ai_request.seed, Some(69));
-        assert!(x_ai_request.tools.is_some());
-        let tools = x_ai_request.tools.as_ref().unwrap();
+        assert_eq!(xai_request.messages.len(), 1);
+        assert_eq!(xai_request.temperature, Some(0.5));
+        assert_eq!(xai_request.max_tokens, Some(100));
+        assert!(!xai_request.stream);
+        assert_eq!(xai_request.seed, Some(69));
+        assert!(xai_request.tools.is_some());
+        let tools = xai_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
 
         assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
         assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
         assert_eq!(
-            x_ai_request.tool_choice,
+            xai_request.tool_choice,
             Some(OpenAIToolChoice::Specific(SpecificToolChoice {
                 r#type: OpenAIToolType::Function,
                 function: SpecificToolFunction {
@@ -438,26 +440,26 @@ mod tests {
             output_schema: None,
         };
 
-        let x_ai_request = XAIRequest::new("grok-beta", &request_with_tools)
+        let xai_request = XAIRequest::new("grok-beta", &request_with_tools)
             .expect("failed to create X AI Request");
 
-        assert_eq!(x_ai_request.messages.len(), 2);
-        assert_eq!(x_ai_request.temperature, Some(0.5));
-        assert_eq!(x_ai_request.max_tokens, Some(100));
-        assert_eq!(x_ai_request.top_p, Some(0.9));
-        assert_eq!(x_ai_request.presence_penalty, Some(0.1));
-        assert_eq!(x_ai_request.frequency_penalty, Some(0.2));
-        assert!(!x_ai_request.stream);
-        assert_eq!(x_ai_request.seed, Some(69));
+        assert_eq!(xai_request.messages.len(), 2);
+        assert_eq!(xai_request.temperature, Some(0.5));
+        assert_eq!(xai_request.max_tokens, Some(100));
+        assert_eq!(xai_request.top_p, Some(0.9));
+        assert_eq!(xai_request.presence_penalty, Some(0.1));
+        assert_eq!(xai_request.frequency_penalty, Some(0.2));
+        assert!(!xai_request.stream);
+        assert_eq!(xai_request.seed, Some(69));
 
-        assert!(x_ai_request.tools.is_some());
-        let tools = x_ai_request.tools.as_ref().unwrap();
+        assert!(xai_request.tools.is_some());
+        let tools = xai_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
 
         assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
         assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
         assert_eq!(
-            x_ai_request.tool_choice,
+            xai_request.tool_choice,
             Some(OpenAIToolChoice::Specific(SpecificToolChoice {
                 r#type: OpenAIToolType::Function,
                 function: SpecificToolFunction {
@@ -471,7 +473,7 @@ mod tests {
             ..request_with_tools
         };
 
-        let x_ai_request = XAIRequest::new("grok-beta", &request_with_tools);
-        assert!(x_ai_request.is_err());
+        let xai_request = XAIRequest::new("grok-beta", &request_with_tools);
+        assert!(xai_request.is_err());
     }
 }

@@ -162,12 +162,12 @@ routing = ["openai"]
 type = "openai"
 model_name = "o1-mini"
 
-[models."grok-beta"]
+[models."grok_2_1212"]
 routing = ["xai"]
 
-[models."grok-beta".providers.xai]
+[models."grok_2_1212".providers.xai]
 type = "xai"
-model_name = "grok-beta"
+model_name = "grok-2-1212"
 
 [models.test]
 routing = ["good"]
@@ -408,7 +408,7 @@ max_tokens = 100
 
 [functions.basic_test.variants.xai]
 type = "chat_completion"
-model = "grok-beta"
+model = "grok_2_1212"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -1058,7 +1058,7 @@ max_tokens = 100
 
 [functions.weather_helper.variants.xai]
 type = "chat_completion"
-model = "grok-beta"
+model = "grok_2_1212"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 100
 
