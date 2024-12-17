@@ -251,8 +251,7 @@ impl<'a> XAIRequest<'a> {
 
         if request.json_mode == ModelInferenceRequestJsonMode::Strict {
             return Err(ErrorDetails::InvalidRequest {
-                message: "The xAI Grok beta family of models does not support strict JSON"
-                    .to_string(),
+                message: "The xAI models don't support strict JSON mode.".to_string(),
             }
             .into());
         }
@@ -475,5 +474,10 @@ mod tests {
 
         let xai_request = XAIRequest::new("grok-beta", &request_with_tools);
         assert!(xai_request.is_err());
+    }
+
+    #[test]
+    fn test_xai_api_base() {
+        assert_eq!(XAI_DEFAULT_BASE_URL.as_str(), "https://api.x.ai/v1");
     }
 }
