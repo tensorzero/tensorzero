@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { FireworksSFTJob, OpenAISFTJob, format_url } from "./client";
+import { OpenAISFTJob } from "./openai.client";
+import { FireworksSFTJob } from "./fireworks.client";
+import { format_url } from "./common";
 
 describe("format_url", () => {
   it("formats URL with no path arg and no query params", () => {

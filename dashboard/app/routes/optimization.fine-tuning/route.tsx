@@ -20,7 +20,8 @@ import {
   dump_model_config,
   get_fine_tuned_model_config,
 } from "~/utils/fine_tuning/config_block";
-import { launch_sft_job, poll_sft_job } from "~/utils/fine_tuning/client";
+import { launch_sft_job } from "~/utils/fine_tuning/client";
+
 export const meta: MetaFunction = () => {
   return [
     { title: "TensorZeroFine-Tuning Dashboard" },
@@ -116,23 +117,21 @@ export default function FineTuning() {
       setSubmissionPhase("submitting");
       setSubmissionResult("Preparing training data...");
 
-      let jobStatus = await launch_sft_job(data);
+      let job = await launch_sft_job(data);
       setSubmissionResult("Job started. Polling for job status...");
-      console.log("Job status:", jobStatus);
 
       let finished = false;
       let result: string | undefined;
 
       while (!finished) {
         await new Promise((resolve) => setTimeout(resolve, 10000));
-        console.log("Polling job status", new Date().toISOString());
-        jobStatus = await poll_sft_job(jobStatus);
-        result = jobStatus.result();
+        job = await job.poll(job);
+        result = job.result();
         finished = result !== undefined;
-        setSubmissionResult(jobStatus.display());
+        setSubmissionResult(job.display());
       }
       setSubmissionPhase("complete");
-      const fineTunedModelName = jobStatus.result();
+      const fineTunedModelName = job.result();
       if (!fineTunedModelName) {
         throw new Error("No fine-tuned model name found");
       }

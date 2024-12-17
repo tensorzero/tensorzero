@@ -17,7 +17,7 @@ import { render_message } from "~/utils/fine_tuning/rendering";
 import { JsExposedEnv } from "~/utils/minijinja/pkg/minijinja_bindings";
 import type { SFTFormValues } from "~/routes/optimization.fine-tuning/route";
 import { v7 } from "uuid";
-import { FireworksSFTJob } from "~/utils/fine_tuning/client";
+import { FireworksSFTJob } from "~/utils/fine_tuning/fireworks.client";
 
 // Launches a fine-tuning job on Fireworks
 // We actually initialize the dataset on Fireworks, upload the dataset, wait
@@ -30,7 +30,6 @@ export async function action({ request }: ActionFunctionArgs) {
 
   try {
     const data = (await request.json()) as SFTFormValues;
-    console.log("data", data);
     const config = await getConfig();
     const current_variant = config.functions[data.function].variants[
       data.variant
@@ -58,7 +57,6 @@ export async function action({ request }: ActionFunctionArgs) {
       validationSplit,
       template_env,
     );
-    console.log("foo Job path:", jobPath);
     return Response.json(
       new FireworksSFTJob(jobPath, "created", undefined, undefined),
     );
@@ -72,7 +70,6 @@ export async function action({ request }: ActionFunctionArgs) {
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
-  console.log("foo Loader URL:", url);
   const jobPath = url.searchParams.get("jobPath");
   const modelId = url.searchParams.get("modelId");
 
@@ -219,6 +216,7 @@ async function create_dataset_record(accountId: string, exampleCount: number) {
     }),
   };
   const response = await fetch(url, options).then((r) => r.json());
+  // TODO(Viraj: check it more robustly)
   console.log("Created dataset record", response);
 
   return datasetId;
@@ -257,7 +255,6 @@ async function upload_dataset(
     body: form,
   };
 
-  console.log("Uploading dataset");
   const response = await fetch(url, options).then((r) => r.json());
 
   return response;
@@ -279,7 +276,6 @@ async function dataset_is_ready(accountId: string, datasetId: string) {
   };
 
   const response = await fetch(url, options).then((r) => r.json());
-  console.log("Dataset status:", response.state);
   return response.state == "READY";
 }
 
@@ -313,9 +309,7 @@ async function create_fine_tuning_job(
     body: JSON.stringify(body),
   };
 
-  console.log("Creating fine-tuning job");
   const response = await fetch(url, options).then((r) => r.json());
-  console.log("Created fine-tuning job", response);
   return response.name;
 }
 
@@ -323,15 +317,12 @@ export async function poll_sft_fireworks(
   jobPath: string,
   modelId?: string,
 ): Promise<FireworksSFTJob> {
-  console.log("polling fireworks job", new Date().toISOString());
   if (!modelId) {
     // If we don't have a model ID, training is still running so we need to poll for it
-    console.log("Polling for fine-tuning job status foo");
     const status = await get_fine_tuning_job_status(jobPath);
 
     if (status === "COMPLETED") {
       const modelId = await get_model_id(jobPath);
-      console.log("Model ID:", modelId);
       await deploy_model(FIREWORKS_ACCOUNT_ID, modelId);
       return new FireworksSFTJob(jobPath, "DEPLOYING", modelId, undefined);
     } else {
@@ -360,7 +351,6 @@ type FineTuningJobStatus =
 // Docs: https://docs.fireworks.ai/api-reference/get-fine-tuning-job
 async function get_fine_tuning_job_details(job_path: string) {
   const url = new URL(`v1/${job_path}`, FIREWORKS_API_URL).toString();
-  console.log("foo Getting fine-tuning job details", url);
   const options = {
     method: "GET",
     headers: {
@@ -369,9 +359,7 @@ async function get_fine_tuning_job_details(job_path: string) {
   };
 
   const info = await fetch(url, options);
-  console.log("Raw fine-tuning job response:", info);
   const response = await info.json();
-  console.log("Fine-tuning job details:", response);
 
   return response;
 }
@@ -380,7 +368,6 @@ async function get_fine_tuning_job_status(
   job_path: string,
 ): Promise<FineTuningJobStatus> {
   const response = await get_fine_tuning_job_details(job_path);
-  console.log("Fine-tuning job status:", response.state);
   return response.state;
 }
 
@@ -419,9 +406,7 @@ async function deploy_model_request(accountId: string, modelId: string) {
     body: JSON.stringify(body),
   };
 
-  console.log("Deploying model");
   const response = await fetch(url, options).then((r) => r.json());
-  console.log("Deployed model", response);
 
   return response;
 }
