@@ -9,13 +9,69 @@ retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max
 retries = 0
 slow-timeout = { period = "2s", terminate-after = 1 }
 
-# Note: use the following commands to debug test groups:
-# cargo nextest show-config test-groups
-# cargo nextest show-config test-groups --features e2e_tests
+# Rate limit configurations for provider E2E tests:
+# - XAI: max-threads=1 due to strict rate limiting
+# - Anthropic: max-threads=3 based on 50 RPM limit
+# - Azure: max-threads=5 to accommodate regional deployment limits
+# - AWS Bedrock: max-threads=2 due to quota approval requirements
+# - GCP Vertex/Google AI Studio: max-threads=5 based on regional quotas
+# - Fireworks/Mistral/Together: max-threads=3 as conservative default
+# - VLLM: max-threads=10 as self-hosted deployment
+# - OpenAI: max-threads=5 with built-in rate limit handling
 
 [test-groups]
 e2e-xai = { max-threads = 1 }  # run XAI E2E tests sequentially to avoid rate limits
+e2e-anthropic = { max-threads = 3 }
+e2e-azure = { max-threads = 5 }
+e2e-aws-bedrock = { max-threads = 2 }
+e2e-gcp-vertex = { max-threads = 5 }
+e2e-google-ai-studio = { max-threads = 5 }
+e2e-fireworks = { max-threads = 3 }
+e2e-mistral = { max-threads = 3 }
+e2e-together = { max-threads = 3 }
+e2e-vllm = { max-threads = 10 }
+e2e-openai = { max-threads = 5 }
 
 [[profile.default.overrides]]
 filter = 'test(providers::xai::) and binary(e2e)'
 test-group = 'e2e-xai'
+
+[[profile.default.overrides]]
+filter = 'test(providers::anthropic::) and binary(e2e)'
+test-group = 'e2e-anthropic'
+
+[[profile.default.overrides]]
+filter = 'test(providers::azure::) and binary(e2e)'
+test-group = 'e2e-azure'
+
+[[profile.default.overrides]]
+filter = 'test(providers::aws_bedrock::) and binary(e2e)'
+test-group = 'e2e-aws-bedrock'
+
+[[profile.default.overrides]]
+filter = 'test(providers::gcp_vertex::) and binary(e2e)'
+test-group = 'e2e-gcp-vertex'
+
+[[profile.default.overrides]]
+filter = 'test(providers::google_ai_studio::) and binary(e2e)'
+test-group = 'e2e-google-ai-studio'
+
+[[profile.default.overrides]]
+filter = 'test(providers::fireworks::) and binary(e2e)'
+test-group = 'e2e-fireworks'
+
+[[profile.default.overrides]]
+filter = 'test(providers::mistral::) and binary(e2e)'
+test-group = 'e2e-mistral'
+
+[[profile.default.overrides]]
+filter = 'test(providers::together::) and binary(e2e)'
+test-group = 'e2e-together'
+
+[[profile.default.overrides]]
+filter = 'test(providers::vllm::) and binary(e2e)'
+test-group = 'e2e-vllm'
+
+[[profile.default.overrides]]
+filter = 'test(providers::openai::) and binary(e2e)'
+test-group = 'e2e-openai'
