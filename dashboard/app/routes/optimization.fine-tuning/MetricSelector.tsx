@@ -1,5 +1,5 @@
 import { Control } from "react-hook-form";
-import { FormValues } from "./route";
+import { SFTFormValues } from "./route";
 import { Config } from "~/utils/config";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 import {
@@ -13,7 +13,7 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { Input } from "~/components/ui/input";
 
 type MetricSelectorProps = {
-  control: Control<FormValues>;
+  control: Control<SFTFormValues>;
   feedbackCount: number | null;
   curatedInferenceCount: number | null;
   config: Config;

@@ -1,33 +1,74 @@
+import { type ActionFunctionArgs } from "react-router";
+import { getConfig } from "~/utils/config.server";
+import { getCuratedInferences } from "~/utils/clickhouse";
+import type { SFTFormValues } from "~/routes/optimization.fine-tuning/route";
+import { ChatCompletionConfig, get_template_env } from "~/utils/config/variant";
+import { ErrorWithStatus } from "~/utils/error";
 import * as os from "os";
 import { createReadStream } from "fs";
 import * as fs from "fs/promises";
 import * as path from "path";
 import OpenAI from "openai";
-import { BadRequestError } from "../error";
 import {
   ContentBlockOutput,
   InputMessageContent,
   JsonInferenceOutput,
   ParsedInferenceRow,
   Role,
-} from "../clickhouse";
-import { JsExposedEnv } from "../minijinja/pkg/minijinja_bindings";
-import { render_message } from "./rendering";
-import { splitValidationData } from "./common";
+} from "~/utils/clickhouse";
+import { JsExposedEnv } from "~/utils/minijinja/pkg/minijinja_bindings";
+import { render_message } from "~/utils/fine_tuning/rendering";
+import { splitValidationData } from "~/utils/fine_tuning/common";
+import { client } from "~/utils/fine_tuning/openai";
+import { OpenAISFTJob } from "~/utils/fine_tuning/client";
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-export async function poll_sft_openai(params: { job_id?: string }) {
-  const { job_id } = params;
-  if (!job_id) {
-    const error = new BadRequestError("Job ID is required to poll OpenAI SFT");
-    throw error;
+export async function action({ request }: ActionFunctionArgs) {
+  if (request.method !== "POST") {
+    return Response.json({ error: "Method not allowed" }, { status: 405 });
   }
 
-  const job = await client.fineTuning.jobs.retrieve(job_id);
-  return job;
+  try {
+    const data = (await request.json()) as SFTFormValues;
+    console.log("data", data);
+    const config = await getConfig();
+    const current_variant = config.functions[data.function].variants[
+      data.variant
+    ] as ChatCompletionConfig;
+    if (
+      data.model.provider !== "openai" &&
+      data.model.provider !== "fireworks"
+    ) {
+      return Response.json(
+        { error: "Unsupported model provider" },
+        { status: 400 },
+      );
+    }
+
+    // Get curated inferences
+    const curatedInferences = await getCuratedInferences(
+      data.function,
+      config.functions[data.function],
+      data.metric,
+      config.metrics[data.metric],
+    );
+
+    const template_env = await get_template_env(current_variant);
+    const validationSplit = data.validationSplitPercent / 100;
+    const job_status = await start_sft_openai(
+      data.model.name,
+      curatedInferences,
+      validationSplit,
+      template_env,
+    );
+
+    console.log("job_status", job_status);
+    return Response.json(job_status);
+  } catch (error) {
+    return Response.json(
+      { error: (error as Error).message },
+      { status: error instanceof ErrorWithStatus ? error.status : 500 },
+    );
+  }
 }
 
 export async function start_sft_openai(
@@ -55,7 +96,7 @@ export async function start_sft_openai(
     file_id,
     val_file_id ?? undefined,
   );
-  return { job_id };
+  return new OpenAISFTJob(job_id, "created", undefined);
 }
 
 async function upload_examples_to_openai(samples: OpenAIMessage[][]) {
@@ -66,6 +107,7 @@ async function upload_examples_to_openai(samples: OpenAIMessage[][]) {
       .map((messages) => JSON.stringify({ messages }))
       .join("\n");
 
+    console.log("jsonl", jsonl);
     // Write to temporary file
     tempFile = path.join(os.tmpdir(), `temp_training_data_${Date.now()}.jsonl`);
     await fs.writeFile(tempFile, jsonl);
@@ -96,6 +138,9 @@ async function create_openai_fine_tuning_job(
   const params: OpenAI.FineTuning.JobCreateParams = {
     model,
     training_file: train_file_id,
+    hyperparameters: {
+      n_epochs: 1,
+    },
   };
 
   if (val_file_id) {

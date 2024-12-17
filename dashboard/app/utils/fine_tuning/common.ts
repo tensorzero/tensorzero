@@ -6,7 +6,7 @@ export function splitValidationData(
 ) {
   const splitIndex =
     validationSplit > 0
-      ? Math.floor(inferences.length * (1 - validationSplit / 100))
+      ? Math.floor(inferences.length * (1 - validationSplit))
       : inferences.length;
 
   const trainInferences = inferences.slice(0, splitIndex);

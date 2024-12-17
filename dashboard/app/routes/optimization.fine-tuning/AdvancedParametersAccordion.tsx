@@ -7,10 +7,10 @@ import {
 } from "~/components/ui/accordion";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 import { Input } from "~/components/ui/input";
-import { FormValues } from "./route";
+import { SFTFormValues } from "./route";
 
 type AdvancedParametersAccordionProps = {
-  control: Control<FormValues>;
+  control: Control<SFTFormValues>;
 };
 
 export function AdvancedParametersAccordion({
@@ -28,7 +28,7 @@ export function AdvancedParametersAccordion({
           <div className="space-y-6 pt-3 px-3">
             <FormField
               control={control}
-              name="validationSplit"
+              name="validationSplitPercent"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Validation Split (%)</FormLabel>

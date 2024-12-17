@@ -1,27 +1,100 @@
+import { type LoaderFunctionArgs, type ActionFunctionArgs } from "react-router";
+import { ErrorWithStatus } from "~/utils/error";
+import { ChatCompletionConfig, get_template_env } from "~/utils/config/variant";
 import {
-  ParsedInferenceRow,
   ContentBlockOutput,
   JsonInferenceOutput,
-} from "../clickhouse";
-import { JsExposedEnv } from "../minijinja/pkg/minijinja_bindings";
-import { render_message } from "./rendering";
+  ParsedInferenceRow,
+  getCuratedInferences,
+} from "~/utils/clickhouse";
+import { getConfig } from "~/utils/config.server";
+import {
+  FIREWORKS_ACCOUNT_ID,
+  FIREWORKS_API_KEY,
+  FIREWORKS_API_URL,
+} from "~/utils/fine_tuning/fireworks";
+import { render_message } from "~/utils/fine_tuning/rendering";
+import { JsExposedEnv } from "~/utils/minijinja/pkg/minijinja_bindings";
+import type { SFTFormValues } from "~/routes/optimization.fine-tuning/route";
 import { v7 } from "uuid";
+import { FireworksSFTJob } from "~/utils/fine_tuning/client";
 
-const FIREWORKS_API_URL = "https://api.fireworks.ai";
-const FIREWORKS_API_KEY = process.env.FIREWORKS_API_KEY || throwError();
-const FIREWORKS_ACCOUNT_ID = process.env.FIREWORKS_ACCOUNT_ID || throwError();
+// Launches a fine-tuning job on Fireworks
+// We actually initialize the dataset on Fireworks, upload the dataset, wait
+// until it is ready, then create the fine-tuning job
+// This usually doesn't take long, so we poll here until the job is running.
+export async function action({ request }: ActionFunctionArgs) {
+  if (request.method !== "POST") {
+    return Response.json({ error: "Method not allowed" }, { status: 405 });
+  }
 
-// This is apparently the traditional way to coerce both to strings.
-function throwError(): never {
-  throw new Error("FIREWORKS_API_KEY and FIREWORKS_ACCOUNT_ID must be set");
+  try {
+    const data = (await request.json()) as SFTFormValues;
+    console.log("data", data);
+    const config = await getConfig();
+    const current_variant = config.functions[data.function].variants[
+      data.variant
+    ] as ChatCompletionConfig;
+    if (data.model.provider !== "fireworks") {
+      return Response.json(
+        { error: "Unsupported model provider" },
+        { status: 400 },
+      );
+    }
+
+    // Get curated inferences
+    const curatedInferences = await getCuratedInferences(
+      data.function,
+      config.functions[data.function],
+      data.metric,
+      config.metrics[data.metric],
+    );
+
+    const template_env = await get_template_env(current_variant);
+    const validationSplit = data.validationSplitPercent / 100;
+    const jobPath = await start_sft_fireworks(
+      data.model.name,
+      curatedInferences,
+      validationSplit,
+      template_env,
+    );
+    console.log("foo Job path:", jobPath);
+    return Response.json(
+      new FireworksSFTJob(jobPath, "created", undefined, undefined),
+    );
+  } catch (error) {
+    return Response.json(
+      { error: (error as Error).message },
+      { status: error instanceof ErrorWithStatus ? error.status : 500 },
+    );
+  }
 }
 
-export async function start_sft_fireworks(
+export async function loader({ request }: LoaderFunctionArgs) {
+  const url = new URL(request.url);
+  console.log("foo Loader URL:", url);
+  const jobPath = url.searchParams.get("jobPath");
+  const modelId = url.searchParams.get("modelId");
+
+  if (!jobPath) {
+    return Response.json({ error: "Job path is required" }, { status: 400 });
+  }
+
+  try {
+    const job_info = await poll_sft_fireworks(jobPath, modelId || undefined);
+    return Response.json(job_info);
+  } catch (error) {
+    console.log("Error during polling", error);
+    return Response.json({ error: (error as Error).message }, { status: 500 });
+  }
+}
+
+async function start_sft_fireworks(
   modelName: string,
   inferences: ParsedInferenceRow[],
   val_split: number,
   templateEnv: JsExposedEnv,
-) {
+): Promise<string> {
   const fireworksExamples = inferences.map((inference) =>
     tensorzero_inference_to_fireworks_messages(inference, templateEnv),
   );
@@ -32,6 +105,7 @@ export async function start_sft_fireworks(
   );
   await upload_dataset(FIREWORKS_ACCOUNT_ID, datasetId, fireworksExamples);
 
+  // We poll here since this usually does not take long
   while (!dataset_is_ready(FIREWORKS_ACCOUNT_ID, datasetId)) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
@@ -43,53 +117,7 @@ export async function start_sft_fireworks(
     val_split,
   );
 
-  return { job_path };
-}
-
-export async function poll_sft_fireworks(params: {
-  job_path?: string;
-  model_id?: string;
-}) {
-  const { job_path, model_id } = params;
-  if (!job_path) {
-    throw new Error("Job path is required");
-  }
-  if (!model_id) {
-    const status = await get_fine_tuning_job_status(job_path);
-
-    if (status === "COMPLETED") {
-      const modelId = await get_model_id(job_path);
-      console.log("Model ID:", modelId);
-      await deploy_model(FIREWORKS_ACCOUNT_ID, modelId);
-      return {
-        status: "DEPLOYING",
-        job_path,
-        model_id: modelId,
-      };
-    } else {
-      return {
-        status,
-        job_path,
-      };
-    }
-  } else {
-    const status = await poll_model_deployment(FIREWORKS_ACCOUNT_ID, model_id);
-    if (status === "DEPLOYED") {
-      const model_path = `accounts/${FIREWORKS_ACCOUNT_ID}/models/${model_id}`;
-      return {
-        status,
-        model_path,
-        model_id,
-        job_path,
-      };
-    } else {
-      return {
-        status,
-        model_id,
-        job_path,
-      };
-    }
-  }
+  return job_path;
 }
 
 type FireworksMessage = {
@@ -291,6 +319,35 @@ async function create_fine_tuning_job(
   return response.name;
 }
 
+export async function poll_sft_fireworks(
+  jobPath: string,
+  modelId?: string,
+): Promise<FireworksSFTJob> {
+  console.log("polling fireworks job", new Date().toISOString());
+  if (!modelId) {
+    // If we don't have a model ID, training is still running so we need to poll for it
+    console.log("Polling for fine-tuning job status foo");
+    const status = await get_fine_tuning_job_status(jobPath);
+
+    if (status === "COMPLETED") {
+      const modelId = await get_model_id(jobPath);
+      console.log("Model ID:", modelId);
+      await deploy_model(FIREWORKS_ACCOUNT_ID, modelId);
+      return new FireworksSFTJob(jobPath, "DEPLOYING", modelId, undefined);
+    } else {
+      return new FireworksSFTJob(jobPath, "TRAINING", undefined, undefined);
+    }
+  } else {
+    const status = await poll_model_deployment(FIREWORKS_ACCOUNT_ID, modelId);
+    if (status === "DEPLOYED") {
+      const modelPath = `accounts/${FIREWORKS_ACCOUNT_ID}/models/${modelId}`;
+      return new FireworksSFTJob(jobPath, "DEPLOYED", modelId, modelPath);
+    } else {
+      return new FireworksSFTJob(jobPath, "DEPLOYING", modelId, undefined);
+    }
+  }
+}
+
 type FineTuningJobStatus =
   | "STATE_UNSPECIFIED"
   | "CREATING"
@@ -303,7 +360,7 @@ type FineTuningJobStatus =
 // Docs: https://docs.fireworks.ai/api-reference/get-fine-tuning-job
 async function get_fine_tuning_job_details(job_path: string) {
   const url = new URL(`v1/${job_path}`, FIREWORKS_API_URL).toString();
-
+  console.log("foo Getting fine-tuning job details", url);
   const options = {
     method: "GET",
     headers: {
@@ -311,7 +368,9 @@ async function get_fine_tuning_job_details(job_path: string) {
     },
   };
 
-  const response = await fetch(url, options).then((r) => r.json());
+  const info = await fetch(url, options);
+  console.log("Raw fine-tuning job response:", info);
+  const response = await info.json();
   console.log("Fine-tuning job details:", response);
 
   return response;

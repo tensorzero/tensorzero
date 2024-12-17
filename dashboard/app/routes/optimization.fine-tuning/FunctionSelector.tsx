@@ -1,5 +1,5 @@
 import { Control } from "react-hook-form";
-import { FormValues } from "./route";
+import { SFTFormValues } from "./route";
 import { Config } from "~/utils/config";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 import {
@@ -12,7 +12,7 @@ import {
 import { Skeleton } from "~/components/ui/skeleton";
 
 type FunctionSelectorProps = {
-  control: Control<FormValues>;
+  control: Control<SFTFormValues>;
   inferenceCount: number | null;
   config: Config;
   onFunctionChange: (value: string) => void;

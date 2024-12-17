@@ -20,6 +20,7 @@ import {
   dump_model_config,
   get_fine_tuned_model_config,
 } from "~/utils/fine_tuning/config_block";
+import { launch_sft_job, poll_sft_job } from "~/utils/fine_tuning/client";
 export const meta: MetaFunction = () => {
   return [
     { title: "TensorZeroFine-Tuning Dashboard" },
@@ -27,23 +28,23 @@ export const meta: MetaFunction = () => {
   ];
 };
 
-export type FormValues = {
+export type SFTFormValues = {
   function: string;
   metric: string;
   model: ModelOption;
   variant: string;
-  validationSplit: number;
+  validationSplitPercent: number;
   maxSamples: number;
   threshold?: number;
 };
 
 export default function FineTuning() {
   const config = useConfig();
-  const form = useForm<FormValues>({
+  const form = useForm<SFTFormValues>({
     defaultValues: {
       function: "",
       metric: "",
-      validationSplit: 20,
+      validationSplitPercent: 20,
       maxSamples: 100000,
       threshold: 0.5,
     },
@@ -109,54 +110,35 @@ export default function FineTuning() {
     }
   }, [counts.inferenceCount, form]);
 
-  async function onSubmit(data: FormValues) {
+  async function onSubmit(data: SFTFormValues) {
     try {
       setIsSubmitted(true);
       setSubmissionPhase("submitting");
       setSubmissionResult("Preparing training data...");
 
-      // Call the API route for fine-tuning
-      const response = await fetch("/api/fine-tuning", {
-        method: "POST",
-        body: JSON.stringify(data),
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to start fine-tuning job");
-      }
-
-      const result = await response.json();
+      let jobStatus = await launch_sft_job(data);
       setSubmissionResult("Job started. Polling for job status...");
+      console.log("Job status:", jobStatus);
 
-      const job_id = result.job_id;
       let finished = false;
-      let jobStatus = "";
+      let result: string | undefined;
 
       while (!finished) {
         await new Promise((resolve) => setTimeout(resolve, 10000));
-        const jobResponse = await fetch(`/api/fine-tuning/${job_id}`);
-        const jobResult = await jobResponse.json();
-        jobStatus = jobResult.status;
-        setSubmissionResult(
-          `Current job status: ${jobStatus}\nJob: ${JSON.stringify(
-            jobResult.job,
-            null,
-            2,
-          )}`,
-        );
-
-        finished =
-          jobStatus === "succeeded" ||
-          jobStatus === "failed" ||
-          jobStatus === "cancelled";
+        console.log("Polling job status", new Date().toISOString());
+        jobStatus = await poll_sft_job(jobStatus);
+        result = jobStatus.result();
+        finished = result !== undefined;
+        setSubmissionResult(jobStatus.display());
       }
       setSubmissionPhase("complete");
+      const fineTunedModelName = jobStatus.result();
+      if (!fineTunedModelName) {
+        throw new Error("No fine-tuned model name found");
+      }
 
       const modelConfig = await get_fine_tuned_model_config(
-        data.model.name,
+        fineTunedModelName,
         data.model.provider,
       );
       const modelConfigToml = dump_model_config(modelConfig);
@@ -164,7 +146,7 @@ export default function FineTuning() {
         getChatCompletionVariantsForFunction()[data.variant];
       const newVariantConfigToml = create_dump_variant_config(
         oldVariantConfig,
-        data.model.name,
+        fineTunedModelName,
         data.function,
       );
 

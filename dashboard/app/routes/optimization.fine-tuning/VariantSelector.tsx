@@ -1,5 +1,5 @@
 import { Control } from "react-hook-form";
-import { FormValues } from "./route";
+import { SFTFormValues } from "./route";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 import {
   Select,
@@ -12,7 +12,7 @@ import { ChatCompletionConfig } from "~/utils/config/variant";
 import { TemplateDetailsDialog } from "./TemplateDetailsDialog";
 
 type VariantSelectorProps = {
-  control: Control<FormValues>;
+  control: Control<SFTFormValues>;
   chatCompletionVariants: Record<string, ChatCompletionConfig>;
 };
 
