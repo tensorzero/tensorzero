@@ -262,6 +262,11 @@ impl<'a> TryFrom<&'a ToolChoice> for GCPVertexAnthropicToolChoice<'a> {
             ToolChoice::Auto => Ok(GCPVertexAnthropicToolChoice::Auto),
             ToolChoice::Required => Ok(GCPVertexAnthropicToolChoice::Any),
             ToolChoice::Specific(name) => Ok(GCPVertexAnthropicToolChoice::Tool { name }),
+            // Workaround for Anthropic API limitation: they don't support explicitly specifying "none"
+            // for tool choice. Instead, we return Auto but the request construction will ensure
+            // that no tools are sent in the request payload. This achieves the same effect
+            // as explicitly telling the model not to use tools, since without any tools
+            // being provided, the model cannot make tool calls.
             ToolChoice::None => Ok(GCPVertexAnthropicToolChoice::Auto),
         }
     }
@@ -417,6 +422,10 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
         } else {
             messages
         };
+
+        // Workaround for GCP Vertex AI Anthropic API limitation: they don't support explicitly specifying "none"
+        // for tool choice. When ToolChoice::None is specified, we don't send any tools in the
+        // request payload to achieve the same effect.
         let tools = request.tool_config.as_ref().and_then(|c| {
             if matches!(c.tool_choice, ToolChoice::None) {
                 None
