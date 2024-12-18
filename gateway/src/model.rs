@@ -1138,28 +1138,28 @@ mod tests {
     }
 
     #[test]
-    fn test_get_or_create_model_config() {
+    fn test_validate_or_create_model_config() {
         let mut model_table = ModelTable::default();
         // Test that we can get or create a model config
-        model_table.validate_or_create("openai::gpt-4o").unwrap();
+        model_table.validate_or_create("dummy::gpt-4o").unwrap();
         assert_eq!(model_table.len(), 1);
-        let model_config = model_table.get("openai::gpt-4o").unwrap();
-        assert_eq!(model_config.routing, vec!["openai".to_string()]);
-        let provider_config = model_config.providers.get("openai").unwrap();
+        let model_config = model_table.get("dummy::gpt-4o").unwrap();
+        assert_eq!(model_config.routing, vec!["dummy".to_string()]);
+        let provider_config = model_config.providers.get("dummy").unwrap();
         match provider_config {
-            ProviderConfig::OpenAI(provider) => assert_eq!(provider.model_name, "gpt-4o"),
-            _ => panic!("Expected OpenAI provider"),
+            ProviderConfig::Dummy(provider) => assert_eq!(provider.model_name, "gpt-4o"),
+            _ => panic!("Expected Dummy provider"),
         }
 
         // Test that it is idempotent
-        model_table.validate_or_create("openai::gpt-4o").unwrap();
+        model_table.validate_or_create("dummy::gpt-4o").unwrap();
         assert_eq!(model_table.len(), 1);
-        let model_config = model_table.get("openai::gpt-4o").unwrap();
-        assert_eq!(model_config.routing, vec!["openai".to_string()]);
-        let provider_config = model_config.providers.get("openai").unwrap();
+        let model_config = model_table.get("dummy::gpt-4o").unwrap();
+        assert_eq!(model_config.routing, vec!["dummy".to_string()]);
+        let provider_config = model_config.providers.get("dummy").unwrap();
         match provider_config {
-            ProviderConfig::OpenAI(provider) => assert_eq!(provider.model_name, "gpt-4o"),
-            _ => panic!("Expected OpenAI provider"),
+            ProviderConfig::Dummy(provider) => assert_eq!(provider.model_name, "gpt-4o"),
+            _ => panic!("Expected Dummy provider"),
         }
 
         // Test that it fails if the model is not well-formed
@@ -1185,6 +1185,7 @@ mod tests {
             HashMap::from([("claude".to_string(), anthropic_model_config)])
                 .try_into()
                 .unwrap();
-        model_table.validate_or_create("claude").unwrap();
+
+        model_table.validate_or_create("dummy::claude").unwrap();
     }
 }
