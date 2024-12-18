@@ -1,3 +1,4 @@
+console.log("Loading common.ts");
 import { ParsedInferenceRow } from "../clickhouse";
 import { SFTFormValues } from "~/routes/optimization.fine-tuning/types";
 
