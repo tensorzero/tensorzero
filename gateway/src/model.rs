@@ -630,7 +630,7 @@ impl std::ops::Deref for ModelTable {
 }
 
 impl ModelTable {
-    pub fn get_or_create(&mut self, key: &str) -> Option<&ModelConfig> {
+    pub fn validate_or_create(&mut self, key: &str) -> Result<(), Error> {
         // Try matching shorthand prefixes
         if let Some(prefix) = SHORTHAND_MODEL_PREFIXES
             .iter()
@@ -639,28 +639,33 @@ impl ModelTable {
             let model_name = match key.strip_prefix(prefix) {
                 Some(name) => name,
                 None => {
-                    tracing::error!("Failed to strip prefix '{}' from model name '{}' This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/issues/new", prefix, key);
-                    return None;
+                    return Err(ErrorDetails::Config {
+                        message: format!(
+                            "Failed to strip prefix '{}' from model name '{}' This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/issues/new",
+                            prefix, key
+                        ),
+                    }
+                    .into());
                 }
             };
             // Remove the last two characters of the prefix to get the provider type
             let provider_type = &prefix[..prefix.len() - 2];
-            let model_config = match model_config_from_shorthand(provider_type, model_name) {
-                Ok(model_config) => model_config,
-                Err(_) => {
-                    return None;
-                }
-            };
+            let model_config = model_config_from_shorthand(provider_type, model_name)?;
+            model_config.validate()?;
             self.0.insert(key.to_string(), model_config);
-            return self.0.get(key);
+            return Ok(());
         }
 
         // Try direct lookup (if it's blacklisted, it's not in the table)
-        if let Some(config) = self.0.get(key) {
-            return Some(config);
+        if let Some(model_config) = self.0.get(key) {
+            model_config.validate()?;
+            return Ok(());
         }
 
-        None
+        Err(ErrorDetails::Config {
+            message: format!("Model name '{}' not found in model table", key),
+        }
+        .into())
     }
 }
 
@@ -731,6 +736,7 @@ mod tests {
         types::{ContentBlockChunk, FunctionType, ModelInferenceRequestJsonMode, TextChunk},
     };
     use crate::tool::{ToolCallConfig, ToolChoice};
+    use anthropic::AnthropicCredentials;
     use secrecy::SecretString;
     use tokio_stream::StreamExt;
     use tracing_test::traced_test;
@@ -1171,5 +1177,56 @@ mod tests {
             response.output,
             vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()]
         );
+    }
+
+    #[test]
+    fn test_get_or_create_model_config() {
+        let mut model_table = ModelTable::default();
+        // Test that we can get or create a model config
+        model_table.validate_or_create("openai::gpt-4o").unwrap();
+        assert_eq!(model_table.len(), 1);
+        let model_config = model_table.get("openai::gpt-4o").unwrap();
+        assert_eq!(model_config.routing, vec!["openai".to_string()]);
+        let provider_config = model_config.providers.get("openai").unwrap();
+        match provider_config {
+            ProviderConfig::OpenAI(provider) => assert_eq!(provider.model_name, "gpt-4o"),
+            _ => panic!("Expected OpenAI provider"),
+        }
+
+        // Test that it is idempotent
+        model_table.validate_or_create("openai::gpt-4o").unwrap();
+        assert_eq!(model_table.len(), 1);
+        let model_config = model_table.get("openai::gpt-4o").unwrap();
+        assert_eq!(model_config.routing, vec!["openai".to_string()]);
+        let provider_config = model_config.providers.get("openai").unwrap();
+        match provider_config {
+            ProviderConfig::OpenAI(provider) => assert_eq!(provider.model_name, "gpt-4o"),
+            _ => panic!("Expected OpenAI provider"),
+        }
+
+        // Test that it fails if the model is not well-formed
+        let model_config = model_table.validate_or_create("foo::bar");
+        assert!(model_config.is_err());
+        assert_eq!(
+            model_config.unwrap_err(),
+            ErrorDetails::Config {
+                message: "Model name 'foo::bar' not found in model table".to_string()
+            }
+            .into()
+        );
+        // Test that it works with an initialized model
+        let anthropic_provider_config = ProviderConfig::Anthropic(AnthropicProvider {
+            model_name: "claude".to_string(),
+            credentials: AnthropicCredentials::Static("".to_string().into()),
+        });
+        let anthropic_model_config = ModelConfig {
+            routing: vec!["anthropic".to_string()],
+            providers: HashMap::from([("anthropic".to_string(), anthropic_provider_config)]),
+        };
+        let mut model_table: ModelTable =
+            HashMap::from([("claude".to_string(), anthropic_model_config)])
+                .try_into()
+                .unwrap();
+        model_table.validate_or_create("claude").unwrap();
     }
 }

@@ -246,21 +246,7 @@ impl Variant for ChatCompletionConfig {
                 ),
             }.into());
         }
-        let model = models.get_or_create(&self.model).ok_or_else(|| Error::new(ErrorDetails::Config {
-            message: format!("`functions.{function_name}.variants.{variant_name}`: `model` must be a valid model name"),
-        }))?;
-
-        // If the variant has weight > 0.0, then we need to validate that the model is correctly configured
-        if self.weight > 0.0 {
-            model.validate().map_err(|e| {
-                Error::new(ErrorDetails::Config {
-                    message: format!(
-                        "`functions.{function_name}.variants.{variant_name}` and model `{}`: {e}",
-                        self.model
-                    ),
-                })
-            })?;
-        }
+        models.validate_or_create(&self.model)?;
 
         // Validate the system template matches the system schema (best effort, we cannot check the variables comprehensively)
         validate_template_and_schema(

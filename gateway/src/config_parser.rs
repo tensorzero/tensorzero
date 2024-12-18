@@ -141,7 +141,7 @@ impl<'c> Config<'c> {
         for (function_name, function) in &self.functions {
             function.validate(
                 &self.tools,
-                &mut self.models,
+                &mut self.models, // NOTE: in here there might be some models created using shorthand initialization
                 &self.embedding_models,
                 &self.templates,
                 function_name,
@@ -1229,8 +1229,9 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
-                message: "`functions.generate_draft.variants.openai_promptA`: `model` must be a valid model name".to_string()
-            }.into()
+                message: "Model name 'non_existent_model' not found in model table".to_string()
+            }
+            .into()
         );
     }
 
@@ -1334,7 +1335,7 @@ mod tests {
     /// Get a sample valid config for testing
     fn get_sample_valid_config() -> toml::Table {
         let config_str = r#"
-        # ┌───────────────���────────────────────────────────────────────────────────────┐
+        # ┌────────────────────────────────────────────────────────────────────────────┐
         # │                                  GENERAL                                   │
         # └────────────────────────────────────────────────────────────────────────────┘
 
@@ -1375,7 +1376,7 @@ mod tests {
         type = "openai"
         model_name = "text-embedding-3-small"
 
-        # ┌────────────────────────────────────────────��───────────────────────────────┐
+        # ┌────────────────────────────────────────────────────────────────────────────┐
         # │                                 FUNCTIONS                                  │
         # └────────────────────────────────────────────────────────────────────────────┘
 
@@ -1501,7 +1502,7 @@ mod tests {
 
         # ┌────────────────────────────────────────────────────────────────────────────┐
         # │                                   TOOLS                                    │
-        # └────────────────────────���───────────────────────────────────────────────────┘
+        # └────────────────────────────────────────────────────────────────────────────┘
         [tools.get_temperature]
         description = "Get the weather for a given location"
         parameters = "fixtures/config/tools/get_temperature.json"
