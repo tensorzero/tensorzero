@@ -22,6 +22,7 @@ use crate::inference::providers::mistral::MistralCredentials;
 use crate::inference::providers::openai::OpenAICredentials;
 use crate::inference::providers::together::TogetherCredentials;
 use crate::inference::providers::vllm::VLLMCredentials;
+use crate::inference::providers::xai::XAICredentials;
 use crate::inference::types::batch::{BatchModelInferenceResponse, BatchProviderInferenceResponse};
 use crate::{
     endpoints::inference::InferenceCredentials,
@@ -39,6 +40,7 @@ use crate::{
             provider_trait::InferenceProvider,
             together::TogetherProvider,
             vllm::VLLMProvider,
+            xai::XAIProvider,
         },
         types::{
             ModelInferenceRequest, ModelInferenceResponse, ProviderInferenceResponse,
@@ -175,6 +177,7 @@ pub enum ProviderConfig {
     OpenAI(OpenAIProvider),
     Together(TogetherProvider),
     VLLM(VLLMProvider),
+    XAI(XAIProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
 }
@@ -257,6 +260,12 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 model_name: String,
                 api_base: Url,
                 #[serde(default = "providers::vllm::default_api_key_location")]
+                api_key_location: CredentialLocation,
+            },
+            #[allow(clippy::upper_case_acronyms)]
+            XAI {
+                model_name: String,
+                #[serde(default = "providers::xai::default_api_key_location")]
                 api_key_location: CredentialLocation,
             },
             #[cfg(any(test, feature = "e2e_tests"))]
@@ -635,6 +644,34 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                     credentials,
                 })
             }
+            ProviderConfigHelper::XAI {
+                model_name,
+                api_key_location,
+            } => {
+                let credentials = match api_key_location {
+                    CredentialLocation::Env(key_name) => {
+                        let api_key = env::var(key_name)
+                            .map_err(|_| {
+                                serde::de::Error::custom(
+                                    ErrorDetails::ApiKeyMissing {
+                                        provider_name: "X AI".to_string(),
+                                    }
+                                    .to_string(),
+                                )
+                            })?
+                            .into();
+                        XAICredentials::Static(api_key)
+                    }
+                    CredentialLocation::Dynamic(key_name) => XAICredentials::Dynamic(key_name),
+                    _ => Err(serde::de::Error::custom(
+                        "Invalid api_key_location for X AI provider".to_string(),
+                    ))?,
+                };
+                ProviderConfig::XAI(XAIProvider {
+                    model_name,
+                    credentials,
+                })
+            }
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfigHelper::Dummy {
                 model_name,
@@ -681,6 +718,7 @@ impl ProviderConfig {
             ProviderConfig::OpenAI(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::Together(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::VLLM(provider) => provider.infer(request, client, api_keys).await,
+            ProviderConfig::XAI(provider) => provider.infer(request, client, api_keys).await,
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => provider.infer(request, client, api_keys).await,
         }
@@ -730,6 +768,7 @@ impl ProviderConfig {
             ProviderConfig::Together(provider) => {
                 provider.infer_stream(request, client, api_keys).await
             }
+            ProviderConfig::XAI(provider) => provider.infer_stream(request, client, api_keys).await,
             ProviderConfig::VLLM(provider) => {
                 provider.infer_stream(request, client, api_keys).await
             }
@@ -798,6 +837,11 @@ impl ProviderConfig {
                     .await
             }
             ProviderConfig::VLLM(provider) => {
+                provider
+                    .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
+            ProviderConfig::XAI(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
                     .await
