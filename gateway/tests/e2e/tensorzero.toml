@@ -182,6 +182,13 @@ routing = ["xai"]
 type = "xai"
 model_name = "grok-2-1212"
 
+[models."meta-llama/Meta-Llama-3-70B-Instruct"]
+routing = ["hyperbolic"]
+
+[models."meta-llama/Meta-Llama-3-70B-Instruct".providers.hyperbolic]
+type = "hyperbolic"
+model_name = "meta-llama/Meta-Llama-3-70B-Instruct"
+
 [models.test]
 routing = ["good"]
 
@@ -434,6 +441,12 @@ max_tokens = 100
 [functions.basic_test.variants.xai]
 type = "chat_completion"
 model = "grok_2_1212"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.hyperbolic]
+type = "chat_completion"
+model = "meta-llama/Meta-Llama-3-70B-Instruct"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -1091,24 +1104,6 @@ max_tokens = 100
 type = "chat_completion"
 model = "grok_2_1212"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
-max_tokens = 100
-
-[functions.weather_helper.variants.xai]
-type = "chat_completion"
-model = "grok_2_1212"
-system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
-max_tokens = 100
-
-[functions.weather_helper.variants.xai]
-type = "chat_completion"
-model = "grok_2_1212"
-system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
-max_tokens = 100
-
-[functions.weather_helper.variants.hyperbolic]
-type = "chat_completion"
-model = "meta-llama/Meta-Llama-3-70B-Instruct"
-system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.weather_helper.variants.hyperbolic]
