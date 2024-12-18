@@ -415,6 +415,11 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.to_lowercase().contains("japan"));
     assert!(
@@ -865,6 +870,11 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.to_lowercase().contains("japan"));
     assert!(
@@ -1101,6 +1111,11 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
+
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.to_lowercase().contains("japan"));
@@ -2830,12 +2845,13 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
 pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // TODO (#204): Implement ToolChoice::None workaround for AWS Bedrock.
-    if provider.model_provider_name.contains("aws-bedrock") {
-        return;
-    }
+    // NOTE: The xAI API occasionally returns a tool call despite receiving the "tool_choice": "none" parameter.
+    // We'll leave this test running for now, so some flakiness is expected.
+    // The bug has been reported to the xAI team.
+    //
+    // https://gist.github.com/GabrielBianconi/2199022d0ea8518e06d366fb613c5bb5
 
-    // TODO (#205): Implement ToolChoice::None workaround for Anthropic.
+    // TODO (#536): Implement ToolChoice::None workaround for GCP Vertex AI Anthropic.
     if provider.model_provider_name.contains("anthropic") {
         return;
     }
@@ -3055,12 +3071,13 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
 pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // TODO (#204): Implement ToolChoice::None workaround for AWS Bedrock.
-    if provider.model_provider_name.contains("aws-bedrock") {
-        return;
-    }
+    // NOTE: The xAI API occasionally returns a tool call despite receiving the "tool_choice": "none" parameter.
+    // We'll leave this test running for now, so some flakiness is expected.
+    // The bug has been reported to the xAI team.
+    //
+    // https://gist.github.com/GabrielBianconi/2199022d0ea8518e06d366fb613c5bb5
 
-    // TODO (#205): Implement ToolChoice::None workaround for Anthropic.
+    // TODO (#536): Implement ToolChoice::None workaround for GCP Vertex AI Anthropic.
     if provider.model_provider_name.contains("anthropic") {
         return;
     }
@@ -4598,6 +4615,14 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
 }
 
 pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ETestProvider) {
+    // NOTE: The xAI API returns an error for multi-turn tool use when the assistant message only has tool_calls but no content.
+    // The xAI team has acknowledged the issue and is working on a fix.
+    // We skip this test for xAI until the fix is deployed.
+    // https://gist.github.com/GabrielBianconi/47a4247cfd8b6689e7228f654806272d
+    if provider.model_provider_name == "xai" {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -4851,6 +4876,14 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
 pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    // NOTE: The xAI API returns an error for multi-turn tool use when the assistant message only has tool_calls but no content.
+    // The xAI team has acknowledged the issue and is working on a fix.
+    // We skip this test for xAI until the fix is deployed.
+    // https://gist.github.com/GabrielBianconi/47a4247cfd8b6689e7228f654806272d
+    if provider.model_provider_name == "xai" {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -5367,6 +5400,11 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
 
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.contains("get_temperature"));
     assert!(raw_request.to_lowercase().contains("tokyo"));
@@ -5688,6 +5726,11 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
+
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.contains("get_temperature"));
@@ -6014,6 +6057,11 @@ pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
+
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.contains("get_temperature"));
@@ -6393,6 +6441,11 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
+
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.to_lowercase().contains("get_temperature"));

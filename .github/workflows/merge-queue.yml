@@ -18,9 +18,9 @@ env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }} # for E2E tests
   TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }} # for E2E tests
   VLLM_API_KEY: ${{ secrets.VLLM_API_KEY }} # for E2E tests
-  VLLM_MODEL_NAME: "microsoft/Phi-3.5-mini-instruct"
-  VLLM_API_BASE: ${{ secrets.VLLM_API_BASE }}
-
+  VLLM_MODEL_NAME: "microsoft/Phi-3.5-mini-instruct" # for E2E tests
+  VLLM_API_BASE: ${{ secrets.VLLM_API_BASE }} # for E2E tests
+  XAI_API_KEY: ${{ secrets.XAI_API_KEY }} # for E2E tests
 jobs:
   live-tests:
     runs-on: ubuntu-22.04-8core
@@ -98,16 +98,6 @@ jobs:
         working-directory: recipes/tests
         run: uv run pytest
 
-      - name: Install dependencies for python recipes tests
-        working-directory: recipes/tests
-        run: |
-          uv venv
-          uv pip sync requirements.txt
-
-      - name: Run python recipes tests
-        working-directory: recipes/tests
-        run: uv run pytest
-
       - name: Terminate the gateway
         run: |
           echo "Killing gateway with pid $GATEWAY_PID"
@@ -135,6 +125,7 @@ jobs:
       - name: Set up CLICKHOUSE_URL for production deployment tests
         run: |
           echo "CLICKHOUSE_URL=http://172.17.0.1:8123/tensorzero" >> $GITHUB_ENV
+
       - name: Set up .env file for production deployment tests
         run: |
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > examples/production-deployment/.env
