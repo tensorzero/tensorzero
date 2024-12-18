@@ -425,18 +425,6 @@ model = "meta-llama/Meta-Llama-3-70B-Instruct"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
-[functions.basic_test.variants.xai]
-type = "chat_completion"
-model = "grok_2_1212"
-system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
-
-[functions.basic_test.variants.hyperbolic]
-type = "chat_completion"
-model = "meta-llama/Meta-Llama-3-70B-Instruct"
-system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
-
 [functions.basic_test.variants.flaky]
 type = "chat_completion"
 model = "flaky_basic_test"
@@ -1078,12 +1066,6 @@ max_tokens = 100
 [functions.weather_helper.variants.together]
 type = "chat_completion"
 model = "mixtral-8x7b-instruct-v0.1"
-system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
-max_tokens = 100
-
-[functions.weather_helper.variants.xai]
-type = "chat_completion"
-model = "grok_2_1212"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 100
 
