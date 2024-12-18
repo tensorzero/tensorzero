@@ -1,7 +1,7 @@
 import { type ActionFunctionArgs } from "react-router";
 import { getConfig } from "~/utils/config.server";
 import { getCuratedInferences } from "~/utils/clickhouse";
-import type { SFTFormValues } from "~/routes/optimization.fine-tuning/route";
+import { SFTFormValues } from "~/routes/optimization.fine-tuning/types";
 import { ChatCompletionConfig, get_template_env } from "~/utils/config/variant";
 import { ErrorWithStatus } from "~/utils/error";
 import { start_sft_openai } from "~/utils/fine_tuning/openai";

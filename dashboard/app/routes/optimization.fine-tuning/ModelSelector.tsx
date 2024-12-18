@@ -7,8 +7,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
-import { SFTFormValues } from "./route";
-import { ModelOption } from "./model-options";
+import { SFTFormValues } from "./types";
+import { ModelOption } from "./model_options";
 
 type ModelSelectorProps = {
   control: Control<SFTFormValues>;

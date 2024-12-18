@@ -1,7 +1,7 @@
 import { type MetaFunction } from "react-router";
 import { Form } from "~/components/ui/form";
 import { Button } from "~/components/ui/button";
-import { ModelOption, models } from "./model-options";
+import { models } from "./model_options";
 import { useForm } from "react-hook-form";
 import { Textarea } from "~/components/ui/textarea";
 import { useEffect, useState } from "react";
@@ -21,22 +21,13 @@ import {
   get_fine_tuned_model_config,
 } from "~/utils/fine_tuning/config_block";
 import { launch_sft_job } from "~/utils/fine_tuning/client";
+import { SFTFormValues } from "./types";
 
 export const meta: MetaFunction = () => {
   return [
     { title: "TensorZeroFine-Tuning Dashboard" },
     { name: "description", content: "Fine Tuning Optimization Dashboard" },
   ];
-};
-
-export type SFTFormValues = {
-  function: string;
-  metric: string;
-  model: ModelOption;
-  variant: string;
-  validationSplitPercent: number;
-  maxSamples: number;
-  threshold?: number;
 };
 
 export default function FineTuning() {
@@ -125,7 +116,7 @@ export default function FineTuning() {
 
       while (!finished) {
         await new Promise((resolve) => setTimeout(resolve, 10000));
-        job = await job.poll(job);
+        job = await job.poll();
         result = job.result();
         finished = result !== undefined;
         setSubmissionResult(job.display());

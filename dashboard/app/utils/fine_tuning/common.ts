@@ -1,5 +1,5 @@
 import { ParsedInferenceRow } from "../clickhouse";
-import { SFTFormValues } from "~/routes/optimization.fine-tuning/route";
+import { SFTFormValues } from "~/routes/optimization.fine-tuning/types";
 
 export function splitValidationData(
   inferences: ParsedInferenceRow[],
@@ -28,19 +28,19 @@ export abstract class SFTJob {
     throw new Error("Child class must implement fromFormData");
   }
 
+  format_url(base_url: string): string {
+    const queryString = new URLSearchParams(this.query_params()).toString();
+    const formattedUrl = `${base_url}${
+      this.path_arg() ? `/${this.path_arg()}` : ""
+    }${queryString ? `?${queryString}` : ""}`;
+    return formattedUrl;
+  }
+
   abstract path_arg(): string | undefined;
   abstract query_params(): Record<string, string>;
   abstract display(): string;
   abstract result(): string | undefined;
   abstract provider(): string;
   abstract is_finished(): boolean;
-  abstract poll(job: SFTJob): Promise<SFTJob>;
-}
-// TODO: unit test this thoroughly
-export function format_url(base_url: string, job: SFTJob) {
-  const queryString = new URLSearchParams(job.query_params()).toString();
-  const formattedUrl = `${base_url}${
-    job.path_arg() ? `/${job.path_arg()}` : ""
-  }${queryString ? `?${queryString}` : ""}`;
-  return formattedUrl;
+  abstract poll(): Promise<SFTJob>;
 }

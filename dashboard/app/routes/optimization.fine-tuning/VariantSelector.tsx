@@ -1,5 +1,5 @@
 import { Control } from "react-hook-form";
-import { SFTFormValues } from "./route";
+import { SFTFormValues } from "./types";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 import {
   Select,

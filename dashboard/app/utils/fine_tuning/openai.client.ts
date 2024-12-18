@@ -1,5 +1,5 @@
-import { SFTFormValues } from "~/routes/optimization.fine-tuning/route";
-import { SFTJob, format_url } from "./common";
+import { SFTFormValues } from "~/routes/optimization.fine-tuning/types";
+import { SFTJob } from "./common";
 
 export class OpenAISFTJob extends SFTJob {
   constructor(
@@ -40,8 +40,8 @@ export class OpenAISFTJob extends SFTJob {
     return this.status === "succeeded" || this.status === "failed";
   }
 
-  async poll(job: SFTJob): Promise<SFTJob> {
-    const url = format_url("/api/fine-tuning/openai", job);
+  async poll(): Promise<SFTJob> {
+    const url = this.format_url("/api/fine-tuning/openai");
 
     const response = await fetch(url, {
       method: "GET",

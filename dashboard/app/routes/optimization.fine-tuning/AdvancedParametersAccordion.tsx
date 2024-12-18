@@ -7,7 +7,7 @@ import {
 } from "~/components/ui/accordion";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 import { Input } from "~/components/ui/input";
-import { SFTFormValues } from "./route";
+import { SFTFormValues } from "./types";
 
 type AdvancedParametersAccordionProps = {
   control: Control<SFTFormValues>;

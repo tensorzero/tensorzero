@@ -15,7 +15,7 @@ import {
 } from "~/utils/fine_tuning/fireworks";
 import { render_message } from "~/utils/fine_tuning/rendering";
 import { JsExposedEnv } from "~/utils/minijinja/pkg/minijinja_bindings";
-import type { SFTFormValues } from "~/routes/optimization.fine-tuning/route";
+import { SFTFormValues } from "~/routes/optimization.fine-tuning/types";
 import { v7 } from "uuid";
 import { FireworksSFTJob } from "~/utils/fine_tuning/fireworks.client";
 
