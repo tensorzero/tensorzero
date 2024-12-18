@@ -115,7 +115,7 @@ impl Variant for BestOfNSamplingConfig {
     fn validate(
         &self,
         function: &FunctionConfig,
-        models: &ModelTable,
+        models: &mut ModelTable,
         embedding_models: &HashMap<String, EmbeddingModelConfig>,
         templates: &TemplateConfig,
         function_name: &str,

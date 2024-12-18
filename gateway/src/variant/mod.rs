@@ -131,7 +131,7 @@ pub trait Variant {
     fn validate(
         &self,
         function: &FunctionConfig,
-        models: &ModelTable,
+        models: &mut ModelTable,
         embedding_models: &HashMap<String, EmbeddingModelConfig>,
         templates: &TemplateConfig,
         function_name: &str,
@@ -334,7 +334,7 @@ impl Variant for VariantConfig {
     fn validate(
         &self,
         function: &FunctionConfig,
-        models: &ModelTable,
+        models: &mut ModelTable,
         embedding_models: &HashMap<String, EmbeddingModelConfig>,
         templates: &TemplateConfig,
         function_name: &str,

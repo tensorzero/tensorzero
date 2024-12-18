@@ -5,12 +5,19 @@ use tracing::instrument;
 use url::Url;
 
 use crate::inference::providers;
+use crate::inference::providers::anthropic;
 #[cfg(any(test, feature = "e2e_tests"))]
-use crate::inference::providers::dummy::DummyCredentials;
+use crate::inference::providers::dummy;
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::inference::providers::dummy::DummyProvider;
+use crate::inference::providers::fireworks;
+use crate::inference::providers::google_ai_studio_gemini;
 use crate::inference::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
 
+use crate::inference::providers::mistral;
+use crate::inference::providers::openai;
+use crate::inference::providers::together;
+use crate::inference::providers::xai;
 use crate::inference::types::batch::{BatchModelInferenceResponse, BatchProviderInferenceResponse};
 use crate::{
     endpoints::inference::InferenceCredentials,
@@ -366,19 +373,10 @@ impl<'de> Deserialize<'de> for ProviderConfig {
             ProviderConfigHelper::Dummy {
                 model_name,
                 api_key_location,
-            } => match api_key_location {
-                CredentialLocation::Dynamic(key_name) => ProviderConfig::Dummy(DummyProvider {
-                    model_name,
-                    credentials: DummyCredentials::Dynamic(key_name),
-                }),
-                CredentialLocation::None => ProviderConfig::Dummy(DummyProvider {
-                    model_name,
-                    credentials: DummyCredentials::None,
-                }),
-                _ => Err(serde::de::Error::custom(
-                    "Invalid api_key_location for Dummy provider".to_string(),
-                ))?,
-            },
+            } => ProviderConfig::Dummy(
+                DummyProvider::new(model_name, api_key_location)
+                    .map_err(|e| D::Error::custom(e.to_string()))?,
+            ),
         })
     }
 }
@@ -632,7 +630,7 @@ impl std::ops::Deref for ModelTable {
 }
 
 impl ModelTable {
-    pub fn get(&self, key: &str) -> Option<&ModelConfig> {
+    pub fn get_or_create(&mut self, key: &str) -> Option<&ModelConfig> {
         // Try matching shorthand prefixes
         if let Some(prefix) = SHORTHAND_MODEL_PREFIXES
             .iter()
@@ -647,7 +645,14 @@ impl ModelTable {
             };
             // Remove the last two characters of the prefix to get the provider type
             let provider_type = &prefix[..prefix.len() - 2];
-            todo!("Call the constructor for the ProviderConfig struct here, then construct a ModelConfig");
+            let model_config = match model_config_from_shorthand(provider_type, model_name) {
+                Ok(model_config) => model_config,
+                Err(_) => {
+                    return None;
+                }
+            };
+            self.0.insert(key.to_string(), model_config);
+            return self.0.get(key);
         }
 
         // Try direct lookup (if it's blacklisted, it's not in the table)
@@ -657,6 +662,61 @@ impl ModelTable {
 
         None
     }
+}
+
+fn model_config_from_shorthand(
+    provider_type: &str,
+    model_name: &str,
+) -> Result<ModelConfig, Error> {
+    let model_name = model_name.to_string();
+    let provider_config = match provider_type {
+        "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(
+            model_name,
+            anthropic::default_api_key_location(),
+        )?),
+        "fireworks" => ProviderConfig::Fireworks(FireworksProvider::new(
+            model_name,
+            fireworks::default_api_key_location(),
+        )?),
+        "google_ai_studio_gemini" => {
+            ProviderConfig::GoogleAIStudioGemini(GoogleAIStudioGeminiProvider::new(
+                model_name,
+                google_ai_studio_gemini::default_api_key_location(),
+            )?)
+        }
+        "mistral" => ProviderConfig::Mistral(MistralProvider::new(
+            model_name,
+            mistral::default_api_key_location(),
+        )?),
+        "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(
+            model_name,
+            None,
+            openai::default_api_key_location(),
+        )?),
+        "together" => ProviderConfig::Together(TogetherProvider::new(
+            model_name,
+            together::default_api_key_location(),
+        )?),
+        "xai" => ProviderConfig::XAI(XAIProvider::new(
+            model_name,
+            xai::default_api_key_location(),
+        )?),
+        #[cfg(any(test, feature = "e2e_tests"))]
+        "dummy" => ProviderConfig::Dummy(DummyProvider::new(
+            model_name,
+            dummy::default_api_key_location(),
+        )?),
+        _ => {
+            return Err(ErrorDetails::Config {
+                message: format!("Invalid provider type: {}", provider_type),
+            }
+            .into());
+        }
+    };
+    Ok(ModelConfig {
+        routing: vec![provider_type.to_string()],
+        providers: HashMap::from([(provider_type.to_string(), provider_config)]),
+    })
 }
 
 #[cfg(test)]

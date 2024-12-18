@@ -231,7 +231,7 @@ impl FunctionConfig {
     pub fn validate(
         &self,
         static_tools: &HashMap<String, StaticToolConfig>,
-        models: &ModelTable,
+        models: &mut ModelTable,
         embedding_models: &HashMap<String, EmbeddingModelConfig>,
         templates: &TemplateConfig,
         function_name: &str,

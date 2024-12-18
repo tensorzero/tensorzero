@@ -136,7 +136,31 @@ impl<'c> Config<'c> {
 
     /// Validate the config
     #[instrument(skip_all)]
-    fn validate(&self) -> Result<(), Error> {
+    fn validate(&mut self) -> Result<(), Error> {
+        // Validate each function
+        for (function_name, function) in &self.functions {
+            function.validate(
+                &self.tools,
+                &mut self.models,
+                &self.embedding_models,
+                &self.templates,
+                function_name,
+            )?;
+        }
+
+        // Ensure that no metrics are named "comment" or "demonstration"
+        for metric_name in self.metrics.keys() {
+            if metric_name == "comment" || metric_name == "demonstration" {
+                return Err(ErrorDetails::Config {
+                    message: format!(
+                        "Metric name '{}' is reserved and cannot be used",
+                        metric_name
+                    ),
+                }
+                .into());
+            }
+        }
+
         // Validate each model
         for (model_name, model) in self.models.iter() {
             // Ensure that the model has at least one provider
@@ -161,11 +185,11 @@ impl<'c> Config<'c> {
 
                 if !model.providers.contains_key(provider) {
                     return Err(ErrorDetails::Config {
-                        message: format!(
-                            "`models.{model_name}`: `routing` contains entry `{provider}` that does not exist in `providers`"
-                        ),
-                    }
-                    .into());
+                message: format!(
+                    "`models.{model_name}`: `routing` contains entry `{provider}` that does not exist in `providers`"
+                ),
+            }
+            .into());
                 }
             }
 
@@ -174,38 +198,13 @@ impl<'c> Config<'c> {
                 if !seen_providers.contains(provider_name) {
                     return Err(ErrorDetails::Config {
                         message: format!(
-                            "`models.{model_name}`: Provider `{provider_name}` is not listed in `routing`"
-                        ),
+                    "`models.{model_name}`: Provider `{provider_name}` is not listed in `routing`"
+                ),
                     }
                     .into());
                 }
             }
         }
-
-        // Validate each function
-        for (function_name, function) in &self.functions {
-            function.validate(
-                &self.tools,
-                &self.models,
-                &self.embedding_models,
-                &self.templates,
-                function_name,
-            )?;
-        }
-
-        // Ensure that no metrics are named "comment" or "demonstration"
-        for metric_name in self.metrics.keys() {
-            if metric_name == "comment" || metric_name == "demonstration" {
-                return Err(ErrorDetails::Config {
-                    message: format!(
-                        "Metric name '{}' is reserved and cannot be used",
-                        metric_name
-                    ),
-                }
-                .into());
-            }
-        }
-
         Ok(())
     }
 

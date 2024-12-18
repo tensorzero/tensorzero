@@ -232,7 +232,7 @@ impl Variant for ChatCompletionConfig {
     fn validate(
         &self,
         function: &FunctionConfig,
-        models: &ModelTable,
+        models: &mut ModelTable,
         _embedding_models: &HashMap<String, EmbeddingModelConfig>,
         templates: &TemplateConfig,
         function_name: &str,
@@ -246,7 +246,7 @@ impl Variant for ChatCompletionConfig {
                 ),
             }.into());
         }
-        let model = models.get(&self.model).ok_or_else(|| Error::new(ErrorDetails::Config {
+        let model = models.get_or_create(&self.model).ok_or_else(|| Error::new(ErrorDetails::Config {
             message: format!("`functions.{function_name}.variants.{variant_name}`: `model` must be a valid model name"),
         }))?;
 
