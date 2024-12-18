@@ -6,7 +6,7 @@ async fn get_providers() -> E2ETestProviders {
     let standard_providers = vec![E2ETestProvider {
         variant_name: "hyperbolic".to_string(),
         model_name: "meta-llama/Meta-Llama-3-70B-Instruct".to_string(),
-        model_provider_name: "hyoerbolic".to_string(),
+        model_provider_name: "hyperbolic".to_string(),
     }];
 
     E2ETestProviders {
