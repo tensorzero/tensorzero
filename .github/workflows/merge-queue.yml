@@ -23,6 +23,7 @@ env:
   VLLM_API_BASE: ${{ secrets.VLLM_API_BASE }}
   XAI_API_KEY: ${{ secrets.XAI_API_KEY }} # for E2E tests
   HYPERBOLIC_API_KEY: ${{secrets.HYPERBOLIC_API_KEY}} # for E2E tests
+
 jobs:
   live-tests:
     runs-on: ubuntu-22.04-8core
