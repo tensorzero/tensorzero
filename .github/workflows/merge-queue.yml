@@ -21,6 +21,7 @@ env:
   VLLM_API_KEY: ${{ secrets.VLLM_API_KEY }} # for E2E tests
   VLLM_MODEL_NAME: "microsoft/Phi-3.5-mini-instruct"
   VLLM_API_BASE: ${{ secrets.VLLM_API_BASE }}
+  HYPERBOLIC_API_KEY: ${{secrets.HYPERBOLIC_API_KEY}}
 
 jobs:
   live-tests:

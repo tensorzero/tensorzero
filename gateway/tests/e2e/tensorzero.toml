@@ -162,6 +162,13 @@ routing = ["openai"]
 type = "openai"
 model_name = "o1-mini"
 
+[models."meta-llama/Meta-Llama-3-70B-Instruct"]
+routing = ["hyperbolic"]
+
+[models."meta-llama/Meta-Llama-3-70B-Instruct".providers.hyperbolic]
+type = "hyperbolic"
+model_name = "meta-llama/Meta-Llama-3-70B-Instruct"
+
 [models.test]
 routing = ["good"]
 
@@ -396,6 +403,12 @@ max_tokens = 100
 [functions.basic_test.variants.vllm]
 type = "chat_completion"
 model = "microsoft/Phi-3.5-mini-instruct"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.hyperbolic]
+type = "chat_completion"
+model = "meta-llama/Meta-Llama-3-70B-Instruct"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -1041,6 +1054,12 @@ max_tokens = 100
 type = "chat_completion"
 model = "mixtral-8x7b-instruct-v0.1"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.weather_helper.variants.hyperbolic]
+type = "chat_completion"
+model = "meta-llama/Meta-Llama-3-70B-Instruct"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.weather_helper_parallel]
