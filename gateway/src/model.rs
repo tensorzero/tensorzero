@@ -608,6 +608,9 @@ impl std::ops::Deref for ModelTable {
 }
 
 impl ModelTable {
+    /// Check that a model name is valid
+    /// This is either true because it's in the table, or because it's a valid shorthand name
+    /// In the latter case, we actually create a new model config in the table corresponding to the shorthand
     pub fn validate_or_create(&mut self, key: &str) -> Result<(), Error> {
         // Try matching shorthand prefixes
         if let Some(prefix) = SHORTHAND_MODEL_PREFIXES
