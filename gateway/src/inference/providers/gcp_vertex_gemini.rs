@@ -43,8 +43,9 @@ impl GCPVertexGeminiProvider {
         model_id: String,
         location: String,
         project_id: String,
-        api_key_location: CredentialLocation,
+        api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
+        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
         let credentials = match api_key_location {
             CredentialLocation::Env(key_name) => {
                 let path = env::var(key_name).map_err(|e| {

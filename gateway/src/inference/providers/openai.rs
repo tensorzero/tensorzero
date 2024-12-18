@@ -35,7 +35,7 @@ lazy_static! {
     };
 }
 
-pub fn default_api_key_location() -> CredentialLocation {
+fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("OPENAI_API_KEY".to_string())
 }
 
@@ -50,8 +50,9 @@ impl OpenAIProvider {
     pub fn new(
         model_name: String,
         api_base: Option<Url>,
-        api_key_location: CredentialLocation,
+        api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
+        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
         let credentials = match api_key_location {
             CredentialLocation::Env(key_name) => {
                 let api_key = env::var(key_name)

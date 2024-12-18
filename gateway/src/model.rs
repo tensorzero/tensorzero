@@ -4,20 +4,10 @@ use std::collections::HashMap;
 use tracing::instrument;
 use url::Url;
 
-use crate::inference::providers;
-use crate::inference::providers::anthropic;
-#[cfg(any(test, feature = "e2e_tests"))]
-use crate::inference::providers::dummy;
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::inference::providers::dummy::DummyProvider;
-use crate::inference::providers::fireworks;
-use crate::inference::providers::google_ai_studio_gemini;
 use crate::inference::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
 
-use crate::inference::providers::mistral;
-use crate::inference::providers::openai;
-use crate::inference::providers::together;
-use crate::inference::providers::xai;
 use crate::inference::types::batch::{BatchModelInferenceResponse, BatchProviderInferenceResponse};
 use crate::{
     endpoints::inference::InferenceCredentials,
@@ -187,8 +177,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
         enum ProviderConfigHelper {
             Anthropic {
                 model_name: String,
-                #[serde(default = "providers::anthropic::default_api_key_location")]
-                api_key_location: CredentialLocation,
+                api_key_location: Option<CredentialLocation>,
             },
             #[serde(rename = "aws_bedrock")]
             AWSBedrock {
@@ -198,70 +187,59 @@ impl<'de> Deserialize<'de> for ProviderConfig {
             Azure {
                 deployment_id: String,
                 endpoint: Url,
-                #[serde(default = "providers::azure::default_api_key_location")]
-                api_key_location: CredentialLocation,
+                api_key_location: Option<CredentialLocation>,
             },
             #[serde(rename = "gcp_vertex_anthropic")]
             GCPVertexAnthropic {
                 model_id: String,
                 location: String,
                 project_id: String,
-                #[serde(default = "providers::gcp_vertex_gemini::default_api_key_location")]
-                credential_location: CredentialLocation,
+                credential_location: Option<CredentialLocation>,
             },
             #[serde(rename = "gcp_vertex_gemini")]
             GCPVertexGemini {
                 model_id: String,
                 location: String,
                 project_id: String,
-                #[serde(default = "providers::gcp_vertex_gemini::default_api_key_location")]
-                credential_location: CredentialLocation,
+                credential_location: Option<CredentialLocation>,
             },
             #[serde(rename = "google_ai_studio_gemini")]
             GoogleAIStudioGemini {
                 model_name: String,
-                #[serde(default = "providers::google_ai_studio_gemini::default_api_key_location")]
-                api_key_location: CredentialLocation,
+                api_key_location: Option<CredentialLocation>,
             },
             Fireworks {
                 model_name: String,
-                #[serde(default = "providers::fireworks::default_api_key_location")]
-                api_key_location: CredentialLocation,
+                api_key_location: Option<CredentialLocation>,
             },
             Mistral {
                 model_name: String,
-                #[serde(default = "providers::mistral::default_api_key_location")]
-                api_key_location: CredentialLocation,
+                api_key_location: Option<CredentialLocation>,
             },
             OpenAI {
                 model_name: String,
                 api_base: Option<Url>,
-                #[serde(default = "providers::openai::default_api_key_location")]
-                api_key_location: CredentialLocation,
+                api_key_location: Option<CredentialLocation>,
             },
             Together {
                 model_name: String,
-                #[serde(default = "providers::together::default_api_key_location")]
-                api_key_location: CredentialLocation,
+                api_key_location: Option<CredentialLocation>,
             },
             #[allow(clippy::upper_case_acronyms)]
             VLLM {
                 model_name: String,
                 api_base: Url,
-                #[serde(default = "providers::vllm::default_api_key_location")]
-                api_key_location: CredentialLocation,
+                api_key_location: Option<CredentialLocation>,
             },
             #[allow(clippy::upper_case_acronyms)]
             XAI {
                 model_name: String,
-                #[serde(default = "providers::xai::default_api_key_location")]
-                api_key_location: CredentialLocation,
+                api_key_location: Option<CredentialLocation>,
             },
             #[cfg(any(test, feature = "e2e_tests"))]
             Dummy {
                 model_name: String,
-                #[serde(default = "providers::dummy::default_api_key_location")]
-                api_key_location: CredentialLocation,
+                api_key_location: Option<CredentialLocation>,
             },
         }
 
@@ -675,42 +653,17 @@ fn model_config_from_shorthand(
 ) -> Result<ModelConfig, Error> {
     let model_name = model_name.to_string();
     let provider_config = match provider_type {
-        "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(
-            model_name,
-            anthropic::default_api_key_location(),
-        )?),
-        "fireworks" => ProviderConfig::Fireworks(FireworksProvider::new(
-            model_name,
-            fireworks::default_api_key_location(),
-        )?),
-        "google_ai_studio_gemini" => {
-            ProviderConfig::GoogleAIStudioGemini(GoogleAIStudioGeminiProvider::new(
-                model_name,
-                google_ai_studio_gemini::default_api_key_location(),
-            )?)
-        }
-        "mistral" => ProviderConfig::Mistral(MistralProvider::new(
-            model_name,
-            mistral::default_api_key_location(),
-        )?),
-        "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(
-            model_name,
-            None,
-            openai::default_api_key_location(),
-        )?),
-        "together" => ProviderConfig::Together(TogetherProvider::new(
-            model_name,
-            together::default_api_key_location(),
-        )?),
-        "xai" => ProviderConfig::XAI(XAIProvider::new(
-            model_name,
-            xai::default_api_key_location(),
-        )?),
+        "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(model_name, None)?),
+        "fireworks" => ProviderConfig::Fireworks(FireworksProvider::new(model_name, None)?),
+        "google_ai_studio_gemini" => ProviderConfig::GoogleAIStudioGemini(
+            GoogleAIStudioGeminiProvider::new(model_name, None)?,
+        ),
+        "mistral" => ProviderConfig::Mistral(MistralProvider::new(model_name, None)?),
+        "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?),
+        "together" => ProviderConfig::Together(TogetherProvider::new(model_name, None)?),
+        "xai" => ProviderConfig::XAI(XAIProvider::new(model_name, None)?),
         #[cfg(any(test, feature = "e2e_tests"))]
-        "dummy" => ProviderConfig::Dummy(DummyProvider::new(
-            model_name,
-            dummy::default_api_key_location(),
-        )?),
+        "dummy" => ProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
         _ => {
             return Err(ErrorDetails::Config {
                 message: format!("Invalid provider type: {}", provider_type),
@@ -729,14 +682,16 @@ mod tests {
     use std::borrow::Cow;
 
     use crate::inference::{
-        providers::dummy::{
-            DummyCredentials, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
-            DUMMY_INFER_USAGE, DUMMY_STREAMING_RESPONSE,
+        providers::{
+            anthropic::AnthropicCredentials,
+            dummy::{
+                DummyCredentials, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
+                DUMMY_INFER_USAGE, DUMMY_STREAMING_RESPONSE,
+            },
         },
         types::{ContentBlockChunk, FunctionType, ModelInferenceRequestJsonMode, TextChunk},
     };
     use crate::tool::{ToolCallConfig, ToolChoice};
-    use anthropic::AnthropicCredentials;
     use secrecy::SecretString;
     use tokio_stream::StreamExt;
     use tracing_test::traced_test;

@@ -29,7 +29,11 @@ pub struct DummyProvider {
 }
 
 impl DummyProvider {
-    pub fn new(model_name: String, api_key_location: CredentialLocation) -> Result<Self, Error> {
+    pub fn new(
+        model_name: String,
+        api_key_location: Option<CredentialLocation>,
+    ) -> Result<Self, Error> {
+        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
         match api_key_location {
             CredentialLocation::Dynamic(key_name) => Ok(DummyProvider {
                 model_name,
@@ -46,7 +50,7 @@ impl DummyProvider {
     }
 }
 
-pub fn default_api_key_location() -> CredentialLocation {
+fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::None
 }
 

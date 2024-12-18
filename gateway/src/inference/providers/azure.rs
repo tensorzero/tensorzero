@@ -35,8 +35,9 @@ impl AzureProvider {
     pub fn new(
         deployment_id: String,
         endpoint: Url,
-        api_key_location: CredentialLocation,
+        api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
+        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
         let credentials = match api_key_location {
             CredentialLocation::Env(key_name) => {
                 let api_key = env::var(key_name)
@@ -86,7 +87,7 @@ impl AzureCredentials {
     }
 }
 
-pub fn default_api_key_location() -> CredentialLocation {
+fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("AZURE_OPENAI_API_KEY".to_string())
 }
 

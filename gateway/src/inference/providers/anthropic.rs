@@ -34,7 +34,7 @@ lazy_static! {
 }
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 
-pub fn default_api_key_location() -> CredentialLocation {
+fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("ANTHROPIC_API_KEY".to_string())
 }
 
@@ -45,7 +45,11 @@ pub struct AnthropicProvider {
 }
 
 impl AnthropicProvider {
-    pub fn new(model_name: String, api_key_location: CredentialLocation) -> Result<Self, Error> {
+    pub fn new(
+        model_name: String,
+        api_key_location: Option<CredentialLocation>,
+    ) -> Result<Self, Error> {
+        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
         let credentials = match api_key_location {
             CredentialLocation::Env(key_name) => {
                 let api_key = env::var(key_name).map_err(|_| {
