@@ -83,11 +83,11 @@ jobs:
         working-directory: clients
         run: uv run pytest
 
-      - name: Run mypy type checking
+      - name: Run pyright type checking
         working-directory: clients
         run: |
-          uv pip install mypy
-          uv run mypy python --strict
+          uv pip install pyright
+          uv run pyright python --strict
 
       - name: Install dependencies for python recipes tests
         working-directory: recipes/tests
