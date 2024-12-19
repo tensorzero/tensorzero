@@ -57,3 +57,7 @@ Make sure to merge every PR with the `merge-on-release` label.
 > [!NOTE]
 > The documentation is currently stored in a separate repository.
 > We're planning to make those files open source in the near future.
+
+## Release Notes
+
+Make sure to tag a release in the GitHub repository.
