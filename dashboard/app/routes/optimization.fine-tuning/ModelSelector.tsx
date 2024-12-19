@@ -29,23 +29,23 @@ function formatProvider(provider: string): { name: string; className: string } {
         className:
           "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
       };
-    case "mistral":
-      return {
-        name: "Mistral",
-        className:
-          "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300",
-      };
     case "fireworks":
       return {
         name: "Fireworks",
         className:
           "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300",
       };
+    case "mistral":
+      return {
+        name: "Mistral",
+        className:
+          "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300",
+      };
     default:
       return {
         name: provider,
         className:
-          "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300",
+          "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300",
       };
   }
 }

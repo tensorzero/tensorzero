@@ -55,7 +55,7 @@ repos:
         entry: npx prettier
         language: node
         types_or:
-          [javascript, jsx, ts, tsx, css, scss, html, json, yaml, markdown]
+          [css, html, javascript, json, jsx, markdown, scss, ts, tsx, yaml]
         args: ["--write", "--list-different"]
         additional_dependencies:
           - prettier
