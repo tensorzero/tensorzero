@@ -22,6 +22,12 @@ async fn get_providers() -> E2ETestProviders {
         // },
     ];
 
+    let shorthand_providers = vec![E2ETestProvider {
+        variant_name: "together-shorthand".to_string(),
+        model_name: "together::meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo".to_string(),
+        model_provider_name: "together".to_string(),
+    }];
+
     // TODOs (#80):
     // - Together seems to have a different format for tool use responses compared to OpenAI (breaking)
     // - Together's function calling for Llama 3.1 is different from Llama 3.0 (breaking) - we should test both
@@ -33,6 +39,7 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: vec![],
         parallel_tool_use_inference: vec![],
         json_mode_inference: json_providers.clone(),
+        shorthand_inference: shorthand_providers.clone(),
         supports_batch_inference: false,
     }
 }

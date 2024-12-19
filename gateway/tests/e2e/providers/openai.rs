@@ -43,6 +43,12 @@ async fn get_providers() -> E2ETestProviders {
         },
     ];
 
+    let shorthand_providers = vec![E2ETestProvider {
+        variant_name: "openai-shorthand".to_string(),
+        model_name: "openai::gpt-4o-mini-2024-07-18".to_string(),
+        model_provider_name: "openai".to_string(),
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         inference_params_inference: standard_providers.clone(),
@@ -51,6 +57,7 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: standard_providers.clone(),
         parallel_tool_use_inference: standard_providers.clone(),
         json_mode_inference: json_providers.clone(),
+        shorthand_inference: shorthand_providers.clone(),
         supports_batch_inference: true,
     }
 }

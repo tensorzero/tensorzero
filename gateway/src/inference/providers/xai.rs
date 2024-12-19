@@ -1,3 +1,5 @@
+use std::env;
+
 use futures::stream::TryStreamExt;
 use futures::StreamExt;
 use lazy_static::lazy_static;
@@ -30,7 +32,7 @@ lazy_static! {
     };
 }
 
-pub fn default_api_key_location() -> CredentialLocation {
+fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("XAI_API_KEY".to_string())
 }
 
@@ -38,6 +40,35 @@ pub fn default_api_key_location() -> CredentialLocation {
 pub struct XAIProvider {
     pub model_name: String,
     pub credentials: XAICredentials,
+}
+
+impl XAIProvider {
+    pub fn new(
+        model_name: String,
+        api_key_location: Option<CredentialLocation>,
+    ) -> Result<Self, Error> {
+        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
+        let credentials = match api_key_location {
+            CredentialLocation::Env(key_name) => {
+                let api_key = env::var(key_name)
+                    .map_err(|_| {
+                        Error::new(ErrorDetails::ApiKeyMissing {
+                            provider_name: "xAI".to_string(),
+                        })
+                    })?
+                    .into();
+                XAICredentials::Static(api_key)
+            }
+            CredentialLocation::Dynamic(key_name) => XAICredentials::Dynamic(key_name),
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: "Invalid api_key_location for xAI provider".to_string(),
+            }))?,
+        };
+        Ok(XAIProvider {
+            model_name,
+            credentials,
+        })
+    }
 }
 
 #[derive(Debug)]

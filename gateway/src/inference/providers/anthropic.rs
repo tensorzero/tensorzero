@@ -5,6 +5,7 @@ use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::env;
 use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
@@ -33,7 +34,7 @@ lazy_static! {
 }
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 
-pub fn default_api_key_location() -> CredentialLocation {
+fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("ANTHROPIC_API_KEY".to_string())
 }
 
@@ -41,6 +42,35 @@ pub fn default_api_key_location() -> CredentialLocation {
 pub struct AnthropicProvider {
     pub model_name: String,
     pub credentials: AnthropicCredentials,
+}
+
+impl AnthropicProvider {
+    pub fn new(
+        model_name: String,
+        api_key_location: Option<CredentialLocation>,
+    ) -> Result<Self, Error> {
+        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
+        let credentials = match api_key_location {
+            CredentialLocation::Env(key_name) => {
+                let api_key = env::var(key_name).map_err(|_| {
+                    Error::new(ErrorDetails::ApiKeyMissing {
+                        provider_name: "Anthropic".to_string(),
+                    })
+                })?;
+                AnthropicCredentials::Static(api_key.into())
+            }
+            CredentialLocation::Dynamic(key_name) => AnthropicCredentials::Dynamic(key_name),
+            _ => {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: "Invalid api_key_location for Anthropic provider".to_string(),
+                }))
+            }
+        };
+        Ok(AnthropicProvider {
+            model_name,
+            credentials,
+        })
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]

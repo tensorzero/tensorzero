@@ -38,6 +38,7 @@ pub struct E2ETestProviders {
     pub dynamic_tool_use_inference: Vec<E2ETestProvider>,
     pub parallel_tool_use_inference: Vec<E2ETestProvider>,
     pub json_mode_inference: Vec<E2ETestProvider>,
+    pub shorthand_inference: Vec<E2ETestProvider>,
     pub supports_batch_inference: bool,
 }
 
@@ -73,6 +74,14 @@ macro_rules! generate_provider_tests {
         #[tokio::test]
         async fn test_simple_inference_request() {
             let providers = $func().await.simple_inference;
+            for provider in providers {
+                test_simple_inference_request_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_shorthand_inference_request() {
+            let providers = $func().await.shorthand_inference;
             for provider in providers {
                 test_simple_inference_request_with_provider(provider).await;
             }
