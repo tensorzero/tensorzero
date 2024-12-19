@@ -214,7 +214,7 @@ impl InferenceProvider for HyperbolicProvider {
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<BatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
-            provider_type: "xAI".to_string(),
+            provider_type: "Hyperbolic".to_string(),
         }
         .into())
     }
