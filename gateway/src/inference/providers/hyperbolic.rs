@@ -28,7 +28,7 @@ lazy_static! {
 }
 
 pub fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("HYPERBOLIC_AI_API_KEY".to_string())
+    CredentialLocation::Env("HYPERBOLIC_API_KEY".to_string())
 }
 
 #[derive(Debug)]

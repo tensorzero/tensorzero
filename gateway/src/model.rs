@@ -175,12 +175,12 @@ pub enum ProviderConfig {
     GCPVertexAnthropic(GCPVertexAnthropicProvider),
     GCPVertexGemini(GCPVertexGeminiProvider),
     GoogleAIStudioGemini(GoogleAIStudioGeminiProvider),
+    Hyperbolic(HyperbolicProvider),
     Mistral(MistralProvider),
     OpenAI(OpenAIProvider),
     Together(TogetherProvider),
     VLLM(VLLMProvider),
     XAI(XAIProvider),
-    Hyperbolic(HyperbolicProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
 }
@@ -215,6 +215,11 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 #[serde(default = "providers::azure::default_api_key_location")]
                 api_key_location: CredentialLocation,
             },
+            Fireworks {
+                model_name: String,
+                #[serde(default = "providers::fireworks::default_api_key_location")]
+                api_key_location: CredentialLocation,
+            },
             #[serde(rename = "gcp_vertex_anthropic")]
             GCPVertexAnthropic {
                 model_id: String,
@@ -237,9 +242,9 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 #[serde(default = "providers::google_ai_studio_gemini::default_api_key_location")]
                 api_key_location: CredentialLocation,
             },
-            Fireworks {
+            Hyperbolic {
                 model_name: String,
-                #[serde(default = "providers::fireworks::default_api_key_location")]
+                #[serde(default = "providers::hyperbolic::default_api_key_location")]
                 api_key_location: CredentialLocation,
             },
             Mistral {
@@ -269,12 +274,6 @@ impl<'de> Deserialize<'de> for ProviderConfig {
             XAI {
                 model_name: String,
                 #[serde(default = "providers::xai::default_api_key_location")]
-                api_key_location: CredentialLocation,
-            },
-            #[allow(clippy::upper_case_acronyms)]
-            Hyperbolic {
-                model_name: String,
-                #[serde(default = "providers::hyperbolic::default_api_key_location")]
                 api_key_location: CredentialLocation,
             },
             #[cfg(any(test, feature = "e2e_tests"))]
@@ -535,6 +534,36 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                     credentials,
                 })
             }
+            ProviderConfigHelper::Hyperbolic {
+                model_name,
+                api_key_location,
+            } => {
+                let credentials = match api_key_location {
+                    CredentialLocation::Env(key_name) => {
+                        let api_key = env::var(key_name)
+                            .map_err(|_| {
+                                serde::de::Error::custom(
+                                    ErrorDetails::ApiKeyMissing {
+                                        provider_name: "Hyperbolic".to_string(),
+                                    }
+                                    .to_string(),
+                                )
+                            })?
+                            .into();
+                        HyperbolicCredentials::Static(api_key)
+                    }
+                    CredentialLocation::Dynamic(key_name) => {
+                        HyperbolicCredentials::Dynamic(key_name)
+                    }
+                    _ => Err(serde::de::Error::custom(
+                        "Invalid api_key_location for Hyperbolic provider".to_string(),
+                    ))?,
+                };
+                ProviderConfig::Hyperbolic(HyperbolicProvider {
+                    model_name,
+                    credentials,
+                })
+            }
             ProviderConfigHelper::Mistral {
                 model_name,
                 api_key_location,
@@ -698,36 +727,6 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                     "Invalid api_key_location for Dummy provider".to_string(),
                 ))?,
             },
-            ProviderConfigHelper::Hyperbolic {
-                model_name,
-                api_key_location,
-            } => {
-                let credentials = match api_key_location {
-                    CredentialLocation::Env(key_name) => {
-                        let api_key = env::var(key_name)
-                            .map_err(|_| {
-                                serde::de::Error::custom(
-                                    ErrorDetails::ApiKeyMissing {
-                                        provider_name: "Hyperbolic".to_string(),
-                                    }
-                                    .to_string(),
-                                )
-                            })?
-                            .into();
-                        HyperbolicCredentials::Static(api_key)
-                    }
-                    CredentialLocation::Dynamic(key_name) => {
-                        HyperbolicCredentials::Dynamic(key_name)
-                    }
-                    _ => Err(serde::de::Error::custom(
-                        "Invalid api_key_location for Hyperbolic provider".to_string(),
-                    ))?,
-                };
-                ProviderConfig::Hyperbolic(HyperbolicProvider {
-                    model_name,
-                    credentials,
-                })
-            }
         })
     }
 }
@@ -753,12 +752,12 @@ impl ProviderConfig {
             ProviderConfig::GoogleAIStudioGemini(provider) => {
                 provider.infer(request, client, api_keys).await
             }
+            ProviderConfig::Hyperbolic(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::Mistral(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::OpenAI(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::Together(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::VLLM(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::XAI(provider) => provider.infer(request, client, api_keys).await,
-            ProviderConfig::Hyperbolic(provider) => provider.infer(request, client, api_keys).await,
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => provider.infer(request, client, api_keys).await,
         }
@@ -799,6 +798,9 @@ impl ProviderConfig {
             ProviderConfig::GoogleAIStudioGemini(provider) => {
                 provider.infer_stream(request, client, api_keys).await
             }
+            ProviderConfig::Hyperbolic(provider) => {
+                provider.infer_stream(request, client, api_keys).await
+            }
             ProviderConfig::Mistral(provider) => {
                 provider.infer_stream(request, client, api_keys).await
             }
@@ -810,9 +812,6 @@ impl ProviderConfig {
             }
             ProviderConfig::XAI(provider) => provider.infer_stream(request, client, api_keys).await,
             ProviderConfig::VLLM(provider) => {
-                provider.infer_stream(request, client, api_keys).await
-            }
-            ProviderConfig::Hyperbolic(provider) => {
                 provider.infer_stream(request, client, api_keys).await
             }
             #[cfg(any(test, feature = "e2e_tests"))]
@@ -864,6 +863,11 @@ impl ProviderConfig {
                     .start_batch_inference(requests, client, api_keys)
                     .await
             }
+            ProviderConfig::Hyperbolic(provider) => {
+                provider
+                    .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
             ProviderConfig::Mistral(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
@@ -885,11 +889,6 @@ impl ProviderConfig {
                     .await
             }
             ProviderConfig::XAI(provider) => {
-                provider
-                    .start_batch_inference(requests, client, api_keys)
-                    .await
-            }
-            ProviderConfig::Hyperbolic(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
                     .await

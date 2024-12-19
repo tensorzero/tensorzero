@@ -7,6 +7,6 @@ services:
     volumes:
       - ./config:/app/config:ro
     environment:
-      - HYPERBOLIC_API_KEY=${XAI_API_KEY:?Environment variable HYPERBOLIC_API_KEY must be set.}
+      - HYPERBOLIC_API_KEY=${HYPERBOLIC_API_KEY:?Environment variable HYPERBOLIC_API_KEY must be set.}
     ports:
       - "3000:3000"
