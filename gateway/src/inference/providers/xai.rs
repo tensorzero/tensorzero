@@ -53,7 +53,7 @@ impl XAIProvider {
                 let api_key = env::var(key_name)
                     .map_err(|_| {
                         Error::new(ErrorDetails::ApiKeyMissing {
-                            provider_name: "X AI".to_string(),
+                            provider_name: "xAI".to_string(),
                         })
                     })?
                     .into();
@@ -61,7 +61,7 @@ impl XAIProvider {
             }
             CredentialLocation::Dynamic(key_name) => XAICredentials::Dynamic(key_name),
             _ => Err(Error::new(ErrorDetails::Config {
-                message: "Invalid api_key_location for X AI provider".to_string(),
+                message: "Invalid api_key_location for xAI provider".to_string(),
             }))?,
         };
         Ok(XAIProvider {

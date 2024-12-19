@@ -612,6 +612,13 @@ impl ModelTable {
     /// This is either true because it's in the table, or because it's a valid shorthand name
     /// In the latter case, we actually create a new model config in the table corresponding to the shorthand
     pub fn validate_or_create(&mut self, key: &str) -> Result<(), Error> {
+        // Try direct lookup (if it's blacklisted, it's not in the table)
+        // If it's shorthand and already in the table, it's valid
+        if let Some(model_config) = self.0.get(key) {
+            model_config.validate()?;
+            return Ok(());
+        }
+
         // Try matching shorthand prefixes
         if let Some(prefix) = SHORTHAND_MODEL_PREFIXES
             .iter()
@@ -634,12 +641,6 @@ impl ModelTable {
             let model_config = model_config_from_shorthand(provider_type, model_name)?;
             model_config.validate()?;
             self.0.insert(key.to_string(), model_config);
-            return Ok(());
-        }
-
-        // Try direct lookup (if it's blacklisted, it's not in the table)
-        if let Some(model_config) = self.0.get(key) {
-            model_config.validate()?;
             return Ok(());
         }
 

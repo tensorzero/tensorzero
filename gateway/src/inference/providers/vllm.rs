@@ -42,7 +42,7 @@ impl VLLMProvider {
                 let api_key = env::var(key_name)
                     .map_err(|_| {
                         Error::new(ErrorDetails::ApiKeyMissing {
-                            provider_name: "VLLM".to_string(),
+                            provider_name: "vLLM".to_string(),
                         })
                     })?
                     .into();
@@ -51,7 +51,7 @@ impl VLLMProvider {
             CredentialLocation::Dynamic(key_name) => VLLMCredentials::Dynamic(key_name),
             CredentialLocation::None => VLLMCredentials::None,
             _ => Err(Error::new(ErrorDetails::Config {
-                message: "Invalid api_key_location for VLLM provider".to_string(),
+                message: "Invalid api_key_location for vLLM provider".to_string(),
             }))?,
         };
         Ok(VLLMProvider {
