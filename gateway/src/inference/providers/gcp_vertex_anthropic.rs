@@ -262,13 +262,12 @@ impl<'a> TryFrom<&'a ToolChoice> for GCPVertexAnthropicToolChoice<'a> {
             ToolChoice::Auto => Ok(GCPVertexAnthropicToolChoice::Auto),
             ToolChoice::Required => Ok(GCPVertexAnthropicToolChoice::Any),
             ToolChoice::Specific(name) => Ok(GCPVertexAnthropicToolChoice::Tool { name }),
-            // TODO (#205): Implement ToolChoice::None workaround for Anthropic.
-            //              MAKE SURE TO UPDATE THE E2E TESTS WHEN THIS IS DONE.
-            ToolChoice::None => Err(ErrorDetails::InvalidTool {
-                message: "Tool choice is None. Anthropic does not support tool choice None."
-                    .to_string(),
-            }
-            .into()),
+            // Workaround for Anthropic API limitation: they don't support explicitly specifying "none"
+            // for tool choice. Instead, we return Auto but the request construction will ensure
+            // that no tools are sent in the request payload. This achieves the same effect
+            // as explicitly telling the model not to use tools, since without any tools
+            // being provided, the model cannot make tool calls.
+            ToolChoice::None => Ok(GCPVertexAnthropicToolChoice::Auto),
         }
     }
 }
@@ -423,11 +422,22 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
         } else {
             messages
         };
-        let tools = request
-            .tool_config
-            .as_ref()
-            .map(|c| &c.tools_available)
-            .map(|tools| tools.iter().map(|tool| tool.into()).collect::<Vec<_>>());
+
+        // Workaround for GCP Vertex AI Anthropic API limitation: they don't support explicitly specifying "none"
+        // for tool choice. When ToolChoice::None is specified, we don't send any tools in the
+        // request payload to achieve the same effect.
+        let tools = request.tool_config.as_ref().and_then(|c| {
+            if matches!(c.tool_choice, ToolChoice::None) {
+                None
+            } else {
+                Some(
+                    c.tools_available
+                        .iter()
+                        .map(|tool| tool.into())
+                        .collect::<Vec<_>>(),
+                )
+            }
+        });
         // `tool_choice` should only be set if tools are set and non-empty
         let tool_choice: Option<GCPVertexAnthropicToolChoice> = tools
             .as_ref()
@@ -897,17 +907,13 @@ mod tests {
 
     #[test]
     fn test_try_from_tool_choice() {
-        // Need to cover all 4 cases
+        // Test conversion of ToolChoice::None - now maps to Auto
         let tool_choice = ToolChoice::None;
         let anthropic_tool_choice = GCPVertexAnthropicToolChoice::try_from(&tool_choice);
-        assert!(anthropic_tool_choice.is_err());
-        let details = anthropic_tool_choice.unwrap_err().get_owned_details();
+        assert!(anthropic_tool_choice.is_ok());
         assert_eq!(
-            details,
-            ErrorDetails::InvalidTool {
-                message: "Tool choice is None. Anthropic does not support tool choice None."
-                    .to_string(),
-            }
+            anthropic_tool_choice.unwrap(),
+            GCPVertexAnthropicToolChoice::Auto
         );
 
         let tool_choice = ToolChoice::Auto;
