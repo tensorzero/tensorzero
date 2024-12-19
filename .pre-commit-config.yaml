@@ -25,6 +25,7 @@ repos:
         types: [rust]
         pass_filenames: false
         always_run: true
+
       - id: cargo-fmt
         name: cargo fmt
         entry: cargo fmt -- --check
@@ -32,6 +33,7 @@ repos:
         types: [rust]
         pass_filenames: false
         always_run: true
+
       - id: cargo-clippy
         name: cargo clippy
         entry: cargo clippy --all-targets --all-features -- -D warnings
@@ -39,6 +41,7 @@ repos:
         types: [rust]
         pass_filenames: false
         always_run: true
+
       - id: cargo-test-unit
         name: cargo test-unit
         entry: cargo test-unit
@@ -59,6 +62,18 @@ repos:
           - "@prettier/plugin-xml"
         always_run: true
         exclude: '.*\.ipynb$'
+
+      - id: eslint
+        name: eslint
+        entry: bash -c 'cd dashboard && npx eslint'
+        language: node
+        types_or: [javascript, jsx, ts, tsx]
+        additional_dependencies:
+          - eslint
+          - "@typescript-eslint/parser"
+          - "@typescript-eslint/eslint-plugin"
+        pass_filenames: false
+        always_run: true
 
       - id: tsc
         name: typescript
