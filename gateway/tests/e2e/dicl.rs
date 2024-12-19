@@ -155,7 +155,7 @@ pub async fn test_dicl_inference_request_no_examples() {
     for model_inference in result {
         let model_name = model_inference.get("model_name").unwrap().as_str().unwrap();
         match model_name {
-            "openai::gpt-4o-mini-2024-07-18" => {
+            "gpt-4o-mini-2024-07-18" => {
                 // The LLM call should generate output tokens
                 assert!(
                     model_inference
@@ -529,7 +529,7 @@ pub async fn test_dicl_inference_request() {
         let output = model_inference.get("output").unwrap().as_str().unwrap();
         let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
         match model_name {
-            "openai::gpt-4o-mini-2024-07-18" => {
+            "gpt-4o-mini-2024-07-18" => {
                 // The LLM call should generate output tokens
                 assert!(
                     model_inference
@@ -778,7 +778,7 @@ pub async fn test_dicl_inference_request() {
         let output = model_inference.get("output").unwrap().as_str().unwrap();
         let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
         match model_name {
-            "openai::gpt-4o-mini-2024-07-18" => {
+            "gpt-4o-mini-2024-07-18" => {
                 // The LLM call should generate output tokens
                 assert!(
                     model_inference
