@@ -20,8 +20,8 @@ env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }} # for E2E tests
   TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }} # for E2E tests
   VLLM_API_KEY: ${{ secrets.VLLM_API_KEY }} # for E2E tests
-  VLLM_MODEL_NAME: "microsoft/Phi-3.5-mini-instruct"
-  VLLM_API_BASE: ${{ secrets.VLLM_API_BASE }}
+  VLLM_API_BASE: ${{ secrets.VLLM_API_BASE }} # for E2E tests
+  VLLM_MODEL_NAME: "microsoft/Phi-3.5-mini-instruct" # for E2E tests
   XAI_API_KEY: ${{ secrets.XAI_API_KEY }} # for E2E tests
 
 jobs:
