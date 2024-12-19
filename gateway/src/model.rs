@@ -1,6 +1,8 @@
+use lazy_static::lazy_static;
 use reqwest::Client;
 use serde::de::Error as SerdeError;
 use std::collections::HashMap;
+use strum::VariantNames;
 use tracing::instrument;
 use url::Url;
 
@@ -161,88 +163,95 @@ pub enum ProviderConfig {
     Dummy(DummyProvider),
 }
 
+/// Helper struct for deserializing the ProviderConfig.
+/// This is necessary because we want to load environment variables as we deserialize
+/// and we need to be able to deserialize the correct one based on the "type" field.
+/// Use the ProviderConfig struct for all post-initialization logic.
+#[derive(Deserialize, VariantNames)]
+#[strum(serialize_all = "lowercase")]
+#[serde(tag = "type")]
+#[serde(rename_all = "lowercase")]
+#[serde(deny_unknown_fields)]
+enum ProviderConfigHelper {
+    Anthropic {
+        model_name: String,
+        api_key_location: Option<CredentialLocation>,
+    },
+    #[strum(serialize = "aws_bedrock")]
+    #[serde(rename = "aws_bedrock")]
+    AWSBedrock {
+        model_id: String,
+        region: Option<String>,
+    },
+    Azure {
+        deployment_id: String,
+        endpoint: Url,
+        api_key_location: Option<CredentialLocation>,
+    },
+    #[strum(serialize = "gcp_vertex_anthropic")]
+    #[serde(rename = "gcp_vertex_anthropic")]
+    GCPVertexAnthropic {
+        model_id: String,
+        location: String,
+        project_id: String,
+        credential_location: Option<CredentialLocation>,
+    },
+    #[strum(serialize = "gcp_vertex_gemini")]
+    #[serde(rename = "gcp_vertex_gemini")]
+    GCPVertexGemini {
+        model_id: String,
+        location: String,
+        project_id: String,
+        credential_location: Option<CredentialLocation>,
+    },
+    #[strum(serialize = "google_ai_studio_gemini")]
+    #[serde(rename = "google_ai_studio_gemini")]
+    GoogleAIStudioGemini {
+        model_name: String,
+        api_key_location: Option<CredentialLocation>,
+    },
+    #[strum(serialize = "fireworks")]
+    #[serde(rename = "fireworks")]
+    Fireworks {
+        model_name: String,
+        api_key_location: Option<CredentialLocation>,
+    },
+    Mistral {
+        model_name: String,
+        api_key_location: Option<CredentialLocation>,
+    },
+    OpenAI {
+        model_name: String,
+        api_base: Option<Url>,
+        api_key_location: Option<CredentialLocation>,
+    },
+    Together {
+        model_name: String,
+        api_key_location: Option<CredentialLocation>,
+    },
+    #[allow(clippy::upper_case_acronyms)]
+    VLLM {
+        model_name: String,
+        api_base: Url,
+        api_key_location: Option<CredentialLocation>,
+    },
+    #[allow(clippy::upper_case_acronyms)]
+    XAI {
+        model_name: String,
+        api_key_location: Option<CredentialLocation>,
+    },
+    #[cfg(any(test, feature = "e2e_tests"))]
+    Dummy {
+        model_name: String,
+        api_key_location: Option<CredentialLocation>,
+    },
+}
+
 impl<'de> Deserialize<'de> for ProviderConfig {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        /// Helper struct for deserializing the ProviderConfig.
-        /// This is necessary because we want to load environment variables as we deserialize
-        /// and we need to be able to deserialize the correct one based on the "type" field.
-        /// Use the ProviderConfig struct for all post-initialization logic.
-        #[derive(Deserialize)]
-        #[serde(tag = "type")]
-        #[serde(rename_all = "lowercase")]
-        #[serde(deny_unknown_fields)]
-        enum ProviderConfigHelper {
-            Anthropic {
-                model_name: String,
-                api_key_location: Option<CredentialLocation>,
-            },
-            #[serde(rename = "aws_bedrock")]
-            AWSBedrock {
-                model_id: String,
-                region: Option<String>,
-            },
-            Azure {
-                deployment_id: String,
-                endpoint: Url,
-                api_key_location: Option<CredentialLocation>,
-            },
-            #[serde(rename = "gcp_vertex_anthropic")]
-            GCPVertexAnthropic {
-                model_id: String,
-                location: String,
-                project_id: String,
-                credential_location: Option<CredentialLocation>,
-            },
-            #[serde(rename = "gcp_vertex_gemini")]
-            GCPVertexGemini {
-                model_id: String,
-                location: String,
-                project_id: String,
-                credential_location: Option<CredentialLocation>,
-            },
-            #[serde(rename = "google_ai_studio_gemini")]
-            GoogleAIStudioGemini {
-                model_name: String,
-                api_key_location: Option<CredentialLocation>,
-            },
-            Fireworks {
-                model_name: String,
-                api_key_location: Option<CredentialLocation>,
-            },
-            Mistral {
-                model_name: String,
-                api_key_location: Option<CredentialLocation>,
-            },
-            OpenAI {
-                model_name: String,
-                api_base: Option<Url>,
-                api_key_location: Option<CredentialLocation>,
-            },
-            Together {
-                model_name: String,
-                api_key_location: Option<CredentialLocation>,
-            },
-            #[allow(clippy::upper_case_acronyms)]
-            VLLM {
-                model_name: String,
-                api_base: Url,
-                api_key_location: Option<CredentialLocation>,
-            },
-            #[allow(clippy::upper_case_acronyms)]
-            XAI {
-                model_name: String,
-                api_key_location: Option<CredentialLocation>,
-            },
-            #[cfg(any(test, feature = "e2e_tests"))]
-            Dummy {
-                model_name: String,
-                api_key_location: Option<CredentialLocation>,
-            },
-        }
-
         let helper = ProviderConfigHelper::deserialize(deserializer)?;
 
         Ok(match helper {
@@ -552,21 +561,12 @@ impl<'de> Deserialize<'de> for CredentialLocation {
     }
 }
 
-const RESERVED_MODEL_PREFIXES: &[&str] = &[
-    "anthropic::",
-    "aws_bedrock::",
-    "azure::",
-    "fireworks::",
-    "gcp_vertex_anthropic::",
-    "gcp_vertex_gemini::",
-    "google_ai_studio_gemini::",
-    "mistral::",
-    "openai::",
-    "together::",
-    "vllm::",
-    "xai::",
-    "dummy::",
-];
+lazy_static! {
+    static ref RESERVED_MODEL_PREFIXES: Vec<String> = ProviderConfigHelper::VARIANTS
+        .iter()
+        .map(|&v| format!("{}::", v))
+        .collect();
+}
 
 const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "anthropic::",
@@ -590,7 +590,7 @@ impl TryFrom<HashMap<String, ModelConfig>> for ModelTable {
         for key in map.keys() {
             if RESERVED_MODEL_PREFIXES
                 .iter()
-                .any(|&name| key.starts_with(name))
+                .any(|name| key.starts_with(name))
             {
                 return Err(format!("Model name '{}' contains a reserved prefix", key));
             }
@@ -1187,5 +1187,16 @@ mod tests {
                 .unwrap();
 
         model_table.validate_or_create("dummy::claude").unwrap();
+    }
+
+    #[test]
+    fn test_shorthand_prefixes_subset_of_reserved() {
+        for &shorthand in SHORTHAND_MODEL_PREFIXES {
+            assert!(
+                RESERVED_MODEL_PREFIXES.contains(&shorthand.to_string()),
+                "Shorthand prefix '{}' is not in RESERVED_MODEL_PREFIXES",
+                shorthand
+            );
+        }
     }
 }
