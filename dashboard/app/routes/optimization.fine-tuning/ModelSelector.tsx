@@ -35,6 +35,12 @@ function formatProvider(provider: string): { name: string; className: string } {
         className:
           "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300",
       };
+    case "fireworks":
+      return {
+        name: "Fireworks",
+        className:
+          "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300",
+      };
     default:
       return {
         name: provider,
