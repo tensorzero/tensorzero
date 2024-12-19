@@ -11,6 +11,7 @@ use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::inference::types::{
     batch::BatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role, Usage,
 };
+use crate::model::ModelTable;
 use crate::{
     endpoints::inference::InferenceParams,
     error::{Error, ErrorDetails},
@@ -97,7 +98,7 @@ impl Variant for MixtureOfNConfig {
     fn validate(
         &self,
         function: &FunctionConfig,
-        models: &HashMap<String, ModelConfig>,
+        models: &mut ModelTable,
         embedding_models: &HashMap<String, EmbeddingModelConfig>,
         templates: &TemplateConfig,
         function_name: &str,

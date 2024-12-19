@@ -1,3 +1,5 @@
+use std::env;
+
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{
@@ -37,11 +39,39 @@ pub struct HyperbolicProvider {
     pub credentials: HyperbolicCredentials,
 }
 
+impl HyperbolicProvider {
+    pub fn new(
+        model_name: String,
+        api_key_location: Option<CredentialLocation>,
+    ) -> Result<Self, Error> {
+        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
+        let credentials = match api_key_location {
+            CredentialLocation::Env(key_name) => {
+                let api_key = env::var(key_name).map_err(|_| {
+                    Error::new(ErrorDetails::ApiKeyMissing {
+                        provider_name: "Hyperbolic".to_string(),
+                    })
+                })?;
+                HyperbolicCredentials::Static(api_key.into())
+            }
+            CredentialLocation::Dynamic(key_name) => HyperbolicCredentials::Dynamic(key_name),
+            _ => {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: "Invalid api_key_location for Hyperbolic provider".to_string(),
+                }))
+            }
+        };
+        Ok(HyperbolicProvider {
+            model_name,
+            credentials,
+        })
+    }
+}
+
 #[derive(Debug)]
 pub enum HyperbolicCredentials {
     Static(SecretString),
     Dynamic(String),
-    None,
 }
 
 impl HyperbolicCredentials {
@@ -59,10 +89,6 @@ impl HyperbolicCredentials {
                     .into()
                 })
             }
-            HyperbolicCredentials::None => Err(ErrorDetails::ApiKeyMissing {
-                provider_name: "Hyperbolic".to_string(),
-            }
-            .into()),
         }
     }
 }

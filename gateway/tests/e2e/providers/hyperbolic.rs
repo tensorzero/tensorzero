@@ -9,6 +9,12 @@ async fn get_providers() -> E2ETestProviders {
         model_provider_name: "hyperbolic".to_string(),
     }];
 
+    let shorthand_providers = vec![E2ETestProvider {
+        variant_name: "hyperbolic-shorthand".to_string(),
+        model_name: "hyperbolic::meta-llama/Meta-Llama-3-70B-Instruct".to_string(),
+        model_provider_name: "hyperbolic".to_string(),
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         inference_params_inference: standard_providers.clone(),
@@ -17,6 +23,7 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: vec![],
         parallel_tool_use_inference: vec![],
         json_mode_inference: vec![],
+        shorthand_inference: shorthand_providers.clone(),
         supports_batch_inference: false,
     }
 }
