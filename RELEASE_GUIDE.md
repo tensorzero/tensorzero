@@ -49,3 +49,11 @@ DOCKER_BUILDKIT=1 docker buildx build \
 
 > [!IMPORTANT]
 > Make sure to replace the `XXXX.XX.X` placeholder with the actual version of the Docker container you are building.
+
+## Documentation
+
+Make sure to merge every PR with the `merge-on-release` label.
+
+> [!NOTE]
+> The documentation is currently stored in a separate repository.
+> We're planning to make those files open source in the near future.
