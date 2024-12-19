@@ -41,9 +41,8 @@ It provides a **data & learning flywheel for LLMs** by unifying:
 
 ## Demo
 
-> [!NOTE]
-> **Watch LLMs get better at data extraction in real time with TensorZero!**
-> 
+> [!NOTE] > **Watch LLMs get better at data extraction in real time with TensorZero!**
+>
 > **[Dynamic in-context learning (DICL)](https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations#dynamic-in-context-learning-dicl)** is a powerful inference-time optimization available out of the box with TensorZero.
 > It enhances LLM performance by automatically incorporating relevant historical examples into the prompt, without the need for model fine-tuning.
 
@@ -75,7 +74,7 @@ Read more about our **[Vision & Roadmap](https://www.tensorzero.com/docs/vision-
 
 ## Get Started
 
-**Next steps?**
+**Start building today.**
 The **[Quick Start](https://www.tensorzero.com/docs/gateway/quickstart)** shows it's easy to set up an LLM application with TensorZero.
 If you want to dive deeper, the **[Tutorial](https://www.tensorzero.com/docs/gateway/tutorial)** teaches how to build a simple chatbot, an email copilot, a weather RAG system, and a structured data extraction pipeline.
 
