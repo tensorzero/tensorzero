@@ -3052,11 +3052,6 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     //
     // https://gist.github.com/GabrielBianconi/2199022d0ea8518e06d366fb613c5bb5
 
-    // TODO (#536): Implement ToolChoice::None workaround for GCP Vertex AI Anthropic.
-    if provider.model_provider_name.contains("anthropic") {
-        return;
-    }
-
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -3277,12 +3272,6 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     // The bug has been reported to the xAI team.
     //
     // https://gist.github.com/GabrielBianconi/2199022d0ea8518e06d366fb613c5bb5
-
-    // TODO (#536): Implement ToolChoice::None workaround for GCP Vertex AI Anthropic.
-    if provider.model_provider_name.contains("anthropic") {
-        return;
-    }
-
     let episode_id = Uuid::now_v7();
 
     let payload = json!({

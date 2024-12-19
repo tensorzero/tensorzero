@@ -477,6 +477,7 @@ impl<'a> AnthropicRequestBody<'a> {
         } else {
             messages
         };
+
         // Workaround for Anthropic API limitation: they don't support explicitly specifying "none"
         // for tool choice. When ToolChoice::None is specified, we don't send any tools in the
         // request payload to achieve the same effect.
@@ -492,6 +493,7 @@ impl<'a> AnthropicRequestBody<'a> {
                 )
             }
         });
+
         // `tool_choice` should only be set if tools are set and non-empty
         let tool_choice: Option<AnthropicToolChoice> = tools
             .as_ref()
