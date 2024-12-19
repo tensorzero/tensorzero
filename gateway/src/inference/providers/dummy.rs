@@ -28,7 +28,29 @@ pub struct DummyProvider {
     pub credentials: DummyCredentials,
 }
 
-pub fn default_api_key_location() -> CredentialLocation {
+impl DummyProvider {
+    pub fn new(
+        model_name: String,
+        api_key_location: Option<CredentialLocation>,
+    ) -> Result<Self, Error> {
+        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
+        match api_key_location {
+            CredentialLocation::Dynamic(key_name) => Ok(DummyProvider {
+                model_name,
+                credentials: DummyCredentials::Dynamic(key_name),
+            }),
+            CredentialLocation::None => Ok(DummyProvider {
+                model_name,
+                credentials: DummyCredentials::None,
+            }),
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: "Invalid api_key_location for Dummy provider".to_string(),
+            })),
+        }
+    }
+}
+
+fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::None
 }
 
