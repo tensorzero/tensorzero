@@ -17,12 +17,9 @@ export async function action({ request }: ActionFunctionArgs) {
     const current_variant = config.functions[data.function].variants[
       data.variant
     ] as ChatCompletionConfig;
-    if (
-      data.model.provider !== "openai" &&
-      data.model.provider !== "fireworks"
-    ) {
+    if (data.model.provider !== "openai") {
       return Response.json(
-        { error: "Unsupported model provider" },
+        { error: `Unsupported model provider: ${data.model.provider}` },
         { status: 400 },
       );
     }
@@ -37,14 +34,14 @@ export async function action({ request }: ActionFunctionArgs) {
 
     const template_env = await get_template_env(current_variant);
     const validationSplit = data.validationSplitPercent / 100;
-    const job_status = await start_sft_openai(
+    const job = await start_sft_openai(
       data.model.name,
       curatedInferences,
       validationSplit,
       template_env,
     );
 
-    return Response.json(job_status);
+    return Response.json(job);
   } catch (error) {
     return Response.json(
       { error: (error as Error).message },
