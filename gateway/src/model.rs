@@ -10,6 +10,7 @@ use url::Url;
 use crate::inference::providers::dummy::DummyProvider;
 use crate::inference::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
 
+use crate::inference::providers::hyperbolic::HyperbolicProvider;
 use crate::inference::types::batch::{BatchModelInferenceResponse, BatchProviderInferenceResponse};
 use crate::{
     endpoints::inference::InferenceCredentials,
@@ -154,6 +155,7 @@ pub enum ProviderConfig {
     GCPVertexAnthropic(GCPVertexAnthropicProvider),
     GCPVertexGemini(GCPVertexGeminiProvider),
     GoogleAIStudioGemini(GoogleAIStudioGeminiProvider),
+    Hyperbolic(HyperbolicProvider),
     Mistral(MistralProvider),
     OpenAI(OpenAIProvider),
     Together(TogetherProvider),
@@ -207,6 +209,10 @@ enum ProviderConfigHelper {
     #[strum(serialize = "google_ai_studio_gemini")]
     #[serde(rename = "google_ai_studio_gemini")]
     GoogleAIStudioGemini {
+        model_name: String,
+        api_key_location: Option<CredentialLocation>,
+    },
+    Hyperbolic {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     },
@@ -319,6 +325,13 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 GoogleAIStudioGeminiProvider::new(model_name, api_key_location)
                     .map_err(|e| D::Error::custom(e.to_string()))?,
             ),
+            ProviderConfigHelper::Hyperbolic {
+                model_name,
+                api_key_location,
+            } => ProviderConfig::Hyperbolic(
+                HyperbolicProvider::new(model_name, api_key_location)
+                    .map_err(|e| D::Error::custom(e.to_string()))?,
+            ),
             ProviderConfigHelper::Mistral {
                 model_name,
                 api_key_location,
@@ -389,6 +402,7 @@ impl ProviderConfig {
             ProviderConfig::GoogleAIStudioGemini(provider) => {
                 provider.infer(request, client, api_keys).await
             }
+            ProviderConfig::Hyperbolic(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::Mistral(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::OpenAI(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::Together(provider) => provider.infer(request, client, api_keys).await,
@@ -432,6 +446,9 @@ impl ProviderConfig {
                 provider.infer_stream(request, client, api_keys).await
             }
             ProviderConfig::GoogleAIStudioGemini(provider) => {
+                provider.infer_stream(request, client, api_keys).await
+            }
+            ProviderConfig::Hyperbolic(provider) => {
                 provider.infer_stream(request, client, api_keys).await
             }
             ProviderConfig::Mistral(provider) => {
@@ -492,6 +509,11 @@ impl ProviderConfig {
                     .await
             }
             ProviderConfig::GoogleAIStudioGemini(provider) => {
+                provider
+                    .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
+            ProviderConfig::Hyperbolic(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
                     .await
@@ -572,6 +594,7 @@ const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "anthropic::",
     "fireworks::",
     "google_ai_studio_gemini::",
+    "hyperbolic::",
     "mistral::",
     "openai::",
     "together::",
@@ -662,6 +685,7 @@ fn model_config_from_shorthand(
         "google_ai_studio_gemini" => ProviderConfig::GoogleAIStudioGemini(
             GoogleAIStudioGeminiProvider::new(model_name, None)?,
         ),
+        "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name, None)?),
         "mistral" => ProviderConfig::Mistral(MistralProvider::new(model_name, None)?),
         "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?),
         "together" => ProviderConfig::Together(TogetherProvider::new(model_name, None)?),
