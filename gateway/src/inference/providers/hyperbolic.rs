@@ -22,7 +22,7 @@ use super::provider_trait::InferenceProvider;
 lazy_static! {
     static ref HYPERBOLIC_DEFAULT_BASE_URL: Url = {
         #[allow(clippy::expect_used)]
-        Url::parse("https://api.hyperbolic.xyz/v1/chat/completions")
+        Url::parse("https://api.hyperbolic.xyz/v1/")
             .expect("Failed to parse HYPERBOLIC_DEFAULT_BASE_URL")
     };
 }
@@ -380,7 +380,7 @@ mod tests {
     fn test_hyperbolic_api_base() {
         assert_eq!(
             HYPERBOLIC_DEFAULT_BASE_URL.as_str(),
-            "https://api.hyperbolic.xyz/v1/chat/completions"
+            "https://api.hyperbolic.xyz/v1/"
         );
     }
 }

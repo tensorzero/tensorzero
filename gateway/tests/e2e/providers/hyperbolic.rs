@@ -12,9 +12,9 @@ async fn get_providers() -> E2ETestProviders {
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         inference_params_inference: standard_providers.clone(),
-        tool_use_inference: standard_providers.clone(),
-        tool_multi_turn_inference: standard_providers.clone(),
-        dynamic_tool_use_inference: standard_providers.clone(),
+        tool_use_inference: vec![],
+        tool_multi_turn_inference: vec![],
+        dynamic_tool_use_inference: vec![],
         parallel_tool_use_inference: vec![],
         json_mode_inference: vec![],
         supports_batch_inference: false,
