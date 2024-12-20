@@ -11,7 +11,7 @@ import { render_message } from "./rendering";
 import { getConfig } from "../config";
 import { get_template_env, type ChatCompletionConfig } from "../config/variant";
 import { z } from "zod";
-// import { SFTJob } from "./common";
+import { SFTJob } from "./common";
 export const FIREWORKS_API_URL = "https://api.fireworks.ai";
 export const FIREWORKS_API_KEY = process.env.FIREWORKS_API_KEY || throwError();
 export const FIREWORKS_ACCOUNT_ID =
@@ -22,7 +22,7 @@ function throwError(): never {
   throw new Error("FIREWORKS_API_KEY and FIREWORKS_ACCOUNT_ID must be set");
 }
 
-export class FireworksSFTJob {
+export class FireworksSFTJob extends SFTJob {
   constructor(
     public jobPath: string,
     public status: string,
@@ -30,7 +30,7 @@ export class FireworksSFTJob {
     public modelId?: string,
     public modelPath?: string,
   ) {
-    // super();
+    super();
   }
 
   static async from_form_data(data: SFTFormValues): Promise<FireworksSFTJob> {

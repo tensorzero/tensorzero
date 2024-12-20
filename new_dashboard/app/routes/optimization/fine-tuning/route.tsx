@@ -7,9 +7,10 @@ import { useEffect, useState } from "react";
 import { type SFTFormValues, SFTFormValuesSchema } from "./types";
 import type { Route } from "./+types/route";
 import { v7 as uuid } from "uuid";
-import { FireworksSFTJob } from "~/utils/fine_tuning/fireworks";
+import type { SFTJob } from "~/utils/fine_tuning/common";
 import { useRevalidator } from "react-router";
 import { redirect } from "react-router";
+import { launch_sft_job } from "~/utils/fine_tuning/client";
 
 export const meta: MetaFunction = () => {
   return [
@@ -19,7 +20,7 @@ export const meta: MetaFunction = () => {
 };
 
 // Mutable store mapping job IDs to their info
-export const jobStore: { [jobId: string]: FireworksSFTJob } = {};
+export const jobStore: { [jobId: string]: SFTJob } = {};
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
@@ -44,6 +45,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     jobStore[job_id] = updatedJob;
 
     const result = updatedJob.result();
+    // TODO (Viraj, important!): fix the status here.
     const status = result ? "completed" : "running";
 
     return {
@@ -70,7 +72,7 @@ export async function action({ request }: Route.ActionArgs) {
   const jsonData = JSON.parse(serializedFormData);
   const validatedData = SFTFormValuesSchema.parse(jsonData);
 
-  const job = await FireworksSFTJob.from_form_data(validatedData);
+  const job = await launch_sft_job(validatedData);
   jobStore[validatedData.jobId] = job;
 
   return redirect(`/optimization/fine-tuning?job_id=${validatedData.jobId}`);
@@ -99,6 +101,11 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
       name: "accounts/fireworks/models/llama-v3p1-8b-instruct",
       provider: "fireworks",
     },
+    // model: {
+    //   displayName: "gpt-4o-mini-2024-07-18",
+    //   name: "gpt-4o-mini-2024-07-18",
+    //   provider: "openai",
+    // },
     variant: "baseline",
     validationSplitPercent: 20,
     maxSamples: 1000,

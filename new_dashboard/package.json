@@ -15,6 +15,7 @@
     "ajv": "^8.17.1",
     "isbot": "^5.1.17",
     "json-schema": "^0.4.0",
+    "openai": "^4.77.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router": "^7.0.2",
