@@ -448,6 +448,8 @@ struct AnthropicRequestBody<'a> {
     tool_choice: Option<AnthropicToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<AnthropicTool<'a>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    disable_parallel_tool_use: Option<bool>,
 }
 
 impl<'a> AnthropicRequestBody<'a> {
@@ -500,6 +502,8 @@ impl<'a> AnthropicRequestBody<'a> {
             .filter(|t| !t.is_empty())
             .and(request.tool_config.as_ref())
             .and_then(|c| (&c.tool_choice).try_into().ok());
+        let disable_parallel_tool_use =
+            request.tool_config.as_ref().map(|c| !c.parallel_tool_calls);
         // NOTE: Anthropic does not support seed
         Ok(AnthropicRequestBody {
             model: model_name,
@@ -511,6 +515,7 @@ impl<'a> AnthropicRequestBody<'a> {
             top_p: request.top_p,
             tool_choice,
             tools,
+            disable_parallel_tool_use,
         })
     }
 }
@@ -1187,6 +1192,7 @@ mod tests {
                 top_p: None,
                 tool_choice: None,
                 tools: None,
+                disable_parallel_tool_use: None,
             }
         );
 
@@ -1234,6 +1240,7 @@ mod tests {
                 top_p: None,
                 tool_choice: None,
                 tools: None,
+                disable_parallel_tool_use: None,
             }
         );
 
@@ -1285,6 +1292,7 @@ mod tests {
                 top_p: None,
                 tool_choice: None,
                 tools: None,
+                disable_parallel_tool_use: None,
             }
         );
 
@@ -1340,6 +1348,7 @@ mod tests {
                 }],
             }
         );
+        assert_eq!(result.disable_parallel_tool_use, Some(true));
     }
 
     #[test]
@@ -1597,6 +1606,7 @@ mod tests {
             temperature: None,
             tool_choice: None,
             tools: None,
+            disable_parallel_tool_use: None,
         };
         let input_messages = vec![RequestMessage {
             role: Role::User,
@@ -1654,6 +1664,7 @@ mod tests {
             top_p: Some(0.9),
             tool_choice: None,
             tools: None,
+            disable_parallel_tool_use: None,
         };
         let input_messages = vec![RequestMessage {
             role: Role::Assistant,
@@ -1721,6 +1732,7 @@ mod tests {
             top_p: Some(0.9),
             tool_choice: None,
             tools: None,
+            disable_parallel_tool_use: None,
         };
         let input_messages = vec![RequestMessage {
             role: Role::User,
