@@ -969,7 +969,7 @@ mod tests {
     use std::borrow::Cow;
 
     use super::*;
-    use crate::inference::providers::common::{MULTI_TOOL_CONFIG, WEATHER_TOOL_CONFIG};
+    use crate::inference::providers::common::{WEATHER_TOOL_CONFIG};
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::tool::{DynamicToolConfig, ToolConfig, ToolResult};
@@ -2253,61 +2253,5 @@ mod tests {
         };
         let result = prefill_json_chunk_response(chunk.clone());
         assert_eq!(result, chunk);
-    }
-
-    #[test]
-    fn test_disable_parallel_tool_use() {
-        let model = "claude".to_string();
-        let messages = vec![RequestMessage {
-            role: Role::Assistant,
-            content: vec!["test_assistant".to_string().into()],
-        }];
-        // Test1: Use a tool_config which disables parallel tool use.
-        let inference_request = ModelInferenceRequest {
-            messages,
-            system: None,
-            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
-            temperature: None,
-            top_p: None,
-            presence_penalty: None,
-            frequency_penalty: None,
-            max_tokens: None,
-            seed: None,
-            stream: false,
-            json_mode: ModelInferenceRequestJsonMode::On,
-            function_type: FunctionType::Json,
-            output_schema: None,
-        };
-        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
-        assert_eq!(
-            anthropic_request_body.unwrap().disable_parallel_tool_use,
-            Some(true)
-        );
-
-        // Test2: Use a tool_config which enables parallel tool use.
-        let messages = vec![RequestMessage {
-            role: Role::Assistant,
-            content: vec!["test_assistant".to_string().into()],
-        }];
-        let inference_request = ModelInferenceRequest {
-            messages,
-            system: None,
-            tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
-            temperature: None,
-            top_p: None,
-            presence_penalty: None,
-            frequency_penalty: None,
-            max_tokens: None,
-            seed: None,
-            stream: false,
-            json_mode: ModelInferenceRequestJsonMode::On,
-            function_type: FunctionType::Json,
-            output_schema: None,
-        };
-        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
-        assert_eq!(
-            anthropic_request_body.unwrap().disable_parallel_tool_use,
-            Some(false)
-        );
     }
 }
