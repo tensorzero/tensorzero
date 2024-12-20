@@ -1,7 +1,7 @@
 import { createClient } from "@clickhouse/client";
 import { z } from "zod";
-import { FunctionConfig } from "./config/function";
-import { MetricConfig } from "./config/metric";
+import { FunctionConfigSchema, type FunctionConfig } from "./config/function";
+import { MetricConfigSchema, type MetricConfig } from "./config/metric";
 
 export const clickhouseClient = createClient({
   url: process.env.CLICKHOUSE_URL,

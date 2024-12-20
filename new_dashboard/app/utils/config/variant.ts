@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { jsonModeSchema, retryConfigSchema } from "./types";
+import { jsonModeSchema, RetryConfigSchema } from "./types";
 import { create_env } from "../minijinja/pkg/minijinja_bindings";
 import { stringify } from "smol-toml";
 
@@ -9,7 +9,7 @@ export interface TemplateWithContent {
   content?: string;
 }
 
-const BaseChatCompletionConfig = z.object({
+const BaseChatCompletionConfigSchema = z.object({
   weight: z.number().default(0),
   model: z.string(),
   system_template: z.string().optional(),
@@ -22,32 +22,35 @@ const BaseChatCompletionConfig = z.object({
   frequency_penalty: z.number().optional(),
   seed: z.number().int().optional(),
   json_mode: jsonModeSchema.default("on"),
-  retries: retryConfigSchema.default({ num_retries: 0, max_delay_s: 10 }),
+  retries: RetryConfigSchema.default({ num_retries: 0, max_delay_s: 10 }),
 });
 
-export const RawChatCompletionConfig = BaseChatCompletionConfig.extend({
-  type: z.literal("chat_completion"),
-}).partial({ retries: true, weight: true });
+export const RawChatCompletionConfigSchema =
+  BaseChatCompletionConfigSchema.extend({
+    type: z.literal("chat_completion"),
+  }).partial({ retries: true, weight: true });
 
-export type RawChatCompletionConfig = z.infer<typeof RawChatCompletionConfig>;
+export type RawChatCompletionConfig = z.infer<
+  typeof RawChatCompletionConfigSchema
+>;
 
-export const EvaluatorConfig = z.object({
-  ...BaseChatCompletionConfig.shape,
+export const EvaluatorConfigSchema = z.object({
+  ...BaseChatCompletionConfigSchema.shape,
 });
 
-export type EvaluatorConfig = z.infer<typeof EvaluatorConfig>;
+export type EvaluatorConfig = z.infer<typeof EvaluatorConfigSchema>;
 
-export const BestOfNSamplingConfig = z.object({
+export const BestOfNSamplingConfigSchema = z.object({
   type: z.literal("experimental_best_of_n_sampling"),
   weight: z.number().default(0),
   timeout_s: z.number().default(300),
   candidates: z.array(z.string()),
-  evaluator: EvaluatorConfig,
+  evaluator: EvaluatorConfigSchema,
 });
 
-export type BestOfNSamplingConfig = z.infer<typeof BestOfNSamplingConfig>;
+export type BestOfNSamplingConfig = z.infer<typeof BestOfNSamplingConfigSchema>;
 
-export const DiclConfig = z.object({
+export const DiclConfigSchema = z.object({
   type: z.literal("experimental_dynamic_in_context_learning"),
   weight: z.number().default(0),
   embedding_model: z.string(),
@@ -61,36 +64,37 @@ export const DiclConfig = z.object({
   max_tokens: z.number().int().optional(),
   seed: z.number().int().optional(),
   json_mode: jsonModeSchema.default("on"),
-  retries: retryConfigSchema
-    .optional()
-    .default({ num_retries: 0, max_delay_s: 10 }),
+  retries: RetryConfigSchema.optional().default({
+    num_retries: 0,
+    max_delay_s: 10,
+  }),
 });
 
-export type DiclConfig = z.infer<typeof DiclConfig>;
+export type DiclConfig = z.infer<typeof DiclConfigSchema>;
 
-export const FuserConfig = z.object({
-  ...BaseChatCompletionConfig.shape,
+export const FuserConfigSchema = z.object({
+  ...BaseChatCompletionConfigSchema.shape,
 });
 
-export type FuserConfig = z.infer<typeof FuserConfig>;
+export type FuserConfig = z.infer<typeof FuserConfigSchema>;
 
-export const MixtureOfNConfig = z.object({
+export const MixtureOfNConfigSchema = z.object({
   type: z.literal("experimental_mixture_of_n"),
   weight: z.number().default(0),
   timeout_s: z.number().default(300),
   candidates: z.array(z.string()),
-  fuser: FuserConfig,
+  fuser: FuserConfigSchema,
 });
 
-export type MixtureOfNConfig = z.infer<typeof MixtureOfNConfig>;
+export type MixtureOfNConfig = z.infer<typeof MixtureOfNConfigSchema>;
 
 // Raw variant config using basic string templates
-export const RawVariantConfig = z
+export const RawVariantConfigSchema = z
   .discriminatedUnion("type", [
-    RawChatCompletionConfig,
-    BestOfNSamplingConfig,
-    DiclConfig,
-    MixtureOfNConfig,
+    RawChatCompletionConfigSchema,
+    BestOfNSamplingConfigSchema,
+    DiclConfigSchema,
+    MixtureOfNConfigSchema,
   ])
   .transform((raw) => ({
     ...raw,
@@ -99,27 +103,29 @@ export const RawVariantConfig = z
     },
   }));
 
-export type RawVariantConfig = z.infer<typeof RawVariantConfig>;
+export type RawVariantConfig = z.infer<typeof RawVariantConfigSchema>;
 
 // Extend the inferred type to include template content
-export const ChatCompletionConfigSchema = BaseChatCompletionConfig.extend({
-  type: z.literal("chat_completion"),
-  system_template: z.custom<TemplateWithContent>().optional(),
-  user_template: z.custom<TemplateWithContent>().optional(),
-  assistant_template: z.custom<TemplateWithContent>().optional(),
-}).partial({ retries: true, weight: true });
+export const ChatCompletionConfigSchema = BaseChatCompletionConfigSchema.extend(
+  {
+    type: z.literal("chat_completion"),
+    system_template: z.custom<TemplateWithContent>().optional(),
+    user_template: z.custom<TemplateWithContent>().optional(),
+    assistant_template: z.custom<TemplateWithContent>().optional(),
+  },
+).partial({ retries: true, weight: true });
 
 export type ChatCompletionConfig = z.infer<typeof ChatCompletionConfigSchema>;
 
 // Variant config using template content
-export const VariantConfig = z.discriminatedUnion("type", [
+export const VariantConfigSchema = z.discriminatedUnion("type", [
   ChatCompletionConfigSchema,
-  BestOfNSamplingConfig,
-  DiclConfig,
-  MixtureOfNConfig,
+  BestOfNSamplingConfigSchema,
+  DiclConfigSchema,
+  MixtureOfNConfigSchema,
 ]);
 
-export type VariantConfig = z.infer<typeof VariantConfig>;
+export type VariantConfig = z.infer<typeof VariantConfigSchema>;
 
 export async function get_template_env(variant: ChatCompletionConfig) {
   const env: {

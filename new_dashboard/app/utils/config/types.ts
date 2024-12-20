@@ -20,7 +20,8 @@ export const jsonSchema7Validator = z.custom<JSONSchema7>((val) => {
 export const jsonModeSchema = z.enum(["off", "on", "strict", "implicit_tool"]);
 export type JsonMode = z.infer<typeof jsonModeSchema>;
 
-export const retryConfigSchema = z.object({
+export const RetryConfigSchema = z.object({
   num_retries: z.number().int().nonnegative().default(0),
   max_delay_s: z.number().nonnegative().default(10),
 });
+export type RetryConfig = z.infer<typeof RetryConfigSchema>;

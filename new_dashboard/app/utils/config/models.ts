@@ -2,116 +2,124 @@ import { z } from "zod";
 import { stringify } from "smol-toml";
 
 // Base provider configs
-export const AnthropicProviderConfig = z.object({
+export const AnthropicProviderConfigSchema = z.object({
   type: z.literal("anthropic"),
   model_name: z.string(),
 });
-export type AnthropicProviderConfig = z.infer<typeof AnthropicProviderConfig>;
+export type AnthropicProviderConfig = z.infer<
+  typeof AnthropicProviderConfigSchema
+>;
 
-export const AWSBedrockProviderConfig = z.object({
+export const AWSBedrockProviderConfigSchema = z.object({
   type: z.literal("aws_bedrock"),
   model_id: z.string(),
   region: z.string().optional(),
 });
-export type AWSBedrockProviderConfig = z.infer<typeof AWSBedrockProviderConfig>;
+export type AWSBedrockProviderConfig = z.infer<
+  typeof AWSBedrockProviderConfigSchema
+>;
 
-export const AzureProviderConfig = z.object({
+export const AzureProviderConfigSchema = z.object({
   type: z.literal("azure"),
   deployment_id: z.string(),
   endpoint: z.string().url(),
 });
-export type AzureProviderConfig = z.infer<typeof AzureProviderConfig>;
+export type AzureProviderConfig = z.infer<typeof AzureProviderConfigSchema>;
 
-export const DummyProviderConfig = z.object({
+export const DummyProviderConfigSchema = z.object({
   type: z.literal("dummy"),
   model_name: z.string(),
 });
-export type DummyProviderConfig = z.infer<typeof DummyProviderConfig>;
+export type DummyProviderConfig = z.infer<typeof DummyProviderConfigSchema>;
 
-export const FireworksProviderConfig = z.object({
+export const FireworksProviderConfigSchema = z.object({
   type: z.literal("fireworks"),
   model_name: z.string(),
 });
-export type FireworksProviderConfig = z.infer<typeof FireworksProviderConfig>;
+export type FireworksProviderConfig = z.infer<
+  typeof FireworksProviderConfigSchema
+>;
 
-export const GCPVertexAnthropicProviderConfig = z.object({
+export const GCPVertexAnthropicProviderConfigSchema = z.object({
   type: z.literal("gcp_vertex_anthropic"),
   model_id: z.string(),
   location: z.string(),
   project_id: z.string(),
 });
 export type GCPVertexAnthropicProviderConfig = z.infer<
-  typeof GCPVertexAnthropicProviderConfig
+  typeof GCPVertexAnthropicProviderConfigSchema
 >;
 
-export const GCPVertexGeminiProviderConfig = z.object({
+export const GCPVertexGeminiProviderConfigSchema = z.object({
   type: z.literal("gcp_vertex_gemini"),
   model_id: z.string(),
   location: z.string(),
   project_id: z.string(),
 });
 export type GCPVertexGeminiProviderConfig = z.infer<
-  typeof GCPVertexGeminiProviderConfig
+  typeof GCPVertexGeminiProviderConfigSchema
 >;
 
-export const GoogleAIStudioGeminiProviderConfig = z.object({
+export const GoogleAIStudioGeminiProviderConfigSchema = z.object({
   type: z.literal("google_ai_studio_gemini"),
   model_name: z.string(),
 });
 export type GoogleAIStudioGeminiProviderConfig = z.infer<
-  typeof GoogleAIStudioGeminiProviderConfig
+  typeof GoogleAIStudioGeminiProviderConfigSchema
 >;
 
-export const MistralProviderConfig = z.object({
+export const MistralProviderConfigSchema = z.object({
   type: z.literal("mistral"),
   model_name: z.string(),
 });
-export type MistralProviderConfig = z.infer<typeof MistralProviderConfig>;
+export type MistralProviderConfig = z.infer<typeof MistralProviderConfigSchema>;
 
-export const OpenAIProviderConfig = z.object({
+export const OpenAIProviderConfigSchema = z.object({
   type: z.literal("openai"),
   model_name: z.string(),
   api_base: z.string().url().optional(),
 });
-export type OpenAIProviderConfig = z.infer<typeof OpenAIProviderConfig>;
+export type OpenAIProviderConfig = z.infer<typeof OpenAIProviderConfigSchema>;
 
-export const TogetherProviderConfig = z.object({
+export const TogetherProviderConfigSchema = z.object({
   type: z.literal("together"),
   model_name: z.string(),
 });
-export type TogetherProviderConfig = z.infer<typeof TogetherProviderConfig>;
+export type TogetherProviderConfig = z.infer<
+  typeof TogetherProviderConfigSchema
+>;
 
-export const VLLMProviderConfig = z.object({
+export const VLLMProviderConfigSchema = z.object({
   type: z.literal("vllm"),
   model_name: z.string(),
   api_base: z.string().url(),
 });
-export type VLLMProviderConfig = z.infer<typeof VLLMProviderConfig>;
+export type VLLMProviderConfig = z.infer<typeof VLLMProviderConfigSchema>;
 
-export const XAIProviderConfig = z.object({
+export const XAIProviderConfigSchema = z.object({
   type: z.literal("xai"),
   model_name: z.string(),
 });
-export type XAIProviderConfig = z.infer<typeof XAIProviderConfig>;
+export type XAIProviderConfig = z.infer<typeof XAIProviderConfigSchema>;
 
 // Union of all provider configs
-export const ProviderConfig = z.discriminatedUnion("type", [
-  AnthropicProviderConfig,
-  AWSBedrockProviderConfig,
-  AzureProviderConfig,
-  DummyProviderConfig,
-  FireworksProviderConfig,
-  GCPVertexAnthropicProviderConfig,
-  GCPVertexGeminiProviderConfig,
-  GoogleAIStudioGeminiProviderConfig,
-  MistralProviderConfig,
-  OpenAIProviderConfig,
-  TogetherProviderConfig,
-  VLLMProviderConfig,
-  XAIProviderConfig,
+export const ProviderConfigSchema = z.discriminatedUnion("type", [
+  AnthropicProviderConfigSchema,
+  AWSBedrockProviderConfigSchema,
+  AzureProviderConfigSchema,
+  DummyProviderConfigSchema,
+  FireworksProviderConfigSchema,
+  GCPVertexAnthropicProviderConfigSchema,
+  GCPVertexGeminiProviderConfigSchema,
+  GoogleAIStudioGeminiProviderConfigSchema,
+  MistralProviderConfigSchema,
+  OpenAIProviderConfigSchema,
+  TogetherProviderConfigSchema,
+  VLLMProviderConfigSchema,
+  XAIProviderConfigSchema,
 ]);
 
-export type ProviderConfig = z.infer<typeof ProviderConfig>;
+export type ProviderConfig = z.infer<typeof ProviderConfigSchema>;
 export type ProviderType = ProviderConfig["type"];
 
 export function createProviderConfig(
@@ -135,31 +143,33 @@ export function createProviderConfig(
 }
 
 // Model config schema
-export const ModelConfig = z.object({
+export const ModelConfigSchema = z.object({
   // Array of provider names for routing/fallback order
   routing: z.array(z.string()),
   // Map of provider name to provider config
-  providers: z.record(z.string(), ProviderConfig),
+  providers: z.record(z.string(), ProviderConfigSchema),
 });
 
-export type ModelConfig = z.infer<typeof ModelConfig>;
+export type ModelConfig = z.infer<typeof ModelConfigSchema>;
 
 // Embedding provider config schema
-export const EmbeddingProviderConfig = z.discriminatedUnion("type", [
-  OpenAIProviderConfig,
+export const EmbeddingProviderConfigSchema = z.discriminatedUnion("type", [
+  OpenAIProviderConfigSchema,
 ]);
 
-export type EmbeddingProviderConfig = z.infer<typeof EmbeddingProviderConfig>;
+export type EmbeddingProviderConfig = z.infer<
+  typeof EmbeddingProviderConfigSchema
+>;
 
 // Embedding model config schema
-export const EmbeddingModelConfig = z.object({
+export const EmbeddingModelConfigSchema = z.object({
   // Array of provider names for routing/fallback order
   routing: z.array(z.string()),
   // Map of provider name to provider config
-  providers: z.record(z.string(), EmbeddingProviderConfig),
+  providers: z.record(z.string(), EmbeddingProviderConfigSchema),
 });
 
-export type EmbeddingModelConfig = z.infer<typeof EmbeddingModelConfig>;
+export type EmbeddingModelConfig = z.infer<typeof EmbeddingModelConfigSchema>;
 
 // Helper functions for model config
 export type FullyQualifiedModelConfig = {

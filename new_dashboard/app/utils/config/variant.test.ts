@@ -1,4 +1,8 @@
-import { ChatCompletionConfig, create_dump_variant_config } from "./variant";
+import {
+  ChatCompletionConfigSchema,
+  create_dump_variant_config,
+  type ChatCompletionConfig,
+} from "./variant";
 import { describe, it, expect } from "vitest";
 
 describe("create_dump_variant_config", () => {

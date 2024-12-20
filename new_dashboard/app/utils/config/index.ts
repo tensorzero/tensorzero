@@ -1,10 +1,14 @@
 import { z } from "zod";
-import { ModelConfig, EmbeddingModelConfig } from "./models";
+import { ModelConfigSchema, EmbeddingModelConfigSchema } from "./models";
 import { parse } from "smol-toml";
 import { promises as fs } from "fs";
-import { FunctionConfig, RawFunctionConfig } from "./function";
-import { MetricConfig } from "./metric";
-import { ToolConfig } from "./tool";
+import {
+  FunctionConfigSchema,
+  RawFunctionConfigSchema,
+  type FunctionConfig,
+} from "./function";
+import { MetricConfigSchema, type MetricConfig } from "./metric";
+import { ToolConfigSchema, type ToolConfig } from "./tool";
 
 const CONFIG_PATH =
   process.env.CONFIG_PATH || "fixtures/config/tensorzero.toml";
@@ -28,14 +32,14 @@ export type GatewayConfig = z.infer<typeof GatewayConfig>;
 export const RawConfig = z
   .object({
     gateway: GatewayConfig.optional().default({}),
-    models: z.record(z.string(), ModelConfig),
+    models: z.record(z.string(), ModelConfigSchema),
     embedding_models: z
-      .record(z.string(), EmbeddingModelConfig)
+      .record(z.string(), EmbeddingModelConfigSchema)
       .optional()
       .default({}),
-    functions: z.record(z.string(), RawFunctionConfig),
-    metrics: z.record(z.string(), MetricConfig),
-    tools: z.record(z.string(), ToolConfig).optional().default({}),
+    functions: z.record(z.string(), RawFunctionConfigSchema),
+    metrics: z.record(z.string(), MetricConfigSchema),
+    tools: z.record(z.string(), ToolConfigSchema).optional().default({}),
   })
   .transform((raw) => {
     const config = { ...raw };
@@ -61,14 +65,14 @@ export type RawConfig = z.infer<typeof RawConfig>;
 
 export const Config = z.object({
   gateway: GatewayConfig.optional().default({}),
-  models: z.record(z.string(), ModelConfig),
+  models: z.record(z.string(), ModelConfigSchema),
   embedding_models: z
-    .record(z.string(), EmbeddingModelConfig)
+    .record(z.string(), EmbeddingModelConfigSchema)
     .optional()
     .default({}),
-  functions: z.record(z.string(), FunctionConfig),
-  metrics: z.record(z.string(), MetricConfig),
-  tools: z.record(z.string(), ToolConfig).optional().default({}),
+  functions: z.record(z.string(), FunctionConfigSchema),
+  metrics: z.record(z.string(), MetricConfigSchema),
+  tools: z.record(z.string(), ToolConfigSchema).optional().default({}),
 });
 export type Config = z.infer<typeof Config>;
 
