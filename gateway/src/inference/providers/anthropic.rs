@@ -448,6 +448,8 @@ struct AnthropicRequestBody<'a> {
     tool_choice: Option<AnthropicToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<AnthropicTool<'a>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    disable_parallel_tool_use: Option<bool>,
 }
 
 impl<'a> AnthropicRequestBody<'a> {
@@ -500,6 +502,8 @@ impl<'a> AnthropicRequestBody<'a> {
             .filter(|t| !t.is_empty())
             .and(request.tool_config.as_ref())
             .and_then(|c| (&c.tool_choice).try_into().ok());
+        let disable_parallel_tool_use =
+            request.tool_config.as_ref().map(|c| !c.parallel_tool_calls);
         // NOTE: Anthropic does not support seed
         Ok(AnthropicRequestBody {
             model: model_name,
@@ -511,6 +515,7 @@ impl<'a> AnthropicRequestBody<'a> {
             top_p: request.top_p,
             tool_choice,
             tools,
+            disable_parallel_tool_use,
         })
     }
 }
@@ -969,7 +974,7 @@ mod tests {
     use std::borrow::Cow;
 
     use super::*;
-    use crate::inference::providers::common::WEATHER_TOOL_CONFIG;
+    use crate::inference::providers::common::{MULTI_TOOL_CONFIG, WEATHER_TOOL_CONFIG};
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::tool::{DynamicToolConfig, ToolConfig, ToolResult};
@@ -1187,6 +1192,7 @@ mod tests {
                 top_p: None,
                 tool_choice: None,
                 tools: None,
+                disable_parallel_tool_use: None,
             }
         );
 
@@ -1234,6 +1240,7 @@ mod tests {
                 top_p: None,
                 tool_choice: None,
                 tools: None,
+                disable_parallel_tool_use: None,
             }
         );
 
@@ -1285,6 +1292,7 @@ mod tests {
                 top_p: None,
                 tool_choice: None,
                 tools: None,
+                disable_parallel_tool_use: None,
             }
         );
 
@@ -1340,6 +1348,7 @@ mod tests {
                 }],
             }
         );
+        assert_eq!(result.disable_parallel_tool_use, Some(true));
     }
 
     #[test]
@@ -1597,6 +1606,7 @@ mod tests {
             temperature: None,
             tool_choice: None,
             tools: None,
+            disable_parallel_tool_use: None,
         };
         let input_messages = vec![RequestMessage {
             role: Role::User,
@@ -1654,6 +1664,7 @@ mod tests {
             top_p: Some(0.9),
             tool_choice: None,
             tools: None,
+            disable_parallel_tool_use: None,
         };
         let input_messages = vec![RequestMessage {
             role: Role::Assistant,
@@ -1721,6 +1732,7 @@ mod tests {
             top_p: Some(0.9),
             tool_choice: None,
             tools: None,
+            disable_parallel_tool_use: None,
         };
         let input_messages = vec![RequestMessage {
             role: Role::User,
@@ -2237,5 +2249,61 @@ mod tests {
         };
         let result = prefill_json_chunk_response(chunk.clone());
         assert_eq!(result, chunk);
+    }
+
+    #[test]
+    fn test_disable_parallel_tool_use() {
+        let model = "claude".to_string();
+        let messages = vec![RequestMessage {
+            role: Role::Assistant,
+            content: vec!["test_assistant".to_string().into()],
+        }];
+        // Test1: Use a tool_config which disables parallel tool use.
+        let inference_request = ModelInferenceRequest {
+            messages,
+            system: None,
+            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::On,
+            function_type: FunctionType::Json,
+            output_schema: None,
+        };
+        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
+        assert_eq!(
+            anthropic_request_body.unwrap().disable_parallel_tool_use,
+            Some(true)
+        );
+
+        // Test2: Use a tool_config which enables parallel tool use.
+        let messages = vec![RequestMessage {
+            role: Role::Assistant,
+            content: vec!["test_assistant".to_string().into()],
+        }];
+        let inference_request = ModelInferenceRequest {
+            messages,
+            system: None,
+            tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::On,
+            function_type: FunctionType::Json,
+            output_schema: None,
+        };
+        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
+        assert_eq!(
+            anthropic_request_body.unwrap().disable_parallel_tool_use,
+            Some(false)
+        );
     }
 }
