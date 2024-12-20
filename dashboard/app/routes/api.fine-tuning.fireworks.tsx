@@ -40,6 +40,10 @@ export async function action({ request }: ActionFunctionArgs) {
       config.metrics[data.metric],
     );
 
+    if (curatedInferences.length === 0) {
+      throw new Error("No curated inferences found");
+    }
+
     const template_env = await get_template_env(current_variant);
     const validationSplit = data.validationSplitPercent / 100;
     const jobPath = await start_sft_fireworks(

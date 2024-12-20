@@ -1,0 +1,1109 @@
+[
+  {
+    "variant_name": "baseline",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "\" I told Monica we need her if we want to win , \" King said ."
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\n    \"person\": [\"Monica\", \"King\"],\n    \"organization\": [],\n    \"location\": [],\n    \"miscellaneous\": []\n}",
+      "parsed": {
+        "person": ["Monica", "King"],
+        "organization": [],
+        "location": [],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-a2c9-7dc3-8865-44a2b090607b"
+  },
+  {
+    "variant_name": "baseline",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "Mark Philippoussis ( Australia ) beat Andrei Olhovskiy ( Russia ) 6 - 3 6-4 6-2"
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\n    \"person\": [\"Mark Philippoussis\", \"Andrei Olhovskiy\"],\n    \"organization\": [],\n    \"location\": [\"Australia\", \"Russia\"],\n    \"miscellaneous\": []\n}",
+      "parsed": {
+        "person": ["Mark Philippoussis", "Andrei Olhovskiy"],
+        "organization": [],
+        "location": ["Australia", "Russia"],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-949e-71e3-965b-28f84cc37437"
+  },
+  {
+    "variant_name": "baseline",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "Natalia Karimova ( Russia ) 3:40.036 beat Yvonne McGregor"
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\n    \"person\": [\"Natalia Karimova\", \"Yvonne McGregor\"],\n    \"organization\": [],\n    \"location\": [\"Russia\"],\n    \"miscellaneous\": []\n}",
+      "parsed": {
+        "person": ["Natalia Karimova", "Yvonne McGregor"],
+        "organization": [],
+        "location": ["Russia"],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-a2c7-7c83-96e1-bdcaf1460b49"
+  },
+  {
+    "variant_name": "baseline",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "\" Last year we stood on the court after we had lost and we put out hands together and made it our committment to bring back the Cup , \" U.S. captain Billie Jean King said at the draw . \""
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[\"Billie Jean King\"],\"organization\":[],\"location\":[\"U.S.\"],\"miscellaneous\":[\"Cup\"]}",
+      "parsed": {
+        "person": ["Billie Jean King"],
+        "organization": [],
+        "location": ["U.S."],
+        "miscellaneous": ["Cup"]
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-a2c7-7c83-96e1-bdec0d19cf59"
+  },
+  {
+    "variant_name": "baseline",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "Sjeng Schalken ( Netherlands ) beat David Rikl ( Czech Republic ) 6 - 2 6-4 6-4"
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\n    \"person\": [\"Sjeng Schalken\", \"David Rikl\"],\n    \"organization\": [],\n    \"location\": [\"Netherlands\", \"Czech Republic\"],\n    \"miscellaneous\": []\n}",
+      "parsed": {
+        "person": ["Sjeng Schalken", "David Rikl"],
+        "organization": [],
+        "location": ["Netherlands", "Czech Republic"],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-a2ae-75f2-b3d4-d286e486f1d4"
+  },
+  {
+    "variant_name": "dicl",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "287 Ian Woosnam 70 76 71 70"
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[\"Ian Woosnam\"],\"organization\":[],\"location\":[],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": ["Ian Woosnam"],
+        "organization": [],
+        "location": [],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-a2b6-7083-8c26-c20166f26756"
+  },
+  {
+    "variant_name": "dicl",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "Natalia Karimova ( Russia ) 3:40.036 beat Yvonne McGregor"
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[\"Natalia Karimova\",\"Yvonne McGregor\"],\"organization\":[],\"location\":[\"Russia\"],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": ["Natalia Karimova", "Yvonne McGregor"],
+        "organization": [],
+        "location": ["Russia"],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-a2b6-7083-8c26-c22a78a1b54d"
+  },
+  {
+    "variant_name": "dicl",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "East Stirling 3 0 2 1 3 4 2"
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[],\"organization\":[\"East Stirling\"],\"location\":[],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": [],
+        "organization": ["East Stirling"],
+        "location": [],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-949d-7063-900d-a543e944a78e"
+  },
+  {
+    "variant_name": "dicl",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "Brechin 3 0 3 0 2 2 3"
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[],\"organization\":[\"Brechin\"],\"location\":[],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": [],
+        "organization": ["Brechin"],
+        "location": [],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-a2c7-7c83-96e1-bdb9a47cf559"
+  },
+  {
+    "variant_name": "dicl",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "Mark Philippoussis ( Australia ) beat Andrei Olhovskiy ( Russia ) 6 - 3 6-4 6-2"
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[\"Mark Philippoussis\",\"Andrei Olhovskiy\"],\"organization\":[],\"location\":[\"Australia\",\"Russia\"],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": ["Mark Philippoussis", "Andrei Olhovskiy"],
+        "organization": [],
+        "location": ["Australia", "Russia"],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-9496-71d1-9722-cf5de87c845f"
+  },
+  {
+    "variant_name": "dicl",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "Brown threw 119 pitches and won for the third time in as many starts against the Reds this season ."
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[\"Brown\"],\"organization\":[\"Reds\"],\"location\":[],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": ["Brown"],
+        "organization": ["Reds"],
+        "location": [],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-9487-7c42-a0e9-3914a74eb32b"
+  },
+  {
+    "variant_name": "dicl",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "SOCCER - AUSTRIA DOMINATE SCOTLAND IN WORLD CUP QUALIFIER ."
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[],\"organization\":[],\"location\":[\"Austria\",\"Scotland\"],\"miscellaneous\":[\"World Cup\"]}",
+      "parsed": {
+        "person": [],
+        "organization": [],
+        "location": ["Austria", "Scotland"],
+        "miscellaneous": ["World Cup"]
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-948b-7ed0-a104-7981cc98423e"
+  },
+  {
+    "variant_name": "dicl",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "9. Mauricio Gugelmin ( Brazil ) , Reynard Ford Cosworth , 54.762"
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[\"Mauricio Gugelmin\"],\"organization\":[\"Reynard Ford Cosworth\"],\"location\":[\"Brazil\"],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": ["Mauricio Gugelmin"],
+        "organization": ["Reynard Ford Cosworth"],
+        "location": ["Brazil"],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-a2b5-7d90-a4b7-eac823d55636"
+  },
+  {
+    "variant_name": "dicl",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "One out later , Gonzalez smacked his 40th homer , extending his hitting streak to 20 games ."
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[\"Gonzalez\"],\"organization\":[],\"location\":[],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": ["Gonzalez"],
+        "organization": [],
+        "location": [],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-a2b0-7be1-afe6-50d37d5a3cb7"
+  },
+  {
+    "variant_name": "dicl",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "Southend 1 Swindon 3"
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[],\"organization\":[\"Southend\",\"Swindon\"],\"location\":[],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": [],
+        "organization": ["Southend", "Swindon"],
+        "location": [],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-a2b9-7e93-b3cd-cfa552758353"
+  },
+  {
+    "variant_name": "dicl",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "\" I told Monica we need her if we want to win , \" King said ."
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[\"Monica\",\"King\"],\"organization\":[],\"location\":[],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": ["Monica", "King"],
+        "organization": [],
+        "location": [],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-a2c6-7323-be23-cdc9057a9534"
+  },
+  {
+    "variant_name": "dicl",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "Sjeng Schalken ( Netherlands ) beat David Rikl ( Czech Republic ) 6 - 2 6-4 6-4"
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[\"Sjeng Schalken\",\"David Rikl\"],\"organization\":[],\"location\":[\"Netherlands\",\"Czech Republic\"],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": ["Sjeng Schalken", "David Rikl"],
+        "organization": [],
+        "location": ["Netherlands", "Czech Republic"],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-a2c6-7323-be23-ce2a24429833"
+  },
+  {
+    "variant_name": "dicl",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "6. Oksana Grichina ( Russia ) 36.242"
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[\"Oksana Grichina\"],\"organization\":[],\"location\":[\"Russia\"],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": ["Oksana Grichina"],
+        "organization": [],
+        "location": ["Russia"],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-a2c6-7323-be23-ce66bf0ae2aa"
+  },
+  {
+    "variant_name": "turbo",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "ATHLETICS - HARRISON , EDWARDS TO MEET IN SARAJEVO ."
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[\"HARRISON\",\"EDWARDS\"],\"organization\":[],\"location\":[\"SARAJEVO\"],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": ["HARRISON", "EDWARDS"],
+        "organization": [],
+        "location": ["SARAJEVO"],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-949f-7193-8e91-baa3ee76e8e4"
+  },
+  {
+    "variant_name": "turbo",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "SOCCER - AUSTRIA DOMINATE SCOTLAND IN WORLD CUP QUALIFIER ."
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[],\"organization\":[],\"location\":[\"AUSTRIA\",\"SCOTLAND\"],\"miscellaneous\":[\"WORLD CUP\"]}",
+      "parsed": {
+        "person": [],
+        "organization": [],
+        "location": ["AUSTRIA", "SCOTLAND"],
+        "miscellaneous": ["WORLD CUP"]
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-949f-7193-8e91-bac43f3c3b38"
+  },
+  {
+    "variant_name": "turbo",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "Mark Philippoussis ( Australia ) beat Andrei Olhovskiy ( Russia ) 6 - 3 6-4 6-2"
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[\"Mark Philippoussis\",\"Andrei Olhovskiy\"],\"organization\":[],\"location\":[\"Australia\",\"Russia\"],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": ["Mark Philippoussis", "Andrei Olhovskiy"],
+        "organization": [],
+        "location": ["Australia", "Russia"],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-949f-7193-8e91-bad56cc63624"
+  },
+  {
+    "variant_name": "turbo",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "AL-RAM , West Bank 1996-08-30"
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[],\"organization\":[],\"location\":[\"AL-RAM\",\"West Bank\"],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": [],
+        "organization": [],
+        "location": ["AL-RAM", "West Bank"],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-949f-7193-8e91-baeb174781be"
+  },
+  {
+    "variant_name": "turbo",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "GERMANY - Bunds extended losses , flirting with session lows after falling victim to sharply higher U.S. economic data which revived fears that interest rates may soon turn higher ."
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[],\"organization\":[],\"location\":[\"GERMANY\",\"U.S.\"],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": [],
+        "organization": [],
+        "location": ["GERMANY", "U.S."],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-949f-7193-8e91-bb35bd5ad521"
+  },
+  {
+    "variant_name": "turbo",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "Brown threw 119 pitches and won for the third time in as many starts against the Reds this season ."
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[\"Brown\"],\"organization\":[\"Reds\"],\"location\":[],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": ["Brown"],
+        "organization": ["Reds"],
+        "location": [],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-949d-7063-900d-a4a6d3b4003b"
+  },
+  {
+    "variant_name": "turbo",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "Mexican army attacked in Michoacan state - report ."
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[],\"organization\":[],\"location\":[\"Michoacan\"],\"miscellaneous\":[\"Mexican\"]}",
+      "parsed": {
+        "person": [],
+        "organization": [],
+        "location": ["Michoacan"],
+        "miscellaneous": ["Mexican"]
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-949d-7063-900d-a4c7f1661358"
+  },
+  {
+    "variant_name": "turbo",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "DETROIT 1996-08-31"
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[],\"organization\":[],\"location\":[\"DETROIT\"],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": [],
+        "organization": [],
+        "location": ["DETROIT"],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-949d-7063-900d-a4e0d31e69c4"
+  },
+  {
+    "variant_name": "turbo",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "Division three"
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[],\"organization\":[],\"location\":[],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": [],
+        "organization": [],
+        "location": [],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-949e-71e3-965b-2802ea9341a1"
+  },
+  {
+    "variant_name": "turbo",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "\" All concerned must avoid taking any course of action that could pose an obstacle to the peace process and which could make a peaceful solution difficult , \" he said , as news came of a renewed breakdown in Arab-Israeli peace talks in Jerusalem ."
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[],\"organization\":[],\"location\":[\"Jerusalem\"],\"miscellaneous\":[\"Arab-Israeli\"]}",
+      "parsed": {
+        "person": [],
+        "organization": [],
+        "location": ["Jerusalem"],
+        "miscellaneous": ["Arab-Israeli"]
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-949e-71e3-965b-2873dc17e120"
+  },
+  {
+    "variant_name": "turbo",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "times in seconds ) :"
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[],\"organization\":[],\"location\":[],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": [],
+        "organization": [],
+        "location": [],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-949e-71e3-965b-28e9465cd560"
+  },
+  {
+    "variant_name": "turbo",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "Brechin 3 0 3 0 2 2 3"
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[],\"organization\":[\"Brechin\"],\"location\":[],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": [],
+        "organization": ["Brechin"],
+        "location": [],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-a2c7-7c83-96e1-bdacce06b6e6"
+  },
+  {
+    "variant_name": "turbo",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "One out later , Gonzalez smacked his 40th homer , extending his hitting streak to 20 games ."
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[\"Gonzalez\"],\"organization\":[],\"location\":[],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": ["Gonzalez"],
+        "organization": [],
+        "location": [],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-a2c7-7c83-96e1-be14a1ecbaac"
+  },
+  {
+    "variant_name": "turbo",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "Adams and Platt are both injured and will miss England 's opening World Cup qualifier against Moldova on Sunday ."
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[\"Adams\",\"Platt\"],\"organization\":[],\"location\":[\"England\",\"Moldova\"],\"miscellaneous\":[\"World Cup\"]}",
+      "parsed": {
+        "person": ["Adams", "Platt"],
+        "organization": [],
+        "location": ["England", "Moldova"],
+        "miscellaneous": ["World Cup"]
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-a2c5-7e21-97da-46f63636f008"
+  },
+  {
+    "variant_name": "turbo",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "Southend 1 Swindon 3"
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[],\"organization\":[\"Southend\",\"Swindon\"],\"location\":[],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": [],
+        "organization": ["Southend", "Swindon"],
+        "location": [],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-a2c8-7f73-9b38-da79e548e53c"
+  },
+  {
+    "variant_name": "turbo",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "287 Ian Woosnam 70 76 71 70"
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[\"Ian Woosnam\"],\"organization\":[],\"location\":[],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": ["Ian Woosnam"],
+        "organization": [],
+        "location": [],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-a2c8-7f73-9b38-da82351b91b1"
+  },
+  {
+    "variant_name": "turbo",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "Results of Yugoslav league"
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[],\"organization\":[],\"location\":[],\"miscellaneous\":[\"Yugoslav\"]}",
+      "parsed": {
+        "person": [],
+        "organization": [],
+        "location": [],
+        "miscellaneous": ["Yugoslav"]
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-a2c8-7f73-9b38-daafd7e8dc7b"
+  },
+  {
+    "variant_name": "turbo",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "9. Mauricio Gugelmin ( Brazil ) , Reynard Ford Cosworth , 54.762"
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[\"Mauricio Gugelmin\"],\"organization\":[\"Reynard Ford Cosworth\"],\"location\":[\"Brazil\"],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": ["Mauricio Gugelmin"],
+        "organization": ["Reynard Ford Cosworth"],
+        "location": ["Brazil"],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-a2c6-7323-be23-cd21b7b4f97f"
+  },
+  {
+    "variant_name": "turbo",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "Natalia Karimova ( Russia ) 3:40.036 beat Yvonne McGregor"
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[\"Natalia Karimova\",\"Yvonne McGregor\"],\"organization\":[],\"location\":[\"Russia\"],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": ["Natalia Karimova", "Yvonne McGregor"],
+        "organization": [],
+        "location": ["Russia"],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-a2c6-7323-be23-cd6fd27bfa59"
+  },
+  {
+    "variant_name": "turbo",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "But on Saturday the people gathered just outside the town seemed to be united in favour of the separatists ."
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[],\"organization\":[],\"location\":[],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": [],
+        "organization": [],
+        "location": [],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-a2c6-7323-be23-ce0171b11a17"
+  },
+  {
+    "variant_name": "turbo",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "6. Oksana Grichina ( Russia ) 36.242"
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[\"Oksana Grichina\"],\"organization\":[],\"location\":[\"Russia\"],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": ["Oksana Grichina"],
+        "organization": [],
+        "location": ["Russia"],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-a2c6-7323-be23-ce1897dfcb38"
+  },
+  {
+    "variant_name": "turbo",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "We have in no way seen any Iraqi troops in the city or in its approaches , \" a U.N. relief official told Reuters ."
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[],\"organization\":[\"U.N.\",\"Reuters\"],\"location\":[],\"miscellaneous\":[\"Iraqi\"]}",
+      "parsed": {
+        "person": [],
+        "organization": ["U.N.", "Reuters"],
+        "location": [],
+        "miscellaneous": ["Iraqi"]
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-a2c6-7323-be23-ce4124e683d3"
+  },
+  {
+    "variant_name": "turbo",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "value": "The reports fanned worries on Wall Street that the Fed , the nation 's central bank , would raise rates next month in a bid to ward off inflation , driving stock and bond prices sharply lower for a second day running ."
+            }
+          ]
+        }
+      ]
+    },
+    "output": {
+      "raw": "{\"person\":[],\"organization\":[\"Fed\"],\"location\":[\"Wall Street\"],\"miscellaneous\":[]}",
+      "parsed": {
+        "person": [],
+        "organization": ["Fed"],
+        "location": ["Wall Street"],
+        "miscellaneous": []
+      }
+    },
+    "value": true,
+    "episode_id": "0192ced0-a2c6-7323-be23-ce7f39c0f76d"
+  }
+]
