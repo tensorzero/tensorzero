@@ -23,7 +23,7 @@ use crate::inference::types::{
     ProviderInferenceResponseStream, RequestMessage, TextChunk, Usage,
 };
 use crate::model::CredentialLocation;
-use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
+use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
 
 lazy_static! {
     static ref ANTHROPIC_BASE_URL: Url = {
@@ -306,28 +306,28 @@ impl From<Role> for AnthropicRole {
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 enum AnthropicToolChoice<'a> {
-    Auto,
-    Any,
-    Tool { name: &'a str },
+    Auto{disable_parallel_tool_use: Option<bool>},
+    Any{disable_parallel_tool_use: Option<bool>},
+    Tool { name: &'a str, disable_parallel_tool_use:Option<bool> },
 }
 
-// We map our ToolChoice enum to the Anthropic one that serializes properly
-impl<'a> TryFrom<&'a ToolChoice> for AnthropicToolChoice<'a> {
+// We map our ToolCallConfig struct to the AnthropicToolChoice that serializes properly
+impl<'a> TryFrom<&'a ToolCallConfig> for AnthropicToolChoice<'a> {
     type Error = Error;
-    fn try_from(tool_choice: &'a ToolChoice) -> Result<Self, Error> {
+
+    fn try_from(tool_call_config: &'a ToolCallConfig) -> Result<Self, Error> {
+        let disable_parallel_tool_use = Some(!tool_call_config.parallel_tool_calls);
+        let tool_choice = &tool_call_config.tool_choice;
+
         match tool_choice {
-            ToolChoice::Auto => Ok(AnthropicToolChoice::Auto),
-            ToolChoice::Required => Ok(AnthropicToolChoice::Any),
-            ToolChoice::Specific(name) => Ok(AnthropicToolChoice::Tool { name }),
-            // Workaround for Anthropic API limitation: they don't support explicitly specifying "none"
-            // for tool choice. Instead, we return Auto but the request construction will ensure
-            // that no tools are sent in the request payload. This achieves the same effect
-            // as explicitly telling the model not to use tools, since without any tools
-            // being provided, the model cannot make tool calls.
-            ToolChoice::None => Ok(AnthropicToolChoice::Auto),
+            ToolChoice::Auto => Ok(AnthropicToolChoice::Auto { disable_parallel_tool_use }),
+            ToolChoice::Required => Ok(AnthropicToolChoice::Any { disable_parallel_tool_use }),
+            ToolChoice::Specific(name) => Ok(AnthropicToolChoice::Tool { name, disable_parallel_tool_use }),
+            ToolChoice::None => Ok(AnthropicToolChoice::Auto { disable_parallel_tool_use }),
         }
     }
 }
+
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct AnthropicTool<'a> {
@@ -448,8 +448,6 @@ struct AnthropicRequestBody<'a> {
     tool_choice: Option<AnthropicToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<AnthropicTool<'a>>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    disable_parallel_tool_use: Option<bool>,
 }
 
 impl<'a> AnthropicRequestBody<'a> {
@@ -501,9 +499,7 @@ impl<'a> AnthropicRequestBody<'a> {
             .as_ref()
             .filter(|t| !t.is_empty())
             .and(request.tool_config.as_ref())
-            .and_then(|c| (&c.tool_choice).try_into().ok());
-        let disable_parallel_tool_use =
-            request.tool_config.as_ref().map(|c| !c.parallel_tool_calls);
+            .and_then(|c| c.as_ref().try_into().ok());
         // NOTE: Anthropic does not support seed
         Ok(AnthropicRequestBody {
             model: model_name,
@@ -515,7 +511,6 @@ impl<'a> AnthropicRequestBody<'a> {
             top_p: request.top_p,
             tool_choice,
             tools,
-            disable_parallel_tool_use,
         })
     }
 }
@@ -981,31 +976,47 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn test_try_from_tool_choice() {
+    fn test_try_from_tool_call_config() {
         // Need to cover all 4 cases
-        let tool_choice = ToolChoice::None;
-        let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_choice);
+        let tool_call_config = ToolCallConfig {
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: false,
+            tools_available: vec![],
+        };
+        let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(matches!(
             anthropic_tool_choice.unwrap(),
-            AnthropicToolChoice::Auto
+            AnthropicToolChoice::Auto{disable_parallel_tool_use: Some(true)}
         ));
 
-        let tool_choice = ToolChoice::Auto;
-        let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_choice);
+        let tool_call_config = ToolCallConfig {
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: true,
+            tools_available: vec![],
+        };
+        let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
-        assert_eq!(anthropic_tool_choice.unwrap(), AnthropicToolChoice::Auto);
+        assert_eq!(anthropic_tool_choice.unwrap(), AnthropicToolChoice::Auto{disable_parallel_tool_use: Some(false)});
 
-        let tool_choice = ToolChoice::Required;
-        let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_choice);
+        let tool_call_config = ToolCallConfig {
+            tool_choice: ToolChoice::Required,
+            parallel_tool_calls: true,
+            tools_available: vec![],
+        };
+        let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
-        assert_eq!(anthropic_tool_choice.unwrap(), AnthropicToolChoice::Any);
+        assert_eq!(anthropic_tool_choice.unwrap(), AnthropicToolChoice::Any{disable_parallel_tool_use: Some(false)});
 
-        let tool_choice = ToolChoice::Specific("test".to_string());
-        let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_choice);
+        let tool_call_config = ToolCallConfig {
+            tool_choice: ToolChoice::Specific("test".to_string()),
+            parallel_tool_calls: false,
+            tools_available: vec![],
+        };
+        let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
         assert_eq!(
             anthropic_tool_choice.unwrap(),
-            AnthropicToolChoice::Tool { name: "test" }
+            AnthropicToolChoice::Tool { name: "test", disable_parallel_tool_use: Some(true) }
         );
     }
 
@@ -1192,7 +1203,6 @@ mod tests {
                 top_p: None,
                 tool_choice: None,
                 tools: None,
-                disable_parallel_tool_use: None,
             }
         );
 
@@ -1240,7 +1250,6 @@ mod tests {
                 top_p: None,
                 tool_choice: None,
                 tools: None,
-                disable_parallel_tool_use: None,
             }
         );
 
@@ -1292,7 +1301,6 @@ mod tests {
                 top_p: None,
                 tool_choice: None,
                 tools: None,
-                disable_parallel_tool_use: None,
             }
         );
 
@@ -1348,7 +1356,6 @@ mod tests {
                 }],
             }
         );
-        assert_eq!(result.disable_parallel_tool_use, Some(true));
     }
 
     #[test]
@@ -1606,7 +1613,6 @@ mod tests {
             temperature: None,
             tool_choice: None,
             tools: None,
-            disable_parallel_tool_use: None,
         };
         let input_messages = vec![RequestMessage {
             role: Role::User,
@@ -1664,7 +1670,6 @@ mod tests {
             top_p: Some(0.9),
             tool_choice: None,
             tools: None,
-            disable_parallel_tool_use: None,
         };
         let input_messages = vec![RequestMessage {
             role: Role::Assistant,
@@ -1732,7 +1737,6 @@ mod tests {
             top_p: Some(0.9),
             tool_choice: None,
             tools: None,
-            disable_parallel_tool_use: None,
         };
         let input_messages = vec![RequestMessage {
             role: Role::User,
