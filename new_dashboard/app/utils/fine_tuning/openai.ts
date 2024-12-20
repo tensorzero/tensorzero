@@ -9,7 +9,7 @@ import OpenAI from "openai";
 
 import type { SFTFormValues } from "~/routes/optimization/fine-tuning/types";
 import {
-  get_curated_inferences,
+  getCuratedInferences,
   type ContentBlockOutput,
   type InputMessageContent,
   type JsonInferenceOutput,
@@ -43,7 +43,7 @@ export class OpenAISFTJob extends SFTJob {
     const currentVariant = config.functions[data.function].variants[
       data.variant
     ] as ChatCompletionConfig;
-    const curatedInferences = await get_curated_inferences(
+    const curatedInferences = await getCuratedInferences(
       data.function,
       config.functions[data.function],
       data.metric,

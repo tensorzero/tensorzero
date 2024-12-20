@@ -6,7 +6,7 @@ import type {
   JsonInferenceOutput,
   ParsedInferenceRow,
 } from "../clickhouse";
-import { get_curated_inferences } from "../clickhouse";
+import { getCuratedInferences } from "../clickhouse";
 import { render_message } from "./rendering";
 import { getConfig } from "../config";
 import { get_template_env, type ChatCompletionConfig } from "../config/variant";
@@ -40,7 +40,7 @@ export class FireworksSFTJob extends SFTJob {
     const currentVariant = config.functions[data.function].variants[
       data.variant
     ] as ChatCompletionConfig;
-    const curatedInferences = await get_curated_inferences(
+    const curatedInferences = await getCuratedInferences(
       data.function,
       config.functions[data.function],
       data.metric,

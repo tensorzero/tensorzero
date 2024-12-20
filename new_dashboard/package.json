@@ -10,6 +10,7 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@clickhouse/client": "^1.10.0",
     "@react-router/node": "^7.0.2",
     "@react-router/serve": "^7.0.2",
     "ajv": "^8.17.1",

@@ -72,7 +72,7 @@ export const Config = z.object({
 });
 export type Config = z.infer<typeof Config>;
 
-async function loadConfig(config_path: string): Promise<Config> {
+export async function loadConfig(config_path: string): Promise<Config> {
   const tomlContent = await fs.readFile(config_path, "utf-8");
   const parsedConfig = parse(tomlContent);
   const validatedConfig = RawConfig.parse(parsedConfig);
