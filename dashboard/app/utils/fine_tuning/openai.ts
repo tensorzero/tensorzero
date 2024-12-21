@@ -27,7 +27,6 @@ export const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Add the interface definition
 interface OpenAISFTJobParams {
   jobId: string;
   status: string;

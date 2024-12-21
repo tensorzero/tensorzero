@@ -44,7 +44,6 @@ function throwError(): never {
   throw new Error("FIREWORKS_API_KEY and FIREWORKS_ACCOUNT_ID must be set");
 }
 
-// Add the interface definition
 interface FireworksSFTJobParams {
   jobPath: string;
   status: string;
