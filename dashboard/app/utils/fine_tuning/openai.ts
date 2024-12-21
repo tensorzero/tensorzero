@@ -27,13 +27,23 @@ export const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Add the interface definition
+interface OpenAISFTJobParams {
+  jobId: string;
+  status: string;
+  fineTunedModel?: string;
+}
+
 export class OpenAISFTJob extends SFTJob {
-  constructor(
-    public jobId: string,
-    public status: string,
-    public fineTunedModel?: string,
-  ) {
+  public jobId: string;
+  public status: string;
+  public fineTunedModel?: string;
+
+  constructor(params: OpenAISFTJobParams) {
     super();
+    this.jobId = params.jobId;
+    this.status = params.status;
+    this.fineTunedModel = params.fineTunedModel;
   }
 
   static async fromFormData(data: SFTFormValues): Promise<OpenAISFTJob> {
@@ -71,11 +81,11 @@ export class OpenAISFTJob extends SFTJob {
       throw new Error("Job ID is required to poll OpenAI SFT");
     }
     const job = await client.fineTuning.jobs.retrieve(this.jobId);
-    return new OpenAISFTJob(
-      job.id,
-      job.status,
-      job.fine_tuned_model ?? undefined,
-    );
+    return new OpenAISFTJob({
+      jobId: job.id,
+      status: job.status,
+      fineTunedModel: job.fine_tuned_model ?? undefined,
+    });
   }
 }
 
@@ -104,7 +114,11 @@ export async function start_sft_openai(
     file_id,
     val_file_id ?? undefined,
   );
-  return new OpenAISFTJob(job_id, "created", undefined);
+  return new OpenAISFTJob({
+    jobId: job_id,
+    status: "created",
+    fineTunedModel: undefined,
+  });
 }
 
 // TODO(Viraj): write unit tests here

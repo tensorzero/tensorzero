@@ -44,15 +44,29 @@ function throwError(): never {
   throw new Error("FIREWORKS_API_KEY and FIREWORKS_ACCOUNT_ID must be set");
 }
 
+// Add the interface definition
+interface FireworksSFTJobParams {
+  jobPath: string;
+  status: string;
+  jobId: string;
+  modelId?: string;
+  modelPath?: string;
+}
+
 export class FireworksSFTJob extends SFTJob {
-  constructor(
-    public jobPath: string,
-    public status: string,
-    public jobId: string,
-    public modelId?: string,
-    public modelPath?: string,
-  ) {
+  public jobPath: string;
+  public status: string;
+  public jobId: string;
+  public modelId?: string;
+  public modelPath?: string;
+
+  constructor(params: FireworksSFTJobParams) {
     super();
+    this.jobPath = params.jobPath;
+    this.status = params.status;
+    this.jobId = params.jobId;
+    this.modelId = params.modelId;
+    this.modelPath = params.modelPath;
   }
 
   static async from_form_data(data: SFTFormValues): Promise<FireworksSFTJob> {
@@ -78,13 +92,13 @@ export class FireworksSFTJob extends SFTJob {
       data.validationSplitPercent,
       templateEnv,
     );
-    return new FireworksSFTJob(
-      jobPath,
-      "RUNNING",
-      data.jobId,
-      undefined,
-      undefined,
-    );
+    return new FireworksSFTJob({
+      jobPath: jobPath,
+      status: "RUNNING",
+      jobId: data.jobId,
+      modelId: undefined,
+      modelPath: undefined,
+    });
   }
 
   result(): string | undefined {
@@ -101,21 +115,21 @@ export class FireworksSFTJob extends SFTJob {
           throw new Error("Model ID not found after job completed");
         }
         await deploy_model(FIREWORKS_ACCOUNT_ID, modelId);
-        return new FireworksSFTJob(
-          this.jobPath,
-          "DEPLOYING",
-          this.jobId,
-          modelId,
-          undefined,
-        );
+        return new FireworksSFTJob({
+          jobPath: this.jobPath,
+          status: "DEPLOYING",
+          jobId: this.jobId,
+          modelId: modelId,
+          modelPath: undefined,
+        });
       } else {
-        return new FireworksSFTJob(
-          this.jobPath,
-          "TRAINING",
-          this.jobId,
-          undefined,
-          undefined,
-        );
+        return new FireworksSFTJob({
+          jobPath: this.jobPath,
+          status: "TRAINING",
+          jobId: this.jobId,
+          modelId: undefined,
+          modelPath: undefined,
+        });
       }
     } else {
       // If we do have a model ID, we need to poll for the deployment
@@ -125,21 +139,21 @@ export class FireworksSFTJob extends SFTJob {
       );
       if (status === "DEPLOYED") {
         const modelPath = `accounts/${FIREWORKS_ACCOUNT_ID}/models/${this.modelId}`;
-        return new FireworksSFTJob(
-          this.jobPath,
-          "DEPLOYED",
-          this.jobId,
-          this.modelId,
-          modelPath,
-        );
+        return new FireworksSFTJob({
+          jobPath: this.jobPath,
+          status: "DEPLOYED",
+          jobId: this.jobId,
+          modelId: this.modelId,
+          modelPath: modelPath,
+        });
       } else {
-        return new FireworksSFTJob(
-          this.jobPath,
-          "DEPLOYING",
-          this.jobId,
-          this.modelId,
-          undefined,
-        );
+        return new FireworksSFTJob({
+          jobPath: this.jobPath,
+          status: "DEPLOYING",
+          jobId: this.jobId,
+          modelId: this.modelId,
+          modelPath: undefined,
+        });
       }
     }
   }
