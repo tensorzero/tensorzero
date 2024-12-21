@@ -3,16 +3,17 @@ import type { ParsedInferenceRow } from "../clickhouse";
 
 export function splitValidationData(
   inferences: ParsedInferenceRow[],
-  validationSplit: number,
+  validationSplitPercent: number,
 ) {
-  validationSplit = validationSplit / 100;
+  const validationSplit = validationSplitPercent / 100;
   const splitIndex =
     validationSplit > 0
       ? Math.floor(inferences.length * (1 - validationSplit))
       : inferences.length;
 
   const trainInferences = inferences.slice(0, splitIndex);
-  const valInferences = validationSplit > 0 ? inferences.slice(splitIndex) : [];
+  const valInferences =
+    validationSplitPercent > 0 ? inferences.slice(splitIndex) : [];
 
   return {
     trainInferences,

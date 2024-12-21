@@ -91,12 +91,12 @@ export class OpenAISFTJob extends SFTJob {
 export async function start_sft_openai(
   modelName: string,
   inferences: ParsedInferenceRow[],
-  val_split: number,
+  validationSplitPercent: number,
   templateEnv: JsExposedEnv,
 ) {
   const { trainInferences, valInferences } = splitValidationData(
     inferences,
-    val_split,
+    validationSplitPercent,
   );
   const trainMessages = trainInferences.map((inference) =>
     tensorzero_inference_to_openai_messages(inference, templateEnv),

@@ -267,7 +267,7 @@ async function poll_model_deployment(
 export async function start_sft_fireworks(
   modelName: string,
   inferences: ParsedInferenceRow[],
-  val_split: number,
+  validationSplitPercent: number,
   templateEnv: JsExposedEnv,
 ): Promise<string> {
   const fireworksExamples = inferences.map((inference) =>
@@ -289,7 +289,7 @@ export async function start_sft_fireworks(
     FIREWORKS_ACCOUNT_ID,
     datasetId,
     modelName,
-    val_split,
+    validationSplitPercent,
   );
 
   return job_path;

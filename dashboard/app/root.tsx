@@ -30,6 +30,7 @@ export async function loader() {
   return await getConfig();
 }
 
+// Global Layout
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
@@ -57,6 +58,7 @@ export default function App() {
   );
 }
 
+// Fallback Error Boundary
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   let message = "Oops!";
   let details = "An unexpected error occurred.";
