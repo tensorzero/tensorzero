@@ -68,6 +68,14 @@ export type GoogleAIStudioGeminiProviderConfig = z.infer<
   typeof GoogleAIStudioGeminiProviderConfigSchema
 >;
 
+export const HyperbolicProviderConfigSchema = z.object({
+  type: z.literal("hyperbolic"),
+  model_name: z.string(),
+});
+export type HyperbolicProviderConfig = z.infer<
+  typeof HyperbolicProviderConfigSchema
+>;
+
 export const MistralProviderConfigSchema = z.object({
   type: z.literal("mistral"),
   model_name: z.string(),
@@ -112,6 +120,7 @@ export const ProviderConfigSchema = z.discriminatedUnion("type", [
   GCPVertexAnthropicProviderConfigSchema,
   GCPVertexGeminiProviderConfigSchema,
   GoogleAIStudioGeminiProviderConfigSchema,
+  HyperbolicProviderConfigSchema,
   MistralProviderConfigSchema,
   OpenAIProviderConfigSchema,
   TogetherProviderConfigSchema,

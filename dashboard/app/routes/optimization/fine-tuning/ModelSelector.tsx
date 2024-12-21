@@ -69,6 +69,11 @@ function formatProvider(provider: ProviderType): {
         name: "Google AI Studio",
         className: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
       };
+    case "hyperbolic":
+      return {
+        name: "Hyperbolic",
+        className: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
+      };
     case "mistral":
       return {
         name: "Mistral",
