@@ -1,100 +1,55 @@
-# Welcome to React Router!
+# TensorZero Dashboard
 
-A modern, production-ready template for building full-stack React applications using React Router.
+## Status
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/remix-run/react-router-templates/tree/main/default)
+This dashboard is currently a work in progress.
 
-## Features
+Our goals for this project are to:
 
-- 🚀 Server-side rendering
-- ⚡️ Hot Module Replacement (HMR)
-- 📦 Asset bundling and optimization
-- 🔄 Data loading and mutations
-- 🔒 TypeScript by default
-- 🎉 TailwindCSS for styling
-- 📖 [React Router docs](https://reactrouter.com/)
+- [ ] Allow users to run TensorZero recipes through the dashboard. To start, this will include:
 
-## Getting Started
+  - [ ] Supervised fine-tuning
+  - [ ] Dynamic in-context learning
 
-### Installation
+- [ ] Allow users to review inferences and episodes and provide feedback to either.
+- [ ] Provide an easy dashboard showing the relative performance of different variants for a particular function.
+- [ ] Allow users to edit the configuration through the dashboard.
 
-Install the dependencies:
+Currently, we are building out the dashboard incrementally.
+We have the beginning of a fine-tuning form that uses the OpenAI fine-tuning API.
 
-```bash
-npm install
-```
+## Running the Dashboard
 
-### Development
+### Prerequisites
 
-Start the development server with HMR:
+- Node.js (we have only tested with v22.9.0)
+- Docker Compose
+- a Rust toolchain
 
-```bash
-npm run dev
-```
+### Setup
 
-Your application will be available at `http://localhost:5173`.
+Currently, the dashboard only runs against hardcoded fixtures in `fixtures/`.
+It depends on a running ClickHouse instance that has been initialized with the TensorZero data model.
+We include some fixture data as well in order to exercise some functionality.
+You will need Docker Compose installed to run the dependencies.
 
-## Building for Production
+It also requires a one-time build of a WebAssembly module from Rust source code that is used to ensure consistent templating of messages across the gateway and dashboard.
 
-Create a production build:
+Here are the steps in order to run or test the dashboard assuming you have the prerequisites installed and this repository checked out:
 
-```bash
-npm run build
-```
-
-## Deployment
-
-### Docker Deployment
-
-This template includes three Dockerfiles optimized for different package managers:
-
-- `Dockerfile` - for npm
-- `Dockerfile.pnpm` - for pnpm
-- `Dockerfile.bun` - for bun
-
-To build and run using Docker:
+1. Install npm dependencies: `npm install`
+2. Build the WebAssembly module following instructions in `app/utils/minijinja/README.md`.
+3. Create a `.env` file in the `dashboard` directory and set the following environment variables for the server:
 
 ```bash
-# For npm
-docker build -t my-app .
-
-# For pnpm
-docker build -f Dockerfile.pnpm -t my-app .
-
-# For bun
-docker build -f Dockerfile.bun -t my-app .
-
-# Run the container
-docker run -p 3000:3000 my-app
+OPENAI_API_KEY=<your-key>
+FIREWORKS_API_KEY=<your-key>
+FIREWORKS_ACCOUNT_ID=<your-account-id>
 ```
 
-The containerized application can be deployed to any platform that supports Docker, including:
+4. Run the dependencies: `docker compose -f fixtures/docker-compose.yml up`
 
-- AWS ECS
-- Google Cloud Run
-- Azure Container Apps
-- Digital Ocean App Platform
-- Fly.io
-- Railway
+With the dependencies running, you can run the tests with `npm run test`.
+Similarly, you can start a development server with `npm run dev`.
 
-### DIY Deployment
-
-If you're familiar with deploying Node applications, the built-in app server is production-ready.
-
-Make sure to deploy the output of `npm run build`
-
-```
-├── package.json
-├── package-lock.json (or pnpm-lock.yaml, or bun.lockb)
-├── build/
-│   ├── client/    # Static assets
-│   └── server/    # Server-side code
-```
-
-## Styling
-
-This template comes with [Tailwind CSS](https://tailwindcss.com/) already configured for a simple default starting experience. You can use whatever CSS framework you prefer.
-
----
-
-Built with ❤️ using React Router.
+We do not currently have a production build process or any way to change configuration.
