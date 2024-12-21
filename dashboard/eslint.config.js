@@ -1,11 +1,15 @@
-import globals from "globals";
 import pluginJs from "@eslint/js";
 import tseslint from "typescript-eslint";
 import pluginReact from "eslint-plugin-react";
 
 export default [
   {
-    ignores: ["**/minijinja/pkg/", "**/node_modules/**"],
+    ignores: [
+      "**/minijinja/pkg/",
+      "**/node_modules/**",
+      "**/build/**",
+      "**/.react-router/**",
+    ],
   },
   {
     files: ["**/*.{js,mjs,cjs,ts,jsx,tsx}"],
@@ -13,7 +17,15 @@ export default [
       react: pluginReact,
     },
     languageOptions: {
-      globals: { ...globals.browser, ...globals.node },
+      globals: {
+        document: true,
+        window: true,
+        process: true,
+        require: true,
+        module: true,
+        __dirname: true,
+        console: true,
+      },
       parserOptions: {
         ecmaFeatures: {
           jsx: true,

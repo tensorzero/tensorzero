@@ -34,7 +34,7 @@ export class FireworksSFTJob extends SFTJob {
   }
 
   static async from_form_data(data: SFTFormValues): Promise<FireworksSFTJob> {
-    let config = await getConfig();
+    const config = await getConfig();
     // TODO: throw if this isn't a chat completion
     const currentVariant = config.functions[data.function].variants[
       data.variant
@@ -134,8 +134,6 @@ export class FireworksSFTJob extends SFTJob {
     }
   }
 }
-
-type DeploymentStatus = "DEPLOYED" | "DEPLOYING";
 
 const FineTuningJobStatusSchema = z.enum([
   "STATE_UNSPECIFIED",
@@ -275,17 +273,12 @@ export async function start_sft_fireworks(
   const fireworksExamples = inferences.map((inference) =>
     tensorzero_inference_to_fireworks_messages(inference, templateEnv),
   );
-  const serializedExamples = JSON.stringify(fireworksExamples, null, 2);
 
   const datasetId = await create_dataset_record(
     FIREWORKS_ACCOUNT_ID,
     fireworksExamples.length,
   );
-  let uploadResponse = await upload_dataset(
-    FIREWORKS_ACCOUNT_ID,
-    datasetId,
-    fireworksExamples,
-  );
+  await upload_dataset(FIREWORKS_ACCOUNT_ID, datasetId, fireworksExamples);
 
   // We poll here since this usually does not take long
   while (!(await dataset_is_ready(FIREWORKS_ACCOUNT_ID, datasetId))) {
@@ -426,7 +419,7 @@ async function create_dataset_record(accountId: string, exampleCount: number) {
       },
     }),
   };
-  const response = await fetch(url, options).then((r) => r.json());
+  await fetch(url, options).then((r) => r.json());
   // TODO(Viraj: check it more robustly)
 
   return datasetId;

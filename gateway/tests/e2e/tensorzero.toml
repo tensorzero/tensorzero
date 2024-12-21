@@ -169,6 +169,13 @@ routing = ["xai"]
 type = "xai"
 model_name = "grok-2-1212"
 
+[models."meta-llama/Meta-Llama-3-70B-Instruct"]
+routing = ["hyperbolic"]
+
+[models."meta-llama/Meta-Llama-3-70B-Instruct".providers.hyperbolic]
+type = "hyperbolic"
+model_name = "meta-llama/Meta-Llama-3-70B-Instruct"
+
 [models.test]
 routing = ["good"]
 
@@ -311,6 +318,12 @@ model = "claude-3-haiku-20240307-anthropic"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.anthropic-shorthand]
+type = "chat_completion"
+model = "anthropic::claude-3-haiku-20240307"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.aws-bedrock]
 type = "chat_completion"
 model = "claude-3-haiku-20240307-aws-bedrock"
@@ -341,6 +354,12 @@ model = "llama3.1-8b-instruct-fireworks"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.fireworks-shorthand]
+type = "chat_completion"
+model = "fireworks::accounts/fireworks/models/llama-v3p1-8b-instruct"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.fireworks-firefunction]
 type = "chat_completion"
 model = "firefunction-v2"
@@ -365,6 +384,12 @@ model = "gemini-1.5-flash-8b"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.google-ai-studio-gemini-flash-8b-shorthand]
+type = "chat_completion"
+model = "google_ai_studio_gemini::gemini-1.5-flash-8b"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.google-ai-studio-gemini-pro-002]
 type = "chat_completion"
 model = "gemini-1.5-pro-002"
@@ -383,9 +408,21 @@ model = "open-mistral-nemo-2407"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.mistral-shorthand]
+type = "chat_completion"
+model = "mistral::open-mistral-nemo-2407"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.openai]
 type = "chat_completion"
 model = "gpt-4o-mini-2024-07-18"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.openai-shorthand]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -400,6 +437,12 @@ model = "llama3.1-8b-instruct-together"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.together-shorthand]
+type = "chat_completion"
+model = "together::meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.vllm]
 type = "chat_completion"
 model = "microsoft/Phi-3.5-mini-instruct"
@@ -409,6 +452,24 @@ max_tokens = 100
 [functions.basic_test.variants.xai]
 type = "chat_completion"
 model = "grok_2_1212"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.xai-shorthand]
+type = "chat_completion"
+model = "xai::grok-2-1212"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.hyperbolic]
+type = "chat_completion"
+model = "meta-llama/Meta-Llama-3-70B-Instruct"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.hyperbolic-shorthand]
+type = "chat_completion"
+model = "hyperbolic::meta-llama/Meta-Llama-3-70B-Instruct"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 

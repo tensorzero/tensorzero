@@ -37,7 +37,7 @@ export class OpenAISFTJob extends SFTJob {
   }
 
   static async fromFormData(data: SFTFormValues): Promise<OpenAISFTJob> {
-    let config = await getConfig();
+    const config = await getConfig();
     // TODO: throw if this isn't a chat completion
     const currentVariant = config.functions[data.function].variants[
       data.variant

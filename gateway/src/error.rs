@@ -125,6 +125,13 @@ pub enum ErrorDetails {
     GoogleAIStudioServer {
         message: String,
     },
+    HyperbolicClient {
+        message: String,
+        status_code: StatusCode,
+    },
+    HyperbolicServer {
+        message: String,
+    },
     Inference {
         message: String,
     },
@@ -314,6 +321,8 @@ impl ErrorDetails {
             ErrorDetails::GCPVertexServer { .. } => tracing::Level::ERROR,
             ErrorDetails::GoogleAIStudioClient { .. } => tracing::Level::WARN,
             ErrorDetails::GoogleAIStudioServer { .. } => tracing::Level::ERROR,
+            ErrorDetails::HyperbolicClient { .. } => tracing::Level::WARN,
+            ErrorDetails::HyperbolicServer { .. } => tracing::Level::ERROR,
             ErrorDetails::Inference { .. } => tracing::Level::ERROR,
             ErrorDetails::InferenceClient { .. } => tracing::Level::ERROR,
             ErrorDetails::InferenceTimeout { .. } => tracing::Level::WARN,
@@ -394,6 +403,8 @@ impl ErrorDetails {
             ErrorDetails::GCPVertexServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::GoogleAIStudioClient { status_code, .. } => *status_code,
             ErrorDetails::GoogleAIStudioServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::HyperbolicClient { status_code, .. } => *status_code,
+            ErrorDetails::HyperbolicServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Inference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceClient { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
@@ -551,6 +562,12 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::GoogleAIStudioServer { message } => {
                 write!(f, "Error from Google AI Studio server: {}", message)
+            }
+            ErrorDetails::HyperbolicClient { message, .. } => {
+                write!(f, "Error from Hyperbolic client: {}", message)
+            }
+            ErrorDetails::HyperbolicServer { message } => {
+                write!(f, "Error from Hyperbolic server: {}", message)
             }
             ErrorDetails::Inference { message } => write!(f, "{}", message),
             ErrorDetails::InferenceClient { message } => write!(f, "{}", message),

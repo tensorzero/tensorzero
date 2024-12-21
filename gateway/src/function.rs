@@ -13,7 +13,7 @@ use crate::inference::types::{
 };
 use crate::jsonschema_util::{JSONSchemaFromPath, JsonSchemaRef};
 use crate::minijinja_util::TemplateConfig;
-use crate::model::ModelConfig;
+use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
 use crate::variant::{InferenceConfig, Variant, VariantConfig};
 
@@ -231,7 +231,7 @@ impl FunctionConfig {
     pub fn validate(
         &self,
         static_tools: &HashMap<String, StaticToolConfig>,
-        models: &HashMap<String, ModelConfig>,
+        models: &mut ModelTable,
         embedding_models: &HashMap<String, EmbeddingModelConfig>,
         templates: &TemplateConfig,
         function_name: &str,

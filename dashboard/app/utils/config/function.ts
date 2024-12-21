@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { VariantConfigSchema, type VariantConfig } from "./variant";
+import { VariantConfigSchema } from "./variant";
 
 // Common schema for both Chat and Json variants
 const baseConfigSchema = z.object({

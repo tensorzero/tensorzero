@@ -1,3 +1,4 @@
+use std::env;
 use std::time::Duration;
 
 use futures::{Stream, StreamExt};
@@ -20,10 +21,13 @@ use crate::inference::types::{
     ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream, RequestMessage, Usage,
 };
+use crate::model::CredentialLocation;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
-use super::gcp_vertex_gemini::GCPVertexCredentials;
+use super::gcp_vertex_gemini::{
+    default_api_key_location, GCPServiceAccountCredentials, GCPVertexCredentials,
+};
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
@@ -35,6 +39,58 @@ pub struct GCPVertexAnthropicProvider {
     pub audience: String,
     pub credentials: GCPVertexCredentials,
     pub model_id: String,
+}
+
+impl GCPVertexAnthropicProvider {
+    pub fn new(
+        model_id: String,
+        location: String,
+        project_id: String,
+        api_key_location: Option<CredentialLocation>,
+    ) -> Result<Self, Error> {
+        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
+        let credentials = match api_key_location {
+            CredentialLocation::Env(key_name) => {
+                let path = env::var(key_name).map_err(|e| {
+                    Error::new(ErrorDetails::GCPCredentials {
+                        message: format!(
+                            "Failed to load GCP credentials from environment variable: {}",
+                            e
+                        ),
+                    })
+                })?;
+                GCPVertexCredentials::Static(
+                    GCPServiceAccountCredentials::from_path(path.as_str()).map_err(|e| {
+                        Error::new(ErrorDetails::GCPCredentials {
+                            message: format!("Failed to load GCP credentials: {}", e),
+                        })
+                    })?,
+                )
+            }
+            CredentialLocation::Path(path) => GCPVertexCredentials::Static(
+                GCPServiceAccountCredentials::from_path(path.as_str()).map_err(|e| {
+                    Error::new(ErrorDetails::GCPCredentials {
+                        message: format!("Failed to load GCP credentials: {}", e),
+                    })
+                })?,
+            ),
+            CredentialLocation::Dynamic(key_name) => GCPVertexCredentials::Dynamic(key_name),
+            _ => Err(Error::new(ErrorDetails::GCPCredentials {
+                message: "Invalid credential_location for GCPVertexAnthropic provider".to_string(),
+            }))?,
+        };
+        let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:rawPredict");
+        let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:streamRawPredict");
+        let audience = format!("https://{location}-aiplatform.googleapis.com/");
+
+        Ok(GCPVertexAnthropicProvider {
+            request_url,
+            streaming_request_url,
+            audience,
+            credentials,
+            model_id,
+        })
+    }
 }
 
 const ANTHROPIC_API_VERSION: &str = "vertex-2023-10-16";
@@ -262,13 +318,12 @@ impl<'a> TryFrom<&'a ToolChoice> for GCPVertexAnthropicToolChoice<'a> {
             ToolChoice::Auto => Ok(GCPVertexAnthropicToolChoice::Auto),
             ToolChoice::Required => Ok(GCPVertexAnthropicToolChoice::Any),
             ToolChoice::Specific(name) => Ok(GCPVertexAnthropicToolChoice::Tool { name }),
-            // TODO (#205): Implement ToolChoice::None workaround for Anthropic.
-            //              MAKE SURE TO UPDATE THE E2E TESTS WHEN THIS IS DONE.
-            ToolChoice::None => Err(ErrorDetails::InvalidTool {
-                message: "Tool choice is None. Anthropic does not support tool choice None."
-                    .to_string(),
-            }
-            .into()),
+            // Workaround for Anthropic API limitation: they don't support explicitly specifying "none"
+            // for tool choice. Instead, we return Auto but the request construction will ensure
+            // that no tools are sent in the request payload. This achieves the same effect
+            // as explicitly telling the model not to use tools, since without any tools
+            // being provided, the model cannot make tool calls.
+            ToolChoice::None => Ok(GCPVertexAnthropicToolChoice::Auto),
         }
     }
 }
@@ -423,11 +478,22 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
         } else {
             messages
         };
-        let tools = request
-            .tool_config
-            .as_ref()
-            .map(|c| &c.tools_available)
-            .map(|tools| tools.iter().map(|tool| tool.into()).collect::<Vec<_>>());
+
+        // Workaround for GCP Vertex AI Anthropic API limitation: they don't support explicitly specifying "none"
+        // for tool choice. When ToolChoice::None is specified, we don't send any tools in the
+        // request payload to achieve the same effect.
+        let tools = request.tool_config.as_ref().and_then(|c| {
+            if matches!(c.tool_choice, ToolChoice::None) {
+                None
+            } else {
+                Some(
+                    c.tools_available
+                        .iter()
+                        .map(|tool| tool.into())
+                        .collect::<Vec<_>>(),
+                )
+            }
+        });
         // `tool_choice` should only be set if tools are set and non-empty
         let tool_choice: Option<GCPVertexAnthropicToolChoice> = tools
             .as_ref()
@@ -897,17 +963,13 @@ mod tests {
 
     #[test]
     fn test_try_from_tool_choice() {
-        // Need to cover all 4 cases
+        // Test conversion of ToolChoice::None - now maps to Auto
         let tool_choice = ToolChoice::None;
         let anthropic_tool_choice = GCPVertexAnthropicToolChoice::try_from(&tool_choice);
-        assert!(anthropic_tool_choice.is_err());
-        let details = anthropic_tool_choice.unwrap_err().get_owned_details();
+        assert!(anthropic_tool_choice.is_ok());
         assert_eq!(
-            details,
-            ErrorDetails::InvalidTool {
-                message: "Tool choice is None. Anthropic does not support tool choice None."
-                    .to_string(),
-            }
+            anthropic_tool_choice.unwrap(),
+            GCPVertexAnthropicToolChoice::Auto
         );
 
         let tool_choice = ToolChoice::Auto;

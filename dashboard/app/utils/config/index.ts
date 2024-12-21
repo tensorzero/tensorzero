@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { ModelConfigSchema, EmbeddingModelConfigSchema } from "./models";
-import { FunctionConfigSchema, type FunctionConfig } from "./function";
-import { MetricConfigSchema, type MetricConfig } from "./metric";
-import { ToolConfigSchema, type ToolConfig } from "./tool";
+import { FunctionConfigSchema } from "./function";
+import { MetricConfigSchema } from "./metric";
+import { ToolConfigSchema } from "./tool";
 
 export const GatewayConfig = z.object({
   bind_address: z.string().optional(), // Socket address as string

@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { jsonModeSchema, RetryConfigSchema } from "./types";
 import { create_env } from "../minijinja/pkg/minijinja_bindings";
-import { stringify } from "smol-toml";
 
 // Runtime-only type for internal use
 export interface TemplateWithContent {
@@ -132,5 +131,3 @@ export async function get_template_env(variant: ChatCompletionConfig) {
 
   return await create_env(env);
 }
-
-const isServer = typeof window === "undefined";

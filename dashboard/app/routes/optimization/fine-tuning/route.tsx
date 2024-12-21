@@ -14,7 +14,7 @@ import { v7 as uuid } from "uuid";
 import type { SFTJob } from "~/utils/fine_tuning/common";
 import { models } from "./model_options";
 import { useRevalidator } from "react-router";
-import { useForm, FormProvider } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { redirect } from "react-router";
 import { launch_sft_job } from "~/utils/fine_tuning/client";
 import type { ChatCompletionConfig } from "~/utils/config/variant";
@@ -94,13 +94,15 @@ export async function action({ request }: Route.ActionArgs) {
 
 export default function FineTuning({ loaderData }: Route.ComponentProps) {
   const config = useConfig();
-  const { jobInfo, status, result, error } = loaderData;
+  const { status } = loaderData;
   const revalidator = useRevalidator();
-  let fetcher = useFetcher();
+  const fetcher = useFetcher();
 
   // If running, periodically poll for updates on the job
   useEffect(() => {
     if (status === "running") {
+      setSubmissionPhase("pending");
+      setIsSubmitted(true);
       const interval = setInterval(() => {
         revalidator.revalidate();
       }, 10000);
@@ -138,8 +140,8 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
   //   jobId: uuid(),
   // };
 
-  const [submissionResult, setSubmissionResult] = useState<string | null>(null);
-  const [finalResult, setFinalResult] = useState<string | null>(null);
+  // TODO: write to this with the TOML
+  const finalResult: string | null = null;
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submissionPhase, setSubmissionPhase] = useState<
     "idle" | "submitting" | "pending" | "complete"
@@ -292,11 +294,14 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
                   {getButtonText()}
                 </Button>
 
-                {submissionResult && (
-                  <div className="p-4 bg-gray-100 rounded-lg">
-                    <div className="mb-2 font-medium">Job Status</div>
+                {loaderData && (
+                  <div className="p-4 bg-gray-100 rounded-lg mt-4">
+                    <div className="mb-2 font-medium">
+                      Loader Data (Last Updated:{" "}
+                      {new Date().toLocaleTimeString()})
+                    </div>
                     <Textarea
-                      value={submissionResult}
+                      value={JSON.stringify(loaderData, null, 2)}
                       className="w-full h-48 resize-none bg-transparent border-none focus:ring-0"
                       readOnly
                     />
@@ -314,19 +319,6 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
                   </div>
                 )}
               </div>
-              {loaderData && (
-                <div className="p-4 bg-gray-100 rounded-lg mt-4">
-                  <div className="mb-2 font-medium">
-                    Loader Data (Last Updated: {new Date().toLocaleTimeString()}
-                    )
-                  </div>
-                  <Textarea
-                    value={JSON.stringify(loaderData, null, 2)}
-                    className="w-full h-48 resize-none bg-transparent border-none focus:ring-0"
-                    readOnly
-                  />
-                </div>
-              )}
             </form>
           </Form>
         </div>
