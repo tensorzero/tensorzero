@@ -62,17 +62,8 @@ export class OpenAISFTJob extends SFTJob {
     return job;
   }
 
-  display(): string {
-    return this.status ?? "";
-  }
   result(): string | undefined {
     return this.fineTunedModel;
-  }
-  provider(): string {
-    return "openai";
-  }
-  is_finished(): boolean {
-    return this.status === "succeeded" || this.status === "failed";
   }
 
   async poll(): Promise<OpenAISFTJob> {

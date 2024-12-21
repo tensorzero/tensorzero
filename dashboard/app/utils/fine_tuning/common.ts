@@ -30,9 +30,6 @@ export abstract class SFTJob {
     throw new Error("Child class must implement fromFormData");
   }
 
-  abstract display(): string;
   abstract result(): string | undefined;
-  abstract provider(): string;
-  abstract is_finished(): boolean;
   abstract poll(): Promise<SFTJob>;
 }

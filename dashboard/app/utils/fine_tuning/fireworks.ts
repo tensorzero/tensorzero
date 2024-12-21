@@ -1,3 +1,25 @@
+/**
+ * This module handles fine-tuning and deployment of models using the Fireworks AI API.
+ *
+ * The high-level flow is:
+ * 1. User submits fine-tuning job configuration via the UI form (SFTFormValues)
+ * 2. FireworksSFTJob class is instantiated with the form data
+ * 3. Curated training data is retrieved from ClickHouse based on:
+ *    - Selected function
+ *    - Selected metric
+ *    - Max samples limit
+ * 4. Training data is formatted according to Fireworks API requirements
+ * 5. Fine-tuning job is launched via Fireworks API endpoints (we get a job ID here)
+ * 6. Job status is polled periodically to track progress
+ * 7. Once complete, the fine-tuned model ID is stored
+ * 8. The fine-tuned model is then deployed-- this also needs to be polled
+ * 9. Once this is completed we have a path we can use for inference
+ *
+ * The FireworksSFTJob class extends the base SFTJob class to provide
+ * Fireworks-specific implementation of job creation, status polling,
+ * result handling, and deployment management.
+ */
+
 import type { SFTFormValues } from "~/routes/optimization/fine-tuning/types";
 import type { JsExposedEnv } from "../minijinja/pkg/minijinja_bindings";
 import { v7 } from "uuid";
@@ -65,20 +87,8 @@ export class FireworksSFTJob extends SFTJob {
     );
   }
 
-  display(): string {
-    return this.status ?? "";
-  }
-
   result(): string | undefined {
     return this.modelPath;
-  }
-
-  provider(): string {
-    return "fireworks";
-  }
-
-  is_finished(): boolean {
-    return this.status === "deployed" || this.status === "failed";
   }
 
   async poll(): Promise<FireworksSFTJob> {
