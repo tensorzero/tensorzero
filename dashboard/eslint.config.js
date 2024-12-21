@@ -9,6 +9,7 @@ export default [
       "**/node_modules/**",
       "**/build/**",
       "**/.react-router/**",
+      "**/.venv/**",
     ],
   },
   {

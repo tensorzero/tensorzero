@@ -22,11 +22,13 @@ import { useConfig } from "~/context/config";
 import { FunctionSelector } from "./FunctionSelector";
 import { MetricSelector } from "./MetricSelector";
 import { VariantSelector } from "./VariantSelector";
+import { get_fine_tuned_model_config } from "~/utils/fine_tuning/config_block";
 import { ModelSelector } from "./ModelSelector";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
 import { Form } from "~/components/ui/form";
+import { stringify } from "smol-toml";
 
 export const meta: MetaFunction = () => {
   return [
@@ -44,7 +46,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const job_id = url.searchParams.get("job_id");
 
   if (!job_id) {
-    return { jobInfo: null, status: "idle" };
+    return { status: "idle" };
   }
 
   const storedJob = jobStore[job_id];
@@ -52,6 +54,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
     throw new Response(JSON.stringify({ error: "Job not found" }), {
       status: 404,
     });
+  }
+  if (storedJob.status() === "completed" || storedJob.status() === "error") {
+    return {
+      status: storedJob.status(),
+      result: storedJob.result(),
+      modelProvider: storedJob.provider(),
+    };
   }
 
   try {
@@ -61,16 +70,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
     const result = updatedJob.result();
     // TODO (Viraj, important!): fix the status here.
-    const status = result ? "completed" : "running";
+    const status = updatedJob.status();
+    const modelProvider = updatedJob.provider();
 
     return {
-      jobInfo: updatedJob,
       status,
       result,
+      modelProvider,
     };
   } catch (error) {
     return {
-      jobInfo: storedJob,
       status: "error",
       error: error instanceof Error ? error.message : "Unknown error",
     };
@@ -97,7 +106,7 @@ export async function action({ request }: Route.ActionArgs) {
 // Renders the fine-tuning form and status info.
 export default function FineTuning({ loaderData }: Route.ComponentProps) {
   const config = useConfig();
-  const { status } = loaderData;
+  const { status, result, modelProvider } = loaderData;
   const revalidator = useRevalidator();
   const fetcher = useFetcher();
 
@@ -123,12 +132,16 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
     resolver: SFTFormValuesResolver,
   });
 
-  // TODO: write to this with the TOML
-  const finalResult: string | null = null;
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submissionPhase, setSubmissionPhase] = useState<
     "idle" | "submitting" | "pending" | "complete"
   >("idle");
+  const finalResult = result
+    ? stringify(get_fine_tuned_model_config(result, modelProvider))
+    : null;
+  if (finalResult && submissionPhase !== "complete") {
+    setSubmissionPhase("complete");
+  }
 
   const [counts, setCounts] = useState<{
     inferenceCount: number | null;

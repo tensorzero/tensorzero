@@ -33,7 +33,8 @@ import { render_message } from "./rendering";
 import { getConfig } from "../config/index.server";
 import { get_template_env, type ChatCompletionConfig } from "../config/variant";
 import { z } from "zod";
-import { SFTJob } from "./common";
+import { SFTJob, type SFTJobStatus } from "./common";
+import type { ProviderType } from "../config/models";
 export const FIREWORKS_API_URL = "https://api.fireworks.ai";
 export const FIREWORKS_API_KEY = process.env.FIREWORKS_API_KEY || throwError();
 export const FIREWORKS_ACCOUNT_ID =
@@ -54,7 +55,7 @@ interface FireworksSFTJobParams {
 
 export class FireworksSFTJob extends SFTJob {
   public jobPath: string;
-  public status: string;
+  public jobStatus: string;
   public jobId: string;
   public modelId?: string;
   public modelPath?: string;
@@ -62,7 +63,7 @@ export class FireworksSFTJob extends SFTJob {
   constructor(params: FireworksSFTJobParams) {
     super();
     this.jobPath = params.jobPath;
-    this.status = params.status;
+    this.jobStatus = params.status;
     this.jobId = params.jobId;
     this.modelId = params.modelId;
     this.modelPath = params.modelPath;
@@ -98,6 +99,15 @@ export class FireworksSFTJob extends SFTJob {
       modelId: undefined,
       modelPath: undefined,
     });
+  }
+
+  provider(): ProviderType {
+    return "fireworks";
+  }
+
+  status(): SFTJobStatus {
+    if (this.jobStatus === "FAILED") return "error";
+    return this.jobStatus === "COMPLETED" ? "completed" : "running";
   }
 
   result(): string | undefined {

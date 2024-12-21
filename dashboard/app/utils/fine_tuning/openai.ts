@@ -19,9 +19,10 @@ import {
 import { get_template_env, type ChatCompletionConfig } from "../config/variant";
 import { getConfig } from "../config/index.server";
 import type { JsExposedEnv } from "../minijinja/pkg/minijinja_bindings";
-import { splitValidationData } from "./common";
+import { splitValidationData, type SFTJobStatus } from "./common";
 import { render_message } from "./rendering";
 import { SFTJob } from "./common";
+import type { ProviderType } from "../config/models";
 
 export const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -35,13 +36,13 @@ interface OpenAISFTJobParams {
 
 export class OpenAISFTJob extends SFTJob {
   public jobId: string;
-  public status: string;
+  public jobStatus: string;
   public fineTunedModel?: string;
 
   constructor(params: OpenAISFTJobParams) {
     super();
     this.jobId = params.jobId;
-    this.status = params.status;
+    this.jobStatus = params.status;
     this.fineTunedModel = params.fineTunedModel;
   }
 
@@ -73,6 +74,15 @@ export class OpenAISFTJob extends SFTJob {
 
   result(): string | undefined {
     return this.fineTunedModel;
+  }
+
+  provider(): ProviderType {
+    return "openai";
+  }
+
+  status(): SFTJobStatus {
+    if (this.jobStatus === "failed") return "error";
+    return this.jobStatus === "COMPLETED" ? "completed" : "running";
   }
 
   async poll(): Promise<OpenAISFTJob> {
