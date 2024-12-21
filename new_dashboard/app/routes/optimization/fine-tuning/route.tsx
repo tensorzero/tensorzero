@@ -2,7 +2,6 @@ import {
   useFetcher,
   type LoaderFunctionArgs,
   type MetaFunction,
-  Form,
 } from "react-router";
 import { useEffect, useState } from "react";
 import {
@@ -27,6 +26,7 @@ import { ModelSelector } from "./ModelSelector";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
+import { Form } from "~/components/ui/form";
 
 export const meta: MetaFunction = () => {
   return [
@@ -55,9 +55,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   try {
     // Poll for updates
-    console.log("polling for updates");
     const updatedJob = await storedJob.poll();
-    console.log("updatedJob", updatedJob);
     jobStore[job_id] = updatedJob;
 
     const result = updatedJob.result();
@@ -213,6 +211,27 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
     }
   }
 
+  async function onSubmit(data: SFTFormValues) {
+    try {
+      const formData = {
+        ...data,
+        jobId: uuid(),
+      };
+
+      const submitData = new FormData();
+      submitData.append("data", JSON.stringify(formData));
+
+      // Try using fetcher.submit synchronously
+      fetcher.submit(submitData, {
+        method: "POST",
+      });
+
+      setSubmissionPhase("submitting");
+    } catch (error) {
+      console.error("Submission error:", error);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <main className="p-4">
@@ -221,34 +240,17 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
         </h2>
 
         <div className="mt-8">
-          <form
-            className="space-y-6"
-            onSubmit={(e) => {
-              e.preventDefault();
-              form.handleSubmit((data) => {
-                console.log("Form data:", data);
+          <Form {...form}>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
 
-                // Add jobId to the form data
-                const formData = {
-                  ...data,
-                  jobId: uuid(),
-                };
-
-                // Create a FormData instance and append the serialized data
-                const submitData = new FormData();
-                submitData.append("data", JSON.stringify(formData));
-
-                // Submit using the fetcher
-                fetcher.submit(submitData, {
-                  method: "POST",
-                });
-
-                setSubmissionPhase("submitting");
-              })(e);
-            }}
-          >
-            {/* Wrap form contents with FormProvider */}
-            <FormProvider {...form}>
+                // Try calling onSubmit directly with current values
+                const values = form.getValues();
+                onSubmit(values);
+              }}
+              className="space-y-6"
+            >
               <div className="space-y-6">
                 <FunctionSelector
                   control={form.control}
@@ -312,8 +314,21 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
                   </div>
                 )}
               </div>
-            </FormProvider>
-          </form>
+              {loaderData && (
+                <div className="p-4 bg-gray-100 rounded-lg mt-4">
+                  <div className="mb-2 font-medium">
+                    Loader Data (Last Updated: {new Date().toLocaleTimeString()}
+                    )
+                  </div>
+                  <Textarea
+                    value={JSON.stringify(loaderData, null, 2)}
+                    className="w-full h-48 resize-none bg-transparent border-none focus:ring-0"
+                    readOnly
+                  />
+                </div>
+              )}
+            </form>
+          </Form>
         </div>
       </main>
     </div>

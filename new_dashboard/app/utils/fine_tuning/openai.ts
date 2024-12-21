@@ -39,7 +39,6 @@ export class OpenAISFTJob extends SFTJob {
   static async fromFormData(data: SFTFormValues): Promise<OpenAISFTJob> {
     let config = await getConfig();
     // TODO: throw if this isn't a chat completion
-    console.log("config", config);
     const currentVariant = config.functions[data.function].variants[
       data.variant
     ] as ChatCompletionConfig;
@@ -105,8 +104,6 @@ export async function start_sft_openai(
   const valMessages = valInferences.map((inference) =>
     tensorzero_inference_to_openai_messages(inference, templateEnv),
   );
-  console.log("trainMessages.length", trainMessages.length);
-  console.log("valMessages.length", valMessages.length);
   const [file_id, val_file_id] = await Promise.all([
     upload_examples_to_openai(trainMessages),
     upload_examples_to_openai(valMessages),
@@ -229,13 +226,11 @@ async function upload_examples_to_openai(samples: OpenAIMessage[][]) {
     // Write to temporary file
     tempFile = path.join(os.tmpdir(), `temp_training_data_${Date.now()}.jsonl`);
     await fs.writeFile(tempFile, jsonl);
-    console.log("tempFile", tempFile);
 
     const file = await client.files.create({
       file: createReadStream(tempFile),
       purpose: "fine-tune",
     });
-    console.log("file", file);
     return file.id;
   } finally {
     // Clean up temp file

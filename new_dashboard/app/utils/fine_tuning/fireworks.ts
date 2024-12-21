@@ -36,7 +36,6 @@ export class FireworksSFTJob extends SFTJob {
   static async from_form_data(data: SFTFormValues): Promise<FireworksSFTJob> {
     let config = await getConfig();
     // TODO: throw if this isn't a chat completion
-    console.log("config", config);
     const currentVariant = config.functions[data.function].variants[
       data.variant
     ] as ChatCompletionConfig;
@@ -85,15 +84,12 @@ export class FireworksSFTJob extends SFTJob {
   async poll(): Promise<FireworksSFTJob> {
     if (!this.modelId) {
       // If we don't have a model ID, training is still running so we need to poll for it
-      console.log("polling for training status");
       const status = await get_fine_tuning_job_status(this.jobPath);
-      console.log("status", status);
       if (status === "COMPLETED") {
         const modelId = await get_model_id(this.jobPath);
         if (!modelId) {
           throw new Error("Model ID not found after job completed");
         }
-        console.log("modelId", modelId);
         await deploy_model(FIREWORKS_ACCOUNT_ID, modelId);
         return new FireworksSFTJob(
           this.jobPath,
@@ -117,10 +113,8 @@ export class FireworksSFTJob extends SFTJob {
         FIREWORKS_ACCOUNT_ID,
         this.modelId,
       );
-      console.log("status", status);
       if (status === "DEPLOYED") {
         const modelPath = `accounts/${FIREWORKS_ACCOUNT_ID}/models/${this.modelId}`;
-        console.log("modelPath", modelPath);
         return new FireworksSFTJob(
           this.jobPath,
           "DEPLOYED",
@@ -167,7 +161,6 @@ type FineTuningJobResponse = z.infer<typeof FineTuningJobResponseSchema>;
 async function get_fine_tuning_job_details(
   job_path: string,
 ): Promise<FineTuningJobResponse> {
-  console.log("getting fine tuning job details");
   const url = new URL(`v1/${job_path}`, FIREWORKS_API_URL).toString();
   const options = {
     method: "GET",
@@ -284,25 +277,20 @@ export async function start_sft_fireworks(
   );
   const serializedExamples = JSON.stringify(fireworksExamples, null, 2);
 
-  console.log("fireworksExamples", serializedExamples);
-
   const datasetId = await create_dataset_record(
     FIREWORKS_ACCOUNT_ID,
     fireworksExamples.length,
   );
-  console.log("datasetId", datasetId);
   let uploadResponse = await upload_dataset(
     FIREWORKS_ACCOUNT_ID,
     datasetId,
     fireworksExamples,
   );
-  console.log("uploadResponse", uploadResponse);
 
   // We poll here since this usually does not take long
   while (!(await dataset_is_ready(FIREWORKS_ACCOUNT_ID, datasetId))) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
-  console.log("dataset is ready");
 
   const job_path = await create_fine_tuning_job(
     FIREWORKS_ACCOUNT_ID,
@@ -440,7 +428,6 @@ async function create_dataset_record(accountId: string, exampleCount: number) {
   };
   const response = await fetch(url, options).then((r) => r.json());
   // TODO(Viraj: check it more robustly)
-  console.log("Created dataset record", response);
 
   return datasetId;
 }
@@ -533,16 +520,12 @@ async function create_fine_tuning_job(
     FIREWORKS_API_URL,
   ).toString();
 
-  console.log("creating fine tuning job with url", url);
-
   const body = {
     dataset: `accounts/${accountId}/datasets/${datasetId}`,
     baseModel: baseModel,
     conversation: {}, // empty due to us using the default conversation template
     evaluationSplit: valSplit / 100,
   };
-
-  console.log("body", body);
 
   const options = {
     method: "POST",
@@ -553,18 +536,14 @@ async function create_fine_tuning_job(
     body: JSON.stringify(body),
   };
 
-  console.log("options", options);
-
   try {
     const response = await fetch(url, options);
-    console.log("response", response);
     if (!response.ok) {
       throw new Error(
         `Failed to create fine tuning job: ${response.status} ${response.statusText}`,
       );
     }
     const data = await response.json();
-    console.log("data", data);
     if (!data.name) {
       throw new Error("Fine tuning job response missing name field");
     }
