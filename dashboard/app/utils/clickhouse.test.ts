@@ -42,7 +42,7 @@ test("countGoodBooleanMetricData", async () => {
 test("queryGoodFloatMetricData", async () => {
   const result = await queryGoodFloatMetricData(
     "dashboard_fixture_extract_entities",
-    "jaccard_similarity",
+    "dashboard_fixture_jaccard_similarity",
     "JsonInference",
     "id",
     true,
@@ -56,7 +56,7 @@ test("queryGoodFloatMetricData", async () => {
 test("countGoodFloatMetricData", async () => {
   const result = await countGoodFloatMetricData(
     "dashboard_fixture_extract_entities",
-    "jaccard_similarity",
+    "dashboard_fixture_jaccard_similarity",
     "JsonInference",
     "id",
     true,

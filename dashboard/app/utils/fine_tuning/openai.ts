@@ -57,6 +57,7 @@ export class OpenAISFTJob extends SFTJob {
       config.functions[data.function],
       data.metric,
       config.metrics[data.metric],
+      data.threshold,
       data.maxSamples,
     );
     if (!curatedInferences || curatedInferences.length === 0) {

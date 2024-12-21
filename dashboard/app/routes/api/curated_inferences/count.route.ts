@@ -16,6 +16,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const functionName = url.searchParams.get("function");
   const metricName = url.searchParams.get("metric");
+  const threshold = parseFloat(url.searchParams.get("threshold") || "0");
 
   let inferenceCount = null;
   let feedbackCount = null;
@@ -39,6 +40,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       config.functions[functionName],
       metricName,
       config.metrics[metricName],
+      threshold,
     );
   }
   return Response.json({

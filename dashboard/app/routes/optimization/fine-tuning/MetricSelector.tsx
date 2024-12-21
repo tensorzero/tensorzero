@@ -18,6 +18,7 @@ type MetricSelectorProps = {
   curatedInferenceCount: number | null;
   config: Config;
   onMetricChange: (value: string) => void;
+  onThresholdChange: (value: number) => void;
 };
 
 export function MetricSelector({
@@ -26,6 +27,7 @@ export function MetricSelector({
   curatedInferenceCount,
   config,
   onMetricChange,
+  onThresholdChange,
 }: MetricSelectorProps) {
   return (
     <FormField
@@ -102,9 +104,10 @@ export function MetricSelector({
                       max={1}
                       {...thresholdField}
                       className="bg-transparent border-none focus:ring-0"
-                      onChange={(e) =>
-                        thresholdField.onChange(Number(e.target.value))
-                      }
+                      onChange={(e) => {
+                        thresholdField.onChange(Number(e.target.value));
+                        onThresholdChange(Number(e.target.value));
+                      }}
                     />
                   </div>
                 )}

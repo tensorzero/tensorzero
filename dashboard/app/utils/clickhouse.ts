@@ -139,6 +139,7 @@ export async function getCuratedInferences(
   function_config: FunctionConfig,
   metric_name: string,
   metric_config: MetricConfig,
+  threshold: number,
   max_samples?: number,
 ) {
   const inference_table_name = getInferenceTableName(function_config);
@@ -154,6 +155,16 @@ export async function getCuratedInferences(
         metric_config.optimize === "max",
         max_samples,
       );
+    case "float":
+      return queryGoodFloatMetricData(
+        function_name,
+        metric_name,
+        inference_table_name,
+        inference_join_key,
+        metric_config.optimize === "max",
+        threshold,
+        max_samples,
+      );
     default:
       throw new Error(`Unsupported metric type: ${metric_config.type}`);
   }
@@ -164,10 +175,10 @@ export async function countCuratedInferences(
   function_config: FunctionConfig,
   metric_name: string,
   metric_config: MetricConfig,
+  threshold: number,
 ) {
   const inference_table_name = getInferenceTableName(function_config);
   const inference_join_key = getInferenceJoinKey(metric_config);
-
   switch (metric_config.type) {
     case "boolean":
       return countGoodBooleanMetricData(
@@ -176,6 +187,15 @@ export async function countCuratedInferences(
         inference_table_name,
         inference_join_key,
         metric_config.optimize === "max",
+      );
+    case "float":
+      return countGoodFloatMetricData(
+        function_name,
+        metric_name,
+        inference_table_name,
+        inference_join_key,
+        metric_config.optimize === "max",
+        threshold,
       );
     default:
       throw new Error(`Unsupported metric type: ${metric_config.type}`);

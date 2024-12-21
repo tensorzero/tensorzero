@@ -9,7 +9,7 @@ export const SFTFormValuesSchema = z.object({
   variant: z.string(),
   validationSplitPercent: z.number(),
   maxSamples: z.number(),
-  threshold: z.number().optional(),
+  threshold: z.number(),
   jobId: z.string(),
 });
 

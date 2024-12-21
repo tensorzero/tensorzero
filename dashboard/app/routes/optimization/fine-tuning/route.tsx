@@ -153,10 +153,15 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
     curatedInferenceCount: null,
   });
 
-  const fetchCounts = async (functionName?: string, metricName?: string) => {
+  const fetchCounts = async (
+    functionName?: string,
+    metricName?: string,
+    threshold?: number,
+  ) => {
     const params = new URLSearchParams();
     if (functionName) params.set("function", functionName);
     if (metricName) params.set("metric", metricName);
+    if (threshold) params.set("threshold", String(threshold));
 
     const response = await fetch(`/api/curated_inferences/count?${params}`);
     const data = await response.json();
@@ -164,11 +169,27 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
   };
 
   const handleFunctionChange = (value: string) => {
-    fetchCounts(value, form.getValues("metric") || undefined);
+    fetchCounts(
+      value,
+      form.getValues("metric") || undefined,
+      form.getValues("threshold") || undefined,
+    );
   };
 
   const handleMetricChange = (value: string) => {
-    fetchCounts(form.getValues("function") || undefined, value);
+    fetchCounts(
+      form.getValues("function") || undefined,
+      value,
+      form.getValues("threshold") || undefined,
+    );
+  };
+
+  const handleThresholdChange = (value: number) => {
+    fetchCounts(
+      form.getValues("function") || undefined,
+      form.getValues("metric") || undefined,
+      value,
+    );
   };
 
   const getChatCompletionVariantsForFunction = (): Record<
@@ -263,6 +284,7 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
                   curatedInferenceCount={counts.curatedInferenceCount}
                   config={config}
                   onMetricChange={handleMetricChange}
+                  onThresholdChange={handleThresholdChange}
                 />
 
                 <VariantSelector
