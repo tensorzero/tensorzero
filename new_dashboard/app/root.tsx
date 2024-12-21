@@ -51,11 +51,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 export default function App() {
   const config = useLoaderData<typeof loader>();
   return (
-    <Layout>
-      <ConfigProvider value={config}>
-        <Outlet />
-      </ConfigProvider>
-    </Layout>
+    <ConfigProvider value={config}>
+      <Outlet />
+    </ConfigProvider>
   );
 }
 
