@@ -38,6 +38,7 @@ export const meta: MetaFunction = () => {
 // Mutable store mapping job IDs to their info
 export const jobStore: { [jobId: string]: SFTJob } = {};
 
+// If there is a job_id in the URL, grab it from the job store and pull it.
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const job_id = url.searchParams.get("job_id");
@@ -76,6 +77,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 }
 
+// The action actually launches the fine-tuning job.
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const serializedFormData = formData.get("data");
@@ -92,6 +94,7 @@ export async function action({ request }: Route.ActionArgs) {
   return redirect(`/optimization/fine-tuning?job_id=${validatedData.jobId}`);
 }
 
+// Renders the fine-tuning form and status info.
 export default function FineTuning({ loaderData }: Route.ComponentProps) {
   const config = useConfig();
   const { status } = loaderData;
@@ -119,26 +122,6 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
     },
     resolver: SFTFormValuesResolver,
   });
-
-  // const testData: SFTFormValues = {
-  //   function: "dashboard_fixture_extract_entities",
-  //   metric: "dashboard_fixture_exact_match",
-  //   model: {
-  //     displayName: "llama-3.1-8b-instruct",
-  //     name: "accounts/fireworks/models/llama-v3p1-8b-instruct",
-  //     provider: "fireworks",
-  //   },
-  //   // model: {
-  //   //   displayName: "gpt-4o-mini-2024-07-18",
-  //   //   name: "gpt-4o-mini-2024-07-18",
-  //   //   provider: "openai",
-  //   // },
-  //   variant: "baseline",
-  //   validationSplitPercent: 20,
-  //   maxSamples: 1000,
-  //   threshold: 0.8,
-  //   jobId: uuid(),
-  // };
 
   // TODO: write to this with the TOML
   const finalResult: string | null = null;
