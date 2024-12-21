@@ -319,32 +319,6 @@ export async function start_sft_fireworks(
   return job_path;
 }
 
-// export async function poll_sft_fireworks(
-//   jobPath: string,
-//   modelId?: string,
-// ): Promise<FireworksSFTJob> {
-//   if (!modelId) {
-//     // If we don't have a model ID, training is still running so we need to poll for it
-//     const status = await get_fine_tuning_job_status(jobPath);
-
-//     if (status === "COMPLETED") {
-//       const modelId = await get_model_id(jobPath);
-//       await deploy_model(FIREWORKS_ACCOUNT_ID, modelId);
-//       return new FireworksSFTJob(jobPath, "DEPLOYING", modelId, undefined);
-//     } else {
-//       return new FireworksSFTJob(jobPath, "TRAINING", undefined, undefined);
-//     }
-//   } else {
-//     const status = await poll_model_deployment(FIREWORKS_ACCOUNT_ID, modelId);
-//     if (status === "DEPLOYED") {
-//       const modelPath = `accounts/${FIREWORKS_ACCOUNT_ID}/models/${modelId}`;
-//       return new FireworksSFTJob(jobPath, "DEPLOYED", modelId, modelPath);
-//     } else {
-//       return new FireworksSFTJob(jobPath, "DEPLOYING", modelId, undefined);
-//     }
-//   }
-// }
-
 type FireworksMessage = {
   role: "system" | "user" | "assistant";
   content: string;
