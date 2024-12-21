@@ -17,7 +17,7 @@ import {
   type Role,
 } from "../clickhouse";
 import { get_template_env, type ChatCompletionConfig } from "../config/variant";
-import { getConfig } from "../config";
+import { getConfig } from "../config/index.server";
 import type { JsExposedEnv } from "../minijinja/pkg/minijinja_bindings";
 import { splitValidationData } from "./common";
 import { render_message } from "./rendering";

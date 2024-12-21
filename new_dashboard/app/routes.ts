@@ -5,4 +5,8 @@ export default [
     "optimization/fine-tuning",
     "routes/optimization/fine-tuning/route.tsx",
   ),
+  route(
+    "api/curated_inferences/count",
+    "routes/api/curated_inferences/count.route.ts",
+  ),
 ] satisfies RouteConfig;

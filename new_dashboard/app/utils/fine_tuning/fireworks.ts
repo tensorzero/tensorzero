@@ -8,7 +8,7 @@ import type {
 } from "../clickhouse";
 import { getCuratedInferences } from "../clickhouse";
 import { render_message } from "./rendering";
-import { getConfig } from "../config";
+import { getConfig } from "../config/index.server";
 import { get_template_env, type ChatCompletionConfig } from "../config/variant";
 import { z } from "zod";
 import { SFTJob } from "./common";

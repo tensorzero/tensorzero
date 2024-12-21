@@ -1,4 +1,4 @@
-import { Control } from "react-hook-form";
+import type { Control } from "react-hook-form";
 import {
   Accordion,
   AccordionContent,
@@ -7,7 +7,7 @@ import {
 } from "~/components/ui/accordion";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 import { Input } from "~/components/ui/input";
-import { SFTFormValues } from "./types";
+import type { SFTFormValues } from "./types";
 
 type AdvancedParametersAccordionProps = {
   control: Control<SFTFormValues>;

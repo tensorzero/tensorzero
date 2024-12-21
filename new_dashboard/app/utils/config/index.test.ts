@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { loadConfig } from "./index";
+import { loadConfig } from "./index.server";
 
 test("parse e2e config", async () => {
   const validatedConfig = await loadConfig(

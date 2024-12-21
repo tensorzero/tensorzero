@@ -1,9 +1,10 @@
 import {
   ChatCompletionConfigSchema,
-  create_dump_variant_config,
   type ChatCompletionConfig,
 } from "./variant";
+
 import { describe, it, expect } from "vitest";
+import { create_dump_variant_config } from "./variant.server";
 
 describe("create_dump_variant_config", () => {
   it("should create correct variant config TOML with string templates", () => {
