@@ -1,7 +1,7 @@
 import { createClient } from "@clickhouse/client";
 import { z } from "zod";
-import { type FunctionConfig } from "./config/function";
-import { type MetricConfig } from "./config/metric";
+import type { FunctionConfig } from "./config/function";
+import type { MetricConfig } from "./config/metric";
 
 export const clickhouseClient = createClient({
   url: process.env.CLICKHOUSE_URL,
@@ -16,141 +16,23 @@ export async function checkClickhouseConnection(): Promise<boolean> {
   }
 }
 
-export const roleSchema = z.enum(["user", "assistant"]);
-export type Role = z.infer<typeof roleSchema>;
+type InferenceRow = {
+  variant_name: string;
+  input: string;
+  output: string;
+  value: number;
+  episode_id: string;
+};
 
-export const textInputMessageContentSchema = z.object({
-  type: z.literal("text"),
-  value: z.any(), // Value type from Rust maps to any in TS
-});
+export type ParsedChatInferenceRow = Omit<InferenceRow, "input" | "output"> & {
+  input: Input;
+  output: ContentBlockOutput[];
+};
 
-export const toolCallSchema = z
-  .object({
-    name: z.string(),
-    arguments: z.string(),
-    id: z.string(),
-  })
-  .strict();
-export type ToolCall = z.infer<typeof toolCallSchema>;
-
-export const toolCallInputMessageContentSchema = z
-  .object({
-    type: z.literal("tool_call"),
-    ...toolCallSchema.shape,
-  })
-  .strict();
-
-export const toolResultSchema = z
-  .object({
-    name: z.string(),
-    result: z.string(),
-    id: z.string(),
-  })
-  .strict();
-
-export const toolResultInputMessageContentSchema = z
-  .object({
-    type: z.literal("tool_result"),
-    ...toolResultSchema.shape,
-  })
-  .strict();
-
-export const inputMessageContentSchema = z.discriminatedUnion("type", [
-  textInputMessageContentSchema,
-  toolCallInputMessageContentSchema,
-  toolResultInputMessageContentSchema,
-]);
-export type InputMessageContent = z.infer<typeof inputMessageContentSchema>;
-
-export const inputMessageSchema = z
-  .object({
-    role: roleSchema,
-    content: z.array(inputMessageContentSchema),
-  })
-  .strict();
-export type InputMessage = z.infer<typeof inputMessageSchema>;
-
-export const inputSchema = z
-  .object({
-    system: z.any().optional(), // Value type from Rust maps to any in TS
-    messages: z.array(inputMessageSchema).default([]),
-  })
-  .strict();
-export type Input = z.infer<typeof inputSchema>;
-
-export const jsonInferenceOutputSchema = z.object({
-  raw: z.string(),
-  parsed: z.any().optional(),
-});
-
-export type JsonInferenceOutput = z.infer<typeof jsonInferenceOutputSchema>;
-
-export const toolCallOutputSchema = z
-  .object({
-    type: z.literal("tool_call"),
-    arguments: z.any().optional(), // Value type from Rust maps to any in TS
-    id: z.string(),
-    name: z.string().optional(),
-    raw_arguments: z.string(),
-    raw_name: z.string(),
-  })
-  .strict();
-
-export type ToolCallOutput = z.infer<typeof toolCallOutputSchema>;
-export const textSchema = z
-  .object({
-    type: z.literal("text"),
-    text: z.string(),
-  })
-  .strict();
-
-export type Text = z.infer<typeof textSchema>;
-
-export const contentBlockOutputSchema = z.discriminatedUnion("type", [
-  textSchema,
-  toolCallOutputSchema,
-]);
-
-export type ContentBlockOutput = z.infer<typeof contentBlockOutputSchema>;
-
-export const inferenceRowSchema = z
-  .object({
-    variant_name: z.string(),
-    input: z.string(),
-    output: z.string(),
-    value: z.number(),
-    episode_id: z.string(),
-  })
-  .strict();
-export type InferenceRow = z.infer<typeof inferenceRowSchema>;
-
-export const parsedChatInferenceRowSchema = inferenceRowSchema
-  .omit({
-    input: true,
-    output: true,
-  })
-  .extend({
-    input: inputSchema,
-    output: z.array(contentBlockOutputSchema),
-  })
-  .strict();
-export type ParsedChatInferenceRow = z.infer<
-  typeof parsedChatInferenceRowSchema
->;
-
-export const parsedJsonInferenceRowSchema = inferenceRowSchema
-  .omit({
-    input: true,
-    output: true,
-  })
-  .extend({
-    input: inputSchema,
-    output: jsonInferenceOutputSchema,
-  })
-  .strict();
-export type ParsedJsonInferenceRow = z.infer<
-  typeof parsedJsonInferenceRowSchema
->;
+export type ParsedJsonInferenceRow = Omit<InferenceRow, "input" | "output"> & {
+  input: Input;
+  output: JsonInferenceOutput;
+};
 
 export type ParsedInferenceRow =
   | ParsedChatInferenceRow
@@ -348,6 +230,96 @@ export async function queryGoodBooleanMetricData(
   return parseInferenceRows(rows, inference_table_name);
 }
 
+export async function queryGoodFloatMetricData(
+  function_name: string,
+  metric_name: string,
+  inference_table_name: InferenceTableName,
+  inference_join_key: InferenceJoinKey,
+  maximize: boolean,
+  threshold: number,
+  max_samples: number | undefined,
+): Promise<ParsedInferenceRow[]> {
+  const comparison_operator = maximize ? ">" : "<";
+  const limitClause = max_samples ? `LIMIT ${max_samples}` : "";
+
+  const query = `
+    SELECT
+      i.variant_name,
+      i.input,
+      i.output,
+      f.value,
+      i.episode_id
+    FROM
+      ${inference_table_name} i
+    JOIN
+      (SELECT
+        target_id,
+        value,
+        ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC) as rn
+      FROM
+        FloatMetricFeedback
+      WHERE
+        metric_name = {metric_name:String}
+        AND value ${comparison_operator} {threshold:Float}
+      ) f ON i.${inference_join_key} = f.target_id and f.rn = 1
+    WHERE
+      i.function_name = {function_name:String}
+    ${limitClause}
+  `;
+
+  const resultSet = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: {
+      metric_name,
+      function_name,
+      threshold,
+    },
+  });
+  const rows = await resultSet.json<InferenceRow>();
+  return parseInferenceRows(rows, inference_table_name);
+}
+
+export async function queryDemonstrationData(
+  function_name: string,
+  inference_table_name: InferenceTableName,
+  max_samples: number | undefined,
+): Promise<ParsedInferenceRow[]> {
+  const limitClause = max_samples ? `LIMIT ${max_samples}` : "";
+
+  const query = `
+    SELECT
+      i.variant_name,
+      i.input,
+      i.output,
+      f.value,
+      i.episode_id
+    FROM
+      ${inference_table_name} i
+    JOIN
+      (SELECT
+        inference_id,
+        value,
+        ROW_NUMBER() OVER (PARTITION BY inference_id ORDER BY timestamp DESC) as rn
+      FROM
+        DemonstrationFeedback
+      ) f ON i.id = f.inference_id and f.rn = 1
+    WHERE
+      i.function_name = {function_name:String}
+    ${limitClause}
+  `;
+
+  const resultSet = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: {
+      function_name,
+    },
+  });
+  const rows = await resultSet.json<InferenceRow>();
+  return parseInferenceRows(rows, inference_table_name);
+}
+
 export async function countGoodBooleanMetricData(
   function_name: string,
   metric_name: string,
@@ -359,7 +331,7 @@ export async function countGoodBooleanMetricData(
 
   const query = `
     SELECT
-      COUNT(*) as count
+      toUInt32(COUNT(*)) as count
     FROM
       ${inference_table_name} i
     JOIN
@@ -388,3 +360,175 @@ export async function countGoodBooleanMetricData(
   const rows = await resultSet.json<{ count: number }>();
   return rows[0].count;
 }
+
+export async function countGoodFloatMetricData(
+  function_name: string,
+  metric_name: string,
+  inference_table_name: InferenceTableName,
+  inference_join_key: InferenceJoinKey,
+  maximize: boolean,
+  threshold: number,
+): Promise<number> {
+  const comparison_operator = maximize ? ">" : "<";
+
+  const query = `
+    SELECT
+      toUInt32(COUNT(*)) as count
+    FROM
+      ${inference_table_name} i
+    JOIN
+      (SELECT
+        target_id,
+        value,
+        ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC) as rn
+      FROM
+        FloatMetricFeedback
+      WHERE
+        metric_name = {metric_name:String}
+        AND value ${comparison_operator} {threshold:Float}
+      ) f ON i.${inference_join_key} = f.target_id and f.rn = 1
+    WHERE
+      i.function_name = {function_name:String}
+  `;
+
+  const resultSet = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: {
+      metric_name,
+      function_name,
+      threshold,
+    },
+  });
+  const rows = await resultSet.json<{ count: number }>();
+  return rows[0].count;
+}
+
+export async function countDemonstrationData(
+  function_name: string,
+  inference_table_name: InferenceTableName,
+): Promise<number> {
+  const query = `
+    SELECT
+      toUInt32(COUNT(*)) as count
+    FROM
+      ${inference_table_name} i
+    JOIN
+      (SELECT
+        inference_id,
+        value,
+        ROW_NUMBER() OVER (PARTITION BY inference_id ORDER BY timestamp DESC) as rn
+      FROM
+        DemonstrationFeedback
+      ) f ON i.id = f.inference_id and f.rn = 1
+    WHERE
+      i.function_name = {function_name:String}
+  `;
+
+  const resultSet = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: {
+      function_name,
+    },
+  });
+  const rows = await resultSet.json<{ count: number }>();
+  return rows[0].count;
+}
+
+export const roleSchema = z.enum(["user", "assistant"]);
+export type Role = z.infer<typeof roleSchema>;
+
+export const textInputMessageContentSchema = z.object({
+  type: z.literal("text"),
+  value: z.any(), // Value type from Rust maps to any in TS
+});
+
+export const toolCallSchema = z
+  .object({
+    name: z.string(),
+    arguments: z.string(),
+    id: z.string(),
+  })
+  .strict();
+export type ToolCall = z.infer<typeof toolCallSchema>;
+
+export const toolCallInputMessageContentSchema = z
+  .object({
+    type: z.literal("tool_call"),
+    ...toolCallSchema.shape,
+  })
+  .strict();
+
+export const toolResultSchema = z
+  .object({
+    name: z.string(),
+    result: z.string(),
+    id: z.string(),
+  })
+  .strict();
+
+export const toolResultInputMessageContentSchema = z
+  .object({
+    type: z.literal("tool_result"),
+    ...toolResultSchema.shape,
+  })
+  .strict();
+
+export const inputMessageContentSchema = z.discriminatedUnion("type", [
+  textInputMessageContentSchema,
+  toolCallInputMessageContentSchema,
+  toolResultInputMessageContentSchema,
+]);
+export type InputMessageContent = z.infer<typeof inputMessageContentSchema>;
+
+export const inputMessageSchema = z
+  .object({
+    role: roleSchema,
+    content: z.array(inputMessageContentSchema),
+  })
+  .strict();
+export type InputMessage = z.infer<typeof inputMessageSchema>;
+
+export const inputSchema = z
+  .object({
+    system: z.any().optional(), // Value type from Rust maps to any in TS
+    messages: z.array(inputMessageSchema).default([]),
+  })
+  .strict();
+export type Input = z.infer<typeof inputSchema>;
+
+export const jsonInferenceOutputSchema = z.object({
+  raw: z.string(),
+  parsed: z.any().optional(),
+});
+
+export type JsonInferenceOutput = z.infer<typeof jsonInferenceOutputSchema>;
+
+export const toolCallOutputSchema = z
+  .object({
+    type: z.literal("tool_call"),
+    arguments: z.any().optional(), // Value type from Rust maps to any in TS
+    id: z.string(),
+    name: z.string().optional(),
+    raw_arguments: z.string(),
+    raw_name: z.string(),
+  })
+  .strict();
+
+export type ToolCallOutput = z.infer<typeof toolCallOutputSchema>;
+export const textSchema = z
+  .object({
+    type: z.literal("text"),
+    text: z.string(),
+  })
+  .strict();
+
+export type Text = z.infer<typeof textSchema>;
+
+export const contentBlockOutputSchema = z.discriminatedUnion("type", [
+  textSchema,
+  toolCallOutputSchema,
+]);
+
+export type ContentBlockOutput = z.infer<typeof contentBlockOutputSchema>;
