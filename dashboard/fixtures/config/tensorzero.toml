@@ -29,3 +29,8 @@ system_template = "functions/extract_entities/initial_prompt/system_template.min
 type = "boolean"
 optimize = "max"
 level = "inference"
+
+[metrics.dashboard_fixture_jaccard_similarity]
+type = "float"
+optimize = "max"
+level = "inference"
