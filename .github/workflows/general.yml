@@ -62,11 +62,11 @@ jobs:
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - name: Build minijinja WASM bindings
-        working-directory: dashboard/utils/minijinja
+        working-directory: dashboard/app/utils/minijinja
         run: wasm-pack build --features console_error_panic_hook
 
       - name: Run minijinja WASM tests
-        working-directory: dashboard/utils/minijinja
+        working-directory: dashboard/app/utils/minijinja
         run: wasm-pack test --node --features console_error_panic_hook
 
       - name: Install npm dependencies
