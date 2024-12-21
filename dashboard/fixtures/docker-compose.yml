@@ -55,6 +55,7 @@ services:
       timeout: 1s
 
   fixtures:
+    # NOTE: This is expected to quickly terminate with status code 0
     container_name: tensorzero-fixtures-dashboard-tests
     image: clickhouse/clickhouse-server:latest
     volumes:
