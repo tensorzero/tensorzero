@@ -306,9 +306,16 @@ impl From<Role> for AnthropicRole {
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 enum AnthropicToolChoice<'a> {
-    Auto{disable_parallel_tool_use: Option<bool>},
-    Any{disable_parallel_tool_use: Option<bool>},
-    Tool { name: &'a str, disable_parallel_tool_use:Option<bool> },
+    Auto {
+        disable_parallel_tool_use: Option<bool>,
+    },
+    Any {
+        disable_parallel_tool_use: Option<bool>,
+    },
+    Tool {
+        name: &'a str,
+        disable_parallel_tool_use: Option<bool>,
+    },
 }
 
 // We map our ToolCallConfig struct to the AnthropicToolChoice that serializes properly
@@ -320,14 +327,22 @@ impl<'a> TryFrom<&'a ToolCallConfig> for AnthropicToolChoice<'a> {
         let tool_choice = &tool_call_config.tool_choice;
 
         match tool_choice {
-            ToolChoice::Auto => Ok(AnthropicToolChoice::Auto { disable_parallel_tool_use }),
-            ToolChoice::Required => Ok(AnthropicToolChoice::Any { disable_parallel_tool_use }),
-            ToolChoice::Specific(name) => Ok(AnthropicToolChoice::Tool { name, disable_parallel_tool_use }),
-            ToolChoice::None => Ok(AnthropicToolChoice::Auto { disable_parallel_tool_use }),
+            ToolChoice::Auto => Ok(AnthropicToolChoice::Auto {
+                disable_parallel_tool_use,
+            }),
+            ToolChoice::Required => Ok(AnthropicToolChoice::Any {
+                disable_parallel_tool_use,
+            }),
+            ToolChoice::Specific(name) => Ok(AnthropicToolChoice::Tool {
+                name,
+                disable_parallel_tool_use,
+            }),
+            ToolChoice::None => Ok(AnthropicToolChoice::Auto {
+                disable_parallel_tool_use,
+            }),
         }
     }
 }
-
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct AnthropicTool<'a> {
@@ -969,7 +984,7 @@ mod tests {
     use std::borrow::Cow;
 
     use super::*;
-    use crate::inference::providers::common::{WEATHER_TOOL_CONFIG};
+    use crate::inference::providers::common::WEATHER_TOOL_CONFIG;
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::tool::{DynamicToolConfig, ToolConfig, ToolResult};
@@ -986,7 +1001,9 @@ mod tests {
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(matches!(
             anthropic_tool_choice.unwrap(),
-            AnthropicToolChoice::Auto{disable_parallel_tool_use: Some(true)}
+            AnthropicToolChoice::Auto {
+                disable_parallel_tool_use: Some(true)
+            }
         ));
 
         let tool_call_config = ToolCallConfig {
@@ -996,7 +1013,12 @@ mod tests {
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
-        assert_eq!(anthropic_tool_choice.unwrap(), AnthropicToolChoice::Auto{disable_parallel_tool_use: Some(false)});
+        assert_eq!(
+            anthropic_tool_choice.unwrap(),
+            AnthropicToolChoice::Auto {
+                disable_parallel_tool_use: Some(false)
+            }
+        );
 
         let tool_call_config = ToolCallConfig {
             tool_choice: ToolChoice::Required,
@@ -1005,7 +1027,12 @@ mod tests {
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
-        assert_eq!(anthropic_tool_choice.unwrap(), AnthropicToolChoice::Any{disable_parallel_tool_use: Some(false)});
+        assert_eq!(
+            anthropic_tool_choice.unwrap(),
+            AnthropicToolChoice::Any {
+                disable_parallel_tool_use: Some(false)
+            }
+        );
 
         let tool_call_config = ToolCallConfig {
             tool_choice: ToolChoice::Specific("test".to_string()),
@@ -1016,7 +1043,10 @@ mod tests {
         assert!(anthropic_tool_choice.is_ok());
         assert_eq!(
             anthropic_tool_choice.unwrap(),
-            AnthropicToolChoice::Tool { name: "test", disable_parallel_tool_use: Some(true) }
+            AnthropicToolChoice::Tool {
+                name: "test",
+                disable_parallel_tool_use: Some(true)
+            }
         );
     }
 
