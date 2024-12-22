@@ -86,6 +86,7 @@ jobs:
       - name: Run TypeScript type checking
         working-directory: dashboard
         run: |
+          npx react-router typegen
           npx tsc
 
       - name: Start services for dashboard tests
