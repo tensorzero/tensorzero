@@ -132,7 +132,6 @@ describe("tensorzero_inference_to_openai_messages", async () => {
     } as ParsedInferenceRow;
 
     const openaiMessages = tensorzero_inference_to_openai_messages(row, env);
-    console.log(openaiMessages);
     expect(openaiMessages.length).toBe(3);
     expect(openaiMessages[0]).toStrictEqual({
       role: "system",
@@ -197,7 +196,6 @@ describe("tensorzero_inference_to_openai_messages", async () => {
     } as ParsedInferenceRow;
 
     const openaiMessages = tensorzero_inference_to_openai_messages(row, env);
-    console.log(openaiMessages);
     expect(openaiMessages.length).toBe(5);
     expect(openaiMessages[0]).toStrictEqual({
       role: "system",

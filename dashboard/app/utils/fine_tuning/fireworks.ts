@@ -341,7 +341,7 @@ type FireworksExample = {
   messages: FireworksMessage[];
 };
 
-function tensorzero_inference_to_fireworks_messages(
+export function tensorzero_inference_to_fireworks_messages(
   sample: ParsedInferenceRow,
   env: JsExposedEnv,
 ): FireworksExample {
