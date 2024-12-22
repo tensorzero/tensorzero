@@ -1,10 +1,8 @@
 import { z } from "zod";
 import type { JSONSchema7 } from "json-schema";
 import Ajv from "ajv";
-// import draft7MetaSchema from "ajv/dist/refs/json-schema-draft-07.json";
 
 const ajv = new Ajv({ allErrors: true });
-// ajv.addMetaSchema(draft7MetaSchema);
 
 export const jsonSchema7Validator = z.custom<JSONSchema7>((val) => {
   try {

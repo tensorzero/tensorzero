@@ -1,12 +1,8 @@
-// Node.js built-ins
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { createReadStream } from "fs";
-
-// External dependencies
 import OpenAI from "openai";
-
 import type { SFTFormValues } from "~/routes/optimization/fine-tuning/types";
 import {
   getCuratedInferences,
