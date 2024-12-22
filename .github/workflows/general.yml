@@ -90,10 +90,8 @@ jobs:
           npx tsc
 
       - name: Start services for dashboard tests
-        run: docker compose -f dashboard/docker-compose.yml up -d --wait clickhouse gateway
-
-      - name: Load test fixtures
-        run: docker compose -f dashboard/docker-compose.yml run fixtures
+        working-directory: dashboard
+        run: docker compose -f fixtures/docker-compose.yml up -d --wait clickhouse gateway
 
       - name: Run dashboard tests
         working-directory: dashboard
