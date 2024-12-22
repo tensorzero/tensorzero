@@ -22,7 +22,7 @@ import { useConfig } from "~/context/config";
 import { FunctionSelector } from "./FunctionSelector";
 import { MetricSelector } from "./MetricSelector";
 import { VariantSelector } from "./VariantSelector";
-import { get_fine_tuned_model_config } from "~/utils/fine_tuning/config_block";
+import { get_fine_tuned_model_config } from "~/utils/config/models";
 import { ModelSelector } from "./ModelSelector";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 import { Button } from "~/components/ui/button";
