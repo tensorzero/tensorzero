@@ -71,10 +71,14 @@ export class FireworksSFTJob extends SFTJob {
 
   static async from_form_data(data: SFTFormValues): Promise<FireworksSFTJob> {
     const config = await getConfig();
-    // TODO: throw if this isn't a chat completion
     const currentVariant = config.functions[data.function].variants[
       data.variant
     ] as ChatCompletionConfig;
+    if (currentVariant.type != "chat_completion") {
+      throw new Error(
+        "Supervised fine-tuning is only supported for chat completion variants",
+      );
+    }
     const curatedInferences = await getCuratedInferences(
       data.function,
       config.functions[data.function],

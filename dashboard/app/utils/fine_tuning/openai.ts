@@ -44,10 +44,14 @@ export class OpenAISFTJob extends SFTJob {
 
   static async fromFormData(data: SFTFormValues): Promise<OpenAISFTJob> {
     const config = await getConfig();
-    // TODO: throw if this isn't a chat completion
     const currentVariant = config.functions[data.function].variants[
       data.variant
     ] as ChatCompletionConfig;
+    if (currentVariant.type != "chat_completion") {
+      throw new Error(
+        "Supervised fine-tuning is only supported for chat completion variants",
+      );
+    }
     const curatedInferences = await getCuratedInferences(
       data.function,
       config.functions[data.function],

@@ -8,9 +8,6 @@ export const ModelOptionSchema = z.object({
 
 export type ModelOption = z.infer<typeof ModelOptionSchema>;
 
-// TODO: make a type per model provider containing
-// what information is needed in order to start a fine-tuning job.
-
 export const models: ModelOption[] = [
   {
     displayName: "gpt-4o-mini-2024-07-18",
