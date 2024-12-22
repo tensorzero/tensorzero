@@ -32,8 +32,8 @@ import { stringify } from "smol-toml";
 
 export const meta: MetaFunction = () => {
   return [
-    { title: "TensorZeroFine-Tuning Dashboard" },
-    { name: "description", content: "Fine Tuning Optimization Dashboard" },
+    { title: "TensorZero Fine-Tuning Dashboard" },
+    { name: "description", content: "Fine-Tuning Optimization Dashboard" },
   ];
 };
 
