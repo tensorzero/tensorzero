@@ -131,8 +131,7 @@ export async function start_sft_openai(
   });
 }
 
-// TODO(Viraj): write unit tests here
-function tensorzero_inference_to_openai_messages(
+export function tensorzero_inference_to_openai_messages(
   sample: ParsedInferenceRow,
   env: JsExposedEnv,
 ) {
@@ -185,7 +184,6 @@ function tensorzero_inference_to_openai_messages(
   return messages;
 }
 
-// TODO(Viraj): write unit tests here
 export function content_block_to_openai_message(
   content: InputMessageContent,
   role: Role,

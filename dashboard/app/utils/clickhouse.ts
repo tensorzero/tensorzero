@@ -127,7 +127,6 @@ export const inferenceRowSchema = z
     variant_name: z.string(),
     input: z.string(),
     output: z.string(),
-    value: z.number(),
     episode_id: z.string(),
   })
   .strict();
@@ -325,7 +324,6 @@ export async function queryGoodBooleanMetricData(
       i.variant_name,
       i.input,
       i.output,
-      f.value,
       i.episode_id
     FROM
       ${inference_table_name} i
