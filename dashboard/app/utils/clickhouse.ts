@@ -23,6 +23,9 @@ export const textInputMessageContentSchema = z.object({
   type: z.literal("text"),
   value: z.any(), // Value type from Rust maps to any in TS
 });
+export type textInputMessageContent = z.infer<
+  typeof textInputMessageContentSchema
+>;
 
 export const toolCallSchema = z
   .object({
@@ -31,7 +34,7 @@ export const toolCallSchema = z
     id: z.string(),
   })
   .strict();
-export type ToolCall = z.infer<typeof toolCallSchema>;
+export type toolCall = z.infer<typeof toolCallSchema>;
 
 export const toolCallInputMessageContentSchema = z
   .object({
@@ -39,6 +42,9 @@ export const toolCallInputMessageContentSchema = z
     ...toolCallSchema.shape,
   })
   .strict();
+export type toolCallInputMessageContent = z.infer<
+  typeof toolCallInputMessageContentSchema
+>;
 
 export const toolResultSchema = z
   .object({
@@ -54,6 +60,9 @@ export const toolResultInputMessageContentSchema = z
     ...toolResultSchema.shape,
   })
   .strict();
+export type toolResultInputMessageContent = z.infer<
+  typeof toolResultInputMessageContentSchema
+>;
 
 export const inputMessageContentSchema = z.discriminatedUnion("type", [
   textInputMessageContentSchema,

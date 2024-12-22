@@ -186,7 +186,7 @@ function tensorzero_inference_to_openai_messages(
 }
 
 // TODO(Viraj): write unit tests here
-function content_block_to_openai_message(
+export function content_block_to_openai_message(
   content: InputMessageContent,
   role: Role,
   env: JsExposedEnv,
