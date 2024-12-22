@@ -90,6 +90,7 @@ export class OpenAISFTJob extends SFTJob {
       throw new Error("Job ID is required to poll OpenAI SFT");
     }
     const job = await client.fineTuning.jobs.retrieve(this.jobId);
+    console.log(job);
     return new OpenAISFTJob({
       jobId: job.id,
       status: job.status,
@@ -238,7 +239,10 @@ async function upload_examples_to_openai(samples: OpenAIMessage[][]) {
       .join("\n");
 
     // Write to temporary file
-    tempFile = path.join(os.tmpdir(), `temp_training_data_${Date.now()}.jsonl`);
+    tempFile = path.join(
+      os.tmpdir(),
+      `temp_training_data_${Math.random().toString(36).substring(2, 10)}.jsonl`,
+    );
     await fs.writeFile(tempFile, jsonl);
 
     const file = await client.files.create({
