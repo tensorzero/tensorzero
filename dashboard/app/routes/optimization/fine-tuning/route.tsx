@@ -17,13 +17,15 @@ import { useConfig } from "~/context/config";
 import { FunctionSelector } from "./FunctionSelector";
 import { MetricSelector } from "./MetricSelector";
 import { VariantSelector } from "./VariantSelector";
-import { get_fine_tuned_model_config } from "~/utils/config/models";
+import {
+  dump_model_config,
+  get_fine_tuned_model_config,
+} from "~/utils/config/models";
 import { ModelSelector } from "./ModelSelector";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
 import { Form } from "~/components/ui/form";
-import { stringify } from "smol-toml";
 import type { Route } from "./+types/route";
 import type { Config } from "~/utils/config";
 
@@ -122,7 +124,7 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
     "idle" | "submitting" | "pending" | "complete"
   >("idle");
   const finalResult = result
-    ? stringify(get_fine_tuned_model_config(result, modelProvider))
+    ? dump_model_config(get_fine_tuned_model_config(result, modelProvider))
     : null;
   if (finalResult && submissionPhase !== "complete") {
     setSubmissionPhase("complete");
