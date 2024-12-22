@@ -1,15 +1,10 @@
-import {
-  useFetcher,
-  type LoaderFunctionArgs,
-  type MetaFunction,
-} from "react-router";
+import { useFetcher, type MetaFunction } from "react-router";
 import { useEffect, useState } from "react";
 import {
   type SFTFormValues,
   SFTFormValuesSchema,
   SFTFormValuesResolver,
 } from "./types";
-import type { Route } from "./+types/route";
 import { v7 as uuid } from "uuid";
 import type { SFTJob } from "~/utils/fine_tuning/common";
 import { models } from "./model_options";
@@ -29,6 +24,8 @@ import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
 import { Form } from "~/components/ui/form";
 import { stringify } from "smol-toml";
+import type { Route } from "./+types/route";
+import type { Config } from "~/utils/config";
 
 export const meta: MetaFunction = () => {
   return [
@@ -41,9 +38,8 @@ export const meta: MetaFunction = () => {
 export const jobStore: { [jobId: string]: SFTJob } = {};
 
 // If there is a job_id in the URL, grab it from the job store and pull it.
-export async function loader({ request }: LoaderFunctionArgs) {
-  const url = new URL(request.url);
-  const job_id = url.searchParams.get("job_id");
+export async function loader({ params }: Route.LoaderArgs) {
+  const job_id = params.job_id;
 
   if (!job_id) {
     return { status: "idle" };
@@ -100,7 +96,7 @@ export async function action({ request }: Route.ActionArgs) {
   const job = await launch_sft_job(validatedData);
   jobStore[validatedData.jobId] = job;
 
-  return redirect(`/optimization/fine-tuning?job_id=${validatedData.jobId}`);
+  return redirect(`/optimization/fine-tuning/${validatedData.jobId}`);
 }
 
 // Renders the fine-tuning form and status info.
@@ -108,7 +104,6 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
   const config = useConfig();
   const { status, result, modelProvider } = loaderData;
   const revalidator = useRevalidator();
-  const fetcher = useFetcher();
 
   // If running, periodically poll for updates on the job
   useEffect(() => {
@@ -121,16 +116,6 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
       return () => clearInterval(interval);
     }
   }, [status, revalidator]);
-  const form = useForm<SFTFormValues>({
-    defaultValues: {
-      function: "",
-      metric: "",
-      validationSplitPercent: 20,
-      maxSamples: 100000,
-      threshold: 0.5,
-    },
-    resolver: SFTFormValuesResolver,
-  });
 
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submissionPhase, setSubmissionPhase] = useState<
@@ -142,6 +127,74 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
   if (finalResult && submissionPhase !== "complete") {
     setSubmissionPhase("complete");
   }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <main className="p-4">
+        <h2 className="scroll-m-20 border-b pb-2 text-3xl font-semibold tracking-tight first:mt-0">
+          Fine-Tuning
+        </h2>
+        {status === "idle" && (
+          <FineTuningForm
+            config={config}
+            submissionPhase={submissionPhase}
+            setSubmissionPhase={setSubmissionPhase}
+            isSubmitted={isSubmitted}
+          />
+        )}
+
+        {loaderData && (
+          <div className="p-4 bg-gray-100 rounded-lg mt-4">
+            <div className="mb-2 font-medium">
+              Loader Data (Last Updated: {new Date().toLocaleTimeString()})
+            </div>
+            <Textarea
+              value={JSON.stringify(loaderData, null, 2)}
+              className="w-full h-48 resize-none bg-transparent border-none focus:ring-0"
+              readOnly
+            />
+          </div>
+        )}
+
+        {finalResult && (
+          <div className="p-4 bg-gray-100 rounded-lg">
+            <div className="mb-2 font-medium">Configuration</div>
+            <Textarea
+              value={finalResult}
+              className="w-full h-48 resize-none bg-transparent border-none focus:ring-0"
+              readOnly
+            />
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+function FineTuningForm({
+  config,
+  submissionPhase,
+  setSubmissionPhase,
+  isSubmitted,
+}: {
+  config: Config;
+  submissionPhase: "idle" | "submitting" | "pending" | "complete";
+  setSubmissionPhase: (
+    phase: "idle" | "submitting" | "pending" | "complete",
+  ) => void;
+  isSubmitted: boolean;
+}) {
+  const form = useForm<SFTFormValues>({
+    defaultValues: {
+      function: "",
+      metric: "",
+      validationSplitPercent: 20,
+      maxSamples: 100000,
+      threshold: 0.5,
+    },
+    resolver: SFTFormValuesResolver,
+  });
+  const fetcher = useFetcher();
 
   const [counts, setCounts] = useState<{
     inferenceCount: number | null;
@@ -229,96 +282,62 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
       console.error("Submission error:", error);
     }
   }
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      <main className="p-4">
-        <h2 className="scroll-m-20 border-b pb-2 text-3xl font-semibold tracking-tight first:mt-0">
-          Fine-Tuning
-        </h2>
+    <div className="mt-8">
+      <Form {...form}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
 
-        <div className="mt-8">
-          <Form {...form}>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
+            // Try calling onSubmit directly with current values
+            const values = form.getValues();
+            onSubmit(values);
+          }}
+          className="space-y-6"
+        >
+          <div className="space-y-6">
+            <FunctionSelector
+              control={form.control}
+              inferenceCount={counts.inferenceCount}
+              config={config}
+              onFunctionChange={handleFunctionChange}
+            />
 
-                // Try calling onSubmit directly with current values
-                const values = form.getValues();
-                onSubmit(values);
-              }}
-              className="space-y-6"
+            <MetricSelector
+              control={form.control}
+              feedbackCount={counts.feedbackCount}
+              curatedInferenceCount={counts.curatedInferenceCount}
+              config={config}
+              onMetricChange={handleMetricChange}
+            />
+
+            <VariantSelector
+              control={form.control}
+              chatCompletionVariants={getChatCompletionVariantsForFunction()}
+            />
+
+            <ModelSelector control={form.control} models={models} />
+
+            <AdvancedParametersAccordion control={form.control} />
+          </div>
+
+          <div className="space-y-4">
+            <Button
+              type="submit"
+              disabled={
+                !form.watch("function") ||
+                !form.watch("metric") ||
+                !form.watch("model") ||
+                !form.watch("variant") ||
+                form.formState.isSubmitting ||
+                isSubmitted
+              }
             >
-              <div className="space-y-6">
-                <FunctionSelector
-                  control={form.control}
-                  inferenceCount={counts.inferenceCount}
-                  config={config}
-                  onFunctionChange={handleFunctionChange}
-                />
-
-                <MetricSelector
-                  control={form.control}
-                  feedbackCount={counts.feedbackCount}
-                  curatedInferenceCount={counts.curatedInferenceCount}
-                  config={config}
-                  onMetricChange={handleMetricChange}
-                />
-
-                <VariantSelector
-                  control={form.control}
-                  chatCompletionVariants={getChatCompletionVariantsForFunction()}
-                />
-
-                <ModelSelector control={form.control} models={models} />
-
-                <AdvancedParametersAccordion control={form.control} />
-              </div>
-
-              <div className="space-y-4">
-                <Button
-                  type="submit"
-                  disabled={
-                    !form.watch("function") ||
-                    !form.watch("metric") ||
-                    !form.watch("model") ||
-                    !form.watch("variant") ||
-                    form.formState.isSubmitting ||
-                    isSubmitted
-                  }
-                >
-                  {getButtonText()}
-                </Button>
-
-                {loaderData && (
-                  <div className="p-4 bg-gray-100 rounded-lg mt-4">
-                    <div className="mb-2 font-medium">
-                      Loader Data (Last Updated:{" "}
-                      {new Date().toLocaleTimeString()})
-                    </div>
-                    <Textarea
-                      value={JSON.stringify(loaderData, null, 2)}
-                      className="w-full h-48 resize-none bg-transparent border-none focus:ring-0"
-                      readOnly
-                    />
-                  </div>
-                )}
-
-                {finalResult && (
-                  <div className="p-4 bg-gray-100 rounded-lg">
-                    <div className="mb-2 font-medium">Configuration</div>
-                    <Textarea
-                      value={finalResult}
-                      className="w-full h-48 resize-none bg-transparent border-none focus:ring-0"
-                      readOnly
-                    />
-                  </div>
-                )}
-              </div>
-            </form>
-          </Form>
-        </div>
-      </main>
+              {getButtonText()}
+            </Button>
+          </div>
+        </form>
+      </Form>
     </div>
   );
 }

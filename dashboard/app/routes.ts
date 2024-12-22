@@ -2,7 +2,7 @@ import { type RouteConfig, route } from "@react-router/dev/routes";
 
 export default [
   route(
-    "optimization/fine-tuning",
+    "optimization/fine-tuning/:job_id?",
     "routes/optimization/fine-tuning/route.tsx",
   ),
   route(
