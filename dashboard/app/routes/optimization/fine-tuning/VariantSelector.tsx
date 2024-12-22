@@ -28,7 +28,7 @@ export function VariantSelector({
       name="variant"
       render={({ field }) => (
         <FormItem>
-          <FormLabel>Variant Name (for prompt templating)</FormLabel>
+          <FormLabel>Prompt</FormLabel>
           <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
             <Select
               onValueChange={field.onChange}
