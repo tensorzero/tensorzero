@@ -91,7 +91,9 @@ jobs:
 
       - name: Start services for dashboard tests
         working-directory: dashboard
-        run: docker compose -f fixtures/docker-compose.yml up -d --wait clickhouse gateway
+        run: |
+          touch .env
+          docker compose -f fixtures/docker-compose.yml up -d --wait clickhouse gateway
 
       - name: Run dashboard tests
         working-directory: dashboard
