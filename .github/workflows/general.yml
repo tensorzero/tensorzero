@@ -102,9 +102,6 @@ jobs:
           echo "CLICKHOUSE_URL=http://localhost:8123/tensorzero" >> .env
           docker compose -f fixtures/docker-compose.yml up -d
 
-      - name: Debugging with ssh
-        uses: lhotari/action-upterm@v1
-
       - name: Run dashboard tests
         working-directory: dashboard
         run: npm test
