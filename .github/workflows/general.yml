@@ -92,6 +92,8 @@ jobs:
       #   run: |
       #     npx react-router typegen
       #     npx tsc
+      - name: Debugging with ssh
+        uses: lhotari/action-upterm@v1
 
       - name: Start services for dashboard tests
         working-directory: dashboard
