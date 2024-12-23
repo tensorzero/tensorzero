@@ -1,3 +1,5 @@
+use std::env;
+
 use futures::{StreamExt, TryStreamExt};
 use reqwest::StatusCode;
 use reqwest_eventsource::RequestBuilderExt;
@@ -31,6 +33,37 @@ pub struct AzureProvider {
     pub credentials: AzureCredentials,
 }
 
+impl AzureProvider {
+    pub fn new(
+        deployment_id: String,
+        endpoint: Url,
+        api_key_location: Option<CredentialLocation>,
+    ) -> Result<Self, Error> {
+        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
+        let credentials = match api_key_location {
+            CredentialLocation::Env(key_name) => {
+                let api_key = env::var(key_name)
+                    .map_err(|_| ErrorDetails::ApiKeyMissing {
+                        provider_name: "Azure".to_string(),
+                    })?
+                    .into();
+                AzureCredentials::Static(api_key)
+            }
+            CredentialLocation::Dynamic(key_name) => AzureCredentials::Dynamic(key_name),
+            _ => {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: "Invalid api_key_location for Azure provider".to_string(),
+                }))
+            }
+        };
+        Ok(AzureProvider {
+            deployment_id,
+            endpoint,
+            credentials,
+        })
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub enum AzureCredentials {
     Static(SecretString),
@@ -56,7 +89,7 @@ impl AzureCredentials {
     }
 }
 
-pub fn default_api_key_location() -> CredentialLocation {
+fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("AZURE_OPENAI_API_KEY".to_string())
 }
 

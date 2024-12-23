@@ -5,6 +5,7 @@ use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::env;
 use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
@@ -24,7 +25,7 @@ use crate::inference::types::{
     ProviderInferenceResponseStream, RequestMessage, TextChunk, Usage,
 };
 use crate::model::CredentialLocation;
-use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
+use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
 
 lazy_static! {
     static ref ANTHROPIC_BASE_URL: Url = {
@@ -35,7 +36,7 @@ lazy_static! {
 }
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 
-pub fn default_api_key_location() -> CredentialLocation {
+fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("ANTHROPIC_API_KEY".to_string())
 }
 
@@ -43,6 +44,35 @@ pub fn default_api_key_location() -> CredentialLocation {
 pub struct AnthropicProvider {
     pub model_name: String,
     pub credentials: AnthropicCredentials,
+}
+
+impl AnthropicProvider {
+    pub fn new(
+        model_name: String,
+        api_key_location: Option<CredentialLocation>,
+    ) -> Result<Self, Error> {
+        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
+        let credentials = match api_key_location {
+            CredentialLocation::Env(key_name) => {
+                let api_key = env::var(key_name).map_err(|_| {
+                    Error::new(ErrorDetails::ApiKeyMissing {
+                        provider_name: "Anthropic".to_string(),
+                    })
+                })?;
+                AnthropicCredentials::Static(api_key.into())
+            }
+            CredentialLocation::Dynamic(key_name) => AnthropicCredentials::Dynamic(key_name),
+            _ => {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: "Invalid api_key_location for Anthropic provider".to_string(),
+                }))
+            }
+        };
+        Ok(AnthropicProvider {
+            model_name,
+            credentials,
+        })
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -290,25 +320,40 @@ impl From<Role> for AnthropicRole {
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 enum AnthropicToolChoice<'a> {
-    Auto,
-    Any,
-    Tool { name: &'a str },
+    Auto {
+        disable_parallel_tool_use: Option<bool>,
+    },
+    Any {
+        disable_parallel_tool_use: Option<bool>,
+    },
+    Tool {
+        name: &'a str,
+        disable_parallel_tool_use: Option<bool>,
+    },
 }
 
-// We map our ToolChoice enum to the Anthropic one that serializes properly
-impl<'a> TryFrom<&'a ToolChoice> for AnthropicToolChoice<'a> {
+// We map our ToolCallConfig struct to the AnthropicToolChoice that serializes properly
+impl<'a> TryFrom<&'a ToolCallConfig> for AnthropicToolChoice<'a> {
     type Error = Error;
-    fn try_from(tool_choice: &'a ToolChoice) -> Result<Self, Error> {
+
+    fn try_from(tool_call_config: &'a ToolCallConfig) -> Result<Self, Error> {
+        let disable_parallel_tool_use = Some(!tool_call_config.parallel_tool_calls);
+        let tool_choice = &tool_call_config.tool_choice;
+
         match tool_choice {
-            ToolChoice::Auto => Ok(AnthropicToolChoice::Auto),
-            ToolChoice::Required => Ok(AnthropicToolChoice::Any),
-            ToolChoice::Specific(name) => Ok(AnthropicToolChoice::Tool { name }),
-            // Workaround for Anthropic API limitation: they don't support explicitly specifying "none"
-            // for tool choice. Instead, we return Auto but the request construction will ensure
-            // that no tools are sent in the request payload. This achieves the same effect
-            // as explicitly telling the model not to use tools, since without any tools
-            // being provided, the model cannot make tool calls.
-            ToolChoice::None => Ok(AnthropicToolChoice::Auto),
+            ToolChoice::Auto => Ok(AnthropicToolChoice::Auto {
+                disable_parallel_tool_use,
+            }),
+            ToolChoice::Required => Ok(AnthropicToolChoice::Any {
+                disable_parallel_tool_use,
+            }),
+            ToolChoice::Specific(name) => Ok(AnthropicToolChoice::Tool {
+                name,
+                disable_parallel_tool_use,
+            }),
+            ToolChoice::None => Ok(AnthropicToolChoice::Auto {
+                disable_parallel_tool_use,
+            }),
         }
     }
 }
@@ -461,6 +506,7 @@ impl<'a> AnthropicRequestBody<'a> {
         } else {
             messages
         };
+
         // Workaround for Anthropic API limitation: they don't support explicitly specifying "none"
         // for tool choice. When ToolChoice::None is specified, we don't send any tools in the
         // request payload to achieve the same effect.
@@ -476,12 +522,13 @@ impl<'a> AnthropicRequestBody<'a> {
                 )
             }
         });
+
         // `tool_choice` should only be set if tools are set and non-empty
         let tool_choice: Option<AnthropicToolChoice> = tools
             .as_ref()
             .filter(|t| !t.is_empty())
             .and(request.tool_config.as_ref())
-            .and_then(|c| (&c.tool_choice).try_into().ok());
+            .and_then(|c| c.as_ref().try_into().ok());
         // NOTE: Anthropic does not support seed
         Ok(AnthropicRequestBody {
             model: model_name,
@@ -958,31 +1005,62 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn test_try_from_tool_choice() {
+    fn test_try_from_tool_call_config() {
         // Need to cover all 4 cases
-        let tool_choice = ToolChoice::None;
-        let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_choice);
+        let tool_call_config = ToolCallConfig {
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: false,
+            tools_available: vec![],
+        };
+        let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(matches!(
             anthropic_tool_choice.unwrap(),
-            AnthropicToolChoice::Auto
+            AnthropicToolChoice::Auto {
+                disable_parallel_tool_use: Some(true)
+            }
         ));
 
-        let tool_choice = ToolChoice::Auto;
-        let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_choice);
-        assert!(anthropic_tool_choice.is_ok());
-        assert_eq!(anthropic_tool_choice.unwrap(), AnthropicToolChoice::Auto);
-
-        let tool_choice = ToolChoice::Required;
-        let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_choice);
-        assert!(anthropic_tool_choice.is_ok());
-        assert_eq!(anthropic_tool_choice.unwrap(), AnthropicToolChoice::Any);
-
-        let tool_choice = ToolChoice::Specific("test".to_string());
-        let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_choice);
+        let tool_call_config = ToolCallConfig {
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: true,
+            tools_available: vec![],
+        };
+        let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
         assert_eq!(
             anthropic_tool_choice.unwrap(),
-            AnthropicToolChoice::Tool { name: "test" }
+            AnthropicToolChoice::Auto {
+                disable_parallel_tool_use: Some(false)
+            }
+        );
+
+        let tool_call_config = ToolCallConfig {
+            tool_choice: ToolChoice::Required,
+            parallel_tool_calls: true,
+            tools_available: vec![],
+        };
+        let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
+        assert!(anthropic_tool_choice.is_ok());
+        assert_eq!(
+            anthropic_tool_choice.unwrap(),
+            AnthropicToolChoice::Any {
+                disable_parallel_tool_use: Some(false)
+            }
+        );
+
+        let tool_call_config = ToolCallConfig {
+            tool_choice: ToolChoice::Specific("test".to_string()),
+            parallel_tool_calls: false,
+            tools_available: vec![],
+        };
+        let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
+        assert!(anthropic_tool_choice.is_ok());
+        assert_eq!(
+            anthropic_tool_choice.unwrap(),
+            AnthropicToolChoice::Tool {
+                name: "test",
+                disable_parallel_tool_use: Some(true)
+            }
         );
     }
 

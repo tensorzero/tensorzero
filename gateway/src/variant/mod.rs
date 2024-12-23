@@ -22,6 +22,7 @@ use crate::inference::types::{
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
+use crate::model::ModelTable;
 use crate::tool::{create_dynamic_implicit_tool_config, ToolCallConfig};
 use crate::{inference::types::InferenceResult, model::ModelConfig};
 
@@ -130,7 +131,7 @@ pub trait Variant {
     fn validate(
         &self,
         function: &FunctionConfig,
-        models: &HashMap<String, ModelConfig>,
+        models: &mut ModelTable,
         embedding_models: &HashMap<String, EmbeddingModelConfig>,
         templates: &TemplateConfig,
         function_name: &str,
@@ -333,7 +334,7 @@ impl Variant for VariantConfig {
     fn validate(
         &self,
         function: &FunctionConfig,
-        models: &HashMap<String, ModelConfig>,
+        models: &mut ModelTable,
         embedding_models: &HashMap<String, EmbeddingModelConfig>,
         templates: &TemplateConfig,
         function_name: &str,

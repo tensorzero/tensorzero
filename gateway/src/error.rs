@@ -132,6 +132,13 @@ pub enum ErrorDetails {
     GoogleAIStudioServer {
         message: String,
     },
+    HyperbolicClient {
+        message: String,
+        status_code: StatusCode,
+    },
+    HyperbolicServer {
+        message: String,
+    },
     Inference {
         message: String,
     },
@@ -300,6 +307,13 @@ pub enum ErrorDetails {
     VLLMServer {
         message: String,
     },
+    XAIClient {
+        message: String,
+        status_code: StatusCode,
+    },
+    XAIServer {
+        message: String,
+    },
 }
 
 impl ErrorDetails {
@@ -332,6 +346,8 @@ impl ErrorDetails {
             ErrorDetails::GCPVertexServer { .. } => tracing::Level::ERROR,
             ErrorDetails::GoogleAIStudioClient { .. } => tracing::Level::WARN,
             ErrorDetails::GoogleAIStudioServer { .. } => tracing::Level::ERROR,
+            ErrorDetails::HyperbolicClient { .. } => tracing::Level::WARN,
+            ErrorDetails::HyperbolicServer { .. } => tracing::Level::ERROR,
             ErrorDetails::Inference { .. } => tracing::Level::ERROR,
             ErrorDetails::InferenceClient { .. } => tracing::Level::ERROR,
             ErrorDetails::InferenceNotFound { .. } => tracing::Level::WARN,
@@ -385,6 +401,8 @@ impl ErrorDetails {
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => tracing::Level::WARN,
             ErrorDetails::VLLMClient { .. } => tracing::Level::WARN,
             ErrorDetails::VLLMServer { .. } => tracing::Level::ERROR,
+            ErrorDetails::XAIClient { .. } => tracing::Level::WARN,
+            ErrorDetails::XAIServer { .. } => tracing::Level::ERROR,
         }
     }
 
@@ -417,6 +435,8 @@ impl ErrorDetails {
             ErrorDetails::GCPVertexServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::GoogleAIStudioClient { status_code, .. } => *status_code,
             ErrorDetails::GoogleAIStudioServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::HyperbolicClient { status_code, .. } => *status_code,
+            ErrorDetails::HyperbolicServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Inference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceClient { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceNotFound { .. } => StatusCode::NOT_FOUND,
@@ -472,6 +492,8 @@ impl ErrorDetails {
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::VLLMClient { status_code, .. } => *status_code,
             ErrorDetails::VLLMServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::XAIClient { status_code, .. } => *status_code,
+            ErrorDetails::XAIServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
@@ -583,6 +605,12 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::GoogleAIStudioServer { message } => {
                 write!(f, "Error from Google AI Studio server: {}", message)
+            }
+            ErrorDetails::HyperbolicClient { message, .. } => {
+                write!(f, "Error from Hyperbolic client: {}", message)
+            }
+            ErrorDetails::HyperbolicServer { message } => {
+                write!(f, "Error from Hyperbolic server: {}", message)
             }
             ErrorDetails::Inference { message } => write!(f, "{}", message),
             ErrorDetails::InferenceClient { message } => write!(f, "{}", message),
@@ -776,6 +804,12 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::VLLMServer { message } => {
                 write!(f, "Error from vLLM server: {}", message)
+            }
+            ErrorDetails::XAIClient { message, .. } => {
+                write!(f, "Error from xAI client: {}", message)
+            }
+            ErrorDetails::XAIServer { message } => {
+                write!(f, "Error from xAI server: {}", message)
             }
         }
     }

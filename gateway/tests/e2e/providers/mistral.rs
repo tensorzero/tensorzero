@@ -12,6 +12,12 @@ async fn get_providers() -> E2ETestProviders {
         model_provider_name: "mistral".to_string(),
     }];
 
+    let shorthand_providers = vec![E2ETestProvider {
+        variant_name: "mistral-shorthand".to_string(),
+        model_name: "mistral::open-mistral-nemo-2407".to_string(),
+        model_provider_name: "mistral".to_string(),
+    }];
+
     E2ETestProviders {
         simple_inference: providers.clone(),
         inference_params_inference: providers.clone(),
@@ -20,6 +26,7 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: providers.clone(),
         parallel_tool_use_inference: vec![],
         json_mode_inference: providers.clone(),
+        shorthand_inference: shorthand_providers.clone(),
         #[cfg(feature = "batch_tests")]
         supports_batch_inference: false,
     }

@@ -25,14 +25,21 @@ async fn get_providers() -> E2ETestProviders {
         },
     ];
 
+    let shorthand_providers = vec![E2ETestProvider {
+        variant_name: "anthropic-shorthand".to_string(),
+        model_name: "anthropic::claude-3-haiku-20240307".to_string(),
+        model_provider_name: "anthropic".to_string(),
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         inference_params_inference: standard_providers.clone(),
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),
         dynamic_tool_use_inference: standard_providers.clone(),
-        parallel_tool_use_inference: vec![],
+        parallel_tool_use_inference: standard_providers.clone(),
         json_mode_inference: json_providers.clone(),
+        shorthand_inference: shorthand_providers.clone(),
         #[cfg(feature = "batch_tests")]
         supports_batch_inference: false,
     }

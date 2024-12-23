@@ -9,6 +9,7 @@ use crate::endpoints::inference::InferenceModels;
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role,
 };
+use crate::model::ModelTable;
 use crate::{
     embeddings::{EmbeddingModelConfig, EmbeddingRequest},
     endpoints::inference::{InferenceClients, InferenceParams},
@@ -19,7 +20,6 @@ use crate::{
         InferenceResultStream, Input, JsonInferenceOutput,
     },
     minijinja_util::TemplateConfig,
-    model::ModelConfig,
 };
 
 use super::{
@@ -213,7 +213,7 @@ impl Variant for DiclConfig {
     fn validate(
         &self,
         _function: &FunctionConfig,
-        models: &HashMap<String, ModelConfig>,
+        models: &mut ModelTable,
         embedding_models: &HashMap<String, EmbeddingModelConfig>,
         _templates: &TemplateConfig,
         function_name: &str,
@@ -234,9 +234,7 @@ impl Variant for DiclConfig {
             .into());
         }
         // Validate that the generation model and embedding model are valid
-        let model = models.get(&self.model).ok_or_else(|| Error::new(ErrorDetails::Config {
-                message: format!("`functions.{function_name}.variants.{variant_name}`: `model` must be a valid model name"),
-            }))?;
+        models.validate_or_create(&self.model)?;
         let embedding_model = embedding_models
             .get(&self.embedding_model)
             .ok_or_else(|| Error::new(ErrorDetails::Config {
@@ -244,14 +242,7 @@ impl Variant for DiclConfig {
                     "`functions.{function_name}.variants.{variant_name}`: `embedding_model` must be a valid embedding model name"
                 ),
             }))?;
-        model.validate().map_err(|e| {
-            Error::new(ErrorDetails::Config {
-                message: format!(
-                    "`functions.{function_name}.variants.{variant_name}` and model `{}`: {e}",
-                    self.model
-                ),
-            })
-        })?;
+
         embedding_model.validate().map_err(|e| {
             Error::new(ErrorDetails::Config {
                 message: format!(

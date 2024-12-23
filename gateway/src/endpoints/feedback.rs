@@ -488,6 +488,7 @@ mod tests {
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::JSONSchemaFromPath;
     use crate::minijinja_util::TemplateConfig;
+    use crate::model::ModelTable;
     use crate::testing::get_unit_test_app_state_data;
     use crate::tool::{ToolCallOutput, ToolChoice};
 
@@ -505,7 +506,7 @@ mod tests {
         );
         let config = Config {
             gateway: GatewayConfig::default(),
-            models: HashMap::new(),
+            models: ModelTable::default(),
             embedding_models: HashMap::new(),
             metrics,
             functions: HashMap::new(),
@@ -627,7 +628,7 @@ mod tests {
         metrics.insert("test_metric".to_string(), metric_config);
         let config = Config {
             gateway: GatewayConfig::default(),
-            models: HashMap::new(),
+            models: ModelTable::default(),
             embedding_models: HashMap::new(),
             metrics,
             functions: HashMap::new(),
@@ -659,7 +660,7 @@ mod tests {
         // Test a Comment Feedback
         let config = Box::leak(Box::new(Config {
             gateway: GatewayConfig::default(),
-            models: HashMap::new(),
+            models: ModelTable::default(),
             embedding_models: HashMap::new(),
             metrics: HashMap::new(),
             functions: HashMap::new(),
@@ -759,7 +760,7 @@ mod tests {
         );
         let config = Box::leak(Box::new(Config {
             gateway: GatewayConfig::default(),
-            models: HashMap::new(),
+            models: ModelTable::default(),
             embedding_models: HashMap::new(),
             metrics,
             functions: HashMap::new(),
@@ -836,7 +837,7 @@ mod tests {
         );
         let config = Box::leak(Box::new(Config {
             gateway: GatewayConfig::default(),
-            models: HashMap::new(),
+            models: ModelTable::default(),
             embedding_models: HashMap::new(),
             metrics,
             functions: HashMap::new(),

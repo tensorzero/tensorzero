@@ -31,7 +31,7 @@ use crate::inference::types::{
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
-use crate::model::ModelConfig;
+use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, ToolCallConfig};
 use crate::uuid_util::validate_episode_id;
 use crate::variant::{InferenceConfig, Variant};
@@ -639,7 +639,7 @@ pub struct InferenceClients<'a> {
 // Carryall struct for models used in inference
 #[derive(Debug)]
 pub struct InferenceModels<'a> {
-    pub models: &'a HashMap<String, ModelConfig>,
+    pub models: &'a ModelTable,
     pub embedding_models: &'a HashMap<String, EmbeddingModelConfig>,
 }
 

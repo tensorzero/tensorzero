@@ -16,6 +16,7 @@ use crate::inference::types::{
     ModelInferenceRequestJsonMode, ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
+use crate::model::ModelTable;
 use crate::{
     endpoints::inference::InferenceParams,
     error::Error,
@@ -114,7 +115,7 @@ impl Variant for BestOfNSamplingConfig {
     fn validate(
         &self,
         function: &FunctionConfig,
-        models: &HashMap<String, ModelConfig>,
+        models: &mut ModelTable,
         embedding_models: &HashMap<String, EmbeddingModelConfig>,
         templates: &TemplateConfig,
         function_name: &str,
