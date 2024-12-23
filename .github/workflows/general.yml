@@ -54,25 +54,25 @@ jobs:
       #     python -m pip install mypy
       #     python -m mypy python --strict
 
-      # - name: Setup Node.js
-      #   uses: actions/setup-node@v4
-      #   with:
-      #     node-version: "22.9.0"
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.9.0"
 
-      # - name: Install wasm-pack
-      #   run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
-      # - name: Build minijinja WASM bindings
-      #   working-directory: dashboard/app/utils/minijinja
-      #   run: wasm-pack build --features console_error_panic_hook
+      - name: Build minijinja WASM bindings
+        working-directory: dashboard/app/utils/minijinja
+        run: wasm-pack build --features console_error_panic_hook
 
       # - name: Run minijinja WASM tests
       #   working-directory: dashboard/app/utils/minijinja
       #   run: wasm-pack test --node --features console_error_panic_hook
 
-      # - name: Install npm dependencies
-      #   working-directory: dashboard
-      #   run: npm install --platform=linux
+      - name: Install npm dependencies
+        working-directory: dashboard
+        run: npm install --platform=linux
 
       # - name: Run ESLint
       #   working-directory: dashboard
