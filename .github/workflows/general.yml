@@ -21,41 +21,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # - name: Set up Cargo Cache
-      #   uses: Swatinem/rust-cache@v2
+      - name: Set up Cargo Cache
+        uses: Swatinem/rust-cache@v2
 
-      # - name: Install cargo-nextest and cargo-deny
-      #   uses: taiki-e/install-action@v2
-      #   with:
-      #     tool: cargo-nextest,cargo-deny
+      - name: Install cargo-nextest and cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest,cargo-deny
 
-      # - name: Build (Rust)
-      #   run: cargo build --verbose
+      - name: Build (Rust)
+        run: cargo build --verbose
 
-      # - name: Lint (Rust)
-      #   run: |
-      #     cargo fmt -- --check
-      #     cargo clippy --all-targets --all-features -- -D warnings
+      - name: Lint (Rust)
+        run: |
+          cargo fmt -- --check
+          cargo clippy --all-targets --all-features -- -D warnings
 
-      # - name: Run cargo-deny
-      #   run: cargo deny check bans
+      - name: Run cargo-deny
+        run: cargo deny check bans
 
-      # - name: Test (Rust)
-      #   run: |
-      #     cargo test-unit ${{vars.CARGO_NEXTEST_ARGS}}
+      - name: Test (Rust)
+        run: |
+          cargo test-unit ${{vars.CARGO_NEXTEST_ARGS}}
 
-      # - name: Lint (Python)
-      #   run: |
-      #     python -m pip install ruff
-      #     ruff format --check .
-      #     ruff check --output-format=github --extend-select I .
+      - name: Lint (Python)
+        run: |
+          python -m pip install ruff
+          ruff format --check .
+          ruff check --output-format=github --extend-select I .
 
-      # - name: Run mypy type checking
-      #   working-directory: clients
-      #   run: |
-      #     python -m pip install -r requirements.txt
-      #     python -m pip install mypy
-      #     python -m mypy python --strict
+      - name: Run mypy type checking
+        working-directory: clients
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install mypy
+          python -m mypy python --strict
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -69,29 +69,29 @@ jobs:
         working-directory: dashboard/app/utils/minijinja
         run: wasm-pack build --features console_error_panic_hook
 
-      # - name: Run minijinja WASM tests
-      #   working-directory: dashboard/app/utils/minijinja
-      #   run: wasm-pack test --node --features console_error_panic_hook
+      - name: Run minijinja WASM tests
+        working-directory: dashboard/app/utils/minijinja
+        run: wasm-pack test --node --features console_error_panic_hook
 
       - name: Install npm dependencies
         working-directory: dashboard
         run: npm install --platform=linux
 
-      # - name: Run ESLint
-      #   working-directory: dashboard
-      #   run: |
-      #     npx eslint . --fix --max-warnings=0 --config eslint.config.js --cache
+      - name: Run ESLint
+        working-directory: dashboard
+        run: |
+          npx eslint . --fix --max-warnings=0 --config eslint.config.js --cache
 
-      # - name: Run Prettier
-      #   working-directory: dashboard
-      #   run: |
-      #     npx prettier --write --list-different "**/*.{js,jsx,ts,tsx,css,scss,html,json,yaml,md}" --ignore-path "**/*.ipynb"
+      - name: Run Prettier
+        working-directory: dashboard
+        run: |
+          npx prettier --write --list-different "**/*.{js,jsx,ts,tsx,css,scss,html,json,yaml,md}" --ignore-path "**/*.ipynb"
 
-      # - name: Run TypeScript type checking
-      #   working-directory: dashboard
-      #   run: |
-      #     npx react-router typegen
-      #     npx tsc
+      - name: Run TypeScript type checking
+        working-directory: dashboard
+        run: |
+          npx react-router typegen
+          npx tsc
 
       - name: Start services for dashboard tests
         working-directory: dashboard
