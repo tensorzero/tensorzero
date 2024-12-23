@@ -15,10 +15,6 @@ use super::check_table_exists;
 /// `BatchRequest` contains metadata about a batch request.
 /// Each time the batch is polled by either inference_id or batch_id, a row will be written to this table.
 /// This allows us to know and also to know the history of actions which have been taken here.
-///
-/// It also changes the `response_time_ms` column of `ModelInference` and the `processing_time_ms` columns of
-/// `ChatInference` and `JsonInference` to be nullable.
-/// This is required since we don't really get latency measurements for batch requests.
 pub struct Migration0006<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
@@ -32,16 +28,6 @@ impl<'a> Migration for Migration0006<'a> {
                 message: e.to_string(),
             })
         })?;
-        let tables = ["ModelInference", "ChatInference", "JsonInference"];
-        for table in tables {
-            if !check_table_exists(self.clickhouse, table, "0006").await? {
-                return Err(ErrorDetails::ClickHouseMigration {
-                    id: "0006".to_string(),
-                    message: format!("{} table does not exist", table),
-                }
-                .into());
-            }
-        }
         Ok(())
     }
 
@@ -99,9 +85,7 @@ impl<'a> Migration for Migration0006<'a> {
                 model_name LowCardinality(String),
                 model_provider_name LowCardinality(String),
                 status Enum('pending' = 1, 'completed' = 2, 'failed' = 3),
-                function_name LowCardinality(String),
-                variant_name LowCardinality(String),
-                errors Array(String),
+                errors Map(UUID, String),
                 timestamp DateTime MATERIALIZED UUIDv7ToDateTime(id),
             ) ENGINE = MergeTree()
             ORDER BY (batch_id, id)
@@ -130,28 +114,6 @@ impl<'a> Migration for Migration0006<'a> {
                 FROM BatchModelInference
             "#;
         let _ = self.clickhouse.run_query(query.to_string()).await?;
-
-        // Alter the `response_time_ms` column of `ModelInference` to be a nullable column
-        let query = r#"
-            ALTER TABLE ModelInference
-            MODIFY COLUMN response_time_ms Nullable(UInt32)
-        "#;
-        let _ = self.clickhouse.run_query(query.to_string()).await?;
-
-        // Alter the `processing_time_ms` column of `ChatInference` to be a nullable column
-        let query = r#"
-            ALTER TABLE ChatInference
-            MODIFY COLUMN processing_time_ms Nullable(UInt32)
-        "#;
-        let _ = self.clickhouse.run_query(query.to_string()).await?;
-
-        // Alter the `processing_time_ms` column of `JsonInference` to be a nullable column
-        let query = r#"
-            ALTER TABLE JsonInference
-            MODIFY COLUMN processing_time_ms Nullable(UInt32)
-        "#;
-        let _ = self.clickhouse.run_query(query.to_string()).await?;
-
         Ok(())
     }
 
