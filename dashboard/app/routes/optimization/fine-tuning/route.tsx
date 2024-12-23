@@ -177,7 +177,6 @@ function FineTuningForm({
   config,
   submissionPhase,
   setSubmissionPhase,
-  isSubmitted,
 }: {
   config: Config;
   submissionPhase: "idle" | "submitting" | "pending" | "complete";
@@ -324,17 +323,7 @@ function FineTuningForm({
           </div>
 
           <div className="space-y-4">
-            <Button
-              type="submit"
-              disabled={
-                !form.watch("function") ||
-                !form.watch("metric") ||
-                !form.watch("model") ||
-                !form.watch("variant") ||
-                form.formState.isSubmitting ||
-                isSubmitted
-              }
-            >
+            <Button type="submit" disabled={submissionPhase !== "idle"}>
               {getButtonText()}
             </Button>
           </div>

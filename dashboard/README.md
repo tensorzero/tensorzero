@@ -45,6 +45,7 @@ Here are the steps in order to run or test the dashboard assuming you have the p
 OPENAI_API_KEY=<your-key>
 FIREWORKS_API_KEY=<your-key>
 FIREWORKS_ACCOUNT_ID=<your-account-id>
+CLICKHOUSE_URL=<your-clickhouse-url> # For testing, set to http://localhost:8123/tensorzero
 ```
 
 4. Run the dependencies: `docker compose -f fixtures/docker-compose.yml up`

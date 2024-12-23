@@ -111,7 +111,7 @@ export class FireworksSFTJob extends SFTJob {
 
   status(): SFTJobStatus {
     if (this.jobStatus === "FAILED") return "error";
-    return this.jobStatus === "COMPLETED" ? "completed" : "running";
+    return this.jobStatus === "DEPLOYED" ? "completed" : "running";
   }
 
   result(): string | undefined {
