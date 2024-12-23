@@ -117,6 +117,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request: {e}"),
+                    status_code: e.status(),
                 })
             })?;
         let latency = Latency::NonStreaming {
@@ -124,13 +125,13 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         };
         if res.status().is_success() {
             let response = res.text().await.map_err(|e| {
-                Error::new(ErrorDetails::AnthropicServer {
+                Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
                 })
             })?;
 
             let response = serde_json::from_str(&response).map_err(|e| {
-                Error::new(ErrorDetails::AnthropicServer {
+                Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {response}"),
                 })
             })?;
@@ -147,7 +148,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         } else {
             let response_code = res.status();
             let error_body = res.json::<GCPVertexAnthropicError>().await.map_err(|e| {
-                Error::new(ErrorDetails::AnthropicServer {
+                Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing response: {e}"),
                 })
             })?;
@@ -171,7 +172,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
     > {
         let request_body = GCPVertexAnthropicRequestBody::new(request)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::AnthropicServer {
+            Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request body as JSON: {e}"),
             })
         })?;
@@ -188,6 +189,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request to Anthropic: {e}"),
+                    status_code: None,
                 })
             })?;
         let mut stream = Box::pin(stream_anthropic(event_source, start_time));
@@ -195,7 +197,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             Some(Ok(chunk)) => chunk,
             Some(Err(e)) => return Err(e),
             None => {
-                return Err(ErrorDetails::AnthropicServer {
+                return Err(ErrorDetails::InferenceServer {
                     message: "Stream ended before first chunk".to_string(),
                 }
                 .into())
@@ -238,7 +240,7 @@ fn stream_anthropic(
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    yield Err(ErrorDetails::AnthropicServer {
+                    yield Err(ErrorDetails::InferenceServer {
                         message: e.to_string(),
                     }.into());
                 }
@@ -246,7 +248,7 @@ fn stream_anthropic(
                     Event::Open => continue,
                     Event::Message(message) => {
                         let data: Result<GCPVertexAnthropicStreamMessage, Error> =
-                            serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::AnthropicServer {
+                            serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
                                 message: format!(
                                     "Error parsing message: {}, Data: {}",
                                     e, message.data
@@ -377,15 +379,15 @@ impl<'a> TryFrom<&'a ContentBlock> for GCPVertexAnthropicMessageContent<'a> {
             ContentBlock::ToolCall(tool_call) => {
                 // Convert the tool call arguments from String to JSON Value (Anthropic expects an object)
                 let input: Value = serde_json::from_str(&tool_call.arguments).map_err(|e| {
-                    Error::new(ErrorDetails::AnthropicClient {
-                        status_code: StatusCode::BAD_REQUEST,
+                    Error::new(ErrorDetails::InferenceClient {
+                        status_code: Some(StatusCode::BAD_REQUEST),
                         message: format!("Error parsing tool call arguments as JSON Value: {e}"),
                     })
                 })?;
 
                 if !input.is_object() {
-                    return Err(ErrorDetails::AnthropicClient {
-                        status_code: StatusCode::BAD_REQUEST,
+                    return Err(ErrorDetails::InferenceClient {
+                        status_code: Some(StatusCode::BAD_REQUEST),
                         message: "Tool call arguments must be a JSON object".to_string(),
                     }
                     .into());
@@ -630,7 +632,7 @@ impl TryFrom<GCPVertexAnthropicContentBlock> for ContentBlock {
                     id,
                     name,
                     arguments: serde_json::to_string(&input).map_err(|e| {
-                        Error::new(ErrorDetails::AnthropicServer {
+                        Error::new(ErrorDetails::InferenceServer {
                             message: format!("Error parsing input for tool call: {e}"),
                         })
                     })?,
@@ -692,7 +694,7 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
         } = value;
 
         let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::AnthropicServer {
+            Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error parsing response from GCP Vertex Anthropic: {e}"),
             })
         })?;
@@ -703,7 +705,7 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
             .map(|block| block.try_into())
             .collect::<Result<Vec<_>, _>>()?;
         let raw_request = serde_json::to_string(&request).map_err(|e| {
-            Error::new(ErrorDetails::AnthropicServer {
+            Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request to GCP Vertex Anthropic: {e}"),
             })
         })?;
@@ -741,14 +743,14 @@ fn handle_anthropic_error(
         StatusCode::UNAUTHORIZED
         | StatusCode::BAD_REQUEST
         | StatusCode::PAYLOAD_TOO_LARGE
-        | StatusCode::TOO_MANY_REQUESTS => Err(ErrorDetails::AnthropicClient {
+        | StatusCode::TOO_MANY_REQUESTS => Err(ErrorDetails::InferenceClient {
             message: response_body.message,
-            status_code: response_code,
+            status_code: Some(response_code),
         }
         .into()),
         // StatusCode::NOT_FOUND | StatusCode::FORBIDDEN | StatusCode::INTERNAL_SERVER_ERROR | 529: Overloaded
         // These are all captured in _ since they have the same error behavior
-        _ => Err(ErrorDetails::AnthropicServer {
+        _ => Err(ErrorDetails::InferenceServer {
             message: response_body.message,
         }
         .into()),
@@ -816,7 +818,7 @@ fn anthropic_to_tensorzero_stream_message(
     current_tool_name: &mut Option<String>,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
     let raw_message = serde_json::to_string(&message).map_err(|e| {
-        Error::new(ErrorDetails::AnthropicServer {
+        Error::new(ErrorDetails::InferenceServer {
             message: format!("Error parsing response from Anthropic: {e}"),
         })
     })?;
@@ -841,10 +843,10 @@ fn anthropic_to_tensorzero_stream_message(
                     // This is necessary because the ToolCallChunk must always contain the tool name and ID
                     // even though Anthropic only sends the tool ID and name in the ToolUse chunk and not InputJSONDelta
                     vec![ContentBlockChunk::ToolCall(ToolCallChunk {
-                        raw_name: current_tool_name.clone().ok_or_else(|| Error::new(ErrorDetails::AnthropicServer {
+                        raw_name: current_tool_name.clone().ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                             message: "Got InputJsonDelta chunk from Anthropic without current tool name being set by a ToolUse".to_string(),
                         }))?,
-                        id: current_tool_id.clone().ok_or_else(|| Error::new(ErrorDetails::AnthropicServer {
+                        id: current_tool_id.clone().ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                             message: "Got InputJsonDelta chunk from Anthropic without current tool id being set by a ToolUse".to_string(),
                         }))?,
                         raw_arguments: partial_json,
@@ -854,7 +856,7 @@ fn anthropic_to_tensorzero_stream_message(
                     message_latency,
                 )))
             }
-            _ => Err(ErrorDetails::AnthropicServer {
+            _ => Err(ErrorDetails::InferenceServer {
                 message: "Unsupported content block type for ContentBlockDelta".to_string(),
             }
             .into()),
@@ -893,13 +895,13 @@ fn anthropic_to_tensorzero_stream_message(
                     message_latency,
                 )))
             }
-            _ => Err(ErrorDetails::AnthropicServer {
+            _ => Err(ErrorDetails::InferenceServer {
                 message: "Unsupported content block type for ContentBlockStart".to_string(),
             }
             .into()),
         },
         GCPVertexAnthropicStreamMessage::ContentBlockStop { .. } => Ok(None),
-        GCPVertexAnthropicStreamMessage::Error { error } => Err(ErrorDetails::AnthropicServer {
+        GCPVertexAnthropicStreamMessage::Error { error } => Err(ErrorDetails::InferenceServer {
             message: error.to_string(),
         }
         .into()),
@@ -1536,9 +1538,9 @@ mod tests {
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
-            ErrorDetails::AnthropicClient {
+            ErrorDetails::InferenceClient {
                 message: "test_message".to_string(),
-                status_code: response_code,
+                status_code: Some(response_code),
             }
         );
         let response_code = StatusCode::UNAUTHORIZED;
@@ -1546,9 +1548,9 @@ mod tests {
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
-            ErrorDetails::AnthropicClient {
+            ErrorDetails::InferenceClient {
                 message: "test_message".to_string(),
-                status_code: response_code,
+                status_code: Some(response_code),
             }
         );
         let response_code = StatusCode::TOO_MANY_REQUESTS;
@@ -1556,9 +1558,9 @@ mod tests {
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
-            ErrorDetails::AnthropicClient {
+            ErrorDetails::InferenceClient {
                 message: "test_message".to_string(),
-                status_code: response_code,
+                status_code: Some(response_code),
             }
         );
         let response_code = StatusCode::NOT_FOUND;
@@ -1567,7 +1569,7 @@ mod tests {
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
-            ErrorDetails::AnthropicServer {
+            ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
             }
         );
@@ -1576,7 +1578,7 @@ mod tests {
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
-            ErrorDetails::AnthropicServer {
+            ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
             }
         );
@@ -1906,7 +1908,7 @@ mod tests {
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
-            ErrorDetails::AnthropicServer {
+            ErrorDetails::InferenceServer {
                 message: "Got InputJsonDelta chunk from Anthropic without current tool name being set by a ToolUse".to_string()
             }
         );
@@ -2021,7 +2023,7 @@ mod tests {
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
-            ErrorDetails::AnthropicServer {
+            ErrorDetails::InferenceServer {
                 message: "Unsupported content block type for ContentBlockStart".to_string()
             }
         );
@@ -2054,7 +2056,7 @@ mod tests {
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
-            ErrorDetails::AnthropicServer {
+            ErrorDetails::InferenceServer {
                 message: r#"{"message":"Test error"}"#.to_string(),
             }
         );
