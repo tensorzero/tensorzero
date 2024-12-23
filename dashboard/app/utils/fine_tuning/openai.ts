@@ -82,7 +82,7 @@ export class OpenAISFTJob extends SFTJob {
 
   status(): SFTJobStatus {
     if (this.jobStatus === "failed") return "error";
-    return this.jobStatus === "COMPLETED" ? "completed" : "running";
+    return this.jobStatus === "succeeded" ? "completed" : "running";
   }
 
   async poll(): Promise<OpenAISFTJob> {
@@ -90,7 +90,6 @@ export class OpenAISFTJob extends SFTJob {
       throw new Error("Job ID is required to poll OpenAI SFT");
     }
     const job = await client.fineTuning.jobs.retrieve(this.jobId);
-    console.log(job);
     return new OpenAISFTJob({
       jobId: job.id,
       status: job.status,
@@ -242,6 +241,10 @@ async function upload_examples_to_openai(samples: OpenAIMessage[][]) {
       `temp_training_data_${Math.random().toString(36).substring(2, 10)}.jsonl`,
     );
     await fs.writeFile(tempFile, jsonl);
+    const localFile = `temp_training_data_${Math.random()
+      .toString(36)
+      .substring(2, 10)}.jsonl`;
+    await fs.writeFile(localFile, jsonl);
 
     const file = await client.files.create({
       file: createReadStream(tempFile),

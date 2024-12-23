@@ -7,6 +7,7 @@ on:
 
 env:
   FORCE_COLOR: 1
+  CLICKHOUSE_URL: "http://localhost:8123/tensorzero"
 
 jobs:
   validate:
