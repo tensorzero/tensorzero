@@ -304,6 +304,7 @@ impl InferenceProvider for OpenAIProvider {
         })?;
         let file_id = response.id;
         let batch_request = OpenAIBatchRequest::new(&file_id);
+        let raw_request = serde_json::to_string(&batch_request).map_err(|_| Error::new(ErrorDetails::Serialization { message: "Error serializing OpenAI batch request. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string() }))?;
         let request_url = get_batch_url(self.api_base.as_ref())?;
         let mut request_builder = client.post(request_url);
         if let Some(api_key) = api_key {
@@ -356,6 +357,8 @@ impl InferenceProvider for OpenAIProvider {
             inference_ids,
             batch_params,
             raw_requests,
+            raw_request,
+            raw_response: text,
             status: BatchStatus::Pending,
             errors,
         })
@@ -379,6 +382,7 @@ impl InferenceProvider for OpenAIProvider {
             })?
             .push(&batch_params.batch_id);
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let raw_request = request_url.to_string();
         let mut request_builder = http_client
             .get(request_url)
             .header("Content-Type", "application/json");
@@ -401,8 +405,12 @@ impl InferenceProvider for OpenAIProvider {
             })
         })?;
         let status: BatchStatus = response.status.into();
+        let raw_response = text;
         match status {
-            BatchStatus::Pending => Ok(PollBatchInferenceResponse::Pending),
+            BatchStatus::Pending => Ok(PollBatchInferenceResponse::Pending {
+                raw_request,
+                raw_response,
+            }),
             BatchStatus::Completed => {
                 let output_file_id = response.output_file_id.as_ref().ok_or_else(|| {
                     Error::new(ErrorDetails::OpenAIServer {
@@ -410,11 +418,20 @@ impl InferenceProvider for OpenAIProvider {
                     })
                 })?;
                 let response = self
-                    .collect_finished_batch(output_file_id, http_client, dynamic_api_keys)
+                    .collect_finished_batch(
+                        output_file_id,
+                        http_client,
+                        dynamic_api_keys,
+                        raw_request,
+                        raw_response,
+                    )
                     .await?;
                 Ok(PollBatchInferenceResponse::Completed(response))
             }
-            BatchStatus::Failed => Ok(PollBatchInferenceResponse::Failed),
+            BatchStatus::Failed => Ok(PollBatchInferenceResponse::Failed {
+                raw_request,
+                raw_response,
+            }),
         }
     }
 }
@@ -531,6 +548,8 @@ impl OpenAIProvider {
         file_id: &str,
         client: &reqwest::Client,
         credentials: &InferenceCredentials,
+        raw_request: String,
+        raw_response: String,
     ) -> Result<ProviderBatchInferenceResponse, Error> {
         let file_url = get_file_url(self.api_base.as_ref(), Some(file_id))?;
         let api_key = self.credentials.get_api_key(credentials)?;
@@ -587,7 +606,11 @@ impl OpenAIProvider {
             elements.insert(output.id, output);
         }
 
-        Ok(ProviderBatchInferenceResponse { elements })
+        Ok(ProviderBatchInferenceResponse {
+            elements,
+            raw_request,
+            raw_response,
+        })
     }
 }
 

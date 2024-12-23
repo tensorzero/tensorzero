@@ -30,8 +30,10 @@ pub enum BatchStatus {
 pub struct StartBatchProviderInferenceResponse {
     pub batch_id: Uuid,
     pub inference_ids: Vec<Uuid>,
-    pub raw_requests: Vec<String>,
+    pub raw_requests: Vec<String>, // The raw text of each individual batch request
     pub batch_params: Value,
+    pub raw_request: String,  // The raw text of the batch request body
+    pub raw_response: String, // The raw text of the response from the batch request
     pub status: BatchStatus,
     pub errors: Vec<Value>,
 }
@@ -43,6 +45,8 @@ pub struct StartBatchModelInferenceResponse<'a> {
     pub inference_ids: Vec<Uuid>,
     pub raw_requests: Vec<String>,
     pub batch_params: Value,
+    pub raw_request: String,  // The raw text of the batch request body
+    pub raw_response: String, // The raw text of the response from the batch request
     pub model_provider_name: &'a str,
     pub status: BatchStatus,
     pub errors: Vec<Value>,
@@ -58,6 +62,8 @@ impl<'a> StartBatchModelInferenceResponse<'a> {
             inference_ids: provider_batch_response.inference_ids,
             raw_requests: provider_batch_response.raw_requests,
             batch_params: provider_batch_response.batch_params,
+            raw_request: provider_batch_response.raw_request,
+            raw_response: provider_batch_response.raw_response,
             model_provider_name,
             status: provider_batch_response.status,
             errors: provider_batch_response.errors,
@@ -78,6 +84,8 @@ pub struct StartBatchModelInferenceWithMetadata<'a> {
     pub inference_params: Vec<InferenceParams>,
     pub output_schemas: Vec<Option<&'a Value>>,
     pub raw_requests: Vec<String>,
+    pub raw_request: String,
+    pub raw_response: String,
     pub batch_params: Value,
     pub model_provider_name: &'a str,
     pub model_name: &'a str,
@@ -110,6 +118,8 @@ impl<'a> StartBatchModelInferenceWithMetadata<'a> {
             inference_params,
             output_schemas,
             raw_requests: model_batch_response.raw_requests,
+            raw_request: model_batch_response.raw_request,
+            raw_response: model_batch_response.raw_response,
             batch_params: model_batch_response.batch_params,
             model_provider_name: model_batch_response.model_provider_name,
             model_name,
@@ -123,9 +133,15 @@ impl<'a> StartBatchModelInferenceWithMetadata<'a> {
 // this will require those variants to wrap structs of their own
 #[derive(Debug)]
 pub enum PollBatchInferenceResponse {
-    Pending,
+    Pending {
+        raw_request: String,
+        raw_response: String,
+    },
     Completed(ProviderBatchInferenceResponse),
-    Failed,
+    Failed {
+        raw_request: String,
+        raw_response: String,
+    },
 }
 
 /// Data retrieved from the BatchRequest table in ClickHouse
@@ -136,6 +152,8 @@ pub struct BatchRequestRow<'a> {
     #[serde(deserialize_with = "deserialize_json_string")]
     pub batch_params: Cow<'a, Value>,
     pub model_name: Cow<'a, str>,
+    pub raw_request: Cow<'a, str>,
+    pub raw_response: Cow<'a, str>,
     pub model_provider_name: Cow<'a, str>,
     pub status: BatchStatus,
     pub function_name: Cow<'a, str>,
@@ -177,6 +195,8 @@ pub struct ProviderBatchInferenceOutput {
 #[derive(Debug)]
 pub struct ProviderBatchInferenceResponse {
     // Inference ID -> Output
+    pub raw_request: String,
+    pub raw_response: String,
     pub elements: HashMap<Uuid, ProviderBatchInferenceOutput>,
     // TODO (#503): add errors
 }
@@ -224,6 +244,8 @@ pub struct UnparsedBatchRequestRow<'a> {
     pub function_name: &'a str,
     pub variant_name: &'a str,
     pub model_name: &'a str,
+    pub raw_request: &'a str,
+    pub raw_response: &'a str,
     pub model_provider_name: &'a str,
     pub status: BatchStatus,
     pub errors: Vec<Value>,
@@ -237,6 +259,8 @@ impl<'a> BatchRequestRow<'a> {
             function_name,
             variant_name,
             model_name,
+            raw_request,
+            raw_response,
             model_provider_name,
             status,
             errors,
@@ -249,6 +273,8 @@ impl<'a> BatchRequestRow<'a> {
             function_name: Cow::Borrowed(function_name),
             variant_name: Cow::Borrowed(variant_name),
             model_name: Cow::Borrowed(model_name),
+            raw_request: Cow::Borrowed(raw_request),
+            raw_response: Cow::Borrowed(raw_response),
             model_provider_name: Cow::Borrowed(model_provider_name),
             status,
             errors,

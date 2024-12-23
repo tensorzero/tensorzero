@@ -42,12 +42,16 @@ async fn test_get_batch_request() {
     let variant_name = "test_variant";
     let model_name = "test_model";
     let model_provider_name = "test_model_provider";
+    let raw_request = "raw request";
+    let raw_response = "raw response";
     let batch_request = BatchRequestRow::new(UnparsedBatchRequestRow {
         batch_id,
         batch_params: &batch_params,
         function_name,
         variant_name,
         model_name,
+        raw_request,
+        raw_response,
         model_provider_name,
         status: BatchStatus::Pending,
         errors: vec![],
@@ -71,6 +75,8 @@ async fn test_get_batch_request() {
     assert_eq!(batch_request.model_name, model_name);
     assert_eq!(batch_request.model_provider_name, model_provider_name);
     assert_eq!(batch_request.status, BatchStatus::Pending);
+    assert_eq!(batch_request.raw_request, raw_request);
+    assert_eq!(batch_request.raw_response, raw_response);
 
     // Next, we'll insert a BatchModelInferenceRow
     let inference_id = Uuid::now_v7();
@@ -127,6 +133,8 @@ async fn test_write_poll_batch_inference() {
     let variant_name = "test_variant2";
     let model_name = "test_model2";
     let model_provider_name = "test_model_provider2";
+    let raw_request = "raw request".to_string();
+    let raw_response = "raw response".to_string();
     let status = BatchStatus::Pending;
     let errors = vec![];
     let batch_request = BatchRequestRow::new(UnparsedBatchRequestRow {
@@ -136,6 +144,8 @@ async fn test_write_poll_batch_inference() {
         variant_name,
         model_name,
         model_provider_name,
+        raw_request: &raw_request,
+        raw_response: &raw_response,
         status,
         errors,
     });
@@ -145,7 +155,10 @@ async fn test_write_poll_batch_inference() {
     let poll_inference_response = write_poll_batch_inference(
         &clickhouse,
         &batch_request,
-        PollBatchInferenceResponse::Pending,
+        PollBatchInferenceResponse::Pending {
+            raw_request: raw_request.clone(),
+            raw_response: raw_response.clone(),
+        },
         &config,
     )
     .await
@@ -169,13 +182,18 @@ async fn test_write_poll_batch_inference() {
         variant_name,
         model_name,
         model_provider_name,
+        raw_request: &raw_request,
+        raw_response: &raw_response,
         status,
         errors: vec![],
     });
     let poll_inference_response = write_poll_batch_inference(
         &clickhouse,
         &batch_request,
-        PollBatchInferenceResponse::Failed,
+        PollBatchInferenceResponse::Failed {
+            raw_request: raw_request.clone(),
+            raw_response: raw_response.clone(),
+        },
         &config,
     )
     .await
@@ -292,6 +310,8 @@ async fn test_write_read_completed_batch_inference_chat() {
     let variant_name = "test_variant";
     let model_name = "test_model";
     let model_provider_name = "test_model_provider";
+    let raw_request = "raw request".to_string();
+    let raw_response = "raw response".to_string();
     let status = BatchStatus::Pending;
     let errors = vec![];
     let batch_request = BatchRequestRow::new(UnparsedBatchRequestRow {
@@ -301,6 +321,8 @@ async fn test_write_read_completed_batch_inference_chat() {
         variant_name,
         model_name,
         model_provider_name,
+        raw_request: &raw_request,
+        raw_response: &raw_response,
         status,
         errors,
     });
@@ -336,6 +358,8 @@ async fn test_write_read_completed_batch_inference_chat() {
     };
     let response = ProviderBatchInferenceResponse {
         elements: HashMap::from([(inference_id1, output_1), (inference_id2, output_2)]),
+        raw_request: raw_request.clone(),
+        raw_response: raw_response.clone(),
     };
     let mut inference_responses =
         write_completed_batch_inference(&clickhouse, &batch_request, response, &config)
@@ -470,12 +494,16 @@ async fn test_write_read_completed_batch_inference_json() {
     let variant_name = "test_variant";
     let model_name = "test_model";
     let model_provider_name = "test_model_provider";
+    let raw_request = "raw request";
+    let raw_response = "raw response";
     let status = BatchStatus::Pending;
     let batch_request = BatchRequestRow::new(UnparsedBatchRequestRow {
         batch_id,
         batch_params: &batch_params,
         function_name,
         variant_name,
+        raw_request,
+        raw_response,
         model_name,
         model_provider_name,
         status,
@@ -522,8 +550,12 @@ async fn test_write_read_completed_batch_inference_json() {
             output_tokens: 30,
         },
     };
+    let raw_request = "raw request".to_string();
+    let raw_response = "raw response".to_string();
     let response = ProviderBatchInferenceResponse {
         elements: HashMap::from([(inference_id1, output_1), (inference_id2, output_2)]),
+        raw_request,
+        raw_response,
     };
     let inference_responses =
         write_completed_batch_inference(&clickhouse, &batch_request, response, &config)

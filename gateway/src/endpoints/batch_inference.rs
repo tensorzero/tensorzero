@@ -610,6 +610,8 @@ async fn write_start_batch_inference<'a>(
         batch_params: &result.batch_params,
         function_name: metadata.function_name,
         variant_name: metadata.variant_name,
+        raw_request: &result.raw_request,
+        raw_response: &result.raw_response,
         model_name: result.model_name,
         model_provider_name: result.model_provider_name,
         status: BatchStatus::Pending,
@@ -643,11 +645,16 @@ pub async fn write_poll_batch_inference<'a>(
     config: &Config<'a>,
 ) -> Result<PollInferenceResponse, Error> {
     match response {
-        PollBatchInferenceResponse::Pending => {
+        PollBatchInferenceResponse::Pending {
+            raw_request,
+            raw_response,
+        } => {
             write_batch_request_status_update(
                 clickhouse_connection_info,
                 batch_request,
                 BatchStatus::Pending,
+                raw_request,
+                raw_response,
             )
             .await?;
             Ok(PollInferenceResponse::Pending)
@@ -667,11 +674,16 @@ pub async fn write_poll_batch_inference<'a>(
                 },
             ))
         }
-        PollBatchInferenceResponse::Failed => {
+        PollBatchInferenceResponse::Failed {
+            raw_request,
+            raw_response,
+        } => {
             write_batch_request_status_update(
                 clickhouse_connection_info,
                 batch_request,
                 BatchStatus::Failed,
+                raw_request,
+                raw_response,
             )
             .await?;
             Ok(PollInferenceResponse::Failed)
@@ -683,6 +695,8 @@ async fn write_batch_request_status_update(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     batch_request: &BatchRequestRow<'_>,
     status: BatchStatus,
+    raw_request: String,
+    raw_response: String,
 ) -> Result<(), Error> {
     let batch_request_insert = BatchRequestRow::new(UnparsedBatchRequestRow {
         batch_id: batch_request.batch_id,
@@ -690,6 +704,8 @@ async fn write_batch_request_status_update(
         function_name: &batch_request.function_name,
         variant_name: &batch_request.variant_name,
         model_name: &batch_request.model_name,
+        raw_request: &raw_request,
+        raw_response: &raw_response,
         model_provider_name: &batch_request.model_provider_name,
         status,
         errors: vec![], // TODO(Viraj): fix
