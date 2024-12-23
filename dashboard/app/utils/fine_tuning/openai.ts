@@ -241,10 +241,6 @@ async function upload_examples_to_openai(samples: OpenAIMessage[][]) {
       `temp_training_data_${Math.random().toString(36).substring(2, 10)}.jsonl`,
     );
     await fs.writeFile(tempFile, jsonl);
-    const localFile = `temp_training_data_${Math.random()
-      .toString(36)
-      .substring(2, 10)}.jsonl`;
-    await fs.writeFile(localFile, jsonl);
 
     const file = await client.files.create({
       file: createReadStream(tempFile),
