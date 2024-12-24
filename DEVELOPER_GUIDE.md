@@ -22,7 +22,7 @@ cargo test-unit
    docker compose -f gateway/tests/e2e/docker-compose.yml up --wait
    ```
 
-2. Set the relevant environment variables
+2. Set the relevant environment variables. See `examples/production-deployment/.env.example` for the full list.
 
 > [!TIP]
 >
