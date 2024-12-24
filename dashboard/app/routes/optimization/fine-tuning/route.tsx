@@ -27,6 +27,9 @@ import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
 import { Form } from "~/components/ui/form";
 import type { Route } from "./+types/route";
+// The following import would be needed for type-safe fetching of counts
+// import type { Route as CuratedInferencesCount } from "../../api/curated_inferences/+types/count.route";
+import type { CountsData } from "../../api/curated_inferences/count.route";
 import type { Config } from "~/utils/config";
 
 export const meta: MetaFunction = () => {
@@ -67,7 +70,6 @@ export async function loader({ params }: Route.LoaderArgs) {
     jobStore[job_id] = updatedJob;
 
     const result = updatedJob.result();
-    // TODO (Viraj, important!): fix the status here.
     const status = updatedJob.status();
     const modelProvider = updatedJob.provider();
 
@@ -111,7 +113,6 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
   useEffect(() => {
     if (status === "running") {
       setSubmissionPhase("pending");
-      setIsSubmitted(true);
       const interval = setInterval(() => {
         revalidator.revalidate();
       }, 10000);
@@ -119,7 +120,6 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
     }
   }, [status, revalidator]);
 
-  const [isSubmitted, setIsSubmitted] = useState(false);
   const [submissionPhase, setSubmissionPhase] = useState<
     "idle" | "submitting" | "pending" | "complete"
   >("idle");
@@ -141,11 +141,10 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
             config={config}
             submissionPhase={submissionPhase}
             setSubmissionPhase={setSubmissionPhase}
-            isSubmitted={isSubmitted}
           />
         )}
 
-        {loaderData && (
+        {status !== "idle" && (
           <div className="p-4 bg-gray-100 rounded-lg mt-4">
             <div className="mb-2 font-medium">
               Loader Data (Last Updated: {new Date().toLocaleTimeString()})
@@ -159,7 +158,7 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
         )}
 
         {finalResult && (
-          <div className="p-4 bg-gray-100 rounded-lg">
+          <div className="p-4 bg-gray-100 rounded-lg mt-4">
             <div className="mb-2 font-medium">Configuration</div>
             <Textarea
               value={finalResult}
@@ -183,7 +182,6 @@ function FineTuningForm({
   setSubmissionPhase: (
     phase: "idle" | "submitting" | "pending" | "complete",
   ) => void;
-  isSubmitted: boolean;
 }) {
   const form = useForm<SFTFormValues>({
     defaultValues: {
@@ -192,16 +190,20 @@ function FineTuningForm({
       validationSplitPercent: 20,
       maxSamples: 100000,
       threshold: 0.5,
+      jobId: uuid(),
     },
     resolver: SFTFormValuesResolver,
+    mode: "onChange",
   });
+
+  const {
+    handleSubmit,
+    formState: { errors },
+  } = form;
+
   const fetcher = useFetcher();
 
-  const [counts, setCounts] = useState<{
-    inferenceCount: number | null;
-    feedbackCount: number | null;
-    curatedInferenceCount: number | null;
-  }>({
+  const [counts, setCounts] = useState<CountsData>({
     inferenceCount: null,
     feedbackCount: null,
     curatedInferenceCount: null,
@@ -218,8 +220,14 @@ function FineTuningForm({
     if (threshold) params.set("threshold", String(threshold));
 
     const response = await fetch(`/api/curated_inferences/count?${params}`);
-    const data = await response.json();
-    setCounts(data);
+    const loaderData = (await response.json()) as CountsData;
+    setCounts(loaderData);
+    /* Type-safe way to do this (pending [this issue](https://github.com/remix-run/react-router/issues/12635))
+     const response = await fetch(`/api/curated_inferences/count?${params}`);
+    const { loaderData } =
+      (await response.json()) as CuratedInferencesCount.ComponentProps;
+    setCounts(loaderData as CountsData);
+    */
   };
 
   const handleFunctionChange = (value: string) => {
@@ -284,36 +292,28 @@ function FineTuningForm({
     }
   }
 
-  async function onSubmit(data: SFTFormValues) {
+  const onSubmit = async (data: SFTFormValues) => {
     try {
       const formData = {
         ...data,
-        jobId: uuid(),
       };
 
       const submitData = new FormData();
       submitData.append("data", JSON.stringify(formData));
 
-      // Try using fetcher.submit synchronously
-      fetcher.submit(submitData, {
-        method: "POST",
-      });
-
+      fetcher.submit(submitData, { method: "POST" });
       setSubmissionPhase("submitting");
     } catch (error) {
       console.error("Submission error:", error);
     }
-  }
+  };
+
   return (
     <div className="mt-8">
       <Form {...form}>
         <form
           onSubmit={(e) => {
-            e.preventDefault();
-
-            // Try calling onSubmit directly with current values
-            const values = form.getValues();
-            onSubmit(values);
+            handleSubmit(onSubmit)(e);
           }}
           className="space-y-6"
         >
@@ -324,6 +324,9 @@ function FineTuningForm({
               config={config}
               onFunctionChange={handleFunctionChange}
             />
+            {errors.function && (
+              <p className="text-red-500 text-sm">{errors.function.message}</p>
+            )}
 
             <MetricSelector
               control={form.control}
@@ -333,6 +336,9 @@ function FineTuningForm({
               onMetricChange={handleMetricChange}
               onThresholdChange={handleThresholdChange}
             />
+            {errors.metric && (
+              <p className="text-red-500 text-sm">{errors.metric.message}</p>
+            )}
 
             <VariantSelector
               control={form.control}
@@ -344,11 +350,9 @@ function FineTuningForm({
             <AdvancedParametersAccordion control={form.control} />
           </div>
 
-          <div className="space-y-4">
-            <Button type="submit" disabled={submissionPhase !== "idle"}>
-              {getButtonText()}
-            </Button>
-          </div>
+          <Button type="submit" disabled={submissionPhase !== "idle"}>
+            {getButtonText()}
+          </Button>
         </form>
       </Form>
     </div>
