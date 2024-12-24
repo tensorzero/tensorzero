@@ -881,7 +881,8 @@ mod tests {
                 provider_errors: HashMap::from([(
                     "error".to_string(),
                     Error::new(ErrorDetails::InferenceClient {
-                        message: "Error sending request to Dummy provider.".to_string()
+                        message: "Error sending request to Dummy provider.".to_string(),
+                        status_code: None
                     })
                 )])
             }

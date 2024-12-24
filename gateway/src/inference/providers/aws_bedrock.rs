@@ -48,8 +48,8 @@ impl AWSBedrockProvider {
             .region()
             .await
             .ok_or_else(|| {
-                Error::new(ErrorDetails::AWSBedrockClient {
-                    status_code: StatusCode::INTERNAL_SERVER_ERROR,
+                Error::new(ErrorDetails::InferenceClient {
+                    status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
                     message: "Failed to determine AWS region.".to_string(),
                 })
             })?;
@@ -128,8 +128,8 @@ impl InferenceProvider for AWSBedrockProvider {
                     .tool_choice(tool_choice)
                     .build()
                     .map_err(|e| {
-                        Error::new(ErrorDetails::AWSBedrockClient {
-                            status_code: StatusCode::INTERNAL_SERVER_ERROR,
+                        Error::new(ErrorDetails::InferenceClient {
+                            status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
                             message: format!("Error configuring AWS Bedrock tool config: {e}"),
                         })
                     })?;
@@ -143,7 +143,7 @@ impl InferenceProvider for AWSBedrockProvider {
 
         let start_time = Instant::now();
         let output = bedrock_request.send().await.map_err(|e| {
-            Error::new(ErrorDetails::AWSBedrockServer {
+            Error::new(ErrorDetails::InferenceServer {
                 message: format!(
                     "Error sending request to AWS Bedrock: {}",
                     DisplayErrorContext(&e)
@@ -237,8 +237,8 @@ impl InferenceProvider for AWSBedrockProvider {
                     .tool_choice(tool_choice)
                     .build()
                     .map_err(|e| {
-                        Error::new(ErrorDetails::AWSBedrockClient {
-                            status_code: StatusCode::INTERNAL_SERVER_ERROR,
+                        Error::new(ErrorDetails::InferenceClient {
+                            status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
                             message: format!("Error configuring AWS Bedrock tool config: {e}"),
                         })
                     })?;
@@ -251,7 +251,7 @@ impl InferenceProvider for AWSBedrockProvider {
 
         let start_time = Instant::now();
         let stream = bedrock_request.send().await.map_err(|e| {
-            Error::new(ErrorDetails::AWSBedrockServer {
+            Error::new(ErrorDetails::InferenceServer {
                 message: format!(
                     "Error sending request to AWS Bedrock: {}",
                     DisplayErrorContext(&e)
@@ -264,7 +264,7 @@ impl InferenceProvider for AWSBedrockProvider {
             Some(Ok(chunk)) => chunk,
             Some(Err(e)) => return Err(e),
             None => {
-                return Err(Error::new(ErrorDetails::AWSBedrockServer {
+                return Err(Error::new(ErrorDetails::InferenceServer {
                     message: "Stream ended before first chunk".to_string(),
                 }))
             }
@@ -309,7 +309,7 @@ fn stream_bedrock(
 
             match ev {
                 Err(e) => {
-                    yield Err(ErrorDetails::AWSBedrockServer {
+                    yield Err(ErrorDetails::InferenceServer {
                         message: e.to_string(),
                     }.into());
                 }
@@ -363,10 +363,10 @@ fn bedrock_to_tensorzero_stream_message(
                             // This is necessary because the ToolCallChunk must always contain the tool name and ID
                             // even though AWS Bedrock only sends the tool ID and name in the ToolUse chunk and not InputJSONDelta
                             vec![ContentBlockChunk::ToolCall(ToolCallChunk {
-                                raw_name: current_tool_name.clone().ok_or_else(|| Error::new(ErrorDetails::AWSBedrockServer {
+                                raw_name: current_tool_name.clone().ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                                     message: "Got InputJsonDelta chunk from AWS Bedrock without current tool name being set by a ToolUse".to_string(),
                                 }))?,
-                                id: current_tool_id.clone().ok_or_else(|| Error::new(ErrorDetails::AWSBedrockServer {
+                                id: current_tool_id.clone().ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                                     message: "Got InputJsonDelta chunk from AWS Bedrock without current tool id being set by a ToolUse".to_string(),
                                 }))?,
                                 raw_arguments: tool_use.input,
@@ -376,7 +376,7 @@ fn bedrock_to_tensorzero_stream_message(
                             message_latency,
                         )))
                     }
-                    _ => Err(ErrorDetails::AWSBedrockServer {
+                    _ => Err(ErrorDetails::InferenceServer {
                         message: "Unsupported content block delta type for AWS Bedrock".to_string(),
                     }
                     .into()),
@@ -405,7 +405,7 @@ fn bedrock_to_tensorzero_stream_message(
                         message_latency,
                     )))
                 }
-                _ => Err(ErrorDetails::AWSBedrockServer {
+                _ => Err(ErrorDetails::InferenceServer {
                     message: "Unsupported content block start type for AWS Bedrock".to_string(),
                 }
                 .into()),
@@ -437,7 +437,7 @@ fn bedrock_to_tensorzero_stream_message(
                 }
             }
         }
-        _ => Err(ErrorDetails::AWSBedrockServer {
+        _ => Err(ErrorDetails::InferenceServer {
             message: "Unknown event type from AWS Bedrock".to_string(),
         }
         .into()),
@@ -474,15 +474,15 @@ impl TryFrom<&ContentBlock> for BedrockContentBlock {
             ContentBlock::ToolCall(tool_call) => {
                 // Convert the tool call arguments from String to JSON Value...
                 let input = serde_json::from_str(&tool_call.arguments).map_err(|e| {
-                    Error::new(ErrorDetails::AWSBedrockClient {
-                        status_code: StatusCode::BAD_REQUEST,
+                    Error::new(ErrorDetails::InferenceClient {
+                        status_code: Some(StatusCode::BAD_REQUEST),
                         message: format!("Error parsing tool call arguments as JSON Value: {e}"),
                     })
                 })?;
 
                 // ...then convert the JSON Value to an AWS SDK Document
                 let input = serde_json::from_value(input).map_err(|e| {
-                    Error::new(ErrorDetails::AWSBedrockServer {
+                    Error::new(ErrorDetails::InferenceServer {
                         message: format!(
                             "Error converting tool call arguments to AWS SDK Document: {e}"
                         ),
@@ -495,8 +495,8 @@ impl TryFrom<&ContentBlock> for BedrockContentBlock {
                     .tool_use_id(tool_call.id.clone())
                     .build()
                     .map_err(|_| {
-                        Error::new(ErrorDetails::AWSBedrockClient {
-                            status_code: StatusCode::BAD_REQUEST,
+                        Error::new(ErrorDetails::InferenceClient {
+                            status_code: Some(StatusCode::BAD_REQUEST),
                             message: "Error serializing tool call block".to_string(),
                         })
                     })?;
@@ -510,8 +510,8 @@ impl TryFrom<&ContentBlock> for BedrockContentBlock {
                     // NOTE: The AWS Bedrock SDK doesn't include `name` in the ToolResultBlock
                     .build()
                     .map_err(|_| {
-                        Error::new(ErrorDetails::AWSBedrockClient {
-                            status_code: StatusCode::BAD_REQUEST,
+                        Error::new(ErrorDetails::InferenceClient {
+                            status_code: Some(StatusCode::BAD_REQUEST),
                             message: "Error serializing tool result block".to_string(),
                         })
                     })?;
@@ -530,7 +530,7 @@ impl TryFrom<BedrockContentBlock> for ContentBlock {
             BedrockContentBlock::Text(text) => Ok(text.into()),
             BedrockContentBlock::ToolUse(tool_use) => {
                 let arguments = serde_json::to_string(&tool_use.input).map_err(|e| {
-                    Error::new(ErrorDetails::AWSBedrockServer {
+                    Error::new(ErrorDetails::InferenceServer {
                         message: format!("Error parsing tool call arguments from AWS Bedrock: {e}"),
                     })
                 })?;
@@ -607,7 +607,7 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
         let message = match output.output {
             Some(ConverseOutputType::Message(message)) => Some(message),
             _ => {
-                return Err(ErrorDetails::AWSBedrockServer {
+                return Err(ErrorDetails::InferenceServer {
                     message: "AWS Bedrock returned an unknown output type.".to_string(),
                 }
                 .into());
@@ -616,7 +616,7 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
 
         let mut content: Vec<ContentBlock> = message
             .ok_or_else(|| {
-                Error::new(ErrorDetails::AWSBedrockServer {
+                Error::new(ErrorDetails::InferenceServer {
                     message: "AWS Bedrock returned an empty message.".to_string(),
                 })
             })?
@@ -640,7 +640,7 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
                 output_tokens: u.output_tokens as u32,
             })
             .ok_or_else(|| {
-                Error::new(ErrorDetails::AWSBedrockServer {
+                Error::new(ErrorDetails::InferenceServer {
                     message: "AWS Bedrock returned a message without usage information."
                         .to_string(),
                 })
@@ -667,7 +667,7 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
 /// https://github.com/awslabs/aws-sdk-rust/issues/645
 fn serialize_aws_bedrock_struct<T: std::fmt::Debug>(output: &T) -> Result<String, Error> {
     serde_json::to_string(&serde_json::json!({"debug": format!("{:?}", output)})).map_err(|e| {
-        Error::new(ErrorDetails::AWSBedrockServer {
+        Error::new(ErrorDetails::InferenceServer {
             message: format!("Error parsing response from AWS Bedrock: {e}"),
         })
     })
@@ -679,8 +679,8 @@ impl TryFrom<&ToolConfig> for Tool {
     fn try_from(tool_config: &ToolConfig) -> Result<Self, Error> {
         let tool_input_schema = ToolInputSchema::Json(
             serde_json::from_value(tool_config.parameters().clone()).map_err(|e| {
-                Error::new(ErrorDetails::AWSBedrockClient {
-                    status_code: StatusCode::INTERNAL_SERVER_ERROR,
+                Error::new(ErrorDetails::InferenceClient {
+                    status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
                     message: format!("Error parsing tool input schema: {e}"),
                 })
             })?,
@@ -692,8 +692,8 @@ impl TryFrom<&ToolConfig> for Tool {
             .input_schema(tool_input_schema)
             .build()
             .map_err(|_| {
-                Error::new(ErrorDetails::AWSBedrockClient {
-                    status_code: StatusCode::INTERNAL_SERVER_ERROR,
+                Error::new(ErrorDetails::InferenceClient {
+                    status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
                     message: "Error configuring AWS Bedrock tool choice (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
                         .to_string(),
                 })
@@ -722,8 +722,8 @@ impl TryFrom<ToolChoice> for AWSBedrockToolChoice {
                 SpecificToolChoice::builder()
                     .name(tool_name)
                     .build()
-                    .map_err(|_| Error::new(ErrorDetails::AWSBedrockClient {
-                        status_code: StatusCode::INTERNAL_SERVER_ERROR,
+                    .map_err(|_| Error::new(ErrorDetails::InferenceClient {
+                        status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
                         message:
                             "Error configuring AWS Bedrock tool choice (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
                                 .to_string(),

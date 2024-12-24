@@ -116,18 +116,19 @@ impl InferenceProvider for HyperbolicProvider {
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request to Hyperbolic: {e}"),
+                    status_code: e.status(),
                 })
             })?;
 
         if res.status().is_success() {
             let response = res.text().await.map_err(|e| {
-                Error::new(ErrorDetails::HyperbolicServer {
+                Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
                 })
             })?;
 
             let response = serde_json::from_str(&response).map_err(|e| {
-                Error::new(ErrorDetails::HyperbolicServer {
+                Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {response}"),
                 })
             })?;
@@ -147,7 +148,7 @@ impl InferenceProvider for HyperbolicProvider {
             Err(map_openai_to_hyperbolic_error(handle_openai_error(
                 res.status(),
                 &res.text().await.map_err(|e| {
-                    Error::new(ErrorDetails::HyperbolicServer {
+                    Error::new(ErrorDetails::InferenceServer {
                         message: format!("Error parsing error response: {e}"),
                     })
                 })?,
@@ -170,7 +171,7 @@ impl InferenceProvider for HyperbolicProvider {
     > {
         let request_body = HyperbolicRequest::new(&self.model_name, request)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::HyperbolicServer {
+            Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request: {e}"),
             })
         })?;
@@ -186,6 +187,7 @@ impl InferenceProvider for HyperbolicProvider {
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request to Hyperbolic: {e}"),
+                    status_code: None,
                 })
             })?;
 
@@ -198,7 +200,7 @@ impl InferenceProvider for HyperbolicProvider {
             Some(Ok(chunk)) => chunk,
             Some(Err(e)) => return Err(e),
             None => {
-                return Err(ErrorDetails::HyperbolicServer {
+                return Err(ErrorDetails::InferenceServer {
                     message: "Stream ended before first chunk".to_string(),
                 }
                 .into())
@@ -292,13 +294,13 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
         } = value;
 
         let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::HyperbolicServer {
+            Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error parsing response: {e}"),
             })
         })?;
 
         if response.choices.len() != 1 {
-            return Err(ErrorDetails::HyperbolicServer {
+            return Err(ErrorDetails::InferenceServer {
                 message: format!(
                     "Response has invalid number of choices {}, Expected 1",
                     response.choices.len()
@@ -311,7 +313,7 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
         let message = response
             .choices
             .pop()
-            .ok_or_else(|| Error::new(ErrorDetails::HyperbolicServer {
+            .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
             }))?
             .message;
@@ -325,7 +327,7 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
             }
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::HyperbolicServer {
+            Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request body as JSON: {e}"),
             })
         })?;
@@ -346,11 +348,11 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
 fn map_openai_to_hyperbolic_error(e: Error) -> Error {
     let details = e.get_owned_details();
     match details {
-        ErrorDetails::HyperbolicServer { message } => ErrorDetails::HyperbolicServer { message },
-        ErrorDetails::HyperbolicClient {
+        ErrorDetails::InferenceServer { message } => ErrorDetails::InferenceServer { message },
+        ErrorDetails::InferenceClient {
             message,
             status_code,
-        } => ErrorDetails::HyperbolicClient {
+        } => ErrorDetails::InferenceClient {
             message,
             status_code,
         },
