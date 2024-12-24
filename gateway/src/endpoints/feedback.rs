@@ -922,12 +922,6 @@ mod tests {
                 message: format!("Inference ID: {inference_id} does not exist"),
             }
         );
-        assert_eq!(
-            details,
-            ErrorDetails::InvalidRequest {
-                message: format!("Inference ID: {inference_id} does not exist"),
-            }
-        );
     }
 
     #[tokio::test]
