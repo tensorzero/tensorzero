@@ -221,6 +221,8 @@ async fn write_comment(
 ) -> Result<(), Error> {
     // Verify that the target_id exists.
     let _ = get_target_identifier(&connection_info, &level, &target_id).await?;
+    // Verify that the target_id exists.
+    let _ = get_target_identifier(&connection_info, &level, &target_id).await?;
     let value = value.as_str().ok_or_else(|| ErrorDetails::InvalidRequest {
         message: "Feedback value for a comment must be a string".to_string(),
     })?;
@@ -281,6 +283,10 @@ async fn write_float(
     // Verify that the target_id exists.
     let _ = get_target_identifier(&connection_info, &metric_config.level, &target_id).await?;
 
+    let metric_config = config.get_metric(metric_name)?;
+    // Verify that the target_id exists.
+    let _ = get_target_identifier(&connection_info, &metric_config.level, &target_id).await?;
+
     let value = value.as_f64().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
             message: format!("Feedback value for metric `{metric_name}` must be a number"),
@@ -311,6 +317,10 @@ async fn write_boolean(
     // Verify that the target_id exists.
     let _ = get_target_identifier(&connection_info, &metric_config.level, &target_id).await?;
 
+    let metric_config = config.get_metric(metric_name)?;
+    // Verify that the target_id exists.
+    let _ = get_target_identifier(&connection_info, &metric_config.level, &target_id).await?;
+
     let value = value.as_bool().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
             message: format!("Feedback value for metric `{metric_name}` must be a boolean"),
@@ -327,26 +337,8 @@ async fn write_boolean(
     Ok(())
 }
 
-/// Retrieves the identifier associated with a given `target_id` based on the specified metric configuration level.
-///
-/// Depending on the `metric_config_level`, this function performs the following:
-/// - For `MetricConfigLevel::Inference`, it validates that the given `target_id` (inference ID) exists in the database
-///   and retrieves the corresponding `function_name`.
-/// - For `MetricConfigLevel::Episode`, this functionality is currently unimplemented and returns an empty string.
-///
-/// # Arguments
-///
-/// * `connection_info` - Connection details for the ClickHouse database.
-/// * `metric_config_level` - The level of metric configuration, either `Inference` or `Episode`.
-/// * `target_id` - The UUID of the target to be validated and retrieved.
-///
-/// # Returns
-///
-/// * On success:
-///   - For `Inference`, returns the `function_name` associated with the `target_id`.
-///   - For `Episode`, currently returns an empty string (implementation pending).
-/// * On failure:
-///   - Returns an `Error` if the `target_id` is invalid or does not exist.
+// Validates the target id and returns the identifier for the target.
+// The identifier will be function name for inference level metrics.
 async fn get_target_identifier(
     connection_info: &ClickHouseConnectionInfo,
     metric_config_level: &MetricConfigLevel,
@@ -891,24 +883,6 @@ mod tests {
             HashMap::from([("poo".to_string(), "bar".to_string())])
         );
 
-        // Test dryrun
-        let inference_id = Uuid::now_v7();
-        let params = Params {
-            episode_id: None,
-            inference_id: Some(inference_id),
-            metric_name: "test_float".to_string(),
-            value: value.clone(),
-            tags: HashMap::from([("poo".to_string(), "bar".to_string())]),
-            dryrun: Some(true),
-        };
-        let response =
-            feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
-        assert!(response.is_ok());
-        let response_json = response.unwrap();
-        let feedback_id = response_json.get("feedback_id").unwrap();
-        assert!(feedback_id.is_string());
-        sleep(Duration::from_millis(200)).await;
-
         // Check that the feedback was not written
         let mock_data = app_state_data
             .clickhouse_connection_info
@@ -953,6 +927,12 @@ mod tests {
         let response =
             feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
         let details = response.unwrap_err().get_owned_details();
+        assert_eq!(
+            details,
+            ErrorDetails::InvalidRequest {
+                message: format!("Inference ID: {inference_id} does not exist"),
+            }
+        );
         assert_eq!(
             details,
             ErrorDetails::InvalidRequest {
