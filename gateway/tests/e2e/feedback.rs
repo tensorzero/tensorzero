@@ -53,8 +53,42 @@ async fn e2e_test_comment_feedback() {
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
 
-    // Test comment feedback on Inference
+    // Test comment feedback on Inference without valid inference_id. Should fail.
     let inference_id = Uuid::now_v7();
+    let payload =
+        json!({"inference_id": inference_id, "metric_name": "comment", "value": "bad job!"});
+    let response = client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    // Run inference (standard, no dryrun) to get an inference_id.
+    let inference_payload = serde_json::json!({
+        "function_name": "json_success",
+        "input": {
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+        },
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(response.status().is_success());
+    let response_json = response.json::<Value>().await.unwrap();
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+    // Sleep for 1 second to allow ClickHouse to write
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
     let payload =
         json!({"inference_id": inference_id, "metric_name": "comment", "value": "bad job!"});
     let response = client
@@ -519,7 +553,7 @@ async fn e2e_test_float_feedback() {
         error_message
     );
 
-    // Test float feedback on different metric for inference
+    // Test float feedback on different metric without an inference id. Should fail.
     let inference_id = Uuid::now_v7();
     let payload =
         json!({"inference_id": inference_id, "metric_name": "brevity_score", "value": 0.5});
@@ -529,7 +563,43 @@ async fn e2e_test_float_feedback() {
         .send()
         .await
         .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    // Run inference (standard, no dryrun) to get an inference_id
+    let inference_payload = serde_json::json!({
+        "function_name": "json_success",
+        "input": {
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+        },
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(response.status().is_success());
+    let response_json = response.json::<Value>().await.unwrap();
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+    // Sleep for 1 second to allow ClickHouse to write
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Test float feedback on different metric for inference.
+    let payload =
+        json!({"inference_id": inference_id, "metric_name": "brevity_score", "value": 0.5});
+    let response = client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
+
     let response_json = response.json::<Value>().await.unwrap();
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
@@ -558,6 +628,7 @@ async fn e2e_test_boolean_feedback() {
     let inference_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
     let tag_value2 = Uuid::now_v7().to_string();
+    // Running without valid inference_id. Should fail.
     let payload = json!({"inference_id": inference_id, "metric_name": "task_success", "value": true, "tags": {"key": tag_value, "key2": tag_value2}});
     let response = client
         .post(get_gateway_endpoint("/feedback"))
@@ -565,7 +636,39 @@ async fn e2e_test_boolean_feedback() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    // Run inference (standard, no dryrun) to get an inference_id.
+    // Run inference (standard, no dryrun) to get an inference_id
+    let inference_payload = serde_json::json!({
+        "function_name": "json_success",
+        "input": {
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+        },
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(response.status().is_success());
+    let response_json = response.json::<Value>().await.unwrap();
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+    // Sleep for 1 second to allow ClickHouse to write
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    let payload = json!({"inference_id": inference_id, "metric_name": "task_success", "value": true, "tags": {"key": tag_value, "key2": tag_value2}});
+    let response = client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
     let response_json = response.json::<Value>().await.unwrap();
     let feedback_id = response_json.get("feedback_id").unwrap();
     assert!(feedback_id.is_string());
