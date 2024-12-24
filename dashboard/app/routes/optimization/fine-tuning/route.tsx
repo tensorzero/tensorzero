@@ -69,7 +69,6 @@ export async function loader({ params }: Route.LoaderArgs) {
     jobStore[job_id] = updatedJob;
 
     const result = updatedJob.result();
-    // TODO (Viraj, important!): fix the status here.
     const status = updatedJob.status();
     const modelProvider = updatedJob.provider();
 
@@ -161,7 +160,7 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
         )}
 
         {finalResult && (
-          <div className="p-4 bg-gray-100 rounded-lg">
+          <div className="p-4 bg-gray-100 rounded-lg mt-4">
             <div className="mb-2 font-medium">Configuration</div>
             <Textarea
               value={finalResult}
