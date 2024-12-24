@@ -283,10 +283,6 @@ async fn write_float(
     // Verify that the target_id exists.
     let _ = get_target_identifier(&connection_info, &metric_config.level, &target_id).await?;
 
-    let metric_config = config.get_metric(metric_name)?;
-    // Verify that the target_id exists.
-    let _ = get_target_identifier(&connection_info, &metric_config.level, &target_id).await?;
-
     let value = value.as_f64().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
             message: format!("Feedback value for metric `{metric_name}` must be a number"),
@@ -316,11 +312,6 @@ async fn write_boolean(
     let metric_config = config.get_metric(metric_name)?;
     // Verify that the target_id exists.
     let _ = get_target_identifier(&connection_info, &metric_config.level, &target_id).await?;
-
-    let metric_config = config.get_metric(metric_name)?;
-    // Verify that the target_id exists.
-    let _ = get_target_identifier(&connection_info, &metric_config.level, &target_id).await?;
-
     let value = value.as_bool().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
             message: format!("Feedback value for metric `{metric_name}` must be a boolean"),
