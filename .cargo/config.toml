@@ -1,4 +1,4 @@
-[build]
+[target.'cfg(not(target_arch = "wasm32"))']
 rustflags = [
     "-C",
     "target-cpu=native",
@@ -8,9 +8,9 @@ rustflags = [
 
 
 [alias]
-test-unit = "nextest run --lib --bins --profile unit"
-test-e2e = "nextest run --test e2e --features e2e_tests"
-test-all = "nextest run --features e2e_tests"
+test-unit = "nextest run -p gateway --lib --bins --profile unit"
+test-e2e = "nextest run -p gateway --test e2e --features e2e_tests"
+test-all = "nextest run -p gateway --features e2e_tests"
 
 run-e2e = "run --bin gateway --features e2e_tests -- gateway/tests/e2e/tensorzero.toml"
 watch-e2e = "watch -x run-e2e"
