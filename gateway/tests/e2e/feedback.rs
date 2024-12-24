@@ -53,7 +53,7 @@ async fn e2e_test_comment_feedback() {
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
 
-    // Test comment feedback on Inference without valid inference_id. Should fail.
+    // Running without valid inference_id. Should fail.
     let inference_id = Uuid::now_v7();
     let payload =
         json!({"inference_id": inference_id, "metric_name": "comment", "value": "bad job!"});
@@ -553,7 +553,7 @@ async fn e2e_test_float_feedback() {
         error_message
     );
 
-    // Test float feedback on different metric without an inference id. Should fail.
+    // Running without valid inference_id. Should fail.
     let inference_id = Uuid::now_v7();
     let payload =
         json!({"inference_id": inference_id, "metric_name": "brevity_score", "value": 0.5});
@@ -638,7 +638,6 @@ async fn e2e_test_boolean_feedback() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     // Run inference (standard, no dryrun) to get an inference_id.
-    // Run inference (standard, no dryrun) to get an inference_id
     let inference_payload = serde_json::json!({
         "function_name": "json_success",
         "input": {
