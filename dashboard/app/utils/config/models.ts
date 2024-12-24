@@ -187,7 +187,7 @@ export type FullyQualifiedModelConfig = {
   };
 };
 
-export async function get_fine_tuned_model_config(
+export function get_fine_tuned_model_config(
   model_name: string,
   model_provider_type: ProviderType,
 ) {
@@ -209,6 +209,11 @@ export async function get_fine_tuned_model_config(
   return fullyQualifiedModelConfig;
 }
 
-export function dump_model_config(model_config: FullyQualifiedModelConfig) {
-  return stringify(model_config);
+export function dump_model_config(modelConfig: FullyQualifiedModelConfig) {
+  const rawSerializedModelConfig = stringify(modelConfig);
+  const lines = rawSerializedModelConfig.split("\n");
+  const linesWithoutFirst = lines.slice(1);
+  linesWithoutFirst.splice(3, 1);
+  const trimmedSerializedModelConfig = linesWithoutFirst.join("\n");
+  return trimmedSerializedModelConfig;
 }

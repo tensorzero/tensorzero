@@ -1,12 +1,8 @@
-// Node.js built-ins
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { createReadStream } from "fs";
-
-// External dependencies
 import OpenAI from "openai";
-
 import type { SFTFormValues } from "~/routes/optimization/fine-tuning/types";
 import {
   getCuratedInferences,
@@ -48,10 +44,14 @@ export class OpenAISFTJob extends SFTJob {
 
   static async fromFormData(data: SFTFormValues): Promise<OpenAISFTJob> {
     const config = await getConfig();
-    // TODO: throw if this isn't a chat completion
     const currentVariant = config.functions[data.function].variants[
       data.variant
     ] as ChatCompletionConfig;
+    if (currentVariant.type != "chat_completion") {
+      throw new Error(
+        "Supervised fine-tuning is only supported for chat completion variants",
+      );
+    }
     const curatedInferences = await getCuratedInferences(
       data.function,
       config.functions[data.function],
@@ -83,7 +83,7 @@ export class OpenAISFTJob extends SFTJob {
 
   status(): SFTJobStatus {
     if (this.jobStatus === "failed") return "error";
-    return this.jobStatus === "COMPLETED" ? "completed" : "running";
+    return this.jobStatus === "succeeded" ? "completed" : "running";
   }
 
   async poll(): Promise<OpenAISFTJob> {
@@ -131,8 +131,7 @@ export async function start_sft_openai(
   });
 }
 
-// TODO(Viraj): write unit tests here
-function tensorzero_inference_to_openai_messages(
+export function tensorzero_inference_to_openai_messages(
   sample: ParsedInferenceRow,
   env: JsExposedEnv,
 ) {
@@ -185,8 +184,7 @@ function tensorzero_inference_to_openai_messages(
   return messages;
 }
 
-// TODO(Viraj): write unit tests here
-function content_block_to_openai_message(
+export function content_block_to_openai_message(
   content: InputMessageContent,
   role: Role,
   env: JsExposedEnv,
@@ -239,7 +237,10 @@ async function upload_examples_to_openai(samples: OpenAIMessage[][]) {
       .join("\n");
 
     // Write to temporary file
-    tempFile = path.join(os.tmpdir(), `temp_training_data_${Date.now()}.jsonl`);
+    tempFile = path.join(
+      os.tmpdir(),
+      `temp_training_data_${Math.random().toString(36).substring(2, 10)}.jsonl`,
+    );
     await fs.writeFile(tempFile, jsonl);
 
     const file = await client.files.create({
