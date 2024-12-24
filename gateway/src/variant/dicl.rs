@@ -7,7 +7,7 @@ use serde::Deserialize;
 use crate::embeddings::EmbeddingResponseWithMetadata;
 use crate::endpoints::inference::InferenceModels;
 use crate::inference::types::{
-    batch::BatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role,
+    batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role,
 };
 use crate::model::ModelTable;
 use crate::{
@@ -266,7 +266,7 @@ impl Variant for DiclConfig {
         _inference_configs: &'a [InferenceConfig<'a, 'a>],
         _clients: &'a InferenceClients<'a>,
         _inference_params: Vec<InferenceParams>,
-    ) -> Result<BatchModelInferenceWithMetadata<'a>, Error> {
+    ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
         // TODO (#493): Implement batch inference for Dicl
         Err(ErrorDetails::UnsupportedVariantForBatchInference { variant_name: None }.into())
     }

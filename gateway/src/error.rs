@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
 use serde_json::{json, Value};
+use uuid::Uuid;
 
 #[derive(Debug, PartialEq)]
 // As long as the struct member is private, we force people to use the `new` method and log the error.
@@ -82,10 +83,16 @@ pub enum ErrorDetails {
         index: usize,
         message: String,
     },
+    BatchNotFound {
+        id: Uuid,
+    },
     ChannelWrite {
         message: String,
     },
     ClickHouseConnection {
+        message: String,
+    },
+    ClickHouseDeserialization {
         message: String,
     },
     ClickHouseMigration {
@@ -135,6 +142,9 @@ pub enum ErrorDetails {
     Inference {
         message: String,
     },
+    InferenceNotFound {
+        inference_id: Uuid,
+    },
     InferenceClient {
         message: String,
     },
@@ -143,6 +153,9 @@ pub enum ErrorDetails {
     },
     InputValidation {
         source: Box<Error>,
+    },
+    InvalidBatchParams {
+        message: String,
     },
     InvalidBaseUrl {
         message: String,
@@ -162,6 +175,13 @@ pub enum ErrorDetails {
     },
     InvalidMessage {
         message: String,
+    },
+    InvalidModel {
+        model_name: String,
+    },
+    InvalidModelProvider {
+        model_name: String,
+        provider_name: String,
     },
     InvalidOpenAICompatibleRequest {
         message: String,
@@ -200,6 +220,9 @@ pub enum ErrorDetails {
     MiniJinjaTemplateRender {
         template_name: String,
         message: String,
+    },
+    MissingBatchInferenceResponse {
+        inference_id: Option<Uuid>,
     },
     MistralClient {
         message: String,
@@ -308,8 +331,10 @@ impl ErrorDetails {
             ErrorDetails::AzureServer { .. } => tracing::Level::ERROR,
             ErrorDetails::BadCredentialsPreInference { .. } => tracing::Level::ERROR,
             ErrorDetails::BatchInputValidation { .. } => tracing::Level::WARN,
+            ErrorDetails::BatchNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::ChannelWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseConnection { .. } => tracing::Level::ERROR,
+            ErrorDetails::ClickHouseDeserialization { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseMigration { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseQuery { .. } => tracing::Level::ERROR,
             ErrorDetails::Config { .. } => tracing::Level::ERROR,
@@ -325,14 +350,18 @@ impl ErrorDetails {
             ErrorDetails::HyperbolicServer { .. } => tracing::Level::ERROR,
             ErrorDetails::Inference { .. } => tracing::Level::ERROR,
             ErrorDetails::InferenceClient { .. } => tracing::Level::ERROR,
+            ErrorDetails::InferenceNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::InferenceTimeout { .. } => tracing::Level::WARN,
             ErrorDetails::InputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidBaseUrl { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidBatchParams { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidCandidate { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidDiclConfig { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidEpisodeId { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidMessage { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidModel { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidModelProvider { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidOpenAICompatibleRequest { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidProviderConfig { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidRequest { .. } => tracing::Level::WARN,
@@ -345,6 +374,7 @@ impl ErrorDetails {
             ErrorDetails::MiniJinjaTemplate { .. } => tracing::Level::ERROR,
             ErrorDetails::MiniJinjaTemplateMissing { .. } => tracing::Level::ERROR,
             ErrorDetails::MiniJinjaTemplateRender { .. } => tracing::Level::ERROR,
+            ErrorDetails::MissingBatchInferenceResponse { .. } => tracing::Level::WARN,
             ErrorDetails::MistralClient { .. } => tracing::Level::WARN,
             ErrorDetails::MistralServer { .. } => tracing::Level::ERROR,
             ErrorDetails::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
@@ -390,8 +420,10 @@ impl ErrorDetails {
             ErrorDetails::AzureServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::BadCredentialsPreInference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::BatchInputValidation { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::BatchNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ClickHouseDeserialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -407,14 +439,18 @@ impl ErrorDetails {
             ErrorDetails::HyperbolicServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Inference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceClient { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InferenceNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::InferenceTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             ErrorDetails::InvalidEpisodeId { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InputValidation { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidBaseUrl { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidBatchParams { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidDiclConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidModel { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidModelProvider { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidOpenAICompatibleRequest { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidProviderConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidRequest { .. } => StatusCode::BAD_REQUEST,
@@ -427,6 +463,7 @@ impl ErrorDetails {
             ErrorDetails::MiniJinjaTemplate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::MiniJinjaTemplateMissing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::MiniJinjaTemplateRender { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::MissingBatchInferenceResponse { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::MistralClient { status_code, .. } => *status_code,
             ErrorDetails::MistralServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -520,11 +557,17 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::BatchInputValidation { index, message } => {
                 write!(f, "Input at index {} failed validation: {}", index, message,)
             }
+            ErrorDetails::BatchNotFound { id } => {
+                write!(f, "Batch request not found for id: {}", id)
+            }
             ErrorDetails::ChannelWrite { message } => {
                 write!(f, "Error writing to channel: {}", message)
             }
             ErrorDetails::ClickHouseConnection { message } => {
                 write!(f, "Error connecting to ClickHouse: {}", message)
+            }
+            ErrorDetails::ClickHouseDeserialization { message } => {
+                write!(f, "Error deserializing ClickHouse response: {}", message)
             }
             ErrorDetails::ClickHouseMigration { id, message } => {
                 write!(f, "Error running ClickHouse migration {}: {}", id, message)
@@ -571,13 +614,21 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::Inference { message } => write!(f, "{}", message),
             ErrorDetails::InferenceClient { message } => write!(f, "{}", message),
+            ErrorDetails::InferenceNotFound { inference_id } => {
+                write!(f, "Inference not found for id: {}", inference_id)
+            }
             ErrorDetails::InferenceTimeout { variant_name } => {
                 write!(f, "Inference timed out for variant: {}", variant_name)
             }
             ErrorDetails::InputValidation { source } => {
                 write!(f, "Input validation failed with messages: {}", source)
             }
-            ErrorDetails::InvalidBaseUrl { message } => write!(f, "{}", message),
+            ErrorDetails::InvalidBaseUrl { message } => write!(
+                f,
+                "Invalid batch params retrieved from database: {}",
+                message
+            ),
+            ErrorDetails::InvalidBatchParams { message } => write!(f, "{}", message),
             ErrorDetails::InvalidCandidate {
                 variant_name,
                 message,
@@ -596,6 +647,19 @@ impl std::fmt::Display for ErrorDetails {
                 write!(f, "Invalid Episode ID: {}", message)
             }
             ErrorDetails::InvalidMessage { message } => write!(f, "{}", message),
+            ErrorDetails::InvalidModel { model_name } => {
+                write!(f, "Invalid model: {}", model_name)
+            }
+            ErrorDetails::InvalidModelProvider {
+                model_name,
+                provider_name,
+            } => {
+                write!(
+                    f,
+                    "Invalid model provider: {} for model: {}",
+                    provider_name, model_name
+                )
+            }
             ErrorDetails::InvalidOpenAICompatibleRequest { message } => write!(
                 f,
                 "Invalid request to OpenAI-compatible endpoint: {}",
@@ -648,6 +712,14 @@ impl std::fmt::Display for ErrorDetails {
             } => {
                 write!(f, "Error rendering template {}: {}", template_name, message)
             }
+            ErrorDetails::MissingBatchInferenceResponse { inference_id } => match inference_id {
+                Some(inference_id) => write!(
+                    f,
+                    "Missing batch inference response for inference id: {}",
+                    inference_id
+                ),
+                None => write!(f, "Missing batch inference response"),
+            },
             ErrorDetails::MistralClient { message, .. } => {
                 write!(f, "Error from Mistral client: {}", message)
             }
