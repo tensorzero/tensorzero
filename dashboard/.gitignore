@@ -5,3 +5,6 @@
 /.react-router/
 /build/
 .vite/
+
+# TS stuff
+*.tsbuildinfo
