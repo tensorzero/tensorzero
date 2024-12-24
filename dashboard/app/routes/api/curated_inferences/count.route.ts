@@ -15,6 +15,7 @@ import { getConfig } from "~/utils/config/index.server";
 export async function loader({
   request,
 }: LoaderFunctionArgs): Promise<Response> {
+  // For type-safe fetching of counts, we would want this function to return a Promise<CountsData>
   const url = new URL(request.url);
   const functionName = url.searchParams.get("function");
   const metricName = url.searchParams.get("metric");
@@ -43,6 +44,12 @@ export async function loader({
       config.metrics[metricName],
     );
   }
+  // For type-safe fetching of counts, we would want this return statement to be:
+  // return {
+  //   inferenceCount,
+  //   feedbackCount,
+  //   curatedInferenceCount,
+  // };
   return Response.json({
     inferenceCount,
     feedbackCount,

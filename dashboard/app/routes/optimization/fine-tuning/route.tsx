@@ -27,6 +27,7 @@ import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
 import { Form } from "~/components/ui/form";
 import type { Route } from "./+types/route";
+// The following import would be needed for type-safe fetching of counts
 // import type { Route as CuratedInferencesCount } from "../../api/curated_inferences/+types/count.route";
 import type { CountsData } from "../../api/curated_inferences/count.route";
 import type { Config } from "~/utils/config";
@@ -214,6 +215,12 @@ function FineTuningForm({
     const response = await fetch(`/api/curated_inferences/count?${params}`);
     const loaderData = (await response.json()) as CountsData;
     setCounts(loaderData);
+    /* Type-safe way to do this (pending [this issue](https://github.com/remix-run/react-router/issues/12635))
+     const response = await fetch(`/api/curated_inferences/count?${params}`);
+    const { loaderData } =
+      (await response.json()) as CuratedInferencesCount.ComponentProps;
+    setCounts(loaderData as CountsData);
+    */
   };
 
   const handleFunctionChange = (value: string) => {
