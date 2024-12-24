@@ -32,7 +32,7 @@ cargo test-unit
 > You can run a subset of the tests by setting the missing credentials for fake values.
 > For example, you can set `OPENAI_API_KEY="none"` if you don't plan to run OpenAI tests.
 >
-> For GCP Vertex AI, you'll need a credential file. You can use the following fake file:
+> For GCP Vertex AI, you'll need a credentials file. You can use the following fake file:
 >
 > ```json
 > {
