@@ -190,12 +190,14 @@ function FineTuningForm({
       validationSplitPercent: 20,
       maxSamples: 100000,
       threshold: 0.5,
+      jobId: uuid(),
     },
     resolver: SFTFormValuesResolver,
+    mode: "onChange",
   });
 
   const {
-    // handleSubmit,
+    handleSubmit,
     formState: { errors },
   } = form;
 
@@ -269,34 +271,28 @@ function FineTuningForm({
     }
   }
 
-  async function onSubmit(data: SFTFormValues) {
+  const onSubmit = async (data: SFTFormValues) => {
     try {
       const formData = {
         ...data,
-        jobId: uuid(),
       };
 
       const submitData = new FormData();
       submitData.append("data", JSON.stringify(formData));
 
       fetcher.submit(submitData, { method: "POST" });
-
       setSubmissionPhase("submitting");
     } catch (error) {
       console.error("Submission error:", error);
     }
-  }
+  };
 
   return (
     <div className="mt-8">
       <Form {...form}>
         <form
           onSubmit={(e) => {
-            e.preventDefault();
-
-            // Try calling onSubmit directly with current values
-            const values = form.getValues();
-            onSubmit(values);
+            handleSubmit(onSubmit)(e);
           }}
           className="space-y-6"
         >
