@@ -221,8 +221,6 @@ async fn write_comment(
 ) -> Result<(), Error> {
     // Verify that the target_id exists.
     let _ = get_target_identifier(&connection_info, &level, &target_id).await?;
-    // Verify that the target_id exists.
-    let _ = get_target_identifier(&connection_info, &level, &target_id).await?;
     let value = value.as_str().ok_or_else(|| ErrorDetails::InvalidRequest {
         message: "Feedback value for a comment must be a string".to_string(),
     })?;
