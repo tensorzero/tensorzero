@@ -310,6 +310,7 @@ async fn write_boolean(
     let metric_config = config.get_metric(metric_name)?;
     // Verify that the target_id exists.
     let _ = get_target_identifier(&connection_info, &metric_config.level, &target_id).await?;
+
     let value = value.as_bool().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
             message: format!("Feedback value for metric `{metric_name}` must be a boolean"),
@@ -889,6 +890,24 @@ mod tests {
             retrieved_tags,
             HashMap::from([("poo".to_string(), "bar".to_string())])
         );
+
+        // Test dryrun
+        let inference_id = Uuid::now_v7();
+        let params = Params {
+            episode_id: None,
+            inference_id: Some(inference_id),
+            metric_name: "test_float".to_string(),
+            value: value.clone(),
+            tags: HashMap::from([("poo".to_string(), "bar".to_string())]),
+            dryrun: Some(true),
+        };
+        let response =
+            feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
+        assert!(response.is_ok());
+        let response_json = response.unwrap();
+        let feedback_id = response_json.get("feedback_id").unwrap();
+        assert!(feedback_id.is_string());
+        sleep(Duration::from_millis(200)).await;
 
         // Check that the feedback was not written
         let mock_data = app_state_data
