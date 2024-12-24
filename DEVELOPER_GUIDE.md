@@ -32,7 +32,7 @@ cargo test-unit
 > You can run a subset of the tests by setting the missing credentials for fake values.
 > For example, you can set `OPENAI_API_KEY="none"` if you don't plan to run OpenAI tests.
 >
-> For GCP Vertex AI, you'll need a credentials file. You can use the following fake file:
+> For GCP Vertex AI, you'll need a credentials file. You can use the following fake file and point `GCP_VERTEX_CREDENTIALS_PATH` to it:
 >
 > ```json
 > {
@@ -49,6 +49,8 @@ cargo test-unit
 >   "universe_domain": "googleapis.com"
 > }
 > ```
+>
+> This workflow is quite cumbersome, so we're planning to streamline it in the future (see [#575](https://github.com/tensorzero/tensorzero/issues/575)).
 
 3. Launch the gateway in testing mode
 
@@ -58,7 +60,7 @@ cargo test-unit
 
 > [!TIP]
 >
-> You can run a subset of tests with `cargo test-e2 xyz`, which will only run tests with `xyz` in their name.
+> You can run a subset of tests with `cargo test-e2e xyz`, which will only run tests with `xyz` in their name.
 
 4. Run the E2E tests
    ```bash
