@@ -3,7 +3,7 @@ use reqwest::Client;
 use serde::de::Error as SerdeError;
 use std::collections::HashMap;
 use strum::VariantNames;
-use tracing::{instrument, span, Level};
+use tracing::{span, Instrument, Level};
 use url::Url;
 
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -39,7 +39,6 @@ pub struct ModelConfig {
 }
 
 impl ModelConfig {
-    #[instrument(skip_all)]
     pub async fn infer<'a, 'request>(
         &'a self,
         request: &'request ModelInferenceRequest<'request>,
@@ -53,9 +52,10 @@ impl ModelConfig {
                     provider_name: provider_name.clone(),
                 })
             })?;
-            let provider_span = span!(Level::INFO, "infer with provider", provider_name);
-            let _guard = provider_span.enter();
-            let response = provider_config.infer(request, client, api_keys).await;
+            let response = provider_config
+                .infer(request, client, api_keys)
+                .instrument(span!(Level::INFO, "infer", provider_name))
+                .await;
             match response {
                 Ok(response) => {
                     let model_inference_response =
@@ -71,7 +71,6 @@ impl ModelConfig {
         Err(err)
     }
 
-    #[instrument(skip_all)]
     pub async fn infer_stream<'a, 'request>(
         &'a self,
         request: &'request ModelInferenceRequest<'request>,
@@ -93,10 +92,9 @@ impl ModelConfig {
                     provider_name: provider_name.clone(),
                 })
             })?;
-            let provider_span = span!(Level::INFO, "infer with provider", provider_name);
-            let _guard = provider_span.enter();
             let response = provider_config
                 .infer_stream(request, client, api_keys)
+                .instrument(span!(Level::INFO, "infer_stream", provider_name))
                 .await;
             match response {
                 Ok(response) => {
@@ -113,7 +111,6 @@ impl ModelConfig {
         }))
     }
 
-    #[instrument(skip_all)]
     pub async fn start_batch_inference<'a, 'request>(
         &'a self,
         requests: &'request [ModelInferenceRequest<'request>],
@@ -127,10 +124,9 @@ impl ModelConfig {
                     provider_name: provider_name.clone(),
                 })
             })?;
-            let provider_span = span!(Level::INFO, "infer with provider", provider_name);
-            let _guard = provider_span.enter();
             let response = provider_config
                 .start_batch_inference(requests, client, api_keys)
+                .instrument(span!(Level::INFO, "start_batch_inference", provider_name))
                 .await;
             match response {
                 Ok(response) => {
@@ -389,7 +385,6 @@ impl<'de> Deserialize<'de> for ProviderConfig {
 }
 
 impl ProviderConfig {
-    #[instrument(skip_all)]
     async fn infer(
         &self,
         request: &ModelInferenceRequest<'_>,
@@ -421,7 +416,6 @@ impl ProviderConfig {
         }
     }
 
-    #[instrument(skip_all)]
     async fn infer_stream(
         &self,
         request: &ModelInferenceRequest<'_>,
@@ -480,7 +474,6 @@ impl ProviderConfig {
         }
     }
 
-    #[instrument(skip_all)]
     async fn start_batch_inference<'a>(
         &self,
         requests: &'a [ModelInferenceRequest<'a>],
