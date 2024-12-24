@@ -51,6 +51,40 @@ repos:
         pass_filenames: false
         always_run: true
 
+      - id: prettier
+        name: prettier
+        entry: npx prettier
+        language: node
+        types_or:
+          [css, html, javascript, json, jsx, markdown, scss, ts, tsx, yaml]
+        args: ["--write", "--list-different"]
+        additional_dependencies:
+          - prettier
+          - "@prettier/plugin-xml"
+        always_run: true
+        exclude: '.*\.ipynb$'
+
+      - id: eslint
+        name: eslint
+        entry: bash -c 'cd dashboard && npx eslint'
+        language: node
+        types_or: [javascript, jsx, ts, tsx]
+        additional_dependencies:
+          - eslint
+          - "@typescript-eslint/parser"
+          - "@typescript-eslint/eslint-plugin"
+        pass_filenames: false
+        always_run: true
+
+      - id: tsc
+        name: typescript
+        entry: bash -c 'cd dashboard && tsc'
+        language: node
+        pass_filenames: false
+        additional_dependencies:
+          - typescript
+        always_run: true
+
   - repo: https://github.com/srstevenson/nb-clean
     rev: 3.2.0
     hooks:
