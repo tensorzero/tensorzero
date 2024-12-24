@@ -426,6 +426,8 @@ pub async fn get_batch_request(
                         status,
                         function_name,
                         variant_name,
+                        raw_request,
+                        raw_response,
                         errors
                     FROM BatchRequest
                     WHERE batch_id = '{}'
@@ -455,6 +457,8 @@ pub async fn get_batch_request(
                         br.status as status,
                         br.function_name as function_name,
                         br.variant_name as variant_name,
+                        br.raw_request as raw_request,
+                        br.raw_response as raw_response,
                         br.errors as errors
                     FROM BatchIdByInferenceId bi
                     JOIN BatchRequest br ON bi.batch_id = br.batch_id

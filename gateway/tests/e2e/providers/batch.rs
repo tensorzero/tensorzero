@@ -458,6 +458,8 @@ async fn get_latest_batch_inference(
                 br.status,
                 br.function_name,
                 br.variant_name,
+                br.raw_request,
+                br.raw_response,
                 br.errors
             FROM BatchRequest br
             INNER JOIN BatchModelInference bmi ON br.batch_id = bmi.batch_id

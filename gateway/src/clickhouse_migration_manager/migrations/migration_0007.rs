@@ -53,6 +53,11 @@ impl<'a> Migration for Migration0007<'a> {
         if !check_column_exists(self.clickhouse, "BatchRequest", "raw_response", "0007").await? {
             return Ok(true);
         }
+        if get_column_type(self.clickhouse, "BatchRequest", "errors", "0007").await?
+            != "Array(String)"
+        {
+            return Ok(true);
+        }
         if get_column_type(
             self.clickhouse,
             "ModelInference",
@@ -96,7 +101,10 @@ impl<'a> Migration for Migration0007<'a> {
         let query = r#"
             ALTER TABLE BatchRequest
             ADD COLUMN IF NOT EXISTS raw_request String,
-            ADD COLUMN IF NOT EXISTS raw_response String;"#;
+            ADD COLUMN IF NOT EXISTS raw_response String,
+            ADD COLUMN IF NOT EXISTS function_name LowCardinality(String),
+            ADD COLUMN IF NOT EXISTS variant_name LowCardinality(String),
+            MODIFY COLUMN errors Array(String);"#;
         let _ = self.clickhouse.run_query(query.to_string()).await?;
 
         // Alter the `response_time_ms` column of `ModelInference` to be a nullable column

@@ -31,6 +31,7 @@ async fn get_providers() -> E2ETestProviders {
         },
     ];
 
+    #[cfg(feature = "e2e_tests")]
     let shorthand_providers = vec![E2ETestProvider {
         variant_name: "fireworks-shorthand".to_string(),
         model_name: "fireworks::accounts/fireworks/models/llama-v3p1-8b-instruct".to_string(),
@@ -45,6 +46,7 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: tool_providers.clone(),
         parallel_tool_use_inference: tool_providers,
         json_mode_inference: json_providers,
+        #[cfg(feature = "e2e_tests")]
         shorthand_inference: shorthand_providers,
         #[cfg(feature = "batch_tests")]
         supports_batch_inference: false,

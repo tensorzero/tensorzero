@@ -42,11 +42,13 @@ pub struct E2ETestProviders {
     pub dynamic_tool_use_inference: Vec<E2ETestProvider>,
     pub parallel_tool_use_inference: Vec<E2ETestProvider>,
     pub json_mode_inference: Vec<E2ETestProvider>,
+    #[cfg(feature = "e2e_tests")]
     pub shorthand_inference: Vec<E2ETestProvider>,
     #[cfg(feature = "batch_tests")]
     pub supports_batch_inference: bool,
 }
 
+#[cfg(feature = "e2e_tests")]
 #[macro_export]
 macro_rules! generate_provider_tests {
     ($func:ident) => {
