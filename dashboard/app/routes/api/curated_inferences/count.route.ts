@@ -14,7 +14,7 @@ import { getConfig } from "~/utils/config/index.server";
 /// If both a function and metric are provided, it will count all curated inferences for that function and metric
 export async function loader({
   request,
-}: LoaderFunctionArgs): Promise<CountsData> {
+}: LoaderFunctionArgs): Promise<Response> {
   const url = new URL(request.url);
   const functionName = url.searchParams.get("function");
   const metricName = url.searchParams.get("metric");
@@ -43,11 +43,11 @@ export async function loader({
       config.metrics[metricName],
     );
   }
-  return {
+  return Response.json({
     inferenceCount,
     feedbackCount,
     curatedInferenceCount,
-  };
+  } as CountsData);
 }
 
 export interface CountsData {

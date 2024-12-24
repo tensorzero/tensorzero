@@ -27,7 +27,7 @@ import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
 import { Form } from "~/components/ui/form";
 import type { Route } from "./+types/route";
-import type { Route as CuratedInferencesCount } from "../../api/curated_inferences/+types/count.route";
+// import type { Route as CuratedInferencesCount } from "../../api/curated_inferences/+types/count.route";
 import type { CountsData } from "../../api/curated_inferences/count.route";
 import type { Config } from "~/utils/config";
 
@@ -112,7 +112,6 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
   useEffect(() => {
     if (status === "running") {
       setSubmissionPhase("pending");
-      setIsSubmitted(true);
       const interval = setInterval(() => {
         revalidator.revalidate();
       }, 10000);
@@ -120,7 +119,6 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
     }
   }, [status, revalidator]);
 
-  const [isSubmitted, setIsSubmitted] = useState(false);
   const [submissionPhase, setSubmissionPhase] = useState<
     "idle" | "submitting" | "pending" | "complete"
   >("idle");
@@ -142,7 +140,6 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
             config={config}
             submissionPhase={submissionPhase}
             setSubmissionPhase={setSubmissionPhase}
-            isSubmitted={isSubmitted}
           />
         )}
 
@@ -184,7 +181,6 @@ function FineTuningForm({
   setSubmissionPhase: (
     phase: "idle" | "submitting" | "pending" | "complete",
   ) => void;
-  isSubmitted: boolean;
 }) {
   const form = useForm<SFTFormValues>({
     defaultValues: {
@@ -196,6 +192,12 @@ function FineTuningForm({
     },
     resolver: SFTFormValuesResolver,
   });
+
+  const {
+    // handleSubmit,
+    formState: { errors },
+  } = form;
+
   const fetcher = useFetcher();
 
   const [counts, setCounts] = useState<CountsData>({
@@ -210,9 +212,8 @@ function FineTuningForm({
     if (metricName) params.set("metric", metricName);
 
     const response = await fetch(`/api/curated_inferences/count?${params}`);
-    const { loaderData } =
-      (await response.json()) as CuratedInferencesCount.ComponentProps;
-    setCounts(loaderData as CountsData);
+    const loaderData = (await response.json()) as CountsData;
+    setCounts(loaderData);
   };
 
   const handleFunctionChange = (value: string) => {
@@ -271,16 +272,14 @@ function FineTuningForm({
       const submitData = new FormData();
       submitData.append("data", JSON.stringify(formData));
 
-      // Try using fetcher.submit synchronously
-      fetcher.submit(submitData, {
-        method: "POST",
-      });
+      fetcher.submit(submitData, { method: "POST" });
 
       setSubmissionPhase("submitting");
     } catch (error) {
       console.error("Submission error:", error);
     }
   }
+
   return (
     <div className="mt-8">
       <Form {...form}>
@@ -301,6 +300,9 @@ function FineTuningForm({
               config={config}
               onFunctionChange={handleFunctionChange}
             />
+            {errors.function && (
+              <p className="text-red-500 text-sm">{errors.function.message}</p>
+            )}
 
             <MetricSelector
               control={form.control}
@@ -309,6 +311,9 @@ function FineTuningForm({
               config={config}
               onMetricChange={handleMetricChange}
             />
+            {errors.metric && (
+              <p className="text-red-500 text-sm">{errors.metric.message}</p>
+            )}
 
             <VariantSelector
               control={form.control}
@@ -320,11 +325,9 @@ function FineTuningForm({
             <AdvancedParametersAccordion control={form.control} />
           </div>
 
-          <div className="space-y-4">
-            <Button type="submit" disabled={submissionPhase !== "idle"}>
-              {getButtonText()}
-            </Button>
-          </div>
+          <Button type="submit" disabled={submissionPhase !== "idle"}>
+            {getButtonText()}
+          </Button>
         </form>
       </Form>
     </div>

@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 export const ModelOptionSchema = z.object({
-  displayName: z.string(),
-  name: z.string(),
+  displayName: z.string().nonempty("Model name is required"),
+  name: z.string().nonempty("Model name is required"),
   provider: z.enum(["openai", "fireworks", "mistral"]),
 });
 
