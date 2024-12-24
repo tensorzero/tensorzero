@@ -124,6 +124,22 @@ async fn e2e_test_comment_feedback() {
 #[tokio::test]
 async fn e2e_test_demonstration_feedback() {
     let client = Client::new();
+    // Running without valid inference_id. Should fail.
+    let tag_value = Uuid::now_v7().to_string();
+    let inference_id = Uuid::now_v7();
+    let payload = json!({
+        "inference_id": inference_id,
+        "metric_name": "demonstration",
+        "value": "do this!",
+        "tags": {"key": tag_value}
+    });
+    let response = client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     // Run inference (standard, no dryrun) to get an inference_id
     let inference_payload = serde_json::json!({
         "function_name": "basic_test",
@@ -234,6 +250,20 @@ async fn e2e_test_demonstration_feedback() {
 #[tokio::test]
 async fn e2e_test_demonstration_feedback_json() {
     let client = Client::new();
+    // Running without valid inference_id. Should fail.
+    let inference_id = Uuid::now_v7();
+    let payload = json!({
+        "inference_id": inference_id,
+        "metric_name": "demonstration",
+        "value": {"answer": "Tokyo"}
+    });
+    let response = client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     // Run inference (standard, no dryrun) to get an inference_id
     let inference_payload = serde_json::json!({
         "function_name": "json_success",
@@ -332,7 +362,21 @@ async fn e2e_test_demonstration_feedback_json() {
 
 #[tokio::test]
 async fn e2e_test_demonstration_feedback_tool() {
+    // Running without valid inference_id. Should fail.
     let client = Client::new();
+    let inference_id = Uuid::now_v7();
+    let payload = json!({
+        "inference_id": inference_id,
+        "metric_name": "demonstration",
+        "value": "sunny",
+    });
+    let response = client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     // Run inference (standard, no dryrun) to get an inference_id
     let inference_payload = serde_json::json!({
         "function_name": "weather_helper",

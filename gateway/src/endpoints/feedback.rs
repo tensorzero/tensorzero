@@ -326,8 +326,26 @@ async fn write_boolean(
     Ok(())
 }
 
-// Validates the target id and returns the identifier for the target.
-// The identifier will be function name for inference level metrics.
+/// Retrieves the identifier associated with a given `target_id` based on the specified metric configuration level.
+///
+/// Depending on the `metric_config_level`, this function performs the following:
+/// - For `MetricConfigLevel::Inference`, it validates that the given `target_id` (inference ID) exists in the database
+///   and retrieves the corresponding `function_name`.
+/// - For `MetricConfigLevel::Episode`, this functionality is currently unimplemented and returns an empty string.
+///
+/// # Arguments
+///
+/// * `connection_info` - Connection details for the ClickHouse database.
+/// * `metric_config_level` - The level of metric configuration, either `Inference` or `Episode`.
+/// * `target_id` - The UUID of the target to be validated and retrieved.
+///
+/// # Returns
+///
+/// * On success:
+///   - For `Inference`, returns the `function_name` associated with the `target_id`.
+///   - For `Episode`, currently returns an empty string (implementation pending).
+/// * On failure:
+///   - Returns an `Error` if the `target_id` is invalid or does not exist.
 async fn get_target_identifier(
     connection_info: &ClickHouseConnectionInfo,
     metric_config_level: &MetricConfigLevel,
