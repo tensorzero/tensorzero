@@ -147,7 +147,7 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
           />
         )}
 
-        {loaderData && (
+        {status !== "idle" && (
           <div className="p-4 bg-gray-100 rounded-lg mt-4">
             <div className="mb-2 font-medium">
               Loader Data (Last Updated: {new Date().toLocaleTimeString()})
