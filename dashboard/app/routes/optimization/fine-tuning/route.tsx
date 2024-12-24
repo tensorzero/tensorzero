@@ -27,6 +27,8 @@ import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
 import { Form } from "~/components/ui/form";
 import type { Route } from "./+types/route";
+import type { Route as CuratedInferencesCount } from "../../api/curated_inferences/+types/count.route";
+import type { CountsData } from "../../api/curated_inferences/count.route";
 import type { Config } from "~/utils/config";
 
 export const meta: MetaFunction = () => {
@@ -197,11 +199,7 @@ function FineTuningForm({
   });
   const fetcher = useFetcher();
 
-  const [counts, setCounts] = useState<{
-    inferenceCount: number | null;
-    feedbackCount: number | null;
-    curatedInferenceCount: number | null;
-  }>({
+  const [counts, setCounts] = useState<CountsData>({
     inferenceCount: null,
     feedbackCount: null,
     curatedInferenceCount: null,
@@ -213,8 +211,9 @@ function FineTuningForm({
     if (metricName) params.set("metric", metricName);
 
     const response = await fetch(`/api/curated_inferences/count?${params}`);
-    const data = await response.json();
-    setCounts(data);
+    const { loaderData } =
+      (await response.json()) as CuratedInferencesCount.ComponentProps;
+    setCounts(loaderData as CountsData);
   };
 
   const handleFunctionChange = (value: string) => {

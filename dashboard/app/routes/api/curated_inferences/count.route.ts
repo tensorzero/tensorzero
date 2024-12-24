@@ -12,7 +12,9 @@ import { getConfig } from "~/utils/config/index.server";
 /// If only a function is provided, it will count all inferences for that function
 /// If only a metric is provided, it will count all feedbacks for that metric
 /// If both a function and metric are provided, it will count all curated inferences for that function and metric
-export async function loader({ request }: LoaderFunctionArgs) {
+export async function loader({
+  request,
+}: LoaderFunctionArgs): Promise<CountsData> {
   const url = new URL(request.url);
   const functionName = url.searchParams.get("function");
   const metricName = url.searchParams.get("metric");
@@ -41,9 +43,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
       config.metrics[metricName],
     );
   }
-  return Response.json({
+  return {
     inferenceCount,
     feedbackCount,
     curatedInferenceCount,
-  });
+  };
+}
+
+export interface CountsData {
+  inferenceCount: number | null;
+  feedbackCount: number | null;
+  curatedInferenceCount: number | null;
 }
