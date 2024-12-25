@@ -220,8 +220,8 @@ function FineTuningForm({
     if (threshold) params.set("threshold", String(threshold));
 
     const response = await fetch(`/api/curated_inferences/count?${params}`);
-    const loaderData = (await response.json()) as CountsData;
-    setCounts(loaderData);
+    const countsData = (await response.json()) as CountsData;
+    setCounts(countsData);
     /* Type-safe way to do this (pending [this issue](https://github.com/remix-run/react-router/issues/12635))
      const response = await fetch(`/api/curated_inferences/count?${params}`);
     const { loaderData } =
@@ -238,10 +238,10 @@ function FineTuningForm({
     );
   };
 
-  const handleMetricChange = (value: string) => {
+  const handleMetricChange = (value: string | null) => {
     fetchCounts(
       form.getValues("function") || undefined,
-      value,
+      value || undefined,
       form.getValues("threshold") || undefined,
     );
   };

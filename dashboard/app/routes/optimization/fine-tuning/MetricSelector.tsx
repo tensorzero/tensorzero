@@ -54,7 +54,7 @@ type MetricSelectorProps = {
   feedbackCount: number | null;
   curatedInferenceCount: number | null;
   config: Config;
-  onMetricChange: (value: string) => void;
+  onMetricChange: (value: string | null) => void;
   onThresholdChange: (value: number) => void;
 };
 
@@ -77,15 +77,21 @@ export function MetricSelector({
             <div className="space-y-2">
               <Select
                 onValueChange={(value: string) => {
-                  field.onChange(value);
-                  onMetricChange(value);
+                  const metricValue = value === "none" ? null : value;
+                  field.onChange(metricValue);
+                  onMetricChange(metricValue);
                 }}
-                value={field.value}
+                value={field.value ?? "none"}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select a metric" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="none">
+                    <div className="flex items-center justify-between w-full">
+                      <span>None</span>
+                    </div>
+                  </SelectItem>
                   {Object.entries(config.metrics).map(([name, metric]) => (
                     <SelectItem key={name} value={name}>
                       <div className="flex items-center justify-between w-full">

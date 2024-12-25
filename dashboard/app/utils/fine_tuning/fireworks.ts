@@ -83,7 +83,7 @@ export class FireworksSFTJob extends SFTJob {
       data.function,
       config.functions[data.function],
       data.metric,
-      config.metrics[data.metric],
+      data.metric ? config.metrics[data.metric] : null,
       data.threshold,
       data.maxSamples,
     );

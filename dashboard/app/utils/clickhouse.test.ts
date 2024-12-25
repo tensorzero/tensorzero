@@ -8,6 +8,7 @@ import {
   queryDemonstrationDataForFunction,
   countDemonstrationDataForFunction,
   countFeedbacksForMetric,
+  queryAllInferencesForFunction,
 } from "./clickhouse";
 
 test("checkClickhouseConnection", async () => {
@@ -94,4 +95,14 @@ test("countFeedbacksForMetric for demonstration type", async () => {
 
   // The fixture should have 100 demonstration feedback rows
   expect(result).toBe(100);
+});
+
+test("queryAllInferencesForFunction", async () => {
+  const result = await queryAllInferencesForFunction(
+    "dashboard_fixture_extract_entities",
+    "JsonInference",
+    undefined,
+  );
+  // The fixture should have 400 rows for this function
+  expect(result.length).toBe(400);
 });

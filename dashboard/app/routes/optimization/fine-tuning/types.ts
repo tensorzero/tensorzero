@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 export const SFTFormValuesSchema = z.object({
   function: z.string().nonempty("Function is required"),
-  metric: z.string().nonempty("Metric is required"),
+  metric: z.string().nullable(),
   model: ModelOptionSchema,
   variant: z.string().nonempty(),
   validationSplitPercent: z
