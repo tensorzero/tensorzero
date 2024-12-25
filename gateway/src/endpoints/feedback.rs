@@ -94,9 +94,8 @@ pub async fn feedback_handler(
         FeedbackType::Comment => {
             write_comment(
                 clickhouse_connection_info,
+                &params,
                 feedback_metadata.target_id,
-                params.value,
-                params.tags,
                 feedback_metadata.level,
                 feedback_id,
                 dryrun,
@@ -107,9 +106,8 @@ pub async fn feedback_handler(
             write_demonstration(
                 clickhouse_connection_info,
                 config,
+                &params,
                 feedback_metadata.target_id,
-                params.value,
-                params.tags,
                 feedback_id,
                 dryrun,
             )
@@ -119,10 +117,8 @@ pub async fn feedback_handler(
             write_float(
                 clickhouse_connection_info,
                 config,
-                &params.metric_name,
+                &params,
                 feedback_metadata.target_id,
-                params.value,
-                params.tags,
                 feedback_id,
                 dryrun,
             )
@@ -132,10 +128,8 @@ pub async fn feedback_handler(
             write_boolean(
                 clickhouse_connection_info,
                 config,
-                &params.metric_name,
+                &params,
                 feedback_metadata.target_id,
-                params.value,
-                params.tags,
                 feedback_id,
                 dryrun,
             )
@@ -212,15 +206,15 @@ fn get_feedback_metadata<'a>(
 
 async fn write_comment(
     connection_info: ClickHouseConnectionInfo,
+    params: &Params,
     target_id: Uuid,
-    value: Value,
-    tags: HashMap<String, String>,
     level: &MetricConfigLevel,
     feedback_id: Uuid,
     dryrun: bool,
 ) -> Result<(), Error> {
+    let Params { value, tags, .. } = params;
     // Verify that the target_id exists.
-    let _ = get_target_identifier(&connection_info, &level, &target_id).await?;
+    let _ = get_target_identifier(&connection_info, level, &target_id).await?;
     let value = value.as_str().ok_or_else(|| ErrorDetails::InvalidRequest {
         message: "Feedback value for a comment must be a string".to_string(),
     })?;
@@ -242,12 +236,12 @@ async fn write_comment(
 async fn write_demonstration(
     connection_info: ClickHouseConnectionInfo,
     config: &'static Config<'_>,
+    params: &Params,
     inference_id: Uuid,
-    value: Value,
-    tags: HashMap<String, String>,
     feedback_id: Uuid,
     dryrun: bool,
 ) -> Result<(), Error> {
+    let Params { value, tags, .. } = params;
     let function_name = get_target_identifier(
         &connection_info,
         &MetricConfigLevel::Inference,
@@ -255,7 +249,7 @@ async fn write_demonstration(
     )
     .await?;
     let function_config = config.get_function(&function_name)?;
-    let parsed_value = validate_parse_demonstration(function_config, &config.tools, &value).await?;
+    let parsed_value = validate_parse_demonstration(function_config, &config.tools, value).await?;
     let payload = json!({"inference_id": inference_id, "value": parsed_value, "id": feedback_id, "tags": tags});
     if !dryrun {
         tokio::spawn(async move {
@@ -270,14 +264,18 @@ async fn write_demonstration(
 async fn write_float(
     connection_info: ClickHouseConnectionInfo,
     config: &'static Config<'_>,
-    metric_name: &str,
+    params: &Params,
     target_id: Uuid,
-    value: Value,
-    tags: HashMap<String, String>,
     feedback_id: Uuid,
     dryrun: bool,
 ) -> Result<(), Error> {
-    let metric_config = config.get_metric(metric_name)?;
+    let Params {
+        metric_name,
+        value,
+        tags,
+        ..
+    } = params;
+    let metric_config: &crate::config_parser::MetricConfig = config.get_metric(metric_name)?;
     // Verify that the target_id exists.
     let _ = get_target_identifier(&connection_info, &metric_config.level, &target_id).await?;
 
@@ -300,13 +298,17 @@ async fn write_float(
 async fn write_boolean(
     connection_info: ClickHouseConnectionInfo,
     config: &'static Config<'_>,
-    metric_name: &str,
+    params: &Params,
     target_id: Uuid,
-    value: Value,
-    tags: HashMap<String, String>,
     feedback_id: Uuid,
     dryrun: bool,
 ) -> Result<(), Error> {
+    let Params {
+        metric_name,
+        value,
+        tags,
+        ..
+    } = params;
     let metric_config = config.get_metric(metric_name)?;
     // Verify that the target_id exists.
     let _ = get_target_identifier(&connection_info, &metric_config.level, &target_id).await?;
@@ -361,14 +363,13 @@ async fn get_target_identifier(
             if function_name.is_empty() {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: format!("Inference ID: {target_id} does not exist"),
-                }))
-                .into();
+                }));
             };
-            return Ok(function_name);
+            Ok(function_name)
         }
         MetricConfigLevel::Episode => {
             // TODO: Implement this later as it might require db migrations.
-            return Ok("".to_string());
+            Ok("".to_string())
         }
     }
 }
