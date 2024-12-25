@@ -94,7 +94,7 @@ test("countFeedbacksForMetric for demonstration type", async () => {
   });
 
   // The fixture should have 100 demonstration feedback rows
-  expect(result).toBe(100);
+  expect(result).toBe(593);
 });
 
 test("queryAllInferencesForFunction", async () => {

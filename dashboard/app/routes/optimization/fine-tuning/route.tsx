@@ -209,6 +209,15 @@ function FineTuningForm({
     curatedInferenceCount: null,
   });
 
+  // Add this effect to watch for fetcher data changes
+  // This is needed because fetcher.load is not async, so it doesn't return a promise
+  // and we need to watch for data changes via the fetcher.data property
+  useEffect(() => {
+    if (fetcher.data) {
+      setCounts(fetcher.data as CountsData);
+    }
+  }, [fetcher.data]);
+
   const fetchCounts = async (
     functionName?: string,
     metricName?: string,
@@ -219,15 +228,7 @@ function FineTuningForm({
     if (metricName) params.set("metric", metricName);
     if (threshold) params.set("threshold", String(threshold));
 
-    const response = await fetch(`/api/curated_inferences/count?${params}`);
-    const countsData = (await response.json()) as CountsData;
-    setCounts(countsData);
-    /* Type-safe way to do this (pending [this issue](https://github.com/remix-run/react-router/issues/12635))
-     const response = await fetch(`/api/curated_inferences/count?${params}`);
-    const { loaderData } =
-      (await response.json()) as CuratedInferencesCount.ComponentProps;
-    setCounts(loaderData as CountsData);
-    */
+    fetcher.load(`/api/curated_inferences/count?${params}`);
   };
 
   const handleFunctionChange = (value: string) => {
