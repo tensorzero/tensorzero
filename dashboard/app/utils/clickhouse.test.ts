@@ -5,8 +5,9 @@ import {
   countGoodBooleanMetricData,
   queryGoodFloatMetricData,
   countGoodFloatMetricData,
-  queryDemonstrationData,
-  countDemonstrationData,
+  queryDemonstrationDataForFunction,
+  countDemonstrationDataForFunction,
+  countFeedbacksForMetric,
 } from "./clickhouse";
 
 test("checkClickhouseConnection", async () => {
@@ -67,7 +68,7 @@ test("countGoodFloatMetricData", async () => {
 });
 
 test("queryDemonstrationData", async () => {
-  const result = await queryDemonstrationData(
+  const result = await queryDemonstrationDataForFunction(
     "dashboard_fixture_extract_entities",
     "JsonInference",
     undefined,
@@ -77,10 +78,20 @@ test("queryDemonstrationData", async () => {
 });
 
 test("countDemonstrationData", async () => {
-  const result = await countDemonstrationData(
+  const result = await countDemonstrationDataForFunction(
     "dashboard_fixture_extract_entities",
     "JsonInference",
   );
   // The fixture should have 100 rows with demonstration data
+  expect(result).toBe(100);
+});
+
+test("countFeedbacksForMetric for demonstration type", async () => {
+  const result = await countFeedbacksForMetric("unused_metric_name", {
+    type: "demonstration",
+    level: "inference",
+  });
+
+  // The fixture should have 100 demonstration feedback rows
   expect(result).toBe(100);
 });

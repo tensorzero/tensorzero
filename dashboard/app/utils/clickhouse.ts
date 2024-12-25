@@ -249,7 +249,21 @@ export async function countFeedbacksForMetric(
   metric_name: string,
   metric_config: MetricConfig,
 ): Promise<number> {
+  console.log("metric_config", metric_config);
   const metric_table_name = getMetricTableName(metric_config);
+
+  // Special handling for demonstration feedback which doesn't use metric_name
+  if (metric_config.type === "demonstration") {
+    const query = `SELECT COUNT() AS count FROM ${metric_table_name}`;
+    const resultSet = await clickhouseClient.query({
+      query,
+      format: "JSONEachRow",
+    });
+    const rows = await resultSet.json<{ count: string }>();
+    return Number(rows[0].count);
+  }
+
+  // Original logic for other metric types
   const query = `SELECT COUNT() AS count FROM ${metric_table_name} WHERE metric_name = {metric_name:String}`;
   const resultSet = await clickhouseClient.query({
     query,
@@ -291,6 +305,12 @@ export async function getCuratedInferences(
         threshold,
         max_samples,
       );
+    case "demonstration":
+      return queryDemonstrationDataForFunction(
+        function_name,
+        inference_table_name,
+        max_samples,
+      );
     default:
       throw new Error(`Unsupported metric type: ${metric_config.type}`);
   }
@@ -322,6 +342,11 @@ export async function countCuratedInferences(
         inference_join_key,
         metric_config.optimize === "max",
         threshold,
+      );
+    case "demonstration":
+      return countDemonstrationDataForFunction(
+        function_name,
+        inference_table_name,
       );
     default:
       throw new Error(`Unsupported metric type: ${metric_config.type}`);
@@ -425,7 +450,7 @@ export async function queryGoodFloatMetricData(
   return parseInferenceRows(rows, inference_table_name);
 }
 
-export async function queryDemonstrationData(
+export async function queryDemonstrationDataForFunction(
   function_name: string,
   inference_table_name: InferenceTableName,
   max_samples: number | undefined,
@@ -549,7 +574,7 @@ export async function countGoodFloatMetricData(
   return rows[0].count;
 }
 
-export async function countDemonstrationData(
+export async function countDemonstrationDataForFunction(
   function_name: string,
   inference_table_name: InferenceTableName,
 ): Promise<number> {
