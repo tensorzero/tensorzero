@@ -798,6 +798,7 @@ mod tests {
                     ErrorDetails::InferenceClient {
                         message: "Error sending request to Dummy provider.".to_string(),
                         status_code: None,
+                        provider_type: "Dummy".to_string(),
                     }
                     .into()
                 )])
@@ -951,6 +952,7 @@ mod tests {
                     ErrorDetails::InferenceClient {
                         message: "Error sending request to Dummy provider.".to_string(),
                         status_code: None,
+                        provider_type: "Dummy".to_string(),
                     }
                     .into()
                 )])
@@ -1099,6 +1101,7 @@ mod tests {
                     ErrorDetails::InferenceClient {
                         message: "Invalid API key for Dummy provider".to_string(),
                         status_code: None,
+                        provider_type: "Dummy".to_string(),
                     }
                     .into()
                 )])

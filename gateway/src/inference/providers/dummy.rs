@@ -165,6 +165,7 @@ impl InferenceProvider for DummyProvider {
                         self.model_name, *counter
                     ),
                     status_code: None,
+                    provider_type: "Dummy".to_string(),
                 }
                 .into());
             }
@@ -174,6 +175,7 @@ impl InferenceProvider for DummyProvider {
             return Err(ErrorDetails::InferenceClient {
                 message: "Error sending request to Dummy provider.".to_string(),
                 status_code: None,
+                provider_type: "Dummy".to_string(),
             }
             .into());
         }
@@ -184,6 +186,7 @@ impl InferenceProvider for DummyProvider {
                     return Err(ErrorDetails::InferenceClient {
                         message: "Invalid API key for Dummy provider".to_string(),
                         status_code: None,
+                        provider_type: "Dummy".to_string(),
                     }
                     .into());
                 }
@@ -291,6 +294,7 @@ impl InferenceProvider for DummyProvider {
                         self.model_name, *counter
                     ),
                     status_code: None,
+                    provider_type: "Dummy".to_string(),
                 }
                 .into());
             }
@@ -300,6 +304,7 @@ impl InferenceProvider for DummyProvider {
             return Err(ErrorDetails::InferenceClient {
                 message: "Error sending request to Dummy provider.".to_string(),
                 status_code: None,
+                provider_type: "Dummy".to_string(),
             }
             .into());
         }
@@ -415,6 +420,7 @@ impl EmbeddingProvider for DummyProvider {
             return Err(ErrorDetails::InferenceClient {
                 message: "Error sending request to Dummy provider.".to_string(),
                 status_code: None,
+                provider_type: "Dummy".to_string(),
             }
             .into());
         }

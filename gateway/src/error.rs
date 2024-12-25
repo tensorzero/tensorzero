@@ -85,10 +85,12 @@ pub enum ErrorDetails {
     },
     InferenceServer {
         message: String,
+        provider_type: String,
     },
     InferenceClient {
         message: String,
         status_code: Option<StatusCode>,
+        provider_type: String,
     },
     Inference {
         message: String,
@@ -404,8 +406,16 @@ impl std::fmt::Display for ErrorDetails {
                 write!(f, "Error in acquiring GCP credentials: {}", message)
             }
             ErrorDetails::Inference { message } => write!(f, "{}", message),
-            ErrorDetails::InferenceClient { message, .. } => write!(f, "{}", message),
-            ErrorDetails::InferenceServer { message, .. } => write!(f, "{}", message),
+            ErrorDetails::InferenceClient {
+                message,
+                provider_type,
+                ..
+            } => write!(f, "Error from {} client: {}", provider_type, message),
+            ErrorDetails::InferenceServer {
+                message,
+                provider_type,
+                ..
+            } => write!(f, "Error from {} server: {}", provider_type, message),
             ErrorDetails::InferenceTimeout { variant_name } => {
                 write!(f, "Inference timed out for variant: {}", variant_name)
             }
