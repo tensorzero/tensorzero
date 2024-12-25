@@ -74,21 +74,23 @@ export function AppSidebar({ className, ...props }: React.ComponentProps<typeof 
       )} 
       {...props}
     >
-      <div className="flex flex-col h-full mt-1.5">
+      <div className={`flex flex-col h-full  ${
+        state === 'collapsed' ? "mt-1.5" : "justify-between"
+      }`}>
         <SidebarHeader className="border-b h-14 flex items-center px-3">
           <SidebarMenu className="">
             <SidebarMenuItem className="">
               <SidebarMenuButton size="lg" className="" asChild>
-                <a href="/" className="flex mr-2 items-center gap-3">
+                <a href="/" className="flex opacity-95 hover:opacity-100 hover:text-black  mr-2 items-center gap-3">
                   <div className="flex aspect-square w-8 items-center justify-center rounded-lg bg-primary/5">
                     <img 
                       src="https://www.tensorzero.com/favicon.svg" 
                       alt="TensorZero logo" 
-                      className="w-6 h-6 "
+                      className={`w-6 h-6 `}
                     />
                   </div>
                   {state === 'expanded' && (
-                    <span className="font-semibold hover:text-black text-lg">TensorZero</span>
+                    <span className="font-semibold text-gray-700 text-lg">TensorZero</span>
                   )}
                 </a>
               </SidebarMenuButton>
