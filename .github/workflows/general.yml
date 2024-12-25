@@ -101,8 +101,6 @@ jobs:
           echo "FIREWORKS_ACCOUNT_ID=${{secrets.FIREWORKS_ACCOUNT_ID}}" >> .env
           echo "CLICKHOUSE_URL=http://localhost:8123/tensorzero" >> .env
           docker compose -f fixtures/docker-compose.yml up -d
-      - name: Debugging with ssh
-        uses: lhotari/action-upterm@v1
 
       - name: Run dashboard tests
         working-directory: dashboard
