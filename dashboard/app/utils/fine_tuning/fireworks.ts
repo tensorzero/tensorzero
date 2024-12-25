@@ -35,6 +35,7 @@ import { get_template_env, type ChatCompletionConfig } from "../config/variant";
 import { z } from "zod";
 import { SFTJob, type SFTJobStatus } from "./common";
 import type { ProviderType } from "../config/models";
+import type { ProgressInfo } from "~/routes/optimization/fine-tuning/ProgressIndicator";
 export const FIREWORKS_API_URL = "https://api.fireworks.ai";
 export const FIREWORKS_API_KEY = process.env.FIREWORKS_API_KEY || throwError();
 export const FIREWORKS_ACCOUNT_ID =
@@ -51,6 +52,7 @@ interface FireworksSFTJobParams {
   jobId: string;
   modelId?: string;
   modelPath?: string;
+  jobInfo: string | Record<string, unknown>;
 }
 
 export class FireworksSFTJob extends SFTJob {
@@ -59,6 +61,7 @@ export class FireworksSFTJob extends SFTJob {
   public jobId: string;
   public modelId?: string;
   public modelPath?: string;
+  public jobInfo: string | Record<string, unknown>;
 
   constructor(params: FireworksSFTJobParams) {
     super();
@@ -67,6 +70,7 @@ export class FireworksSFTJob extends SFTJob {
     this.jobId = params.jobId;
     this.modelId = params.modelId;
     this.modelPath = params.modelPath;
+    this.jobInfo = params.jobInfo;
   }
 
   static async from_form_data(data: SFTFormValues): Promise<FireworksSFTJob> {
@@ -91,18 +95,20 @@ export class FireworksSFTJob extends SFTJob {
       throw new Error("No curated inferences found");
     }
     const templateEnv = await get_template_env(currentVariant);
-    const jobPath = await start_sft_fireworks(
+    const jobInfo = await start_sft_fireworks(
       data.model.name,
       curatedInferences,
       data.validationSplitPercent,
       templateEnv,
     );
+    const jobPath = jobInfo.name as string;
     return new FireworksSFTJob({
       jobPath: jobPath,
       status: "RUNNING",
       jobId: data.jobId,
       modelId: undefined,
       modelPath: undefined,
+      jobInfo: jobInfo,
     });
   }
 
@@ -119,22 +125,32 @@ export class FireworksSFTJob extends SFTJob {
     return this.modelPath;
   }
 
+  progress_info(): ProgressInfo {
+    return {
+      provider: "fireworks",
+      data: this.jobInfo,
+    };
+  }
+
   async poll(): Promise<FireworksSFTJob> {
     if (!this.modelId) {
       // If we don't have a model ID, training is still running so we need to poll for it
-      const status = await get_fine_tuning_job_status(this.jobPath);
+      const jobInfo = await get_fine_tuning_job_details(this.jobPath);
+      const status = jobInfo.state;
       if (status === "COMPLETED") {
-        const modelId = await get_model_id(this.jobPath);
+        const modelId = jobInfo.modelId;
         if (!modelId) {
           throw new Error("Model ID not found after job completed");
         }
-        await deploy_model(FIREWORKS_ACCOUNT_ID, modelId);
+        // Begin deployment process
+        await deploy_model_request(FIREWORKS_ACCOUNT_ID, modelId);
         return new FireworksSFTJob({
           jobPath: this.jobPath,
           status: "DEPLOYING",
           jobId: this.jobId,
           modelId: modelId,
           modelPath: undefined,
+          jobInfo: jobInfo,
         });
       } else {
         return new FireworksSFTJob({
@@ -143,14 +159,16 @@ export class FireworksSFTJob extends SFTJob {
           jobId: this.jobId,
           modelId: undefined,
           modelPath: undefined,
+          jobInfo: jobInfo,
         });
       }
     } else {
       // If we do have a model ID, we need to poll for the deployment
-      const status = await poll_model_deployment(
+      const deployModelResponse = await deploy_model_request(
         FIREWORKS_ACCOUNT_ID,
         this.modelId,
       );
+      const status = get_deployment_status(deployModelResponse);
       if (status === "DEPLOYED") {
         const modelPath = `accounts/${FIREWORKS_ACCOUNT_ID}/models/${this.modelId}`;
         return new FireworksSFTJob({
@@ -159,6 +177,7 @@ export class FireworksSFTJob extends SFTJob {
           jobId: this.jobId,
           modelId: this.modelId,
           modelPath: modelPath,
+          jobInfo: deployModelResponse,
         });
       } else {
         return new FireworksSFTJob({
@@ -167,6 +186,7 @@ export class FireworksSFTJob extends SFTJob {
           jobId: this.jobId,
           modelId: this.modelId,
           modelPath: undefined,
+          jobInfo: deployModelResponse,
         });
       }
     }
@@ -182,8 +202,6 @@ const FineTuningJobStatusSchema = z.enum([
   "FAILED",
   "DELETING",
 ]);
-
-type FineTuningJobStatus = z.infer<typeof FineTuningJobStatusSchema>;
 
 const FineTuningJobResponseSchema = z.object({
   state: FineTuningJobStatusSchema,
@@ -228,20 +246,6 @@ async function get_fine_tuning_job_details(
   }
 }
 
-async function get_fine_tuning_job_status(
-  job_path: string,
-): Promise<FineTuningJobStatus> {
-  const response = await get_fine_tuning_job_details(job_path);
-  return response.state;
-}
-
-// This is the model ID that we can use to deploy the model
-// Note: this should only be called after the job is completed
-async function get_model_id(job_path: string): Promise<string | undefined> {
-  const response = await get_fine_tuning_job_details(job_path);
-  return response.modelId;
-}
-
 // Docs: https://docs.fireworks.ai/api-reference/create-deployment
 // Once a model has been fine-tuned, we should deploy it
 // This is a separate step from the fine-tuning job
@@ -275,24 +279,12 @@ async function deploy_model_request(accountId: string, modelId: string) {
   return response;
 }
 
-async function deploy_model(
-  accountId: string,
-  modelId: string,
-): Promise<string> {
-  const response = await deploy_model_request(accountId, modelId);
-  return response.name;
-}
-
-// Returns the status of the deployment
-// TODO: this should be a better API call honestly
-// We just can't find the right endpoint
-async function poll_model_deployment(
-  accountId: string,
-  modelId: string,
-): Promise<string> {
-  const response = await deploy_model_request(accountId, modelId);
-  const message = response.message;
-  if (!message) {
+// Extracts the deployment status from the deploy model response
+function get_deployment_status(
+  deployModelResponse: Record<string, unknown>,
+): string {
+  const message = deployModelResponse.message;
+  if (!message || typeof message !== "string") {
     throw new Error("Failed to get deployment status message");
   }
   const status = message.split(":").pop()?.trim();
@@ -307,7 +299,7 @@ export async function start_sft_fireworks(
   inferences: ParsedInferenceRow[],
   validationSplitPercent: number,
   templateEnv: JsExposedEnv,
-): Promise<string> {
+): Promise<Record<string, unknown>> {
   const fireworksExamples = inferences.map((inference) =>
     tensorzero_inference_to_fireworks_messages(inference, templateEnv),
   );
@@ -323,14 +315,14 @@ export async function start_sft_fireworks(
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 
-  const job_path = await create_fine_tuning_job(
+  const jobInfo = await create_fine_tuning_job(
     FIREWORKS_ACCOUNT_ID,
     datasetId,
     modelName,
     validationSplitPercent,
   );
 
-  return job_path;
+  return jobInfo;
 }
 
 type FireworksMessage = {
@@ -519,7 +511,7 @@ async function create_fine_tuning_job(
   datasetId: string,
   baseModel: string,
   valSplit: number,
-): Promise<string> {
+): Promise<Record<string, unknown>> {
   const url = new URL(
     `v1/accounts/${accountId}/fineTuningJobs`,
     FIREWORKS_API_URL,
@@ -552,7 +544,7 @@ async function create_fine_tuning_job(
     if (!data.name) {
       throw new Error("Fine tuning job response missing name field");
     }
-    return data.name;
+    return data;
   } catch (error) {
     throw new Error(
       `Error creating fine tuning job: ${

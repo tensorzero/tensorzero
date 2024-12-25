@@ -19,6 +19,7 @@ import { splitValidationData, type SFTJobStatus } from "./common";
 import { render_message } from "./rendering";
 import { SFTJob } from "./common";
 import type { ProviderType } from "../config/models";
+import type { ProgressInfo } from "~/routes/optimization/fine-tuning/ProgressIndicator";
 
 export const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -87,6 +88,13 @@ export class OpenAISFTJob extends SFTJob {
   status(): SFTJobStatus {
     if (this.jobStatus === "failed") return "error";
     return this.jobStatus === "succeeded" ? "completed" : "running";
+  }
+
+  progress_info(): ProgressInfo {
+    return {
+      provider: "openai",
+      data: this.job,
+    };
   }
 
   async poll(): Promise<OpenAISFTJob> {

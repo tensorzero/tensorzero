@@ -1,6 +1,7 @@
 import type { SFTFormValues } from "~/routes/optimization/fine-tuning/types";
 import type { ParsedInferenceRow } from "../clickhouse";
 import type { ProviderType } from "../config/models";
+import type { ProgressInfo } from "~/routes/optimization/fine-tuning/ProgressIndicator";
 
 export function splitValidationData(
   inferences: ParsedInferenceRow[],
@@ -35,6 +36,7 @@ export abstract class SFTJob {
 
   abstract result(): string | undefined;
   abstract status(): SFTJobStatus;
+  abstract progress_info(): ProgressInfo;
   abstract poll(): Promise<SFTJob>;
   abstract provider(): ProviderType;
 }
