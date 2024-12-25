@@ -107,11 +107,14 @@ export function AppSidebar({ className, ...props }: React.ComponentProps<typeof 
               <SidebarMenuItem>
                 <SidebarMenuButton asChild className="px-2">
                   <div className="flex items-center gap-2 h-8">
+                  {state === 'expanded' && (
+                    <>
                     {section.icon && (
                       <section.icon className="h-4 w-4 text-muted-foreground shrink-0" />
                     )}
-                    {state === 'expanded' && (
+                   
                       <span className="font-medium text-sm text-muted-foreground">{section.title}</span>
+                      </>
                     )}
                   </div>
                 </SidebarMenuButton>
@@ -150,7 +153,7 @@ export function AppSidebar({ className, ...props }: React.ComponentProps<typeof 
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild className={cn(
                     "px-2 py-1.5",
-                    state === 'collapsed' && "justify-center"
+                    // state === 'collapsed' && "justify-center"
                   )}>
                     <a href={item.url} target="_blank" className="flex items-center gap-2">
                       <item.icon className="h-4 w-4 text-muted-foreground shrink-0" />
