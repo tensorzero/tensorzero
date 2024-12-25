@@ -36,20 +36,20 @@ user_template = "functions/write_haiku/initial_prompt/user_template.minijinja"
 
 [metrics.dashboard_fixture_exact_match]
 type = "boolean"
-optimize = "max"
 level = "inference"
+optimize = "max"
 
 [metrics.dashboard_fixture_jaccard_similarity]
 type = "float"
-optimize = "max"
 level = "inference"
+optimize = "max"
 
 [metrics.dashboard_fixture_haiku_score]
 type = "boolean"
-optimize = "max"
 level = "inference"
+optimize = "max"
 
 [metrics.dashboard_fixture_haiku_rating]
 type = "float"
-optimize = "max"
 level = "inference"
+optimize = "max"
