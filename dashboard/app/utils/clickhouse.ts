@@ -249,7 +249,6 @@ export async function countFeedbacksForMetric(
   metric_name: string,
   metric_config: MetricConfig,
 ): Promise<number> {
-  console.log("metric_config", metric_config);
   const metric_table_name = getMetricTableName(metric_config);
 
   // Special handling for demonstration feedback which doesn't use metric_name

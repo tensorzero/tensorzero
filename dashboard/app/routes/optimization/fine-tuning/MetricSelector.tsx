@@ -137,8 +137,6 @@ export function MetricSelector({
                       <Input
                         type="number"
                         step="0.01"
-                        min={0}
-                        max={1}
                         {...thresholdField}
                         className="bg-transparent border-none focus:ring-0"
                         onChange={(e) => {

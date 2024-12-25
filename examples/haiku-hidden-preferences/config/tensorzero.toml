@@ -43,6 +43,17 @@ model = "gpt-4o-mini-2024-07-18"
 system_template = "functions/write_haiku/initial_prompt/system_template.minijinja"
 user_template = "functions/write_haiku/initial_prompt/user_template.minijinja"
 
+[functions.cheat_haiku]
+type = "chat"
+user_schema = "functions/write_haiku/user_schema.json"
+
+[functions.cheat_haiku.variants.baseline]
+weight = 1
+type = "chat_completion"
+model = "gpt-4o-2024-08-06"
+system_template = "functions/cheat_haiku/initial_prompt/system_template.minijinja"
+user_template = "functions/cheat_haiku/initial_prompt/user_template.minijinja"
+
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘

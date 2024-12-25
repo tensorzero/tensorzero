@@ -21,6 +21,15 @@ type = "chat_completion"
 model = "gpt-4o-mini-2024-07-18"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
 
+[functions.dashboard_fixture_write_haiku]
+type = "chat"
+
+[functions.dashboard_fixture_write_haiku.variants.baseline]
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18"
+system_template = "functions/write_haiku/initial_prompt/system_template.minijinja"
+user_template = "functions/write_haiku/initial_prompt/user_template.minijinja"
+
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
@@ -31,6 +40,16 @@ optimize = "max"
 level = "inference"
 
 [metrics.dashboard_fixture_jaccard_similarity]
+type = "float"
+optimize = "max"
+level = "inference"
+
+[metrics.dashboard_fixture_haiku_score]
+type = "boolean"
+optimize = "max"
+level = "inference"
+
+[metrics.dashboard_fixture_haiku_rating]
 type = "float"
 optimize = "max"
 level = "inference"
