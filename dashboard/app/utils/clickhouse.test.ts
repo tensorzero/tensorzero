@@ -144,6 +144,24 @@ test("queryDemonstrationDataJson", async () => {
   );
   // The fixture should have 100 rows with demonstration data since 120 is too big
   expect(limitedResult.length).toBe(20);
+
+  // Check a selected inference retrieved to make sure it's a demonstration and not the inference itself
+  const selectedResults = result.filter((element) => {
+    if (element.episode_id === "0193da94-17e7-7933-9256-2cec500b9515")
+      return element;
+    return undefined;
+  });
+  expect(selectedResults.length).toBe(1);
+  const selectedResult = selectedResults[0];
+  expect(selectedResult.output).toStrictEqual({
+    raw: '{"person":[],"organization":[],"location":[],"miscellaneous":["Doetinchem-Doetinchem"]}',
+    parsed: {
+      person: [],
+      organization: [],
+      location: [],
+      miscellaneous: ["Doetinchem-Doetinchem"],
+    },
+  });
 });
 
 test("queryDemonstrationDataChat", async () => {
