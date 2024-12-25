@@ -23,6 +23,7 @@ system_template = "functions/extract_entities/initial_prompt/system_template.min
 
 [functions.dashboard_fixture_write_haiku]
 type = "chat"
+user_schema = "functions/write_haiku/user_schema.json"
 
 [functions.dashboard_fixture_write_haiku.variants.baseline]
 type = "chat_completion"

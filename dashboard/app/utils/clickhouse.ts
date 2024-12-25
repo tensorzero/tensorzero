@@ -484,8 +484,7 @@ export async function queryDemonstrationDataForFunction(
     SELECT
       i.variant_name,
       i.input,
-      i.output,
-      f.value,
+      f.value as output, -- Since this is a demonstration, the value is the desired output for that inference
       i.episode_id
     FROM
       ${inference_table_name} i
