@@ -28,18 +28,21 @@ interface OpenAISFTJobParams {
   jobId: string;
   status: string;
   fineTunedModel?: string;
+  job: OpenAI.FineTuning.Jobs.FineTuningJob;
 }
 
 export class OpenAISFTJob extends SFTJob {
   public jobId: string;
   public jobStatus: string;
   public fineTunedModel?: string;
+  public job: OpenAI.FineTuning.Jobs.FineTuningJob;
 
   constructor(params: OpenAISFTJobParams) {
     super();
     this.jobId = params.jobId;
     this.jobStatus = params.status;
     this.fineTunedModel = params.fineTunedModel;
+    this.job = params.job;
   }
 
   static async fromFormData(data: SFTFormValues): Promise<OpenAISFTJob> {
@@ -95,6 +98,7 @@ export class OpenAISFTJob extends SFTJob {
       jobId: job.id,
       status: job.status,
       fineTunedModel: job.fine_tuned_model ?? undefined,
+      job: job,
     });
   }
 }
@@ -119,15 +123,17 @@ export async function start_sft_openai(
     upload_examples_to_openai(trainMessages),
     upload_examples_to_openai(valMessages),
   ]);
-  const job_id = await create_openai_fine_tuning_job(
+  const job = await create_openai_fine_tuning_job(
     modelName,
     file_id,
     val_file_id ?? undefined,
   );
+  const jobId = job.id;
   return new OpenAISFTJob({
-    jobId: job_id,
+    jobId: jobId,
     status: "created",
     fineTunedModel: undefined,
+    job,
   });
 }
 
@@ -279,7 +285,7 @@ async function create_openai_fine_tuning_job(
 
   try {
     const job = await client.fineTuning.jobs.create(params);
-    return job.id;
+    return job;
   } catch (error) {
     console.error("Error creating fine-tuning job:", error);
     throw error;
