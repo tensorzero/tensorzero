@@ -625,12 +625,14 @@ impl TryFrom<(CredentialLocation, &str, &str)> for Credential {
                         #[cfg(any(test, feature = "e2e_tests"))]
                         {
                             warn!("You are missing the credentials required for `model.{}.provider.{}`, so the associated tests will likely fail.",model_name,provider_type);
-                            return Ok(Credential::Missing);
+                            Ok(Credential::Missing)
                         }
                         #[cfg(not(any(test, feature = "e2e_tests")))]
-                        Err(Error::new(ErrorDetails::ApiKeyMissing {
-                            provider_name: provider_type.to_string(),
-                        }))
+                        {
+                            Err(Error::new(ErrorDetails::ApiKeyMissing {
+                                provider_name: provider_type.to_string(),
+                            }))
+                        }
                     }
                 }
             },
@@ -641,12 +643,14 @@ impl TryFrom<(CredentialLocation, &str, &str)> for Credential {
                         #[cfg(any(test, feature = "e2e_tests"))]
                         {
                             warn!("You are missing the credentials required for `model.{}.provider.{}`, so the associated tests will likely fail.",model_name,provider_type);
-                            return Ok(Credential::Missing);
+                            Ok(Credential::Missing)
                         }
                         #[cfg(not(any(test, feature = "e2e_tests")))]
-                        Err(Error::new(ErrorDetails::ApiKeyMissing {
-                            provider_name: provider_type.to_string(),
-                        }))
+                        {
+                            Err(Error::new(ErrorDetails::ApiKeyMissing {
+                                provider_name: provider_type.to_string(),
+                            }))
+                        }
                     }
                 }
             },
