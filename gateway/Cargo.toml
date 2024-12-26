@@ -36,7 +36,7 @@ derive_builder = "0.20.0"
 futures = "0.3.30"
 futures-core = "0.3.30"
 itertools = "0.13.0"
-jsonschema = "0.18.0"
+jsonschema = "0.27.1"
 jsonwebtoken = "9.3.0"
 lazy_static = { version = "1.5.0" }
 metrics = "0.23.0"
