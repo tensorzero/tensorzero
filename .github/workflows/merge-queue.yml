@@ -127,7 +127,7 @@ jobs:
         working-directory: recipes/tests
         run: |
           uv venv
-          uv pip sync requirements.tx
+          uv pip sync requirements.txt
 
       - name: "Python: Recipes: mypy"
         working-directory: recipes/tests
