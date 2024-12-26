@@ -1,28 +1,31 @@
 name: Merge Queue Checks
 
 on:
+  pull_request:
+    branches: ["main"]
   merge_group:
+
 env:
-  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }} # for E2E tests
-  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }} # for E2E tests
-  AWS_REGION: "us-east-1" # for E2E tests
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }} # for E2E tests
-  AZURE_OPENAI_API_BASE: ${{secrets.AZURE_OPENAI_API_BASE }} # for E2E tests
-  AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }} # for E2E tests
-  AZURE_OPENAI_DEPLOYMENT_ID: ${{secrets.AZURE_OPENAI_DEPLOYMENT_ID }} # for E2E tests
-  FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }} # for E2E tests
-  FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }} # for E2E tests
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_REGION: "us-east-1"
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AZURE_OPENAI_API_BASE: ${{secrets.AZURE_OPENAI_API_BASE }}
+  AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+  AZURE_OPENAI_DEPLOYMENT_ID: ${{secrets.AZURE_OPENAI_DEPLOYMENT_ID }}
+  FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+  FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
   FORCE_COLOR: 1
   GCP_VERTEX_CREDENTIALS_PATH: ${{ github.workspace }}/gcp_jwt_key.json
-  GOOGLE_AI_STUDIO_API_KEY: ${{ secrets.GOOGLE_AI_STUDIO_API_KEY }} # for E2E tests
-  HYPERBOLIC_API_KEY: ${{secrets.HYPERBOLIC_API_KEY}} # for E2E tests
-  MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }} # for E2E tests
-  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }} # for E2E tests
-  TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }} # for E2E tests
-  VLLM_API_KEY: ${{ secrets.VLLM_API_KEY }} # for E2E tests
-  VLLM_API_BASE: ${{ secrets.VLLM_API_BASE }} # for E2E tests
-  VLLM_MODEL_NAME: "microsoft/Phi-3.5-mini-instruct" # for E2E tests
-  XAI_API_KEY: ${{ secrets.XAI_API_KEY }} # for E2E tests
+  GOOGLE_AI_STUDIO_API_KEY: ${{ secrets.GOOGLE_AI_STUDIO_API_KEY }}
+  HYPERBOLIC_API_KEY: ${{secrets.HYPERBOLIC_API_KEY}}
+  MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+  VLLM_API_KEY: ${{ secrets.VLLM_API_KEY }}
+  VLLM_API_BASE: ${{ secrets.VLLM_API_BASE }}
+  VLLM_MODEL_NAME: "microsoft/Phi-3.5-mini-instruct"
+  XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
 
 jobs:
   live-tests:
@@ -75,31 +78,62 @@ jobs:
       - name: Install Python for python async client tests
         run: uv python install 3.10
 
-      - name: Install dependencies for python client tests
-        working-directory: clients
+      - name: "TensorZero Python Client: Install dependencies"
+        working-directory: clients/python
         run: |
           uv venv
           uv pip sync requirements.txt
 
-      - name: Run python client tests
-        working-directory: clients
-        run: uv run pytest
-
-      - name: Run mypy type checking
-        working-directory: clients
+      - name: "TensorZero Python Client: Run mypy"
+        working-directory: clients/python
         run: |
           uv pip install mypy
-          uv run mypy python --strict
+          uv run mypy . --strict
 
-      - name: Install dependencies for python recipes tests
-        working-directory: recipes/tests
+      - name: "TensorZero Python Client: Run tests"
+        working-directory: clients/python
+        run: |
+          uv run pytest
+          uv pip install mypy
+          uv run mypy . --strict
+
+      - name: "OpenAI Python Client: Install dependencies"
+        working-directory: clients/openai-python
         run: |
           uv venv
           uv pip sync requirements.txt
 
-      - name: Run python recipes tests
+      - name: "OpenAI Python Client: Run mypy"
+        working-directory: clients/openai-python
+        run: |
+          uv pip install mypy
+          uv run mypy . --strict
+
+      - name: "OpenAI Python Client: Run tests"
+        working-directory: clients/openai-python
+        run: |
+          uv run pytest
+          uv pip install mypy
+          uv run mypy . --strict
+
+      - name: "Python Recipes: Install dependencies"
         working-directory: recipes/tests
-        run: uv run pytest
+        run: |
+          uv venv
+          uv pip sync requirements.tx
+
+      - name: "Python Recipes: Run mypy"
+        working-directory: recipes/tests
+        run: |
+          uv pip install mypy
+          uv run mypy . --strict
+
+      - name: "Python Recipes: Run tests"
+        working-directory: recipes/tests
+        run: |
+          uv run pytest
+          uv pip install mypy
+          uv run mypy . --strict
 
       - name: Terminate the gateway
         run: |

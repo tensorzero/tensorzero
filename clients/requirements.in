@@ -1,5 +1,0 @@
-# Requirements for python tests of clients
-openai
-./python
-pytest
-pytest-asyncio

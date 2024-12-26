@@ -4,6 +4,19 @@
 >
 > **This guide is for developers planning to contribute to TensorZero, not for developers planning to use TensorZero.**
 
+## Setup
+
+- Install Rust (1.80+) [→](https://www.rust-lang.org/tools/install)
+- Install `cargo-deny` [→](https://github.com/EmbarkStudios/cargo-deny)
+- Install `cargo-nextest` [→](https://nexte.st/docs/installation/pre-built-binaries/)
+- Install `pre-commit` [→](https://pre-commit.com/#install)
+- Enable `pre-commit` in your repository: `pre-commit install`
+- Install Docker [→](https://docs.docker.com/get-docker/)
+- Install Python (3.10+) [→](https://www.python.org/downloads/)
+- Install `uv` [→](https://docs.astral.sh/uv/)
+
+###
+
 ## Tests
 
 ### Rust
@@ -65,4 +78,30 @@ cargo test-unit
 4. Run the E2E tests
    ```bash
    cargo test-e2e
+   ```
+
+### Python
+
+1. Launch ClickHouse and the gateway in testing mode (see above).
+
+2. Go to the relevant directory (e.g. `cd clients/python`)
+
+3. Create a virtual environment and install the dependencies
+
+   ```bash
+   uv venv
+   uv pip sync requirements.txt
+   ```
+
+4. Run the tests
+
+   ```bash
+   uv run pytest
+   ```
+
+5. Run the linter
+
+   ```bash
+   uv pip install mypy
+   uv run mypy . --strict
    ```
