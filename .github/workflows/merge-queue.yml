@@ -96,12 +96,14 @@ jobs:
           uv pip install mypy
           uv run mypy . --strict
 
+      # TODO: remove!!!
+      - name: Setup upterm session
+        uses: lhotari/action-upterm@v1
+
       - name: "Python: TensorZero Client: pytest"
         working-directory: clients/python
         run: |
           uv run pytest
-          uv pip install mypy
-          uv run mypy . --strict
 
       - name: "Python: OpenAI Client: Install dependencies"
         working-directory: clients/openai-python
@@ -119,8 +121,6 @@ jobs:
         working-directory: clients/openai-python
         run: |
           uv run pytest
-          uv pip install mypy
-          uv run mypy . --strict
 
       - name: "Python: Recipes: Install dependencies"
         working-directory: recipes/tests
@@ -138,8 +138,6 @@ jobs:
         working-directory: recipes/tests
         run: |
           uv run pytest
-          uv pip install mypy
-          uv run mypy . --strict
 
       - name: Terminate the gateway
         run: |
