@@ -50,8 +50,15 @@ jobs:
           ruff format --check .
           ruff check --output-format=github --extend-select I .
 
-      - name: Run mypy type checking
-        working-directory: clients
+      - name: "TensorZero Python Client: mypy"
+        working-directory: clients/python
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install mypy
+          python -m mypy python --strict
+
+      - name: "OpenAI Python Client: mypy"
+        working-directory: clients/openai-python
         run: |
           python -m pip install -r requirements.txt
           python -m pip install mypy

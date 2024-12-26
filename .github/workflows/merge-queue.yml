@@ -84,13 +84,20 @@ jobs:
           uv venv
           uv pip sync requirements.txt
 
-      - name: "TensorZero Python Client: Run mypy"
+      - name: "TensorZero Python Client: mypy"
         working-directory: clients/python
         run: |
           uv pip install mypy
           uv run mypy . --strict
 
-      - name: "TensorZero Python Client: Run tests"
+      - name: "TensorZero Python Client: ruff"
+        working-directory: clients/python
+        run: |
+          uv pip install ruff
+          uv run ruff format --check .
+          uv run ruff check --output-format=github --extend-select I .
+
+      - name: "TensorZero Python Client: pytest"
         working-directory: clients/python
         run: |
           uv run pytest
@@ -103,13 +110,20 @@ jobs:
           uv venv
           uv pip sync requirements.txt
 
-      - name: "OpenAI Python Client: Run mypy"
+      - name: "OpenAI Python Client: mypy"
         working-directory: clients/openai-python
         run: |
           uv pip install mypy
           uv run mypy . --strict
 
-      - name: "OpenAI Python Client: Run tests"
+      - name: "OpenAI Python Client: ruff"
+        working-directory: clients/openai-python
+        run: |
+          uv pip install ruff
+          uv run ruff format --check .
+          uv run ruff check --output-format=github --extend-select I .
+
+      - name: "OpenAI Python Client: pytest"
         working-directory: clients/openai-python
         run: |
           uv run pytest
@@ -122,13 +136,20 @@ jobs:
           uv venv
           uv pip sync requirements.tx
 
-      - name: "Python Recipes: Run mypy"
+      - name: "Python Recipes: mypy"
         working-directory: recipes/tests
         run: |
           uv pip install mypy
           uv run mypy . --strict
 
-      - name: "Python Recipes: Run tests"
+      - name: "Python Recipes: ruff"
+        working-directory: recipes/tests
+        run: |
+          uv pip install ruff
+          uv run ruff format --check .
+          uv run ruff check --output-format=github --extend-select I .
+
+      - name: "Python Recipes: pytest"
         working-directory: recipes/tests
         run: |
           uv run pytest
