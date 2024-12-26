@@ -8,7 +8,6 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::borrow::Cow;
-use std::env;
 use std::io::Write;
 use std::time::Duration;
 use tokio::time::Instant;
@@ -25,7 +24,7 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     RequestMessage, Role, Text, TextChunk, Usage,
 };
-use crate::model::CredentialLocation;
+use crate::model::{Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 lazy_static! {
@@ -35,7 +34,7 @@ lazy_static! {
     };
 }
 
-fn default_api_key_location() -> CredentialLocation {
+pub fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("OPENAI_API_KEY".to_string())
 }
 
@@ -50,30 +49,22 @@ impl OpenAIProvider {
     pub fn new(
         model_name: String,
         api_base: Option<Url>,
-        api_key_location: Option<CredentialLocation>,
+        credentials: Credential,
     ) -> Result<Self, Error> {
-        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
-        let credentials = match api_key_location {
-            CredentialLocation::Env(key_name) => {
-                let api_key = env::var(key_name)
-                    .map_err(|_| {
-                        Error::new(ErrorDetails::ApiKeyMissing {
-                            provider_name: "OpenAI".to_string(),
-                        })
-                    })?
-                    .into();
-                OpenAICredentials::Static(api_key)
+        let api_key_location = match credentials {
+            Credential::Static(key) => OpenAICredentials::Static(key),
+            Credential::Dynamic(key_name) => OpenAICredentials::Dynamic(key_name),
+            Credential::FileContents(_) => OpenAICredentials::None,
+            Credential::None => OpenAICredentials::None,
+            #[cfg(any(test, feature = "e2e_tests"))]
+            Credential::Missing => {
+                OpenAICredentials::None
             }
-            CredentialLocation::Dynamic(key_name) => OpenAICredentials::Dynamic(key_name),
-            CredentialLocation::None => OpenAICredentials::None,
-            _ => Err(Error::new(ErrorDetails::Config {
-                message: "Invalid api_key_location for OpenAI provider".to_string(),
-            }))?,
         };
         Ok(OpenAIProvider {
             model_name,
             api_base,
-            credentials,
+            credentials: api_key_location,
         })
     }
 }
