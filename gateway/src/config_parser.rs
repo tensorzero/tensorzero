@@ -665,6 +665,12 @@ mod tests {
             .remove("models")
             .expect("Failed to remove `[models]` section");
 
+        // Remove all functions except generate_draft so we are sure what error will be thrown
+        config["functions"]
+            .as_table_mut()
+            .unwrap()
+            .retain(|k, _| k == "generate_draft");
+
         assert_eq!(
             Config::load_from_toml(config, base_path).unwrap_err(),
             Error::new(ErrorDetails::Config {
