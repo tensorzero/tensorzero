@@ -79,78 +79,62 @@ jobs:
       - name: Install Python for python async client tests
         run: uv python install 3.10
 
-      - name: "TensorZero Python Client: Install dependencies"
+      - name: "Python: ruff"
+        run: |
+          uvx ruff check --output-format=github --extend-select I .
+          uvx ruff format --check .
+
+      - name: "Python: TensorZero Client: Install dependencies"
         working-directory: clients/python
         run: |
           uv venv
           uv pip sync requirements.txt
 
-      - name: "TensorZero Python Client: mypy"
+      - name: "Python: TensorZero Client: mypy"
         working-directory: clients/python
         run: |
           uv pip install mypy
           uv run mypy . --strict
 
-      - name: "TensorZero Python Client: ruff"
-        working-directory: clients/python
-        run: |
-          uv pip install ruff==0.8.4
-          uv run ruff format --check .
-          uv run ruff check --output-format=github --extend-select I .
-
-      - name: "TensorZero Python Client: pytest"
+      - name: "Python: TensorZero Client: pytest"
         working-directory: clients/python
         run: |
           uv run pytest
           uv pip install mypy
           uv run mypy . --strict
 
-      - name: "OpenAI Python Client: Install dependencies"
+      - name: "Python: OpenAI Client: Install dependencies"
         working-directory: clients/openai-python
         run: |
           uv venv
           uv pip sync requirements.txt
 
-      - name: "OpenAI Python Client: mypy"
+      - name: "Python: OpenAI Client: mypy"
         working-directory: clients/openai-python
         run: |
           uv pip install mypy
           uv run mypy . --strict
 
-      - name: "OpenAI Python Client: ruff"
-        working-directory: clients/openai-python
-        run: |
-          uv pip install ruff==0.8.4
-          uv run ruff format --check .
-          uv run ruff check --output-format=github --extend-select I .
-
-      - name: "OpenAI Python Client: pytest"
+      - name: "Python: OpenAI Client: pytest"
         working-directory: clients/openai-python
         run: |
           uv run pytest
           uv pip install mypy
           uv run mypy . --strict
 
-      - name: "Python Recipes: Install dependencies"
+      - name: "Python: Recipes: Install dependencies"
         working-directory: recipes/tests
         run: |
           uv venv
           uv pip sync requirements.tx
 
-      - name: "Python Recipes: mypy"
+      - name: "Python: Recipes: mypy"
         working-directory: recipes/tests
         run: |
           uv pip install mypy
           uv run mypy . --strict
 
-      - name: "Python Recipes: ruff"
-        working-directory: recipes/tests
-        run: |
-          uv pip install ruff==0.8.4
-          uv run ruff format --check .
-          uv run ruff check --output-format=github --extend-select I .
-
-      - name: "Python Recipes: pytest"
+      - name: "Python: Recipes: pytest"
         working-directory: recipes/tests
         run: |
           uv run pytest
