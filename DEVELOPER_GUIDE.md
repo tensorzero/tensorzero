@@ -13,7 +13,7 @@
 - Enable `pre-commit` in your repository: `pre-commit install`
 - Install Docker [→](https://docs.docker.com/get-docker/)
 - Install `uv` [→](https://docs.astral.sh/uv/)
-- Install Python (3.10+) (e.g. `uv python install 3.10`)
+- Install Python (3.10+) (e.g. `uv python install 3.10` + )
 
 ## Tests
 
