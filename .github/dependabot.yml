@@ -2,16 +2,24 @@ version: 2
 updates:
   - package-ecosystem: "npm"
     directory: "/"
+    schedule:
+      interval: "weekly"
     labels: []
 
   - package-ecosystem: "docker"
     directory: "/"
+    schedule:
+      interval: "weekly"
     labels: []
 
   - package-ecosystem: "pip"
     directory: "/"
+    schedule:
+      interval: "weekly"
     labels: []
 
   - package-ecosystem: "cargo"
     directory: "/"
+    schedule:
+      interval: "weekly"
     labels: []
