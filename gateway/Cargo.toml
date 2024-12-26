@@ -20,8 +20,8 @@ workspace = true
 
 [dependencies]
 async-stream = "0.3.5"
-aws-config = { version = "1.5.4", features = ["behavior-version-latest"] }
-aws-sdk-bedrockruntime = { version = "1.42.0", features = [
+aws-config = { version = "1.5.11", features = ["behavior-version-latest"] }
+aws-sdk-bedrockruntime = { version = "1.65.0", features = [
     "behavior-version-latest",
 ] }
 aws-smithy-types = { version = "1.2.0", features = [
@@ -54,7 +54,7 @@ reqwest = { version = "0.12.5", features = [
 reqwest-eventsource = "0.6.0"
 secrecy = { version = "0.10.2", features = ["serde"] }
 serde = { version = "1.0.204", features = ["derive"] }
-serde_json = { version = "1.0.120", features = ["preserve_order"] }
+serde_json = { version = "1.0.134", features = ["preserve_order"] }
 serde_path_to_error = "0.1.16"
 sha2 = "0.10.8"
 signal = "0.7.0"
