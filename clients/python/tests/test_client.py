@@ -836,8 +836,7 @@ def test_sync_feedback_invalid_input(sync_client):
 
 def test_sync_tensorzero_error(sync_client):
     with pytest.raises(TensorZeroError) as excinfo:
-        sync_client.inference(
-            function_name="not_a_function", input={"messages": []})
+        sync_client.inference(function_name="not_a_function", input={"messages": []})
 
     assert (
         str(excinfo.value)
@@ -897,8 +896,7 @@ def test_prepare_inference_request(sync_client):
         },
     )
     assert request["input"]["messages"][0]["content"] == "Hello"
-    assert request["input"]["system"] == {
-        "assistant_name": "Alfred Pennyworth"}
+    assert request["input"]["system"] == {"assistant_name": "Alfred Pennyworth"}
     assert request["function_name"] == "basic_test"
 
     # Test a complex request that covers every argument of the client
