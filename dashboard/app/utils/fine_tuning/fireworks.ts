@@ -36,13 +36,14 @@ import { z } from "zod";
 import { SFTJob, type SFTJobStatus } from "./common";
 import type { ProviderType } from "../config/models";
 export const FIREWORKS_API_URL = "https://api.fireworks.ai";
-export const FIREWORKS_API_KEY = process.env.FIREWORKS_API_KEY || throwError();
+export const FIREWORKS_API_KEY = process.env.FIREWORKS_API_KEY || logError();
 export const FIREWORKS_ACCOUNT_ID =
-  process.env.FIREWORKS_ACCOUNT_ID || throwError();
+  process.env.FIREWORKS_ACCOUNT_ID || logError();
 
-// This is apparently the traditional way to coerce both to strings.
-function throwError(): never {
-  throw new Error("FIREWORKS_API_KEY and FIREWORKS_ACCOUNT_ID must be set");
+// Log error and return empty string if env vars not set
+function logError(): string {
+  console.error("FIREWORKS_API_KEY and FIREWORKS_ACCOUNT_ID must be set");
+  return "";
 }
 
 interface FireworksSFTJobParams {

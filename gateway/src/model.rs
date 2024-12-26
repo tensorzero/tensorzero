@@ -3,7 +3,7 @@ use reqwest::Client;
 use serde::de::Error as SerdeError;
 use std::collections::HashMap;
 use strum::VariantNames;
-use tracing::instrument;
+use tracing::{span, Instrument, Level};
 use url::Url;
 
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -52,7 +52,10 @@ impl ModelConfig {
                     provider_name: provider_name.clone(),
                 })
             })?;
-            let response = provider_config.infer(request, client, api_keys).await;
+            let response = provider_config
+                .infer(request, client, api_keys)
+                .instrument(span!(Level::INFO, "infer", provider_name))
+                .await;
             match response {
                 Ok(response) => {
                     let model_inference_response =
@@ -64,12 +67,10 @@ impl ModelConfig {
                 }
             }
         }
-        Err(Error::new(ErrorDetails::ModelProvidersExhausted {
-            provider_errors,
-        }))
+        let err = Error::new(ErrorDetails::ModelProvidersExhausted { provider_errors });
+        Err(err)
     }
 
-    #[instrument(skip_all)]
     pub async fn infer_stream<'a, 'request>(
         &'a self,
         request: &'request ModelInferenceRequest<'request>,
@@ -93,6 +94,7 @@ impl ModelConfig {
             })?;
             let response = provider_config
                 .infer_stream(request, client, api_keys)
+                .instrument(span!(Level::INFO, "infer_stream", provider_name))
                 .await;
             match response {
                 Ok(response) => {
@@ -124,6 +126,7 @@ impl ModelConfig {
             })?;
             let response = provider_config
                 .start_batch_inference(requests, client, api_keys)
+                .instrument(span!(Level::INFO, "start_batch_inference", provider_name))
                 .await;
             match response {
                 Ok(response) => {
@@ -793,7 +796,9 @@ mod tests {
                 provider_errors: HashMap::from([(
                     "error".to_string(),
                     ErrorDetails::InferenceClient {
-                        message: "Error sending request to Dummy provider.".to_string()
+                        message: "Error sending request to Dummy provider.".to_string(),
+                        status_code: None,
+                        provider_type: "Dummy".to_string(),
                     }
                     .into()
                 )])
@@ -945,7 +950,9 @@ mod tests {
                 provider_errors: HashMap::from([(
                     "error".to_string(),
                     ErrorDetails::InferenceClient {
-                        message: "Error sending request to Dummy provider.".to_string()
+                        message: "Error sending request to Dummy provider.".to_string(),
+                        status_code: None,
+                        provider_type: "Dummy".to_string(),
                     }
                     .into()
                 )])
@@ -1092,7 +1099,9 @@ mod tests {
                 provider_errors: HashMap::from([(
                     "model".to_string(),
                     ErrorDetails::InferenceClient {
-                        message: "Invalid API key for Dummy provider".to_string()
+                        message: "Invalid API key for Dummy provider".to_string(),
+                        status_code: None,
+                        provider_type: "Dummy".to_string(),
                     }
                     .into()
                 )])
