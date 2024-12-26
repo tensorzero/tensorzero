@@ -3,10 +3,14 @@ name: General Checks
 on:
   merge_group:
   pull_request:
-    branches: ["main"]
+    branches: ["main", "dashboard"]
 
 env:
   FORCE_COLOR: 1
+  CLICKHOUSE_URL: "http://localhost:8123/tensorzero"
+  OPENAI_API_KEY: ${{secrets.OPENAI_API_KEY}}
+  FIREWORKS_API_KEY: ${{secrets.FIREWORKS_API_KEY}}
+  FIREWORKS_ACCOUNT_ID: ${{secrets.FIREWORKS_ACCOUNT_ID}}
 
 jobs:
   validate:
@@ -45,3 +49,59 @@ jobs:
           python -m pip install ruff
           ruff format --check .
           ruff check --output-format=github --extend-select I .
+
+      - name: Run mypy type checking
+        working-directory: clients
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install mypy
+          python -m mypy python --strict
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.9.0"
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Build minijinja WASM bindings
+        working-directory: dashboard/app/utils/minijinja
+        run: wasm-pack build --features console_error_panic_hook
+
+      - name: Run minijinja WASM tests
+        working-directory: dashboard/app/utils/minijinja
+        run: wasm-pack test --node --features console_error_panic_hook
+
+      - name: Install npm dependencies
+        working-directory: dashboard
+        run: npm install --platform=linux
+
+      - name: Run ESLint
+        working-directory: dashboard
+        run: |
+          npx eslint . --fix --max-warnings=0 --config eslint.config.js --cache
+
+      - name: Run Prettier
+        working-directory: dashboard
+        run: |
+          npx prettier --write --list-different "**/*.{js,jsx,ts,tsx,css,scss,html,json,yaml,md}" --ignore-path "**/*.ipynb"
+
+      - name: Run TypeScript type checking
+        working-directory: dashboard
+        run: |
+          npx react-router typegen
+          npx tsc
+
+      - name: Start services for dashboard tests
+        working-directory: dashboard
+        run: |
+          echo "OPENAI_API_KEY=${{secrets.OPENAI_API_KEY}}" >> .env
+          echo "FIREWORKS_API_KEY=${{secrets.FIREWORKS_API_KEY}}" >> .env
+          echo "FIREWORKS_ACCOUNT_ID=${{secrets.FIREWORKS_ACCOUNT_ID}}" >> .env
+          echo "CLICKHOUSE_URL=http://localhost:8123/tensorzero" >> .env
+          docker compose -f fixtures/docker-compose.yml up -d
+
+      - name: Run dashboard tests
+        working-directory: dashboard
+        run: npm test

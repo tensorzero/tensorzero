@@ -8,7 +8,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
-use crate::model::ModelConfig;
+use crate::model::{ModelConfig, ModelTable};
 use crate::tool::{
     ImplicitToolConfig, StaticToolConfig, ToolCallConfig, ToolChoice, ToolConfig,
     IMPLICIT_TOOL_NAME,
@@ -22,7 +22,7 @@ use crate::variant::{Variant, VariantConfig};
 #[derive(Debug, Default)]
 pub struct Config<'c> {
     pub gateway: GatewayConfig,
-    pub models: HashMap<String, ModelConfig>, // model name => model config
+    pub models: ModelTable, // model name => model config
     pub embedding_models: HashMap<String, EmbeddingModelConfig>, // embedding model name => embedding model config
     pub functions: HashMap<String, FunctionConfig>,              // function name => function config
     pub metrics: HashMap<String, MetricConfig>,                  // metric name => metric config
@@ -136,9 +136,33 @@ impl<'c> Config<'c> {
 
     /// Validate the config
     #[instrument(skip_all)]
-    fn validate(&self) -> Result<(), Error> {
+    fn validate(&mut self) -> Result<(), Error> {
+        // Validate each function
+        for (function_name, function) in &self.functions {
+            function.validate(
+                &self.tools,
+                &mut self.models, // NOTE: in here there might be some models created using shorthand initialization
+                &self.embedding_models,
+                &self.templates,
+                function_name,
+            )?;
+        }
+
+        // Ensure that no metrics are named "comment" or "demonstration"
+        for metric_name in self.metrics.keys() {
+            if metric_name == "comment" || metric_name == "demonstration" {
+                return Err(ErrorDetails::Config {
+                    message: format!(
+                        "Metric name '{}' is reserved and cannot be used",
+                        metric_name
+                    ),
+                }
+                .into());
+            }
+        }
+
         // Validate each model
-        for (model_name, model) in &self.models {
+        for (model_name, model) in self.models.iter() {
             // Ensure that the model has at least one provider
             if model.routing.is_empty() {
                 return Err(ErrorDetails::Config {
@@ -161,11 +185,11 @@ impl<'c> Config<'c> {
 
                 if !model.providers.contains_key(provider) {
                     return Err(ErrorDetails::Config {
-                        message: format!(
-                            "`models.{model_name}`: `routing` contains entry `{provider}` that does not exist in `providers`"
-                        ),
-                    }
-                    .into());
+                message: format!(
+                    "`models.{model_name}`: `routing` contains entry `{provider}` that does not exist in `providers`"
+                ),
+            }
+            .into());
                 }
             }
 
@@ -174,38 +198,13 @@ impl<'c> Config<'c> {
                 if !seen_providers.contains(provider_name) {
                     return Err(ErrorDetails::Config {
                         message: format!(
-                            "`models.{model_name}`: Provider `{provider_name}` is not listed in `routing`"
-                        ),
+                    "`models.{model_name}`: Provider `{provider_name}` is not listed in `routing`"
+                ),
                     }
                     .into());
                 }
             }
         }
-
-        // Validate each function
-        for (function_name, function) in &self.functions {
-            function.validate(
-                &self.tools,
-                &self.models,
-                &self.embedding_models,
-                &self.templates,
-                function_name,
-            )?;
-        }
-
-        // Ensure that no metrics are named "comment" or "demonstration"
-        for metric_name in self.metrics.keys() {
-            if metric_name == "comment" || metric_name == "demonstration" {
-                return Err(ErrorDetails::Config {
-                    message: format!(
-                        "Metric name '{}' is reserved and cannot be used",
-                        metric_name
-                    ),
-                }
-                .into());
-            }
-        }
-
         Ok(())
     }
 
@@ -278,7 +277,7 @@ impl<'c> Config<'c> {
 #[serde(deny_unknown_fields)]
 struct UninitializedConfig {
     pub gateway: Option<GatewayConfig>,
-    pub models: HashMap<String, ModelConfig>, // model name => model config
+    pub models: ModelTable, // model name => model config
     #[serde(default)]
     pub embedding_models: HashMap<String, EmbeddingModelConfig>, // embedding model name => embedding model config
     pub functions: HashMap<String, UninitializedFunctionConfig>, // function name => function config
@@ -833,6 +832,29 @@ mod tests {
             .contains("unknown field `enable_agi`, expected"));
     }
 
+    /// Ensure that the config parsing fails when there models with blacklisted names
+    #[test]
+    fn test_config_from_toml_table_blacklisted_models() {
+        let mut config = get_sample_valid_config();
+
+        let claude_config = config["models"]
+            .as_table_mut()
+            .expect("Failed to get `models` section")
+            .remove("claude-3-haiku-20240307")
+            .expect("Failed to remove claude config");
+        config["models"]
+            .as_table_mut()
+            .expect("Failed to get `models` section")
+            .insert("anthropic::claude-3-haiku-20240307".into(), claude_config);
+
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, base_path);
+        let error = result.unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("Model name 'anthropic::claude-3-haiku-20240307' contains a reserved prefix\nin `models`"));
+    }
+
     /// Ensure that the config parsing fails when there are extra variables for providers
     #[test]
     fn test_config_from_toml_table_extra_variables_providers() {
@@ -1207,8 +1229,9 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
-                message: "`functions.generate_draft.variants.openai_promptA`: `model` must be a valid model name".to_string()
-            }.into()
+                message: "Model name 'non_existent_model' not found in model table".to_string()
+            }
+            .into()
         );
     }
 

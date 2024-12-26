@@ -5,6 +5,7 @@ Thank you for your interest in contributing to TensorZero!
 TensorZero aims to power the next generation of AI applications. We'd love to collaborate with you to make this vision a reality.
 
 > [!TIP]
+>
 > In addition to community contributions, we're also hiring in NYC (in-person only). See our [open roles](https://www.tensorzero.com/jobs).
 
 ## License
@@ -33,7 +34,12 @@ You can start a discussion (GitHub, Slack, or Discord) or open an issue as a sta
 The team will be happy to provide feedback and guidance.
 
 > [!TIP]
+>
 > See the [`good-first-issue`](https://github.com/tensorzero/tensorzero/issues?q=is%3Aopen+is%3Aissue+label%3Agood-first-issue) label for simpler issues that might be a good starting point for new contributors.
+
+> [!TIP]
+>
+> See the [`DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md) for more details on building and testing TensorZero.
 
 ### Documentation
 

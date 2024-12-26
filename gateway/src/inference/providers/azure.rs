@@ -1,4 +1,6 @@
-use futures::{StreamExt, TryStreamExt};
+use std::env;
+
+use futures::StreamExt;
 use reqwest::StatusCode;
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
@@ -29,6 +31,37 @@ pub struct AzureProvider {
     pub credentials: AzureCredentials,
 }
 
+impl AzureProvider {
+    pub fn new(
+        deployment_id: String,
+        endpoint: Url,
+        api_key_location: Option<CredentialLocation>,
+    ) -> Result<Self, Error> {
+        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
+        let credentials = match api_key_location {
+            CredentialLocation::Env(key_name) => {
+                let api_key = env::var(key_name)
+                    .map_err(|_| ErrorDetails::ApiKeyMissing {
+                        provider_name: "Azure".to_string(),
+                    })?
+                    .into();
+                AzureCredentials::Static(api_key)
+            }
+            CredentialLocation::Dynamic(key_name) => AzureCredentials::Dynamic(key_name),
+            _ => {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: "Invalid api_key_location for Azure provider".to_string(),
+                }))
+            }
+        };
+        Ok(AzureProvider {
+            deployment_id,
+            endpoint,
+            credentials,
+        })
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub enum AzureCredentials {
     Static(SecretString),
@@ -54,7 +87,7 @@ impl AzureCredentials {
     }
 }
 
-pub fn default_api_key_location() -> CredentialLocation {
+fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("AZURE_OPENAI_API_KEY".to_string())
 }
 
@@ -77,9 +110,10 @@ impl InferenceProvider for AzureProvider {
             .send()
             .await
             .map_err(|e| {
-                Error::new(ErrorDetails::AzureClient {
+                Error::new(ErrorDetails::InferenceClient {
                     message: e.to_string(),
-                    status_code: e.status().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
+                    status_code: Some(e.status().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)),
+                    provider_type: "Azure".to_string(),
                 })
             })?;
         if res.status().is_success() {
@@ -88,14 +122,16 @@ impl InferenceProvider for AzureProvider {
             };
 
             let response = res.text().await.map_err(|e| {
-                Error::new(ErrorDetails::AzureServer {
+                Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
+                    provider_type: "Azure".to_string(),
                 })
             })?;
 
             let response = serde_json::from_str(&response).map_err(|e| {
-                Error::new(ErrorDetails::AzureServer {
+                Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {response}"),
+                    provider_type: "Azure".to_string(),
                 })
             })?;
 
@@ -105,17 +141,17 @@ impl InferenceProvider for AzureProvider {
                 request: request_body,
                 generic_request: request,
             }
-            .try_into()
-            .map_err(map_openai_to_azure_error)?)
+            .try_into()?)
         } else {
-            Err(map_openai_to_azure_error(handle_openai_error(
+            Err(handle_openai_error(
                 res.status(),
                 &res.text().await.map_err(|e| {
-                    Error::new(ErrorDetails::AzureServer {
+                    Error::new(ErrorDetails::InferenceServer {
                         message: format!("Error parsing error response: {e}"),
+                        provider_type: "Azure".to_string(),
                     })
                 })?,
-            )))
+            ))
         }
     }
 
@@ -134,8 +170,9 @@ impl InferenceProvider for AzureProvider {
     > {
         let request_body = AzureRequest::new(request);
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::AzureServer {
+            Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request body as JSON: {e}"),
+                provider_type: "Azure".to_string(),
             })
         })?;
         let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id)?;
@@ -150,18 +187,20 @@ impl InferenceProvider for AzureProvider {
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request to Azure: {e}"),
+                    status_code: None,
+                    provider_type: "Azure".to_string(),
                 })
             })?;
-        let mut stream =
-            Box::pin(stream_openai(event_source, start_time).map_err(map_openai_to_azure_error));
+        let mut stream = Box::pin(stream_openai(event_source, start_time));
         // Get a single chunk from the stream and make sure it is OK then send to client.
         // We want to do this here so that we can tell that the request is working.
         let chunk = match stream.next().await {
             Some(Ok(chunk)) => chunk,
             Some(Err(e)) => return Err(e),
             None => {
-                return Err(ErrorDetails::TogetherServer {
+                return Err(ErrorDetails::InferenceServer {
                     message: "Stream ended before first chunk".to_string(),
+                    provider_type: "Azure".to_string(),
                 }
                 .into())
             }
@@ -182,28 +221,13 @@ impl InferenceProvider for AzureProvider {
     }
 }
 
-fn map_openai_to_azure_error(e: Error) -> Error {
-    let details = e.get_owned_details();
-    match details {
-        ErrorDetails::OpenAIServer { message } => ErrorDetails::AzureServer { message },
-        ErrorDetails::OpenAIClient {
-            message,
-            status_code,
-        } => ErrorDetails::AzureClient {
-            message,
-            status_code,
-        },
-        e => e,
-    }
-    .into()
-}
-
 fn get_azure_chat_url(endpoint: &Url, deployment_id: &str) -> Result<Url, Error> {
     let mut url = endpoint.clone();
     url.path_segments_mut()
         .map_err(|e| {
-            Error::new(ErrorDetails::AzureServer {
+            Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error parsing URL: {e:?}"),
+                provider_type: "Azure".to_string(),
             })
         })?
         .push("openai")
@@ -334,16 +358,18 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
             generic_request,
         } = value;
         let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::OpenAIServer {
+            Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error parsing response: {e}"),
+                provider_type: "Azure".to_string(),
             })
         })?;
         if response.choices.len() != 1 {
-            return Err(ErrorDetails::OpenAIServer {
+            return Err(ErrorDetails::InferenceServer {
                 message: format!(
                     "Response has invalid number of choices: {}. Expected 1.",
                     response.choices.len()
                 ),
+                provider_type: "Azure".to_string(),
             }
             .into());
         }
@@ -354,8 +380,9 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
             .choices
             .pop()
             .ok_or_else(|| {
-                Error::new(ErrorDetails::OpenAIServer {
+                Error::new(ErrorDetails::InferenceServer {
                     message: "Response has no choices (this should never happen)".to_string(),
+                    provider_type: "Azure".to_string(),
                 })
             })?
             .message;
@@ -369,8 +396,9 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
             }
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::AzureServer {
+            Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request body as JSON: {e}"),
+                provider_type: "Azure".to_string(),
             })
         })?;
 
