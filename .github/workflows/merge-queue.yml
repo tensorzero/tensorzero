@@ -67,9 +67,9 @@ jobs:
           cargo run-e2e &
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
 
-      # - name: Run all tests (including E2E tests)
-      #   run: |
-      #     cargo test-all --profile ci ${{ vars.CARGO_NEXTEST_ARGS }}
+      - name: Run all tests (including E2E tests)
+        run: |
+          cargo test-all --profile ci ${{ vars.CARGO_NEXTEST_ARGS }}
 
       - name: Set up uv
         # uv recommends pinning a version to avoid unexpected behavior
