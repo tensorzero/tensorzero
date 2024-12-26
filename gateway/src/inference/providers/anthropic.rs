@@ -5,7 +5,6 @@ use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::env;
 use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
@@ -22,7 +21,7 @@ use crate::inference::types::{
     ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream, RequestMessage, TextChunk, Usage,
 };
-use crate::model::CredentialLocation;
+use crate::model::{Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
 
 lazy_static! {
@@ -34,7 +33,7 @@ lazy_static! {
 }
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 
-fn default_api_key_location() -> CredentialLocation {
+pub fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("ANTHROPIC_API_KEY".to_string())
 }
 
@@ -47,28 +46,21 @@ pub struct AnthropicProvider {
 impl AnthropicProvider {
     pub fn new(
         model_name: String,
-        api_key_location: Option<CredentialLocation>,
+        credentials: Credential,
     ) -> Result<Self, Error> {
-        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
-        let credentials = match api_key_location {
-            CredentialLocation::Env(key_name) => {
-                let api_key = env::var(key_name).map_err(|_| {
-                    Error::new(ErrorDetails::ApiKeyMissing {
-                        provider_name: "Anthropic".to_string(),
-                    })
-                })?;
-                AnthropicCredentials::Static(api_key.into())
-            }
-            CredentialLocation::Dynamic(key_name) => AnthropicCredentials::Dynamic(key_name),
-            _ => {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: "Invalid api_key_location for Anthropic provider".to_string(),
-                }))
-            }
-        };
+        let api_key_location = match credentials {
+            Credential::Static(key) => AnthropicCredentials::Static(key),
+            Credential::Dynamic(key_name) => AnthropicCredentials::Dynamic(key_name),
+            Credential::FileContents(_) => AnthropicCredentials::None,
+            Credential::None => AnthropicCredentials::None,
+            #[cfg(any(test, feature = "e2e_tests"))]
+            Credential::Missing => {
+                AnthropicCredentials::None
+            } 
+         };
         Ok(AnthropicProvider {
             model_name,
-            credentials,
+            credentials: api_key_location,
         })
     }
 }
@@ -77,23 +69,26 @@ impl AnthropicProvider {
 pub enum AnthropicCredentials {
     Static(SecretString),
     Dynamic(String),
+    None
 }
 
 impl AnthropicCredentials {
     fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<&'a SecretString, Error> {
+    ) -> Result<Option<&'a SecretString>, Error> {
         match self {
-            AnthropicCredentials::Static(api_key) => Ok(api_key),
+            AnthropicCredentials::Static(api_key) => Ok(Some(api_key)),
             AnthropicCredentials::Dynamic(key_name) => {
-                dynamic_api_keys.get(key_name).ok_or_else(|| {
+                Some(dynamic_api_keys.get(key_name).ok_or_else(|| {
                     ErrorDetails::ApiKeyMissing {
                         provider_name: "Anthropic".to_string(),
                     }
                     .into()
-                })
-            }
+                })).transpose()
+            },
+            AnthropicCredentials::None => Ok(None)
+            
         }
     }
 }
@@ -108,6 +103,13 @@ impl InferenceProvider for AnthropicProvider {
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = AnthropicRequestBody::new(&self.model_name, request)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = if let Some(api_key) = api_key {
+            api_key
+        } else {
+            return Err(Error::new(ErrorDetails::ApiKeyMissing {
+                provider_name: "Anthropic".to_string(),
+            }));
+        };
         let start_time = Instant::now();
         let res = http_client
             .post(ANTHROPIC_BASE_URL.as_ref())
@@ -186,6 +188,13 @@ impl InferenceProvider for AnthropicProvider {
         })?;
         let start_time = Instant::now();
         let api_key = self.credentials.get_api_key(api_key)?;
+        let api_key = if let Some(api_key) = api_key {
+            api_key
+        } else {
+            return Err(Error::new(ErrorDetails::ApiKeyMissing {
+                provider_name: "Anthropic".to_string(),
+            }));
+        };
         let event_source = http_client
             .post(ANTHROPIC_BASE_URL.as_ref())
             .header("anthropic-version", ANTHROPIC_API_VERSION)

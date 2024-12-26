@@ -1,11 +1,15 @@
 use lazy_static::lazy_static;
 use reqwest::Client;
+use secrecy::SecretString;
 use serde::de::Error as SerdeError;
 use std::collections::HashMap;
+use std::{env, fs};
 use strum::VariantNames;
-use tracing::{span, Instrument, Level};
+#[allow(unused_imports)]
+use tracing::{span, warn,Instrument, Level};
 use url::Url;
 
+use crate::inference::providers::{anthropic, openai};
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::inference::providers::dummy::DummyProvider;
 use crate::inference::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
@@ -30,6 +34,8 @@ use crate::{
     },
 };
 use serde::Deserialize;
+
+
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -262,15 +268,22 @@ impl<'de> Deserialize<'de> for ProviderConfig {
         D: serde::Deserializer<'de>,
     {
         let helper = ProviderConfigHelper::deserialize(deserializer)?;
+        let convert_to_credential = |location: CredentialLocation, provider_name: &str, model_name: &str| {
+            Credential::try_from((location, provider_name, model_name))
+                .map_err(|e| D::Error::custom(format!("Failed to convert credentials: {e}")))
+        };
 
         Ok(match helper {
             ProviderConfigHelper::Anthropic {
                 model_name,
                 api_key_location,
-            } => ProviderConfig::Anthropic(
-                AnthropicProvider::new(model_name, api_key_location)
+            } =>{
+                let key_location = api_key_location.unwrap_or(anthropic::default_api_key_location());
+                let credentials = convert_to_credential(key_location, "anthropic",&model_name)?;
+                 ProviderConfig::Anthropic(
+                AnthropicProvider::new(model_name, credentials)
                     .map_err(|e| D::Error::custom(e.to_string()))?,
-            ),
+            )},
             ProviderConfigHelper::AWSBedrock { model_id, region } => {
                 let region = region.map(aws_types::region::Region::new);
 
@@ -346,10 +359,13 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 model_name,
                 api_base,
                 api_key_location,
-            } => ProviderConfig::OpenAI(
-                OpenAIProvider::new(model_name, api_base, api_key_location)
+            } => {
+                let key_location = api_key_location.unwrap_or(openai::default_api_key_location());
+                let credentials = convert_to_credential(key_location, "Openai",&model_name)?;
+                ProviderConfig::OpenAI(
+                OpenAIProvider::new(model_name, api_base, credentials)
                     .map_err(|e| D::Error::custom(e.to_string()))?,
-            ),
+            )},
             ProviderConfigHelper::Together {
                 model_name,
                 api_key_location,
@@ -586,6 +602,64 @@ impl<'de> Deserialize<'de> for CredentialLocation {
     }
 }
 
+
+pub enum Credential {
+    Static(SecretString),
+    FileContents(SecretString),
+    Dynamic(String),
+    None,
+    #[cfg(any(test, feature = "e2e_tests"))]
+    Missing,
+}
+
+
+impl TryFrom<(CredentialLocation, &str, &str)> for Credential {
+    type Error = Error;
+    #[allow(unused_variables)]
+    fn try_from((location, provider_type, model_name): (CredentialLocation, &str, &str)) -> Result<Self, Self::Error> {
+        match location {
+            CredentialLocation::Env(key_name) => {
+                match env::var(key_name) {
+                    Ok(value) => Ok(Credential::Static(SecretString::from(value))),
+                    Err(_) => {
+                        #[cfg(any(test, feature = "e2e_tests"))]
+                        {
+                            warn!("You are missing the credentials required for `model.{}.provider.{}`, so the associated tests will likely fail.",model_name,provider_type);
+                            return Ok(Credential::Missing);
+                        }
+                        #[cfg(not(any(test, feature = "e2e_tests")))]
+                        Err(Error::new(ErrorDetails::ApiKeyMissing {
+                            provider_name: provider_type.to_string(),
+                        }))
+                    }
+                }
+            },
+            CredentialLocation::Path(path) => {
+                match fs::read_to_string(path) {
+                    Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
+                    Err(_) => {
+                        #[cfg(any(test, feature = "e2e_tests"))]
+                        {
+                            warn!("You are missing the credentials required for `model.{}.provider.{}`, so the associated tests will likely fail.",model_name,provider_type);
+                            return Ok(Credential::Missing);
+                        }
+                        #[cfg(not(any(test, feature = "e2e_tests")))]
+                        Err(Error::new(ErrorDetails::ApiKeyMissing {
+                            provider_name: provider_type.to_string(),
+                        }))
+                    }
+                }
+            },
+            CredentialLocation::Dynamic(key_name) => Ok(Credential::Dynamic(key_name.clone())),
+            CredentialLocation::None => Ok(Credential::None),
+        }
+    }
+}
+
+
+
+
+
 lazy_static! {
     static ref RESERVED_MODEL_PREFIXES: Vec<String> = ProviderConfigHelper::VARIANTS
         .iter()
@@ -683,14 +757,14 @@ fn model_config_from_shorthand(
 ) -> Result<ModelConfig, Error> {
     let model_name = model_name.to_string();
     let provider_config = match provider_type {
-        "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(model_name, None)?),
+        "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(model_name, Credential::None)?),
         "fireworks" => ProviderConfig::Fireworks(FireworksProvider::new(model_name, None)?),
         "google_ai_studio_gemini" => ProviderConfig::GoogleAIStudioGemini(
             GoogleAIStudioGeminiProvider::new(model_name, None)?,
         ),
         "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name, None)?),
         "mistral" => ProviderConfig::Mistral(MistralProvider::new(model_name, None)?),
-        "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?),
+        "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, Credential::None)?),
         "together" => ProviderConfig::Together(TogetherProvider::new(model_name, None)?),
         "xai" => ProviderConfig::XAI(XAIProvider::new(model_name, None)?),
         #[cfg(any(test, feature = "e2e_tests"))]
