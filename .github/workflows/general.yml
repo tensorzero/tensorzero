@@ -46,7 +46,7 @@ jobs:
 
       - name: Lint (Python)
         run: |
-          python -m pip install ruff
+          python -m pip install ruff==0.8.4
           ruff format --check .
           ruff check --output-format=github --extend-select I .
 

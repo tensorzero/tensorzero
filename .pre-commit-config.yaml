@@ -93,7 +93,7 @@ repos:
           - --remove-empty-cells
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.3
+    rev: v0.8.4
     hooks:
       - id: ruff
         args: ["--extend-select", "I", "--fix"]
