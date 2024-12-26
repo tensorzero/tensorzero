@@ -66,6 +66,7 @@ jobs:
         run: |
           cargo run-e2e &
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
+          sleep 5
 
       # TODO: temporary: OpenAI is down
       # - name: Run all tests (including E2E tests)
@@ -97,8 +98,8 @@ jobs:
           uv run mypy . --strict
 
       # TODO: remove!!!
-      - name: Setup upterm session
-        uses: lhotari/action-upterm@v1
+      # - name: Setup upterm session
+      #   uses: lhotari/action-upterm@v1
 
       - name: "Python: TensorZero Client: pytest"
         working-directory: clients/python
