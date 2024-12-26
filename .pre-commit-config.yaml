@@ -85,22 +85,6 @@ repos:
           - typescript
         always_run: true
 
-      # - id: ruff
-      #   name: ruff
-      #   entry: uvx ruff check --extend-select I . --fix
-      #   language: system
-      #   types: [python]
-      #   pass_filenames: false
-      #   always_run: true
-
-      # - id: ruff-format
-      #   name: ruff-format
-      #   entry: uvx ruff format .
-      #   language: system
-      #   types: [python]
-      #   pass_filenames: false
-      #   always_run: true
-
   - repo: https://github.com/srstevenson/nb-clean
     rev: 3.2.0
     hooks:
