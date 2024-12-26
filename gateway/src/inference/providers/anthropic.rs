@@ -618,32 +618,42 @@ pub(crate) fn prefill_json_response(
     Ok(content)
 }
 
+/// Updated function signature to return `Result<ProviderInferenceResponseChunk, Error>`
+/// to handle errors properly instead of silently ignoring them.
 pub(crate) fn prefill_json_chunk_response(
-    chunk: ProviderInferenceResponseChunk,
-) -> ProviderInferenceResponseChunk {
-    let mut chunk = chunk;
+    mut chunk: ProviderInferenceResponseChunk,
+) -> Result<ProviderInferenceResponseChunk, Error> {
     if chunk.content.is_empty() {
+        // If the content is empty, prepend '{' to indicate the start of a JSON object.
         chunk.content = vec![ContentBlockChunk::Text(TextChunk {
             text: "{".to_string(),
             id: chunk.inference_id.to_string(),
         })];
+        return Ok(chunk);
     } else if chunk.content.len() == 1 {
+        // If there is only one content block, prepend '{' to the text.
         if let ContentBlockChunk::Text(TextChunk { text, .. }) = &chunk.content[0] {
-            // Add a "{" to the beginning of the text
             chunk.content = vec![ContentBlockChunk::Text(TextChunk {
                 text: format!("{{{}", text.trim_start()),
                 id: chunk.inference_id.to_string(),
             })];
+            return Ok(chunk);
+        } else {
+            // If the single block is not a text block, return an error.
+            let raw_output = format!("{:?}", chunk.content);
+            return Err(Error::new(ErrorDetails::OutputParsing {
+                message: "Expected a single text block in the response from Anthropic".to_string(),
+                raw_output,
+            }));
         }
     } else {
-        Error::new(ErrorDetails::OutputParsing {
+        // If there are multiple blocks, return an error as it violates the JSON response assumption.
+        let raw_output = format!("{:?}", chunk.content);
+        return Err(Error::new(ErrorDetails::OutputParsing {
             message: "Expected a single text block in the response from Anthropic".to_string(),
-            raw_output: serde_json::to_string(&chunk.content).map_err(|e| Error::new(ErrorDetails::Inference {
-                message: format!("Error serializing content as JSON: {e}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"),
-            })).unwrap_or_default()
-        });
+            raw_output,
+        }));
     }
-    chunk
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
