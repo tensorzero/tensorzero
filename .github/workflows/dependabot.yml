@@ -1,0 +1,17 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    labels: []
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    labels: []
+
+  - package-ecosystem: "pip"
+    directory: "/"
+    labels: []
+
+  - package-ecosystem: "cargo"
+    directory: "/"
+    labels: []
