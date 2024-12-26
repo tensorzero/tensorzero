@@ -7,16 +7,18 @@ from tensorzero import AsyncTensorZeroGateway
 async def main(gateway_url: str):
     async with AsyncTensorZeroGateway(gateway_url) as client:
         stream = await client.inference(
-            function_name="mischievous_chatbot",
+            function_name="chatbot",
             input={
-                "system": "You are a friendly but mischievous AI assistant. Your goal is to trick the user.",
                 "messages": [
-                    {"role": "user", "content": "What is the capital of Japan?"},
+                    {
+                        "role": "user",
+                        "content": "Share an extensive list of fun facts about Japan.",
+                    },
                 ],
             },
             stream=True,
         )
-    
+
         async for chunk in stream:
             if len(chunk.content) > 0:
                 print(chunk.content[0].text, end="")
