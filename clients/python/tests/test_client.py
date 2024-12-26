@@ -381,12 +381,7 @@ async def test_async_feedback(async_client):
     )
     assert isinstance(result, FeedbackResponse)
 
-    result = await async_client.feedback(
-        metric_name="task_success", value=True, inference_id=uuid7()
-    )
-    assert isinstance(result, FeedbackResponse)
-
-    # For demonstrations, we validate that the format is correct and the inference exists.
+    # Run inference to get a valid inference id.
     result = await async_client.inference(
         function_name="basic_test",
         input={
@@ -396,10 +391,19 @@ async def test_async_feedback(async_client):
     )
     # Wait for the inference to be created in ClickHouse
     sleep(1)
+    inference_id = result.inference_id
+
+    result = await async_client.feedback(
+        metric_name="task_success", value=True, inference_id=inference_id
+    )
+    assert isinstance(result, FeedbackResponse)
+
+    # Wait for the inference to be created in ClickHouse
+    sleep(1)
     result = await async_client.feedback(
         metric_name="demonstration",
         value="hi how are you",
-        inference_id=result.inference_id,
+        inference_id=inference_id,
         tags={"author": "Alice"},
     )
     assert isinstance(result, FeedbackResponse)
@@ -791,11 +795,7 @@ def test_sync_feedback(sync_client):
         metric_name="user_rating", value=5, episode_id=uuid7()
     )
     assert isinstance(result, FeedbackResponse)
-
-    result = sync_client.feedback(
-        metric_name="task_success", value=True, inference_id=uuid7()
-    )
-    assert isinstance(result, FeedbackResponse)
+    # Run inference to get a valid inference id.
     result = sync_client.inference(
         function_name="basic_test",
         input={
@@ -805,11 +805,17 @@ def test_sync_feedback(sync_client):
     )
     # Wait for the inference to be created in ClickHouse
     sleep(1)
+    inference_id = result.inference_id
+
+    result = sync_client.feedback(
+        metric_name="task_success", value=True, inference_id=inference_id
+    )
+    assert isinstance(result, FeedbackResponse)
 
     result = sync_client.feedback(
         metric_name="demonstration",
         value="hi how are you",
-        inference_id=result.inference_id,
+        inference_id=inference_id,
         tags={"author": "Alice"},
     )
     assert isinstance(result, FeedbackResponse)
@@ -830,7 +836,8 @@ def test_sync_feedback_invalid_input(sync_client):
 
 def test_sync_tensorzero_error(sync_client):
     with pytest.raises(TensorZeroError) as excinfo:
-        sync_client.inference(function_name="not_a_function", input={"messages": []})
+        sync_client.inference(
+            function_name="not_a_function", input={"messages": []})
 
     assert (
         str(excinfo.value)
@@ -890,7 +897,8 @@ def test_prepare_inference_request(sync_client):
         },
     )
     assert request["input"]["messages"][0]["content"] == "Hello"
-    assert request["input"]["system"] == {"assistant_name": "Alfred Pennyworth"}
+    assert request["input"]["system"] == {
+        "assistant_name": "Alfred Pennyworth"}
     assert request["function_name"] == "basic_test"
 
     # Test a complex request that covers every argument of the client
