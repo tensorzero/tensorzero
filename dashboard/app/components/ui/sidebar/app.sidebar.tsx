@@ -39,7 +39,7 @@ const navigation = [
     items: [
       {
         title: "Fine-tuning",
-        url: "/optimization/fine-tuning",
+        url: "/dashboard/optimization/fine-tuning",
       },
     ],
   },

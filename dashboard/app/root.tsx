@@ -55,14 +55,7 @@ export default function App() {
   const config = useLoaderData<typeof loader>();
   return (
     <ConfigProvider value={config}>
-      <SidebarProvider>
-        <div className="flex min-h-screen w-full"> 
-          <AppSidebar />
-          <main className="flex-1 overflow-y-auto">
             <Outlet />
-          </main>
-        </div>
-      </SidebarProvider>
     </ConfigProvider>
   );
 }
