@@ -80,7 +80,7 @@ cargo test-unit
 
 ### Python
 
-1. Launch ClickHouse and the gateway in testing mode (see above).
+1. Launch ClickHouse and the gateway in E2E testing mode (see above).
 
 2. Go to the relevant directory (e.g. `cd clients/python`)
 
@@ -97,9 +97,16 @@ cargo test-unit
    uv run pytest
    ```
 
-5. Run the linter
+5. Run the type checker
 
    ```bash
    uv pip install mypy
    uv run mypy . --strict
+   ```
+
+6. Run the formatter
+
+   ```bash
+   uv run ruff format --check .
+   uv run ruff check --output-format=github --extend-select I .
    ```
