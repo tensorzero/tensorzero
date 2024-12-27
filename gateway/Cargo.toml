@@ -24,7 +24,7 @@ aws-config = { version = "1.5.11", features = ["behavior-version-latest"] }
 aws-sdk-bedrockruntime = { version = "1.65.0", features = [
     "behavior-version-latest",
 ] }
-aws-smithy-types = { version = "1.2.0", features = [
+aws-smithy-types = { version = "1.2.11", features = [
     "serde-deserialize",
     "serde-serialize",
 ] }
