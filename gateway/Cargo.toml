@@ -40,7 +40,7 @@ jsonschema = "0.18.0"
 jsonwebtoken = "9.3.0"
 lazy_static = { version = "1.5.0" }
 metrics = "0.23.0"
-metrics-exporter-prometheus = { version = "0.15.3", features = [
+metrics-exporter-prometheus = { version = "0.16.0", features = [
     "http-listener",
 ], default-features = false }
 mimalloc = "0.1.43"
