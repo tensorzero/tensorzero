@@ -5,21 +5,25 @@ updates:
     schedule:
       interval: "daily"
     labels: []
+    open-pull-requests-limit: 0 # only send security updates
 
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "daily"
     labels: []
+    open-pull-requests-limit: 0 # only send security updates
 
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
       interval: "daily"
     labels: []
+    open-pull-requests-limit: 0 # only send security updates
 
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
       interval: "daily"
     labels: []
+    open-pull-requests-limit: 0 # only send security updates
