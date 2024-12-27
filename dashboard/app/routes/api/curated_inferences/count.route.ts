@@ -31,13 +31,13 @@ export async function loader({
       config.functions[functionName],
     );
   }
-  if (metricName) {
+  if (functionName && metricName) {
     feedbackCount = await countFeedbacksForMetric(
+      functionName,
+      config.functions[functionName],
       metricName,
       config.metrics[metricName],
     );
-  }
-  if (functionName && metricName) {
     curatedInferenceCount = await countCuratedInferences(
       functionName,
       config.functions[functionName],

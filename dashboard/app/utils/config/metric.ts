@@ -31,7 +31,7 @@ export const MetricConfigSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("demonstration"),
-    level: MetricConfigLevelSchema,
+    level: z.literal("inference"),
   }),
 ]);
 export type MetricConfig = z.infer<typeof MetricConfigSchema>;

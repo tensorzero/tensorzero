@@ -1,120 +1,117 @@
 import { expect, test } from "vitest";
 import {
   checkClickhouseConnection,
-  queryGoodBooleanMetricData,
-  countGoodBooleanMetricData,
-  queryGoodFloatMetricData,
-  countGoodFloatMetricData,
   queryDemonstrationDataForFunction,
   countDemonstrationDataForFunction,
   countFeedbacksForMetric,
   queryAllInferencesForFunction,
+  queryMetricData,
+  countMetricData,
 } from "./clickhouse";
 
 test("checkClickhouseConnection", async () => {
   const result = await checkClickhouseConnection();
   expect(result).toBe(true);
 });
-
 test("queryBooleanMetricDataJson", async () => {
-  const result = await queryGoodBooleanMetricData(
+  const result = await queryMetricData(
     "dashboard_fixture_extract_entities",
     "dashboard_fixture_exact_match",
     "JsonInference",
     "id",
-    true,
-    undefined,
+    "boolean",
+    { filterGood: true, maximize: true },
   );
   // The fixture was written to have 41 rows with good boolean metric data that should be returned
   expect(result.length).toBe(41);
 });
 
 test("queryBooleanMetricDataChat", async () => {
-  const result = await queryGoodBooleanMetricData(
+  const result = await queryMetricData(
     "dashboard_fixture_write_haiku",
     "dashboard_fixture_haiku_score",
     "ChatInference",
     "id",
-    true,
-    undefined,
+    "boolean",
+    { filterGood: true, maximize: true },
   );
   // The fixture was written to have 80 rows with good boolean metric data
   expect(result.length).toBe(80);
 });
 
 test("countGoodBooleanMetricDataJson", async () => {
-  const result = await countGoodBooleanMetricData(
+  const result = await countMetricData(
     "dashboard_fixture_extract_entities",
     "dashboard_fixture_exact_match",
     "JsonInference",
     "id",
-    true,
+    "boolean",
+    { filterGood: true, maximize: true },
   );
   // The fixture should have 41 rows with good boolean metric data
   expect(result).toBe(41);
 });
 
 test("countGoodBooleanMetricDataChat", async () => {
-  const result = await countGoodBooleanMetricData(
+  const result = await countMetricData(
     "dashboard_fixture_write_haiku",
     "dashboard_fixture_haiku_score",
     "ChatInference",
     "id",
-    true,
+    "boolean",
+    { filterGood: true, maximize: true },
   );
   // The fixture should have 80 rows with good boolean metric data
   expect(result).toBe(80);
 });
 
 test("queryGoodFloatMetricDataJson", async () => {
-  const result = await queryGoodFloatMetricData(
+  const result = await queryMetricData(
     "dashboard_fixture_extract_entities",
     "dashboard_fixture_jaccard_similarity",
     "JsonInference",
     "id",
-    true,
-    0.8,
-    undefined,
+    "float",
+    { filterGood: true, maximize: true, threshold: 0.8 },
   );
   // The fixture should have 54 rows with float metric data above 0.8
   expect(result.length).toBe(54);
 });
 
 test("queryGoodFloatMetricDataChat", async () => {
-  const result = await queryGoodFloatMetricData(
+  const result = await queryMetricData(
     "dashboard_fixture_write_haiku",
     "dashboard_fixture_haiku_rating",
     "ChatInference",
     "id",
-    true,
-    0.8,
-    undefined,
+    "float",
+    { filterGood: true, maximize: true, threshold: 0.8 },
   );
   // The fixture should have 67 rows with float metric data above 0.8
   expect(result.length).toBe(67);
 });
 
 test("countGoodFloatMetricDataJson", async () => {
-  const result = await countGoodFloatMetricData(
+  const result = await countMetricData(
     "dashboard_fixture_extract_entities",
     "dashboard_fixture_jaccard_similarity",
     "JsonInference",
     "id",
-    true,
-    0.8,
+    "float",
+    { filterGood: true, maximize: true, threshold: 0.8 },
   );
   // The fixture should have 54 rows with float metric data above 0.8
   expect(result).toBe(54);
 });
 
 test("countGoodFloatMetricDataChat", async () => {
-  const result = await countGoodFloatMetricData(
+  const result = await countMetricData(
     "dashboard_fixture_write_haiku",
     "dashboard_fixture_haiku_rating",
     "ChatInference",
     "id",
-    true,
-    0.8,
+    "float",
+    { filterGood: true, maximize: true, threshold: 0.8 },
   );
   // The fixture should have 67 rows with float metric data above 0.8
   expect(result).toBe(67);
@@ -208,17 +205,33 @@ test("countDemonstrationDataChat", async () => {
 });
 
 test("countFeedbacksForMetric for demonstration type", async () => {
-  const result = await countFeedbacksForMetric("unused_metric_name", {
-    type: "demonstration",
-    level: "inference",
-  });
+  const result = await countFeedbacksForMetric(
+    "dashboard_fixture_extract_entities",
+    {
+      type: "json",
+      variants: {},
+    },
+    "unused_metric_name",
+    {
+      type: "demonstration",
+      level: "inference",
+    },
+  );
 
-  // The fixture should have 100 demonstration feedback rows
-  expect(result).toBe(593);
+  // This should return null for demonstration
+  expect(result).toBe(null);
 });
 
 test("countFeedbacksForMetric for float type", async () => {
   const result = await countFeedbacksForMetric(
+    "dashboard_fixture_write_haiku",
+    {
+      type: "chat",
+      variants: {},
+      tools: [],
+      tool_choice: "none",
+      parallel_tool_calls: false,
+    },
     "dashboard_fixture_haiku_rating",
     {
       type: "float",
@@ -233,6 +246,11 @@ test("countFeedbacksForMetric for float type", async () => {
 
 test("countFeedbacksForMetric for boolean type", async () => {
   const result = await countFeedbacksForMetric(
+    "dashboard_fixture_extract_entities",
+    {
+      type: "json",
+      variants: {},
+    },
     "dashboard_fixture_exact_match",
     {
       type: "boolean",
@@ -241,8 +259,8 @@ test("countFeedbacksForMetric for boolean type", async () => {
     },
   );
 
-  // The fixture should have 100 rows for exact match
-  expect(result).toBe(100);
+  // The fixture should have 99 rows for exact match
+  expect(result).toBe(99);
 });
 
 test("queryAllInferencesForFunctionJson", async () => {

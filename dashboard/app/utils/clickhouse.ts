@@ -208,25 +208,18 @@ function getInferenceTableName(
   }
 }
 
-function getMetricTableName(metric_config: MetricConfig): string {
-  switch (metric_config.type) {
-    case "boolean":
-      return "BooleanMetricFeedback";
-    case "float":
-      return "FloatMetricFeedback";
-    case "comment":
-      return "CommentFeedback";
-    case "demonstration":
-      return "DemonstrationFeedback";
-  }
-}
-
 function getInferenceJoinKey(metric_config: MetricConfig): InferenceJoinKey {
-  switch (metric_config.level) {
-    case "inference":
-      return InferenceJoinKey.ID;
-    case "episode":
-      return InferenceJoinKey.EPISODE_ID;
+  if ("level" in metric_config) {
+    switch (metric_config.level) {
+      case "inference":
+        return InferenceJoinKey.ID;
+      case "episode":
+        return InferenceJoinKey.EPISODE_ID;
+    }
+  } else {
+    throw new Error(
+      "Metric config level is undefined. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new",
+    );
   }
 }
 
@@ -246,78 +239,35 @@ export async function countInferencesForFunction(
 }
 
 export async function countFeedbacksForMetric(
-  metric_name: string,
-  metric_config: MetricConfig,
-): Promise<number> {
-  const metric_table_name = getMetricTableName(metric_config);
-
-  // Special handling for demonstration feedback which doesn't use metric_name
-  if (metric_config.type === "demonstration") {
-    const query = `SELECT COUNT() AS count FROM ${metric_table_name}`;
-    const resultSet = await clickhouseClient.query({
-      query,
-      format: "JSONEachRow",
-    });
-    const rows = await resultSet.json<{ count: string }>();
-    return Number(rows[0].count);
-  }
-
-  // Original logic for other metric types
-  const query = `SELECT COUNT() AS count FROM ${metric_table_name} WHERE metric_name = {metric_name:String}`;
-  const resultSet = await clickhouseClient.query({
-    query,
-    format: "JSONEachRow",
-    query_params: { metric_name },
-  });
-  const rows = await resultSet.json<{ count: string }>();
-  return Number(rows[0].count);
-}
-
-export async function getCuratedInferences(
   function_name: string,
   function_config: FunctionConfig,
-  metric_name: string | null,
-  metric_config: MetricConfig | null,
-  threshold: number,
-  max_samples?: number,
-) {
+  metric_name: string,
+  metric_config: MetricConfig,
+): Promise<number | null> {
   const inference_table_name = getInferenceTableName(function_config);
-  // metric_config and metric_name should both be null if either is null, so this || is for typing purposes only
-  if (!metric_config || !metric_name) {
-    return queryAllInferencesForFunction(
-      function_name,
-      inference_table_name,
-      max_samples,
-    );
-  }
-  const inference_join_key = getInferenceJoinKey(metric_config);
-
   switch (metric_config.type) {
-    case "boolean":
-      return queryGoodBooleanMetricData(
+    case "boolean": {
+      const inference_join_key = getInferenceJoinKey(metric_config);
+      return countMetricData(
         function_name,
         metric_name,
         inference_table_name,
         inference_join_key,
-        metric_config.optimize === "max",
-        max_samples,
+        "boolean",
       );
-    case "float":
-      return queryGoodFloatMetricData(
+    }
+    case "float": {
+      const inference_join_key = getInferenceJoinKey(metric_config);
+      return countMetricData(
         function_name,
         metric_name,
         inference_table_name,
         inference_join_key,
-        metric_config.optimize === "max",
-        threshold,
-        max_samples,
+        "float",
       );
+    }
     case "demonstration":
-      return queryDemonstrationDataForFunction(
-        function_name,
-        inference_table_name,
-        max_samples,
-      );
+      return null;
     default:
       throw new Error(`Unsupported metric type: ${metric_config.type}`);
   }
@@ -334,26 +284,88 @@ export async function countCuratedInferences(
   const inference_join_key = getInferenceJoinKey(metric_config);
   switch (metric_config.type) {
     case "boolean":
-      return countGoodBooleanMetricData(
+      return countMetricData(
         function_name,
         metric_name,
         inference_table_name,
         inference_join_key,
-        metric_config.optimize === "max",
+        "boolean",
+        { filterGood: true, maximize: metric_config.optimize === "max" },
       );
     case "float":
-      return countGoodFloatMetricData(
+      return countMetricData(
         function_name,
         metric_name,
         inference_table_name,
         inference_join_key,
-        metric_config.optimize === "max",
-        threshold,
+        "float",
+        {
+          filterGood: true,
+          maximize: metric_config.optimize === "max",
+          threshold,
+        },
       );
     case "demonstration":
       return countDemonstrationDataForFunction(
         function_name,
         inference_table_name,
+      );
+    default:
+      throw new Error(`Unsupported metric type: ${metric_config.type}`);
+  }
+}
+
+export async function getCuratedInferences(
+  function_name: string,
+  function_config: FunctionConfig,
+  metric_name: string | null,
+  metric_config: MetricConfig | null,
+  threshold: number,
+  max_samples?: number,
+) {
+  const inference_table_name = getInferenceTableName(function_config);
+  if (!metric_config || !metric_name) {
+    return queryAllInferencesForFunction(
+      function_name,
+      inference_table_name,
+      max_samples,
+    );
+  }
+  const inference_join_key = getInferenceJoinKey(metric_config);
+
+  switch (metric_config.type) {
+    case "boolean":
+      return queryMetricData(
+        function_name,
+        metric_name,
+        inference_table_name,
+        inference_join_key,
+        "boolean",
+        {
+          filterGood: true,
+          maximize: metric_config.optimize === "max",
+          max_samples,
+        },
+      );
+    case "float":
+      return queryMetricData(
+        function_name,
+        metric_name,
+        inference_table_name,
+        inference_join_key,
+        "float",
+        {
+          filterGood: true,
+          maximize: metric_config.optimize === "max",
+          threshold,
+          max_samples,
+        },
+      );
+    case "demonstration":
+      return queryDemonstrationDataForFunction(
+        function_name,
+        inference_table_name,
+        max_samples,
       );
     default:
       throw new Error(`Unsupported metric type: ${metric_config.type}`);
@@ -376,16 +388,39 @@ export async function queryAllInferencesForFunction(
   return parseInferenceRows(rows, inference_table_name);
 }
 
-export async function queryGoodBooleanMetricData(
+// Generic function to handle both boolean and float metric queries
+export async function queryMetricData(
   function_name: string,
   metric_name: string,
   inference_table_name: InferenceTableName,
   inference_join_key: InferenceJoinKey,
-  maximize: boolean,
-  max_samples: number | undefined,
+  metricType: "boolean" | "float",
+  options?: {
+    filterGood?: boolean;
+    maximize?: boolean;
+    threshold?: number;
+    max_samples?: number;
+  },
 ): Promise<ParsedInferenceRow[]> {
-  const comparison_operator = maximize ? "= 1" : "= 0"; // Changed from "IS TRUE"/"IS FALSE"
+  const {
+    filterGood = false,
+    maximize = false,
+    threshold,
+    max_samples,
+  } = options || {};
   const limitClause = max_samples ? `LIMIT ${max_samples}` : "";
+
+  let valueCondition = "";
+  if (filterGood) {
+    if (metricType === "boolean") {
+      valueCondition = `AND value = ${maximize ? 1 : 0}`;
+    } else if (metricType === "float" && threshold !== undefined) {
+      valueCondition = `AND value ${maximize ? ">" : "<"} {threshold:Float}`;
+    }
+  }
+
+  const feedbackTable =
+    metricType === "boolean" ? "BooleanMetricFeedback" : "FloatMetricFeedback";
 
   const query = `
     SELECT
@@ -401,10 +436,10 @@ export async function queryGoodBooleanMetricData(
         value,
         ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC) as rn
       FROM
-        BooleanMetricFeedback
+        ${feedbackTable}
       WHERE
         metric_name = {metric_name:String}
-        AND value ${comparison_operator}
+        ${valueCondition}
       ) f ON i.${inference_join_key} = f.target_id and f.rn = 1
     WHERE
       i.function_name = {function_name:String}
@@ -417,31 +452,44 @@ export async function queryGoodBooleanMetricData(
     query_params: {
       metric_name,
       function_name,
+      ...(threshold !== undefined ? { threshold } : {}),
     },
   });
   const rows = await resultSet.json<InferenceRow>();
   return parseInferenceRows(rows, inference_table_name);
 }
 
-export async function queryGoodFloatMetricData(
+// Generic function to count metric data
+export async function countMetricData(
   function_name: string,
   metric_name: string,
   inference_table_name: InferenceTableName,
   inference_join_key: InferenceJoinKey,
-  maximize: boolean,
-  threshold: number,
-  max_samples: number | undefined,
-): Promise<ParsedInferenceRow[]> {
-  const comparison_operator = maximize ? ">" : "<";
-  const limitClause = max_samples ? `LIMIT ${max_samples}` : "";
+  metricType: "boolean" | "float",
+  options?: {
+    filterGood?: boolean;
+    maximize?: boolean;
+    threshold?: number;
+  },
+): Promise<number> {
+  const { filterGood = false, maximize = false, threshold } = options || {};
+
+  let valueCondition = "";
+  if (filterGood) {
+    if (metricType === "boolean") {
+      valueCondition = `AND value = ${maximize ? 1 : 0}`;
+    } else if (metricType === "float" && threshold !== undefined) {
+      valueCondition = `AND value ${maximize ? ">" : "<"} {threshold:Float}`;
+    }
+  }
+  console.log(valueCondition);
+
+  const feedbackTable =
+    metricType === "boolean" ? "BooleanMetricFeedback" : "FloatMetricFeedback";
 
   const query = `
     SELECT
-      i.variant_name,
-      i.input,
-      i.output,
-      f.value,
-      i.episode_id
+      toUInt32(COUNT(*)) as count
     FROM
       ${inference_table_name} i
     JOIN
@@ -450,14 +498,13 @@ export async function queryGoodFloatMetricData(
         value,
         ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC) as rn
       FROM
-        FloatMetricFeedback
+        ${feedbackTable}
       WHERE
         metric_name = {metric_name:String}
-        AND value ${comparison_operator} {threshold:Float}
+        ${valueCondition}
       ) f ON i.${inference_join_key} = f.target_id and f.rn = 1
     WHERE
       i.function_name = {function_name:String}
-    ${limitClause}
   `;
 
   const resultSet = await clickhouseClient.query({
@@ -466,11 +513,11 @@ export async function queryGoodFloatMetricData(
     query_params: {
       metric_name,
       function_name,
-      threshold,
+      ...(threshold !== undefined ? { threshold } : {}),
     },
   });
-  const rows = await resultSet.json<InferenceRow>();
-  return parseInferenceRows(rows, inference_table_name);
+  const rows = await resultSet.json<{ count: number }>();
+  return rows[0].count;
 }
 
 export async function queryDemonstrationDataForFunction(
@@ -510,90 +557,6 @@ export async function queryDemonstrationDataForFunction(
   });
   const rows = await resultSet.json<InferenceRow>();
   return parseInferenceRows(rows, inference_table_name);
-}
-
-export async function countGoodBooleanMetricData(
-  function_name: string,
-  metric_name: string,
-  inference_table_name: InferenceTableName,
-  inference_join_key: InferenceJoinKey,
-  maximize: boolean,
-): Promise<number> {
-  const comparison_operator = maximize ? "= 1" : "= 0"; // Changed from "IS TRUE"/"IS FALSE"
-
-  const query = `
-    SELECT
-      toUInt32(COUNT(*)) as count
-    FROM
-      ${inference_table_name} i
-    JOIN
-      (SELECT
-        target_id,
-        value,
-        ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC) as rn
-      FROM
-        BooleanMetricFeedback
-      WHERE
-        metric_name = {metric_name:String}
-        AND value ${comparison_operator}
-      ) f ON i.${inference_join_key} = f.target_id and f.rn = 1
-    WHERE
-      i.function_name = {function_name:String}
-  `;
-
-  const resultSet = await clickhouseClient.query({
-    query,
-    format: "JSONEachRow",
-    query_params: {
-      metric_name,
-      function_name,
-    },
-  });
-  const rows = await resultSet.json<{ count: number }>();
-  return rows[0].count;
-}
-
-export async function countGoodFloatMetricData(
-  function_name: string,
-  metric_name: string,
-  inference_table_name: InferenceTableName,
-  inference_join_key: InferenceJoinKey,
-  maximize: boolean,
-  threshold: number,
-): Promise<number> {
-  const comparison_operator = maximize ? ">" : "<";
-
-  const query = `
-    SELECT
-      toUInt32(COUNT(*)) as count
-    FROM
-      ${inference_table_name} i
-    JOIN
-      (SELECT
-        target_id,
-        value,
-        ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC) as rn
-      FROM
-        FloatMetricFeedback
-      WHERE
-        metric_name = {metric_name:String}
-        AND value ${comparison_operator} {threshold:Float}
-      ) f ON i.${inference_join_key} = f.target_id and f.rn = 1
-    WHERE
-      i.function_name = {function_name:String}
-  `;
-
-  const resultSet = await clickhouseClient.query({
-    query,
-    format: "JSONEachRow",
-    query_params: {
-      metric_name,
-      function_name,
-      threshold,
-    },
-  });
-  const rows = await resultSet.json<{ count: number }>();
-  return rows[0].count;
 }
 
 export async function countDemonstrationDataForFunction(
