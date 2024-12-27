@@ -74,16 +74,15 @@ repos:
           - "@typescript-eslint/parser"
           - "@typescript-eslint/eslint-plugin"
         pass_filenames: false
-        always_run: true
 
       - id: tsc
         name: typescript
         entry: bash -c 'cd dashboard && tsc'
         language: node
-        pass_filenames: false
+        types_or: [ts, tsx]
         additional_dependencies:
           - typescript
-        always_run: true
+        pass_filenames: false
 
   - repo: https://github.com/srstevenson/nb-clean
     rev: 3.2.0
