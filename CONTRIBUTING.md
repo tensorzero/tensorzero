@@ -39,7 +39,7 @@ The team will be happy to provide feedback and guidance.
 
 > [!TIP]
 >
-> See the "Contributor Guide" section below for more details on building and testing TensorZero.
+> See the "Technical Guide" section below for more details on building and testing TensorZero.
 
 ### Documentation
 
@@ -73,7 +73,7 @@ Did you have something else in mind? Reach out on Slack or Discord and let us kn
 
 ---
 
-## Contributor Guide
+## Technical Guide
 
 ### Setup
 
@@ -181,6 +181,10 @@ cargo test-unit
    uv run ruff format --check .
    uv run ruff check --output-format=github --extend-select I .
    ```
+
+#### Dashboard
+
+Refer to the instructions in `dashboard/README.md`.
 
 ---
 
