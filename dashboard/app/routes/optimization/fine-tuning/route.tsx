@@ -275,10 +275,13 @@ function FineTuningForm({
   };
 
   useEffect(() => {
-    if (counts.inferenceCount !== null) {
-      form.setValue("maxSamples", Math.min(100000, counts.inferenceCount));
+    if (counts.curatedInferenceCount !== null) {
+      form.setValue(
+        "maxSamples",
+        Math.min(100000, counts.curatedInferenceCount),
+      );
     }
-  }, [counts.inferenceCount, form]);
+  }, [counts.curatedInferenceCount, form]);
 
   function getButtonText() {
     switch (submissionPhase) {
@@ -348,7 +351,10 @@ function FineTuningForm({
 
             <ModelSelector control={form.control} models={models} />
 
-            <AdvancedParametersAccordion control={form.control} />
+            <AdvancedParametersAccordion
+              control={form.control}
+              maxSamplesLimit={counts.curatedInferenceCount ?? undefined}
+            />
           </div>
 
           <Button type="submit" disabled={submissionPhase !== "idle"}>
