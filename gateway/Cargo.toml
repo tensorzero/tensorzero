@@ -46,7 +46,7 @@ metrics-exporter-prometheus = { version = "0.15.3", features = [
 mimalloc = "0.1.43"
 minijinja = { version = "2.1.0", features = ["loader", "debug"] }
 rand = "0.8.5"
-reqwest = { version = "0.12.5", features = [
+reqwest = { version = "0.12.10", features = [
     "json",
     "multipart",
     "rustls-tls",
