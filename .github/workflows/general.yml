@@ -8,9 +8,6 @@ on:
 env:
   FORCE_COLOR: 1
   CLICKHOUSE_URL: "http://localhost:8123/tensorzero"
-  OPENAI_API_KEY: ${{secrets.OPENAI_API_KEY}}
-  FIREWORKS_API_KEY: ${{secrets.FIREWORKS_API_KEY}}
-  FIREWORKS_ACCOUNT_ID: ${{secrets.FIREWORKS_ACCOUNT_ID}}
 
 jobs:
   validate:
