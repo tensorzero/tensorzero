@@ -15,43 +15,43 @@ import { getConfig } from "~/utils/config/index.server";
 export async function loader({
   request,
 }: LoaderFunctionArgs): Promise<Response> {
-  // For type-safe fetching of counts, we would want this function to return a Promise<CountsData>
   const url = new URL(request.url);
   const functionName = url.searchParams.get("function");
   const metricName = url.searchParams.get("metric");
   const threshold = parseFloat(url.searchParams.get("threshold") || "0");
 
-  let inferenceCount = null;
-  let feedbackCount = null;
-  let curatedInferenceCount = null;
   const config = await getConfig();
-  if (functionName) {
-    inferenceCount = await countInferencesForFunction(
-      functionName,
-      config.functions[functionName],
-    );
-  }
-  if (functionName && metricName) {
-    feedbackCount = await countFeedbacksForMetric(
-      functionName,
-      config.functions[functionName],
-      metricName,
-      config.metrics[metricName],
-    );
-    curatedInferenceCount = await countCuratedInferences(
-      functionName,
-      config.functions[functionName],
-      metricName,
-      config.metrics[metricName],
-      threshold,
-    );
-  }
-  // For type-safe fetching of counts, we would want this return statement to be:
-  // return {
-  //   inferenceCount,
-  //   feedbackCount,
-  //   curatedInferenceCount,
-  // };
+
+  // Run all fetches concurrently
+  const [inferenceCount, feedbackCount, curatedInferenceCount] =
+    await Promise.all([
+      functionName
+        ? countInferencesForFunction(
+            functionName,
+            config.functions[functionName],
+          )
+        : Promise.resolve(null),
+
+      functionName && metricName
+        ? countFeedbacksForMetric(
+            functionName,
+            config.functions[functionName],
+            metricName,
+            config.metrics[metricName],
+          )
+        : Promise.resolve(null),
+
+      functionName && metricName
+        ? countCuratedInferences(
+            functionName,
+            config.functions[functionName],
+            metricName,
+            config.metrics[metricName],
+            threshold,
+          )
+        : Promise.resolve(null),
+    ]);
+
   return Response.json({
     inferenceCount,
     feedbackCount,

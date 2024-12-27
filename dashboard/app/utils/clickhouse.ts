@@ -267,7 +267,10 @@ export async function countFeedbacksForMetric(
       );
     }
     case "demonstration":
-      return null;
+      return countDemonstrationDataForFunction(
+        function_name,
+        inference_table_name,
+      );
     default:
       throw new Error(`Unsupported metric type: ${metric_config.type}`);
   }

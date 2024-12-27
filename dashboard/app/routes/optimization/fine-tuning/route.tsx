@@ -218,7 +218,7 @@ function FineTuningForm({
     }
   }, [fetcher.data]);
 
-  const fetchCounts = async (
+  const fetchCounts = (
     functionName?: string,
     metricName?: string,
     threshold?: number,
