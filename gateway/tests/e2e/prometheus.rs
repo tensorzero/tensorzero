@@ -315,8 +315,6 @@ async fn test_prometheus_metrics_feedback_float() {
     let response_json = response.json::<Value>().await.unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-    // Sleep for 1 second to allow ClickHouse to write
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     // Send feedback for task_success
     let feedback_payload = serde_json::json!({
         "inference_id": inference_id,
@@ -375,8 +373,6 @@ async fn test_prometheus_metrics_feedback_float_dryrun() {
     let response_json = response.json::<Value>().await.unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-    // Sleep for 1 second to allow ClickHouse to write
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     // Send feedback for task_success
     let feedback_payload = serde_json::json!({
         "inference_id": inference_id,
@@ -440,8 +436,6 @@ async fn test_prometheus_metrics_feedback_comment() {
     let response_json = response.json::<Value>().await.unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-    // Sleep for 1 second to allow ClickHouse to write
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     // Send feedback for comment
     let feedback_payload = serde_json::json!({
         "inference_id": inference_id,
