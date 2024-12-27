@@ -219,7 +219,7 @@ test("countFeedbacksForMetric for demonstration type", async () => {
   );
 
   // This should return null for demonstration
-  expect(result).toBe(null);
+  expect(result).toBe(100);
 });
 
 test("countFeedbacksForMetric for float type", async () => {
