@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::Duration;
 
 use axum::extract::State;
 use axum::{debug_handler, Json};
@@ -15,6 +16,9 @@ use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{parse_chat_output, ContentBlock, ContentBlockOutput, Text};
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCall, ToolCallConfig};
+use crate::uuid_util::uuid_elapsed;
+
+const FEEDBACK_COOLDOWN_PERIOD: Duration = Duration::from_secs(5);
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Deserialize)]
@@ -214,7 +218,7 @@ async fn write_comment(
 ) -> Result<(), Error> {
     let Params { value, tags, .. } = params;
     // Verify that the target_id exists.
-    let _ = get_target_identifier(&connection_info, level, &target_id).await?;
+    let _ = throttled_get_target_identifier(&connection_info, level, &target_id).await?;
     let value = value.as_str().ok_or_else(|| ErrorDetails::InvalidRequest {
         message: "Feedback value for a comment must be a string".to_string(),
     })?;
@@ -242,7 +246,7 @@ async fn write_demonstration(
     dryrun: bool,
 ) -> Result<(), Error> {
     let Params { value, tags, .. } = params;
-    let function_name = get_target_identifier(
+    let function_name = throttled_get_target_identifier(
         &connection_info,
         &MetricConfigLevel::Inference,
         &inference_id,
@@ -277,7 +281,8 @@ async fn write_float(
     } = params;
     let metric_config: &crate::config_parser::MetricConfig = config.get_metric(metric_name)?;
     // Verify that the target_id exists.
-    let _ = get_target_identifier(&connection_info, &metric_config.level, &target_id).await?;
+    let _ =
+        throttled_get_target_identifier(&connection_info, &metric_config.level, &target_id).await?;
 
     let value = value.as_f64().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
@@ -311,7 +316,8 @@ async fn write_boolean(
     } = params;
     let metric_config = config.get_metric(metric_name)?;
     // Verify that the target_id exists.
-    let _ = get_target_identifier(&connection_info, &metric_config.level, &target_id).await?;
+    let _ =
+        throttled_get_target_identifier(&connection_info, &metric_config.level, &target_id).await?;
     let value = value.as_bool().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
             message: format!("Feedback value for metric `{metric_name}` must be a boolean"),
@@ -326,6 +332,39 @@ async fn write_boolean(
         });
     }
     Ok(())
+}
+
+/// This function throttles the check that an id is valid if it was created very recently.
+/// This is to avoid a race condition where the id was created (e.g. an inference was made)
+/// but the feedback is received before the id is written to the database.o
+///
+/// The current behavior is to immediately check and return the result if the id was created
+/// more than FEEDBACK_COOLDOWN_PERIOD ago.
+///
+/// Otherwise, it will poll the database every second until the cooldown period has passed.
+/// Then, if the id has still not been created, it will return an error.
+async fn throttled_get_target_identifier(
+    connection_info: &ClickHouseConnectionInfo,
+    metric_config_level: &MetricConfigLevel,
+    target_id: &Uuid,
+) -> Result<String, Error> {
+    let mut elapsed = uuid_elapsed(target_id)?;
+    if elapsed > FEEDBACK_COOLDOWN_PERIOD {
+        return get_target_identifier(connection_info, metric_config_level, target_id).await;
+    }
+
+    loop {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        elapsed = uuid_elapsed(target_id)?;
+        match get_target_identifier(connection_info, metric_config_level, target_id).await {
+            Ok(identifier) => return Ok(identifier),
+            Err(e) => {
+                if elapsed > FEEDBACK_COOLDOWN_PERIOD {
+                    return Err(e);
+                }
+            }
+        }
+    }
 }
 
 /// Retrieves the identifier associated with a given `target_id` based on the specified metric configuration level.
@@ -716,7 +755,8 @@ mod tests {
             templates: TemplateConfig::new(),
         }));
         let app_state_data = get_unit_test_app_state_data(config, true);
-        let episode_id = Uuid::now_v7();
+        let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
+        let episode_id = Uuid::new_v7(timestamp);
         let value = json!("test comment");
         let params = Params {
             episode_id: Some(episode_id),
@@ -754,7 +794,6 @@ mod tests {
         );
 
         // Test dryrun
-        let episode_id = Uuid::now_v7();
         let params = Params {
             episode_id: Some(episode_id),
             inference_id: None,
@@ -772,7 +811,6 @@ mod tests {
         sleep(Duration::from_millis(200)).await;
 
         // Test a Demonstration Feedback
-        let episode_id = Uuid::now_v7();
         let value = json!("test demonstration");
         let params = Params {
             // Demonstrations shouldn't work with episode id
@@ -795,7 +833,7 @@ mod tests {
             }
         );
 
-        let inference_id = Uuid::now_v7();
+        let inference_id = Uuid::new_v7(timestamp);
         let params = Params {
             episode_id: None,
             inference_id: Some(inference_id),
@@ -835,8 +873,8 @@ mod tests {
         }));
         let app_state_data = get_unit_test_app_state_data(config, true);
         let value = json!(4.5);
-        let inference_id = Uuid::now_v7();
-        let episode_id = Uuid::now_v7();
+        let inference_id = Uuid::new_v7(timestamp);
+        let episode_id = Uuid::new_v7(timestamp);
         let params = Params {
             episode_id: None,
             inference_id: Some(inference_id),
@@ -923,7 +961,7 @@ mod tests {
         }));
         let app_state_data = get_unit_test_app_state_data(config, true);
         let value = json!(true);
-        let inference_id = Uuid::now_v7();
+        let inference_id = Uuid::new_v7(timestamp);
         let params = Params {
             episode_id: None,
             inference_id: Some(inference_id),

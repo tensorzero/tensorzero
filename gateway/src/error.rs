@@ -133,6 +133,9 @@ pub enum ErrorDetails {
     InvalidTool {
         message: String,
     },
+    InvalidUuid {
+        raw_uuid: String,
+    },
     JsonRequest {
         message: String,
     },
@@ -247,6 +250,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidRequest { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidTemplatePath => tracing::Level::ERROR,
             ErrorDetails::InvalidTool { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidUuid { .. } => tracing::Level::ERROR,
             ErrorDetails::JsonRequest { .. } => tracing::Level::WARN,
             ErrorDetails::JsonSchema { .. } => tracing::Level::ERROR,
             ErrorDetails::JsonSchemaValidation { .. } => tracing::Level::ERROR,
@@ -297,6 +301,7 @@ impl ErrorDetails {
             ErrorDetails::InferenceServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             ErrorDetails::InvalidEpisodeId { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidUuid { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InputValidation { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidBaseUrl { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -452,6 +457,9 @@ impl std::fmt::Display for ErrorDetails {
                 write!(f, "Template path failed to convert to Rust string")
             }
             ErrorDetails::InvalidTool { message } => write!(f, "{}", message),
+            ErrorDetails::InvalidUuid { raw_uuid } => {
+                write!(f, "Failed to parse UUID as v7: {}", raw_uuid)
+            }
             ErrorDetails::JsonRequest { message } => write!(f, "{}", message),
             ErrorDetails::JsonSchema { message } => write!(f, "{}", message),
             ErrorDetails::JsonSchemaValidation {
