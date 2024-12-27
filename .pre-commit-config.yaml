@@ -63,24 +63,22 @@ repos:
 
       - id: eslint
         name: eslint
-        entry: npx eslint
+        entry: bash -c 'cd dashboard && npx eslint'
         language: node
         types_or: [javascript, jsx, ts, tsx]
         additional_dependencies:
           - eslint
           - "@typescript-eslint/parser"
           - "@typescript-eslint/eslint-plugin"
-        working_directory: dashboard
         pass_filenames: false
 
       - id: tsc
         name: typescript
-        entry: tsc
+        entry: bash -c 'cd dashboard && tsc'
         language: node
         types_or: [ts, tsx]
         additional_dependencies:
           - typescript
-        working_directory: dashboard
         pass_filenames: false
 
   - repo: https://github.com/srstevenson/nb-clean
