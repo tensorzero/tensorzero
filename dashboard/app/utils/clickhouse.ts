@@ -485,7 +485,6 @@ export async function countMetricData(
       valueCondition = `AND value ${maximize ? ">" : "<"} {threshold:Float}`;
     }
   }
-  console.log(valueCondition);
 
   const feedbackTable =
     metricType === "boolean" ? "BooleanMetricFeedback" : "FloatMetricFeedback";
