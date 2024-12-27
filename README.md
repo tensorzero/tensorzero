@@ -41,8 +41,7 @@ It provides a **data & learning flywheel for LLMs** by unifying:
 
 ## Demo
 
-> [!NOTE]
-> **Watch LLMs get better at data extraction in real time with TensorZero!**
+> [!NOTE] > **Watch LLMs get better at data extraction in real time with TensorZero!**
 >
 > **[Dynamic in-context learning (DICL)](https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations#dynamic-in-context-learning-dicl)** is a powerful inference-time optimization available out of the box with TensorZero.
 > It enhances LLM performance by automatically incorporating relevant historical examples into the prompt, without the need for model fine-tuning.
