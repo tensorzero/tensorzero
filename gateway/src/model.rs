@@ -9,7 +9,6 @@ use strum::VariantNames;
 use tracing::{span, warn,Instrument, Level};
 use url::Url;
 
-use crate::inference::providers::{anthropic, openai};
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::inference::providers::dummy::DummyProvider;
 use crate::inference::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
@@ -268,22 +267,14 @@ impl<'de> Deserialize<'de> for ProviderConfig {
         D: serde::Deserializer<'de>,
     {
         let helper = ProviderConfigHelper::deserialize(deserializer)?;
-        let convert_to_credential = |location: CredentialLocation, provider_name: &str, model_name: &str| {
-            Credential::try_from((location, provider_name, model_name))
-                .map_err(|e| D::Error::custom(format!("Failed to convert credentials: {e}")))
-        };
-
         Ok(match helper {
             ProviderConfigHelper::Anthropic {
                 model_name,
                 api_key_location,
-            } =>{
-                let key_location = api_key_location.unwrap_or(anthropic::default_api_key_location());
-                let credentials = convert_to_credential(key_location, "anthropic",&model_name)?;
-                 ProviderConfig::Anthropic(
-                AnthropicProvider::new(model_name, credentials)
+            } => ProviderConfig::Anthropic(
+                AnthropicProvider::new(model_name, api_key_location)
                     .map_err(|e| D::Error::custom(e.to_string()))?,
-            )},
+            ),
             ProviderConfigHelper::AWSBedrock { model_id, region } => {
                 let region = region.map(aws_types::region::Region::new);
 
@@ -359,13 +350,11 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 model_name,
                 api_base,
                 api_key_location,
-            } => {
-                let key_location = api_key_location.unwrap_or(openai::default_api_key_location());
-                let credentials = convert_to_credential(key_location, "Openai",&model_name)?;
+            } => 
                 ProviderConfig::OpenAI(
-                OpenAIProvider::new(model_name, api_base, credentials)
+                OpenAIProvider::new(model_name, api_base, api_key_location)
                     .map_err(|e| D::Error::custom(e.to_string()))?,
-            )},
+            ),
             ProviderConfigHelper::Together {
                 model_name,
                 api_key_location,
@@ -613,10 +602,10 @@ pub enum Credential {
 }
 
 
-impl TryFrom<(CredentialLocation, &str, &str)> for Credential {
+impl TryFrom<(CredentialLocation, &str)> for Credential {
     type Error = Error;
     #[allow(unused_variables)]
-    fn try_from((location, provider_type, model_name): (CredentialLocation, &str, &str)) -> Result<Self, Self::Error> {
+    fn try_from((location, provider_type): (CredentialLocation, &str)) -> Result<Self, Self::Error> {
         match location {
             CredentialLocation::Env(key_name) => {
                 match env::var(key_name) {
@@ -624,7 +613,7 @@ impl TryFrom<(CredentialLocation, &str, &str)> for Credential {
                     Err(_) => {
                         #[cfg(any(test, feature = "e2e_tests"))]
                         {
-                            warn!("You are missing the credentials required for `model.{}.provider.{}`, so the associated tests will likely fail.",model_name,provider_type);
+                            warn!("You are missing the credentials required for a {} model, so the associated tests will likely fail.", provider_type);
                             Ok(Credential::Missing)
                         }
                         #[cfg(not(any(test, feature = "e2e_tests")))]
@@ -639,16 +628,16 @@ impl TryFrom<(CredentialLocation, &str, &str)> for Credential {
             CredentialLocation::Path(path) => {
                 match fs::read_to_string(path) {
                     Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
-                    Err(_) => {
+                    Err(e) => {
                         #[cfg(any(test, feature = "e2e_tests"))]
                         {
-                            warn!("You are missing the credentials required for `model.{}.provider.{}`, so the associated tests will likely fail.",model_name,provider_type);
+                            warn!("Failed to read credentials file for a {} model: {}. Tests will likely fail.", provider_type, e);
                             Ok(Credential::Missing)
                         }
                         #[cfg(not(any(test, feature = "e2e_tests")))]
                         {
                             Err(Error::new(ErrorDetails::ApiKeyMissing {
-                                provider_name: provider_type.to_string(),
+                                provider_name: format!("{}: Failed to read credentials file - {}", provider_type, e),
                             }))
                         }
                     }
@@ -761,14 +750,14 @@ fn model_config_from_shorthand(
 ) -> Result<ModelConfig, Error> {
     let model_name = model_name.to_string();
     let provider_config = match provider_type {
-        "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(model_name, Credential::None)?),
+        "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(model_name, None)?),
         "fireworks" => ProviderConfig::Fireworks(FireworksProvider::new(model_name, None)?),
         "google_ai_studio_gemini" => ProviderConfig::GoogleAIStudioGemini(
             GoogleAIStudioGeminiProvider::new(model_name, None)?,
         ),
         "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name, None)?),
         "mistral" => ProviderConfig::Mistral(MistralProvider::new(model_name, None)?),
-        "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, Credential::None)?),
+        "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?),
         "together" => ProviderConfig::Together(TogetherProvider::new(model_name, None)?),
         "xai" => ProviderConfig::XAI(XAIProvider::new(model_name, None)?),
         #[cfg(any(test, feature = "e2e_tests"))]

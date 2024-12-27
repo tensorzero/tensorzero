@@ -1,4 +1,3 @@
-use std::env;
 use std::time::Duration;
 
 use futures::{Stream, StreamExt};
@@ -21,12 +20,12 @@ use crate::inference::types::{
     ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream, RequestMessage, Usage,
 };
-use crate::model::CredentialLocation;
+use crate::model::{Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
 use super::gcp_vertex_gemini::{
-    default_api_key_location, GCPServiceAccountCredentials, GCPVertexCredentials,
+    default_api_key_location, GCPVertexCredentials,
 };
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
@@ -48,37 +47,9 @@ impl GCPVertexAnthropicProvider {
         project_id: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
-        let credentials = match api_key_location {
-            CredentialLocation::Env(key_name) => {
-                let path = env::var(key_name).map_err(|e| {
-                    Error::new(ErrorDetails::GCPCredentials {
-                        message: format!(
-                            "Failed to load GCP credentials from environment variable: {}",
-                            e
-                        ),
-                    })
-                })?;
-                GCPVertexCredentials::Static(
-                    GCPServiceAccountCredentials::from_path(path.as_str()).map_err(|e| {
-                        Error::new(ErrorDetails::GCPCredentials {
-                            message: format!("Failed to load GCP credentials: {}", e),
-                        })
-                    })?,
-                )
-            }
-            CredentialLocation::Path(path) => GCPVertexCredentials::Static(
-                GCPServiceAccountCredentials::from_path(path.as_str()).map_err(|e| {
-                    Error::new(ErrorDetails::GCPCredentials {
-                        message: format!("Failed to load GCP credentials: {}", e),
-                    })
-                })?,
-            ),
-            CredentialLocation::Dynamic(key_name) => GCPVertexCredentials::Dynamic(key_name),
-            _ => Err(Error::new(ErrorDetails::GCPCredentials {
-                message: "Invalid credential_location for GCPVertexAnthropic provider".to_string(),
-            }))?,
-        };
+        let credential_location = api_key_location.unwrap_or(default_api_key_location());
+        let generic_credentials = Credential::try_from((credential_location, "GCPVertexAnthropic"))?;
+        let provider_credentials= GCPVertexCredentials::try_from((generic_credentials, "GCPVertexAnthropic"))?;
         let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:rawPredict");
         let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:streamRawPredict");
         let audience = format!("https://{location}-aiplatform.googleapis.com/");
@@ -87,7 +58,7 @@ impl GCPVertexAnthropicProvider {
             request_url,
             streaming_request_url,
             audience,
-            credentials,
+            credentials: provider_credentials,
             model_id,
         })
     }

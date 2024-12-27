@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::env;
 use std::time::Duration;
 
 use futures::{Stream, StreamExt};
@@ -23,7 +22,7 @@ use crate::inference::types::{
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequestJsonMode, Role, Text, TextChunk,
 };
-use crate::model::CredentialLocation;
+use crate::model::{Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
@@ -45,37 +44,9 @@ impl GCPVertexGeminiProvider {
         project_id: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
-        let credentials = match api_key_location {
-            CredentialLocation::Env(key_name) => {
-                let path = env::var(key_name).map_err(|e| {
-                    Error::new(ErrorDetails::GCPCredentials {
-                        message: format!(
-                            "Failed to load GCP credentials from environment variable: {}",
-                            e
-                        ),
-                    })
-                })?;
-                GCPVertexCredentials::Static(
-                    GCPServiceAccountCredentials::from_path(path.as_str()).map_err(|e| {
-                        Error::new(ErrorDetails::GCPCredentials {
-                            message: format!("Failed to load GCP credentials: {}", e),
-                        })
-                    })?,
-                )
-            }
-            CredentialLocation::Path(path) => GCPVertexCredentials::Static(
-                GCPServiceAccountCredentials::from_path(path.as_str()).map_err(|e| {
-                    Error::new(ErrorDetails::GCPCredentials {
-                        message: format!("Failed to load GCP credentials: {}", e),
-                    })
-                })?,
-            ),
-            CredentialLocation::Dynamic(key_name) => GCPVertexCredentials::Dynamic(key_name),
-            _ => Err(Error::new(ErrorDetails::GCPCredentials {
-                message: "Invalid credential_location for GCPVertexGemini provider".to_string(),
-            }))?,
-        };
+        let credential_location = api_key_location.unwrap_or(default_api_key_location());
+        let generic_credentials = Credential::try_from((credential_location, "GCPVertexGemini"))?;
+        let provider_credentials= GCPVertexCredentials::try_from((generic_credentials, "GCPVertexGemini"))?;
         let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:generateContent");
         let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:streamGenerateContent?alt=sse");
         let audience = format!("https://{location}-aiplatform.googleapis.com/");
@@ -84,7 +55,7 @@ impl GCPVertexGeminiProvider {
             request_url,
             streaming_request_url,
             audience,
-            credentials,
+            credentials: provider_credentials,
             model_id,
         })
     }
@@ -98,6 +69,40 @@ pub fn default_api_key_location() -> CredentialLocation {
 pub enum GCPVertexCredentials {
     Static(GCPServiceAccountCredentials),
     Dynamic(String),
+    #[cfg(any(test, feature = "e2e_tests"))]
+    None
+}
+
+impl TryFrom<(Credential, &str)> for GCPVertexCredentials {
+    type Error = Error;
+    
+    fn try_from((credentials, model): (Credential, &str)) -> Result<Self, Error> {
+        match credentials {
+            Credential::Static(value) => Ok(GCPVertexCredentials::Static(
+                GCPServiceAccountCredentials::from_path(value.expose_secret()).map_err(|e| {
+                    Error::new(ErrorDetails::GCPCredentials {
+                        message: format!("Failed to load GCP credentials: {}", e),
+                    })
+                })?,
+            )),
+            Credential::FileContents(file_content) => Ok(GCPVertexCredentials::Static(
+                GCPServiceAccountCredentials::from_json_str(file_content.expose_secret()).map_err(|e| {
+                    Error::new(ErrorDetails::GCPCredentials {
+                        message: format!("Failed to load GCP credentials: {}", e),
+                    })
+                })?,
+            )),
+            Credential::Dynamic(key_name) => Ok(GCPVertexCredentials::Dynamic(key_name)),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            Credential::Missing => {
+                Ok(GCPVertexCredentials::None)
+            },
+            _ => Err(Error::new(ErrorDetails::GCPCredentials {
+                message: format!("Invalid credential_location for {} provider", model),
+            }))?,
+
+        }
+    }
 }
 
 impl GCPVertexCredentials {
@@ -117,6 +122,10 @@ impl GCPVertexCredentials {
                     })
                 })?,
             )),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            GCPVertexCredentials::None => Err(Error::new(ErrorDetails::ApiKeyMissing {
+                provider_name: "GCP Vertex Gemini".to_string(),
+            }))
         }
     }
 }
@@ -133,6 +142,8 @@ pub struct GCPServiceAccountCredentials {
     pub private_key: EncodingKey,
     pub client_email: String,
 }
+
+
 
 impl std::fmt::Debug for GCPServiceAccountCredentials {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -173,14 +184,9 @@ impl<'a> Claims<'a> {
 }
 
 impl GCPServiceAccountCredentials {
-    /// Given a path to a JSON key taken from a GCP service account, load the credentials needed to sign requests.
-    pub fn from_path(path: &str) -> Result<Self, Error> {
-        let credential_str = std::fs::read_to_string(path).map_err(|e| {
-            Error::new(ErrorDetails::GCPCredentials {
-                message: format!("Failed to read GCP Vertex Gemini credentials: {e}"),
-            })
-        })?;
-        let credential_value: Value = serde_json::from_str(&credential_str).map_err(|e| {
+    // Parse a JSON string into a GCPServiceAccountCredentials struct.
+    pub fn from_json_str(credential_str: &str) -> Result<Self,Error> {
+        let credential_value: Value = serde_json::from_str(credential_str).map_err(|e| {
             Error::new(ErrorDetails::GCPCredentials {
                 message: format!("Failed to parse GCP Vertex Gemini credentials: {e}"),
             })
@@ -230,6 +236,17 @@ impl GCPServiceAccountCredentials {
             }
             .into()),
         }
+    }
+
+    /// Given a path to a JSON key taken from a GCP service account, load the credentials needed to sign requests.
+    pub fn from_path(path: &str) -> Result<Self, Error> {
+        let credential_str = std::fs::read_to_string(path).map_err(|e| {
+            Error::new(ErrorDetails::GCPCredentials {
+                message: format!("Failed to read GCP Vertex Gemini credentials: {e}"),
+            })
+        })?;
+
+        Self::from_json_str(&credential_str)   
     }
 
     // Get a signed JWT token for the given audience valid from the current time.

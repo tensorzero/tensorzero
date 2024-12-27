@@ -34,7 +34,7 @@ lazy_static! {
     };
 }
 
-pub fn default_api_key_location() -> CredentialLocation {
+fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("OPENAI_API_KEY".to_string())
 }
 
@@ -49,22 +49,15 @@ impl OpenAIProvider {
     pub fn new(
         model_name: String,
         api_base: Option<Url>,
-        credentials: Credential,
+        api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let api_key_location = match credentials {
-            Credential::Static(key) => OpenAICredentials::Static(key),
-            Credential::Dynamic(key_name) => OpenAICredentials::Dynamic(key_name),
-            Credential::FileContents(_) => OpenAICredentials::None,
-            Credential::None => OpenAICredentials::None,
-            #[cfg(any(test, feature = "e2e_tests"))]
-            Credential::Missing => {
-                OpenAICredentials::None
-            }
-        };
+        let credential_location = api_key_location.unwrap_or(default_api_key_location());
+        let generic_credentials = Credential::try_from((credential_location, "OpenAI"))?;
+        let provider_credentials = OpenAICredentials::try_from(generic_credentials)?;
         Ok(OpenAIProvider {
             model_name,
             api_base,
-            credentials: api_key_location,
+            credentials: provider_credentials,
         })
     }
 }
@@ -74,6 +67,25 @@ pub enum OpenAICredentials {
     Static(SecretString),
     Dynamic(String),
     None,
+}
+
+impl TryFrom<Credential> for OpenAICredentials {
+    type Error = Error;
+    
+    fn try_from(credentials: Credential) -> Result<Self, Error> {
+        match credentials {
+            Credential::Static(key) => Ok(OpenAICredentials::Static(key)),
+            Credential::Dynamic(key_name) => Ok(OpenAICredentials::Dynamic(key_name)),
+            Credential::None => Ok(OpenAICredentials::None),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            Credential::Missing => {
+                Ok(OpenAICredentials::None)
+            },
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: "Invalid api_key_location for OpenAI provider".to_string(),
+            })),
+        }
+    }
 }
 
 impl OpenAICredentials {

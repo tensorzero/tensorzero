@@ -1,4 +1,3 @@
-use std::env;
 use std::time::Duration;
 
 use futures::{Stream, StreamExt};
@@ -22,7 +21,7 @@ use crate::inference::types::{
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequestJsonMode, Role, Text, TextChunk,
 };
-use crate::model::CredentialLocation;
+use crate::model::{Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 /// Implements a subset of the Google AI Studio Gemini API as documented [here](https://ai.google.dev/gemini-api/docs/text-generation?lang=rest)
@@ -39,23 +38,10 @@ impl GoogleAIStudioGeminiProvider {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
-        let credentials = match api_key_location {
-            CredentialLocation::Env(key_name) => GoogleAIStudioCredentials::Static(
-                env::var(key_name)
-                    .map_err(|_| {
-                        Error::new(ErrorDetails::ApiKeyMissing {
-                            provider_name: "Google AI Studio Gemini".to_string(),
-                        })
-                    })?
-                    .into(),
-            ),
-            CredentialLocation::Dynamic(key_name) => GoogleAIStudioCredentials::Dynamic(key_name),
-            _ => Err(Error::new(ErrorDetails::Config {
-                message: "Invalid api_key_location for Google AI Studio Gemini provider"
-                    .to_string(),
-            }))?,
-        };
+        let credential_location = api_key_location.unwrap_or(default_api_key_location());
+        let generic_credentials = Credential::try_from((credential_location, "Google AI Studio Gemini"))?;
+        let provider_credentials = GoogleAIStudioCredentials::try_from(generic_credentials)?;
+        
         let request_url = Url::parse(&format!(
             "https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent",
         ))
@@ -75,7 +61,7 @@ impl GoogleAIStudioGeminiProvider {
         Ok(GoogleAIStudioGeminiProvider {
             request_url,
             streaming_request_url,
-            credentials,
+            credentials: provider_credentials,
         })
     }
 }
@@ -88,6 +74,25 @@ fn default_api_key_location() -> CredentialLocation {
 pub enum GoogleAIStudioCredentials {
     Static(SecretString),
     Dynamic(String),
+    #[cfg(any(test, feature = "e2e_tests"))]
+    None
+}
+
+impl TryFrom<Credential> for GoogleAIStudioCredentials {
+    type Error = Error;
+    
+    fn try_from(credentials: Credential) -> Result<Self, Error> {
+        match credentials {
+            Credential::Static(key) => Ok(GoogleAIStudioCredentials::Static(key)),
+            Credential::Dynamic(key_name) => Ok(GoogleAIStudioCredentials::Dynamic(key_name)),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            Credential::Missing => Ok(GoogleAIStudioCredentials::None),
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: "Invalid api_key_location for Google AI Studio Gemini provider"
+                    .to_string(),
+            }))?,
+        }
+    }
 }
 
 impl GoogleAIStudioCredentials {
@@ -104,7 +109,11 @@ impl GoogleAIStudioCredentials {
                     }
                     .into()
                 })
-            }
+            },
+            #[cfg(any(test, feature = "e2e_tests"))]
+            GoogleAIStudioCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+                provider_name: "Google AI Studio".to_string(),
+            })?,
         }
     }
 }

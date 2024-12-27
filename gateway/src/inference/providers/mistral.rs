@@ -1,4 +1,4 @@
-use std::{borrow::Cow, env, time::Duration};
+use std::{borrow::Cow, time::Duration};
 
 use futures::stream::Stream;
 use futures::StreamExt;
@@ -19,7 +19,7 @@ use crate::{
         ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
         ProviderInferenceResponseChunk, ProviderInferenceResponseStream, TextChunk, Usage,
     },
-    model::CredentialLocation,
+    model::{Credential, CredentialLocation},
     tool::{ToolCall, ToolCallChunk, ToolChoice},
 };
 
@@ -53,26 +53,12 @@ impl MistralProvider {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
-        let credentials = match api_key_location {
-            CredentialLocation::Env(key_name) => {
-                let api_key = env::var(key_name)
-                    .map_err(|_| {
-                        Error::new(ErrorDetails::ApiKeyMissing {
-                            provider_name: "Mistral".to_string(),
-                        })
-                    })?
-                    .into();
-                MistralCredentials::Static(api_key)
-            }
-            CredentialLocation::Dynamic(key_name) => MistralCredentials::Dynamic(key_name),
-            _ => Err(Error::new(ErrorDetails::Config {
-                message: "Invalid api_key_location for Mistral provider".to_string(),
-            }))?,
-        };
+        let credential_location = api_key_location.unwrap_or(default_api_key_location());
+        let generic_credentials = Credential::try_from((credential_location, "Mistral"))?;
+        let provider_credentials = MistralCredentials::try_from(generic_credentials)?;
         Ok(MistralProvider {
             model_name,
-            credentials,
+            credentials: provider_credentials,
         })
     }
 }
@@ -81,6 +67,24 @@ impl MistralProvider {
 pub enum MistralCredentials {
     Static(SecretString),
     Dynamic(String),
+    #[cfg(any(test, feature = "e2e_tests"))]
+    None
+}
+
+impl TryFrom<Credential> for MistralCredentials {
+    type Error = Error;
+    
+    fn try_from(credentials: Credential) -> Result<Self, Error> {
+        match credentials {
+            Credential::Static(key) => Ok(MistralCredentials::Static(key)),
+            Credential::Dynamic(key_name) => Ok(MistralCredentials::Dynamic(key_name)),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            Credential::Missing => Ok(MistralCredentials::None),
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: "Invalid api_key_location for Mistral provider".to_string(),
+            }))
+        }
+    }
 }
 
 impl MistralCredentials {
@@ -97,7 +101,11 @@ impl MistralCredentials {
                     }
                     .into()
                 })
-            }
+            },
+            #[cfg(any(test, feature = "e2e_tests"))]
+            MistralCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+                provider_name: "Mistral".to_string(),
+            }.into())
         }
     }
 }

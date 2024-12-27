@@ -1,4 +1,3 @@
-use std::env;
 
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
@@ -6,7 +5,7 @@ use crate::inference::types::{
     batch::BatchProviderInferenceResponse, ContentBlock, Latency, ModelInferenceRequest,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
 };
-use crate::model::CredentialLocation;
+use crate::model::{Credential, CredentialLocation};
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest_eventsource::RequestBuilderExt;
@@ -44,26 +43,12 @@ impl HyperbolicProvider {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
-        let credentials = match api_key_location {
-            CredentialLocation::Env(key_name) => {
-                let api_key = env::var(key_name).map_err(|_| {
-                    Error::new(ErrorDetails::ApiKeyMissing {
-                        provider_name: "Hyperbolic".to_string(),
-                    })
-                })?;
-                HyperbolicCredentials::Static(api_key.into())
-            }
-            CredentialLocation::Dynamic(key_name) => HyperbolicCredentials::Dynamic(key_name),
-            _ => {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: "Invalid api_key_location for Hyperbolic provider".to_string(),
-                }))
-            }
-        };
+        let credential_location = api_key_location.unwrap_or(default_api_key_location());
+        let generic_credentials = Credential::try_from((credential_location, "Hyperbolic"))?;
+        let provider_credentials = HyperbolicCredentials::try_from(generic_credentials)?; 
         Ok(HyperbolicProvider {
             model_name,
-            credentials,
+            credentials: provider_credentials,
         })
     }
 }
@@ -72,7 +57,26 @@ impl HyperbolicProvider {
 pub enum HyperbolicCredentials {
     Static(SecretString),
     Dynamic(String),
+    #[cfg(any(test, feature = "e2e_tests"))]
+    None
 }
+
+impl TryFrom<Credential> for HyperbolicCredentials {
+    type Error = Error;
+    
+    fn try_from(credentials: Credential) -> Result<Self, Error> {
+        match credentials {
+            Credential::Static(key) => Ok(HyperbolicCredentials::Static(key)),
+            Credential::Dynamic(key_name) => Ok(HyperbolicCredentials::Dynamic(key_name)),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            Credential::Missing => Ok(HyperbolicCredentials::None),
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: "Invalid api_key_location for Hyperbolic provider".to_string(),
+            }))
+        }
+    }
+}
+
 
 impl HyperbolicCredentials {
     fn get_api_key<'a>(
@@ -88,7 +92,11 @@ impl HyperbolicCredentials {
                     }
                     .into()
                 })
-            }
+            },
+            #[cfg(any(test, feature = "e2e_tests"))]
+            HyperbolicCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+                provider_name: "Hyperbolic".to_string(),
+            })?,
         }
     }
 }
