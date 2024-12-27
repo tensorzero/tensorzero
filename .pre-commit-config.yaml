@@ -12,7 +12,7 @@ repos:
       - id: check-xml
       - id: check-yaml
       - id: detect-private-key
-        exclude: DEVELOPER_GUIDE.md
+        exclude: CONTRIBUTING.md
       - id: end-of-file-fixer
         exclude: \.minijinja$
       - id: trailing-whitespace
