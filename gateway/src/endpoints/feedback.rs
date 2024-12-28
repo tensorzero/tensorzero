@@ -18,6 +18,11 @@ use crate::inference::types::{parse_chat_output, ContentBlock, ContentBlockOutpu
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCall, ToolCallConfig};
 use crate::uuid_util::uuid_elapsed;
 
+/// There is a potential issue here where if we write an inference and then immediately write feedback for it,
+/// we might not be able to find the inference in the database because it hasn't been written yet.
+///
+/// This is the amount of time we want to wait after the target was supposed to have been written
+/// before we decide that the target was actually not written because we can't find it in the database.
 const FEEDBACK_COOLDOWN_PERIOD: Duration = Duration::from_secs(5);
 
 /// The expected payload is a JSON object with the following fields:
@@ -336,7 +341,7 @@ async fn write_boolean(
 
 /// This function throttles the check that an id is valid if it was created very recently.
 /// This is to avoid a race condition where the id was created (e.g. an inference was made)
-/// but the feedback is received before the id is written to the database.o
+/// but the feedback is received before the id is written to the database.
 ///
 /// The current behavior is to immediately check and return the result if the id was created
 /// more than FEEDBACK_COOLDOWN_PERIOD ago.

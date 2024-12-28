@@ -627,7 +627,10 @@ async fn e2e_test_float_feedback() {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    // No sleeping, we should throttle in the gateway
+    // Just this once, we sleep longer than the duration of the feedback cooldown period (5s)
+    // to make sure that the feedback is written after the inference.
+    sleep(Duration::from_millis(5500)).await;
+
     // Test float feedback on different metric for inference.
     let payload =
         json!({"inference_id": inference_id, "metric_name": "brevity_score", "value": 0.5});

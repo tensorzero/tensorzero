@@ -216,6 +216,9 @@ pub enum ErrorDetails {
     UnsupportedVariantForBatchInference {
         variant_name: Option<String>,
     },
+    UuidInFuture {
+        raw_uuid: String,
+    },
 }
 
 impl ErrorDetails {
@@ -276,6 +279,7 @@ impl ErrorDetails {
             ErrorDetails::UnknownMetric { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => tracing::Level::WARN,
+            ErrorDetails::UuidInFuture { .. } => tracing::Level::WARN,
         }
     }
 
@@ -340,6 +344,7 @@ impl ErrorDetails {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::UuidInFuture { .. } => StatusCode::BAD_REQUEST,
         }
     }
 
@@ -561,6 +566,9 @@ impl std::fmt::Display for ErrorDetails {
                     ),
                     None => write!(f, "Unsupported variant for batch inference"),
                 }
+            }
+            ErrorDetails::UuidInFuture { raw_uuid } => {
+                write!(f, "UUID is in the future: {}", raw_uuid)
             }
         }
     }

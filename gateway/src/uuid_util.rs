@@ -61,7 +61,16 @@ pub fn uuid_elapsed(uuid: &Uuid) -> Result<Duration, Error> {
         UNIX_EPOCH + Duration::from_secs(seconds) + Duration::from_nanos(subsec_nanos as u64);
     let elapsed = match SystemTime::now().duration_since(uuid_system_time) {
         Ok(duration) => duration,
-        Err(_) => Duration::from_secs(0),
+        Err(e) => {
+            let future_duration = e.duration();
+            if future_duration > Duration::from_secs(1) {
+                return Err(ErrorDetails::UuidInFuture {
+                    raw_uuid: uuid.to_string(),
+                }
+                .into());
+            }
+            Duration::from_secs(0)
+        }
     };
     Ok(elapsed)
 }
@@ -121,5 +130,19 @@ mod tests {
         let uuid = Uuid::now_v7();
         let elapsed = uuid_elapsed(&uuid).unwrap();
         assert!(elapsed > Duration::from_secs(0) && elapsed < Duration::from_millis(1));
+
+        // Test UUID in future
+        let future_timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_secs()
+            + 30;
+        let future_uuid = Uuid::new_v7(Timestamp::from_unix(NoContext, future_timestamp, 0));
+        assert_eq!(
+            uuid_elapsed(&future_uuid).unwrap_err().get_details(),
+            &ErrorDetails::UuidInFuture {
+                raw_uuid: future_uuid.to_string(),
+            }
+        );
     }
 }
