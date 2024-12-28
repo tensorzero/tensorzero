@@ -31,6 +31,7 @@ import type { Route } from "./+types/route";
 // import type { Route as CuratedInferencesCount } from "../../api/curated_inferences/+types/count.route";
 import type { CountsData } from "../../api/curated_inferences/count.route";
 import type { Config } from "~/utils/config";
+import { ProgressIndicator } from "./ProgressIndicator";
 
 export const meta: MetaFunction = () => {
   return [
@@ -61,6 +62,7 @@ export async function loader({ params }: Route.LoaderArgs) {
       status: storedJob.status(),
       result: storedJob.result(),
       modelProvider: storedJob.provider(),
+      progressInfo: storedJob.progress_info(),
     };
   }
 
@@ -72,11 +74,20 @@ export async function loader({ params }: Route.LoaderArgs) {
     const result = updatedJob.result();
     const status = updatedJob.status();
     const modelProvider = updatedJob.provider();
+    const progressInfo = updatedJob.progress_info();
+    const loaderData = {
+      status,
+      result,
+      modelProvider,
+      progressInfo,
+    };
+    console.log(loaderData);
 
     return {
       status,
       result,
       modelProvider,
+      progressInfo,
     };
   } catch (error) {
     return {
@@ -106,7 +117,7 @@ export async function action({ request }: Route.ActionArgs) {
 // Renders the fine-tuning form and status info.
 export default function FineTuning({ loaderData }: Route.ComponentProps) {
   const config = useConfig();
-  const { status, result, modelProvider } = loaderData;
+  const { status, result, modelProvider, progressInfo } = loaderData;
   const revalidator = useRevalidator();
 
   // If running, periodically poll for updates on the job
@@ -144,19 +155,6 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
           />
         )}
 
-        {status !== "idle" && (
-          <div className="p-4 bg-gray-100 rounded-lg mt-4">
-            <div className="mb-2 font-medium">
-              Loader Data (Last Updated: {new Date().toLocaleTimeString()})
-            </div>
-            <Textarea
-              value={JSON.stringify(loaderData, null, 2)}
-              className="w-full h-48 resize-none bg-transparent border-none focus:ring-0"
-              readOnly
-            />
-          </div>
-        )}
-
         {finalResult && (
           <div className="p-4 bg-gray-100 rounded-lg mt-4">
             <div className="mb-2 font-medium">Configuration</div>
@@ -167,6 +165,8 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
             />
           </div>
         )}
+
+        {status !== "idle" && <ProgressIndicator progressInfo={progressInfo} />}
       </main>
     </div>
   );

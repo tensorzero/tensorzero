@@ -94,6 +94,7 @@ export class OpenAISFTJob extends SFTJob {
     return {
       provider: "openai",
       data: this.job,
+      estimatedCompletionTimestamp: this.job.estimated_finish ?? undefined,
     };
   }
 

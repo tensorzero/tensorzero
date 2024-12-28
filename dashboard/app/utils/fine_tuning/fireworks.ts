@@ -101,6 +101,7 @@ export class FireworksSFTJob extends SFTJob {
       data.validationSplitPercent,
       templateEnv,
     );
+    console.log(jobInfo);
     const jobPath = jobInfo.name as string;
     return new FireworksSFTJob({
       jobPath: jobPath,
@@ -126,9 +127,11 @@ export class FireworksSFTJob extends SFTJob {
   }
 
   progress_info(): ProgressInfo {
+    const jobUrl = fireworks_job_url_from_path(this.jobPath);
     return {
       provider: "fireworks",
       data: this.jobInfo,
+      jobUrl: jobUrl,
     };
   }
 
@@ -552,4 +555,12 @@ async function create_fine_tuning_job(
       }`,
     );
   }
+}
+
+function fireworks_job_url_from_path(path: string): string {
+  const jobId = path.split("/").pop();
+  if (!jobId) {
+    throw new Error("Failed to parse job ID from path");
+  }
+  return `https://fireworks.ai/dashboard/fine-tuning/${jobId}`;
 }
