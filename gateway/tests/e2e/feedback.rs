@@ -86,9 +86,8 @@ async fn e2e_test_comment_feedback() {
     let response_json = response.json::<Value>().await.unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-    // Sleep for 1 second to allow ClickHouse to write
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
+    // No sleeping, we should throttle in the gateway
     let payload =
         json!({"inference_id": inference_id, "metric_name": "comment", "value": "bad job!"});
     let response = client
@@ -161,9 +160,8 @@ async fn e2e_test_demonstration_feedback() {
     let response_json = response.json::<Value>().await.unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-    // Sleep for 1 second to allow ClickHouse to write
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
+    // No sleeping, we should throttle in the gateway
     // Test demonstration feedback on Inference
     let tag_value = Uuid::now_v7().to_string();
     let payload = json!({
@@ -285,10 +283,9 @@ async fn e2e_test_demonstration_feedback_json() {
     let response_json = response.json::<Value>().await.unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-    // Sleep for 1 second to allow ClickHouse to write
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Test demonstration feedback on Inference
+    // No sleeping, we should throttle in the gateway
+    // Test demonstration feedback on an inference
     let payload = json!({
         "inference_id": inference_id,
         "metric_name": "demonstration",
@@ -398,9 +395,8 @@ async fn e2e_test_demonstration_feedback_tool() {
     let response_json = response.json::<Value>().await.unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-    // Sleep for 1 second to allow ClickHouse to write
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
+    // No sleeping, we should throttle in the gateway
     // Test demonstration feedback on Inference (string shortcut)
     let payload = json!({
         "inference_id": inference_id,
@@ -630,8 +626,10 @@ async fn e2e_test_float_feedback() {
     let response_json = response.json::<Value>().await.unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-    // Sleep for 1 second to allow ClickHouse to write
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Just this once, we sleep longer than the duration of the feedback cooldown period (5s)
+    // to make sure that the feedback is written after the inference.
+    sleep(Duration::from_millis(5500)).await;
 
     // Test float feedback on different metric for inference.
     let payload =
@@ -702,8 +700,8 @@ async fn e2e_test_boolean_feedback() {
     let response_json = response.json::<Value>().await.unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-    // Sleep for 1 second to allow ClickHouse to write
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // No sleeping, we should throttle in the gateway
 
     let payload = json!({"inference_id": inference_id, "metric_name": "task_success", "value": true, "tags": {"key": tag_value, "key2": tag_value2}});
     let response = client
