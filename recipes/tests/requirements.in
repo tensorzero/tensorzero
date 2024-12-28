@@ -1,4 +1,4 @@
-../../clients/python
+-e ../../clients/python
 clickhouse-connect
 pandas
 pytest

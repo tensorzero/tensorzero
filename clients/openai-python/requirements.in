@@ -1,0 +1,4 @@
+-e ../python
+openai
+pytest
+pytest-asyncio
