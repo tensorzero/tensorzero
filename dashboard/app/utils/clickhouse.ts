@@ -338,7 +338,7 @@ export async function getCuratedInferences(
 
   switch (metric_config.type) {
     case "boolean":
-      return queryMetricData(
+      return queryCuratedMetricData(
         function_name,
         metric_name,
         inference_table_name,
@@ -351,7 +351,7 @@ export async function getCuratedInferences(
         },
       );
     case "float":
-      return queryMetricData(
+      return queryCuratedMetricData(
         function_name,
         metric_name,
         inference_table_name,
@@ -375,7 +375,7 @@ export async function getCuratedInferences(
   }
 }
 
-export async function queryAllInferencesForFunction(
+async function queryAllInferencesForFunction(
   function_name: string,
   inference_table_name: InferenceTableName,
   max_samples: number | undefined,
@@ -392,7 +392,7 @@ export async function queryAllInferencesForFunction(
 }
 
 // Generic function to handle both boolean and float metric queries
-export async function queryMetricData(
+async function queryCuratedMetricData(
   function_name: string,
   metric_name: string,
   inference_table_name: InferenceTableName,
@@ -464,7 +464,7 @@ export async function queryMetricData(
 }
 
 // Generic function to count metric data
-export async function countMetricData(
+async function countMetricData(
   function_name: string,
   metric_name: string,
   inference_table_name: InferenceTableName,
@@ -523,7 +523,7 @@ export async function countMetricData(
   return rows[0].count;
 }
 
-export async function queryDemonstrationDataForFunction(
+async function queryDemonstrationDataForFunction(
   function_name: string,
   inference_table_name: InferenceTableName,
   max_samples: number | undefined,
