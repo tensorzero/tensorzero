@@ -6,28 +6,27 @@ use crate::error::{Error, ErrorDetails};
 
 use super::check_table_exists;
 
-/// This migration is used to set up the ClickHouse database to efficiently validate
-/// the type of demonstrations.
-/// To do this, we need to be able to efficiently query what function was called for a
-/// particular inference ID.
+/// This migration is used to set up the ClickHouse database to allow for efficient querying by episode ID
+/// To do this, we need to be able to efficiently query what function and variant was called for a
+/// particular episode ID.
 ///
-/// As the original table was not set up to index on inference ID we instead need to create
-/// a materialized view that is indexed by inference ID and maps to the function_name that was used.
-/// Since we also would like to be able to get the original row from the inference ID we will keep the function_name,
-/// variant_name and episode_id in the materialized view so that we can use them to query the original table.
-pub struct Migration0001<'a> {
+/// As the original table was not set up to index on episode ID we instead need to create
+/// a materialized view that is indexed by episode ID and maps to the function_name and variant_name that was used.
+/// Since we also would like to be able to get the original row from the episode ID we will keep the function_name,
+/// variant_name and inference ID in the materialized view so that we can use them to query the original table.
+pub struct Migration0007<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
     pub clean_start: bool,
 }
 
-impl<'a> Migration for Migration0001<'a> {
+impl<'a> Migration for Migration0007<'a> {
     /// Check if you can connect to the database
     /// Then check if the two inference tables exist as the sources for the materialized views
     /// If all of this is OK, then we can apply the migration
     async fn can_apply(&self) -> Result<(), Error> {
         self.clickhouse.health().await.map_err(|e| {
             Error::new(ErrorDetails::ClickHouseMigration {
-                id: "0001".to_string(),
+                id: "0007".to_string(),
                 message: e.to_string(),
             })
         })?;
@@ -35,9 +34,9 @@ impl<'a> Migration for Migration0001<'a> {
         let tables = vec!["ChatInference", "JsonInference"];
 
         for table in tables {
-            if !check_table_exists(self.clickhouse, table, "0001").await? {
+            if !check_table_exists(self.clickhouse, table, "0007").await? {
                 return Err(ErrorDetails::ClickHouseMigration {
-                    id: "0001".to_string(),
+                    id: "0007".to_string(),
                     message: format!("Table {} does not exist", table),
                 }
                 .into());
@@ -48,9 +47,9 @@ impl<'a> Migration for Migration0001<'a> {
     }
 
     /// Check if the migration has already been applied
-    /// This should be equivalent to checking if `InferenceById` exists
+    /// This should be equivalent to checking if `InferenceByEpisode` exists
     async fn should_apply(&self) -> Result<bool, Error> {
-        let exists = check_table_exists(self.clickhouse, "InferenceById", "0001").await?;
+        let exists = check_table_exists(self.clickhouse, "InferenceByEpisode", "0007").await?;
         if !exists {
             return Ok(true);
         }
@@ -76,31 +75,32 @@ impl<'a> Migration for Migration0001<'a> {
             + view_offset)
             .as_secs();
 
-        // Create the `InferencesById` table
+        // Create the `InferenceByEpisode` table
         let query = r#"
-            CREATE TABLE IF NOT EXISTS InferenceById
+            CREATE TABLE IF NOT EXISTS InferenceByEpisode
             (
-                id UUID, -- must be a UUIDv7
+                episode_id UUID,
+                id UUID,
                 function_name LowCardinality(String),
                 variant_name LowCardinality(String),
-                episode_id UUID, -- must be a UUIDv7,
-                function_type Enum('chat' = 1, 'json' = 2)
-            ) ENGINE = MergeTree()
-            ORDER BY id;
+                function_type Enum8('chat' = 1, 'json' = 2),
+            )
+            ENGINE = MergeTree
+            ORDER BY (episode_id, id);
         "#;
         let _ = self.clickhouse.run_query(query.to_string()).await?;
 
-        // Create the materialized view for the `InferencesById` table from ChatInference
+        // Create the materialized view for the `InferenceByEpisode` table from ChatInference
         let query = format!(
             r#"
-            CREATE MATERIALIZED VIEW ChatInferenceByIdView
-            TO InferenceById
+            CREATE MATERIALIZED VIEW ChatInferenceByEpisodeView
+            TO InferenceByEpisode
             AS
                 SELECT
+                    episode_id,
                     id,
                     function_name,
                     variant_name,
-                    episode_id,
                     'chat'
                 FROM ChatInference
                 WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}));
@@ -109,17 +109,17 @@ impl<'a> Migration for Migration0001<'a> {
         );
         let _ = self.clickhouse.run_query(query).await?;
 
-        // Create the materialized view for the `InferencesById` table from JsonInference
+        // Create the materialized view for the `InferenceByEpisode` table from JsonInference
         let query = format!(
             r#"
-            CREATE MATERIALIZED VIEW JsonInferenceByIdView
-            TO InferenceById
+            CREATE MATERIALIZED VIEW JsonInferenceByEpisodeView
+            TO InferenceByEpisode
             AS
                 SELECT
+                    episode_id,
                     id,
                     function_name,
                     variant_name,
-                    episode_id,
                     'json'
                 FROM JsonInference
                 WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}));
@@ -135,12 +135,12 @@ impl<'a> Migration for Migration0001<'a> {
         let insert_chat_inference = async {
             let query = format!(
                 r#"
-                INSERT INTO InferenceById
+                INSERT INTO InferenceByEpisode
                 SELECT
+                    episode_id,
                     id,
                     function_name,
                     variant_name,
-                    episode_id,
                     'chat'
                 FROM ChatInference
                 WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
@@ -153,12 +153,12 @@ impl<'a> Migration for Migration0001<'a> {
         let insert_json_inference = async {
             let query = format!(
                 r#"
-                INSERT INTO InferenceById
+                INSERT INTO InferenceByEpisode
                 SELECT
+                    episode_id,
                     id,
                     function_name,
                     variant_name,
-                    episode_id,
                     'json'
                 FROM JsonInference
                 WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
@@ -176,11 +176,11 @@ impl<'a> Migration for Migration0001<'a> {
     fn rollback_instructions(&self) -> String {
         "\
             -- Drop the materialized views\n\
-            DROP VIEW IF EXISTS ChatInferenceByIdView;\n\
-            DROP VIEW IF EXISTS JsonInferenceByIdView;\n\
+            DROP VIEW IF EXISTS ChatInferenceByEpisodeView;\n\
+            DROP VIEW IF EXISTS JsonInferenceByEpisodeView;\n\
             \n\
             -- Drop the table\n\
-            DROP TABLE IF EXISTS InferenceById;\n\
+            DROP TABLE IF EXISTS InferenceByEpisode;\n\
             "
         .to_string()
     }
