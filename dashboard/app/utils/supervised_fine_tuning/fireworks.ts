@@ -35,7 +35,7 @@ import { get_template_env, type ChatCompletionConfig } from "../config/variant";
 import { z } from "zod";
 import { SFTJob, type SFTJobStatus } from "./common";
 import type { ProviderType } from "../config/models";
-import type { ProgressInfo } from "~/routes/optimization/fine-tuning/ProgressIndicator";
+import type { ProgressInfo } from "~/routes/optimization/supervised-fine-tuning/ProgressIndicator";
 export const FIREWORKS_API_URL = "https://api.fireworks.ai";
 export const FIREWORKS_API_KEY = process.env.FIREWORKS_API_KEY || logError();
 export const FIREWORKS_ACCOUNT_ID =
@@ -210,7 +210,30 @@ const FineTuningJobStatusSchema = z.enum([
 const FineTuningJobResponseSchema = z.object({
   state: FineTuningJobStatusSchema,
   modelId: z.string().optional(),
-  // Add more fields as needed
+  baseModel: z.string().optional(),
+  batchSize: z.number().optional(),
+  createTime: z.string().optional(),
+  createdBy: z.string().optional(),
+  dataset: z.string().optional(),
+  evaluationSplit: z.number().optional(),
+  fineTuningJobId: z.string().optional(),
+  fineTuningJobName: z.string().optional(),
+  fineTuningJobPath: z.string().optional(),
+  evaluation: z.boolean().optional(),
+  evaluationDataset: z.string().optional(),
+  learningRate: z.number().optional(),
+  loraRank: z.number().optional(),
+  loraTargetModules: z.array(z.string()).optional(),
+  maskToken: z.string().optional(),
+  microBatchSize: z.number().optional(),
+  name: z.string().optional(),
+  padToken: z.string().optional(),
+  status: z
+    .object({
+      code: z.string().optional(),
+      message: z.string().optional(),
+    })
+    .optional(),
 });
 
 type FineTuningJobResponse = z.infer<typeof FineTuningJobResponseSchema>;

@@ -19,7 +19,7 @@ import { splitValidationData, type SFTJobStatus } from "./common";
 import { render_message } from "./rendering";
 import { SFTJob } from "./common";
 import type { ProviderType } from "../config/models";
-import type { ProgressInfo } from "~/routes/optimization/fine-tuning/ProgressIndicator";
+import type { ProgressInfo } from "~/routes/optimization/supervised-fine-tuning/ProgressIndicator";
 
 export const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -94,7 +94,10 @@ export class OpenAISFTJob extends SFTJob {
     return {
       provider: "openai",
       data: this.job,
-      estimatedCompletionTimestamp: this.job.estimated_finish ?? undefined,
+      estimatedCompletionTimestamp: this.job.estimated_finish
+        ? this.job.estimated_finish * 1000
+        : undefined,
+      jobUrl: `https://platform.openai.com/finetune/${this.job.id}`,
     };
   }
 

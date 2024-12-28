@@ -6,7 +6,10 @@ import {
   SFTFormValuesResolver,
 } from "./types";
 import { v7 as uuid } from "uuid";
-import type { SFTJob } from "~/utils/supervised_fine_tuning/common";
+import type {
+  SFTJob,
+  SFTJobStatus,
+} from "~/utils/supervised_fine_tuning/common";
 import { models } from "./model_options";
 import { useRevalidator } from "react-router";
 import { useForm } from "react-hook-form";
@@ -20,6 +23,7 @@ import { VariantSelector } from "./VariantSelector";
 import {
   dump_model_config,
   get_fine_tuned_model_config,
+  type ProviderType,
 } from "~/utils/config/models";
 import { ModelSelector } from "./ModelSelector";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
@@ -31,7 +35,7 @@ import type { Route } from "./+types/route";
 // import type { Route as CuratedInferencesCount } from "../../api/curated_inferences/+types/count.route";
 import type { CountsData } from "../../api/curated_inferences/count.route";
 import type { Config } from "~/utils/config";
-import { ProgressIndicator } from "./ProgressIndicator";
+import { ProgressIndicator, type ProgressInfo } from "./ProgressIndicator";
 
 export const meta: MetaFunction = () => {
   return [
@@ -46,12 +50,112 @@ export const meta: MetaFunction = () => {
 // Mutable store mapping job IDs to their info
 export const jobStore: { [jobId: string]: SFTJob } = {};
 
+// TODO: remove once we're happy
+function get_progress_fixture(provider: ProviderType): LoaderData {
+  switch (provider) {
+    case "openai":
+      return {
+        status: "running",
+        result: undefined,
+        modelProvider: "openai",
+        progressInfo: {
+          jobUrl: "https://platform.openai.com/finetune/ftjob-abc123",
+          provider: "openai",
+          data: {
+            object: "fine_tuning.job",
+            id: "ftjob-abc123",
+            model: "davinci-002",
+            created_at: 1692661014,
+            finished_at: 1692661190,
+            fine_tuned_model: "ft:davinci-002:my-org:custom_suffix:7q8mpxmy",
+            organization_id: "org-123",
+            result_files: ["file-abc123"],
+            status: "succeeded",
+            validation_file: null,
+            training_file: "file-abc123",
+            hyperparameters: {
+              n_epochs: 4,
+              batch_size: 1,
+              learning_rate_multiplier: 1.0,
+            },
+            trained_tokens: 5768,
+            integrations: [],
+            seed: 0,
+            estimated_finish: 0,
+            method: {
+              type: "supervised",
+              supervised: {
+                hyperparameters: {
+                  n_epochs: 4,
+                  batch_size: 1,
+                  learning_rate_multiplier: 1.0,
+                },
+              },
+            },
+          },
+          estimatedCompletionTimestamp: Math.floor(Date.now()) + 300000,
+        },
+      };
+    case "fireworks":
+      return {
+        status: "running",
+        modelProvider: "fireworks",
+        result: undefined,
+        progressInfo: {
+          provider: "fireworks",
+          data: {
+            state: "PENDING",
+            modelId: "",
+            baseModel: "accounts/fireworks/models/llama-v3p1-8b-instruct",
+            batchSize: 16,
+            createTime: "2024-12-28T15:16:43.649092Z",
+            createdBy: "viraj@tensorzero.com",
+            dataset:
+              "accounts/viraj-ebfe5a/datasets/01940dd7-4f65-716a-a257-6da73412fe87",
+            evaluationSplit: 0.2,
+            evaluation: false,
+            evaluationDataset: "",
+            learningRate: 0.0001,
+            loraRank: 8,
+            loraTargetModules: [],
+            maskToken: "",
+            microBatchSize: 0,
+            name: "accounts/viraj-ebfe5a/fineTuningJobs/ed8f3dead9d74b7fbe0623f039d151e3",
+            padToken: "",
+            status: {
+              code: "OK",
+              message: "",
+            },
+          },
+          jobUrl: "https://fireworks.ai/dashboard/fine-tuning/ftjob-abc123",
+        },
+      };
+    default:
+      throw new Error(`Unknown provider: ${provider}`);
+  }
+}
+interface LoaderData {
+  status: SFTJobStatus;
+  result: string | undefined;
+  modelProvider: ProviderType | undefined;
+  progressInfo: ProgressInfo | undefined;
+}
+
 // If there is a job_id in the URL, grab it from the job store and pull it.
-export async function loader({ params }: Route.LoaderArgs) {
+export async function loader({
+  params,
+}: Route.LoaderArgs): Promise<LoaderData | { status: "error"; error: string }> {
+  // for debugging ProgressIndicator without starting a real job
+  // return get_progress_fixture("fireworks");
   const job_id = params.job_id;
 
   if (!job_id) {
-    return { status: "idle" };
+    return {
+      status: "idle",
+      result: undefined,
+      modelProvider: undefined,
+      progressInfo: undefined,
+    };
   }
 
   const storedJob = jobStore[job_id];
@@ -124,6 +228,10 @@ export default function SupervisedFineTuning({
   loaderData,
 }: Route.ComponentProps) {
   const config = useConfig();
+  if (loaderData.status === "error") {
+    // TODO: do error handling and make this better
+    return <div>Error: {(loaderData as { error: string }).error}</div>;
+  }
   const { status, result, modelProvider, progressInfo } = loaderData;
   const revalidator = useRevalidator();
 
@@ -141,9 +249,10 @@ export default function SupervisedFineTuning({
   const [submissionPhase, setSubmissionPhase] = useState<
     "idle" | "submitting" | "pending" | "complete"
   >("idle");
-  const finalResult = result
-    ? dump_model_config(get_fine_tuned_model_config(result, modelProvider))
-    : null;
+  const finalResult =
+    result && modelProvider
+      ? dump_model_config(get_fine_tuned_model_config(result, modelProvider))
+      : null;
   if (finalResult && submissionPhase !== "complete") {
     setSubmissionPhase("complete");
   }

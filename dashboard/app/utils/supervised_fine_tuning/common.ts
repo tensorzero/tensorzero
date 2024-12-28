@@ -1,7 +1,7 @@
 import type { SFTFormValues } from "~/routes/optimization/supervised-fine-tuning/types";
 import type { ParsedInferenceRow } from "../clickhouse";
 import type { ProviderType } from "../config/models";
-import type { ProgressInfo } from "~/routes/optimization/fine-tuning/ProgressIndicator";
+import type { ProgressInfo } from "~/routes/optimization/supervised-fine-tuning/ProgressIndicator";
 
 export function splitValidationData(
   inferences: ParsedInferenceRow[],
@@ -23,7 +23,7 @@ export function splitValidationData(
   };
 }
 
-export type SFTJobStatus = "running" | "completed" | "error";
+export type SFTJobStatus = "running" | "completed" | "error" | "idle";
 
 // Abstract base class
 export abstract class SFTJob {
