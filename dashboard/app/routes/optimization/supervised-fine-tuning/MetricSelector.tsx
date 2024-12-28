@@ -153,18 +153,28 @@ export function MetricSelector({
             <div className="space-y-1 text-sm text-muted-foreground">
               <div>
                 Feedbacks:{" "}
-                {field.value ? (
-                  <span className="font-medium">{feedbackCount}</span>
-                ) : (
+                {/* If field.value is empty string (unselected), show loading skeleton */}
+                {field.value === "" ? (
                   <Skeleton className="inline-block h-4 w-16 align-middle" />
+                ) : /* If field.value is null (selected "None"), show N/A */
+                field.value === null ? (
+                  <span className="font-medium">N/A</span>
+                ) : (
+                  /* Otherwise show the actual feedback count */
+                  <span className="font-medium">{feedbackCount}</span>
                 )}
               </div>
               <div>
                 Curated Inferences:{" "}
-                {field.value ? (
-                  <span className="font-medium">{curatedInferenceCount}</span>
-                ) : (
+                {/* If field.value is empty string (unselected), show loading skeleton */}
+                {field.value === "" ? (
                   <Skeleton className="inline-block h-4 w-16 align-middle" />
+                ) : /* If field.value is null (selected "None"), show N/A */
+                field.value === null ? (
+                  <span className="font-medium">N/A</span>
+                ) : (
+                  /* Otherwise show the actual curated inference count */
+                  <span className="font-medium">{curatedInferenceCount}</span>
                 )}
               </div>
             </div>

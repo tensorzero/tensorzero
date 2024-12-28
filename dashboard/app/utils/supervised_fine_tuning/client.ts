@@ -1,4 +1,4 @@
-import type { SFTFormValues } from "~/routes/optimization/fine-tuning/types";
+import type { SFTFormValues } from "~/routes/optimization/supervised-fine-tuning/types";
 import { OpenAISFTJob } from "./openai";
 import { FireworksSFTJob } from "./fireworks";
 import type { SFTJob } from "./common";

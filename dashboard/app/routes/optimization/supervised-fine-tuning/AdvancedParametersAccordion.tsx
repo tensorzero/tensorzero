@@ -11,10 +11,12 @@ import type { SFTFormValues } from "./types";
 
 type AdvancedParametersAccordionProps = {
   control: Control<SFTFormValues>;
+  maxSamplesLimit?: number;
 };
 
 export function AdvancedParametersAccordion({
   control,
+  maxSamplesLimit,
 }: AdvancedParametersAccordionProps) {
   return (
     <Accordion type="single" collapsible className="w-full">
@@ -55,7 +57,8 @@ export function AdvancedParametersAccordion({
                   <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
                     <Input
                       type="number"
-                      min={1}
+                      min={10}
+                      max={maxSamplesLimit}
                       step={1}
                       {...field}
                       onChange={(e) => field.onChange(Number(e.target.value))}

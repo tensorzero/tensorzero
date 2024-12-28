@@ -40,9 +40,19 @@ type = "boolean"
 level = "inference"
 optimize = "max"
 
+[metrics.dashboard_fixture_exact_match_episode]
+type = "boolean"
+level = "episode"
+optimize = "max"
+
 [metrics.dashboard_fixture_jaccard_similarity]
 type = "float"
 level = "inference"
+optimize = "max"
+
+[metrics.dashboard_fixture_jaccard_similarity_episode]
+type = "float"
+level = "episode"
 optimize = "max"
 
 [metrics.dashboard_fixture_haiku_score]
@@ -50,7 +60,17 @@ type = "boolean"
 level = "inference"
 optimize = "max"
 
+[metrics.dashboard_fixture_haiku_score_episode]
+type = "boolean"
+level = "episode"
+optimize = "max"
+
 [metrics.dashboard_fixture_haiku_rating]
 type = "float"
 level = "inference"
+optimize = "max"
+
+[metrics.dashboard_fixture_haiku_rating_episode]
+type = "float"
+level = "episode"
 optimize = "max"

@@ -1,4 +1,4 @@
-import type { SFTFormValues } from "~/routes/optimization/fine-tuning/types";
+import type { SFTFormValues } from "~/routes/optimization/supervised-fine-tuning/types";
 import type { ParsedInferenceRow } from "../clickhouse";
 import type { ProviderType } from "../config/models";
 import type { ProgressInfo } from "~/routes/optimization/fine-tuning/ProgressIndicator";
