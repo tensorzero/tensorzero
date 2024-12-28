@@ -1,7 +1,10 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
-use crate::error::{Error, ErrorDetails};
+use crate::{
+    error::{Error, ErrorDetails},
+    inference::types::current_timestamp,
+};
 
 /// Timestamp when Scaling Laws for Neural Language Models was published.
 /// No way anyone could use TensorZero prior to this.
@@ -28,11 +31,7 @@ pub fn validate_episode_id(episode_id: Uuid) -> Result<(), Error> {
             message: "Timestamp is too early".to_string(),
         }));
     }
-    #[allow(clippy::expect_used)]
-    let current_timestamp: u64 = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards")
-        .as_secs();
+    let current_timestamp: u64 = current_timestamp();
     if timestamp > current_timestamp {
         return Err(ErrorDetails::InvalidEpisodeId {
             message: "Timestamp is in the future".to_string(),
@@ -40,6 +39,40 @@ pub fn validate_episode_id(episode_id: Uuid) -> Result<(), Error> {
         .into());
     }
     Ok(())
+}
+
+pub fn uuid_elapsed(uuid: &Uuid) -> Result<Duration, Error> {
+    let version = uuid.get_version_num();
+    if version != 7 {
+        return Err(ErrorDetails::InvalidUuid {
+            raw_uuid: uuid.to_string(),
+        }
+        .into());
+    }
+    let (seconds, subsec_nanos) = uuid
+        .get_timestamp()
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::InvalidUuid {
+                raw_uuid: uuid.to_string(),
+            })
+        })?
+        .to_unix();
+    let uuid_system_time =
+        UNIX_EPOCH + Duration::from_secs(seconds) + Duration::from_nanos(subsec_nanos as u64);
+    let elapsed = match SystemTime::now().duration_since(uuid_system_time) {
+        Ok(duration) => duration,
+        Err(e) => {
+            let future_duration = e.duration();
+            if future_duration > Duration::from_secs(1) {
+                return Err(ErrorDetails::UuidInFuture {
+                    raw_uuid: uuid.to_string(),
+                }
+                .into());
+            }
+            Duration::from_secs(0)
+        }
+    };
+    Ok(elapsed)
 }
 
 #[cfg(test)]
@@ -70,5 +103,46 @@ mod tests {
             + 10;
         let late_uuid = Uuid::new_v7(Timestamp::from_unix(NoContext, late_timestamp, 0));
         assert!(validate_episode_id(late_uuid).is_err());
+    }
+
+    #[test]
+    fn test_uuid_elapsed() {
+        // Get current time
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards");
+
+        // Subtract 5 seconds
+        let five_seconds_ago = now
+            .checked_sub(std::time::Duration::from_secs(5))
+            .expect("Timestamp arithmetic overflow");
+
+        // Extract seconds and subsec_nanos
+        let seconds = five_seconds_ago.as_secs();
+        let subsec_nanos = five_seconds_ago.subsec_nanos();
+
+        // Create the timestamp
+        let timestamp = Timestamp::from_unix_time(seconds, subsec_nanos, 0, 0);
+        let uuid = Uuid::new_v7(timestamp);
+        let elapsed = uuid_elapsed(&uuid).unwrap();
+        assert!(elapsed > Duration::from_secs(4) && elapsed < Duration::from_secs(6));
+
+        let uuid = Uuid::now_v7();
+        let elapsed = uuid_elapsed(&uuid).unwrap();
+        assert!(elapsed > Duration::from_secs(0) && elapsed < Duration::from_millis(1));
+
+        // Test UUID in future
+        let future_timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_secs()
+            + 30;
+        let future_uuid = Uuid::new_v7(Timestamp::from_unix(NoContext, future_timestamp, 0));
+        assert_eq!(
+            uuid_elapsed(&future_uuid).unwrap_err().get_details(),
+            &ErrorDetails::UuidInFuture {
+                raw_uuid: future_uuid.to_string(),
+            }
+        );
     }
 }

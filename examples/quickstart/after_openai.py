@@ -1,7 +1,9 @@
 from openai import OpenAI
 
-response = OpenAI().chat.completions.create(
-    model="gpt-4o-mini",
+client = OpenAI(base_url="http://localhost:3000/openai/v1")
+
+response = client.chat.completions.create(
+    model="tensorzero::generate_haiku",
     messages=[
         {
             "role": "user",

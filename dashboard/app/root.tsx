@@ -12,6 +12,8 @@ import { ConfigProvider } from "./context/config";
 import type { Route } from "./+types/root";
 import "./tailwind.css";
 import { getConfig } from "./utils/config/index.server";
+import { AppSidebar } from "~/components/ui/sidebar/app.sidebar";
+import { SidebarProvider } from "~/components/ui/sidebar";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -23,6 +25,11 @@ export const links: Route.LinksFunction = () => [
   {
     rel: "stylesheet",
     href: "https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap",
+  },
+  {
+    rel: "icon",
+    type: "image/svg+xml",
+    href: "/favicon.svg",
   },
 ];
 
@@ -53,7 +60,14 @@ export default function App() {
   const config = useLoaderData<typeof loader>();
   return (
     <ConfigProvider value={config}>
-      <Outlet />
+      <SidebarProvider>
+        <div className="flex min-h-screen w-full">
+          <AppSidebar />
+          <main className="flex-1 overflow-y-auto">
+            <Outlet />
+          </main>
+        </div>
+      </SidebarProvider>
     </ConfigProvider>
   );
 }

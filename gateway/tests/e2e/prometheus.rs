@@ -1,6 +1,7 @@
 use reqwest::Client;
 use serde_json::Value;
 use std::collections::HashMap;
+use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 
@@ -171,9 +172,31 @@ async fn test_prometheus_metrics_feedback_boolean() {
 
     let request_count_before = get_metric_u32(&client, prometheus_metric_name).await;
 
+    // Run inference (standard, no dryrun) to get an inference_id.
+    let inference_payload = serde_json::json!({
+        "function_name": "json_success",
+        "input": {
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+        },
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(response.status().is_success());
+    let response_json = response.json::<Value>().await.unwrap();
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
     // Send feedback for task_success
     let feedback_payload = serde_json::json!({
-        "inference_id": uuid::Uuid::now_v7(),
+        "inference_id": inference_id,
         "metric_name": "prometheus_test_boolean1",
         "value": true,
     });
@@ -208,9 +231,31 @@ async fn test_prometheus_metrics_feedback_boolean_dryrun() {
 
     let request_count_before = get_metric_u32(&client, prometheus_metric_name).await;
 
+    // Run inference (standard, no dryrun) to get an inference_id.
+    let inference_payload = serde_json::json!({
+        "function_name": "json_success",
+        "input": {
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+        },
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(response.status().is_success());
+    let response_json = response.json::<Value>().await.unwrap();
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
     // Send feedback for task_success
     let feedback_payload = serde_json::json!({
-        "inference_id": uuid::Uuid::now_v7(),
+        "inference_id": inference_id,
         "metric_name": "prometheus_test_boolean2",
         "value": true,
         "dryrun": true,
@@ -245,9 +290,30 @@ async fn test_prometheus_metrics_feedback_float() {
 
     let request_count_before = get_metric_u32(&client, prometheus_metric_name).await;
 
+    // Run inference (standard, no dryrun) to get an inference_id.
+    let inference_payload = serde_json::json!({
+        "function_name": "json_success",
+        "input": {
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+        },
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(response.status().is_success());
+    let response_json = response.json::<Value>().await.unwrap();
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
     // Send feedback for task_success
     let feedback_payload = serde_json::json!({
-        "inference_id": uuid::Uuid::now_v7(),
+        "inference_id": inference_id,
         "metric_name": "prometheus_test_float1",
         "value": 5.0,
     });
@@ -282,9 +348,30 @@ async fn test_prometheus_metrics_feedback_float_dryrun() {
 
     let request_count_before = get_metric_u32(&client, prometheus_metric_name).await;
 
+    // Run inference (standard, no dryrun) to get an inference_id.
+    let inference_payload = serde_json::json!({
+        "function_name": "json_success",
+        "input": {
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+        },
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(response.status().is_success());
+    let response_json = response.json::<Value>().await.unwrap();
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
     // Send feedback for task_success
     let feedback_payload = serde_json::json!({
-        "inference_id": uuid::Uuid::now_v7(),
+        "inference_id": inference_id,
         "metric_name": "prometheus_test_float2",
         "value": 5.0,
         "dryrun": true,
@@ -324,9 +411,30 @@ async fn test_prometheus_metrics_feedback_comment() {
 
     let request_count_before = get_metric_u32(&client, prometheus_metric_name).await;
 
+    // Run inference (standard, no dryrun) to get an inference_id.
+    let inference_payload = serde_json::json!({
+        "function_name": "json_success",
+        "input": {
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+        },
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(response.status().is_success());
+    let response_json = response.json::<Value>().await.unwrap();
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
     // Send feedback for comment
     let feedback_payload = serde_json::json!({
-        "inference_id": uuid::Uuid::now_v7(),
+        "inference_id": inference_id,
         "metric_name": "comment",
         "value": "Splendid!",
     });
@@ -354,7 +462,7 @@ async fn test_prometheus_metrics_feedback_comment() {
 
     // Send feedback for comment (dryrun)
     let feedback_payload = serde_json::json!({
-        "inference_id": uuid::Uuid::now_v7(),
+        "inference_id": inference_id,
         "metric_name": "comment",
         "value": "Splendid!",
         "dryrun": true,

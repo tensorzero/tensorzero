@@ -164,6 +164,8 @@ impl InferenceProvider for DummyProvider {
                         "Flaky model '{}' failed on call number {}",
                         self.model_name, *counter
                     ),
+                    status_code: None,
+                    provider_type: "Dummy".to_string(),
                 }
                 .into());
             }
@@ -172,6 +174,8 @@ impl InferenceProvider for DummyProvider {
         if self.model_name == "error" {
             return Err(ErrorDetails::InferenceClient {
                 message: "Error sending request to Dummy provider.".to_string(),
+                status_code: None,
+                provider_type: "Dummy".to_string(),
             }
             .into());
         }
@@ -181,17 +185,15 @@ impl InferenceProvider for DummyProvider {
                 if api_key.expose_secret() != "good_key" {
                     return Err(ErrorDetails::InferenceClient {
                         message: "Invalid API key for Dummy provider".to_string(),
+                        status_code: None,
+                        provider_type: "Dummy".to_string(),
                     }
                     .into());
                 }
             }
         }
         let id = Uuid::now_v7();
-        #[allow(clippy::expect_used)]
-        let created = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_secs();
+        let created = current_timestamp();
         let content = match self.model_name.as_str() {
             "tool" => vec![ContentBlock::ToolCall(ToolCall {
                 name: "get_temperature".to_string(),
@@ -287,6 +289,8 @@ impl InferenceProvider for DummyProvider {
                         "Flaky model '{}' failed on call number {}",
                         self.model_name, *counter
                     ),
+                    status_code: None,
+                    provider_type: "Dummy".to_string(),
                 }
                 .into());
             }
@@ -295,15 +299,13 @@ impl InferenceProvider for DummyProvider {
         if self.model_name == "error" {
             return Err(ErrorDetails::InferenceClient {
                 message: "Error sending request to Dummy provider.".to_string(),
+                status_code: None,
+                provider_type: "Dummy".to_string(),
             }
             .into());
         }
         let id = Uuid::now_v7();
-        #[allow(clippy::expect_used)]
-        let created = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_secs();
+        let created = current_timestamp();
 
         let (content_chunks, is_tool_call) = if self.model_name == "tool" {
             (DUMMY_STREAMING_TOOL_RESPONSE.to_vec(), true)
@@ -409,6 +411,8 @@ impl EmbeddingProvider for DummyProvider {
         if self.model_name == "error" {
             return Err(ErrorDetails::InferenceClient {
                 message: "Error sending request to Dummy provider.".to_string(),
+                status_code: None,
+                provider_type: "Dummy".to_string(),
             }
             .into());
         }
