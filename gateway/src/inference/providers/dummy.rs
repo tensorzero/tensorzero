@@ -193,11 +193,7 @@ impl InferenceProvider for DummyProvider {
             }
         }
         let id = Uuid::now_v7();
-        #[allow(clippy::expect_used)]
-        let created = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_secs();
+        let created = current_timestamp();
         let content = match self.model_name.as_str() {
             "tool" => vec![ContentBlock::ToolCall(ToolCall {
                 name: "get_temperature".to_string(),
@@ -309,11 +305,7 @@ impl InferenceProvider for DummyProvider {
             .into());
         }
         let id = Uuid::now_v7();
-        #[allow(clippy::expect_used)]
-        let created = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_secs();
+        let created = current_timestamp();
 
         let (content_chunks, is_tool_call) = if self.model_name == "tool" {
             (DUMMY_STREAMING_TOOL_RESPONSE.to_vec(), true)
