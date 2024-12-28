@@ -281,14 +281,18 @@ function FineTuningForm({
     );
   };
 
+  // Sets the max samples limit based on the number of curatedInferences (if available) or inferences (if available)
+  // This means it will change when the function is selected or the metric is changed to something that actually curates inferences (i.e. not None)
   useEffect(() => {
     if (counts.curatedInferenceCount !== null) {
       form.setValue(
         "maxSamples",
         Math.min(100000, counts.curatedInferenceCount),
       );
+    } else if (counts.inferenceCount !== null) {
+      form.setValue("maxSamples", Math.min(100000, counts.inferenceCount));
     }
-  }, [counts.curatedInferenceCount, form]);
+  }, [counts.curatedInferenceCount, counts.inferenceCount, form]);
 
   function getButtonText() {
     switch (submissionPhase) {
@@ -360,7 +364,7 @@ function FineTuningForm({
 
             <AdvancedParametersAccordion
               control={form.control}
-              maxSamplesLimit={counts.curatedInferenceCount ?? undefined}
+              maxSamplesLimit={counts.inferenceCount ?? undefined}
             />
           </div>
 

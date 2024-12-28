@@ -268,9 +268,6 @@ async function create_openai_fine_tuning_job(
   const params: OpenAI.FineTuning.JobCreateParams = {
     model,
     training_file: train_file_id,
-    hyperparameters: {
-      n_epochs: 1,
-    },
   };
 
   if (val_file_id) {
