@@ -13,7 +13,7 @@ services:
       timeout: 1s
 
   gateway:
-    image: tensorzero/gateway:2024.12.1
+    image: tensorzero/gateway
     volumes:
       # Mount our tensorzero.toml file into the container
       - ./config:/app/config:ro
