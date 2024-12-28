@@ -1,12 +1,10 @@
 import asyncio
-import os
-from pprint import pprint
 
 from tensorzero import AsyncTensorZeroGateway
 
 
-async def main(gateway_url: str):
-    async with AsyncTensorZeroGateway(gateway_url) as client:
+async def main():
+    async with AsyncTensorZeroGateway("http://localhost:3000") as client:
         inference_result = await client.inference(
             function_name="draft_email",
             input={
@@ -24,7 +22,7 @@ async def main(gateway_url: str):
         )
 
         # If everything is working correctly, the `variant_name` field should change depending on the request
-        pprint(inference_result)
+        print(inference_result)
 
         feedback_result = await client.feedback(
             metric_name="email_draft_accepted",
@@ -34,14 +32,8 @@ async def main(gateway_url: str):
             value=True,
         )
 
-        pprint(feedback_result)
-
-        print("Success! 🎉")
+        print(feedback_result)
 
 
 if __name__ == "__main__":
-    gateway_url = os.getenv("TENSORZERO_GATEWAY_URL")
-    if not gateway_url:
-        gateway_url = "http://localhost:3000"
-
-    asyncio.run(main(gateway_url))
+    asyncio.run(main())
