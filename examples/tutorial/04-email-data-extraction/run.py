@@ -1,16 +1,16 @@
 from tensorzero import TensorZeroGateway
 
 with TensorZeroGateway("http://localhost:3000") as client:
-    response = client.inference(
-        function_name="generate_haiku",
+    result = client.inference(
+        function_name="extract_email",
         input={
             "messages": [
                 {
                     "role": "user",
-                    "content": "Write a haiku about artificial intelligence.",
+                    "content": "blah blah blah hello@tensorzero.com blah blah blah",
                 }
             ]
         },
     )
 
-print(response)
+    print(result)

@@ -1,12 +1,10 @@
 import asyncio
-import os
-from pprint import pprint
 
 from tensorzero import AsyncTensorZeroGateway
 
 
-async def main(gateway_url: str):
-    async with AsyncTensorZeroGateway(gateway_url) as client:
+async def main():
+    async with AsyncTensorZeroGateway("http://localhost:3000") as client:
         result = await client.inference(
             function_name="extract_email",
             input={
@@ -19,14 +17,8 @@ async def main(gateway_url: str):
             },
         )
 
-        pprint(result)
-
-        print("Success! 🎉")
+        print(result)
 
 
 if __name__ == "__main__":
-    gateway_url = os.getenv("TENSORZERO_GATEWAY_URL")
-    if not gateway_url:
-        gateway_url = "http://localhost:3000"
-
-    asyncio.run(main(gateway_url))
+    asyncio.run(main())
