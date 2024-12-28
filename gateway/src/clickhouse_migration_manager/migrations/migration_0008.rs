@@ -12,17 +12,17 @@ use super::{check_column_exists, check_table_exists, get_column_type};
 ///
 /// It also adds a raw_request and raw_response column to the `BatchRequest` table for
 /// debugging and observability of batch requests.
-pub struct Migration0007<'a> {
+pub struct Migration0008<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
 
-impl<'a> Migration for Migration0007<'a> {
+impl<'a> Migration for Migration0008<'a> {
     /// Check if you can connect to the database
     /// Also check that the tables that need altering already exist
     async fn can_apply(&self) -> Result<(), Error> {
         self.clickhouse.health().await.map_err(|e| {
             Error::new(ErrorDetails::ClickHouseMigration {
-                id: "0007".to_string(),
+                id: "0008".to_string(),
                 message: e.to_string(),
             })
         })?;
@@ -35,7 +35,7 @@ impl<'a> Migration for Migration0007<'a> {
         for table in tables {
             if !check_table_exists(self.clickhouse, table, "0006").await? {
                 return Err(ErrorDetails::ClickHouseMigration {
-                    id: "0007".to_string(),
+                    id: "0008".to_string(),
                     message: format!("{} table does not exist", table),
                 }
                 .into());
@@ -47,13 +47,13 @@ impl<'a> Migration for Migration0007<'a> {
     /// Check if the migration has already been applied by checking if the raw_request or raw_response columns exist in BatchRequest
     /// and if the processing_time_ms columns in ChatInference and JsonInference and response_time_ms column in ModelInference is Nullable
     async fn should_apply(&self) -> Result<bool, Error> {
-        if !check_column_exists(self.clickhouse, "BatchRequest", "raw_request", "0007").await? {
+        if !check_column_exists(self.clickhouse, "BatchRequest", "raw_request", "0008").await? {
             return Ok(true);
         }
-        if !check_column_exists(self.clickhouse, "BatchRequest", "raw_response", "0007").await? {
+        if !check_column_exists(self.clickhouse, "BatchRequest", "raw_response", "0008").await? {
             return Ok(true);
         }
-        if get_column_type(self.clickhouse, "BatchRequest", "errors", "0007").await?
+        if get_column_type(self.clickhouse, "BatchRequest", "errors", "0008").await?
             != "Array(String)"
         {
             return Ok(true);
@@ -62,7 +62,7 @@ impl<'a> Migration for Migration0007<'a> {
             self.clickhouse,
             "ModelInference",
             "response_time_ms",
-            "0007",
+            "0008",
         )
         .await?
             != "Nullable(UInt32)"
@@ -73,7 +73,7 @@ impl<'a> Migration for Migration0007<'a> {
             self.clickhouse,
             "JsonInference",
             "processing_time_ms",
-            "0007",
+            "0008",
         )
         .await?
             != "Nullable(UInt32)"
@@ -84,7 +84,7 @@ impl<'a> Migration for Migration0007<'a> {
             self.clickhouse,
             "ChatInference",
             "processing_time_ms",
-            "0007",
+            "0008",
         )
         .await?
             != "Nullable(UInt32)"

@@ -1,0 +1,76 @@
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                   MODELS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[models."gpt-4o-mini-2024-07-18"]
+routing = ["openai"]
+
+[models."gpt-4o-mini-2024-07-18".providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini-2024-07-18"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.dashboard_fixture_extract_entities]
+type = "json"
+
+[functions.dashboard_fixture_extract_entities.variants.baseline]
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18"
+system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+
+[functions.dashboard_fixture_write_haiku]
+type = "chat"
+user_schema = "functions/write_haiku/user_schema.json"
+
+[functions.dashboard_fixture_write_haiku.variants.baseline]
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18"
+system_template = "functions/write_haiku/initial_prompt/system_template.minijinja"
+user_template = "functions/write_haiku/initial_prompt/user_template.minijinja"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  METRICS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[metrics.dashboard_fixture_exact_match]
+type = "boolean"
+level = "inference"
+optimize = "max"
+
+[metrics.dashboard_fixture_exact_match_episode]
+type = "boolean"
+level = "episode"
+optimize = "max"
+
+[metrics.dashboard_fixture_jaccard_similarity]
+type = "float"
+level = "inference"
+optimize = "max"
+
+[metrics.dashboard_fixture_jaccard_similarity_episode]
+type = "float"
+level = "episode"
+optimize = "max"
+
+[metrics.dashboard_fixture_haiku_score]
+type = "boolean"
+level = "inference"
+optimize = "max"
+
+[metrics.dashboard_fixture_haiku_score_episode]
+type = "boolean"
+level = "episode"
+optimize = "max"
+
+[metrics.dashboard_fixture_haiku_rating]
+type = "float"
+level = "inference"
+optimize = "max"
+
+[metrics.dashboard_fixture_haiku_rating_episode]
+type = "float"
+level = "episode"
+optimize = "max"

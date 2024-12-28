@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::env;
 
-use futures::{StreamExt, TryStreamExt};
+use futures::StreamExt;
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
@@ -121,6 +121,8 @@ impl InferenceProvider for VLLMProvider {
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request to vLLM: {e}"),
+                    status_code: e.status(),
+                    provider_type: "vLLM".to_string(),
                 })
             })?;
         let latency = Latency::NonStreaming {
@@ -128,8 +130,9 @@ impl InferenceProvider for VLLMProvider {
         };
         if res.status().is_success() {
             let response_body = res.json::<OpenAIResponse>().await.map_err(|e| {
-                Error::new(ErrorDetails::VLLMServer {
+                Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing response: {e}"),
+                    provider_type: "vLLM".to_string(),
                 })
             })?;
             Ok(VLLMResponseWithMetadata {
@@ -138,17 +141,17 @@ impl InferenceProvider for VLLMProvider {
                 request: request_body,
                 generic_request: request,
             }
-            .try_into()
-            .map_err(map_openai_to_vllm_error)?)
+            .try_into()?)
         } else {
-            Err(map_openai_to_vllm_error(handle_openai_error(
+            Err(handle_openai_error(
                 res.status(),
                 &res.text().await.map_err(|e| {
-                    Error::new(ErrorDetails::VLLMServer {
+                    Error::new(ErrorDetails::InferenceServer {
                         message: format!("Error parsing error response: {e}"),
+                        provider_type: "vLLM".to_string(),
                     })
                 })?,
-            )))
+            ))
         }
     }
 
@@ -167,8 +170,9 @@ impl InferenceProvider for VLLMProvider {
     > {
         let request_body = VLLMRequest::new(&self.model_name, request)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::VLLMServer {
+            Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request: {e}"),
+                provider_type: "vLLM".to_string(),
             })
         })?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
@@ -186,18 +190,20 @@ impl InferenceProvider for VLLMProvider {
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request to vLLM: {e}"),
+                    status_code: None,
+                    provider_type: "vLLM".to_string(),
                 })
             })?;
-        let mut stream =
-            Box::pin(stream_openai(event_source, start_time).map_err(map_openai_to_vllm_error));
+        let mut stream = Box::pin(stream_openai(event_source, start_time));
         // Get a single chunk from the stream and make sure it is OK then send to client.
         // We want to do this here so that we can tell that the request is working.
         let chunk = match stream.next().await {
             Some(Ok(chunk)) => chunk,
             Some(Err(e)) => return Err(e),
             None => {
-                return Err(ErrorDetails::VLLMServer {
+                return Err(ErrorDetails::InferenceServer {
                     message: "Stream ended before first chunk".to_string(),
+                    provider_type: "vLLM".to_string(),
                 }
                 .into())
             }
@@ -227,21 +233,6 @@ impl InferenceProvider for VLLMProvider {
             provider_type: "GCP Vertex Gemini".to_string(),
         }
         .into())
-    }
-}
-
-fn map_openai_to_vllm_error(e: Error) -> Error {
-    match e.get_owned_details() {
-        ErrorDetails::OpenAIServer { message } => Error::new(ErrorDetails::VLLMServer { message }),
-        ErrorDetails::OpenAIClient {
-            message,
-            status_code,
-        } => ErrorDetails::VLLMClient {
-            message,
-            status_code,
-        }
-        .into(),
-        e => e.into(),
     }
 }
 
@@ -293,9 +284,10 @@ impl<'a> VLLMRequest<'a> {
         let messages = prepare_vllm_messages(request);
         // TODO (#169): Implement tool calling.
         if request.tool_config.is_some() {
-            return Err(ErrorDetails::VLLMClient {
-                status_code: reqwest::StatusCode::BAD_REQUEST,
+            return Err(ErrorDetails::InferenceClient {
+                status_code: Some(reqwest::StatusCode::BAD_REQUEST),
                 message: "TensorZero does not support tool use with vLLM. Please use a different provider.".to_string(),
+                provider_type: "vLLM".to_string(),
             }.into());
         }
 
@@ -332,16 +324,18 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
             generic_request,
         } = value;
         let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::OpenAIServer {
+            Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error parsing response: {e}"),
+                provider_type: "vLLM".to_string(),
             })
         })?;
         if response.choices.len() != 1 {
-            return Err(ErrorDetails::OpenAIServer {
+            return Err(ErrorDetails::InferenceServer {
                 message: format!(
                     "Response has invalid number of choices: {}. Expected 1.",
                     response.choices.len()
                 ),
+                provider_type: "vLLM".to_string(),
             }
             .into());
         }
@@ -349,8 +343,9 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let message = response
             .choices
             .pop()
-            .ok_or_else(|| Error::new(ErrorDetails::VLLMServer {
+            .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
+                provider_type: "vLLM".to_string(),
             }))?
             .message;
         let mut content: Vec<ContentBlock> = Vec::new();
@@ -363,8 +358,9 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
             }
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::VLLMServer {
+            Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request body as JSON: {e}"),
+                provider_type: "vLLM".to_string(),
             })
         })?;
         let system = generic_request.system.clone();

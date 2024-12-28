@@ -55,27 +55,6 @@ pub enum ErrorDetails {
     AppState {
         message: String,
     },
-    AnthropicClient {
-        message: String,
-        status_code: StatusCode,
-    },
-    AnthropicServer {
-        message: String,
-    },
-    AWSBedrockClient {
-        message: String,
-        status_code: StatusCode,
-    },
-    AWSBedrockServer {
-        message: String,
-    },
-    AzureClient {
-        message: String,
-        status_code: StatusCode,
-    },
-    AzureServer {
-        message: String,
-    },
     BadCredentialsPreInference {
         provider_name: String,
     },
@@ -108,45 +87,23 @@ pub enum ErrorDetails {
     DynamicJsonSchema {
         message: String,
     },
-    FireworksClient {
-        message: String,
-        status_code: StatusCode,
-    },
-    FireworksServer {
-        message: String,
-    },
     GCPCredentials {
-        message: String,
-    },
-    GCPVertexClient {
-        message: String,
-        status_code: StatusCode,
-    },
-    GCPVertexServer {
-        message: String,
-    },
-    GoogleAIStudioClient {
-        message: String,
-        status_code: StatusCode,
-    },
-    GoogleAIStudioServer {
-        message: String,
-    },
-    HyperbolicClient {
-        message: String,
-        status_code: StatusCode,
-    },
-    HyperbolicServer {
         message: String,
     },
     Inference {
         message: String,
     },
+    InferenceClient {
+        message: String,
+        status_code: Option<StatusCode>,
+        provider_type: String,
+    },
     InferenceNotFound {
         inference_id: Uuid,
     },
-    InferenceClient {
+    InferenceServer {
         message: String,
+        provider_type: String,
     },
     InferenceTimeout {
         variant_name: String,
@@ -196,6 +153,9 @@ pub enum ErrorDetails {
     InvalidTool {
         message: String,
     },
+    InvalidUuid {
+        raw_uuid: String,
+    },
     JsonRequest {
         message: String,
     },
@@ -224,13 +184,6 @@ pub enum ErrorDetails {
     MissingBatchInferenceResponse {
         inference_id: Option<Uuid>,
     },
-    MistralClient {
-        message: String,
-        status_code: StatusCode,
-    },
-    MistralServer {
-        message: String,
-    },
     ModelProvidersExhausted {
         provider_errors: HashMap<String, Error>,
     },
@@ -238,13 +191,6 @@ pub enum ErrorDetails {
         message: String,
     },
     Observability {
-        message: String,
-    },
-    OpenAIClient {
-        message: String,
-        status_code: StatusCode,
-    },
-    OpenAIServer {
         message: String,
     },
     OutputParsing {
@@ -258,13 +204,6 @@ pub enum ErrorDetails {
         provider_name: String,
     },
     Serialization {
-        message: String,
-    },
-    TogetherClient {
-        message: String,
-        status_code: StatusCode,
-    },
-    TogetherServer {
         message: String,
     },
     ToolNotFound {
@@ -300,19 +239,8 @@ pub enum ErrorDetails {
     UnsupportedVariantForBatchInference {
         variant_name: Option<String>,
     },
-    VLLMClient {
-        message: String,
-        status_code: StatusCode,
-    },
-    VLLMServer {
-        message: String,
-    },
-    XAIClient {
-        message: String,
-        status_code: StatusCode,
-    },
-    XAIServer {
-        message: String,
+    UuidInFuture {
+        raw_uuid: String,
     },
 }
 
@@ -323,12 +251,6 @@ impl ErrorDetails {
             ErrorDetails::AllVariantsFailed { .. } => tracing::Level::ERROR,
             ErrorDetails::ApiKeyMissing { .. } => tracing::Level::ERROR,
             ErrorDetails::AppState { .. } => tracing::Level::ERROR,
-            ErrorDetails::AnthropicClient { .. } => tracing::Level::WARN,
-            ErrorDetails::AnthropicServer { .. } => tracing::Level::ERROR,
-            ErrorDetails::AWSBedrockClient { .. } => tracing::Level::WARN,
-            ErrorDetails::AWSBedrockServer { .. } => tracing::Level::ERROR,
-            ErrorDetails::AzureClient { .. } => tracing::Level::WARN,
-            ErrorDetails::AzureServer { .. } => tracing::Level::ERROR,
             ErrorDetails::BadCredentialsPreInference { .. } => tracing::Level::ERROR,
             ErrorDetails::BatchInputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::BatchNotFound { .. } => tracing::Level::WARN,
@@ -339,18 +261,11 @@ impl ErrorDetails {
             ErrorDetails::ClickHouseQuery { .. } => tracing::Level::ERROR,
             ErrorDetails::Config { .. } => tracing::Level::ERROR,
             ErrorDetails::DynamicJsonSchema { .. } => tracing::Level::WARN,
-            ErrorDetails::FireworksClient { .. } => tracing::Level::WARN,
-            ErrorDetails::FireworksServer { .. } => tracing::Level::ERROR,
             ErrorDetails::GCPCredentials { .. } => tracing::Level::ERROR,
-            ErrorDetails::GCPVertexClient { .. } => tracing::Level::WARN,
-            ErrorDetails::GCPVertexServer { .. } => tracing::Level::ERROR,
-            ErrorDetails::GoogleAIStudioClient { .. } => tracing::Level::WARN,
-            ErrorDetails::GoogleAIStudioServer { .. } => tracing::Level::ERROR,
-            ErrorDetails::HyperbolicClient { .. } => tracing::Level::WARN,
-            ErrorDetails::HyperbolicServer { .. } => tracing::Level::ERROR,
             ErrorDetails::Inference { .. } => tracing::Level::ERROR,
             ErrorDetails::InferenceClient { .. } => tracing::Level::ERROR,
             ErrorDetails::InferenceNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::InferenceServer { .. } => tracing::Level::ERROR,
             ErrorDetails::InferenceTimeout { .. } => tracing::Level::WARN,
             ErrorDetails::InputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidBaseUrl { .. } => tracing::Level::ERROR,
@@ -367,6 +282,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidRequest { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidTemplatePath => tracing::Level::ERROR,
             ErrorDetails::InvalidTool { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidUuid { .. } => tracing::Level::ERROR,
             ErrorDetails::JsonRequest { .. } => tracing::Level::WARN,
             ErrorDetails::JsonSchema { .. } => tracing::Level::ERROR,
             ErrorDetails::JsonSchemaValidation { .. } => tracing::Level::ERROR,
@@ -375,19 +291,13 @@ impl ErrorDetails {
             ErrorDetails::MiniJinjaTemplateMissing { .. } => tracing::Level::ERROR,
             ErrorDetails::MiniJinjaTemplateRender { .. } => tracing::Level::ERROR,
             ErrorDetails::MissingBatchInferenceResponse { .. } => tracing::Level::WARN,
-            ErrorDetails::MistralClient { .. } => tracing::Level::WARN,
-            ErrorDetails::MistralServer { .. } => tracing::Level::ERROR,
             ErrorDetails::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
             ErrorDetails::ModelValidation { .. } => tracing::Level::ERROR,
             ErrorDetails::Observability { .. } => tracing::Level::ERROR,
-            ErrorDetails::OpenAIClient { .. } => tracing::Level::WARN,
-            ErrorDetails::OpenAIServer { .. } => tracing::Level::ERROR,
             ErrorDetails::OutputParsing { .. } => tracing::Level::WARN,
             ErrorDetails::OutputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::ProviderNotFound { .. } => tracing::Level::ERROR,
             ErrorDetails::Serialization { .. } => tracing::Level::ERROR,
-            ErrorDetails::TogetherClient { .. } => tracing::Level::WARN,
-            ErrorDetails::TogetherServer { .. } => tracing::Level::ERROR,
             ErrorDetails::ToolNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::ToolNotLoaded { .. } => tracing::Level::ERROR,
             ErrorDetails::TypeConversion { .. } => tracing::Level::ERROR,
@@ -399,10 +309,7 @@ impl ErrorDetails {
             ErrorDetails::UnknownMetric { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => tracing::Level::WARN,
-            ErrorDetails::VLLMClient { .. } => tracing::Level::WARN,
-            ErrorDetails::VLLMServer { .. } => tracing::Level::ERROR,
-            ErrorDetails::XAIClient { .. } => tracing::Level::WARN,
-            ErrorDetails::XAIServer { .. } => tracing::Level::ERROR,
+            ErrorDetails::UuidInFuture { .. } => tracing::Level::WARN,
         }
     }
 
@@ -412,12 +319,6 @@ impl ErrorDetails {
             ErrorDetails::AllVariantsFailed { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ApiKeyMissing { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::AppState { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::AnthropicClient { status_code, .. } => *status_code,
-            ErrorDetails::AnthropicServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::AWSBedrockClient { status_code, .. } => *status_code,
-            ErrorDetails::AWSBedrockServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::AzureClient { status_code, .. } => *status_code,
-            ErrorDetails::AzureServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::BadCredentialsPreInference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::BatchInputValidation { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::BatchNotFound { .. } => StatusCode::NOT_FOUND,
@@ -428,20 +329,16 @@ impl ErrorDetails {
             ErrorDetails::ClickHouseQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DynamicJsonSchema { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::FireworksServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::FireworksClient { status_code, .. } => *status_code,
             ErrorDetails::GCPCredentials { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::GCPVertexClient { status_code, .. } => *status_code,
-            ErrorDetails::GCPVertexServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::GoogleAIStudioClient { status_code, .. } => *status_code,
-            ErrorDetails::GoogleAIStudioServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::HyperbolicClient { status_code, .. } => *status_code,
-            ErrorDetails::HyperbolicServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Inference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::InferenceClient { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InferenceClient { status_code, .. } => {
+                status_code.unwrap_or_else(|| StatusCode::INTERNAL_SERVER_ERROR)
+            }
             ErrorDetails::InferenceNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::InferenceServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             ErrorDetails::InvalidEpisodeId { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidUuid { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InputValidation { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidBaseUrl { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidBatchParams { .. } => StatusCode::BAD_REQUEST,
@@ -464,19 +361,13 @@ impl ErrorDetails {
             ErrorDetails::MiniJinjaTemplateMissing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::MiniJinjaTemplateRender { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::MissingBatchInferenceResponse { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::MistralClient { status_code, .. } => *status_code,
-            ErrorDetails::MistralServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::OpenAIClient { status_code, .. } => *status_code,
-            ErrorDetails::OpenAIServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::OutputParsing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::OutputValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ProviderNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::Serialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::TogetherClient { status_code, .. } => *status_code,
-            ErrorDetails::TogetherServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ToolNotFound { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::ToolNotLoaded { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::TypeConversion { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -490,10 +381,7 @@ impl ErrorDetails {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::VLLMClient { status_code, .. } => *status_code,
-            ErrorDetails::VLLMServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::XAIClient { status_code, .. } => *status_code,
-            ErrorDetails::XAIServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::UuidInFuture { .. } => StatusCode::BAD_REQUEST,
         }
     }
 
@@ -528,24 +416,6 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::AppState { message } => {
                 write!(f, "Error initializing AppState: {}", message)
-            }
-            ErrorDetails::AnthropicClient { message, .. } => {
-                write!(f, "Error from Anthropic client: {}", message)
-            }
-            ErrorDetails::AnthropicServer { message } => {
-                write!(f, "Error from Anthropic server: {}", message)
-            }
-            ErrorDetails::AWSBedrockClient { message, .. } => {
-                write!(f, "Error from AWS Bedrock client: {}", message)
-            }
-            ErrorDetails::AWSBedrockServer { message } => {
-                write!(f, "Error from AWS Bedrock server: {}", message)
-            }
-            ErrorDetails::AzureClient { message, .. } => {
-                write!(f, "Error from Azure client: {}", message)
-            }
-            ErrorDetails::AzureServer { message } => {
-                write!(f, "Error from Azure server: {}", message)
             }
             ErrorDetails::BadCredentialsPreInference { provider_name } => {
                 write!(
@@ -585,38 +455,23 @@ impl std::fmt::Display for ErrorDetails {
                     message
                 )
             }
-            ErrorDetails::FireworksClient { message, .. } => {
-                write!(f, "Error from Fireworks client: {}", message)
-            }
-            ErrorDetails::FireworksServer { message } => {
-                write!(f, "Error from Fireworks server: {}", message)
-            }
             ErrorDetails::GCPCredentials { message } => {
                 write!(f, "Error in acquiring GCP credentials: {}", message)
             }
-            ErrorDetails::GCPVertexClient { message, .. } => {
-                write!(f, "Error from GCP Vertex client: {}", message)
-            }
-            ErrorDetails::GCPVertexServer { message } => {
-                write!(f, "Error from GCP Vertex server: {}", message)
-            }
-            ErrorDetails::GoogleAIStudioClient { message, .. } => {
-                write!(f, "Error from Google AI Studio client: {}", message)
-            }
-            ErrorDetails::GoogleAIStudioServer { message } => {
-                write!(f, "Error from Google AI Studio server: {}", message)
-            }
-            ErrorDetails::HyperbolicClient { message, .. } => {
-                write!(f, "Error from Hyperbolic client: {}", message)
-            }
-            ErrorDetails::HyperbolicServer { message } => {
-                write!(f, "Error from Hyperbolic server: {}", message)
-            }
             ErrorDetails::Inference { message } => write!(f, "{}", message),
-            ErrorDetails::InferenceClient { message } => write!(f, "{}", message),
+            ErrorDetails::InferenceClient {
+                message,
+                provider_type,
+                ..
+            } => write!(f, "Error from {} client: {}", provider_type, message),
             ErrorDetails::InferenceNotFound { inference_id } => {
                 write!(f, "Inference not found for id: {}", inference_id)
             }
+            ErrorDetails::InferenceServer {
+                message,
+                provider_type,
+                ..
+            } => write!(f, "Error from {} server: {}", provider_type, message),
             ErrorDetails::InferenceTimeout { variant_name } => {
                 write!(f, "Inference timed out for variant: {}", variant_name)
             }
@@ -671,6 +526,9 @@ impl std::fmt::Display for ErrorDetails {
                 write!(f, "Template path failed to convert to Rust string")
             }
             ErrorDetails::InvalidTool { message } => write!(f, "{}", message),
+            ErrorDetails::InvalidUuid { raw_uuid } => {
+                write!(f, "Failed to parse UUID as v7: {}", raw_uuid)
+            }
             ErrorDetails::JsonRequest { message } => write!(f, "{}", message),
             ErrorDetails::JsonSchema { message } => write!(f, "{}", message),
             ErrorDetails::JsonSchemaValidation {
@@ -720,12 +578,6 @@ impl std::fmt::Display for ErrorDetails {
                 ),
                 None => write!(f, "Missing batch inference response"),
             },
-            ErrorDetails::MistralClient { message, .. } => {
-                write!(f, "Error from Mistral client: {}", message)
-            }
-            ErrorDetails::MistralServer { message } => {
-                write!(f, "Error from Mistral server: {}", message)
-            }
             ErrorDetails::ModelProvidersExhausted { provider_errors } => {
                 write!(
                     f,
@@ -742,12 +594,6 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::Observability { message } => {
                 write!(f, "{}", message)
-            }
-            ErrorDetails::OpenAIClient { message, .. } => {
-                write!(f, "Error from OpenAI client: {}", message)
-            }
-            ErrorDetails::OpenAIServer { message } => {
-                write!(f, "Error from OpenAI server: {}", message)
             }
             ErrorDetails::OutputParsing {
                 raw_output,
@@ -766,12 +612,6 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::Serialization { message } => write!(f, "{}", message),
             ErrorDetails::TypeConversion { message } => write!(f, "{}", message),
-            ErrorDetails::TogetherClient { message, .. } => {
-                write!(f, "Error from Together client: {}", message)
-            }
-            ErrorDetails::TogetherServer { message } => {
-                write!(f, "Error from Together server: {}", message)
-            }
             ErrorDetails::ToolNotFound { name } => write!(f, "Tool not found: {}", name),
             ErrorDetails::ToolNotLoaded { name } => write!(f, "Tool not loaded: {}", name),
             ErrorDetails::UnknownCandidate { name } => {
@@ -799,17 +639,8 @@ impl std::fmt::Display for ErrorDetails {
                     None => write!(f, "Unsupported variant for batch inference"),
                 }
             }
-            ErrorDetails::VLLMClient { message, .. } => {
-                write!(f, "Error from vLLM client: {}", message)
-            }
-            ErrorDetails::VLLMServer { message } => {
-                write!(f, "Error from vLLM server: {}", message)
-            }
-            ErrorDetails::XAIClient { message, .. } => {
-                write!(f, "Error from xAI client: {}", message)
-            }
-            ErrorDetails::XAIServer { message } => {
-                write!(f, "Error from xAI server: {}", message)
+            ErrorDetails::UuidInFuture { raw_uuid } => {
+                write!(f, "UUID is in the future: {}", raw_uuid)
             }
         }
     }

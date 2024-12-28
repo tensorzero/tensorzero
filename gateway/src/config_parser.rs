@@ -277,6 +277,7 @@ impl<'c> Config<'c> {
 #[serde(deny_unknown_fields)]
 struct UninitializedConfig {
     pub gateway: Option<GatewayConfig>,
+    #[serde(default)]
     pub models: ModelTable, // model name => model config
     #[serde(default)]
     pub embedding_models: HashMap<String, EmbeddingModelConfig>, // embedding model name => embedding model config
@@ -664,10 +665,16 @@ mod tests {
             .remove("models")
             .expect("Failed to remove `[models]` section");
 
+        // Remove all functions except generate_draft so we are sure what error will be thrown
+        config["functions"]
+            .as_table_mut()
+            .unwrap()
+            .retain(|k, _| k == "generate_draft");
+
         assert_eq!(
             Config::load_from_toml(config, base_path).unwrap_err(),
             Error::new(ErrorDetails::Config {
-                message: "missing field `models`\n".to_string()
+                message: "Model name 'gpt-3.5-turbo' not found in model table".to_string()
             })
         );
     }
@@ -1330,6 +1337,40 @@ mod tests {
 
         // Check the total number of templates
         assert_eq!(templates.len(), 10);
+    }
+
+    #[test]
+    fn test_config_load_shorthand_models_only() {
+        let config_str = r#"
+        # ┌────────────────────────────────────────────────────────────────────────────┐
+        # │                                  GENERAL                                   │
+        # └────────────────────────────────────────────────────────────────────────────┘
+
+        [gateway]
+        bind_address = "0.0.0.0:3000"
+
+
+        # ┌────────────────────────────────────────────────────────────────────────────┐
+        # │                                 FUNCTIONS                                  │
+        # └────────────────────────────────────────────────────────────────────────────┘
+
+        [functions.generate_draft]
+        type = "chat"
+        system_schema = "fixtures/config/functions/generate_draft/system_schema.json"
+
+        [functions.generate_draft.variants.openai_promptA]
+        type = "chat_completion"
+        weight = 0.9
+        model = "openai::gpt-3.5-turbo"
+        system_template = "fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
+        "#;
+        env::set_var("OPENAI_API_KEY", "sk-something");
+        env::set_var("ANTHROPIC_API_KEY", "sk-something");
+        env::set_var("AZURE_OPENAI_API_KEY", "sk-something");
+
+        let config = toml::from_str(config_str).expect("Failed to parse sample config");
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        Config::load_from_toml(config, base_path.clone()).expect("Failed to load config");
     }
 
     /// Get a sample valid config for testing

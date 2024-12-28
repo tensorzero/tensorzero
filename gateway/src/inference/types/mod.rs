@@ -622,11 +622,7 @@ impl<'a> ChatInferenceResult<'a> {
         tool_config: Option<&ToolCallConfig>,
         inference_params: InferenceParams,
     ) -> Self {
-        #[allow(clippy::expect_used)]
-        let created = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_secs();
+        let created = current_timestamp();
         let content = parse_chat_output(raw_content, tool_config).await;
         Self {
             inference_id,

@@ -9,9 +9,11 @@ repos:
       - id: check-merge-conflict
       - id: check-symlinks
       - id: check-toml
+      - id: check-vcs-permalinks
       - id: check-xml
       - id: check-yaml
       - id: detect-private-key
+        exclude: CONTRIBUTING.md
       - id: end-of-file-fixer
         exclude: \.minijinja$
       - id: trailing-whitespace
@@ -24,7 +26,6 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
-        always_run: true
 
       - id: cargo-fmt
         name: cargo fmt
@@ -32,7 +33,6 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
-        always_run: true
 
       - id: cargo-clippy
         name: cargo clippy
@@ -40,7 +40,6 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
-        always_run: true
 
       - id: cargo-test-unit
         name: cargo test-unit
@@ -48,7 +47,39 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
-        always_run: true
+
+      - id: prettier
+        name: prettier
+        entry: npx prettier
+        language: node
+        types_or:
+          [css, html, javascript, json, jsx, markdown, scss, ts, tsx, yaml]
+        args: ["--write", "--list-different"]
+        additional_dependencies:
+          - prettier
+          - "@prettier/plugin-xml"
+        exclude: '.*\.ipynb$'
+        pass_filenames: false
+
+      - id: eslint
+        name: eslint
+        entry: bash -c 'cd dashboard && npx eslint'
+        language: node
+        types_or: [javascript, jsx, ts, tsx]
+        additional_dependencies:
+          - eslint
+          - "@typescript-eslint/parser"
+          - "@typescript-eslint/eslint-plugin"
+        pass_filenames: false
+
+      - id: tsc
+        name: tsc
+        entry: bash -c 'cd dashboard && tsc'
+        language: node
+        types_or: [ts, tsx]
+        additional_dependencies:
+          - typescript
+        pass_filenames: false
 
   - repo: https://github.com/srstevenson/nb-clean
     rev: 3.2.0
@@ -58,7 +89,7 @@ repos:
           - --remove-empty-cells
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.3
+    rev: v0.8.4
     hooks:
       - id: ruff
         args: ["--extend-select", "I", "--fix"]
