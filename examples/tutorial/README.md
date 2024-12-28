@@ -27,5 +27,5 @@ pip install -r requirements.txt
 3. Run the example:
 
 ```bash
-python run.py
+python run.py # or run_async.py or run_openai.py
 ```
