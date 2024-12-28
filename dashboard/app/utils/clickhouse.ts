@@ -448,6 +448,7 @@ export async function queryMetricData(
       i.function_name = {function_name:String}
     ${limitClause}
   `;
+  console.log(query);
 
   const resultSet = await clickhouseClient.query({
     query,

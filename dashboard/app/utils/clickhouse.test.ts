@@ -13,7 +13,7 @@ test("checkClickhouseConnection", async () => {
   const result = await checkClickhouseConnection();
   expect(result).toBe(true);
 });
-test("queryBooleanMetricDataJson", async () => {
+test("queryBooleanMetricDataJsonInference", async () => {
   const result = await queryMetricData(
     "dashboard_fixture_extract_entities",
     "dashboard_fixture_exact_match",
@@ -26,7 +26,20 @@ test("queryBooleanMetricDataJson", async () => {
   expect(result.length).toBe(41);
 });
 
-test("queryBooleanMetricDataChat", async () => {
+test("queryBooleanMetricDataJsonEpisode", async () => {
+  const result = await queryMetricData(
+    "dashboard_fixture_extract_entities",
+    "dashboard_fixture_exact_match_episode",
+    "JsonInference",
+    "episode_id",
+    "boolean",
+    { filterGood: true, maximize: true },
+  );
+  // The fixture was written to have 29 rows with good boolean metric data that should be returned
+  expect(result.length).toBe(29);
+});
+
+test("queryBooleanMetricDataChatInference", async () => {
   const result = await queryMetricData(
     "dashboard_fixture_write_haiku",
     "dashboard_fixture_haiku_score",
@@ -39,7 +52,20 @@ test("queryBooleanMetricDataChat", async () => {
   expect(result.length).toBe(80);
 });
 
-test("countGoodBooleanMetricDataJson", async () => {
+test("queryBooleanMetricDataChatEpisode", async () => {
+  const result = await queryMetricData(
+    "dashboard_fixture_write_haiku",
+    "dashboard_fixture_haiku_score_episode",
+    "ChatInference",
+    "episode_id",
+    "boolean",
+    { filterGood: true, maximize: true },
+  );
+  // The fixture was written to have 9 rows with good boolean metric data
+  expect(result.length).toBe(9);
+});
+
+test("countGoodBooleanMetricDataJsonInference", async () => {
   const result = await countMetricData(
     "dashboard_fixture_extract_entities",
     "dashboard_fixture_exact_match",
@@ -52,7 +78,20 @@ test("countGoodBooleanMetricDataJson", async () => {
   expect(result).toBe(41);
 });
 
-test("countGoodBooleanMetricDataChat", async () => {
+test("countGoodBooleanMetricDataJsonEpisode", async () => {
+  const result = await countMetricData(
+    "dashboard_fixture_extract_entities",
+    "dashboard_fixture_exact_match_episode",
+    "JsonInference",
+    "episode_id",
+    "boolean",
+    { filterGood: true, maximize: true },
+  );
+  // The fixture should have 29 rows with good boolean metric data
+  expect(result).toBe(29);
+});
+
+test("countGoodBooleanMetricDataChatInference", async () => {
   const result = await countMetricData(
     "dashboard_fixture_write_haiku",
     "dashboard_fixture_haiku_score",
@@ -65,7 +104,20 @@ test("countGoodBooleanMetricDataChat", async () => {
   expect(result).toBe(80);
 });
 
-test("queryGoodFloatMetricDataJson", async () => {
+test("countGoodBooleanMetricDataChatEpisode", async () => {
+  const result = await countMetricData(
+    "dashboard_fixture_write_haiku",
+    "dashboard_fixture_haiku_score_episode",
+    "ChatInference",
+    "episode_id",
+    "boolean",
+    { filterGood: true, maximize: true },
+  );
+  // The fixture should have 9 rows with good boolean metric data
+  expect(result).toBe(9);
+});
+
+test("queryGoodFloatMetricDataJsonInference", async () => {
   const result = await queryMetricData(
     "dashboard_fixture_extract_entities",
     "dashboard_fixture_jaccard_similarity",
@@ -78,7 +130,20 @@ test("queryGoodFloatMetricDataJson", async () => {
   expect(result.length).toBe(54);
 });
 
-test("queryGoodFloatMetricDataChat", async () => {
+test("queryGoodFloatMetricDataJsonEpisode", async () => {
+  const result = await queryMetricData(
+    "dashboard_fixture_extract_entities",
+    "dashboard_fixture_jaccard_similarity_episode",
+    "JsonInference",
+    "episode_id",
+    "float",
+    { filterGood: true, maximize: true, threshold: 0.8 },
+  );
+  // The fixture should have 35 rows with float metric data above 0.8
+  expect(result.length).toBe(35);
+});
+
+test("queryGoodFloatMetricDataChatInference", async () => {
   const result = await queryMetricData(
     "dashboard_fixture_write_haiku",
     "dashboard_fixture_haiku_rating",
@@ -91,7 +156,20 @@ test("queryGoodFloatMetricDataChat", async () => {
   expect(result.length).toBe(67);
 });
 
-test("countGoodFloatMetricDataJson", async () => {
+test("queryGoodFloatMetricDataChatEpisode", async () => {
+  const result = await queryMetricData(
+    "dashboard_fixture_write_haiku",
+    "dashboard_fixture_haiku_rating_episode",
+    "ChatInference",
+    "episode_id",
+    "float",
+    { filterGood: true, maximize: true, threshold: 0.8 },
+  );
+  // The fixture should have 11 rows with float metric data above 0.8
+  expect(result.length).toBe(11);
+});
+
+test("countGoodFloatMetricDataJsonInference", async () => {
   const result = await countMetricData(
     "dashboard_fixture_extract_entities",
     "dashboard_fixture_jaccard_similarity",
@@ -104,7 +182,20 @@ test("countGoodFloatMetricDataJson", async () => {
   expect(result).toBe(54);
 });
 
-test("countGoodFloatMetricDataChat", async () => {
+test("countGoodFloatMetricDataJsonEpisode", async () => {
+  const result = await countMetricData(
+    "dashboard_fixture_extract_entities",
+    "dashboard_fixture_jaccard_similarity_episode",
+    "JsonInference",
+    "episode_id",
+    "float",
+    { filterGood: true, maximize: true, threshold: 0.8 },
+  );
+  // The fixture should have 35 rows with float metric data above 0.8
+  expect(result).toBe(35);
+});
+
+test("countGoodFloatMetricDataChatInference", async () => {
   const result = await countMetricData(
     "dashboard_fixture_write_haiku",
     "dashboard_fixture_haiku_rating",
@@ -115,6 +206,19 @@ test("countGoodFloatMetricDataChat", async () => {
   );
   // The fixture should have 67 rows with float metric data above 0.8
   expect(result).toBe(67);
+});
+
+test("countGoodFloatMetricDataChatEpisode", async () => {
+  const result = await countMetricData(
+    "dashboard_fixture_write_haiku",
+    "dashboard_fixture_haiku_rating_episode",
+    "ChatInference",
+    "episode_id",
+    "float",
+    { filterGood: true, maximize: true, threshold: 0.8 },
+  );
+  // The fixture should have 11 rows with float metric data above 0.8
+  expect(result).toBe(11);
 });
 
 test("queryDemonstrationDataJson", async () => {
@@ -186,6 +290,31 @@ test("queryDemonstrationDataChat", async () => {
   ]);
 });
 
+test("queryDemonstrationDataChat", async () => {
+  const result = await queryDemonstrationDataForFunction(
+    "dashboard_fixture_write_haiku",
+    "ChatInference",
+    undefined,
+  );
+  // The fixture should have 493 rows with demonstration data
+  expect(result.length).toBe(493);
+
+  // Check a selected inference retrieved to make sure it's a demonstration and not the inference itself
+  const selectedResults = result.filter((element) => {
+    if (element.episode_id === "0193fb9d-7a21-7c41-a428-4ca775426ab4")
+      return element;
+    return undefined;
+  });
+  expect(selectedResults.length).toBe(1);
+  const selectedResult = selectedResults[0];
+  expect(selectedResult.output).toStrictEqual([
+    {
+      type: "text",
+      text: "Alright, let's dive into the concept of virtue. Virtue often suggests moral excellence, goodness, and righteousness. Hyperbole could be utilized to emphasize the grandness or the celestial quality of virtue.\n\nNow, to construct a haiku:\n- I'll start with a 5-syllable line capturing a core element of virtue.\n- Then, I'll think of a 7-syllable line that incorporates hyperbole.\n- Lastly, I'll wrap it up with another 5-syllable line relating to virtue.\n\nHere is the haiku:\n\nHeart of purest gold,  \nMountains bow to its great light,  \nGuiding stars above.",
+    },
+  ]);
+});
+
 test("countDemonstrationDataJson", async () => {
   const result = await countDemonstrationDataForFunction(
     "dashboard_fixture_extract_entities",
@@ -222,7 +351,7 @@ test("countFeedbacksForMetric for demonstration type", async () => {
   expect(result).toBe(100);
 });
 
-test("countFeedbacksForMetric for float type", async () => {
+test("countFeedbacksForMetric for float type and inference level", async () => {
   const result = await countFeedbacksForMetric(
     "dashboard_fixture_write_haiku",
     {
@@ -244,7 +373,29 @@ test("countFeedbacksForMetric for float type", async () => {
   expect(result).toBe(491);
 });
 
-test("countFeedbacksForMetric for boolean type", async () => {
+test("countFeedbacksForMetric for float type and episode level", async () => {
+  const result = await countFeedbacksForMetric(
+    "dashboard_fixture_write_haiku",
+    {
+      type: "chat",
+      variants: {},
+      tools: [],
+      tool_choice: "none",
+      parallel_tool_calls: false,
+    },
+    "dashboard_fixture_haiku_rating_episode",
+    {
+      type: "float",
+      optimize: "max",
+      level: "episode",
+    },
+  );
+
+  // The fixture should have 85 rows for haiku rating
+  expect(result).toBe(85);
+});
+
+test("countFeedbacksForMetric for boolean type and inference level", async () => {
   const result = await countFeedbacksForMetric(
     "dashboard_fixture_extract_entities",
     {
@@ -261,6 +412,25 @@ test("countFeedbacksForMetric for boolean type", async () => {
 
   // The fixture should have 99 rows for exact match
   expect(result).toBe(99);
+});
+
+test("countFeedbacksForMetric for boolean type and episode level", async () => {
+  const result = await countFeedbacksForMetric(
+    "dashboard_fixture_extract_entities",
+    {
+      type: "json",
+      variants: {},
+    },
+    "dashboard_fixture_exact_match_episode",
+    {
+      type: "boolean",
+      optimize: "max",
+      level: "episode",
+    },
+  );
+
+  // The fixture should have 69 rows for exact match
+  expect(result).toBe(69);
 });
 
 test("queryAllInferencesForFunctionJson", async () => {
