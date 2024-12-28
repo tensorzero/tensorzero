@@ -4,13 +4,16 @@ This directory contains the code for the **[TensorZero Tutorial](https://www.ten
 
 ## Running an Example
 
-1. Launch the TensorZero Gateway and ClickHouse database:
+1. Set the `OPENAI_API_KEY` environment variable.
+   For the second example (Email Copilot), you will also need to set the `ANTHROPIC_API_KEY` environment variable.
+
+2. Launch the TensorZero Gateway and ClickHouse database:
 
 ```bash
 docker compose up
 ```
 
-2. Install the dependencies:
+3. Install the dependencies:
 
 ```bash
 uv venv
@@ -24,7 +27,7 @@ or
 pip install -r requirements.txt
 ```
 
-3. Run the example:
+4. Run the example:
 
 ```bash
 python run.py # or run_async.py or run_openai.py
