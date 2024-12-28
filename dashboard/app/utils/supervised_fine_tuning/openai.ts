@@ -3,7 +3,7 @@ import * as os from "os";
 import * as path from "path";
 import { createReadStream } from "fs";
 import OpenAI from "openai";
-import type { SFTFormValues } from "~/routes/optimization/fine-tuning/types";
+import type { SFTFormValues } from "~/routes/optimization/supervised-fine-tuning/types";
 import {
   getCuratedInferences,
   type ContentBlockOutput,

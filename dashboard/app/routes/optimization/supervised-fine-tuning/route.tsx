@@ -6,12 +6,12 @@ import {
   SFTFormValuesResolver,
 } from "./types";
 import { v7 as uuid } from "uuid";
-import type { SFTJob } from "~/utils/fine_tuning/common";
+import type { SFTJob } from "~/utils/supervised_fine_tuning/common";
 import { models } from "./model_options";
 import { useRevalidator } from "react-router";
 import { useForm } from "react-hook-form";
 import { redirect } from "react-router";
-import { launch_sft_job } from "~/utils/fine_tuning/client";
+import { launch_sft_job } from "~/utils/supervised_fine_tuning/client";
 import type { ChatCompletionConfig } from "~/utils/config/variant";
 import { useConfig } from "~/context/config";
 import { FunctionSelector } from "./FunctionSelector";
@@ -34,8 +34,11 @@ import type { Config } from "~/utils/config";
 
 export const meta: MetaFunction = () => {
   return [
-    { title: "TensorZero Fine-Tuning Dashboard" },
-    { name: "description", content: "Fine-Tuning Optimization Dashboard" },
+    { title: "TensorZero Supervised Fine-Tuning Dashboard" },
+    {
+      name: "description",
+      content: "Supervised Fine-Tuning Optimization Dashboard",
+    },
   ];
 };
 
@@ -100,11 +103,15 @@ export async function action({ request }: Route.ActionArgs) {
   const job = await launch_sft_job(validatedData);
   jobStore[validatedData.jobId] = job;
 
-  return redirect(`/optimization/fine-tuning/${validatedData.jobId}`);
+  return redirect(
+    `/optimization/supervised-fine-tuning/${validatedData.jobId}`,
+  );
 }
 
 // Renders the fine-tuning form and status info.
-export default function FineTuning({ loaderData }: Route.ComponentProps) {
+export default function SupervisedFineTuning({
+  loaderData,
+}: Route.ComponentProps) {
   const config = useConfig();
   const { status, result, modelProvider } = loaderData;
   const revalidator = useRevalidator();
@@ -134,7 +141,7 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
     <div className="min-h-screen bg-gray-50">
       <main className="p-4">
         <h2 className="scroll-m-20 border-b pb-2 text-3xl font-semibold tracking-tight first:mt-0">
-          Fine-Tuning
+          Supervised Fine-Tuning
         </h2>
         {status === "idle" && (
           <FineTuningForm
