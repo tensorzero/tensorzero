@@ -73,7 +73,7 @@ repos:
         pass_filenames: false
 
       - id: tsc
-        name: typescript
+        name: tsc
         entry: bash -c 'cd dashboard && tsc'
         language: node
         types_or: [ts, tsx]
