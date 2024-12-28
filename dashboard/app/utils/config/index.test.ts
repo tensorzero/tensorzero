@@ -87,6 +87,12 @@ test("parse e2e config", async () => {
     throw new Error("Task success metric not found");
   }
 
+  // Test demonstration metric is added
+  const demonstrationMetric = validatedConfig.metrics["demonstration"];
+  expect(demonstrationMetric).toBeDefined();
+  expect(demonstrationMetric.type).toBe("demonstration");
+  expect(demonstrationMetric.level).toBe("inference");
+
   // Test a tool config
   const getTemperatureTool = validatedConfig.tools["get_temperature"];
   expect(getTemperatureTool.description).toBe(

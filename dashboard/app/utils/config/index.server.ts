@@ -18,6 +18,15 @@ export async function loadConfig(config_path: string): Promise<Config> {
 
   const loadedConfig = await validatedConfig.load(config_path);
 
+  // Add demonstration metric to the config
+  loadedConfig.metrics = {
+    ...loadedConfig.metrics,
+    demonstration: {
+      type: "demonstration" as const,
+      level: "inference" as const,
+    },
+  };
+
   return loadedConfig;
 }
 

@@ -6,12 +6,12 @@ import {
   SFTFormValuesResolver,
 } from "./types";
 import { v7 as uuid } from "uuid";
-import type { SFTJob } from "~/utils/fine_tuning/common";
+import type { SFTJob } from "~/utils/supervised_fine_tuning/common";
 import { models } from "./model_options";
 import { useRevalidator } from "react-router";
 import { useForm } from "react-hook-form";
 import { redirect } from "react-router";
-import { launch_sft_job } from "~/utils/fine_tuning/client";
+import { launch_sft_job } from "~/utils/supervised_fine_tuning/client";
 import type { ChatCompletionConfig } from "~/utils/config/variant";
 import { useConfig } from "~/context/config";
 import { FunctionSelector } from "./FunctionSelector";
@@ -34,8 +34,11 @@ import type { Config } from "~/utils/config";
 
 export const meta: MetaFunction = () => {
   return [
-    { title: "TensorZero Fine-Tuning Dashboard" },
-    { name: "description", content: "Fine-Tuning Optimization Dashboard" },
+    { title: "TensorZero Supervised Fine-Tuning Dashboard" },
+    {
+      name: "description",
+      content: "Supervised Fine-Tuning Optimization Dashboard",
+    },
   ];
 };
 
@@ -100,11 +103,15 @@ export async function action({ request }: Route.ActionArgs) {
   const job = await launch_sft_job(validatedData);
   jobStore[validatedData.jobId] = job;
 
-  return redirect(`/optimization/fine-tuning/${validatedData.jobId}`);
+  return redirect(
+    `/optimization/supervised-fine-tuning/${validatedData.jobId}`,
+  );
 }
 
 // Renders the fine-tuning form and status info.
-export default function FineTuning({ loaderData }: Route.ComponentProps) {
+export default function SupervisedFineTuning({
+  loaderData,
+}: Route.ComponentProps) {
   const config = useConfig();
   const { status, result, modelProvider } = loaderData;
   const revalidator = useRevalidator();
@@ -134,7 +141,7 @@ export default function FineTuning({ loaderData }: Route.ComponentProps) {
     <div className="min-h-screen bg-gray-50">
       <main className="p-4">
         <h2 className="scroll-m-20 border-b pb-2 text-3xl font-semibold tracking-tight first:mt-0">
-          Fine-Tuning
+          Supervised Fine-Tuning
         </h2>
         {status === "idle" && (
           <FineTuningForm
@@ -209,28 +216,50 @@ function FineTuningForm({
     curatedInferenceCount: null,
   });
 
-  const fetchCounts = async (functionName?: string, metricName?: string) => {
+  // Add this effect to watch for fetcher data changes
+  // This is needed because fetcher.load is not async, so it doesn't return a promise
+  // and we need to watch for data changes via the fetcher.data property
+  useEffect(() => {
+    if (fetcher.data) {
+      setCounts(fetcher.data as CountsData);
+    }
+  }, [fetcher.data]);
+
+  const fetchCounts = (
+    functionName?: string,
+    metricName?: string,
+    threshold?: number,
+  ) => {
     const params = new URLSearchParams();
     if (functionName) params.set("function", functionName);
     if (metricName) params.set("metric", metricName);
+    if (threshold) params.set("threshold", String(threshold));
 
-    const response = await fetch(`/api/curated_inferences/count?${params}`);
-    const loaderData = (await response.json()) as CountsData;
-    setCounts(loaderData);
-    /* Type-safe way to do this (pending [this issue](https://github.com/remix-run/react-router/issues/12635))
-     const response = await fetch(`/api/curated_inferences/count?${params}`);
-    const { loaderData } =
-      (await response.json()) as CuratedInferencesCount.ComponentProps;
-    setCounts(loaderData as CountsData);
-    */
+    fetcher.load(`/api/curated_inferences/count?${params}`);
   };
 
   const handleFunctionChange = (value: string) => {
-    fetchCounts(value, form.getValues("metric") || undefined);
+    fetchCounts(
+      value,
+      form.getValues("metric") || undefined,
+      form.getValues("threshold") || undefined,
+    );
   };
 
-  const handleMetricChange = (value: string) => {
-    fetchCounts(form.getValues("function") || undefined, value);
+  const handleMetricChange = (value: string | null) => {
+    fetchCounts(
+      form.getValues("function") || undefined,
+      value || undefined,
+      form.getValues("threshold") || undefined,
+    );
+  };
+
+  const handleThresholdChange = (value: number) => {
+    fetchCounts(
+      form.getValues("function") || undefined,
+      form.getValues("metric") || undefined,
+      value,
+    );
   };
 
   const getChatCompletionVariantsForFunction = (): Record<
@@ -252,11 +281,18 @@ function FineTuningForm({
     );
   };
 
+  // Sets the max samples limit based on the number of curatedInferences (if available) or inferences (if available)
+  // This means it will change when the function is selected or the metric is changed to something that actually curates inferences (i.e. not None)
   useEffect(() => {
-    if (counts.inferenceCount !== null) {
+    if (counts.curatedInferenceCount !== null) {
+      form.setValue(
+        "maxSamples",
+        Math.min(100000, counts.curatedInferenceCount),
+      );
+    } else if (counts.inferenceCount !== null) {
       form.setValue("maxSamples", Math.min(100000, counts.inferenceCount));
     }
-  }, [counts.inferenceCount, form]);
+  }, [counts.curatedInferenceCount, counts.inferenceCount, form]);
 
   function getButtonText() {
     switch (submissionPhase) {
@@ -313,6 +349,7 @@ function FineTuningForm({
               curatedInferenceCount={counts.curatedInferenceCount}
               config={config}
               onMetricChange={handleMetricChange}
+              onThresholdChange={handleThresholdChange}
             />
             {errors.metric && (
               <p className="text-red-500 text-sm">{errors.metric.message}</p>
@@ -325,7 +362,10 @@ function FineTuningForm({
 
             <ModelSelector control={form.control} models={models} />
 
-            <AdvancedParametersAccordion control={form.control} />
+            <AdvancedParametersAccordion
+              control={form.control}
+              maxSamplesLimit={counts.inferenceCount ?? undefined}
+            />
           </div>
 
           <Button type="submit" disabled={submissionPhase !== "idle"}>
