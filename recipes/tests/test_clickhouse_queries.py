@@ -7,7 +7,7 @@ from clickhouse_connect import get_client
 from tensorzero.util import uuid7
 
 
-def test_double_feedback_query():
+def test_double_feedback_query() -> None:
     """
     Most fine-tuning recipes will use a query that pulls all inference for a function and the
     feedback associated with that inference, if the feedback is above / below a certain threshold.
@@ -100,4 +100,4 @@ def test_double_feedback_query():
     assert result.iloc[0]["input"] == "test_input"
     assert result.iloc[0]["output"] == "test_output"
     assert result.iloc[0]["value"] == 4.0
-    assert result.iloc[0]["episode_id"] == UUID(inference["episode_id"])
+    assert result.iloc[0]["episode_id"] == UUID(str(inference["episode_id"]))
