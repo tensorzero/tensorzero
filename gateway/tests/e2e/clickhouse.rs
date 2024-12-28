@@ -5,7 +5,7 @@ use gateway::clickhouse_migration_manager::migrations::migration_0003::Migration
 use gateway::clickhouse_migration_manager::migrations::migration_0004::Migration0004;
 use gateway::clickhouse_migration_manager::migrations::migration_0005::Migration0005;
 use gateway::clickhouse_migration_manager::migrations::migration_0006::Migration0006;
-use gateway::clickhouse_migration_manager::migrations::migration_0007::Migration0007;
+use gateway::clickhouse_migration_manager::migrations::migration_0008::Migration0007;
 use gateway::{
     clickhouse::ClickHouseConnectionInfo,
     clickhouse_migration_manager::migrations::migration_0001::Migration0001,

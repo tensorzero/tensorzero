@@ -11,7 +11,7 @@ use migrations::migration_0003::Migration0003;
 use migrations::migration_0004::Migration0004;
 use migrations::migration_0005::Migration0005;
 use migrations::migration_0006::Migration0006;
-use migrations::migration_0007::Migration0007;
+use migrations::migration_0008::Migration0007;
 
 pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     // This is a no-op if the database already exists
