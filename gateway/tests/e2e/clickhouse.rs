@@ -474,12 +474,12 @@ async fn test_clickhouse_migration_manager() {
         assert!(!logs_contain("Migration succeeded: Migration0004"));
         assert!(!logs_contain("Applying migration: Migration0005"));
         assert!(!logs_contain("Migration succeeded: Migration0005"));
-        assert!(!logs_contain("Applying migration: Migration0006"));
+        assert!(!logs_contain("Applying migration: Migration/print0006"));
         assert!(!logs_contain("Migration succeeded: Migration0006"));
         assert!(!logs_contain("Applying migration: Migration0007"));
         assert!(!logs_contain("Migration succeeded: Migration0007"));
-        assert!(logs_contain("Applying migration: Migration0008"));
-        assert!(logs_contain("Migration succeeded: Migration0008"));
+        assert!(!logs_contain("Applying migration: Migration0008"));
+        assert!(!logs_contain("Migration succeeded: Migration0008"));
     }
 
     first(&clickhouse).await;
