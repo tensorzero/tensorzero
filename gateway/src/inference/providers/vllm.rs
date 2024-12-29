@@ -469,4 +469,34 @@ mod tests {
             .to_string()
             .contains("TensorZero does not support tool use with vLLM"));
     }
+
+    #[test]
+    fn test_credential_to_vllm_credentials() {
+        // Test Static credential
+        let generic = Credential::Static(SecretString::from("test_key"));
+        let creds: VLLMCredentials = VLLMCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, VLLMCredentials::Static(_)));
+
+        // Test Dynamic credential
+        let generic = Credential::Dynamic("key_name".to_string());
+        let creds = VLLMCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, VLLMCredentials::Dynamic(_)));
+
+        // Test Missing credential (test mode)
+        #[cfg(any(test, feature = "e2e_tests"))]
+        {
+            let generic = Credential::Missing;
+            let creds = VLLMCredentials::try_from(generic).unwrap();
+            assert!(matches!(creds, VLLMCredentials::None));
+        }
+
+        // Test invalid type
+        let generic = Credential::FileContents(SecretString::from("test"));
+        let result = VLLMCredentials::try_from(generic);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err().get_owned_details(),
+            ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
+        ));
+    }
 }

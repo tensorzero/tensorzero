@@ -467,4 +467,34 @@ mod tests {
     fn test_together_api_base() {
         assert_eq!(TOGETHER_API_BASE.as_str(), "https://api.together.xyz/v1");
     }
+    #[test]
+    fn test_credential_to_together_credentials() {
+        // Test Static credential
+        let generic = Credential::Static(SecretString::from("test_key"));
+        let creds: TogetherCredentials = TogetherCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, TogetherCredentials::Static(_)));
+
+        // Test Dynamic credential
+        let generic = Credential::Dynamic("key_name".to_string());
+        let creds = TogetherCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, TogetherCredentials::Dynamic(_)));
+
+        // Test Missing credential (test mode)
+        #[cfg(any(test, feature = "e2e_tests"))]
+        {
+            let generic = Credential::Missing;
+            let creds = TogetherCredentials::try_from(generic).unwrap();
+            assert!(matches!(creds, TogetherCredentials::None));
+        }
+
+        // Test invalid type
+        let generic = Credential::FileContents(SecretString::from("test"));
+        let result = TogetherCredentials::try_from(generic);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err().get_owned_details(),
+            ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
+        ));
+    }
+   
 }

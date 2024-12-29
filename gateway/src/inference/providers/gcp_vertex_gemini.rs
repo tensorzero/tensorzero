@@ -78,13 +78,6 @@ impl TryFrom<(Credential, &str)> for GCPVertexCredentials {
     
     fn try_from((credentials, model): (Credential, &str)) -> Result<Self, Error> {
         match credentials {
-            Credential::Static(value) => Ok(GCPVertexCredentials::Static(
-                GCPServiceAccountCredentials::from_path(value.expose_secret()).map_err(|e| {
-                    Error::new(ErrorDetails::GCPCredentials {
-                        message: format!("Failed to load GCP credentials: {}", e),
-                    })
-                })?,
-            )),
             Credential::FileContents(file_content) => Ok(GCPVertexCredentials::Static(
                 GCPServiceAccountCredentials::from_json_str(file_content.expose_secret()).map_err(|e| {
                     Error::new(ErrorDetails::GCPCredentials {
@@ -184,7 +177,7 @@ impl<'a> Claims<'a> {
 }
 
 impl GCPServiceAccountCredentials {
-    // Parse a JSON string into a GCPServiceAccountCredentials struct.
+    // Parse a JSON string into a GCPServiceAccountCredentials struct that can be used to sign requests.
     pub fn from_json_str(credential_str: &str) -> Result<Self,Error> {
         let credential_value: Value = serde_json::from_str(credential_str).map_err(|e| {
             Error::new(ErrorDetails::GCPCredentials {
@@ -236,17 +229,6 @@ impl GCPServiceAccountCredentials {
             }
             .into()),
         }
-    }
-
-    /// Given a path to a JSON key taken from a GCP service account, load the credentials needed to sign requests.
-    pub fn from_path(path: &str) -> Result<Self, Error> {
-        let credential_str = std::fs::read_to_string(path).map_err(|e| {
-            Error::new(ErrorDetails::GCPCredentials {
-                message: format!("Failed to read GCP Vertex Gemini credentials: {e}"),
-            })
-        })?;
-
-        Self::from_json_str(&credential_str)   
     }
 
     // Get a signed JWT token for the given audience valid from the current time.

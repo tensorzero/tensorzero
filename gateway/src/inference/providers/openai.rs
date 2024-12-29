@@ -2591,4 +2591,38 @@ mod tests {
         let result = tensorzero_to_openai_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
     }
+    #[test]
+    fn test_try_from_openai_credentials() {
+        // Test Static credentials
+        let generic = Credential::Static(SecretString::from("test_key"));
+        let creds = OpenAICredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, OpenAICredentials::Static(_)));
+ 
+        // Test Dynamic credentials 
+        let generic = Credential::Dynamic("key_name".to_string());
+        let creds = OpenAICredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, OpenAICredentials::Dynamic(_)));
+ 
+        // Test None credentials
+        let generic = Credential::None;
+        let creds = OpenAICredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, OpenAICredentials::None));
+ 
+        // Test Missing credentials (in test mode)
+        #[cfg(any(test, feature = "e2e_tests"))]
+        {
+            let generic = Credential::Missing;
+            let creds = OpenAICredentials::try_from(generic).unwrap();
+            assert!(matches!(creds, OpenAICredentials::None));
+        }
+ 
+        // Test invalid credential type
+        let generic = Credential::FileContents(SecretString::from("test"));
+        let result = OpenAICredentials::try_from(generic);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err().get_owned_details(),
+            ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
+        ));
+    }
 }

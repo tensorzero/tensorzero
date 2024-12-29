@@ -2328,4 +2328,35 @@ mod tests {
         let result = prefill_json_chunk_response(chunk.clone());
         assert_eq!(result, chunk);
     }
+
+    #[test]
+    fn test_credential_to_anthropic_credentials() {
+        // Test Static credential
+        let generic = Credential::Static(SecretString::from("test_key"));
+        let creds = AnthropicCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, AnthropicCredentials::Static(_)));
+
+        // Test Dynamic credential
+        let generic = Credential::Dynamic("key_name".to_string());
+        let creds = AnthropicCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, AnthropicCredentials::Dynamic(_)));
+
+        // Test Missing credential (test mode)
+        #[cfg(any(test, feature = "e2e_tests"))]
+        {
+            let generic = Credential::Missing;
+            let creds = AnthropicCredentials::try_from(generic).unwrap();
+            assert!(matches!(creds, AnthropicCredentials::None));
+        }
+
+        // Test invalid type
+        let generic = Credential::FileContents(SecretString::from("test"));
+        let result = AnthropicCredentials::try_from(generic);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err().get_owned_details(),
+            ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
+        ));
+    }
+    
 }

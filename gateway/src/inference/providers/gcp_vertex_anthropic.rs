@@ -949,6 +949,7 @@ mod tests {
 
     use super::*;
 
+    use secrecy::SecretString;
     use serde_json::json;
 
     use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
@@ -2196,4 +2197,55 @@ mod tests {
             }]
         );
     }
+  
+
+    #[test]
+    fn test_credential_to_gcp_vertex_credentials() {
+        // Test valid JSON file contents using the sample from dev guide
+        let json_content = r#"{
+            "type": "service_account",
+            "project_id": "none",
+            "private_key_id": "none",
+            "private_key": "-----BEGIN RSA PRIVATE KEY-----\nMIICXAIBAAKBgQDAKxbF0dfne7PmPwpFEcSi2JFBeO98DXW7bimAPE6dHHCkDvoU\nlD/fy8svrPU6xsCYxM3LfKY/F+s/P+FizXUQ6eDu5ipYCRfweiQ4gqms+zROeORA\nJez3zelPQ7vY/MYCnp0LYYCH2HTyBeMFIX+Rgwjral495j0O6uV7cjgneQIDAQAB\nAoGAOXcpMjLUS6bUX1AOtCTiFoiIt3mAtCoaQNhqlKx0Hct5a7YG1syWZUg+FJ22\nH8N7qLOBjw5RcKCoepuRvMgP71+Hp03Xt8WSpN1Evl6EllwtmTtVTTeVS8fjP7xL\nhc7XemtDPY/81cBuj+HCit9/+44HZCT9V3dV6D9IWWnc3mECQQD1sTvcNAsh8idv\nMS12jmqdaOYTnJM1kFiddRvdkfChADq35x5bzV/oORYAmfurjuPN7ssHvrEEjmew\nbvi62MYtAkEAyDsAKrWsAfJQKbraTraJE7r7mTWxvAAYUONKKPZV2BXPzrTD/WMI\nn7z95pUu8x7anck9qqF6RYplo4fFLQKh/QJBANYwsszgGix33WUUbFwFAHFGN/40\n7CkwM/DhXW+mgS768jXNKSxDOS9MRSA1HbCMm5C2cw3Hcq9ULpUjyXeq7+kCQDx1\nvFYpJzgrP9Np7XNpILkJc+FOWk2nRbBfAUyfHUqzQ11qLef8GGWLfqs6jsOwpFiS\npIE6Yx5ObORVIc+2hM0CQE/pVhPEZ3boB8xoc9+3YL+++0yR2uMHoTY/q6r96kPC\n6C1oSRcDX/MUDOzC5HCUuwTYhNoN3FYkB5fov32BUbQ=\n-----END RSA PRIVATE KEY-----\n",
+            "client_email": "none",
+            "client_id": "114469363779822440226",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/vertex%40tensorzero-public.iam.gserviceaccount.com",
+            "universe_domain": "googleapis.com"
+        }"#;
+        let generic = Credential::FileContents(SecretString::from(json_content));
+        let creds = GCPVertexCredentials::try_from((generic, "GCPVertexGemini")).unwrap();
+        assert!(matches!(creds, GCPVertexCredentials::Static(_)));
+
+        // Test Dynamic credential
+        let generic = Credential::Dynamic("key_name".to_string());
+        let creds = GCPVertexCredentials::try_from((generic, "GCPVertexGemini")).unwrap();
+        assert!(matches!(creds, GCPVertexCredentials::Dynamic(_)));
+
+        // Test Missing credential (test mode)
+        #[cfg(any(test, feature = "e2e_tests"))]
+        {
+            let generic = Credential::Missing;
+            let creds = GCPVertexCredentials::try_from((generic, "GCPVertexGemini")).unwrap();
+            assert!(matches!(creds, GCPVertexCredentials::None));
+        }
+
+        // Test invalid JSON content
+        let invalid_json = "invalid json";
+        let generic = Credential::FileContents(SecretString::from(invalid_json));
+        let result = GCPVertexCredentials::try_from((generic, "GCPVertexGemini"));
+        assert!(result.is_err());
+        let err = result.unwrap_err().get_owned_details();
+        assert!(matches!(err, ErrorDetails::GCPCredentials { message } if message.contains("Failed to load GCP credentials")));
+
+        // Test invalid credential type (Static)
+        let generic = Credential::Static(SecretString::from("test"));
+        let result = GCPVertexCredentials::try_from((generic, "GCPVertexGemini"));
+        assert!(result.is_err());
+        let err = result.unwrap_err().get_owned_details();
+        assert!(matches!(err, ErrorDetails::GCPCredentials { message } if message.contains("Invalid credential_location")));
+    }
+    
 }
