@@ -1,6 +1,7 @@
 import { type RouteConfig, route } from "@react-router/dev/routes";
 
 export default [
+  route("/", "routes/index.tsx"),
   route(
     "optimization/supervised-fine-tuning/:job_id?",
     "routes/optimization/supervised-fine-tuning/route.tsx",
