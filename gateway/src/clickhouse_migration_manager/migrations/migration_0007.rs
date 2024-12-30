@@ -47,9 +47,9 @@ impl<'a> Migration for Migration0007<'a> {
     }
 
     /// Check if the migration has already been applied
-    /// This should be equivalent to checking if `InferenceByEpisode` exists
+    /// This should be equivalent to checking if `InferenceByEpisodeId` exists
     async fn should_apply(&self) -> Result<bool, Error> {
-        let exists = check_table_exists(self.clickhouse, "InferenceByEpisode", "0007").await?;
+        let exists = check_table_exists(self.clickhouse, "InferenceByEpisodeId", "0007").await?;
         if !exists {
             return Ok(true);
         }
@@ -68,16 +68,16 @@ impl<'a> Migration for Migration0007<'a> {
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| {
                 Error::new(ErrorDetails::ClickHouseMigration {
-                    id: "0001".to_string(),
+                    id: "0007".to_string(),
                     message: e.to_string(),
                 })
             })?
             + view_offset)
             .as_secs();
 
-        // Create the `InferenceByEpisode` table
+        // Create the `InferenceByEpisodeId` table
         let query = r#"
-            CREATE TABLE IF NOT EXISTS InferenceByEpisode
+            CREATE TABLE IF NOT EXISTS InferenceByEpisodeId
             (
                 episode_id UUID,
                 id UUID,
@@ -90,11 +90,11 @@ impl<'a> Migration for Migration0007<'a> {
         "#;
         let _ = self.clickhouse.run_query(query.to_string()).await?;
 
-        // Create the materialized view for the `InferenceByEpisode` table from ChatInference
+        // Create the materialized view for the `InferenceByEpisodeId` table from ChatInference
         let query = format!(
             r#"
-            CREATE MATERIALIZED VIEW ChatInferenceByEpisodeView
-            TO InferenceByEpisode
+            CREATE MATERIALIZED VIEW ChatInferenceByEpisodeIdView
+            TO InferenceByEpisodeId
             AS
                 SELECT
                     episode_id,
@@ -109,11 +109,11 @@ impl<'a> Migration for Migration0007<'a> {
         );
         let _ = self.clickhouse.run_query(query).await?;
 
-        // Create the materialized view for the `InferenceByEpisode` table from JsonInference
+        // Create the materialized view for the `InferenceByEpisodeId` table from JsonInference
         let query = format!(
             r#"
-            CREATE MATERIALIZED VIEW JsonInferenceByEpisodeView
-            TO InferenceByEpisode
+            CREATE MATERIALIZED VIEW JsonInferenceByEpisodeIdView
+            TO InferenceByEpisodeId
             AS
                 SELECT
                     episode_id,
@@ -135,7 +135,7 @@ impl<'a> Migration for Migration0007<'a> {
         let insert_chat_inference = async {
             let query = format!(
                 r#"
-                INSERT INTO InferenceByEpisode
+                INSERT INTO InferenceByEpisodeId
                 SELECT
                     episode_id,
                     id,
@@ -153,7 +153,7 @@ impl<'a> Migration for Migration0007<'a> {
         let insert_json_inference = async {
             let query = format!(
                 r#"
-                INSERT INTO InferenceByEpisode
+                INSERT INTO InferenceByEpisodeId
                 SELECT
                     episode_id,
                     id,
@@ -177,10 +177,10 @@ impl<'a> Migration for Migration0007<'a> {
         "\
             -- Drop the materialized views\n\
             DROP VIEW IF EXISTS ChatInferenceByEpisodeView;\n\
-            DROP VIEW IF EXISTS JsonInferenceByEpisodeView;\n\
+            DROP VIEW IF EXISTS JsonInferenceByEpisodeIdView;\n\
             \n\
             -- Drop the table\n\
-            DROP TABLE IF EXISTS InferenceByEpisode;\n\
+            DROP TABLE IF EXISTS InferenceByEpisodeId;\n\
             "
         .to_string()
     }
