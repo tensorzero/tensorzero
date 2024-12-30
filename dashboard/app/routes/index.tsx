@@ -57,8 +57,8 @@ export default function Home() {
           <p className="text-lg text-muted-foreground mb-6">
             Explore our documentation to get the most out of TensorZero.
           </p>
-          <Button size="default" variant="secondary" asChild>
-            <Link to="https://www.tensorzero.com/docs">
+          <Button size="default" variant="default" asChild>
+            <Link to="https://www.tensorzero.com/docs" target="_blank">
               View Documentation <BookOpen className="ml-2 h-4 w-4" />
             </Link>
           </Button>
