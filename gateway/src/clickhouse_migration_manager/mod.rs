@@ -11,6 +11,7 @@ use migrations::migration_0003::Migration0003;
 use migrations::migration_0004::Migration0004;
 use migrations::migration_0005::Migration0005;
 use migrations::migration_0006::Migration0006;
+use migrations::migration_0007::Migration0007;
 
 pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     // This is a no-op if the database already exists
@@ -27,6 +28,11 @@ pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     run_migration(&Migration0004 { clickhouse }).await?;
     run_migration(&Migration0005 { clickhouse }).await?;
     run_migration(&Migration0006 { clickhouse }).await?;
+    run_migration(&Migration0007 {
+        clickhouse,
+        clean_start,
+    })
+    .await?;
     // NOTE:
     // When we add more migrations, we need to add a test that applies them in a cumulative (N^2) way.
     //
