@@ -1,0 +1,16 @@
+[models.default_model]
+routing = ["openai"]
+
+[models.default_model.providers.openai]
+type = "openai"
+model_name = "gpt-4"
+
+[functions.retrieve_context]
+type = "python"
+
+[functions.answer_question]
+type = "chat"
+
+[functions.answer_question.variants.default_model]
+type = "chat_completion"
+model = "default_model"
