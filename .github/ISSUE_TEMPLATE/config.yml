@@ -1,0 +1,4 @@
+contact_links:
+  - name: Feature Requests, Bug Reports, Questions
+    url: https://github.com/tensorzero/tensorzero/discussions/new/choose
+    about: Please open a discussion for any feature requests, bug reports, or questions. The team will triage and create an issue if appropriate.
