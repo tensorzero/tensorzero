@@ -1,4 +1,10 @@
 contact_links:
-  - name: Feature Requests, Bug Reports, Questions
-    url: https://github.com/tensorzero/tensorzero/discussions/new/choose
-    about: Please open a discussion for any feature requests, bug reports, or questions. The team will triage and create an issue if appropriate.
+  - name: Submit a feature request
+    url: https://github.com/tensorzero/tensorzero/discussions/new?category=feature-requests
+    about: Share ideas for new features and discuss how they should be implemented.
+  - name: Report a bug
+    url: https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports
+    about: Found a bug? Please share detailed information to help us identify, reproduce, and fix the issue.
+  - name: Ask a question
+    url: https://github.com/tensorzero/tensorzero/discussions/new?category=help
+    about: Get support from maintainers and experienced community members.
