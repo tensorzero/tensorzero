@@ -124,33 +124,41 @@ function formatProvider(provider: ProviderType): {
   }
 }
 
-
-export function ModelSelector({ control, models: initialModels }: { control: Control<SFTFormValues>; models: ModelOption[] }) {
+export function ModelSelector({
+  control,
+  models: initialModels,
+}: {
+  control: Control<SFTFormValues>;
+  models: ModelOption[];
+}) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [currentModels, setCurrentModels] = useState(initialModels);
 
   const handleInputChange = (input: string) => {
     setInputValue(input);
-    
+
     if (input) {
       const newModels = [...initialModels];
 
       // Pick all providers from the schema
       // TODO: remove mistral filter once we support it.
-      const providers = (ModelOptionSchema.shape.provider.options as ModelOption["provider"][]).filter(provider => provider !== "mistral");
-      
-      providers.forEach(provider => {
+      const providers = (
+        ModelOptionSchema.shape.provider.options as ModelOption["provider"][]
+      ).filter((provider) => provider !== "mistral");
+
+      providers.forEach((provider) => {
         const modelExists = initialModels.some(
-          m => m.displayName.toLowerCase() === input.toLowerCase() && 
-          m.provider === provider
+          (m) =>
+            m.displayName.toLowerCase() === input.toLowerCase() &&
+            m.provider === provider,
         );
-        
+
         if (!modelExists) {
           newModels.push({
             displayName: `Other: ${input}`,
             name: input,
-            provider: provider
+            provider: provider,
           });
         }
       });
@@ -165,16 +173,11 @@ export function ModelSelector({ control, models: initialModels }: { control: Con
     }
   };
 
-  const isOtherModel = (model: ModelOption) => 
-    !initialModels.some(m => 
-      m.displayName === model.displayName && 
-      m.provider === model.provider
+  const isOtherModel = (model: ModelOption) =>
+    !initialModels.some(
+      (m) =>
+        m.displayName === model.displayName && m.provider === model.provider,
     );
-
-  const getDisplayName = (model: ModelOption) => {
-    if (!model) return "Select a model...";
-    return isOtherModel(model) ? model.displayName : model.displayName;
-  };
 
   return (
     <FormField
@@ -194,7 +197,8 @@ export function ModelSelector({ control, models: initialModels }: { control: Con
                     className="w-full justify-between font-normal"
                   >
                     <div>
-                      {getDisplayName(field.value)} {field.value?.provider && (
+                      {field.value?.displayName ?? "Select a model..."}
+                      {field.value?.provider && (
                         <span
                           className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                             formatProvider(field.value.provider).className
@@ -207,7 +211,10 @@ export function ModelSelector({ control, models: initialModels }: { control: Con
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start">
+                <PopoverContent
+                  className="p-0 w-[var(--radix-popover-trigger-width)]"
+                  align="start"
+                >
                   <Command>
                     <CommandInput
                       placeholder="Search models..."
@@ -216,7 +223,9 @@ export function ModelSelector({ control, models: initialModels }: { control: Con
                       className="h-9"
                     />
                     <CommandList>
-                      <CommandEmpty className="py-2 px-4 text-sm">No model found.</CommandEmpty>
+                      <CommandEmpty className="py-2 px-4 text-sm">
+                        No model found.
+                      </CommandEmpty>
                       <CommandGroup>
                         {currentModels.map((model) => (
                           <CommandItem
@@ -233,10 +242,11 @@ export function ModelSelector({ control, models: initialModels }: { control: Con
                               <Check
                                 className={cn(
                                   "mr-2 h-4 w-4",
-                                  field.value?.displayName === model.displayName && 
-                                  field.value?.provider === model.provider
+                                  field.value?.displayName ===
+                                    model.displayName &&
+                                    field.value?.provider === model.provider
                                     ? "opacity-100"
-                                    : "opacity-0"
+                                    : "opacity-0",
                                 )}
                               />
                               <span>{model.displayName}</span>
@@ -262,4 +272,3 @@ export function ModelSelector({ control, models: initialModels }: { control: Con
     />
   );
 }
-
