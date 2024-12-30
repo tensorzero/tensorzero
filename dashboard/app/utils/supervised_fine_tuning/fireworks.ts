@@ -1,5 +1,5 @@
 /**
- * This module handles fine-tuning and deployment of models using the Fireworks AI API.
+ * This module handles supervised fine-tuning and deployment of models using the Fireworks AI API.
  *
  * The high-level flow is:
  * 1. User submits fine-tuning job configuration via the UI form (SFTFormValues)
@@ -20,7 +20,7 @@
  * result handling, and deployment management.
  */
 
-import type { SFTFormValues } from "~/routes/optimization/fine-tuning/types";
+import type { SFTFormValues } from "~/routes/optimization/supervised-fine-tuning/types";
 import type { JsExposedEnv } from "../minijinja/pkg/minijinja_bindings";
 import { v7 } from "uuid";
 import type {
@@ -84,7 +84,8 @@ export class FireworksSFTJob extends SFTJob {
       data.function,
       config.functions[data.function],
       data.metric,
-      config.metrics[data.metric],
+      data.metric ? config.metrics[data.metric] : null,
+      data.threshold,
       data.maxSamples,
     );
     if (!curatedInferences || curatedInferences.length === 0) {

@@ -9,10 +9,11 @@ repos:
       - id: check-merge-conflict
       - id: check-symlinks
       - id: check-toml
+      - id: check-vcs-permalinks
       - id: check-xml
       - id: check-yaml
       - id: detect-private-key
-        exclude: DEVELOPER_GUIDE.md
+        exclude: CONTRIBUTING.md
       - id: end-of-file-fixer
         exclude: \.minijinja$
       - id: trailing-whitespace
@@ -25,7 +26,6 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
-        always_run: true
 
       - id: cargo-fmt
         name: cargo fmt
@@ -33,7 +33,6 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
-        always_run: true
 
       - id: cargo-clippy
         name: cargo clippy
@@ -41,7 +40,6 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
-        always_run: true
 
       - id: cargo-test-unit
         name: cargo test-unit
@@ -49,7 +47,6 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
-        always_run: true
 
       - id: prettier
         name: prettier
@@ -61,8 +58,8 @@ repos:
         additional_dependencies:
           - prettier
           - "@prettier/plugin-xml"
-        always_run: true
         exclude: '.*\.ipynb$'
+        pass_filenames: false
 
       - id: eslint
         name: eslint
@@ -74,16 +71,15 @@ repos:
           - "@typescript-eslint/parser"
           - "@typescript-eslint/eslint-plugin"
         pass_filenames: false
-        always_run: true
 
       - id: tsc
-        name: typescript
+        name: tsc
         entry: bash -c 'cd dashboard && tsc'
         language: node
-        pass_filenames: false
+        types_or: [ts, tsx]
         additional_dependencies:
           - typescript
-        always_run: true
+        pass_filenames: false
 
   - repo: https://github.com/srstevenson/nb-clean
     rev: 3.2.0
@@ -93,7 +89,7 @@ repos:
           - --remove-empty-cells
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.3
+    rev: v0.8.4
     hooks:
       - id: ruff
         args: ["--extend-select", "I", "--fix"]

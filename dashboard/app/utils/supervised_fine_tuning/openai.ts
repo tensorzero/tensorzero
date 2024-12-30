@@ -3,7 +3,7 @@ import * as os from "os";
 import * as path from "path";
 import { createReadStream } from "fs";
 import OpenAI from "openai";
-import type { SFTFormValues } from "~/routes/optimization/fine-tuning/types";
+import type { SFTFormValues } from "~/routes/optimization/supervised-fine-tuning/types";
 import {
   getCuratedInferences,
   type ContentBlockOutput,
@@ -56,7 +56,8 @@ export class OpenAISFTJob extends SFTJob {
       data.function,
       config.functions[data.function],
       data.metric,
-      config.metrics[data.metric],
+      data.metric ? config.metrics[data.metric] : null,
+      data.threshold,
       data.maxSamples,
     );
     if (!curatedInferences || curatedInferences.length === 0) {
@@ -267,9 +268,6 @@ async function create_openai_fine_tuning_job(
   const params: OpenAI.FineTuning.JobCreateParams = {
     model,
     training_file: train_file_id,
-    hyperparameters: {
-      n_epochs: 1,
-    },
   };
 
   if (val_file_id) {

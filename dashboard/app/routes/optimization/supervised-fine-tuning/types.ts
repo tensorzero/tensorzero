@@ -4,7 +4,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 export const SFTFormValuesSchema = z.object({
   function: z.string().nonempty("Function is required"),
-  metric: z.string().nonempty("Metric is required"),
+  metric: z
+    .string()
+    .nullable()
+    .refine((val) => val === null || val !== "", {
+      message: "Please select a metric or 'None'",
+    }),
   model: ModelOptionSchema,
   variant: z.string().nonempty(),
   validationSplitPercent: z
@@ -15,7 +20,7 @@ export const SFTFormValuesSchema = z.object({
     .number()
     .min(10, "Max samples must be greater than 10")
     .optional(),
-  threshold: z.number().optional(),
+  threshold: z.number(),
   jobId: z.string().nonempty("Job ID is required"),
 });
 

@@ -38,8 +38,8 @@ const navigation = [
     title: "Optimization",
     items: [
       {
-        title: "Fine-tuning",
-        url: "/optimization/fine-tuning",
+        title: "Supervised Fine-Tuning",
+        url: "/optimization/supervised-fine-tuning",
       },
     ],
   },

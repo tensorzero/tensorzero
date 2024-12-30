@@ -176,8 +176,8 @@ impl<'a> Migration for Migration0001<'a> {
     fn rollback_instructions(&self) -> String {
         "\
             -- Drop the materialized views\n\
-            DROP MATERIALIZED VIEW IF EXISTS ChatInferenceByIdView;\n\
-            DROP MATERIALIZED VIEW IF EXISTS JsonInferenceByIdView;\n\
+            DROP VIEW IF EXISTS ChatInferenceByIdView;\n\
+            DROP VIEW IF EXISTS JsonInferenceByIdView;\n\
             \n\
             -- Drop the table\n\
             DROP TABLE IF EXISTS InferenceById;\n\
