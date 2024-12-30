@@ -12,7 +12,7 @@ import type {
 } from "~/utils/supervised_fine_tuning/common";
 import { models } from "./model_options";
 import { useRevalidator } from "react-router";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { redirect } from "react-router";
 import { launch_sft_job } from "~/utils/supervised_fine_tuning/client";
 import type { ChatCompletionConfig } from "~/utils/config/variant";
@@ -248,6 +248,10 @@ export default function SupervisedFineTuning({
   const { status, result, modelProvider, progressInfo } = loaderData;
   const revalidator = useRevalidator();
 
+  const [submissionPhase, setSubmissionPhase] = useState<
+    "idle" | "submitting" | "pending" | "complete"
+  >("idle");
+
   // If running, periodically poll for updates on the job
   useEffect(() => {
     if (status === "running") {
@@ -259,9 +263,6 @@ export default function SupervisedFineTuning({
     }
   }, [status, revalidator]);
 
-  const [submissionPhase, setSubmissionPhase] = useState<
-    "idle" | "submitting" | "pending" | "complete"
-  >("idle");
   const finalResult =
     result && modelProvider
       ? dump_model_config(get_fine_tuned_model_config(result, modelProvider))
@@ -330,61 +331,61 @@ function FineTuningForm({
     formState: { errors },
   } = form;
 
-  const fetcher = useFetcher();
-  const errorsOnSubmit = fetcher.data?.errors;
-  if (errorsOnSubmit) {
-    setSubmissionPhase("idle");
-  }
+  // Separate fetchers for counts and form submission
+  const countFetcher = useFetcher();
+  const formFetcher = useFetcher();
+
+  const watchedValues = useWatch({
+    control: form.control,
+    name: ["function", "metric", "threshold"],
+  });
+
+  // Use formFetcher for submission errors
+  const errorsOnSubmit = formFetcher.data?.errors;
+  useEffect(() => {
+    if (errorsOnSubmit) {
+      setSubmissionPhase("idle");
+    }
+  }, [errorsOnSubmit, setSubmissionPhase]);
+
   const [counts, setCounts] = useState<CountsData>({
     inferenceCount: null,
     feedbackCount: null,
     curatedInferenceCount: null,
   });
 
-  // Add this effect to watch for fetcher data changes
-  // This is needed because fetcher.load is not async, so it doesn't return a promise
-  // and we need to watch for data changes via the fetcher.data property
+  // Update counts only from countFetcher
   useEffect(() => {
-    if (fetcher.data) {
-      setCounts(fetcher.data as CountsData);
+    if (countFetcher.data && !countFetcher.data.errors) {
+      setCounts(countFetcher.data as CountsData);
     }
-  }, [fetcher.data]);
+  }, [countFetcher.data]);
 
-  const fetchCounts = (
-    functionName?: string,
-    metricName?: string,
-    threshold?: number,
-  ) => {
-    const params = new URLSearchParams();
-    if (functionName) params.set("function", functionName);
-    if (metricName) params.set("metric", metricName);
-    if (threshold) params.set("threshold", String(threshold));
+  // Handle count fetching with countFetcher
+  useEffect(() => {
+    const [functionName, metricName, threshold] = watchedValues;
 
-    fetcher.load(`/api/curated_inferences/count?${params}`);
-  };
+    if (functionName) {
+      const params = new URLSearchParams();
+      params.set("function", functionName);
+      if (metricName) params.set("metric", metricName);
+      if (threshold) params.set("threshold", String(threshold));
 
-  const handleFunctionChange = (value: string) => {
-    fetchCounts(
-      value,
-      form.getValues("metric") || undefined,
-      form.getValues("threshold") || undefined,
-    );
-  };
+      countFetcher.load(`/api/curated_inferences/count?${params}`);
+    }
+  }, [watchedValues]);
 
-  const handleMetricChange = (value: string | null) => {
-    fetchCounts(
-      form.getValues("function") || undefined,
-      value || undefined,
-      form.getValues("threshold") || undefined,
-    );
-  };
+  // Form submission using formFetcher
+  const onSubmit = async (data: SFTFormValues) => {
+    try {
+      const submitData = new FormData();
+      submitData.append("data", JSON.stringify(data));
 
-  const handleThresholdChange = (value: number) => {
-    fetchCounts(
-      form.getValues("function") || undefined,
-      form.getValues("metric") || undefined,
-      value,
-    );
+      formFetcher.submit(submitData, { method: "POST" });
+      setSubmissionPhase("submitting");
+    } catch (error) {
+      console.error("Submission error (likely a bug):", error);
+    }
   };
 
   const getChatCompletionVariantsForFunction = (): Record<
@@ -432,22 +433,6 @@ function FineTuningForm({
     }
   }
 
-  const onSubmit = async (data: SFTFormValues) => {
-    try {
-      const formData = {
-        ...data,
-      };
-
-      const submitData = new FormData();
-      submitData.append("data", JSON.stringify(formData));
-
-      fetcher.submit(submitData, { method: "POST" });
-      setSubmissionPhase("submitting");
-    } catch (error) {
-      console.error("Submission error (likely a bug):", error);
-    }
-  };
-
   return (
     <div className="mt-8">
       <Form {...form}>
@@ -462,7 +447,6 @@ function FineTuningForm({
               control={form.control}
               inferenceCount={counts.inferenceCount}
               config={config}
-              onFunctionChange={handleFunctionChange}
             />
             {errors.function && (
               <p className="text-red-500 text-sm">{errors.function.message}</p>
@@ -473,8 +457,6 @@ function FineTuningForm({
               feedbackCount={counts.feedbackCount}
               curatedInferenceCount={counts.curatedInferenceCount}
               config={config}
-              onMetricChange={handleMetricChange}
-              onThresholdChange={handleThresholdChange}
             />
             {errors.metric && (
               <p className="text-red-500 text-sm">{errors.metric.message}</p>

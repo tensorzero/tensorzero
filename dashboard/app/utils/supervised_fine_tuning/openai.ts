@@ -46,7 +46,7 @@ export class OpenAISFTJob extends SFTJob {
     this.job = params.job;
   }
 
-  static async fromFormData(data: SFTFormValues): Promise<OpenAISFTJob> {
+  static async from_form_data(data: SFTFormValues): Promise<OpenAISFTJob> {
     const config = await getConfig();
     const currentVariant = config.functions[data.function].variants[
       data.variant
@@ -68,12 +68,21 @@ export class OpenAISFTJob extends SFTJob {
       throw new Error("No curated inferences found");
     }
     const templateEnv = await get_template_env(currentVariant);
-    const job = await start_sft_openai(
-      data.model.name,
-      curatedInferences,
-      data.validationSplitPercent,
-      templateEnv,
-    );
+    let job;
+    try {
+      job = await start_sft_openai(
+        data.model.name,
+        curatedInferences,
+        data.validationSplitPercent,
+        templateEnv,
+      );
+    } catch (error) {
+      throw new Error(
+        `Failed to start OpenAI SFT job: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
     return job;
   }
 
