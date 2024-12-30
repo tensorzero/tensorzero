@@ -25,18 +25,28 @@ export const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+type JobInfo =
+  | {
+      status: "ok";
+      info: OpenAI.FineTuning.Jobs.FineTuningJob;
+    }
+  | {
+      status: "error";
+      message: string;
+    };
+
 interface OpenAISFTJobParams {
   jobId: string;
   status: string;
   fineTunedModel?: string;
-  job: OpenAI.FineTuning.Jobs.FineTuningJob;
+  job: JobInfo;
 }
 
 export class OpenAISFTJob extends SFTJob {
   public jobId: string;
   public jobStatus: string;
   public fineTunedModel?: string;
-  public job: OpenAI.FineTuning.Jobs.FineTuningJob;
+  public job: JobInfo;
 
   constructor(params: OpenAISFTJobParams) {
     super();
@@ -100,13 +110,24 @@ export class OpenAISFTJob extends SFTJob {
   }
 
   progress_info(): ProgressInfo {
+    if (this.job.status === "error") {
+      return {
+        provider: "error",
+        data: {
+          message: this.job.message || "Unknown error occurred",
+        },
+        jobUrl: `https://platform.openai.com/finetune/${this.jobId}`,
+      };
+    }
+    const estimatedCompletionTimestamp = this.job.info.estimated_finish
+      ? this.job.info.estimated_finish * 1000
+      : undefined;
+
     return {
       provider: "openai",
-      data: this.job,
-      estimatedCompletionTimestamp: this.job.estimated_finish
-        ? this.job.estimated_finish * 1000
-        : undefined,
-      jobUrl: `https://platform.openai.com/finetune/${this.job.id}`,
+      data: this.job.info,
+      estimatedCompletionTimestamp: estimatedCompletionTimestamp,
+      jobUrl: `https://platform.openai.com/finetune/${this.jobId}`,
     };
   }
 
@@ -119,7 +140,10 @@ export class OpenAISFTJob extends SFTJob {
       jobId: job.id,
       status: job.status,
       fineTunedModel: job.fine_tuned_model ?? undefined,
-      job: job,
+      job: {
+        status: "ok",
+        info: job,
+      },
     });
   }
 }
@@ -154,7 +178,10 @@ export async function start_sft_openai(
     jobId: jobId,
     status: "created",
     fineTunedModel: undefined,
-    job,
+    job: {
+      status: "ok",
+      info: job,
+    },
   });
 }
 

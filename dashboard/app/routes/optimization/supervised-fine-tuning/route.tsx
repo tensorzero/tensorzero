@@ -52,6 +52,25 @@ export const jobStore: { [jobId: string]: SFTJob } = {};
 
 // TODO: remove once we're happy
 function get_progress_fixture(provider: ProviderType): LoaderData {
+  // 25% chance of returning an error
+  if (Math.random() < 0.25) {
+    return {
+      status: "running",
+      result: undefined,
+      modelProvider: provider,
+      progressInfo: {
+        provider: "error",
+        data: {
+          message: "Simulated error occurred during fine-tuning",
+        },
+        jobUrl:
+          provider === "openai"
+            ? "https://platform.openai.com/finetune/ftjob-abc123"
+            : "https://fireworks.ai/dashboard/fine-tuning/ftjob-abc123",
+      },
+    };
+  }
+
   switch (provider) {
     case "openai":
       return {
@@ -146,7 +165,7 @@ export async function loader({
   params,
 }: Route.LoaderArgs): Promise<LoaderData | { status: "error"; error: string }> {
   // for debugging ProgressIndicator without starting a real job
-  // return get_progress_fixture("fireworks");
+  // return get_progress_fixture("openai");
   const job_id = params.job_id;
 
   if (!job_id) {
@@ -173,35 +192,28 @@ export async function loader({
     };
   }
 
-  try {
-    // Poll for updates
-    const updatedJob = await storedJob.poll();
-    jobStore[job_id] = updatedJob;
+  // Poll for updates
+  const updatedJob = await storedJob.poll();
+  jobStore[job_id] = updatedJob;
 
-    const result = updatedJob.result();
-    const status = updatedJob.status();
-    const modelProvider = updatedJob.provider();
-    const progressInfo = updatedJob.progress_info();
-    const loaderData = {
-      status,
-      result,
-      modelProvider,
-      progressInfo,
-    };
-    console.log(loaderData);
+  const result = updatedJob.result();
+  const status = updatedJob.status();
+  const modelProvider = updatedJob.provider();
+  const progressInfo = updatedJob.progress_info();
+  const loaderData = {
+    status,
+    result,
+    modelProvider,
+    progressInfo,
+  };
+  console.log(loaderData);
 
-    return {
-      status,
-      result,
-      modelProvider,
-      progressInfo,
-    };
-  } catch (error) {
-    return {
-      status: "error",
-      error: error instanceof Error ? error.message : "Unknown error",
-    };
-  }
+  return {
+    status,
+    result,
+    modelProvider,
+    progressInfo,
+  };
 }
 
 // The action actually launches the fine-tuning job.

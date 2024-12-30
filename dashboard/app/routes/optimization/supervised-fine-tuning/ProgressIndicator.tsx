@@ -15,6 +15,11 @@ export const ProgressInfoSchema = z.discriminatedUnion("provider", [
     data: z.union([z.string(), z.record(z.any())]),
     jobUrl: z.string(),
   }),
+  z.object({
+    provider: z.literal("error"),
+    data: z.object({ message: z.string() }),
+    jobUrl: z.string(),
+  }),
 ]);
 
 export type ProgressInfo = z.infer<typeof ProgressInfoSchema>;
@@ -67,6 +72,13 @@ export function ProgressIndicator({
     return new Date(timestamp).toLocaleString();
   };
 
+  const getEntryClassName = (entry: ProgressEntry) => {
+    if (entry.info.provider === "error") {
+      return "border-red-300 bg-red-50";
+    }
+    return "border-gray-200";
+  };
+
   return (
     <div className="p-4 bg-gray-100 rounded-lg mt-4">
       <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -106,7 +118,6 @@ export function ProgressIndicator({
 
       <div className="mb-2 font-medium">Progress History</div>
       <div className="space-y-4 max-h-[600px] overflow-y-auto">
-        {/* Reverse history array so most recent entries appear at the top */}
         {[...history].reverse().map((entry, index) => {
           const serializedData = getSerializedData(entry);
           const height = getTextAreaHeight(serializedData);
@@ -114,15 +125,26 @@ export function ProgressIndicator({
           return (
             <div
               key={index}
-              className="border-b border-gray-200 pb-4 last:border-0"
+              className={`border rounded-md p-3 ${getEntryClassName(
+                entry,
+              )} last:border-b`}
             >
-              <div className="text-sm text-gray-500 mb-1">
-                {entry.timestamp.toLocaleTimeString()}
+              <div className="flex justify-between items-center mb-1">
+                <div className="text-sm text-gray-500">
+                  {entry.timestamp.toLocaleTimeString()}
+                </div>
+                {entry.info.provider === "error" && (
+                  <div className="text-sm font-medium text-red-600">Error</div>
+                )}
               </div>
               <Textarea
                 value={serializedData}
                 style={{ height: `${height}px` }}
-                className="w-full resize-none bg-transparent border-none focus:ring-0"
+                className={`w-full resize-none border-none focus:ring-0 ${
+                  entry.info.provider === "error"
+                    ? "bg-red-50 text-red-700"
+                    : "bg-transparent"
+                }`}
                 readOnly
               />
             </div>

@@ -53,8 +53,18 @@ interface FireworksSFTJobParams {
   jobId: string;
   modelId?: string;
   modelPath?: string;
-  jobInfo: string | Record<string, unknown>;
+  jobInfo: JobInfo;
 }
+
+type JobInfo =
+  | {
+      status: "ok";
+      info: string | Record<string, unknown>;
+    }
+  | {
+      status: "error";
+      message: string;
+    };
 
 export class FireworksSFTJob extends SFTJob {
   public jobPath: string;
@@ -62,7 +72,7 @@ export class FireworksSFTJob extends SFTJob {
   public jobId: string;
   public modelId?: string;
   public modelPath?: string;
-  public jobInfo: string | Record<string, unknown>;
+  public jobInfo: JobInfo;
 
   constructor(params: FireworksSFTJobParams) {
     super();
@@ -118,7 +128,10 @@ export class FireworksSFTJob extends SFTJob {
       jobId: data.jobId,
       modelId: undefined,
       modelPath: undefined,
-      jobInfo: jobInfo,
+      jobInfo: {
+        status: "ok",
+        info: jobInfo,
+      },
     });
   }
 
@@ -137,6 +150,21 @@ export class FireworksSFTJob extends SFTJob {
 
   progress_info(): ProgressInfo {
     const jobUrl = fireworks_job_url_from_path(this.jobPath);
+    if (
+      this.jobInfo &&
+      typeof this.jobInfo === "object" &&
+      "status" in this.jobInfo
+    ) {
+      if (this.jobInfo.status === "error") {
+        return {
+          provider: "error",
+          data: {
+            message: this.jobInfo.message,
+          },
+          jobUrl: jobUrl,
+        };
+      }
+    }
     return {
       provider: "fireworks",
       data: this.jobInfo,
@@ -145,62 +173,88 @@ export class FireworksSFTJob extends SFTJob {
   }
 
   async poll(): Promise<FireworksSFTJob> {
-    if (!this.modelId) {
-      // If we don't have a model ID, training is still running so we need to poll for it
-      const jobInfo = await get_fine_tuning_job_details(this.jobPath);
-      const status = jobInfo.state;
-      if (status === "COMPLETED") {
-        const modelId = jobInfo.modelId;
-        if (!modelId) {
-          throw new Error("Model ID not found after job completed");
+    try {
+      if (!this.modelId) {
+        // If we don't have a model ID, training is still running so we need to poll for it
+        const jobInfo = await get_fine_tuning_job_details(this.jobPath);
+        const status = jobInfo.state;
+        if (status === "COMPLETED") {
+          const modelId = jobInfo.modelId;
+          if (!modelId) {
+            throw new Error("Model ID not found after job completed");
+          }
+          // Begin deployment process
+          await deploy_model_request(FIREWORKS_ACCOUNT_ID, modelId);
+          return new FireworksSFTJob({
+            jobPath: this.jobPath,
+            status: "DEPLOYING",
+            jobId: this.jobId,
+            modelId: modelId,
+            modelPath: undefined,
+            jobInfo: {
+              status: "ok",
+              info: jobInfo,
+            },
+          });
+        } else {
+          return new FireworksSFTJob({
+            jobPath: this.jobPath,
+            status: "TRAINING",
+            jobId: this.jobId,
+            modelId: undefined,
+            modelPath: undefined,
+            jobInfo: {
+              status: "ok",
+              info: jobInfo,
+            },
+          });
         }
-        // Begin deployment process
-        await deploy_model_request(FIREWORKS_ACCOUNT_ID, modelId);
-        return new FireworksSFTJob({
-          jobPath: this.jobPath,
-          status: "DEPLOYING",
-          jobId: this.jobId,
-          modelId: modelId,
-          modelPath: undefined,
-          jobInfo: jobInfo,
-        });
       } else {
-        return new FireworksSFTJob({
-          jobPath: this.jobPath,
-          status: "TRAINING",
-          jobId: this.jobId,
-          modelId: undefined,
-          modelPath: undefined,
-          jobInfo: jobInfo,
-        });
+        // If we do have a model ID, we need to poll for the deployment
+        const deployModelResponse = await deploy_model_request(
+          FIREWORKS_ACCOUNT_ID,
+          this.modelId,
+        );
+        const status = get_deployment_status(deployModelResponse);
+        if (status === "DEPLOYED") {
+          const modelPath = `accounts/${FIREWORKS_ACCOUNT_ID}/models/${this.modelId}`;
+          return new FireworksSFTJob({
+            jobPath: this.jobPath,
+            status: "DEPLOYED",
+            jobId: this.jobId,
+            modelId: this.modelId,
+            modelPath: modelPath,
+            jobInfo: {
+              status: "ok",
+              info: deployModelResponse,
+            },
+          });
+        } else {
+          return new FireworksSFTJob({
+            jobPath: this.jobPath,
+            status: "DEPLOYING",
+            jobId: this.jobId,
+            modelId: this.modelId,
+            modelPath: undefined,
+            jobInfo: {
+              status: "ok",
+              info: deployModelResponse,
+            },
+          });
+        }
       }
-    } else {
-      // If we do have a model ID, we need to poll for the deployment
-      const deployModelResponse = await deploy_model_request(
-        FIREWORKS_ACCOUNT_ID,
-        this.modelId,
-      );
-      const status = get_deployment_status(deployModelResponse);
-      if (status === "DEPLOYED") {
-        const modelPath = `accounts/${FIREWORKS_ACCOUNT_ID}/models/${this.modelId}`;
-        return new FireworksSFTJob({
-          jobPath: this.jobPath,
-          status: "DEPLOYED",
-          jobId: this.jobId,
-          modelId: this.modelId,
-          modelPath: modelPath,
-          jobInfo: deployModelResponse,
-        });
-      } else {
-        return new FireworksSFTJob({
-          jobPath: this.jobPath,
-          status: "DEPLOYING",
-          jobId: this.jobId,
-          modelId: this.modelId,
-          modelPath: undefined,
-          jobInfo: deployModelResponse,
-        });
-      }
+    } catch (error) {
+      return new FireworksSFTJob({
+        jobPath: this.jobPath,
+        status: "error",
+        jobId: this.jobId,
+        modelId: this.modelId,
+        modelPath: undefined,
+        jobInfo: {
+          status: "error",
+          message: error instanceof Error ? error.message : String(error),
+        },
+      });
     }
   }
 }
