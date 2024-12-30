@@ -8,9 +8,26 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 import type { SFTFormValues } from "./types";
-import type { ModelOption } from "./model_options";
+import { ModelOptionSchema, type ModelOption } from "./model_options";
 import type { ProviderConfigSchema } from "~/utils/config/models";
 import { z } from "zod";
+import { useMemo, useState } from "react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "~/components/ui/popover";
+import { Button } from "~/components/ui/button";
+import { Check, ChevronsUpDown } from "lucide-react";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "~/components/ui/command";
+import { cn } from "~/utils/common";
 
 type ProviderType = z.infer<typeof ProviderConfigSchema>["type"];
 
@@ -107,7 +124,58 @@ function formatProvider(provider: ProviderType): {
   }
 }
 
-export function ModelSelector({ control, models }: ModelSelectorProps) {
+
+export function ModelSelector({ control, models: initialModels }: { control: Control<SFTFormValues>; models: ModelOption[] }) {
+  const [open, setOpen] = useState(false);
+  const [inputValue, setInputValue] = useState("");
+  const [currentModels, setCurrentModels] = useState(initialModels);
+
+  const handleInputChange = (input: string) => {
+    setInputValue(input);
+    
+    if (input) {
+      const newModels = [...initialModels];
+
+      // Pick all providers from the schema
+      // TODO: remove mistral filter once we support it.
+      const providers = (ModelOptionSchema.shape.provider.options as ModelOption["provider"][]).filter(provider => provider !== "mistral");
+      
+      providers.forEach(provider => {
+        const modelExists = initialModels.some(
+          m => m.displayName.toLowerCase() === input.toLowerCase() && 
+          m.provider === provider
+        );
+        
+        if (!modelExists) {
+          newModels.push({
+            displayName: `Other: ${input}`,
+            name: input,
+            provider: provider
+          });
+        }
+      });
+
+      if (newModels.length > initialModels.length) {
+        setCurrentModels(newModels);
+      } else {
+        setCurrentModels(initialModels);
+      }
+    } else {
+      setCurrentModels(initialModels);
+    }
+  };
+
+  const isOtherModel = (model: ModelOption) => 
+    !initialModels.some(m => 
+      m.displayName === model.displayName && 
+      m.provider === model.provider
+    );
+
+  const getDisplayName = (model: ModelOption) => {
+    if (!model) return "Select a model...";
+    return isOtherModel(model) ? model.displayName : model.displayName;
+  };
+
   return (
     <FormField
       control={control}
@@ -115,42 +183,83 @@ export function ModelSelector({ control, models }: ModelSelectorProps) {
       render={({ field }) => (
         <FormItem>
           <FormLabel>Model</FormLabel>
-          <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
-            <Select
-              onValueChange={(value: string) => {
-                const selectedModel = models.find(
-                  (model) => model.displayName === value,
-                );
-                if (selectedModel) {
-                  field.onChange(selectedModel);
-                }
-              }}
-              defaultValue={field.value?.displayName}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select a model" />
-              </SelectTrigger>
-              <SelectContent>
-                {models.map((model) => (
-                  <SelectItem key={model.displayName} value={model.displayName}>
-                    <div className="flex items-center justify-between w-full">
-                      <span>{model.displayName}</span>
-                      <span
-                        className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                          formatProvider(model.provider).className
-                        }`}
-                      >
-                        {formatProvider(model.provider).name}
-                      </span>
+          <div className="grid md:grid-cols-2 gap-x-8">
+            <div className="w-full space-y-2">
+              <Popover open={open} onOpenChange={setOpen}>
+                <PopoverTrigger className="bg-gray-50 border-gray-200" asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={open}
+                    className="w-full justify-between font-normal"
+                  >
+                    <div>
+                      {getDisplayName(field.value)} {field.value?.provider && (
+                        <span
+                          className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                            formatProvider(field.value.provider).className
+                          }`}
+                        >
+                          {formatProvider(field.value.provider).name}
+                        </span>
+                      )}
                     </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <div></div>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start">
+                  <Command>
+                    <CommandInput
+                      placeholder="Search models..."
+                      value={inputValue}
+                      onValueChange={handleInputChange}
+                      className="h-9"
+                    />
+                    <CommandList>
+                      <CommandEmpty className="py-2 px-4 text-sm">No model found.</CommandEmpty>
+                      <CommandGroup>
+                        {currentModels.map((model) => (
+                          <CommandItem
+                            key={`${model.provider}::${model.displayName}`}
+                            value={`${model.provider}::${model.displayName}`}
+                            onSelect={() => {
+                              field.onChange(model);
+                              setInputValue("");
+                              setOpen(false);
+                            }}
+                            className="flex items-center justify-between"
+                          >
+                            <div className="flex items-center">
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  field.value?.displayName === model.displayName && 
+                                  field.value?.provider === model.provider
+                                    ? "opacity-100"
+                                    : "opacity-0"
+                                )}
+                              />
+                              <span>{model.displayName}</span>
+                            </div>
+                            <span
+                              className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                                formatProvider(model.provider).className
+                              }`}
+                            >
+                              {formatProvider(model.provider).name}
+                            </span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
           </div>
         </FormItem>
       )}
     />
   );
 }
+
