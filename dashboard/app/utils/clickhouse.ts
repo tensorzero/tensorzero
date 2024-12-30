@@ -448,7 +448,6 @@ async function queryCuratedMetricData(
       i.function_name = {function_name:String}
     ${limitClause}
   `;
-  console.log(query);
 
   const resultSet = await clickhouseClient.query({
     query,
@@ -592,4 +591,48 @@ export async function countDemonstrationDataForFunction(
   });
   const rows = await resultSet.json<{ count: number }>();
   return rows[0].count;
+}
+
+export const inferenceByIdRowSchema = z
+  .object({
+    id: z.string().uuid(),
+    function_name: z.string(),
+    variant_name: z.string(),
+    episode_id: z.string().uuid(),
+    timestamp: z.string().datetime(),
+  })
+  .strict();
+
+export type InferenceByIdRow = z.infer<typeof inferenceByIdRowSchema>;
+
+/// Query a table of Inferences from ChatInference or JsonInference
+export async function queryInferenceTable(params: {
+  offset: number;
+  page_size: number;
+}): Promise<InferenceByIdRow[]> {
+  const query = `
+    SELECT
+      id,
+      function_name,
+      variant_name, 
+      episode_id,
+      function_type,
+      UUIDv7ToDateTime(id) as timestamp
+    FROM InferenceById
+    ORDER BY UUIDv7ToDateTime(id) DESC
+    LIMIT {page_size:UInt32}
+    OFFSET {offset:UInt32}
+  `;
+
+  const resultSet = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: {
+      offset: params.offset,
+      page_size: params.page_size,
+    },
+  });
+
+  const rows = await resultSet.json<InferenceByIdRow>();
+  return rows;
 }

@@ -5,6 +5,7 @@ import {
   countFeedbacksForMetric,
   countInferencesForFunction,
   getCuratedInferences,
+  queryInferenceTable,
 } from "./clickhouse";
 
 test("checkClickhouseConnection", async () => {
@@ -257,4 +258,13 @@ test("countInferencesForFunction returns correct counts", async () => {
     },
   );
   expect(chatCount).toBe(494);
+});
+
+test("queryInferenceTable", async () => {
+  const inferences = await queryInferenceTable({
+    offset: 0,
+    page_size: 10,
+  });
+  console.log(inferences);
+  expect(inferences.length).toBe(10);
 });
