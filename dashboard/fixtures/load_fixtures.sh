@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
-clickhouse-client --host $CLICKHOUSE_HOST --database tensorzero --query "INSERT INTO JsonInference FORMAT CSV" < json_inference_examples.csv
-clickhouse-client --host $CLICKHOUSE_HOST --database tensorzero --query "INSERT INTO BooleanMetricFeedback FORMAT CSV" < boolean_metric_feedback_examples.csv
-clickhouse-client --host $CLICKHOUSE_HOST --database tensorzero --query "INSERT INTO FloatMetricFeedback FORMAT CSV" < float_metric_feedback_examples.csv
-clickhouse-client --host $CLICKHOUSE_HOST --database tensorzero --query "INSERT INTO DemonstrationFeedback FORMAT CSV" < demonstration_feedback_examples.csv
-clickhouse-client --host $CLICKHOUSE_HOST --database tensorzero --query "INSERT INTO ChatInference FORMAT CSV" < chat_inference_examples.csv
+clickhouse-client --host $CLICKHOUSE_HOST --database tensorzero --query "INSERT INTO JsonInference SELECT generateUUIDv7() as id, function_name, variant_name, episode_id, input, output, output_schema, inference_params, processing_time_ms, tags FROM input('function_name String, variant_name String, episode_id String, input String, output String, output_schema String, inference_params String, processing_time_ms Int64, tags Map(String, String)') FORMAT CSV" < json_inference_examples.csv
+clickhouse-client --host $CLICKHOUSE_HOST --database tensorzero --query "INSERT INTO BooleanMetricFeedback SELECT generateUUIDv7() as id, target_id, metric_name, value, tags FROM input('target_id UUID, metric_name String, value Bool, tags Map(String, String)') FORMAT CSV" < boolean_metric_feedback_examples.csv
+clickhouse-client --host $CLICKHOUSE_HOST --database tensorzero --query "INSERT INTO FloatMetricFeedback SELECT generateUUIDv7() as id, target_id, metric_name, value, tags FROM input('target_id UUID, metric_name String, value Float32, tags Map(String, String)') FORMAT CSV" < float_metric_feedback_examples.csv
+clickhouse-client --host $CLICKHOUSE_HOST --database tensorzero --query "INSERT INTO DemonstrationFeedback SELECT generateUUIDv7() as id, inference_id, value, tags FROM input('inference_id UUID, value String, tags Map(String, String)') FORMAT CSV" < demonstration_feedback_examples.csv
+clickhouse-client --host $CLICKHOUSE_HOST --database tensorzero --query "INSERT INTO ChatInference SELECT generateUUIDv7() as id, function_name, variant_name, episode_id, input, output, tool_params, inference_params, processing_time_ms, tags FROM input('function_name String, variant_name String, episode_id String, input String, output String, tool_params String, inference_params String, processing_time_ms Int64, tags Map(String, String)') FORMAT CSV" < chat_inference_examples.csv
 echo "Fixtures loaded; this container will now exit with status 0"
