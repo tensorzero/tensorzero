@@ -59,8 +59,8 @@ export function FunctionSelector({
                           {fn.type === "chat"
                             ? "Chat"
                             : fn.type === "json"
-                              ? "JSON"
-                              : "Unknown"}
+                            ? "JSON"
+                            : "Unknown"}
                         </span>
                       </div>
                     </SelectItem>

@@ -1,4 +1,4 @@
-import { useFetcher, type MetaFunction } from "react-router";
+import { data, useFetcher, type MetaFunction } from "react-router";
 import { useEffect, useState } from "react";
 import {
   type SFTFormValues,
@@ -214,8 +214,18 @@ export async function action({ request }: Route.ActionArgs) {
 
   const jsonData = JSON.parse(serializedFormData);
   const validatedData = SFTFormValuesSchema.parse(jsonData);
-
-  const job = await launch_sft_job(validatedData);
+  let job;
+  try {
+    job = await launch_sft_job(validatedData);
+  } catch (error) {
+    const errors = {
+      message:
+        error instanceof Error
+          ? error.message
+          : "Unknown error occurred while launching fine-tuning job",
+    };
+    return data({ errors }, { status: 500 });
+  }
   jobStore[validatedData.jobId] = job;
 
   return redirect(
@@ -229,8 +239,11 @@ export default function SupervisedFineTuning({
 }: Route.ComponentProps) {
   const config = useConfig();
   if (loaderData.status === "error") {
-    // TODO: do error handling and make this better
-    return <div>Error: {(loaderData as { error: string }).error}</div>;
+    return (
+      <div className="text-red-500 text-sm">
+        Error: {(loaderData as { error: string }).error}
+      </div>
+    );
   }
   const { status, result, modelProvider, progressInfo } = loaderData;
   const revalidator = useRevalidator();
@@ -318,7 +331,10 @@ function FineTuningForm({
   } = form;
 
   const fetcher = useFetcher();
-
+  const errorsOnSubmit = fetcher.data?.errors;
+  if (errorsOnSubmit) {
+    setSubmissionPhase("idle");
+  }
   const [counts, setCounts] = useState<CountsData>({
     inferenceCount: null,
     feedbackCount: null,
@@ -428,7 +444,7 @@ function FineTuningForm({
       fetcher.submit(submitData, { method: "POST" });
       setSubmissionPhase("submitting");
     } catch (error) {
-      console.error("Submission error:", error);
+      console.error("Submission error (likely a bug):", error);
     }
   };
 
@@ -480,6 +496,9 @@ function FineTuningForm({
           <Button type="submit" disabled={submissionPhase !== "idle"}>
             {getButtonText()}
           </Button>
+          {errorsOnSubmit && (
+            <p className="text-red-500 text-sm">{errorsOnSubmit.message}</p>
+          )}
         </form>
       </Form>
     </div>

@@ -96,13 +96,21 @@ export class FireworksSFTJob extends SFTJob {
       throw new Error("No curated inferences found");
     }
     const templateEnv = await get_template_env(currentVariant);
-    const jobInfo = await start_sft_fireworks(
-      data.model.name,
-      curatedInferences,
-      data.validationSplitPercent,
-      templateEnv,
-    );
-    console.log(jobInfo);
+    let jobInfo;
+    try {
+      jobInfo = await start_sft_fireworks(
+        data.model.name,
+        curatedInferences,
+        data.validationSplitPercent,
+        templateEnv,
+      );
+    } catch (error) {
+      throw new Error(
+        `Failed to start Fireworks SFT job: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
     const jobPath = jobInfo.name as string;
     return new FireworksSFTJob({
       jobPath: jobPath,
@@ -301,9 +309,25 @@ async function deploy_model_request(accountId: string, modelId: string) {
     body: JSON.stringify(body),
   };
 
-  const response = await fetch(url, options).then((r) => r.json());
-
-  return response;
+  try {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      throw new Error(
+        `Failed to deploy model: ${response.status} ${response.statusText}`,
+      );
+    }
+    const data = await response.json();
+    if (!data) {
+      throw new Error("Empty response received from deploy model request");
+    }
+    return data;
+  } catch (error) {
+    throw new Error(
+      `Error deploying model: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`,
+    );
+  }
 }
 
 // Extracts the deployment status from the deploy model response
@@ -450,8 +474,21 @@ async function create_dataset_record(accountId: string, exampleCount: number) {
       },
     }),
   };
-  await fetch(url, options).then((r) => r.json());
-  // TODO(Viraj: check it more robustly)
+  try {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      throw new Error(
+        `Failed to create dataset record: ${response.status} ${response.statusText}`,
+      );
+    }
+    await response.json();
+  } catch (error) {
+    throw new Error(
+      `Error creating dataset record: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`,
+    );
+  }
 
   return datasetId;
 }
@@ -489,9 +526,26 @@ async function upload_dataset(
     body: form,
   };
 
-  const response = await fetch(url, options).then((r) => r.json());
-
-  return response;
+  let response;
+  try {
+    response = await fetch(url, options);
+    if (!response.ok) {
+      throw new Error(
+        `Failed to upload dataset: ${response.status} ${response.statusText}`,
+      );
+    }
+    const data = await response.json();
+    if (!data) {
+      throw new Error("Empty response received from upload dataset request");
+    }
+    return data;
+  } catch (error) {
+    throw new Error(
+      `Error uploading dataset: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`,
+    );
+  }
 }
 
 // Returns true if the dataset is ready for fine-tuning
