@@ -1,4 +1,4 @@
-import { useFetcher, type MetaFunction } from "react-router";
+import { data, useFetcher, type MetaFunction } from "react-router";
 import { useEffect, useState } from "react";
 import {
   type SFTFormValues,
@@ -6,10 +6,13 @@ import {
   SFTFormValuesResolver,
 } from "./types";
 import { v7 as uuid } from "uuid";
-import type { SFTJob } from "~/utils/supervised_fine_tuning/common";
+import type {
+  SFTJob,
+  SFTJobStatus,
+} from "~/utils/supervised_fine_tuning/common";
 import { models } from "./model_options";
 import { useRevalidator } from "react-router";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { redirect } from "react-router";
 import { launch_sft_job } from "~/utils/supervised_fine_tuning/client";
 import type { ChatCompletionConfig } from "~/utils/config/variant";
@@ -20,6 +23,7 @@ import { VariantSelector } from "./VariantSelector";
 import {
   dump_model_config,
   get_fine_tuned_model_config,
+  type ProviderType,
 } from "~/utils/config/models";
 import { ModelSelector } from "./ModelSelector";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
@@ -31,6 +35,7 @@ import type { Route } from "./+types/route";
 // import type { Route as CuratedInferencesCount } from "../../api/curated_inferences/+types/count.route";
 import type { CountsData } from "../../api/curated_inferences/count.route";
 import type { Config } from "~/utils/config";
+import { ProgressIndicator, type ProgressInfo } from "./ProgressIndicator";
 
 export const meta: MetaFunction = () => {
   return [
@@ -45,12 +50,131 @@ export const meta: MetaFunction = () => {
 // Mutable store mapping job IDs to their info
 export const jobStore: { [jobId: string]: SFTJob } = {};
 
+// TODO: remove once we're happy
+function get_progress_fixture(provider: ProviderType): LoaderData {
+  // 25% chance of returning an error
+  if (Math.random() < 0.25) {
+    return {
+      status: "running",
+      result: undefined,
+      modelProvider: provider,
+      progressInfo: {
+        provider: "error",
+        data: {
+          message: "Simulated error occurred during fine-tuning",
+        },
+        jobUrl:
+          provider === "openai"
+            ? "https://platform.openai.com/finetune/ftjob-abc123"
+            : "https://fireworks.ai/dashboard/fine-tuning/ftjob-abc123",
+      },
+    };
+  }
+
+  switch (provider) {
+    case "openai":
+      return {
+        status: "running",
+        result: undefined,
+        modelProvider: "openai",
+        progressInfo: {
+          jobUrl: "https://platform.openai.com/finetune/ftjob-abc123",
+          provider: "openai",
+          data: {
+            object: "fine_tuning.job",
+            id: "ftjob-abc123",
+            model: "davinci-002",
+            created_at: 1692661014,
+            finished_at: 1692661190,
+            fine_tuned_model: "ft:davinci-002:my-org:custom_suffix:7q8mpxmy",
+            organization_id: "org-123",
+            result_files: ["file-abc123"],
+            status: "succeeded",
+            validation_file: null,
+            training_file: "file-abc123",
+            hyperparameters: {
+              n_epochs: 4,
+              batch_size: 1,
+              learning_rate_multiplier: 1.0,
+            },
+            trained_tokens: 5768,
+            integrations: [],
+            seed: 0,
+            estimated_finish: 0,
+            method: {
+              type: "supervised",
+              supervised: {
+                hyperparameters: {
+                  n_epochs: 4,
+                  batch_size: 1,
+                  learning_rate_multiplier: 1.0,
+                },
+              },
+            },
+          },
+          estimatedCompletionTimestamp: Math.floor(Date.now()) + 300000,
+        },
+      };
+    case "fireworks":
+      return {
+        status: "running",
+        modelProvider: "fireworks",
+        result: undefined,
+        progressInfo: {
+          provider: "fireworks",
+          data: {
+            state: "PENDING",
+            modelId: "",
+            baseModel: "accounts/fireworks/models/llama-v3p1-8b-instruct",
+            batchSize: 16,
+            createTime: "2024-12-28T15:16:43.649092Z",
+            createdBy: "viraj@tensorzero.com",
+            dataset:
+              "accounts/viraj-ebfe5a/datasets/01940dd7-4f65-716a-a257-6da73412fe87",
+            evaluationSplit: 0.2,
+            evaluation: false,
+            evaluationDataset: "",
+            learningRate: 0.0001,
+            loraRank: 8,
+            loraTargetModules: [],
+            maskToken: "",
+            microBatchSize: 0,
+            name: "accounts/viraj-ebfe5a/fineTuningJobs/ed8f3dead9d74b7fbe0623f039d151e3",
+            padToken: "",
+            status: {
+              code: "OK",
+              message: "",
+            },
+          },
+          jobUrl: "https://fireworks.ai/dashboard/fine-tuning/ftjob-abc123",
+        },
+      };
+    default:
+      throw new Error(`Unknown provider: ${provider}`);
+  }
+}
+interface LoaderData {
+  status: SFTJobStatus;
+  result: string | undefined;
+  modelProvider: ProviderType | undefined;
+  progressInfo: ProgressInfo | undefined;
+}
+
 // If there is a job_id in the URL, grab it from the job store and pull it.
-export async function loader({ params }: Route.LoaderArgs) {
+export async function loader({
+  params,
+}: Route.LoaderArgs): Promise<LoaderData | { status: "error"; error: string }> {
+  // for debugging ProgressIndicator without starting a real job
+  // return get_progress_fixture("openai");
   const job_id = params.job_id;
 
   if (!job_id) {
-    return { status: "idle" };
+    return {
+      status: "idle",
+      result: undefined,
+      modelProvider: undefined,
+      progressInfo: undefined,
+    };
   }
 
   const storedJob = jobStore[job_id];
@@ -64,29 +188,32 @@ export async function loader({ params }: Route.LoaderArgs) {
       status: storedJob.status(),
       result: storedJob.result(),
       modelProvider: storedJob.provider(),
+      progressInfo: storedJob.progress_info(),
     };
   }
 
-  try {
-    // Poll for updates
-    const updatedJob = await storedJob.poll();
-    jobStore[job_id] = updatedJob;
+  // Poll for updates
+  const updatedJob = await storedJob.poll();
+  jobStore[job_id] = updatedJob;
 
-    const result = updatedJob.result();
-    const status = updatedJob.status();
-    const modelProvider = updatedJob.provider();
+  const result = updatedJob.result();
+  const status = updatedJob.status();
+  const modelProvider = updatedJob.provider();
+  const progressInfo = updatedJob.progress_info();
+  const loaderData = {
+    status,
+    result,
+    modelProvider,
+    progressInfo,
+  };
+  console.log(loaderData);
 
-    return {
-      status,
-      result,
-      modelProvider,
-    };
-  } catch (error) {
-    return {
-      status: "error",
-      error: error instanceof Error ? error.message : "Unknown error",
-    };
-  }
+  return {
+    status,
+    result,
+    modelProvider,
+    progressInfo,
+  };
 }
 
 // The action actually launches the fine-tuning job.
@@ -99,8 +226,18 @@ export async function action({ request }: Route.ActionArgs) {
 
   const jsonData = JSON.parse(serializedFormData);
   const validatedData = SFTFormValuesSchema.parse(jsonData);
-
-  const job = await launch_sft_job(validatedData);
+  let job;
+  try {
+    job = await launch_sft_job(validatedData);
+  } catch (error) {
+    const errors = {
+      message:
+        error instanceof Error
+          ? error.message
+          : "Unknown error occurred while launching fine-tuning job",
+    };
+    return data({ errors }, { status: 500 });
+  }
   jobStore[validatedData.jobId] = job;
 
   return redirect(
@@ -113,8 +250,19 @@ export default function SupervisedFineTuning({
   loaderData,
 }: Route.ComponentProps) {
   const config = useConfig();
-  const { status, result, modelProvider } = loaderData;
+  if (loaderData.status === "error") {
+    return (
+      <div className="text-red-500 text-sm">
+        Error: {(loaderData as { error: string }).error}
+      </div>
+    );
+  }
+  const { status, result, modelProvider, progressInfo } = loaderData;
   const revalidator = useRevalidator();
+
+  const [submissionPhase, setSubmissionPhase] = useState<
+    "idle" | "submitting" | "pending" | "complete"
+  >("idle");
 
   // If running, periodically poll for updates on the job
   useEffect(() => {
@@ -127,12 +275,10 @@ export default function SupervisedFineTuning({
     }
   }, [status, revalidator]);
 
-  const [submissionPhase, setSubmissionPhase] = useState<
-    "idle" | "submitting" | "pending" | "complete"
-  >("idle");
-  const finalResult = result
-    ? dump_model_config(get_fine_tuned_model_config(result, modelProvider))
-    : null;
+  const finalResult =
+    result && modelProvider
+      ? dump_model_config(get_fine_tuned_model_config(result, modelProvider))
+      : null;
   if (finalResult && submissionPhase !== "complete") {
     setSubmissionPhase("complete");
   }
@@ -151,19 +297,6 @@ export default function SupervisedFineTuning({
           />
         )}
 
-        {status !== "idle" && (
-          <div className="p-4 bg-gray-100 rounded-lg mt-4">
-            <div className="mb-2 font-medium">
-              Loader Data (Last Updated: {new Date().toLocaleTimeString()})
-            </div>
-            <Textarea
-              value={JSON.stringify(loaderData, null, 2)}
-              className="w-full h-48 resize-none bg-transparent border-none focus:ring-0"
-              readOnly
-            />
-          </div>
-        )}
-
         {finalResult && (
           <div className="p-4 bg-gray-100 rounded-lg mt-4">
             <div className="mb-2 font-medium">Configuration</div>
@@ -174,6 +307,8 @@ export default function SupervisedFineTuning({
             />
           </div>
         )}
+
+        {status !== "idle" && <ProgressIndicator progressInfo={progressInfo} />}
       </main>
     </div>
   );
@@ -208,7 +343,22 @@ function FineTuningForm({
     formState: { errors },
   } = form;
 
-  const fetcher = useFetcher();
+  // Separate fetchers for counts and form submission
+  const countFetcher = useFetcher();
+  const formFetcher = useFetcher();
+
+  const watchedValues = useWatch({
+    control: form.control,
+    name: ["function", "metric", "threshold"],
+  });
+
+  // Use formFetcher for submission errors
+  const errorsOnSubmit = formFetcher.data?.errors;
+  useEffect(() => {
+    if (errorsOnSubmit) {
+      setSubmissionPhase("idle");
+    }
+  }, [errorsOnSubmit, setSubmissionPhase]);
 
   const [counts, setCounts] = useState<CountsData>({
     inferenceCount: null,
@@ -216,50 +366,38 @@ function FineTuningForm({
     curatedInferenceCount: null,
   });
 
-  // Add this effect to watch for fetcher data changes
-  // This is needed because fetcher.load is not async, so it doesn't return a promise
-  // and we need to watch for data changes via the fetcher.data property
+  // Update counts only from countFetcher
   useEffect(() => {
-    if (fetcher.data) {
-      setCounts(fetcher.data as CountsData);
+    if (countFetcher.data && !countFetcher.data.errors) {
+      setCounts(countFetcher.data as CountsData);
     }
-  }, [fetcher.data]);
+  }, [countFetcher.data]);
 
-  const fetchCounts = (
-    functionName?: string,
-    metricName?: string,
-    threshold?: number,
-  ) => {
-    const params = new URLSearchParams();
-    if (functionName) params.set("function", functionName);
-    if (metricName) params.set("metric", metricName);
-    if (threshold) params.set("threshold", String(threshold));
+  // Handle count fetching with countFetcher
+  useEffect(() => {
+    const [functionName, metricName, threshold] = watchedValues;
 
-    fetcher.load(`/api/curated_inferences/count?${params}`);
-  };
+    if (functionName) {
+      const params = new URLSearchParams();
+      params.set("function", functionName);
+      if (metricName) params.set("metric", metricName);
+      if (threshold) params.set("threshold", String(threshold));
 
-  const handleFunctionChange = (value: string) => {
-    fetchCounts(
-      value,
-      form.getValues("metric") || undefined,
-      form.getValues("threshold") || undefined,
-    );
-  };
+      countFetcher.load(`/api/curated_inferences/count?${params}`);
+    }
+  }, [watchedValues]);
 
-  const handleMetricChange = (value: string | null) => {
-    fetchCounts(
-      form.getValues("function") || undefined,
-      value || undefined,
-      form.getValues("threshold") || undefined,
-    );
-  };
+  // Form submission using formFetcher
+  const onSubmit = async (data: SFTFormValues) => {
+    try {
+      const submitData = new FormData();
+      submitData.append("data", JSON.stringify(data));
 
-  const handleThresholdChange = (value: number) => {
-    fetchCounts(
-      form.getValues("function") || undefined,
-      form.getValues("metric") || undefined,
-      value,
-    );
+      formFetcher.submit(submitData, { method: "POST" });
+      setSubmissionPhase("submitting");
+    } catch (error) {
+      console.error("Submission error (likely a bug):", error);
+    }
   };
 
   const getChatCompletionVariantsForFunction = (): Record<
@@ -307,22 +445,6 @@ function FineTuningForm({
     }
   }
 
-  const onSubmit = async (data: SFTFormValues) => {
-    try {
-      const formData = {
-        ...data,
-      };
-
-      const submitData = new FormData();
-      submitData.append("data", JSON.stringify(formData));
-
-      fetcher.submit(submitData, { method: "POST" });
-      setSubmissionPhase("submitting");
-    } catch (error) {
-      console.error("Submission error:", error);
-    }
-  };
-
   return (
     <div className="mt-8">
       <Form {...form}>
@@ -337,7 +459,6 @@ function FineTuningForm({
               control={form.control}
               inferenceCount={counts.inferenceCount}
               config={config}
-              onFunctionChange={handleFunctionChange}
             />
             {errors.function && (
               <p className="text-red-500 text-sm">{errors.function.message}</p>
@@ -348,8 +469,6 @@ function FineTuningForm({
               feedbackCount={counts.feedbackCount}
               curatedInferenceCount={counts.curatedInferenceCount}
               config={config}
-              onMetricChange={handleMetricChange}
-              onThresholdChange={handleThresholdChange}
             />
             {errors.metric && (
               <p className="text-red-500 text-sm">{errors.metric.message}</p>
@@ -371,6 +490,9 @@ function FineTuningForm({
           <Button type="submit" disabled={submissionPhase !== "idle"}>
             {getButtonText()}
           </Button>
+          {errorsOnSubmit && (
+            <p className="text-red-500 text-sm">{errorsOnSubmit.message}</p>
+          )}
         </form>
       </Form>
     </div>

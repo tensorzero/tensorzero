@@ -19,30 +19,44 @@ import { splitValidationData, type SFTJobStatus } from "./common";
 import { render_message } from "./rendering";
 import { SFTJob } from "./common";
 import type { ProviderType } from "../config/models";
+import type { ProgressInfo } from "~/routes/optimization/supervised-fine-tuning/ProgressIndicator";
 
 export const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+type JobInfo =
+  | {
+      status: "ok";
+      info: OpenAI.FineTuning.Jobs.FineTuningJob;
+    }
+  | {
+      status: "error";
+      message: string;
+    };
+
 interface OpenAISFTJobParams {
   jobId: string;
   status: string;
   fineTunedModel?: string;
+  job: JobInfo;
 }
 
 export class OpenAISFTJob extends SFTJob {
   public jobId: string;
   public jobStatus: string;
   public fineTunedModel?: string;
+  public job: JobInfo;
 
   constructor(params: OpenAISFTJobParams) {
     super();
     this.jobId = params.jobId;
     this.jobStatus = params.status;
     this.fineTunedModel = params.fineTunedModel;
+    this.job = params.job;
   }
 
-  static async fromFormData(data: SFTFormValues): Promise<OpenAISFTJob> {
+  static async from_form_data(data: SFTFormValues): Promise<OpenAISFTJob> {
     const config = await getConfig();
     const currentVariant = config.functions[data.function].variants[
       data.variant
@@ -64,12 +78,21 @@ export class OpenAISFTJob extends SFTJob {
       throw new Error("No curated inferences found");
     }
     const templateEnv = await get_template_env(currentVariant);
-    const job = await start_sft_openai(
-      data.model.name,
-      curatedInferences,
-      data.validationSplitPercent,
-      templateEnv,
-    );
+    let job;
+    try {
+      job = await start_sft_openai(
+        data.model.name,
+        curatedInferences,
+        data.validationSplitPercent,
+        templateEnv,
+      );
+    } catch (error) {
+      throw new Error(
+        `Failed to start OpenAI SFT job: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
     return job;
   }
 
@@ -86,6 +109,28 @@ export class OpenAISFTJob extends SFTJob {
     return this.jobStatus === "succeeded" ? "completed" : "running";
   }
 
+  progress_info(): ProgressInfo {
+    if (this.job.status === "error") {
+      return {
+        provider: "error",
+        data: {
+          message: this.job.message || "Unknown error occurred",
+        },
+        jobUrl: `https://platform.openai.com/finetune/${this.jobId}`,
+      };
+    }
+    const estimatedCompletionTimestamp = this.job.info.estimated_finish
+      ? this.job.info.estimated_finish * 1000
+      : undefined;
+
+    return {
+      provider: "openai",
+      data: this.job.info,
+      estimatedCompletionTimestamp: estimatedCompletionTimestamp,
+      jobUrl: `https://platform.openai.com/finetune/${this.jobId}`,
+    };
+  }
+
   async poll(): Promise<OpenAISFTJob> {
     if (!this.jobId) {
       throw new Error("Job ID is required to poll OpenAI SFT");
@@ -95,6 +140,10 @@ export class OpenAISFTJob extends SFTJob {
       jobId: job.id,
       status: job.status,
       fineTunedModel: job.fine_tuned_model ?? undefined,
+      job: {
+        status: "ok",
+        info: job,
+      },
     });
   }
 }
@@ -119,15 +168,20 @@ export async function start_sft_openai(
     upload_examples_to_openai(trainMessages),
     upload_examples_to_openai(valMessages),
   ]);
-  const job_id = await create_openai_fine_tuning_job(
+  const job = await create_openai_fine_tuning_job(
     modelName,
     file_id,
     val_file_id ?? undefined,
   );
+  const jobId = job.id;
   return new OpenAISFTJob({
-    jobId: job_id,
+    jobId: jobId,
     status: "created",
     fineTunedModel: undefined,
+    job: {
+      status: "ok",
+      info: job,
+    },
   });
 }
 
@@ -276,7 +330,7 @@ async function create_openai_fine_tuning_job(
 
   try {
     const job = await client.fineTuning.jobs.create(params);
-    return job.id;
+    return job;
   } catch (error) {
     console.error("Error creating fine-tuning job:", error);
     throw error;
