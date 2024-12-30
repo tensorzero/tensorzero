@@ -14,9 +14,24 @@ export type MetricConfigOptimize = z.infer<typeof MetricConfigOptimizeSchema>;
 export const MetricConfigLevelSchema = z.enum(["inference", "episode"]);
 export type MetricConfigLevel = z.infer<typeof MetricConfigLevelSchema>;
 
-export const MetricConfigSchema = z.object({
-  type: MetricConfigTypeSchema,
-  optimize: MetricConfigOptimizeSchema,
-  level: MetricConfigLevelSchema,
-});
+export const MetricConfigSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("boolean"),
+    optimize: MetricConfigOptimizeSchema,
+    level: MetricConfigLevelSchema,
+  }),
+  z.object({
+    type: z.literal("float"),
+    optimize: MetricConfigOptimizeSchema,
+    level: MetricConfigLevelSchema,
+  }),
+  z.object({
+    type: z.literal("comment"),
+    level: MetricConfigLevelSchema,
+  }),
+  z.object({
+    type: z.literal("demonstration"),
+    level: z.literal("inference"),
+  }),
+]);
 export type MetricConfig = z.infer<typeof MetricConfigSchema>;
