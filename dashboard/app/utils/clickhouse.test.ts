@@ -265,6 +265,17 @@ test("queryInferenceTable", async () => {
     offset: 0,
     page_size: 10,
   });
-  console.log(inferences);
   expect(inferences.length).toBe(10);
+
+  const inferences2 = await queryInferenceTable({
+    offset: 10,
+    page_size: 10,
+  });
+  expect(inferences2.length).toBe(10);
+
+  const longInferences = await queryInferenceTable({
+    offset: 0,
+    page_size: 50,
+  });
+  expect(longInferences.length).toBe(50);
 });
