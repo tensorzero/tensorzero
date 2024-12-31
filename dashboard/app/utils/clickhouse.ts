@@ -2,6 +2,7 @@ import { createClient } from "@clickhouse/client";
 import { z } from "zod";
 import type { FunctionConfig } from "./config/function";
 import type { MetricConfig } from "./config/metric";
+import { data } from "react-router";
 
 export const clickhouseClient = createClient({
   url: process.env.CLICKHOUSE_URL,
@@ -687,14 +688,18 @@ export async function queryInferenceTable(params: {
     query_params.after = after;
   }
 
-  const resultSet = await clickhouseClient.query({
-    query,
-    format: "JSONEachRow",
-    query_params,
-  });
-
-  const rows = await resultSet.json<InferenceByIdRow>();
-  return rows;
+  try {
+    const resultSet = await clickhouseClient.query({
+      query,
+      format: "JSONEachRow",
+      query_params,
+    });
+    const rows = await resultSet.json<InferenceByIdRow>();
+    return rows;
+  } catch (error) {
+    console.error(error);
+    throw data("Error querying inference table", { status: 500 });
+  }
 }
 
 export interface InferenceTableBounds {
@@ -710,10 +715,15 @@ export async function queryInferenceTableBounds(): Promise<InferenceTableBounds>
     FROM InferenceById
   `;
 
-  const resultSet = await clickhouseClient.query({
-    query,
-    format: "JSONEachRow",
-  });
-  const rows = await resultSet.json<InferenceTableBounds>();
-  return rows[0];
+  try {
+    const resultSet = await clickhouseClient.query({
+      query,
+      format: "JSONEachRow",
+    });
+    const rows = await resultSet.json<InferenceTableBounds>();
+    return rows[0];
+  } catch (error) {
+    console.error(error);
+    throw data("Error querying inference table bounds", { status: 500 });
+  }
 }
