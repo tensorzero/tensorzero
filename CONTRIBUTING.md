@@ -111,7 +111,7 @@ cargo test-unit
 > The gateway requires credentials for every model provider defined in its configuration.
 > The E2E tests define every supported provider, so you need every possible credential to run the entire test suite.
 >
-> You can run a subset of the tests by setting the missing credentials for fake values.
+> You can run a subset of the tests by setting the missing credentials to fake values.
 > For example, you can set `OPENAI_API_KEY="none"` if you don't plan to run OpenAI tests.
 >
 > For GCP Vertex AI, you'll need a credentials file. You can use the following fake file and point `GCP_VERTEX_CREDENTIALS_PATH` to it:
