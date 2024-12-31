@@ -60,6 +60,7 @@
     "@typescript-eslint/parser": "^8.19.0",
     "autoprefixer": "^10.4.20",
     "cross-env": "^7.0.3",
+    "eslint": "^9.17.0",
     "postcss": "^8.4.49",
     "prettier": "^3.4.2",
     "prettier-plugin-tailwindcss": "^0.6.9",

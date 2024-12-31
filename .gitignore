@@ -37,4 +37,4 @@ credentials/
 
 # Node
 node_modules/
-.eslintcache
+**/.eslintcache
