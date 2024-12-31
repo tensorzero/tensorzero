@@ -266,11 +266,9 @@ test("queryInferenceTable", async () => {
   });
   expect(inferences.length).toBe(10);
 
-  // Verify timestamps are in descending order
+  // Verify IDs are in descending order
   for (let i = 1; i < inferences.length; i++) {
-    expect(
-      new Date(inferences[i - 1].timestamp).getTime(),
-    ).toBeGreaterThanOrEqual(new Date(inferences[i].timestamp).getTime());
+    expect(inferences[i - 1].id > inferences[i].id).toBe(true);
   }
 
   const inferences2 = await queryInferenceTable({
@@ -280,7 +278,7 @@ test("queryInferenceTable", async () => {
   expect(inferences2.length).toBe(10);
 });
 
-test("queryInferenceTable pages through all results correctly", async () => {
+test("queryInferenceTable pages through all results correctly using before", async () => {
   const PAGE_SIZE = 100;
   let currentPage = await queryInferenceTable({
     page_size: PAGE_SIZE,
@@ -295,12 +293,9 @@ test("queryInferenceTable pages through all results correctly", async () => {
 
     // Verify each page is the correct size
     expect(currentPage.length).toBe(PAGE_SIZE);
-
-    // Verify timestamps are in descending order within each page
+    // Verify IDs are in descending order within each page
     for (let i = 1; i < currentPage.length; i++) {
-      expect(
-        new Date(currentPage[i - 1].timestamp).getTime(),
-      ).toBeGreaterThanOrEqual(new Date(currentPage[i].timestamp).getTime());
+      expect(currentPage[i - 1].id > currentPage[i].id).toBe(true);
     }
 
     // Get next page using last item's ID as cursor
@@ -321,6 +316,66 @@ test("queryInferenceTable pages through all results correctly", async () => {
 
   // Verify total number of elements
   expect(totalElements).toBe(894);
+
+  // We should have seen at least one full page
+  expect(numFullPages).toBeGreaterThan(0);
+});
+
+test("queryInferenceTable pages through all results correctly using after", async () => {
+  const PAGE_SIZE = 100;
+
+  // First get to the last page to find the earliest ID
+  let currentPage = await queryInferenceTable({
+    page_size: PAGE_SIZE,
+  });
+
+  while (currentPage.length === PAGE_SIZE) {
+    currentPage = await queryInferenceTable({
+      before: currentPage[currentPage.length - 1].id,
+      page_size: PAGE_SIZE,
+    });
+  }
+
+  // Now we have the earliest ID, let's page forward using after
+  const firstId = currentPage[currentPage.length - 1].id;
+  currentPage = await queryInferenceTable({
+    after: firstId,
+    page_size: PAGE_SIZE,
+  });
+
+  // Keep track of how many full pages we've seen
+  let numFullPages = 0;
+  let totalElements = 0;
+
+  while (currentPage.length === PAGE_SIZE) {
+    totalElements += currentPage.length;
+
+    // Verify each page is the correct size
+    expect(currentPage.length).toBe(PAGE_SIZE);
+
+    // Verify IDs are in descending order within each page
+    for (let i = 1; i < currentPage.length; i++) {
+      expect(currentPage[i - 1].id > currentPage[i].id).toBe(true);
+    }
+
+    // Get next page using first item's ID as cursor
+    currentPage = await queryInferenceTable({
+      after: currentPage[0].id,
+      page_size: PAGE_SIZE,
+    });
+
+    numFullPages++;
+  }
+
+  // Add the remaining elements from the last page
+  totalElements += currentPage.length;
+
+  // The last page should have fewer items than PAGE_SIZE
+  // (unless the total happens to be exactly divisible by PAGE_SIZE)
+  expect(currentPage.length).toBeLessThanOrEqual(PAGE_SIZE);
+
+  // Verify total number of elements matches the previous test
+  expect(totalElements).toBe(893); // One less because we excluded the first ID
 
   // We should have seen at least one full page
   expect(numFullPages).toBeGreaterThan(0);
