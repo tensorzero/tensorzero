@@ -68,9 +68,9 @@ export default function InferencesTable({
     navigate(`?after=${firstInference.id}&page_size=${pageSize}`);
   };
 
-  // This is because the table is sorted in descending order
-  const showPrevious = bounds.last_id !== firstInference.id;
-  const showNext = bounds.first_id !== lastInference.id;
+  // These are swapped because the table is sorted in descending order
+  const disablePrevious = bounds.last_id === firstInference.id;
+  const disableNext = bounds.first_id === lastInference.id;
 
   return (
     <div>
@@ -145,22 +145,20 @@ export default function InferencesTable({
         </TableBody>
       </Table>
       <div className="mt-4 flex items-center justify-center gap-2">
-        {showPrevious && (
-          <Button
-            onClick={handlePreviousPage}
-            className="rounded-md border border-gray-300 bg-white p-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-        )}
-        {showNext && (
-          <Button
-            onClick={handleNextPage}
-            className="rounded-md border border-gray-300 bg-white p-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        )}
+        <Button
+          onClick={handlePreviousPage}
+          disabled={disablePrevious}
+          className="rounded-md border border-gray-300 bg-white p-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <Button
+          onClick={handleNextPage}
+          disabled={disableNext}
+          className="rounded-md border border-gray-300 bg-white p-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
       </div>
     </div>
   );
