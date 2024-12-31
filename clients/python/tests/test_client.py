@@ -376,12 +376,7 @@ async def test_async_json_failure(async_client):
 
 @pytest.mark.asyncio
 async def test_async_feedback(async_client):
-    result = await async_client.feedback(
-        metric_name="user_rating", value=5, episode_id=uuid7()
-    )
-    assert isinstance(result, FeedbackResponse)
-
-    # Run inference to get a valid inference id.
+    # Run inference to get a valid inference id and episode id.
     result = await async_client.inference(
         function_name="basic_test",
         input={
@@ -392,6 +387,12 @@ async def test_async_feedback(async_client):
     # Wait for the inference to be created in ClickHouse
     sleep(1)
     inference_id = result.inference_id
+    episode_id = result.episode_id
+
+    result = await async_client.feedback(
+        metric_name="user_rating", value=5, episode_id=episode_id
+    )
+    assert isinstance(result, FeedbackResponse)
 
     result = await async_client.feedback(
         metric_name="task_success", value=True, inference_id=inference_id
@@ -791,11 +792,7 @@ def test_sync_json_failure(sync_client):
 
 
 def test_sync_feedback(sync_client):
-    result = sync_client.feedback(
-        metric_name="user_rating", value=5, episode_id=uuid7()
-    )
-    assert isinstance(result, FeedbackResponse)
-    # Run inference to get a valid inference id.
+    # Run inference to get a valid inference id and episode id.
     result = sync_client.inference(
         function_name="basic_test",
         input={
@@ -806,6 +803,12 @@ def test_sync_feedback(sync_client):
     # Wait for the inference to be created in ClickHouse
     sleep(1)
     inference_id = result.inference_id
+    episode_id = result.episode_id
+
+    result = sync_client.feedback(
+        metric_name="user_rating", value=5, episode_id=episode_id
+    )
+    assert isinstance(result, FeedbackResponse)
 
     result = sync_client.feedback(
         metric_name="task_success", value=True, inference_id=inference_id
