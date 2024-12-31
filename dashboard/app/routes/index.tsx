@@ -42,7 +42,7 @@ export default function Home() {
                   <CardHeader>
                     <div className="flex items-center space-x-2">
                       <Zap className="h-6 w-6 text-primary" />
-                      <CardTitle>Fine-tuning</CardTitle>
+                      <CardTitle>Supervised Fine-tuning</CardTitle>
                     </div>
                   </CardHeader>
                 </Card>
