@@ -1,17 +1,10 @@
 import type { Control } from "react-hook-form";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "~/components/ui/select";
 import type { SFTFormValues } from "./types";
 import { ModelOptionSchema, type ModelOption } from "./model_options";
 import type { ProviderConfigSchema } from "~/utils/config/models";
 import { z } from "zod";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   Popover,
   PopoverContent,
@@ -30,11 +23,6 @@ import {
 import { cn } from "~/utils/common";
 
 type ProviderType = z.infer<typeof ProviderConfigSchema>["type"];
-
-type ModelSelectorProps = {
-  control: Control<SFTFormValues>;
-  models: ModelOption[];
-};
 
 function formatProvider(provider: ProviderType): {
   name: string;
@@ -173,12 +161,6 @@ export function ModelSelector({
     }
   };
 
-  const isOtherModel = (model: ModelOption) =>
-    !initialModels.some(
-      (m) =>
-        m.displayName === model.displayName && m.provider === model.provider,
-    );
-
   return (
     <FormField
       control={control}
@@ -186,10 +168,10 @@ export function ModelSelector({
       render={({ field }) => (
         <FormItem>
           <FormLabel>Model</FormLabel>
-          <div className="grid md:grid-cols-2 gap-x-8">
+          <div className="grid gap-x-8 md:grid-cols-2">
             <div className="w-full space-y-2">
               <Popover open={open} onOpenChange={setOpen}>
-                <PopoverTrigger className="bg-gray-50 border-gray-200" asChild>
+                <PopoverTrigger className="border-gray-200 bg-gray-50" asChild>
                   <Button
                     variant="outline"
                     role="combobox"
@@ -212,7 +194,7 @@ export function ModelSelector({
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent
-                  className="p-0 w-[var(--radix-popover-trigger-width)]"
+                  className="w-[var(--radix-popover-trigger-width)] p-0"
                   align="start"
                 >
                   <Command>
@@ -223,7 +205,7 @@ export function ModelSelector({
                       className="h-9"
                     />
                     <CommandList>
-                      <CommandEmpty className="py-2 px-4 text-sm">
+                      <CommandEmpty className="px-4 py-2 text-sm">
                         No model found.
                       </CommandEmpty>
                       <CommandGroup>
