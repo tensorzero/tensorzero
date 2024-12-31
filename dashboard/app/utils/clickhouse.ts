@@ -605,30 +605,31 @@ export const inferenceByIdRowSchema = z
 
 export type InferenceByIdRow = z.infer<typeof inferenceByIdRowSchema>;
 
-/// Query a table of Inferences from ChatInference or JsonInference
+/// Query a table of at most `page_size` Inferences from ChatInference or JsonInference that are before the given `before` ID.
+/// If `before` is not provided, the query will return the most recent `page_size` Inferences.
 export async function queryInferenceTable(params: {
-  offset: number;
   page_size: number;
+  before?: string; // UUIDv7 string
 }): Promise<InferenceByIdRow[]> {
   const query = `
     SELECT
       id,
       function_name,
-      variant_name, 
+      variant_name,
       episode_id,
       function_type,
       UUIDv7ToDateTime(id) as timestamp
     FROM InferenceById
-    ORDER BY UUIDv7ToDateTime(id) DESC
+    ${params.before ? `WHERE id < toUUID({before:String})` : ""}
+    ORDER BY id DESC
     LIMIT {page_size:UInt32}
-    OFFSET {offset:UInt32}
   `;
 
   const resultSet = await clickhouseClient.query({
     query,
     format: "JSONEachRow",
     query_params: {
-      offset: params.offset,
+      before: params.before,
       page_size: params.page_size,
     },
   });
