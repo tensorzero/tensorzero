@@ -58,9 +58,8 @@ impl<'a> Migration for Migration0001<'a> {
     }
 
     async fn apply(&self) -> Result<(), Error> {
-        // If there is no data, we don't need to wait for the view to catch up
+        // Only gets used when we are not doing a clean start
         let view_offset = Duration::from_secs(15);
-
         let view_timestamp = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| {
