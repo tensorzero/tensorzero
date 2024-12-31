@@ -28,6 +28,7 @@ export default function InferencesTable({
   const [goToId, setGoToId] = useState("");
   const navigate = useNavigate();
 
+  // TODO: wire this to go the the details page for a particular inference, maybe add a popover.
   const handleGoTo = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const inferenceIndex = inferences.findIndex((inf) => inf.id === goToId);
