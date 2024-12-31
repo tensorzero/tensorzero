@@ -380,3 +380,23 @@ test("queryInferenceTable pages through all results correctly using after", asyn
   // We should have seen at least one full page
   expect(numFullPages).toBeGreaterThan(0);
 });
+
+test("queryInferenceTable after future timestamp is empty", async () => {
+  // Create a future timestamp UUID - this will be larger than any existing ID
+  const futureUUID = "ffffffff-ffff-7fff-ffff-ffffffffffff";
+  const inferences = await queryInferenceTable({
+    after: futureUUID,
+    page_size: 10,
+  });
+  expect(inferences.length).toBe(0);
+});
+
+test("queryInferenceTable before past timestamp is empty", async () => {
+  // Create a past timestamp UUID - this will be smaller than any existing ID
+  const pastUUID = "00000000-0000-7000-0000-000000000000";
+  const inferences = await queryInferenceTable({
+    before: pastUUID,
+    page_size: 10,
+  });
+  expect(inferences.length).toBe(0);
+});

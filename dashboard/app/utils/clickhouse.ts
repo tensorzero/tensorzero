@@ -618,6 +618,7 @@ export async function queryInferenceTable(params: {
   after?: string; // UUIDv7 string
 }): Promise<InferenceByIdRow[]> {
   const { page_size, before, after } = params;
+  console.log(params);
 
   if (before && after) {
     throw new Error("Cannot specify both 'before' and 'after' parameters");
