@@ -152,24 +152,24 @@ export default function SupervisedFineTuning({
         )}
 
         {status !== "idle" && (
-          <div className="p-4 bg-gray-100 rounded-lg mt-4">
+          <div className="mt-4 rounded-lg bg-gray-100 p-4">
             <div className="mb-2 font-medium">
               Loader Data (Last Updated: {new Date().toLocaleTimeString()})
             </div>
             <Textarea
               value={JSON.stringify(loaderData, null, 2)}
-              className="w-full h-48 resize-none bg-transparent border-none focus:ring-0"
+              className="h-48 w-full resize-none border-none bg-transparent focus:ring-0"
               readOnly
             />
           </div>
         )}
 
         {finalResult && (
-          <div className="p-4 bg-gray-100 rounded-lg mt-4">
+          <div className="mt-4 rounded-lg bg-gray-100 p-4">
             <div className="mb-2 font-medium">Configuration</div>
             <Textarea
               value={finalResult}
-              className="w-full h-48 resize-none bg-transparent border-none focus:ring-0"
+              className="h-48 w-full resize-none border-none bg-transparent focus:ring-0"
               readOnly
             />
           </div>
@@ -340,7 +340,7 @@ function FineTuningForm({
               onFunctionChange={handleFunctionChange}
             />
             {errors.function && (
-              <p className="text-red-500 text-sm">{errors.function.message}</p>
+              <p className="text-sm text-red-500">{errors.function.message}</p>
             )}
 
             <MetricSelector
@@ -352,7 +352,7 @@ function FineTuningForm({
               onThresholdChange={handleThresholdChange}
             />
             {errors.metric && (
-              <p className="text-red-500 text-sm">{errors.metric.message}</p>
+              <p className="text-sm text-red-500">{errors.metric.message}</p>
             )}
 
             <VariantSelector
