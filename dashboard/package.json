@@ -7,7 +7,7 @@
     "dev": "react-router dev",
     "start": "cross-env NODE_ENV=production react-router-serve ./build/server/index.js",
     "typecheck": "react-router typegen && tsc",
-    "format": "prettier --write --list-different \"**/*.{js,jsx,ts,tsx,css,scss,html,json,yaml,md}\" --ignore-path \"**/*.ipynb\"",
+    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,css,scss,html,json,yaml,md}\" --ignore-path \"**/*.ipynb\"",
     "format:check": "prettier --check \"**/*.{js,jsx,ts,tsx,css,scss,html,json,yaml,md}\" --ignore-path \"**/*.ipynb\"",
     "lint": "eslint . --fix --max-warnings=0 --config eslint.config.js --cache",
     "test": "vitest"
