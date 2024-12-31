@@ -140,14 +140,14 @@ cargo test-unit
    cargo run-e2e
    ```
 
-> [!TIP]
->
-> You can run a subset of tests with `cargo test-e2e xyz`, which will only run tests with `xyz` in their name.
-
 4. Run the E2E tests
    ```bash
    cargo test-e2e
    ```
+
+> [!TIP]
+>
+> You can run a subset of tests with `cargo test-e2e xyz`, which will only run tests with `xyz` in their name.
 
 #### Python
 
