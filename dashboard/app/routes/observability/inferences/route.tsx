@@ -32,7 +32,6 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export default function InferencesPage({ loaderData }: Route.ComponentProps) {
-  console.log(loaderData);
   const { inferences, pageSize, bounds } = loaderData;
 
   return (
