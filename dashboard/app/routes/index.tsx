@@ -5,12 +5,12 @@ import { BarChart2, GitBranch, Zap, BookOpen } from "lucide-react";
 
 export default function Home() {
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="flex min-h-screen flex-col">
       <main className="flex-grow py-12">
-        <div className="container px-4 md:px-6 mx-auto max-w-5xl">
+        <div className="container mx-auto max-w-5xl px-4 md:px-6">
           <div id="observability" className="mb-12">
-            <h2 className="text-3xl font-bold mb-6">Observability</h2>
-            <div className="grid md:grid-cols-2 gap-6">
+            <h2 className="mb-6 text-3xl font-bold">Observability</h2>
+            <div className="grid gap-6 md:grid-cols-2">
               <Link to="#" className="block">
                 <Card className="h-full transition-shadow hover:shadow-md">
                   <CardHeader>
@@ -35,8 +35,8 @@ export default function Home() {
           </div>
 
           <div id="optimization" className="mb-12">
-            <h2 className="text-3xl font-bold mb-6">Optimization</h2>
-            <div className="grid md:grid-cols-2 gap-6">
+            <h2 className="mb-6 text-3xl font-bold">Optimization</h2>
+            <div className="grid gap-6 md:grid-cols-2">
               <Link to="/optimization/fine-tuning" className="block">
                 <Card className="h-full transition-shadow hover:shadow-md">
                   <CardHeader>
@@ -52,9 +52,9 @@ export default function Home() {
         </div>
       </main>
 
-      <footer className="py-10 bg-muted">
-        <div className="container mx-auto px-4 md:px-6 text-center">
-          <p className="text-lg text-muted-foreground mb-6">
+      <footer className="bg-muted py-10">
+        <div className="container mx-auto px-4 text-center md:px-6">
+          <p className="mb-6 text-lg text-muted-foreground">
             Explore our documentation to get the most out of TensorZero.
           </p>
           <Button size="default" variant="default" asChild>
