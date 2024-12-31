@@ -83,19 +83,15 @@ jobs:
 
       - name: Run ESLint
         working-directory: dashboard
-        run: |
-          npx eslint . --fix --max-warnings=0 --config eslint.config.js --cache
+        run: npm run lint
 
       - name: Run Prettier
         working-directory: dashboard
-        run: |
-          npx prettier --write --list-different "**/*.{js,jsx,ts,tsx,css,scss,html,json,yaml,md}" --ignore-path "**/*.ipynb"
+        run: npm run format
 
       - name: Run TypeScript type checking
         working-directory: dashboard
-        run: |
-          npx react-router typegen
-          npx tsc
+        run: npm run typecheck
 
       - name: Start services for dashboard tests
         working-directory: dashboard
