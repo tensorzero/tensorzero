@@ -12,8 +12,6 @@ services:
       nofile:
         soft: 262144
         hard: 262144
-    networks:
-      - tensorzero-dashboard-fixtures-network
     healthcheck:
       test:
         [
@@ -55,23 +53,16 @@ services:
       start_period: 1s
       start_interval: 1s
       timeout: 1s
-    networks:
-      - tensorzero-dashboard-fixtures-network
 
   fixtures:
-    container_name: tensorzero-dashboard-fixtures
-    build: .
+    # NOTE: This is expected to quickly terminate with status code 0
+    container_name: tensorzero-fixtures-dashboard-tests
+    image: clickhouse/clickhouse-server:latest
     volumes:
       - .:/fixtures:ro
     environment:
-      - CLICKHOUSE_URL=http://tensorzero-clickhouse-dashboard-tests:8123/tensorzero
+      - CLICKHOUSE_HOST=tensorzero-clickhouse-dashboard-tests
     depends_on:
       gateway:
         condition: service_healthy
-    command: ["python", "load_fixtures.py"]
-    networks:
-      - tensorzero-dashboard-fixtures-network
-
-networks:
-  tensorzero-dashboard-fixtures-network:
-    name: tensorzero-dashboard-fixtures-network
+    command: ["bash", "-c", "cd /fixtures && ./load_fixtures.sh"]
