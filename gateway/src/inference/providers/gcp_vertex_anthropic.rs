@@ -24,9 +24,7 @@ use crate::model::{Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
-use super::gcp_vertex_gemini::{
-    default_api_key_location, GCPVertexCredentials,
-};
+use super::gcp_vertex_gemini::{default_api_key_location, GCPVertexCredentials};
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
@@ -48,8 +46,10 @@ impl GCPVertexAnthropicProvider {
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
         let credential_location = api_key_location.unwrap_or(default_api_key_location());
-        let generic_credentials = Credential::try_from((credential_location, "GCPVertexAnthropic"))?;
-        let provider_credentials= GCPVertexCredentials::try_from((generic_credentials, "GCPVertexAnthropic"))?;
+        let generic_credentials =
+            Credential::try_from((credential_location, "GCPVertexAnthropic"))?;
+        let provider_credentials =
+            GCPVertexCredentials::try_from((generic_credentials, "GCPVertexAnthropic"))?;
         let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:rawPredict");
         let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:streamRawPredict");
         let audience = format!("https://{location}-aiplatform.googleapis.com/");
@@ -2197,7 +2197,6 @@ mod tests {
             }]
         );
     }
-  
 
     #[test]
     fn test_credential_to_gcp_vertex_credentials() {
@@ -2238,14 +2237,17 @@ mod tests {
         let result = GCPVertexCredentials::try_from((generic, "GCPVertexGemini"));
         assert!(result.is_err());
         let err = result.unwrap_err().get_owned_details();
-        assert!(matches!(err, ErrorDetails::GCPCredentials { message } if message.contains("Failed to load GCP credentials")));
+        assert!(
+            matches!(err, ErrorDetails::GCPCredentials { message } if message.contains("Failed to load GCP credentials"))
+        );
 
         // Test invalid credential type (Static)
         let generic = Credential::Static(SecretString::from("test"));
         let result = GCPVertexCredentials::try_from((generic, "GCPVertexGemini"));
         assert!(result.is_err());
         let err = result.unwrap_err().get_owned_details();
-        assert!(matches!(err, ErrorDetails::GCPCredentials { message } if message.contains("Invalid credential_location")));
+        assert!(
+            matches!(err, ErrorDetails::GCPCredentials { message } if message.contains("Invalid credential_location"))
+        );
     }
-    
 }

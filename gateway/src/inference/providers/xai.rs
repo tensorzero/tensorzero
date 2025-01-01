@@ -1,4 +1,3 @@
-
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest_eventsource::RequestBuilderExt;
@@ -65,7 +64,7 @@ pub enum XAICredentials {
 
 impl TryFrom<Credential> for XAICredentials {
     type Error = Error;
-    
+
     fn try_from(credentials: Credential) -> Result<Self, Error> {
         match credentials {
             Credential::Static(key) => Ok(XAICredentials::Static(key)),
@@ -75,7 +74,7 @@ impl TryFrom<Credential> for XAICredentials {
             Credential::Missing => Ok(XAICredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for xAI provider".to_string(),
-            }))
+            })),
         }
     }
 }

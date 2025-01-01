@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::{env, fs};
 use strum::VariantNames;
 #[allow(unused_imports)]
-use tracing::{span, warn,Instrument, Level};
+use tracing::{span, warn, Instrument, Level};
 use url::Url;
 
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -33,8 +33,6 @@ use crate::{
     },
 };
 use serde::Deserialize;
-
-
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -350,8 +348,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 model_name,
                 api_base,
                 api_key_location,
-            } => 
-                ProviderConfig::OpenAI(
+            } => ProviderConfig::OpenAI(
                 OpenAIProvider::new(model_name, api_base, api_key_location)
                     .map_err(|e| D::Error::custom(e.to_string()))?,
             ),
@@ -591,7 +588,6 @@ impl<'de> Deserialize<'de> for CredentialLocation {
     }
 }
 
-
 pub enum Credential {
     Static(SecretString),
     FileContents(SecretString),
@@ -601,45 +597,45 @@ pub enum Credential {
     Missing,
 }
 
-
 impl TryFrom<(CredentialLocation, &str)> for Credential {
     type Error = Error;
     #[allow(unused_variables)]
-    fn try_from((location, provider_type): (CredentialLocation, &str)) -> Result<Self, Self::Error> {
+    fn try_from(
+        (location, provider_type): (CredentialLocation, &str),
+    ) -> Result<Self, Self::Error> {
         match location {
-            CredentialLocation::Env(key_name) => {
-                match env::var(key_name) {
-                    Ok(value) => Ok(Credential::Static(SecretString::from(value))),
-                    Err(_) => {
-                        #[cfg(any(test, feature = "e2e_tests"))]
-                        {
-                            warn!("You are missing the credentials required for a {} model, so the associated tests will likely fail.", provider_type);
-                            Ok(Credential::Missing)
-                        }
-                        #[cfg(not(any(test, feature = "e2e_tests")))]
-                        {
-                            Err(Error::new(ErrorDetails::ApiKeyMissing {
-                                provider_name: provider_type.to_string(),
-                            }))
-                        }
+            CredentialLocation::Env(key_name) => match env::var(key_name) {
+                Ok(value) => Ok(Credential::Static(SecretString::from(value))),
+                Err(_) => {
+                    #[cfg(any(test, feature = "e2e_tests"))]
+                    {
+                        warn!("You are missing the credentials required for a {} model, so the associated tests will likely fail.", provider_type);
+                        Ok(Credential::Missing)
+                    }
+                    #[cfg(not(any(test, feature = "e2e_tests")))]
+                    {
+                        Err(Error::new(ErrorDetails::ApiKeyMissing {
+                            provider_name: provider_type.to_string(),
+                        }))
                     }
                 }
             },
-            CredentialLocation::Path(path) => {
-                match fs::read_to_string(path) {
-                    Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
-                    Err(e) => {
-                        #[cfg(any(test, feature = "e2e_tests"))]
-                        {
-                            warn!("Failed to read credentials file for a {} model: {}. Tests will likely fail.", provider_type, e);
-                            Ok(Credential::Missing)
-                        }
-                        #[cfg(not(any(test, feature = "e2e_tests")))]
-                        {
-                            Err(Error::new(ErrorDetails::ApiKeyMissing {
-                                provider_name: format!("{}: Failed to read credentials file - {}", provider_type, e),
-                            }))
-                        }
+            CredentialLocation::Path(path) => match fs::read_to_string(path) {
+                Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
+                Err(e) => {
+                    #[cfg(any(test, feature = "e2e_tests"))]
+                    {
+                        warn!("Failed to read credentials file for a {} model: {}. Tests will likely fail.", provider_type, e);
+                        Ok(Credential::Missing)
+                    }
+                    #[cfg(not(any(test, feature = "e2e_tests")))]
+                    {
+                        Err(Error::new(ErrorDetails::ApiKeyMissing {
+                            provider_name: format!(
+                                "{}: Failed to read credentials file - {}",
+                                provider_type, e
+                            ),
+                        }))
                     }
                 }
             },
@@ -648,10 +644,6 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
         }
     }
 }
-
-
-
-
 
 lazy_static! {
     static ref RESERVED_MODEL_PREFIXES: Vec<String> = ProviderConfigHelper::VARIANTS

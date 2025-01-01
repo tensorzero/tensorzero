@@ -63,12 +63,12 @@ pub enum AnthropicCredentials {
     Static(SecretString),
     Dynamic(String),
     #[cfg(any(test, feature = "e2e_tests"))]
-    None
+    None,
 }
 
 impl TryFrom<Credential> for AnthropicCredentials {
     type Error = Error;
-    
+
     fn try_from(credentials: Credential) -> Result<Self, Error> {
         match credentials {
             Credential::Static(key) => Ok(AnthropicCredentials::Static(key)),
@@ -77,7 +77,7 @@ impl TryFrom<Credential> for AnthropicCredentials {
             Credential::Missing => Ok(AnthropicCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Anthropic provider".to_string(),
-            }))
+            })),
         }
     }
 }
@@ -96,14 +96,12 @@ impl AnthropicCredentials {
                     }
                     .into()
                 })
-            },
-            #[cfg(any(test, feature = "e2e_tests"))]
-            AnthropicCredentials::None => {
-                Err(ErrorDetails::ApiKeyMissing {
-                    provider_name: "Anthropic".to_string(),
-                }.into())
             }
-            
+            #[cfg(any(test, feature = "e2e_tests"))]
+            AnthropicCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+                provider_name: "Anthropic".to_string(),
+            }
+            .into()),
         }
     }
 }
@@ -2358,5 +2356,4 @@ mod tests {
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
         ));
     }
-    
 }

@@ -57,10 +57,9 @@ pub enum VLLMCredentials {
     None,
 }
 
-
 impl TryFrom<Credential> for VLLMCredentials {
     type Error = Error;
-    
+
     fn try_from(credentials: Credential) -> Result<Self, Error> {
         match credentials {
             Credential::Static(key) => Ok(VLLMCredentials::Static(key)),
@@ -70,7 +69,7 @@ impl TryFrom<Credential> for VLLMCredentials {
             Credential::Missing => Ok(VLLMCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for vLLM provider".to_string(),
-            }))
+            })),
         }
     }
 }

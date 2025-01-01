@@ -63,27 +63,24 @@ pub enum FireworksCredentials {
     Static(SecretString),
     Dynamic(String),
     #[cfg(any(test, feature = "e2e_tests"))]
-    None
+    None,
 }
 
 impl TryFrom<Credential> for FireworksCredentials {
     type Error = Error;
-    
+
     fn try_from(credentials: Credential) -> Result<Self, Error> {
         match credentials {
             Credential::Static(key) => Ok(FireworksCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(FireworksCredentials::Dynamic(key_name)),
             #[cfg(any(test, feature = "e2e_tests"))]
-            Credential::Missing => {
-                Ok(FireworksCredentials::None)
-            },
+            Credential::Missing => Ok(FireworksCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Fireworks provider".to_string(),
             })),
         }
     }
 }
-
 
 impl FireworksCredentials {
     fn get_api_key<'a>(
@@ -99,14 +96,12 @@ impl FireworksCredentials {
                     }
                     .into()
                 })
-            },
-            #[cfg(any(test, feature = "e2e_tests"))]
-            &FireworksCredentials::None => {
-                Err(ErrorDetails::ApiKeyMissing {
-                    provider_name: "Fireworks".to_string(),
-                }
-                .into())
             }
+            #[cfg(any(test, feature = "e2e_tests"))]
+            &FireworksCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+                provider_name: "Fireworks".to_string(),
+            }
+            .into()),
         }
     }
 }
@@ -508,7 +503,7 @@ mod tests {
             "https://api.fireworks.ai/inference/v1/"
         );
     }
- 
+
     #[test]
     fn test_credential_to_fireworks_credentials() {
         // Test Static credential
@@ -538,5 +533,4 @@ mod tests {
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
         ));
     }
-    
 }

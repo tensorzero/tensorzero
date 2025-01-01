@@ -1,5 +1,7 @@
 #![allow(clippy::print_stdout)]
 
+use std::collections::HashMap;
+
 use futures::StreamExt;
 use gateway::{
     inference::types::{ContentBlock, RequestMessage, Role},
@@ -21,6 +23,7 @@ pub struct E2ETestProvider {
     pub variant_name: String,
     pub model_name: String,
     pub model_provider_name: String,
+    pub credentials: Option<HashMap<String, String>>,
 }
 
 /// Enforce that every provider implements a common set of tests.
@@ -715,7 +718,7 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
 pub async fn test_inference_params_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
 
-    let payload = json!({
+    let mut payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
         "episode_id": episode_id,
@@ -740,6 +743,10 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
         },
         "stream": false,
     });
+
+    if let Some(creds) = &provider.credentials {
+        payload["credentials"] = json!(creds);
+    }
 
     let response = Client::new()
         .post(get_gateway_endpoint("/inference"))
@@ -924,7 +931,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
 ) {
     let episode_id = Uuid::now_v7();
 
-    let payload = json!({
+    let mut payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
         "episode_id": episode_id,
@@ -949,6 +956,10 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
         },
         "stream": true,
     });
+
+    if let Some(creds) = &provider.credentials {
+        payload["credentials"] = json!(creds);
+    }
 
     let mut event_source = Client::new()
         .post(get_gateway_endpoint("/inference"))

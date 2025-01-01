@@ -67,12 +67,12 @@ pub enum TogetherCredentials {
     Static(SecretString),
     Dynamic(String),
     #[cfg(any(test, feature = "e2e_tests"))]
-    None
+    None,
 }
 
 impl TryFrom<Credential> for TogetherCredentials {
     type Error = Error;
-    
+
     fn try_from(credentials: Credential) -> Result<Self, Error> {
         match credentials {
             Credential::Static(key) => Ok(TogetherCredentials::Static(key)),
@@ -81,7 +81,7 @@ impl TryFrom<Credential> for TogetherCredentials {
             Credential::Missing => Ok(TogetherCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Together provider".to_string(),
-            }))
+            })),
         }
     }
 }
@@ -99,7 +99,7 @@ impl TogetherCredentials {
                         provider_name: "Together".to_string(),
                     },
                 )?))
-            },
+            }
             #[cfg(any(test, feature = "e2e_tests"))]
             TogetherCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: "Together".to_string(),
@@ -496,5 +496,4 @@ mod tests {
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
         ));
     }
-   
 }

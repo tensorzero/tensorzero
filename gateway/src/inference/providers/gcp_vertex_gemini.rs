@@ -46,7 +46,8 @@ impl GCPVertexGeminiProvider {
     ) -> Result<Self, Error> {
         let credential_location = api_key_location.unwrap_or(default_api_key_location());
         let generic_credentials = Credential::try_from((credential_location, "GCPVertexGemini"))?;
-        let provider_credentials= GCPVertexCredentials::try_from((generic_credentials, "GCPVertexGemini"))?;
+        let provider_credentials =
+            GCPVertexCredentials::try_from((generic_credentials, "GCPVertexGemini"))?;
         let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:generateContent");
         let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:streamGenerateContent?alt=sse");
         let audience = format!("https://{location}-aiplatform.googleapis.com/");
@@ -70,30 +71,29 @@ pub enum GCPVertexCredentials {
     Static(GCPServiceAccountCredentials),
     Dynamic(String),
     #[cfg(any(test, feature = "e2e_tests"))]
-    None
+    None,
 }
 
 impl TryFrom<(Credential, &str)> for GCPVertexCredentials {
     type Error = Error;
-    
+
     fn try_from((credentials, model): (Credential, &str)) -> Result<Self, Error> {
         match credentials {
             Credential::FileContents(file_content) => Ok(GCPVertexCredentials::Static(
-                GCPServiceAccountCredentials::from_json_str(file_content.expose_secret()).map_err(|e| {
-                    Error::new(ErrorDetails::GCPCredentials {
-                        message: format!("Failed to load GCP credentials: {}", e),
-                    })
-                })?,
+                GCPServiceAccountCredentials::from_json_str(file_content.expose_secret()).map_err(
+                    |e| {
+                        Error::new(ErrorDetails::GCPCredentials {
+                            message: format!("Failed to load GCP credentials: {}", e),
+                        })
+                    },
+                )?,
             )),
             Credential::Dynamic(key_name) => Ok(GCPVertexCredentials::Dynamic(key_name)),
             #[cfg(any(test, feature = "e2e_tests"))]
-            Credential::Missing => {
-                Ok(GCPVertexCredentials::None)
-            },
+            Credential::Missing => Ok(GCPVertexCredentials::None),
             _ => Err(Error::new(ErrorDetails::GCPCredentials {
                 message: format!("Invalid credential_location for {} provider", model),
             }))?,
-
         }
     }
 }
@@ -118,7 +118,7 @@ impl GCPVertexCredentials {
             #[cfg(any(test, feature = "e2e_tests"))]
             GCPVertexCredentials::None => Err(Error::new(ErrorDetails::ApiKeyMissing {
                 provider_name: "GCP Vertex Gemini".to_string(),
-            }))
+            })),
         }
     }
 }
@@ -135,8 +135,6 @@ pub struct GCPServiceAccountCredentials {
     pub private_key: EncodingKey,
     pub client_email: String,
 }
-
-
 
 impl std::fmt::Debug for GCPServiceAccountCredentials {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -178,7 +176,7 @@ impl<'a> Claims<'a> {
 
 impl GCPServiceAccountCredentials {
     // Parse a JSON string into a GCPServiceAccountCredentials struct that can be used to sign requests.
-    pub fn from_json_str(credential_str: &str) -> Result<Self,Error> {
+    pub fn from_json_str(credential_str: &str) -> Result<Self, Error> {
         let credential_value: Value = serde_json::from_str(credential_str).map_err(|e| {
             Error::new(ErrorDetails::GCPCredentials {
                 message: format!("Failed to parse GCP Vertex Gemini credentials: {e}"),

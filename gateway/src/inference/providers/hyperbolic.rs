@@ -1,4 +1,3 @@
-
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{
@@ -45,7 +44,7 @@ impl HyperbolicProvider {
     ) -> Result<Self, Error> {
         let credential_location = api_key_location.unwrap_or(default_api_key_location());
         let generic_credentials = Credential::try_from((credential_location, "Hyperbolic"))?;
-        let provider_credentials = HyperbolicCredentials::try_from(generic_credentials)?; 
+        let provider_credentials = HyperbolicCredentials::try_from(generic_credentials)?;
         Ok(HyperbolicProvider {
             model_name,
             credentials: provider_credentials,
@@ -58,12 +57,12 @@ pub enum HyperbolicCredentials {
     Static(SecretString),
     Dynamic(String),
     #[cfg(any(test, feature = "e2e_tests"))]
-    None
+    None,
 }
 
 impl TryFrom<Credential> for HyperbolicCredentials {
     type Error = Error;
-    
+
     fn try_from(credentials: Credential) -> Result<Self, Error> {
         match credentials {
             Credential::Static(key) => Ok(HyperbolicCredentials::Static(key)),
@@ -72,11 +71,10 @@ impl TryFrom<Credential> for HyperbolicCredentials {
             Credential::Missing => Ok(HyperbolicCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Hyperbolic provider".to_string(),
-            }))
+            })),
         }
     }
 }
-
 
 impl HyperbolicCredentials {
     fn get_api_key<'a>(
@@ -92,7 +90,7 @@ impl HyperbolicCredentials {
                     }
                     .into()
                 })
-            },
+            }
             #[cfg(any(test, feature = "e2e_tests"))]
             HyperbolicCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: "Hyperbolic".to_string(),
@@ -412,7 +410,6 @@ mod tests {
         );
     }
 
-   
     #[test]
     fn test_credential_to_hyperbolic_credentials() {
         // Test Static credential
@@ -442,5 +439,4 @@ mod tests {
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
         ));
     }
-   
 }

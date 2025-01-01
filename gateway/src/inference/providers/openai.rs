@@ -71,16 +71,14 @@ pub enum OpenAICredentials {
 
 impl TryFrom<Credential> for OpenAICredentials {
     type Error = Error;
-    
+
     fn try_from(credentials: Credential) -> Result<Self, Error> {
         match credentials {
             Credential::Static(key) => Ok(OpenAICredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(OpenAICredentials::Dynamic(key_name)),
             Credential::None => Ok(OpenAICredentials::None),
             #[cfg(any(test, feature = "e2e_tests"))]
-            Credential::Missing => {
-                Ok(OpenAICredentials::None)
-            },
+            Credential::Missing => Ok(OpenAICredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for OpenAI provider".to_string(),
             })),
@@ -2597,17 +2595,17 @@ mod tests {
         let generic = Credential::Static(SecretString::from("test_key"));
         let creds = OpenAICredentials::try_from(generic).unwrap();
         assert!(matches!(creds, OpenAICredentials::Static(_)));
- 
-        // Test Dynamic credentials 
+
+        // Test Dynamic credentials
         let generic = Credential::Dynamic("key_name".to_string());
         let creds = OpenAICredentials::try_from(generic).unwrap();
         assert!(matches!(creds, OpenAICredentials::Dynamic(_)));
- 
+
         // Test None credentials
         let generic = Credential::None;
         let creds = OpenAICredentials::try_from(generic).unwrap();
         assert!(matches!(creds, OpenAICredentials::None));
- 
+
         // Test Missing credentials (in test mode)
         #[cfg(any(test, feature = "e2e_tests"))]
         {
@@ -2615,7 +2613,7 @@ mod tests {
             let creds = OpenAICredentials::try_from(generic).unwrap();
             assert!(matches!(creds, OpenAICredentials::None));
         }
- 
+
         // Test invalid credential type
         let generic = Credential::FileContents(SecretString::from("test"));
         let result = OpenAICredentials::try_from(generic);

@@ -39,9 +39,10 @@ impl GoogleAIStudioGeminiProvider {
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
         let credential_location = api_key_location.unwrap_or(default_api_key_location());
-        let generic_credentials = Credential::try_from((credential_location, "Google AI Studio Gemini"))?;
+        let generic_credentials =
+            Credential::try_from((credential_location, "Google AI Studio Gemini"))?;
         let provider_credentials = GoogleAIStudioCredentials::try_from(generic_credentials)?;
-        
+
         let request_url = Url::parse(&format!(
             "https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent",
         ))
@@ -75,12 +76,12 @@ pub enum GoogleAIStudioCredentials {
     Static(SecretString),
     Dynamic(String),
     #[cfg(any(test, feature = "e2e_tests"))]
-    None
+    None,
 }
 
 impl TryFrom<Credential> for GoogleAIStudioCredentials {
     type Error = Error;
-    
+
     fn try_from(credentials: Credential) -> Result<Self, Error> {
         match credentials {
             Credential::Static(key) => Ok(GoogleAIStudioCredentials::Static(key)),
@@ -109,7 +110,7 @@ impl GoogleAIStudioCredentials {
                     }
                     .into()
                 })
-            },
+            }
             #[cfg(any(test, feature = "e2e_tests"))]
             GoogleAIStudioCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: "Google AI Studio".to_string(),
@@ -1671,7 +1672,7 @@ mod tests {
         let processed_schema_recursive = process_output_schema(&output_schema_recursive).unwrap();
         assert_eq!(processed_schema_recursive, expected_processed_schema);
     }
-    
+
     #[test]
     fn test_credential_to_google_ai_studio_credentials() {
         // Test Static credential
@@ -1701,5 +1702,4 @@ mod tests {
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
         ));
     }
-
 }

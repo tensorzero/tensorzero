@@ -1,4 +1,3 @@
-
 use futures::StreamExt;
 use reqwest::StatusCode;
 use reqwest_eventsource::RequestBuilderExt;
@@ -52,25 +51,21 @@ pub enum AzureCredentials {
     Static(SecretString),
     Dynamic(String),
     #[cfg(any(test, feature = "e2e_tests"))]
-    None
+    None,
 }
 
 impl TryFrom<Credential> for AzureCredentials {
     type Error = Error;
-    
+
     fn try_from(credentials: Credential) -> Result<Self, Error> {
         match credentials {
             Credential::Static(key) => Ok(AzureCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(AzureCredentials::Dynamic(key_name)),
             #[cfg(any(test, feature = "e2e_tests"))]
-            Credential::Missing => {
-                Ok(AzureCredentials::None)
-            },
-            _ => {
-                Err(Error::new(ErrorDetails::Config {
-                    message: "Invalid api_key_location for Azure provider".to_string(),
-                }))
-            } 
+            Credential::Missing => Ok(AzureCredentials::None),
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: "Invalid api_key_location for Azure provider".to_string(),
+            })),
         }
     }
 }
@@ -89,14 +84,12 @@ impl AzureCredentials {
                     }
                     .into()
                 })
-            },
-            #[cfg(any(test, feature = "e2e_tests"))]
-            AzureCredentials::None => {
-                Err(ErrorDetails::ApiKeyMissing {
-                    provider_name: "Azure".to_string(),
-                }
-                .into())
             }
+            #[cfg(any(test, feature = "e2e_tests"))]
+            AzureCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+                provider_name: "Azure".to_string(),
+            }
+            .into()),
         }
     }
 }
@@ -580,7 +573,6 @@ mod tests {
         );
     }
 
-
     #[test]
     fn test_credential_to_azure_credentials() {
         // Test Static credential
@@ -610,5 +602,4 @@ mod tests {
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
         ));
     }
-    
 }

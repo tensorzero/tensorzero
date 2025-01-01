@@ -68,12 +68,12 @@ pub enum MistralCredentials {
     Static(SecretString),
     Dynamic(String),
     #[cfg(any(test, feature = "e2e_tests"))]
-    None
+    None,
 }
 
 impl TryFrom<Credential> for MistralCredentials {
     type Error = Error;
-    
+
     fn try_from(credentials: Credential) -> Result<Self, Error> {
         match credentials {
             Credential::Static(key) => Ok(MistralCredentials::Static(key)),
@@ -82,7 +82,7 @@ impl TryFrom<Credential> for MistralCredentials {
             Credential::Missing => Ok(MistralCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Mistral provider".to_string(),
-            }))
+            })),
         }
     }
 }
@@ -101,11 +101,12 @@ impl MistralCredentials {
                     }
                     .into()
                 })
-            },
+            }
             #[cfg(any(test, feature = "e2e_tests"))]
             MistralCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: "Mistral".to_string(),
-            }.into())
+            }
+            .into()),
         }
     }
 }
@@ -1086,5 +1087,4 @@ mod tests {
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
         ));
     }
-   
 }
