@@ -639,7 +639,7 @@ export async function queryInferenceTable(params: {
         function_type,
         UUIDv7ToDateTime(id) AS timestamp
       FROM InferenceById
-      ORDER BY id DESC
+      ORDER BY toUInt128(id) DESC
       LIMIT {page_size:UInt32}
     `;
   } else if (before) {
@@ -653,8 +653,8 @@ export async function queryInferenceTable(params: {
         function_type,
         UUIDv7ToDateTime(id) AS timestamp
       FROM InferenceById
-      WHERE id < toUUID({before:String})
-      ORDER BY id DESC
+      WHERE toUInt128(id) < toUInt128(toUUID({before:String}))
+      ORDER BY toUInt128(id) DESC
       LIMIT {page_size:UInt32}
     `;
     query_params.before = before;
@@ -679,11 +679,11 @@ export async function queryInferenceTable(params: {
           function_type,
           UUIDv7ToDateTime(id) AS timestamp
         FROM InferenceById
-        WHERE id > toUUID({after:String})
-        ORDER BY id ASC
+        WHERE toUInt128(id) > toUInt128(toUUID({after:String}))
+        ORDER BY toUInt128(id) ASC
         LIMIT {page_size:UInt32}
       )
-      ORDER BY id DESC
+      ORDER BY toUInt128(id) DESC
     `;
     query_params.after = after;
   }
@@ -709,10 +709,11 @@ export interface InferenceTableBounds {
 
 export async function queryInferenceTableBounds(): Promise<InferenceTableBounds> {
   const query = `
-    SELECT
-      MIN(id) AS first_id,
-      MAX(id) AS last_id
-    FROM InferenceById
+   SELECT
+  (SELECT id FROM InferenceById WHERE toUInt128(id) = (SELECT MIN(toUInt128(id)) FROM InferenceById)) AS first_id,
+  (SELECT id FROM InferenceById WHERE toUInt128(id) = (SELECT MAX(toUInt128(id)) FROM InferenceById)) AS last_id
+FROM InferenceById
+LIMIT 1
   `;
 
   try {
