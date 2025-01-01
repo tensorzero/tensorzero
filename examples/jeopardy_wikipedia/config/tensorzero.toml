@@ -1,0 +1,27 @@
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                   MODELS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+# Define the model `gpt_4o_mini`
+[models.gpt_4o_mini]
+routing = ["openai"]
+
+[models.gpt_4o_mini.providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini"  #   Match the model name in the gateway log
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+# Define the function `answer_question`
+[functions.answer_question]
+type = "chat"
+user_schema = "config/functions/answer_question/user_schema.json"
+system_schema = "config/functions/answer_question/system_schema.json"
+
+[functions.answer_question.variants.default]
+type = "chat_completion"
+model = "gpt_4o_mini"  # Reference the model 
+system_template = "config/functions/answer_question/system_template.minijinja"
+user_template = "config/functions/answer_question/user_template.minijinja"

@@ -1,0 +1,2 @@
+Using the following context: {{ context }}, answer the question: {{ question }}.
+Provide a direct and accurate response.

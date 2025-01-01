@@ -1,0 +1,17 @@
+# Ignore environment variables
+.env
+
+# Python compiled files
+*.pyc
+__pycache__/
+
+# Ignore IDE/Editor settings
+.vscode/
+.idea/
+
+# Ignore Docker overrides
+docker-compose.override.yml
+
+# Ignore OS-specific files
+.DS_Store
+Thumbs.db

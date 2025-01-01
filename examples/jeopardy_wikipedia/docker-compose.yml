@@ -1,0 +1,29 @@
+version: "3.9"
+services:
+  clickhouse:
+    container_name: tensorzero-clickhouse
+    image: clickhouse/clickhouse-server
+    ports:
+      - "8123:8123"
+    healthcheck:
+      test: wget --spider --tries 1 http://localhost:8123/ping
+      start_period: 30s
+      interval: 1s
+      timeout: 1s
+
+  gateway:
+    container_name: tensorzero-gateway
+    image: tensorzero/gateway
+    volumes:
+      - ./config:/app/config:ro
+environment:
+      - CLICKHOUSE_URL=http://clickhouse:8123/tensorzero
+      - LOG_LEVEL=debug
+      - OPENAI_API_KEY=${OPENAI_API_KEY}  # Reads from .env file
+    env_file:
+      - .env  # Load environment variables from the .env file
+    ports:
+      - "3000:3000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
