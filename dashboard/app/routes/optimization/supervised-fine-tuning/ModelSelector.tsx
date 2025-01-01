@@ -133,7 +133,7 @@ export function ModelSelector({ control, models }: ModelSelectorProps) {
               <SelectContent>
                 {models.map((model) => (
                   <SelectItem key={model.displayName} value={model.displayName}>
-                    <div className="flex items-center justify-between w-full">
+                    <div className="flex w-full items-center justify-between">
                       <span>{model.displayName}</span>
                       <span
                         className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${

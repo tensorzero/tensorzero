@@ -28,8 +28,8 @@ export function TemplateDetailsDialog({
             Details
           </Button>
         </DialogTrigger>
-        <DialogContent className="sm:max-w-[625px] p-0 overflow-hidden">
-          <div className="max-h-[90vh] overflow-y-auto p-6 rounded-lg">
+        <DialogContent className="overflow-hidden p-0 sm:max-w-[625px]">
+          <div className="max-h-[90vh] overflow-y-auto rounded-lg p-6">
             <DialogHeader>
               <DialogTitle>Template Details</DialogTitle>
             </DialogHeader>

@@ -73,7 +73,7 @@ export function MetricSelector({
       render={({ field }) => (
         <FormItem>
           <FormLabel>Metric</FormLabel>
-          <div className="grid md:grid-cols-2 gap-x-8">
+          <div className="grid gap-x-8 md:grid-cols-2">
             <div className="space-y-2">
               <Select
                 onValueChange={(value: string) => {
@@ -88,35 +88,32 @@ export function MetricSelector({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">
-                    <div className="flex items-center justify-between w-full">
+                    <div className="flex w-full items-center justify-between">
                       <span>None</span>
                     </div>
                   </SelectItem>
                   {Object.entries(config.metrics).map(([name, metric]) => (
                     <SelectItem key={name} value={name}>
-                      <div className="flex items-center justify-between w-full">
+                      <div className="flex w-full items-center justify-between">
                         <span>{name}</span>
                         <div className="ml-2 flex gap-1.5">
                           {/* Type badge */}
                           <span
-                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
-                              ${getBadgeStyle("type", metric.type)}`}
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getBadgeStyle("type", metric.type)}`}
                           >
                             {metric.type}
                           </span>
                           {/* Only show optimize badge if it's defined */}
                           {"optimize" in metric && metric.optimize && (
                             <span
-                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
-                                ${getBadgeStyle("optimize", metric.optimize)}`}
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getBadgeStyle("optimize", metric.optimize)}`}
                             >
                               {metric.optimize}
                             </span>
                           )}
                           {/* Level badge */}
                           <span
-                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
-                              ${getBadgeStyle("level", metric.level)}`}
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getBadgeStyle("level", metric.level)}`}
                           >
                             {metric.level}
                           </span>
@@ -132,13 +129,13 @@ export function MetricSelector({
                   control={control}
                   name="threshold"
                   render={({ field: thresholdField }) => (
-                    <div className="p-4 bg-gray-100 rounded-lg">
+                    <div className="rounded-lg bg-gray-100 p-4">
                       <FormLabel>Threshold</FormLabel>
                       <Input
                         type="number"
                         step="0.01"
                         {...thresholdField}
-                        className="bg-transparent border-none focus:ring-0"
+                        className="border-none bg-transparent focus:ring-0"
                         onChange={(e) => {
                           thresholdField.onChange(Number(e.target.value));
                           onThresholdChange(Number(e.target.value));
