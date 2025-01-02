@@ -6,22 +6,21 @@ crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
-    let mut map = HashMap::new();
-    if let Ok(api_key) = std::env::var("VLLM_API_KEY") {
-        map.insert("VLLM_API_KEY".to_string(), api_key);
-    }
-    let credentials = if map.is_empty() { None } else { Some(map) };
+    let credentials = match std::env::var("VLLM_API_KEY") {
+        Ok(key) => HashMap::from([("vllm_api_key".to_string(), key)]),
+        Err(_) => HashMap::new(),
+    };
 
     let providers = vec![E2ETestProvider {
         variant_name: "vllm".to_string(),
         model_name: "microsoft/Phi-3.5-mini-instruct".to_string(),
         model_provider_name: "vllm".to_string(),
-        credentials: None,
+        credentials: HashMap::new(),
     }];
 
     let inference_params_providers = vec![E2ETestProvider {
-        variant_name: "vllm".to_string(),
-        model_name: "microsoft/Phi-3.5-mini-instruct".to_string(),
+        variant_name: "vllm-dynamic".to_string(),
+        model_name: "microsoft/Phi-3.5-mini-instruct-dynamic".to_string(),
         model_provider_name: "vllm".to_string(),
         credentials,
     }];

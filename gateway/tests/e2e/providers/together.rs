@@ -6,22 +6,21 @@ crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
-    let mut map = HashMap::new();
-    if let Ok(api_key) = std::env::var("TOGETHER_API_KEY") {
-        map.insert("TOGETHER_API_KEY".to_string(), api_key);
-    }
-    let credentials = if map.is_empty() { None } else { Some(map) };
+    let credentials = match std::env::var("TOGETHER_API_KEY") {
+        Ok(key) => HashMap::from([("together_api_key".to_string(), key)]),
+        Err(_) => HashMap::new(),
+    };
 
     let standard_providers = vec![E2ETestProvider {
         variant_name: "together".to_string(),
         model_name: "llama3.1-8b-instruct-together".to_string(),
         model_provider_name: "together".to_string(),
-        credentials: None,
+        credentials: HashMap::new(),
     }];
 
     let inference_params_providers = vec![E2ETestProvider {
-        variant_name: "together".to_string(),
-        model_name: "llama3.1-8b-instruct-together".to_string(),
+        variant_name: "together-dynamic".to_string(),
+        model_name: "llama3.1-8b-instruct-together-dynamic".to_string(),
         model_provider_name: "together".to_string(),
         credentials,
     }];
@@ -31,7 +30,7 @@ async fn get_providers() -> E2ETestProviders {
             variant_name: "together".to_string(),
             model_name: "llama3.1-8b-instruct-together".to_string(),
             model_provider_name: "together".to_string(),
-            credentials: None,
+            credentials: HashMap::new(),
         },
         // TODOs (#80): see below
         // E2ETestProvider {
@@ -43,7 +42,7 @@ async fn get_providers() -> E2ETestProviders {
         variant_name: "together-shorthand".to_string(),
         model_name: "together::meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo".to_string(),
         model_provider_name: "together".to_string(),
-        credentials: None,
+        credentials: HashMap::new(),
     }];
 
     // TODOs (#80):

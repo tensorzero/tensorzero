@@ -20,6 +20,14 @@ routing = ["openai"]
 type = "openai"
 model_name = "gpt-4o-mini-2024-07-18"
 
+[models."gpt-4o-mini-2024-07-18-dynamic"]
+routing = ["openai"]
+
+[models."gpt-4o-mini-2024-07-18-dynamic".providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini-2024-07-18"
+credential_location = "dynamic::openai_api_key"
+
 [models."gpt-4o-mini-azure"]
 routing = ["azure"]
 
@@ -27,6 +35,17 @@ routing = ["azure"]
 type = "azure"
 deployment_id = "gpt4o-mini-20240718"
 endpoint = "https://t0-azure-openai-east.openai.azure.com"
+
+
+[models."gpt-4o-mini-azure-dynamic"]
+routing = ["azure"]
+
+[models."gpt-4o-mini-azure-dynamic".providers.azure]
+type = "azure"
+deployment_id = "gpt4o-mini-20240718"
+endpoint = "https://t0-azure-openai-east.openai.azure.com"
+credential_location = "dynamic::azure_openai_api_key"
+
 
 [models.claude-3-haiku-20240307]
 routing = ["anthropic", "aws-bedrock"]
@@ -63,6 +82,14 @@ routing = ["anthropic"]
 type = "anthropic"
 model_name = "claude-3-haiku-20240307"
 
+[models."claude-3-haiku-20240307-anthropic-dynamic"]
+routing = ["anthropic"]
+
+[models."claude-3-haiku-20240307-anthropic-dynamic".providers.anthropic]
+type = "anthropic"
+model_name = "claude-3-haiku-20240307"
+credential_location = "dynamic::anthropic_api_key"
+
 # Duplicate so that we can test just AWS Bedrock no fallbacks
 [models.claude-3-haiku-20240307-aws-bedrock]
 routing = ["aws-bedrock"]
@@ -80,6 +107,16 @@ model_id = "claude-3-haiku@20240307"
 location = "us-central1"
 project_id = "tensorzero-public"
 
+[models.claude-3-haiku-20240307-gcp-vertex-dynamic]
+routing = ["gcp_vertex_anthropic"]
+
+[models.claude-3-haiku-20240307-gcp-vertex-dynamic.providers.gcp_vertex_anthropic]
+type = "gcp_vertex_anthropic"
+model_id = "claude-3-haiku@20240307"
+location = "us-central1"
+project_id = "tensorzero-public"
+credential_location = "path_from_env::gcp_vertex_credentials_path"
+
 [models."gemini-1.5-flash-001"]
 routing = ["gcp_vertex_gemini"]
 
@@ -88,6 +125,16 @@ type = "gcp_vertex_gemini"
 model_id = "gemini-1.5-flash-001"
 location = "us-central1"
 project_id = "tensorzero-public"
+
+[models."gemini-1.5-flash-001-dynamic"]
+routing = ["gcp_vertex_gemini"]
+
+[models."gemini-1.5-flash-001-dynamic".providers.gcp_vertex_gemini]
+type = "gcp_vertex_gemini"
+model_id = "gemini-1.5-flash-001"
+location = "us-central1"
+project_id = "tensorzero-public"
+credential_location = "path_from_env::gcp_vertex_credentials_path"
 
 [models."gemini-1.5-pro-001"]
 routing = ["gcp_vertex_gemini"]
@@ -98,12 +145,31 @@ model_id = "gemini-1.5-pro-001"
 location = "us-central1"
 project_id = "tensorzero-public"
 
+[models."gemini-1.5-pro-001-dynamic"]
+routing = ["gcp_vertex_gemini"]
+
+[models."gemini-1.5-pro-001-dynamic".providers.gcp_vertex_gemini]
+type = "gcp_vertex_gemini"
+model_id = "gemini-1.5-pro-001"
+location = "us-central1"
+project_id = "tensorzero-public"
+credential_location = "path_from_env::gcp_vertex_credentials_path"
+
 [models."gemini-1.5-flash-8b"]
 routing = ["google_ai_studio_gemini"]
 
 [models."gemini-1.5-flash-8b".providers.google_ai_studio_gemini]
 type = "google_ai_studio_gemini"
 model_name = "gemini-1.5-flash-8b"
+
+
+[models."gemini-1.5-flash-8b-dynamic"]
+routing = ["google_ai_studio_gemini"]
+
+[models."gemini-1.5-flash-8b-dynamic".providers.google_ai_studio_gemini]
+type = "google_ai_studio_gemini"
+model_name = "gemini-1.5-flash-8b"
+credential_location = "dynamic::google_ai_studio_api_key"
 
 [models."gemini-1.5-pro-002"]
 routing = ["google_ai_studio_gemini"]
@@ -112,12 +178,28 @@ routing = ["google_ai_studio_gemini"]
 type = "google_ai_studio_gemini"
 model_name = "gemini-1.5-pro-002"
 
+[models."gemini-1.5-pro-002-dynamic"]
+routing = ["google_ai_studio_gemini"]
+
+[models."gemini-1.5-pro-002-dynamic".providers.google_ai_studio_gemini]
+type = "google_ai_studio_gemini"
+model_name = "gemini-1.5-pro-002"
+credential_location = "dynamic::google_ai_studio_api_key"
+
 [models."llama3.1-8b-instruct-fireworks"]
 routing = ["fireworks"]
 
 [models."llama3.1-8b-instruct-fireworks".providers.fireworks]
 type = "fireworks"
 model_name = "accounts/fireworks/models/llama-v3p1-8b-instruct"
+
+[models."llama3.1-8b-instruct-fireworks-dynamic"]
+routing = ["fireworks"]
+
+[models."llama3.1-8b-instruct-fireworks-dynamic".providers.fireworks]
+type = "fireworks"
+model_name = "accounts/fireworks/models/llama-v3p1-8b-instruct"
+credential_location = "dynamic::fireworks_api_key"
 
 [models.firefunction-v2]
 routing = ["fireworks"]
@@ -132,6 +214,14 @@ routing = ["together"]
 [models."llama3.1-8b-instruct-together".providers.together]
 type = "together"
 model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
+
+[models."llama3.1-8b-instruct-together-dynamic"]
+routing = ["together"]
+
+[models."llama3.1-8b-instruct-together-dynamic".providers.together]
+type = "together"
+model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
+credential_location = "dynamic::together_api_key"
 
 [models."mixtral-8x7b-instruct-v0.1"]
 routing = ["together"]
@@ -148,12 +238,29 @@ type = "vllm"
 model_name = "microsoft/Phi-3.5-mini-instruct"
 api_base = "https://pun1owldydhycl-8000.proxy.runpod.net/v1/"
 
+[models."microsoft/Phi-3.5-mini-instruct-dynamic"]
+routing = ["vllm"]
+
+[models."microsoft/Phi-3.5-mini-instruct-dynamic".providers.vllm]
+type = "vllm"
+model_name = "microsoft/Phi-3.5-mini-instruct"
+api_base = "https://pun1owldydhycl-8000.proxy.runpod.net/v1/"
+credential_location = "dynamic::vllm_api_key"
+
 [models."open-mistral-nemo-2407"]
 routing = ["mistral"]
 
 [models."open-mistral-nemo-2407".providers.mistral]
 type = "mistral"
 model_name = "open-mistral-nemo-2407"
+
+[models."open-mistral-nemo-2407-dynamic"]
+routing = ["mistral"]
+
+[models."open-mistral-nemo-2407-dynamic".providers.mistral]
+type = "mistral"
+model_name = "open-mistral-nemo-2407"
+credential_location = "dynamic::mistral_api_key"
 
 [models.o1-mini]
 routing = ["openai"]
@@ -169,12 +276,29 @@ routing = ["xai"]
 type = "xai"
 model_name = "grok-2-1212"
 
+[models."grok_2_1212-dynamic"]
+routing = ["xai"]
+
+[models."grok_2_1212-dynamic".providers.xai]
+type = "xai"
+model_name = "grok-2-1212"
+credential_location = "dynamic::xai_api_key"
+
 [models."meta-llama/Meta-Llama-3-70B-Instruct"]
 routing = ["hyperbolic"]
 
 [models."meta-llama/Meta-Llama-3-70B-Instruct".providers.hyperbolic]
 type = "hyperbolic"
 model_name = "meta-llama/Meta-Llama-3-70B-Instruct"
+
+[models."meta-llama/Meta-Llama-3-70B-Instruct-dynamic"]
+routing = ["hyperbolic"]
+
+[models."meta-llama/Meta-Llama-3-70B-Instruct-dynamic".providers.hyperbolic]
+type = "hyperbolic"
+model_name = "meta-llama/Meta-Llama-3-70B-Instruct"
+credential_location = "dynamic::hyperbolic_api_key"
+
 
 [models.test]
 routing = ["good"]
@@ -318,6 +442,12 @@ model = "claude-3-haiku-20240307-anthropic"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.anthropic-dynamic]
+type = "chat_completion"
+model = "claude-3-haiku-20240307-anthropic-dynamic"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.anthropic-shorthand]
 type = "chat_completion"
 model = "anthropic::claude-3-haiku-20240307"
@@ -348,9 +478,21 @@ model = "gpt-4o-mini-azure"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.azure-dynamic]
+type = "chat_completion"
+model = "gpt-4o-mini-azure-dynamic"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.fireworks]
 type = "chat_completion"
 model = "llama3.1-8b-instruct-fireworks"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.fireworks-dynamic]
+type = "chat_completion"
+model = "llama3.1-8b-instruct-fireworks-dynamic"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -372,15 +514,33 @@ model = "gemini-1.5-flash-001"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.gcp-vertex-gemini-flash-dynamic]
+type = "chat_completion"
+model = "gemini-1.5-flash-001-dynamic"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.gcp-vertex-gemini-pro]
 type = "chat_completion"
 model = "gemini-1.5-pro-001"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.gcp-vertex-gemini-pro-dynamic]
+type = "chat_completion"
+model = "gemini-1.5-pro-001-dynamic"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.google-ai-studio-gemini-flash-8b]
 type = "chat_completion"
 model = "gemini-1.5-flash-8b"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.google-ai-studio-gemini-flash-8b-dynamic]
+type = "chat_completion"
+model = "gemini-1.5-flash-8b-dynamic"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -396,9 +556,21 @@ model = "gemini-1.5-pro-002"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.google-ai-studio-gemini-pro-002-dynamic]
+type = "chat_completion"
+model = "gemini-1.5-pro-002-dynamic"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.gcp-vertex-haiku]
 type = "chat_completion"
 model = "claude-3-haiku-20240307-gcp-vertex"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.gcp-vertex-haiku-dynamic]
+type = "chat_completion"
+model = "claude-3-haiku-20240307-gcp-vertex-dynamic"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -408,15 +580,28 @@ model = "open-mistral-nemo-2407"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.mistral-dynamic]
+type = "chat_completion"
+model = "open-mistral-nemo-2407-dynamic"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.mistral-shorthand]
 type = "chat_completion"
 model = "mistral::open-mistral-nemo-2407"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+
 [functions.basic_test.variants.openai]
 type = "chat_completion"
 model = "gpt-4o-mini-2024-07-18"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.openai-dynamic]
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18-dynamic"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -437,6 +622,12 @@ model = "llama3.1-8b-instruct-together"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.together-dynamic]
+type = "chat_completion"
+model = "llama3.1-8b-instruct-together-dynamic"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.together-shorthand]
 type = "chat_completion"
 model = "together::meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
@@ -449,9 +640,21 @@ model = "microsoft/Phi-3.5-mini-instruct"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.vllm-dynamic]
+type = "chat_completion"
+model = "microsoft/Phi-3.5-mini-instruct-dynamic"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.xai]
 type = "chat_completion"
 model = "grok_2_1212"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.xai-dynamic]
+type = "chat_completion"
+model = "grok_2_1212-dynamic"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -464,6 +667,12 @@ max_tokens = 100
 [functions.basic_test.variants.hyperbolic]
 type = "chat_completion"
 model = "meta-llama/Meta-Llama-3-70B-Instruct"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.hyperbolic-dynamic]
+type = "chat_completion"
+model = "meta-llama/Meta-Llama-3-70B-Instruct-dynamic"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 

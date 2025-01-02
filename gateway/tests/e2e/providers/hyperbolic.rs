@@ -5,23 +5,21 @@ use crate::providers::common::{E2ETestProvider, E2ETestProviders};
 crate::generate_provider_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
-    let mut map = HashMap::new();
-    if let Ok(api_key) = std::env::var("HYPERBOLIC_API_KEY") {
-        map.insert("HYPERBOLIC_API_KEY".to_string(), api_key);
-    }
-
-    let credentials = if map.is_empty() { None } else { Some(map) };
+    let credentials = match std::env::var("HYPERBOLIC_API_KEY") {
+        Ok(key) => HashMap::from([("hyperbolic_api_key".to_string(), key)]),
+        Err(_) => HashMap::new(),
+    };
 
     let standard_providers = vec![E2ETestProvider {
         variant_name: "hyperbolic".to_string(),
         model_name: "meta-llama/Meta-Llama-3-70B-Instruct".to_string(),
         model_provider_name: "hyperbolic".to_string(),
-        credentials: None,
+        credentials: HashMap::new(),
     }];
 
     let inference_params_providers = vec![E2ETestProvider {
-        variant_name: "hyperbolic".to_string(),
-        model_name: "meta-llama/Meta-Llama-3-70B-Instruct".to_string(),
+        variant_name: "hyperbolic-dynamic".to_string(),
+        model_name: "meta-llama/Meta-Llama-3-70B-Instruct-dynamic".to_string(),
         model_provider_name: "hyperbolic".to_string(),
         credentials,
     }];
@@ -30,7 +28,7 @@ async fn get_providers() -> E2ETestProviders {
         variant_name: "hyperbolic-shorthand".to_string(),
         model_name: "hyperbolic::meta-llama/Meta-Llama-3-70B-Instruct".to_string(),
         model_provider_name: "hyperbolic".to_string(),
-        credentials: None,
+        credentials: HashMap::new(),
     }];
 
     E2ETestProviders {

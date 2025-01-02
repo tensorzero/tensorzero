@@ -15,7 +15,7 @@ repos:
       - id: detect-private-key
         exclude: |
           (?x)
-          gateway/src/inference/providers/gcp_vertex_anthropic\.rs|
+          gateway/src/inference/providers/gcp_vertex_gemini\.rs|
           CONTRIBUTING\.md
       - id: end-of-file-fixer
         exclude: \.minijinja$

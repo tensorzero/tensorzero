@@ -6,24 +6,21 @@ crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
-    let mut map = HashMap::new();
-
-    if let Ok(api_key) = std::env::var("AZURE_OPENAI_API_KEY") {
-        map.insert("AZURE_OPENAI_API_KEY".to_string(), api_key);
-    }
-
-    let credentials = if map.is_empty() { None } else { Some(map) };
+    let credentials = match std::env::var("AZURE_OPENAI_API_KEY") {
+        Ok(key) => HashMap::from([("azure_openai_api_key".to_string(), key)]),
+        Err(_) => HashMap::new(),
+    };
 
     let standard_providers = vec![E2ETestProvider {
         variant_name: "azure".to_string(),
         model_name: "gpt-4o-mini-azure".to_string(),
         model_provider_name: "azure".to_string(),
-        credentials: None,
+        credentials: HashMap::new(),
     }];
 
     let inference_params_providers = vec![E2ETestProvider {
-        variant_name: "azure".to_string(),
-        model_name: "gpt-4o-mini-azure".to_string(),
+        variant_name: "azure-dynamic".to_string(),
+        model_name: "gpt-4o-mini-azure-dynamic".to_string(),
         model_provider_name: "azure".to_string(),
         credentials,
     }];
@@ -33,13 +30,13 @@ async fn get_providers() -> E2ETestProviders {
             variant_name: "azure".to_string(),
             model_name: "gpt-4o-mini-azure".to_string(),
             model_provider_name: "azure".to_string(),
-            credentials: None,
+            credentials: HashMap::new(),
         },
         E2ETestProvider {
             variant_name: "azure-implicit".to_string(),
             model_name: "gpt-4o-mini-azure".to_string(),
             model_provider_name: "azure".to_string(),
-            credentials: None,
+            credentials: HashMap::new(),
         },
     ];
 

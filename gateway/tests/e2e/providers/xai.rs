@@ -5,17 +5,16 @@ use crate::providers::common::{E2ETestProvider, E2ETestProviders};
 crate::generate_provider_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
-    let mut map = HashMap::new();
-    if let Ok(api_key) = std::env::var("XAI_API_KEY") {
-        map.insert("XAI_API_KEY".to_string(), api_key);
-    }
-    let credentials = if map.is_empty() { None } else { Some(map) };
+    let credentials = match std::env::var("XAI_API_KEY") {
+        Ok(key) => HashMap::from([("xai_api_key".to_string(), key)]),
+        Err(_) => HashMap::new(),
+    };
 
     let standard_providers = vec![E2ETestProvider {
         variant_name: "xai".to_string(),
         model_name: "grok_2_1212".to_string(),
         model_provider_name: "xai".to_string(),
-        credentials: None,
+        credentials: HashMap::new(),
     }];
 
     let inference_params_providers = vec![E2ETestProvider {
@@ -29,7 +28,7 @@ async fn get_providers() -> E2ETestProviders {
         variant_name: "xai-shorthand".to_string(),
         model_name: "xai::grok-2-1212".to_string(),
         model_provider_name: "xai".to_string(),
-        credentials: None,
+        credentials: HashMap::new(),
     }];
 
     E2ETestProviders {

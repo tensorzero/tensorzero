@@ -559,8 +559,13 @@ impl ProviderConfig {
 }
 
 pub enum CredentialLocation {
+    /// Environment variable containing the actual credential
     Env(String),
+    /// Environment variable containing the path to a credential file
+    PathFromEnv(String),
+    /// For dynamic credential resolution
     Dynamic(String),
+    /// Direct path to a credential file
     Path(String),
     None,
 }
@@ -573,6 +578,8 @@ impl<'de> Deserialize<'de> for CredentialLocation {
         let s = String::deserialize(deserializer)?;
         if let Some(inner) = s.strip_prefix("env::") {
             Ok(CredentialLocation::Env(inner.to_string()))
+        } else if let Some(inner) = s.strip_prefix("path_from_env::") {
+            Ok(CredentialLocation::PathFromEnv(inner.to_string()))
         } else if let Some(inner) = s.strip_prefix("dynamic::") {
             Ok(CredentialLocation::Dynamic(inner.to_string()))
         } else if let Some(inner) = s.strip_prefix("path::") {
@@ -609,7 +616,10 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                 Err(_) => {
                     #[cfg(any(test, feature = "e2e_tests"))]
                     {
-                        warn!("You are missing the credentials required for a {} model, so the associated tests will likely fail.", provider_type);
+                        warn!(
+                            "You are missing the credentials required for a {} model, so the associated tests will likely fail.",
+                            provider_type
+                        );
                         Ok(Credential::Missing)
                     }
                     #[cfg(not(any(test, feature = "e2e_tests")))]
@@ -620,12 +630,63 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                     }
                 }
             },
+            CredentialLocation::PathFromEnv(env_key) => {
+                // First get the path from environment variable
+                let path = match env::var(&env_key) {
+                    Ok(path) => path,
+                    Err(_) => {
+                        #[cfg(any(test, feature = "e2e_tests"))]
+                        {
+                            warn!(
+                                "Environment variable {} for {} credentials path is missing, tests will likely fail.",
+                                env_key, provider_type
+                            );
+                            return Ok(Credential::Missing);
+                        }
+                        #[cfg(not(any(test, feature = "e2e_tests")))]
+                        {
+                            return Err(Error::new(ErrorDetails::ApiKeyMissing {
+                                provider_name: format!(
+                                    "{}: Environment variable {} for credentials path is missing",
+                                    provider_type, env_key
+                                ),
+                            }));
+                        }
+                    }
+                };
+                // Then read the file contents
+                match fs::read_to_string(path) {
+                    Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
+                    Err(e) => {
+                        #[cfg(any(test, feature = "e2e_tests"))]
+                        {
+                            warn!(
+                                "Failed to read credentials file for a {} model: {}. Tests will likely fail.",
+                                provider_type, e
+                            );
+                            Ok(Credential::Missing)
+                        }
+                        #[cfg(not(any(test, feature = "e2e_tests")))]
+                        {
+                            Err(Error::new(ErrorDetails::ApiKeyMissing {
+                                provider_name: format!(
+                                    "{}: Failed to read credentials file - {}",
+                                    provider_type, e
+                                ),
+                            }))
+                        }
+                    }
+                }
+            }
             CredentialLocation::Path(path) => match fs::read_to_string(path) {
                 Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
                 Err(e) => {
                     #[cfg(any(test, feature = "e2e_tests"))]
                     {
-                        warn!("Failed to read credentials file for a {} model: {}. Tests will likely fail.", provider_type, e);
+                        warn!(
+                            "Failed to read credentials file for a {} model: {}. Tests will likely fail.",
+                            provider_type, e
+                        );
                         Ok(Credential::Missing)
                     }
                     #[cfg(not(any(test, feature = "e2e_tests")))]
