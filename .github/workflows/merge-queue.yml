@@ -24,6 +24,7 @@ env:
   VLLM_API_BASE: ${{ secrets.VLLM_API_BASE }}
   VLLM_MODEL_NAME: "microsoft/Phi-3.5-mini-instruct"
   XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+  TGI_API_KEY: ${{ secrets.TGI_API_KEY }}
 
 jobs:
   live-tests:
@@ -186,7 +187,6 @@ jobs:
       - name: Run ESLint
         working-directory: dashboard
         run: npm run lint
-
 
       - name: Run Prettier
         working-directory: dashboard
