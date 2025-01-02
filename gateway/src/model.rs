@@ -11,6 +11,7 @@ use crate::inference::providers::dummy::DummyProvider;
 use crate::inference::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
 
 use crate::inference::providers::hyperbolic::HyperbolicProvider;
+use crate::inference::providers::tgi::TGIProvider;
 use crate::inference::types::batch::{BatchModelInferenceResponse, BatchProviderInferenceResponse};
 use crate::{
     endpoints::inference::InferenceCredentials,
@@ -164,6 +165,7 @@ pub enum ProviderConfig {
     Together(TogetherProvider),
     VLLM(VLLMProvider),
     XAI(XAIProvider),
+    TGI(TGIProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
 }
@@ -247,6 +249,11 @@ enum ProviderConfigHelper {
     #[allow(clippy::upper_case_acronyms)]
     XAI {
         model_name: String,
+        api_key_location: Option<CredentialLocation>,
+    },
+    #[allow(clippy::upper_case_acronyms)]
+    TGI {
+        api_base: Option<Url>,
         api_key_location: Option<CredentialLocation>,
     },
     #[cfg(any(test, feature = "e2e_tests"))]
@@ -372,6 +379,13 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 XAIProvider::new(model_name, api_key_location)
                     .map_err(|e| D::Error::custom(e.to_string()))?,
             ),
+            ProviderConfigHelper::TGI {
+                api_base,
+                api_key_location,
+            } => ProviderConfig::TGI(
+                TGIProvider::new(api_base, api_key_location)
+                    .map_err(|e| D::Error::custom(e.to_string()))?,
+            ),
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfigHelper::Dummy {
                 model_name,
@@ -411,6 +425,7 @@ impl ProviderConfig {
             ProviderConfig::Together(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::VLLM(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::XAI(provider) => provider.infer(request, client, api_keys).await,
+            ProviderConfig::TGI(provider) => provider.infer(request, client, api_keys).await,
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => provider.infer(request, client, api_keys).await,
         }
@@ -467,6 +482,7 @@ impl ProviderConfig {
             ProviderConfig::VLLM(provider) => {
                 provider.infer_stream(request, client, api_keys).await
             }
+            ProviderConfig::TGI(provider) => provider.infer_stream(request, client, api_keys).await,
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => {
                 provider.infer_stream(request, client, api_keys).await
@@ -546,6 +562,11 @@ impl ProviderConfig {
                     .start_batch_inference(requests, client, api_keys)
                     .await
             }
+            ProviderConfig::TGI(provider) => {
+                provider
+                    .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => {
                 provider
@@ -602,6 +623,7 @@ const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "openai::",
     "together::",
     "xai::",
+    "tgi::",
     "dummy::",
 ];
 
@@ -693,6 +715,7 @@ fn model_config_from_shorthand(
         "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?),
         "together" => ProviderConfig::Together(TogetherProvider::new(model_name, None)?),
         "xai" => ProviderConfig::XAI(XAIProvider::new(model_name, None)?),
+        "tgi" => ProviderConfig::TGI(TGIProvider::new(None, None)?),
         #[cfg(any(test, feature = "e2e_tests"))]
         "dummy" => ProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
         _ => {
