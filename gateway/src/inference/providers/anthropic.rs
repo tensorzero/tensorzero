@@ -5,7 +5,6 @@ use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::env;
 use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
@@ -22,7 +21,7 @@ use crate::inference::types::{
     ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream, RequestMessage, TextChunk, Usage,
 };
-use crate::model::CredentialLocation;
+use crate::model::{Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
 
 lazy_static! {
@@ -49,26 +48,12 @@ impl AnthropicProvider {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
-        let credentials = match api_key_location {
-            CredentialLocation::Env(key_name) => {
-                let api_key = env::var(key_name).map_err(|_| {
-                    Error::new(ErrorDetails::ApiKeyMissing {
-                        provider_name: "Anthropic".to_string(),
-                    })
-                })?;
-                AnthropicCredentials::Static(api_key.into())
-            }
-            CredentialLocation::Dynamic(key_name) => AnthropicCredentials::Dynamic(key_name),
-            _ => {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: "Invalid api_key_location for Anthropic provider".to_string(),
-                }))
-            }
-        };
+        let credential_location = api_key_location.unwrap_or(default_api_key_location());
+        let generic_credentials = Credential::try_from((credential_location, "anthropic"))?;
+        let provider_credentials = AnthropicCredentials::try_from(generic_credentials)?;
         Ok(AnthropicProvider {
             model_name,
-            credentials,
+            credentials: provider_credentials,
         })
     }
 }
@@ -77,6 +62,24 @@ impl AnthropicProvider {
 pub enum AnthropicCredentials {
     Static(SecretString),
     Dynamic(String),
+    #[cfg(any(test, feature = "e2e_tests"))]
+    None,
+}
+
+impl TryFrom<Credential> for AnthropicCredentials {
+    type Error = Error;
+
+    fn try_from(credentials: Credential) -> Result<Self, Error> {
+        match credentials {
+            Credential::Static(key) => Ok(AnthropicCredentials::Static(key)),
+            Credential::Dynamic(key_name) => Ok(AnthropicCredentials::Dynamic(key_name)),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            Credential::Missing => Ok(AnthropicCredentials::None),
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: "Invalid api_key_location for Anthropic provider".to_string(),
+            })),
+        }
+    }
 }
 
 impl AnthropicCredentials {
@@ -94,6 +97,11 @@ impl AnthropicCredentials {
                     .into()
                 })
             }
+            #[cfg(any(test, feature = "e2e_tests"))]
+            AnthropicCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+                provider_name: "Anthropic".to_string(),
+            }
+            .into()),
         }
     }
 }
@@ -2317,5 +2325,35 @@ mod tests {
         };
         let result = prefill_json_chunk_response(chunk.clone());
         assert_eq!(result, chunk);
+    }
+
+    #[test]
+    fn test_credential_to_anthropic_credentials() {
+        // Test Static credential
+        let generic = Credential::Static(SecretString::from("test_key"));
+        let creds = AnthropicCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, AnthropicCredentials::Static(_)));
+
+        // Test Dynamic credential
+        let generic = Credential::Dynamic("key_name".to_string());
+        let creds = AnthropicCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, AnthropicCredentials::Dynamic(_)));
+
+        // Test Missing credential (test mode)
+        #[cfg(any(test, feature = "e2e_tests"))]
+        {
+            let generic = Credential::Missing;
+            let creds = AnthropicCredentials::try_from(generic).unwrap();
+            assert!(matches!(creds, AnthropicCredentials::None));
+        }
+
+        // Test invalid type
+        let generic = Credential::FileContents(SecretString::from("test"));
+        let result = AnthropicCredentials::try_from(generic);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err().get_owned_details(),
+            ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
+        ));
     }
 }

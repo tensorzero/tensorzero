@@ -8,7 +8,6 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::borrow::Cow;
-use std::env;
 use std::io::Write;
 use std::time::Duration;
 use tokio::time::Instant;
@@ -25,7 +24,7 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     RequestMessage, Role, Text, TextChunk, Usage,
 };
-use crate::model::CredentialLocation;
+use crate::model::{Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 lazy_static! {
@@ -52,28 +51,13 @@ impl OpenAIProvider {
         api_base: Option<Url>,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
-        let credentials = match api_key_location {
-            CredentialLocation::Env(key_name) => {
-                let api_key = env::var(key_name)
-                    .map_err(|_| {
-                        Error::new(ErrorDetails::ApiKeyMissing {
-                            provider_name: "OpenAI".to_string(),
-                        })
-                    })?
-                    .into();
-                OpenAICredentials::Static(api_key)
-            }
-            CredentialLocation::Dynamic(key_name) => OpenAICredentials::Dynamic(key_name),
-            CredentialLocation::None => OpenAICredentials::None,
-            _ => Err(Error::new(ErrorDetails::Config {
-                message: "Invalid api_key_location for OpenAI provider".to_string(),
-            }))?,
-        };
+        let credential_location = api_key_location.unwrap_or(default_api_key_location());
+        let generic_credentials = Credential::try_from((credential_location, "OpenAI"))?;
+        let provider_credentials = OpenAICredentials::try_from(generic_credentials)?;
         Ok(OpenAIProvider {
             model_name,
             api_base,
-            credentials,
+            credentials: provider_credentials,
         })
     }
 }
@@ -83,6 +67,23 @@ pub enum OpenAICredentials {
     Static(SecretString),
     Dynamic(String),
     None,
+}
+
+impl TryFrom<Credential> for OpenAICredentials {
+    type Error = Error;
+
+    fn try_from(credentials: Credential) -> Result<Self, Error> {
+        match credentials {
+            Credential::Static(key) => Ok(OpenAICredentials::Static(key)),
+            Credential::Dynamic(key_name) => Ok(OpenAICredentials::Dynamic(key_name)),
+            Credential::None => Ok(OpenAICredentials::None),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            Credential::Missing => Ok(OpenAICredentials::None),
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: "Invalid api_key_location for OpenAI provider".to_string(),
+            })),
+        }
+    }
 }
 
 impl OpenAICredentials {
@@ -2587,5 +2588,39 @@ mod tests {
         let expected = None;
         let result = tensorzero_to_openai_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
+    }
+    #[test]
+    fn test_try_from_openai_credentials() {
+        // Test Static credentials
+        let generic = Credential::Static(SecretString::from("test_key"));
+        let creds = OpenAICredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, OpenAICredentials::Static(_)));
+
+        // Test Dynamic credentials
+        let generic = Credential::Dynamic("key_name".to_string());
+        let creds = OpenAICredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, OpenAICredentials::Dynamic(_)));
+
+        // Test None credentials
+        let generic = Credential::None;
+        let creds = OpenAICredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, OpenAICredentials::None));
+
+        // Test Missing credentials (in test mode)
+        #[cfg(any(test, feature = "e2e_tests"))]
+        {
+            let generic = Credential::Missing;
+            let creds = OpenAICredentials::try_from(generic).unwrap();
+            assert!(matches!(creds, OpenAICredentials::None));
+        }
+
+        // Test invalid credential type
+        let generic = Credential::FileContents(SecretString::from("test"));
+        let result = OpenAICredentials::try_from(generic);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err().get_owned_details(),
+            ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
+        ));
     }
 }

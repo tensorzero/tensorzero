@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::env;
 
 use futures::StreamExt;
 use reqwest_eventsource::RequestBuilderExt;
@@ -21,7 +20,7 @@ use crate::inference::types::{
     ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream,
 };
-use crate::model::CredentialLocation;
+use crate::model::{Credential, CredentialLocation};
 
 #[derive(Debug)]
 pub struct VLLMProvider {
@@ -36,28 +35,13 @@ impl VLLMProvider {
         api_base: Url,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
-        let credentials = match api_key_location {
-            CredentialLocation::Env(key_name) => {
-                let api_key = env::var(key_name)
-                    .map_err(|_| {
-                        Error::new(ErrorDetails::ApiKeyMissing {
-                            provider_name: "vLLM".to_string(),
-                        })
-                    })?
-                    .into();
-                VLLMCredentials::Static(api_key)
-            }
-            CredentialLocation::Dynamic(key_name) => VLLMCredentials::Dynamic(key_name),
-            CredentialLocation::None => VLLMCredentials::None,
-            _ => Err(Error::new(ErrorDetails::Config {
-                message: "Invalid api_key_location for vLLM provider".to_string(),
-            }))?,
-        };
+        let credential_location = api_key_location.unwrap_or(default_api_key_location());
+        let generic_credentials = Credential::try_from((credential_location, "vLLM"))?;
+        let provider_credentials = VLLMCredentials::try_from(generic_credentials)?;
         Ok(VLLMProvider {
             model_name,
             api_base,
-            credentials,
+            credentials: provider_credentials,
         })
     }
 }
@@ -71,6 +55,23 @@ pub enum VLLMCredentials {
     Static(SecretString),
     Dynamic(String),
     None,
+}
+
+impl TryFrom<Credential> for VLLMCredentials {
+    type Error = Error;
+
+    fn try_from(credentials: Credential) -> Result<Self, Error> {
+        match credentials {
+            Credential::Static(key) => Ok(VLLMCredentials::Static(key)),
+            Credential::Dynamic(key_name) => Ok(VLLMCredentials::Dynamic(key_name)),
+            Credential::None => Ok(VLLMCredentials::None),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            Credential::Missing => Ok(VLLMCredentials::None),
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: "Invalid api_key_location for vLLM provider".to_string(),
+            })),
+        }
+    }
 }
 
 impl VLLMCredentials {
@@ -466,5 +467,35 @@ mod tests {
         assert!(err
             .to_string()
             .contains("TensorZero does not support tool use with vLLM"));
+    }
+
+    #[test]
+    fn test_credential_to_vllm_credentials() {
+        // Test Static credential
+        let generic = Credential::Static(SecretString::from("test_key"));
+        let creds: VLLMCredentials = VLLMCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, VLLMCredentials::Static(_)));
+
+        // Test Dynamic credential
+        let generic = Credential::Dynamic("key_name".to_string());
+        let creds = VLLMCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, VLLMCredentials::Dynamic(_)));
+
+        // Test Missing credential (test mode)
+        #[cfg(any(test, feature = "e2e_tests"))]
+        {
+            let generic = Credential::Missing;
+            let creds = VLLMCredentials::try_from(generic).unwrap();
+            assert!(matches!(creds, VLLMCredentials::None));
+        }
+
+        // Test invalid type
+        let generic = Credential::FileContents(SecretString::from("test"));
+        let result = VLLMCredentials::try_from(generic);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err().get_owned_details(),
+            ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
+        ));
     }
 }

@@ -1,4 +1,4 @@
-use std::{borrow::Cow, env};
+use std::borrow::Cow;
 
 use futures::StreamExt;
 use lazy_static::lazy_static;
@@ -18,7 +18,7 @@ use crate::{
         ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
         ProviderInferenceResponseStream,
     },
-    model::CredentialLocation,
+    model::{Credential, CredentialLocation},
 };
 
 use super::{
@@ -48,26 +48,12 @@ impl TogetherProvider {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
-        let credentials = match api_key_location {
-            CredentialLocation::Env(key_name) => {
-                let api_key = env::var(key_name)
-                    .map_err(|_| {
-                        Error::new(ErrorDetails::ApiKeyMissing {
-                            provider_name: "Together".to_string(),
-                        })
-                    })?
-                    .into();
-                TogetherCredentials::Static(api_key)
-            }
-            CredentialLocation::Dynamic(key_name) => TogetherCredentials::Dynamic(key_name),
-            _ => Err(Error::new(ErrorDetails::Config {
-                message: "Invalid api_key_location for Together provider".to_string(),
-            }))?,
-        };
+        let credential_location = api_key_location.unwrap_or(default_api_key_location());
+        let generic_credentials = Credential::try_from((credential_location, "Together"))?;
+        let provider_credentials = TogetherCredentials::try_from(generic_credentials)?;
         Ok(TogetherProvider {
             model_name,
-            credentials,
+            credentials: provider_credentials,
         })
     }
 }
@@ -80,6 +66,24 @@ fn default_api_key_location() -> CredentialLocation {
 pub enum TogetherCredentials {
     Static(SecretString),
     Dynamic(String),
+    #[cfg(any(test, feature = "e2e_tests"))]
+    None,
+}
+
+impl TryFrom<Credential> for TogetherCredentials {
+    type Error = Error;
+
+    fn try_from(credentials: Credential) -> Result<Self, Error> {
+        match credentials {
+            Credential::Static(key) => Ok(TogetherCredentials::Static(key)),
+            Credential::Dynamic(key_name) => Ok(TogetherCredentials::Dynamic(key_name)),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            Credential::Missing => Ok(TogetherCredentials::None),
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: "Invalid api_key_location for Together provider".to_string(),
+            })),
+        }
+    }
 }
 
 impl TogetherCredentials {
@@ -96,6 +100,10 @@ impl TogetherCredentials {
                     },
                 )?))
             }
+            #[cfg(any(test, feature = "e2e_tests"))]
+            TogetherCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+                provider_name: "Together".to_string(),
+            })?,
         }
     }
 }
@@ -458,5 +466,34 @@ mod tests {
     #[test]
     fn test_together_api_base() {
         assert_eq!(TOGETHER_API_BASE.as_str(), "https://api.together.xyz/v1");
+    }
+    #[test]
+    fn test_credential_to_together_credentials() {
+        // Test Static credential
+        let generic = Credential::Static(SecretString::from("test_key"));
+        let creds: TogetherCredentials = TogetherCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, TogetherCredentials::Static(_)));
+
+        // Test Dynamic credential
+        let generic = Credential::Dynamic("key_name".to_string());
+        let creds = TogetherCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, TogetherCredentials::Dynamic(_)));
+
+        // Test Missing credential (test mode)
+        #[cfg(any(test, feature = "e2e_tests"))]
+        {
+            let generic = Credential::Missing;
+            let creds = TogetherCredentials::try_from(generic).unwrap();
+            assert!(matches!(creds, TogetherCredentials::None));
+        }
+
+        // Test invalid type
+        let generic = Credential::FileContents(SecretString::from("test"));
+        let result = TogetherCredentials::try_from(generic);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err().get_owned_details(),
+            ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
+        ));
     }
 }

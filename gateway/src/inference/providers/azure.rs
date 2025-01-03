@@ -1,5 +1,3 @@
-use std::env;
-
 use futures::StreamExt;
 use reqwest::StatusCode;
 use reqwest_eventsource::RequestBuilderExt;
@@ -15,7 +13,7 @@ use crate::inference::types::{
     ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream,
 };
-use crate::model::CredentialLocation;
+use crate::model::{Credential, CredentialLocation};
 
 use super::openai::{
     handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
@@ -37,27 +35,13 @@ impl AzureProvider {
         endpoint: Url,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
-        let credentials = match api_key_location {
-            CredentialLocation::Env(key_name) => {
-                let api_key = env::var(key_name)
-                    .map_err(|_| ErrorDetails::ApiKeyMissing {
-                        provider_name: "Azure".to_string(),
-                    })?
-                    .into();
-                AzureCredentials::Static(api_key)
-            }
-            CredentialLocation::Dynamic(key_name) => AzureCredentials::Dynamic(key_name),
-            _ => {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: "Invalid api_key_location for Azure provider".to_string(),
-                }))
-            }
-        };
+        let credential_location = api_key_location.unwrap_or(default_api_key_location());
+        let generic_credentials = Credential::try_from((credential_location, "azure"))?;
+        let provider_credentials = AzureCredentials::try_from(generic_credentials)?;
         Ok(AzureProvider {
             deployment_id,
             endpoint,
-            credentials,
+            credentials: provider_credentials,
         })
     }
 }
@@ -66,6 +50,24 @@ impl AzureProvider {
 pub enum AzureCredentials {
     Static(SecretString),
     Dynamic(String),
+    #[cfg(any(test, feature = "e2e_tests"))]
+    None,
+}
+
+impl TryFrom<Credential> for AzureCredentials {
+    type Error = Error;
+
+    fn try_from(credentials: Credential) -> Result<Self, Error> {
+        match credentials {
+            Credential::Static(key) => Ok(AzureCredentials::Static(key)),
+            Credential::Dynamic(key_name) => Ok(AzureCredentials::Dynamic(key_name)),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            Credential::Missing => Ok(AzureCredentials::None),
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: "Invalid api_key_location for Azure provider".to_string(),
+            })),
+        }
+    }
 }
 
 impl AzureCredentials {
@@ -83,6 +85,11 @@ impl AzureCredentials {
                     .into()
                 })
             }
+            #[cfg(any(test, feature = "e2e_tests"))]
+            AzureCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+                provider_name: "Azure".to_string(),
+            }
+            .into()),
         }
     }
 }
@@ -564,5 +571,35 @@ mod tests {
             azure_auto_tool_choice,
             AzureToolChoice::String(AzureToolChoiceString::Auto)
         );
+    }
+
+    #[test]
+    fn test_credential_to_azure_credentials() {
+        // Test Static credential
+        let generic = Credential::Static(SecretString::from("test_key"));
+        let creds = AzureCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, AzureCredentials::Static(_)));
+
+        // Test Dynamic credential
+        let generic = Credential::Dynamic("key_name".to_string());
+        let creds = AzureCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, AzureCredentials::Dynamic(_)));
+
+        // Test Missing credential (test mode)
+        #[cfg(any(test, feature = "e2e_tests"))]
+        {
+            let generic = Credential::Missing;
+            let creds = AzureCredentials::try_from(generic).unwrap();
+            assert!(matches!(creds, AzureCredentials::None));
+        }
+
+        // Test invalid type
+        let generic = Credential::FileContents(SecretString::from("test"));
+        let result = AzureCredentials::try_from(generic);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err().get_owned_details(),
+            ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
+        ));
     }
 }
