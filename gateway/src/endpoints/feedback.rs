@@ -222,8 +222,8 @@ async fn write_comment(
     dryrun: bool,
 ) -> Result<(), Error> {
     let Params { value, tags, .. } = params;
-    // Verify that the target_id exists.
-    let _ = throttled_get_target_identifier(&connection_info, level, &target_id).await?;
+    // Verify that the function name exists.
+    let _ = throttled_get_function_name(&connection_info, level, &target_id).await?;
     let value = value.as_str().ok_or_else(|| ErrorDetails::InvalidRequest {
         message: "Feedback value for a comment must be a string".to_string(),
     })?;
@@ -251,7 +251,7 @@ async fn write_demonstration(
     dryrun: bool,
 ) -> Result<(), Error> {
     let Params { value, tags, .. } = params;
-    let function_name = throttled_get_target_identifier(
+    let function_name = throttled_get_function_name(
         &connection_info,
         &MetricConfigLevel::Inference,
         &inference_id,
@@ -285,9 +285,8 @@ async fn write_float(
         ..
     } = params;
     let metric_config: &crate::config_parser::MetricConfig = config.get_metric(metric_name)?;
-    // Verify that the target_id exists.
-    let _ =
-        throttled_get_target_identifier(&connection_info, &metric_config.level, &target_id).await?;
+    // Verify that the function name exists.
+    let _ = throttled_get_function_name(&connection_info, &metric_config.level, &target_id).await?;
 
     let value = value.as_f64().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
@@ -320,9 +319,8 @@ async fn write_boolean(
         ..
     } = params;
     let metric_config = config.get_metric(metric_name)?;
-    // Verify that the target_id exists.
-    let _ =
-        throttled_get_target_identifier(&connection_info, &metric_config.level, &target_id).await?;
+    // Verify that the function name exists.
+    let _ = throttled_get_function_name(&connection_info, &metric_config.level, &target_id).await?;
     let value = value.as_bool().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
             message: format!("Feedback value for metric `{metric_name}` must be a boolean"),
@@ -348,20 +346,20 @@ async fn write_boolean(
 ///
 /// Otherwise, it will poll the database every second until the cooldown period has passed.
 /// Then, if the id has still not been created, it will return an error.
-async fn throttled_get_target_identifier(
+async fn throttled_get_function_name(
     connection_info: &ClickHouseConnectionInfo,
     metric_config_level: &MetricConfigLevel,
     target_id: &Uuid,
 ) -> Result<String, Error> {
     let mut elapsed = uuid_elapsed(target_id)?;
     if elapsed > FEEDBACK_COOLDOWN_PERIOD {
-        return get_target_identifier(connection_info, metric_config_level, target_id).await;
+        return get_function_name(connection_info, metric_config_level, target_id).await;
     }
 
     loop {
         tokio::time::sleep(Duration::from_secs(1)).await;
         elapsed = uuid_elapsed(target_id)?;
-        match get_target_identifier(connection_info, metric_config_level, target_id).await {
+        match get_function_name(connection_info, metric_config_level, target_id).await {
             Ok(identifier) => return Ok(identifier),
             Err(e) => {
                 if elapsed > FEEDBACK_COOLDOWN_PERIOD {
@@ -372,12 +370,7 @@ async fn throttled_get_target_identifier(
     }
 }
 
-/// Retrieves the identifier associated with a given `target_id` based on the specified metric configuration level.
-///
-/// Depending on the `metric_config_level`, this function performs the following:
-/// - For `MetricConfigLevel::Inference`, it validates that the given `target_id` (inference ID) exists in the database
-///   and retrieves the corresponding `function_name`.
-/// - For `MetricConfigLevel::Episode`, this functionality is currently unimplemented and returns an empty string.
+/// Retrieves the function name associated with a given `target_id` of the inference or episode.
 ///
 /// # Arguments
 ///
@@ -388,34 +381,37 @@ async fn throttled_get_target_identifier(
 /// # Returns
 ///
 /// * On success:
-///   - For `Inference`, returns the `function_name` associated with the `target_id`.
-///   - For `Episode`, currently returns an empty string (implementation pending).
+///   - Returns the `function_name` associated with the `target_id`.
 /// * On failure:
 ///   - Returns an `Error` if the `target_id` is invalid or does not exist.
-async fn get_target_identifier(
+async fn get_function_name(
     connection_info: &ClickHouseConnectionInfo,
     metric_config_level: &MetricConfigLevel,
     target_id: &Uuid,
 ) -> Result<String, Error> {
-    match metric_config_level {
-        MetricConfigLevel::Inference => {
-            let query = format!(
-                "SELECT function_name FROM InferenceById WHERE id = '{}'",
-                target_id
-            );
-            let function_name = connection_info.run_query(query).await?.trim().to_string();
-            if function_name.is_empty() {
-                return Err(Error::new(ErrorDetails::InvalidRequest {
-                    message: format!("Inference ID: {target_id} does not exist"),
-                }));
-            };
-            Ok(function_name)
-        }
-        MetricConfigLevel::Episode => {
-            // TODO: Implement this later as it might require db migrations.
-            Ok("".to_string())
-        }
-    }
+    let table_name = match metric_config_level {
+        MetricConfigLevel::Inference => "InferenceById",
+        MetricConfigLevel::Episode => "InferenceByEpisodeId",
+    };
+    let identifier_type = match metric_config_level {
+        MetricConfigLevel::Inference => "Inference",
+        MetricConfigLevel::Episode => "Episode",
+    };
+    let identifier_key = match metric_config_level {
+        MetricConfigLevel::Inference => "id",
+        MetricConfigLevel::Episode => "episode_id",
+    };
+    let query = format!(
+        "SELECT function_name FROM {} WHERE {} = '{}'",
+        table_name, identifier_key, target_id
+    );
+    let function_name = connection_info.run_query(query).await?.trim().to_string();
+    if function_name.is_empty() {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: format!("{identifier_type} ID: {target_id} does not exist"),
+        }));
+    };
+    Ok(function_name)
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -574,7 +570,6 @@ async fn validate_parse_demonstration(
 mod tests {
     use super::*;
     use std::collections::HashMap;
-    use tokio::time::{sleep, Duration};
 
     use crate::config_parser::{Config, GatewayConfig, MetricConfig, MetricConfigOptimize};
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
@@ -773,47 +768,13 @@ mod tests {
         };
         let response =
             feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
-        assert!(response.is_ok());
-        let response_json = response.unwrap();
-        let feedback_id = response_json.get("feedback_id").unwrap();
-        assert!(feedback_id.is_string());
-        sleep(Duration::from_millis(200)).await;
-
-        // Check that the feedback was written
-        let mock_data = app_state_data
-            .clickhouse_connection_info
-            .read("CommentFeedback", "target_id", &episode_id.to_string())
-            .await
-            .unwrap();
-        let retrieved_target_id = mock_data.get("target_id").unwrap();
-        assert_eq!(retrieved_target_id, &episode_id.to_string());
-        let retrieved_value = mock_data.get("value").unwrap();
-        assert_eq!(retrieved_value, &value);
-        let retrieved_target_type = mock_data.get("target_type").unwrap().as_str().unwrap();
-        assert_eq!(retrieved_target_type, "episode");
-        let retrieved_tags: HashMap<String, String> =
-            serde_json::from_value(mock_data["tags"].clone()).unwrap();
+        let details = response.unwrap_err().get_owned_details();
         assert_eq!(
-            retrieved_tags,
-            HashMap::from([("foo".to_string(), "bar".to_string())])
+            details,
+            ErrorDetails::InvalidRequest {
+                message: format!("Episode ID: {episode_id} does not exist"),
+            }
         );
-
-        // Test dryrun
-        let params = Params {
-            episode_id: Some(episode_id),
-            inference_id: None,
-            metric_name: "comment".to_string(),
-            value: value.clone(),
-            tags: HashMap::from([("poo".to_string(), "bar".to_string())]),
-            dryrun: Some(true),
-        };
-        let response =
-            feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
-        assert!(response.is_ok());
-        let response_json = response.unwrap();
-        let feedback_id = response_json.get("feedback_id").unwrap();
-        assert!(feedback_id.is_string());
-        sleep(Duration::from_millis(200)).await;
 
         // Test a Demonstration Feedback
         let value = json!("test demonstration");
@@ -909,41 +870,13 @@ mod tests {
         };
         let response =
             feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
-        assert!(response.is_ok());
-        let response_json = response.unwrap();
-        let feedback_id = response_json.get("feedback_id").unwrap();
-        assert!(feedback_id.is_string());
-
-        sleep(Duration::from_millis(200)).await;
-        // Check that the feedback was written
-        let mock_data = app_state_data
-            .clickhouse_connection_info
-            .read("FloatMetricFeedback", "target_id", &episode_id.to_string())
-            .await
-            .unwrap();
-        let retrieved_name = mock_data.get("metric_name").unwrap();
-        assert_eq!(retrieved_name, "test_float");
-        let retrieved_target_id = mock_data.get("target_id").unwrap();
-        assert_eq!(retrieved_target_id, &episode_id.to_string());
-        let retrieved_value = mock_data.get("value").unwrap();
-        assert_eq!(retrieved_value, &value);
-        let retrieved_tags: HashMap<String, String> =
-            serde_json::from_value(mock_data["tags"].clone()).unwrap();
+        let details = response.unwrap_err().get_owned_details();
         assert_eq!(
-            retrieved_tags,
-            HashMap::from([("poo".to_string(), "bar".to_string())])
+            details,
+            ErrorDetails::InvalidRequest {
+                message: format!("Episode ID: {episode_id} does not exist"),
+            }
         );
-
-        // Check that the feedback was not written
-        let mock_data = app_state_data
-            .clickhouse_connection_info
-            .read(
-                "FloatMetricFeedback",
-                "target_id",
-                &inference_id.to_string(),
-            )
-            .await;
-        assert!(mock_data.is_none());
 
         // Test Boolean feedback with invalid inference-level.
         let mut metrics = HashMap::new();

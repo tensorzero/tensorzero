@@ -37,12 +37,12 @@ export default function Home() {
           <div id="optimization" className="mb-12">
             <h2 className="mb-6 text-3xl font-bold">Optimization</h2>
             <div className="grid gap-6 md:grid-cols-2">
-              <Link to="/optimization/fine-tuning" className="block">
+              <Link to="/optimization/supervised-fine-tuning" className="block">
                 <Card className="h-full transition-shadow hover:shadow-md">
                   <CardHeader>
                     <div className="flex items-center space-x-2">
                       <Zap className="h-6 w-6 text-primary" />
-                      <CardTitle>Fine-tuning</CardTitle>
+                      <CardTitle>Supervised Fine-tuning</CardTitle>
                     </div>
                   </CardHeader>
                 </Card>

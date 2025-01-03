@@ -12,7 +12,40 @@ use crate::common::{
 #[tokio::test]
 async fn e2e_test_comment_feedback() {
     let client = Client::new();
+    // // Running without valid episode_id. Should fail.
     let episode_id = Uuid::now_v7();
+    // Test comment feedback on episode
+    let tag_value = Uuid::now_v7().to_string();
+    let payload = json!({"episode_id": episode_id, "metric_name": "comment", "value": "good job!", "tags": {"key": tag_value}});
+    let response = client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    // Run inference (standard, no dryrun) to get an episode_id.
+    let inference_payload = serde_json::json!({
+        "function_name": "json_success",
+        "input": {
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+        },
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(response.status().is_success());
+    let response_json = response.json::<Value>().await.unwrap();
+    let episode_id = response_json.get("episode_id").unwrap().as_str().unwrap();
+    let episode_id = Uuid::parse_str(episode_id).unwrap();
+
     // Test comment feedback on episode
     let tag_value = Uuid::now_v7().to_string();
     let payload = json!({"episode_id": episode_id, "metric_name": "comment", "value": "good job!", "tags": {"key": tag_value}});
@@ -518,8 +551,38 @@ async fn e2e_test_demonstration_feedback_tool() {
 #[tokio::test]
 async fn e2e_test_float_feedback() {
     let client = Client::new();
-    let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
+    // Running without valid episode_id. Should fail.
+    let episode_id = Uuid::now_v7();
+    let payload = json!({"episode_id": episode_id, "metric_name": "user_rating", "value": 32.8, "tags": {"key": tag_value}});
+    let response = client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    // Run inference (standard, no dryrun) to get an episode_id.
+    let inference_payload = serde_json::json!({
+        "function_name": "json_success",
+        "input": {
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+        },
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(response.status().is_success());
+    let response_json = response.json::<Value>().await.unwrap();
+    let episode_id = response_json.get("episode_id").unwrap().as_str().unwrap();
+    let episode_id = Uuid::parse_str(episode_id).unwrap();
     // Test Float feedback on episode
     let payload = json!({"episode_id": episode_id, "metric_name": "user_rating", "value": 32.8, "tags": {"key": tag_value}});
     let response = client
@@ -782,8 +845,38 @@ async fn e2e_test_boolean_feedback() {
         "Feedback value for metric `task_success` must be a boolean"
     );
 
-    // Try episode-level feedback on different metric
+    // Try episode-level feedback on different metric with invalid episode id.
     let episode_id = Uuid::now_v7();
+    let payload = json!({"episode_id": episode_id, "metric_name": "goal_achieved", "value": true});
+    let response = client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    // Run inference (standard, no dryrun) to get an episode_id.
+    let inference_payload = serde_json::json!({
+        "function_name": "json_success",
+        "input": {
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+        },
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(response.status().is_success());
+    let response_json = response.json::<Value>().await.unwrap();
+    let episode_id = response_json.get("episode_id").unwrap().as_str().unwrap();
+    let episode_id = Uuid::parse_str(episode_id).unwrap();
+
     let payload = json!({"episode_id": episode_id, "metric_name": "goal_achieved", "value": true});
     let response = client
         .post(get_gateway_endpoint("/feedback"))
