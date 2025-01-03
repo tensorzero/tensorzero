@@ -839,7 +839,8 @@ export async function queryEpisodeTable(params: {
   }
 }
 
-/// NOTE: these are the Episode IDs of the episodes that have the earliest and latest last inferences, i.e. the first and last episodes in our sort order
+/// NOTE: these are the last inference IDs of the episodes that have the earliest and latest last inferences,
+/// i.e. the first and last episodes in the dashboard sort order
 /// You should still paginate on the Inference IDs not the Episode IDs
 export async function queryEpisodeTableBounds(): Promise<TableBounds> {
   const query = `
