@@ -138,11 +138,10 @@ export default function SupervisedFineTuning({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <main className="p-4">
-        <h2 className="scroll-m-20 border-b pb-2 text-3xl font-semibold tracking-tight first:mt-0">
-          Supervised Fine-Tuning
-        </h2>
+    <div className="container mx-auto px-4 py-8">
+      <main>
+        <h2 className="mb-4 text-2xl font-semibold">Supervised Fine-Tuning</h2>
+        <div className="mb-6 h-px w-full bg-gray-200"></div>
         {status === "idle" && (
           <FineTuningForm
             config={config}
