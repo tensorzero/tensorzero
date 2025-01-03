@@ -31,6 +31,10 @@ lazy_static! {
     static ref TGI: String = "TGI".to_string();
 }
 
+fn default_api_key_location() -> CredentialLocation {
+    CredentialLocation::Env("TGI_API_KEY".to_string())
+}
+
 #[derive(Debug)]
 pub struct TGIProvider {
     pub api_base: Url,
@@ -38,7 +42,8 @@ pub struct TGIProvider {
 }
 
 impl TGIProvider {
-    pub fn new(api_base: Url, api_key_location: CredentialLocation) -> Result<Self, Error> {
+    pub fn new(api_base: Url, api_key_location: Option<CredentialLocation>) -> Result<Self, Error> {
+        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
         let credentials = match api_key_location {
             CredentialLocation::Env(key_name) => {
                 let api_key = env::var(key_name)
@@ -261,7 +266,7 @@ struct TGIRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     stream_options: Option<StreamOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    response_format: Option<OpenAIResponseFormat>,
+    response_format: Option<TGIResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenAITool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -275,7 +280,7 @@ impl<'a> TGIRequest<'a> {
         model: &'a str,
         request: &'a ModelInferenceRequest,
     ) -> Result<TGIRequest<'a>, Error> {
-        let response_format = Some(OpenAIResponseFormat::new(
+        let response_format = Some(TGIResponseFormat::new(
             &request.json_mode,
             request.output_schema,
             model,
@@ -314,7 +319,7 @@ impl<'a> TGIRequest<'a> {
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "type")]
-enum OpenAIResponseFormat {
+enum TGIResponseFormat {
     #[default]
     Text,
     JsonObject,
@@ -323,25 +328,25 @@ enum OpenAIResponseFormat {
     },
 }
 
-impl OpenAIResponseFormat {
+impl TGIResponseFormat {
     pub fn new(
         json_mode: &ModelInferenceRequestJsonMode,
         output_schema: Option<&Value>,
         model: &str,
     ) -> Self {
         if model.contains("3.5") && *json_mode == ModelInferenceRequestJsonMode::Strict {
-            return OpenAIResponseFormat::JsonObject;
+            return TGIResponseFormat::JsonObject;
         }
 
         match json_mode {
-            ModelInferenceRequestJsonMode::On => OpenAIResponseFormat::JsonObject,
-            ModelInferenceRequestJsonMode::Off => OpenAIResponseFormat::Text,
+            ModelInferenceRequestJsonMode::On => TGIResponseFormat::JsonObject,
+            ModelInferenceRequestJsonMode::Off => TGIResponseFormat::Text,
             ModelInferenceRequestJsonMode::Strict => match output_schema {
                 Some(schema) => {
                     let json_schema = json!({"name": "response", "strict": true, "schema": schema});
-                    OpenAIResponseFormat::JsonSchema { json_schema }
+                    TGIResponseFormat::JsonSchema { json_schema }
                 }
-                None => OpenAIResponseFormat::JsonObject,
+                None => TGIResponseFormat::JsonObject,
             },
         }
     }
@@ -483,10 +488,7 @@ mod tests {
         assert_eq!(tgi_request.presence_penalty, Some(0.1));
         assert_eq!(tgi_request.frequency_penalty, Some(0.2));
         assert!(tgi_request.stream);
-        assert_eq!(
-            tgi_request.response_format,
-            Some(OpenAIResponseFormat::Text)
-        );
+        assert_eq!(tgi_request.response_format, Some(TGIResponseFormat::Text));
         assert!(tgi_request.tools.is_none());
         assert_eq!(tgi_request.tool_choice, None);
         assert!(tgi_request.parallel_tool_calls.is_none());
@@ -524,7 +526,7 @@ mod tests {
         assert!(!tgi_request.stream);
         assert_eq!(
             tgi_request.response_format,
-            Some(OpenAIResponseFormat::JsonObject)
+            Some(TGIResponseFormat::JsonObject)
         );
         assert!(tgi_request.tools.is_some());
         let tools = tgi_request.tools.as_ref().unwrap();
@@ -574,7 +576,7 @@ mod tests {
         // Resolves to normal JSON mode since no schema is provided (this shouldn't really happen in practice)
         assert_eq!(
             tgi_request.response_format,
-            Some(OpenAIResponseFormat::JsonObject)
+            Some(TGIResponseFormat::JsonObject)
         );
 
         // Test request with strict JSON mode with an output schema
@@ -612,7 +614,7 @@ mod tests {
         let expected_schema = serde_json::json!({"name": "response", "strict": true, "schema": {}});
         assert_eq!(
             tgi_request.response_format,
-            Some(OpenAIResponseFormat::JsonSchema {
+            Some(TGIResponseFormat::JsonSchema {
                 json_schema: expected_schema,
             })
         );

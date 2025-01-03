@@ -254,7 +254,7 @@ enum ProviderConfigHelper {
     #[allow(clippy::upper_case_acronyms)]
     TGI {
         api_base: Url,
-        api_key_location: CredentialLocation,
+        api_key_location: Option<CredentialLocation>,
     },
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy {
