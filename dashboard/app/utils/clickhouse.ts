@@ -2,6 +2,7 @@ import { createClient } from "@clickhouse/client";
 import { z } from "zod";
 import type { FunctionConfig } from "./config/function";
 import type { MetricConfig } from "./config/metric";
+import { data } from "react-router";
 
 export const clickhouseClient = createClient({
   url: process.env.CLICKHOUSE_URL,
@@ -448,7 +449,6 @@ async function queryCuratedMetricData(
       i.function_name = {function_name:String}
     ${limitClause}
   `;
-  console.log(query);
 
   const resultSet = await clickhouseClient.query({
     query,
@@ -592,4 +592,139 @@ export async function countDemonstrationDataForFunction(
   });
   const rows = await resultSet.json<{ count: number }>();
   return rows[0].count;
+}
+
+export const inferenceByIdRowSchema = z
+  .object({
+    id: z.string().uuid(),
+    function_name: z.string(),
+    variant_name: z.string(),
+    episode_id: z.string().uuid(),
+    timestamp: z.string().datetime(),
+  })
+  .strict();
+
+export type InferenceByIdRow = z.infer<typeof inferenceByIdRowSchema>;
+
+/// Query a table of at most `page_size` Inferences from ChatInference or JsonInference that are before the given `before` ID.
+/// If `before` and `after` are both not provided, the query will return the most recent `page_size` Inferences.
+/// If `before` and `after` are both provided, we will throw an error.
+/// If `before` is provided, the query will return the most recent `page_size` Inferences before the given `before` ID.
+/// If `after` is provided, the query will return the earliest `page_size` Inferences after the given `after` ID.
+/// All returned data should be ordered by `id` in descending order.
+export async function queryInferenceTable(params: {
+  page_size: number;
+  before?: string; // UUIDv7 string
+  after?: string; // UUIDv7 string
+}): Promise<InferenceByIdRow[]> {
+  const { page_size, before, after } = params;
+
+  if (before && after) {
+    throw new Error("Cannot specify both 'before' and 'after' parameters");
+  }
+
+  let query = "";
+  const query_params: Record<string, string | number> = {
+    page_size,
+  };
+
+  if (!before && !after) {
+    // No before/after => just the most recent page_size items
+    query = `
+      SELECT
+        id,
+        function_name,
+        variant_name,
+        episode_id,
+        function_type,
+        UUIDv7ToDateTime(id) AS timestamp
+      FROM InferenceById
+      ORDER BY toUInt128(id) DESC
+      LIMIT {page_size:UInt32}
+    `;
+  } else if (before) {
+    // "Most recent" page_size before a certain ID => descending sort is fine
+    query = `
+      SELECT
+        id,
+        function_name,
+        variant_name,
+        episode_id,
+        function_type,
+        UUIDv7ToDateTime(id) AS timestamp
+      FROM InferenceById
+      WHERE toUInt128(id) < toUInt128(toUUID({before:String}))
+      ORDER BY toUInt128(id) DESC
+      LIMIT {page_size:UInt32}
+    `;
+    query_params.before = before;
+  } else if (after) {
+    // "Earliest" page_size after a certain ID => first sort ascending, then reorder descending
+    // Subselect:
+    query = `
+      SELECT
+        id,
+        function_name,
+        variant_name,
+        episode_id,
+        function_type,
+        timestamp
+      FROM
+      (
+        SELECT
+          id,
+          function_name,
+          variant_name,
+          episode_id,
+          function_type,
+          UUIDv7ToDateTime(id) AS timestamp
+        FROM InferenceById
+        WHERE toUInt128(id) > toUInt128(toUUID({after:String}))
+        ORDER BY toUInt128(id) ASC
+        LIMIT {page_size:UInt32}
+      )
+      ORDER BY toUInt128(id) DESC
+    `;
+    query_params.after = after;
+  }
+
+  try {
+    const resultSet = await clickhouseClient.query({
+      query,
+      format: "JSONEachRow",
+      query_params,
+    });
+    const rows = await resultSet.json<InferenceByIdRow>();
+    return rows;
+  } catch (error) {
+    console.error(error);
+    throw data("Error querying inference table", { status: 500 });
+  }
+}
+
+export interface InferenceTableBounds {
+  first_id: string; // UUIDv7 string
+  last_id: string; // UUIDv7 string
+}
+
+export async function queryInferenceTableBounds(): Promise<InferenceTableBounds> {
+  const query = `
+   SELECT
+  (SELECT id FROM InferenceById WHERE toUInt128(id) = (SELECT MIN(toUInt128(id)) FROM InferenceById)) AS first_id,
+  (SELECT id FROM InferenceById WHERE toUInt128(id) = (SELECT MAX(toUInt128(id)) FROM InferenceById)) AS last_id
+FROM InferenceById
+LIMIT 1
+  `;
+
+  try {
+    const resultSet = await clickhouseClient.query({
+      query,
+      format: "JSONEachRow",
+    });
+    const rows = await resultSet.json<InferenceTableBounds>();
+    return rows[0];
+  } catch (error) {
+    console.error(error);
+    throw data("Error querying inference table bounds", { status: 500 });
+  }
 }

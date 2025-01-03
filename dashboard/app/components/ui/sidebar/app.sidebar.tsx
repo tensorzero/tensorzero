@@ -24,7 +24,7 @@ const navigation = [
     items: [
       {
         title: "Inferences",
-        url: "#",
+        url: "/observability/inferences",
       },
       {
         title: "Episodes",
