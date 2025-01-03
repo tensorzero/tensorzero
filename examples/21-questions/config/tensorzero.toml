@@ -1,0 +1,48 @@
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.generate_secret]
+type = "json"
+output_schema = "functions/generate_secret/output_schema.json"
+
+[functions.generate_secret.variants.baseline]
+weight = 1
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_template = "functions/generate_secret/baseline/system_template.minijinja"
+json_mode = "strict"
+# for creativity
+temperature = 1.5
+
+[functions.ask_question]
+type = "json"
+output_schema = "functions/ask_question/output_schema.json"
+system_schema = "functions/ask_question/system_schema.json"
+
+[functions.ask_question.variants.baseline]
+type = "chat_completion"
+weight = 1
+model = "openai::gpt-4o-mini-2024-07-18"
+system_template = "functions/ask_question/baseline/system_template.minijinja"
+
+[functions.answer_question]
+type = "chat"
+system_schema = "functions/answer_question/system_schema.json"
+
+[functions.answer_question.variants.baseline]
+type = "chat_completion"
+weight = 1
+model = "openai::gpt-4o-mini-2024-07-18"
+system_template = "functions/answer_question/baseline/system_template.minijinja"
+# for honesty
+temperature = 0.5
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  METRICS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[metrics.solved]
+type = "boolean"
+level = "episode"
+optimize = "max"
