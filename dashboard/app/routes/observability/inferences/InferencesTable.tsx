@@ -59,9 +59,7 @@ export default function InferencesTable({
   const lastInference = inferences[inferences.length - 1];
 
   const handleNextPage = () => {
-    if (inferences.length === pageSize) {
-      navigate(`?before=${lastInference.id}&page_size=${pageSize}`);
-    }
+    navigate(`?before=${lastInference.id}&page_size=${pageSize}`);
   };
 
   const handlePreviousPage = () => {
