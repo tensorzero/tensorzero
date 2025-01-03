@@ -14,4 +14,5 @@ export default [
     "observability/inferences",
     "routes/observability/inferences/route.tsx",
   ),
+  route("observability/episodes", "routes/observability/episodes/route.tsx"),
 ] satisfies RouteConfig;
