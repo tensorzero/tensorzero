@@ -253,8 +253,8 @@ enum ProviderConfigHelper {
     },
     #[allow(clippy::upper_case_acronyms)]
     TGI {
-        api_base: Option<Url>,
-        api_key_location: Option<CredentialLocation>,
+        api_base: Url,
+        api_key_location: CredentialLocation,
     },
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy {
@@ -715,7 +715,6 @@ fn model_config_from_shorthand(
         "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?),
         "together" => ProviderConfig::Together(TogetherProvider::new(model_name, None)?),
         "xai" => ProviderConfig::XAI(XAIProvider::new(model_name, None)?),
-        "tgi" => ProviderConfig::TGI(TGIProvider::new(None, None)?),
         #[cfg(any(test, feature = "e2e_tests"))]
         "dummy" => ProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
         _ => {

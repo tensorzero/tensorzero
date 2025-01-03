@@ -2,22 +2,24 @@ use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use std::env;
 use tokio::time::Instant;
 use url::Url;
 
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
-    stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseFormat, OpenAITool,
-    OpenAIToolChoice, StreamOptions,
+    stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAITool, OpenAIToolChoice,
+    OpenAIToolType, StreamOptions,
 };
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::{
     batch::BatchProviderInferenceResponse, ContentBlock, Latency, ModelInferenceRequest,
-    ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
+    ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStream,
 };
 use crate::model::CredentialLocation;
 
@@ -29,22 +31,14 @@ lazy_static! {
     static ref TGI: String = "TGI".to_string();
 }
 
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("TGI_API_KEY".to_string())
-}
-
 #[derive(Debug)]
 pub struct TGIProvider {
-    pub api_base: Option<Url>,
+    pub api_base: Url,
     pub credentials: TGICredentials,
 }
 
 impl TGIProvider {
-    pub fn new(
-        api_base: Option<Url>,
-        api_key_location: Option<CredentialLocation>,
-    ) -> Result<Self, Error> {
-        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
+    pub fn new(api_base: Url, api_key_location: CredentialLocation) -> Result<Self, Error> {
         let credentials = match api_key_location {
             CredentialLocation::Env(key_name) => {
                 let api_key = env::var(key_name)
@@ -161,7 +155,7 @@ impl InferenceProvider for TGIProvider {
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
                         message: format!("Error parsing error response: {e}"),
-                        provider_type: "OpenAI".to_string(),
+                        provider_type: TGI.clone(),
                     })
                 })?,
             ))
@@ -241,7 +235,7 @@ impl InferenceProvider for TGIProvider {
 
 /// This struct defines the supported parameters for the TGI API
 /// See the [TGI documentation](https://huggingface.co/docs/text-generation-inference/en/reference/api_reference#openai-messages-api)
-/// And TGI fully compatible with Open AI, you can also
+/// Since TGI is fully compatible with Open AI, you can also
 /// See the [OpenAI API documentation](https://platform.openai.com/docs/api-reference/chat/create)
 /// for more details.
 /// We are not handling logprobs, top_logprobs, n,
@@ -315,6 +309,54 @@ impl<'a> TGIRequest<'a> {
             parallel_tool_calls,
         })
     }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "type")]
+enum OpenAIResponseFormat {
+    #[default]
+    Text,
+    JsonObject,
+    JsonSchema {
+        json_schema: Value,
+    },
+}
+
+impl OpenAIResponseFormat {
+    pub fn new(
+        json_mode: &ModelInferenceRequestJsonMode,
+        output_schema: Option<&Value>,
+        model: &str,
+    ) -> Self {
+        if model.contains("3.5") && *json_mode == ModelInferenceRequestJsonMode::Strict {
+            return OpenAIResponseFormat::JsonObject;
+        }
+
+        match json_mode {
+            ModelInferenceRequestJsonMode::On => OpenAIResponseFormat::JsonObject,
+            ModelInferenceRequestJsonMode::Off => OpenAIResponseFormat::Text,
+            ModelInferenceRequestJsonMode::Strict => match output_schema {
+                Some(schema) => {
+                    let json_schema = json!({"name": "response", "strict": true, "schema": schema});
+                    OpenAIResponseFormat::JsonSchema { json_schema }
+                }
+                None => OpenAIResponseFormat::JsonObject,
+            },
+        }
+    }
+}
+#[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
+struct OpenAIRequestToolCall<'a> {
+    id: &'a str,
+    r#type: OpenAIToolType,
+    function: OpenAIRequestFunctionCall<'a>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct OpenAIRequestFunctionCall<'a> {
+    name: &'a str,
+    arguments: &'a str,
 }
 
 struct TGIResponseWithMetadata<'a> {
