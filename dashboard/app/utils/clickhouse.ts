@@ -770,7 +770,7 @@ export async function queryEpisodeTable(params: {
         toUInt32(count(*)) as count,
         min(UUIDv7ToDateTime(id)) as start_time,
         max(UUIDv7ToDateTime(id)) as end_time,
-        max(id) as last_inference_id
+        argMax(id, toUInt128(id)) as last_inference_id
       FROM InferenceByEpisodeId
       GROUP BY episode_id
       ORDER BY toUInt128(last_inference_id) DESC
@@ -783,10 +783,10 @@ export async function queryEpisodeTable(params: {
         toUInt32(count(*)) as count,
         min(UUIDv7ToDateTime(id)) as start_time,
         max(UUIDv7ToDateTime(id)) as end_time,
-        max(id) as last_inference_id
+        argMax(id, toUInt128(id)) as last_inference_id
       FROM InferenceByEpisodeId
-      WHERE toUInt128(id) < toUInt128(toUUID({before:String}))
       GROUP BY episode_id
+      HAVING toUInt128(last_inference_id) < toUInt128(toUUID({before:String}))
       ORDER BY toUInt128(last_inference_id) DESC
       LIMIT {page_size:UInt32}
     `;
@@ -806,10 +806,10 @@ export async function queryEpisodeTable(params: {
           toUInt32(count(*)) as count,
           min(UUIDv7ToDateTime(id)) as start_time,
           max(UUIDv7ToDateTime(id)) as end_time,
-          max(id) as last_inference_id
+          argMax(id, toUInt128(id)) as last_inference_id
         FROM InferenceByEpisodeId
-        WHERE toUInt128(id) > toUInt128(toUUID({after:String}))
         GROUP BY episode_id
+        HAVING toUInt128(last_inference_id) > toUInt128(toUUID({after:String}))
         ORDER BY toUInt128(last_inference_id) ASC
         LIMIT {page_size:UInt32}
       )

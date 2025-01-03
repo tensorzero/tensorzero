@@ -52,20 +52,20 @@ export default function InferencesTable({
     });
   };
 
-  const firstInference = inferences[0];
-  const lastInference = inferences[inferences.length - 1];
+  const topInference = inferences[0];
+  const bottomInference = inferences[inferences.length - 1];
 
   const handleNextPage = () => {
-    navigate(`?before=${lastInference.id}&page_size=${pageSize}`);
+    navigate(`?before=${bottomInference.id}&page_size=${pageSize}`);
   };
 
   const handlePreviousPage = () => {
-    navigate(`?after=${firstInference.id}&page_size=${pageSize}`);
+    navigate(`?after=${topInference.id}&page_size=${pageSize}`);
   };
 
   // These are swapped because the table is sorted in descending order
-  const disablePrevious = bounds.last_id === firstInference.id;
-  const disableNext = bounds.first_id === lastInference.id;
+  const disablePrevious = bounds.last_id === topInference.id;
+  const disableNext = bounds.first_id === bottomInference.id;
 
   return (
     <div>

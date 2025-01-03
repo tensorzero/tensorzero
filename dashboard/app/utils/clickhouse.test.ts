@@ -5,6 +5,7 @@ import {
   countFeedbacksForMetric,
   countInferencesForFunction,
   getCuratedInferences,
+  queryEpisodeTableBounds,
   queryInferenceTable,
 } from "./clickhouse";
 
@@ -315,7 +316,7 @@ test("queryInferenceTable pages through all results correctly using before", asy
   expect(currentPage.length).toBeLessThanOrEqual(PAGE_SIZE);
 
   // Verify total number of elements
-  expect(totalElements).toBe(894);
+  expect(totalElements).toBe(1658);
 
   // We should have seen at least one full page
   expect(numFullPages).toBeGreaterThan(0);
@@ -375,7 +376,7 @@ test("queryInferenceTable pages through all results correctly using after", asyn
   expect(currentPage.length).toBeLessThanOrEqual(PAGE_SIZE);
 
   // Verify total number of elements matches the previous test
-  expect(totalElements).toBe(893); // One less because we excluded the first ID
+  expect(totalElements).toBe(1657); // One less than with before because we excluded the first ID
 
   // We should have seen at least one full page
   expect(numFullPages).toBeGreaterThan(0);
@@ -399,4 +400,10 @@ test("queryInferenceTable before past timestamp is empty", async () => {
     page_size: 10,
   });
   expect(inferences.length).toBe(0);
+});
+
+test("queryEpisodeTableBounds", async () => {
+  const bounds = await queryEpisodeTableBounds();
+  expect(bounds.first_id).toBe("0192ced0-9873-70e2-ade5-dc5b8faea232");
+  expect(bounds.last_id).toBe("01942e28-4a3c-7873-b94d-402a9cc83f2a");
 });

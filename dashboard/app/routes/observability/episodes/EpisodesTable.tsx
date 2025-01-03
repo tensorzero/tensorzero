@@ -50,21 +50,23 @@ export default function EpisodesTable({
     return `${start} — ${end}`;
   };
 
-  const firstEpisode = episodes[0];
-  const lastEpisode = episodes[episodes.length - 1];
+  const topEpisode = episodes[0];
+  const bottomEpisode = episodes[episodes.length - 1];
 
   // IMPORTANT: use the last_inference_id to navigate
   const handleNextPage = () => {
-    navigate(`?before=${lastEpisode.last_inference_id}&page_size=${pageSize}`);
+    navigate(
+      `?before=${bottomEpisode.last_inference_id}&page_size=${pageSize}`,
+    );
   };
 
   const handlePreviousPage = () => {
-    navigate(`?after=${firstEpisode.last_inference_id}&page_size=${pageSize}`);
+    navigate(`?after=${topEpisode.last_inference_id}&page_size=${pageSize}`);
   };
 
   // These are swapped because the table is sorted in descending order
-  const disablePrevious = bounds.last_id === firstEpisode.last_inference_id;
-  const disableNext = bounds.first_id === lastEpisode.last_inference_id;
+  const disablePrevious = bounds.last_id === topEpisode.last_inference_id;
+  const disableNext = bounds.first_id === bottomEpisode.last_inference_id;
 
   return (
     <div>
