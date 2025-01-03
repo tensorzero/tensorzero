@@ -26,7 +26,7 @@ routing = ["openai"]
 [models."gpt-4o-mini-2024-07-18-dynamic".providers.openai]
 type = "openai"
 model_name = "gpt-4o-mini-2024-07-18"
-credential_location = "dynamic::openai_api_key"
+api_key_location = "dynamic::openai_api_key"
 
 [models."gpt-4o-mini-azure"]
 routing = ["azure"]
@@ -44,7 +44,7 @@ routing = ["azure"]
 type = "azure"
 deployment_id = "gpt4o-mini-20240718"
 endpoint = "https://t0-azure-openai-east.openai.azure.com"
-credential_location = "dynamic::azure_openai_api_key"
+api_key_location = "dynamic::azure_openai_api_key"
 
 
 [models.claude-3-haiku-20240307]
@@ -88,7 +88,7 @@ routing = ["anthropic"]
 [models."claude-3-haiku-20240307-anthropic-dynamic".providers.anthropic]
 type = "anthropic"
 model_name = "claude-3-haiku-20240307"
-credential_location = "dynamic::anthropic_api_key"
+api_key_location = "dynamic::anthropic_api_key"
 
 # Duplicate so that we can test just AWS Bedrock no fallbacks
 [models.claude-3-haiku-20240307-aws-bedrock]
@@ -169,7 +169,7 @@ routing = ["google_ai_studio_gemini"]
 [models."gemini-1.5-flash-8b-dynamic".providers.google_ai_studio_gemini]
 type = "google_ai_studio_gemini"
 model_name = "gemini-1.5-flash-8b"
-credential_location = "dynamic::google_ai_studio_api_key"
+api_key_location = "dynamic::google_ai_studio_api_key"
 
 [models."gemini-1.5-pro-002"]
 routing = ["google_ai_studio_gemini"]
@@ -184,7 +184,7 @@ routing = ["google_ai_studio_gemini"]
 [models."gemini-1.5-pro-002-dynamic".providers.google_ai_studio_gemini]
 type = "google_ai_studio_gemini"
 model_name = "gemini-1.5-pro-002"
-credential_location = "dynamic::google_ai_studio_api_key"
+api_key_location = "dynamic::google_ai_studio_api_key"
 
 [models."llama3.1-8b-instruct-fireworks"]
 routing = ["fireworks"]
@@ -199,7 +199,7 @@ routing = ["fireworks"]
 [models."llama3.1-8b-instruct-fireworks-dynamic".providers.fireworks]
 type = "fireworks"
 model_name = "accounts/fireworks/models/llama-v3p1-8b-instruct"
-credential_location = "dynamic::fireworks_api_key"
+api_key_location = "dynamic::fireworks_api_key"
 
 [models.firefunction-v2]
 routing = ["fireworks"]
@@ -221,7 +221,7 @@ routing = ["together"]
 [models."llama3.1-8b-instruct-together-dynamic".providers.together]
 type = "together"
 model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
-credential_location = "dynamic::together_api_key"
+api_key_location = "dynamic::together_api_key"
 
 [models."mixtral-8x7b-instruct-v0.1"]
 routing = ["together"]
@@ -245,7 +245,7 @@ routing = ["vllm"]
 type = "vllm"
 model_name = "microsoft/Phi-3.5-mini-instruct"
 api_base = "https://pun1owldydhycl-8000.proxy.runpod.net/v1/"
-credential_location = "dynamic::vllm_api_key"
+api_key_location = "dynamic::vllm_api_key"
 
 [models."open-mistral-nemo-2407"]
 routing = ["mistral"]
@@ -260,7 +260,7 @@ routing = ["mistral"]
 [models."open-mistral-nemo-2407-dynamic".providers.mistral]
 type = "mistral"
 model_name = "open-mistral-nemo-2407"
-credential_location = "dynamic::mistral_api_key"
+api_key_location = "dynamic::mistral_api_key"
 
 [models.o1-mini]
 routing = ["openai"]
@@ -282,7 +282,7 @@ routing = ["xai"]
 [models."grok_2_1212-dynamic".providers.xai]
 type = "xai"
 model_name = "grok-2-1212"
-credential_location = "dynamic::xai_api_key"
+api_key_location = "dynamic::xai_api_key"
 
 [models."meta-llama/Meta-Llama-3-70B-Instruct"]
 routing = ["hyperbolic"]
@@ -297,7 +297,7 @@ routing = ["hyperbolic"]
 [models."meta-llama/Meta-Llama-3-70B-Instruct-dynamic".providers.hyperbolic]
 type = "hyperbolic"
 model_name = "meta-llama/Meta-Llama-3-70B-Instruct"
-credential_location = "dynamic::hyperbolic_api_key"
+api_key_location = "dynamic::hyperbolic_api_key"
 
 
 [models.test]
