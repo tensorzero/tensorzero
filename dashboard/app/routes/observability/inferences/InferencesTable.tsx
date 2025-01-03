@@ -1,8 +1,5 @@
 import { useState } from "react";
-import type {
-  InferenceByIdRow,
-  InferenceTableBounds,
-} from "~/utils/clickhouse";
+import type { InferenceByIdRow, TableBounds } from "~/utils/clickhouse";
 import {
   Table,
   TableBody,
@@ -23,7 +20,7 @@ export default function InferencesTable({
 }: {
   inferences: InferenceByIdRow[];
   pageSize: number;
-  bounds: InferenceTableBounds;
+  bounds: TableBounds;
 }) {
   const [goToId, setGoToId] = useState("");
   const navigate = useNavigate();
@@ -59,9 +56,7 @@ export default function InferencesTable({
   const lastInference = inferences[inferences.length - 1];
 
   const handleNextPage = () => {
-    if (inferences.length === pageSize) {
-      navigate(`?before=${lastInference.id}&page_size=${pageSize}`);
-    }
+    navigate(`?before=${lastInference.id}&page_size=${pageSize}`);
   };
 
   const handlePreviousPage = () => {

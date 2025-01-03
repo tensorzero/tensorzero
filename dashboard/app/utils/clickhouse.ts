@@ -606,7 +606,7 @@ export const inferenceByIdRowSchema = z
 
 export type InferenceByIdRow = z.infer<typeof inferenceByIdRowSchema>;
 
-/// Query a table of at most `page_size` Inferences from ChatInference or JsonInference that are before the given `before` ID.
+/// Query a table of at most `page_size` Inferences from ChatInference or JsonInference that are before the given `before` ID or after the given `after` ID.
 /// If `before` and `after` are both not provided, the query will return the most recent `page_size` Inferences.
 /// If `before` and `after` are both provided, we will throw an error.
 /// If `before` is provided, the query will return the most recent `page_size` Inferences before the given `before` ID.
@@ -702,12 +702,12 @@ export async function queryInferenceTable(params: {
   }
 }
 
-export interface InferenceTableBounds {
+export interface TableBounds {
   first_id: string; // UUIDv7 string
   last_id: string; // UUIDv7 string
 }
 
-export async function queryInferenceTableBounds(): Promise<InferenceTableBounds> {
+export async function queryInferenceTableBounds(): Promise<TableBounds> {
   const query = `
    SELECT
   (SELECT id FROM InferenceById WHERE toUInt128(id) = (SELECT MIN(toUInt128(id)) FROM InferenceById)) AS first_id,
@@ -721,7 +721,133 @@ LIMIT 1
       query,
       format: "JSONEachRow",
     });
-    const rows = await resultSet.json<InferenceTableBounds>();
+    const rows = await resultSet.json<TableBounds>();
+    return rows[0];
+  } catch (error) {
+    console.error(error);
+    throw data("Error querying inference table bounds", { status: 500 });
+  }
+}
+
+export const episodeByIdSchema = z
+  .object({
+    id: z.string().uuid(),
+    count: z.number().min(1),
+    start_time: z.string().datetime(),
+    end_time: z.string().datetime(),
+    last_inference_id: z.string().uuid(),
+  })
+  .strict();
+
+export type EpisodeByIdRow = z.infer<typeof episodeByIdSchema>;
+
+/// Query a table of at most `page_size` Episodes that are before the given `before` ID or after the given `after` ID.
+/// Important: The ordering is on the last inference in the episode, not the first (we want to show the freshest episodes first)
+/// So we should paginate on the last_inference_ids not the Episode IDs
+/// If `before` and `after` are both not provided, the query will return the most recent `page_size` Inferences.
+/// If `before` and `after` are both provided, we will throw an error.
+/// If `before` is provided, the query will return the most recent `page_size` Inferences before the given `before` ID.
+/// If `after` is provided, the query will return the earliest `page_size` Inferences after the given `after` ID.
+/// All returned data should be ordered by `id` in descending order.
+export async function queryEpisodeTable(params: {
+  page_size: number;
+  before?: string; // UUIDv7 string
+  after?: string; // UUIDv7 string
+}): Promise<EpisodeByIdRow[]> {
+  const { page_size, before, after } = params;
+  if (before && after) {
+    throw new Error("Cannot specify both 'before' and 'after' parameters");
+  }
+  let query = "";
+  const query_params: Record<string, string | number> = {
+    page_size,
+  };
+  if (!before && !after) {
+    // No before/after => just the most recent page_size items
+    query = `
+      SELECT
+        episode_id,
+        count(*) as count,
+        min(UUIDv7ToDateTime(id)) as start_time,
+        max(UUIDv7ToDateTime(id)) as end_time,
+        max(id) as last_inference_id
+      FROM InferenceByEpisodeId
+      GROUP BY episode_id
+      ORDER BY max(toUInt128(id)) DESC
+      LIMIT {page_size:UInt32}
+    `;
+  } else if (before) {
+    query = `
+      SELECT
+        episode_id,
+        count(*) as count,
+        min(UUIDv7ToDateTime(id)) as start_time,
+        max(UUIDv7ToDateTime(id)) as end_time,
+        max(id) as last_inference_id
+      FROM InferenceByEpisodeId
+      WHERE toUInt128(id) < toUInt128(toUUID({before:String}))
+      GROUP BY episode_id
+      ORDER BY max(toUInt128(id)) DESC
+      LIMIT {page_size:UInt32}
+    `;
+    query_params.before = before;
+  } else if (after) {
+    query = `
+      SELECT
+        episode_id,
+        count(*) as count,
+        min(UUIDv7ToDateTime(id)) as start_time,
+        max(UUIDv7ToDateTime(id)) as end_time,
+        max(id) as last_inference_id
+      FROM
+      (
+        SELECT
+          episode_id,
+          count(*) as count,
+          min(UUIDv7ToDateTime(id)) as start_time,
+          max(UUIDv7ToDateTime(id)) as end_time,
+          max(id) as last_inference_id
+        FROM InferenceByEpisodeId
+        WHERE toUInt128(id) > toUInt128(toUUID({after:String}))
+        GROUP BY episode_id
+        ORDER BY max(toUInt128(id)) ASC
+        LIMIT {page_size:UInt32}
+      )
+      ORDER BY max(toUInt128(id)) DESC
+    `;
+    query_params.after = after;
+  }
+
+  try {
+    const resultSet = await clickhouseClient.query({
+      query,
+      format: "JSONEachRow",
+      query_params,
+    });
+    const rows = await resultSet.json<EpisodeByIdRow>();
+    return rows;
+  } catch (error) {
+    console.error(error);
+    throw data("Error querying episode table", { status: 500 });
+  }
+}
+
+/// NOTE: these are the Episode IDs of the episodes that have the earliest and latest last inferences, i.e. the first and last episodes in our sort order
+/// You should still paginate on the Inference IDs not the Episode IDs
+export async function queryEpisodeTableBounds(): Promise<TableBounds> {
+  const query = `
+    SELECT
+     (SELECT episode_id FROM InferenceByEpisodeId WHERE toUInt128(id) = (SELECT MIN(toUInt128(id)) FROM InferenceByEpisodeId)) AS first_id,
+     (SELECT episode_id FROM InferenceByEpisodeId WHERE toUInt128(id) = (SELECT MAX(toUInt128(id)) FROM InferenceByEpisodeId)) AS last_id
+    FROM InferenceByEpisodeId
+    LIMIT 1
+  `;
+  try {
+    const resultSet = await clickhouseClient.query({
+      query,
+      format: "JSONEachRow",
+    });
+    const rows = await resultSet.json<TableBounds>();
     return rows[0];
   } catch (error) {
     console.error(error);
