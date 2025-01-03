@@ -731,7 +731,7 @@ LIMIT 1
 
 export const episodeByIdSchema = z
   .object({
-    id: z.string().uuid(),
+    episode_id: z.string().uuid(),
     count: z.number().min(1),
     start_time: z.string().datetime(),
     end_time: z.string().datetime(),
@@ -767,27 +767,27 @@ export async function queryEpisodeTable(params: {
     query = `
       SELECT
         episode_id,
-        count(*) as count,
+        toUInt32(count(*)) as count,
         min(UUIDv7ToDateTime(id)) as start_time,
         max(UUIDv7ToDateTime(id)) as end_time,
         max(id) as last_inference_id
       FROM InferenceByEpisodeId
       GROUP BY episode_id
-      ORDER BY max(toUInt128(id)) DESC
+      ORDER BY toUInt128(last_inference_id) DESC
       LIMIT {page_size:UInt32}
     `;
   } else if (before) {
     query = `
       SELECT
         episode_id,
-        count(*) as count,
+        toUInt32(count(*)) as count,
         min(UUIDv7ToDateTime(id)) as start_time,
         max(UUIDv7ToDateTime(id)) as end_time,
         max(id) as last_inference_id
       FROM InferenceByEpisodeId
       WHERE toUInt128(id) < toUInt128(toUUID({before:String}))
       GROUP BY episode_id
-      ORDER BY max(toUInt128(id)) DESC
+      ORDER BY toUInt128(last_inference_id) DESC
       LIMIT {page_size:UInt32}
     `;
     query_params.before = before;
@@ -795,25 +795,25 @@ export async function queryEpisodeTable(params: {
     query = `
       SELECT
         episode_id,
-        count(*) as count,
-        min(UUIDv7ToDateTime(id)) as start_time,
-        max(UUIDv7ToDateTime(id)) as end_time,
-        max(id) as last_inference_id
+        count,
+        start_time,
+        end_time,
+        last_inference_id
       FROM
       (
         SELECT
           episode_id,
-          count(*) as count,
+          toUInt32(count(*)) as count,
           min(UUIDv7ToDateTime(id)) as start_time,
           max(UUIDv7ToDateTime(id)) as end_time,
           max(id) as last_inference_id
         FROM InferenceByEpisodeId
         WHERE toUInt128(id) > toUInt128(toUUID({after:String}))
         GROUP BY episode_id
-        ORDER BY max(toUInt128(id)) ASC
+        ORDER BY toUInt128(last_inference_id) ASC
         LIMIT {page_size:UInt32}
       )
-      ORDER BY max(toUInt128(id)) DESC
+      ORDER BY toUInt128(last_inference_id) DESC
     `;
     query_params.after = after;
   }
@@ -825,6 +825,13 @@ export async function queryEpisodeTable(params: {
       query_params,
     });
     const rows = await resultSet.json<EpisodeByIdRow>();
+    const episodeIds = rows.map((episode) => episode.episode_id);
+    const uniqueIds = new Set(episodeIds);
+    if (uniqueIds.size !== rows.length) {
+      console.warn(
+        `Found duplicate episode IDs: ${rows.length - uniqueIds.size} duplicates detected`,
+      );
+    }
     return rows;
   } catch (error) {
     console.error(error);
@@ -837,8 +844,8 @@ export async function queryEpisodeTable(params: {
 export async function queryEpisodeTableBounds(): Promise<TableBounds> {
   const query = `
     SELECT
-     (SELECT episode_id FROM InferenceByEpisodeId WHERE toUInt128(id) = (SELECT MIN(toUInt128(id)) FROM InferenceByEpisodeId)) AS first_id,
-     (SELECT episode_id FROM InferenceByEpisodeId WHERE toUInt128(id) = (SELECT MAX(toUInt128(id)) FROM InferenceByEpisodeId)) AS last_id
+     (SELECT id FROM InferenceByEpisodeId WHERE toUInt128(id) = (SELECT MIN(toUInt128(id)) FROM InferenceByEpisodeId)) AS first_id,
+     (SELECT id FROM InferenceByEpisodeId WHERE toUInt128(id) = (SELECT MAX(toUInt128(id)) FROM InferenceByEpisodeId)) AS last_id
     FROM InferenceByEpisodeId
     LIMIT 1
   `;

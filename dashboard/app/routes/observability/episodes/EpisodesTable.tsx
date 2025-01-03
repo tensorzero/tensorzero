@@ -93,11 +93,11 @@ export default function EpisodesTable({
         </TableHeader>
         <TableBody>
           {episodes.map((episode) => (
-            <TableRow key={episode.id} id={episode.id}>
+            <TableRow key={episode.episode_id} id={episode.episode_id}>
               <TableCell className="max-w-[200px] lg:max-w-none">
                 <a href="#" className="block no-underline">
                   <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
-                    {episode.id}
+                    {episode.episode_id}
                   </code>
                 </a>
               </TableCell>

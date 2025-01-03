@@ -21,7 +21,7 @@ export default function Home() {
                   </CardHeader>
                 </Card>
               </Link>
-              <Link to="#" className="block">
+              <Link to="/observability/episodes" className="block">
                 <Card className="h-full transition-shadow hover:shadow-md">
                   <CardHeader>
                     <div className="flex items-center space-x-2">

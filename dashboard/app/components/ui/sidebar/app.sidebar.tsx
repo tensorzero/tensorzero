@@ -30,7 +30,7 @@ const navigation = [
       },
       {
         title: "Episodes",
-        url: "#",
+        url: "/observability/episodes",
       },
     ],
   },
