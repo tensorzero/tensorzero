@@ -712,7 +712,7 @@ async fn write_batch_request_status_update(
         raw_response: &raw_response,
         model_provider_name: &batch_request.model_provider_name,
         status,
-        errors: vec![], // TODO(Viraj): fix
+        errors: vec![],
     });
     clickhouse_connection_info
         .write(&[batch_request_insert], "BatchRequest")
