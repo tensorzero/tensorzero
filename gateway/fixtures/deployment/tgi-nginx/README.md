@@ -3,7 +3,7 @@
 This image is used to run [TGI](https://huggingface.co/docs/text-generation-inference/index) behind an NGINX proxy that provides Bearer token authentication.
 We use it to provide a persistent secure endpoint serving TGI for our E2E tests.
 
-# Usage example:
+## Usage example:
 
 ```bash
 docker run \
