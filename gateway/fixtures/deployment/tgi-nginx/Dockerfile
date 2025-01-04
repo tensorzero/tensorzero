@@ -2,8 +2,10 @@
 
 FROM ghcr.io/huggingface/text-generation-inference:latest
 
-# Install nginx
-RUN apt-get update && apt-get install -y nginx && rm -rf /var/lib/apt/lists/*
+# Install nginx and remove default site
+RUN apt-get update && apt-get install -y nginx \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm /etc/nginx/sites-enabled/default
 
 # Copy the nginx config (we'll define it below)
 COPY default.conf /etc/nginx/conf.d/default.conf
