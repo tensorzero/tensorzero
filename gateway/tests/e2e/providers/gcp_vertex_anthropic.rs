@@ -6,11 +6,6 @@ crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
-    let credentials = match std::env::var("GCP_VERTEX_CREDENTIALS_PATH") {
-        Ok(key) => HashMap::from([("gcp_vertex_credentials_path".to_string(), key)]),
-        Err(_) => HashMap::new(),
-    };
-
     let standard_providers = vec![E2ETestProvider {
         variant_name: "gcp-vertex-haiku".to_string(),
         model_name: "claude-3-haiku-20240307-gcp-vertex".to_string(),
@@ -22,7 +17,7 @@ async fn get_providers() -> E2ETestProviders {
         variant_name: "gcp-vertex-haiku-dynamic".to_string(),
         model_name: "claude-3-haiku-20240307-gcp-vertex-dynamic".to_string(),
         model_provider_name: "gcp_vertex_anthropic".to_string(),
-        credentials,
+        credentials: HashMap::new(),
     }];
 
     let json_providers = vec![
