@@ -883,6 +883,7 @@ pub async fn write_completed_batch_inference<'a>(
     Ok(responses)
 }
 
+/// This function gets the batch inferences from the database for a given batch id and inference ids
 pub async fn get_batch_inferences(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     batch_id: Uuid,
@@ -907,6 +908,10 @@ pub async fn get_batch_inferences(
     Ok(rows)
 }
 
+/// This function gets the already-completed batch inference response from the database
+/// It takes a `BatchRequestRow` and a `PollPathParams` and returns a `CompletedBatchInferenceResponse`
+/// The `PollPathParams` is used to determine which inference to get (a single inference or all inferences in the batch)
+/// The `FunctionConfig` is helpful in determining which table to query for the inference
 pub async fn get_completed_batch_inference_response(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     batch_request: &BatchRequestRow<'_>,
@@ -914,7 +919,7 @@ pub async fn get_completed_batch_inference_response(
     function: &FunctionConfig,
 ) -> Result<CompletedBatchInferenceResponse, Error> {
     match function {
-        FunctionConfig::Chat(_chat_function) => match path_params {
+        FunctionConfig::Chat(_) => match path_params {
             PollPathParams {
                 batch_id,
                 inference_id: None,
@@ -1008,7 +1013,7 @@ pub async fn get_completed_batch_inference_response(
                 })
             }
         },
-        FunctionConfig::Json(_json_function) => match path_params {
+        FunctionConfig::Json(_) => match path_params {
             PollPathParams {
                 inference_id: None, ..
             } => {
