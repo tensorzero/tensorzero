@@ -44,13 +44,20 @@ impl<'a> Migration for Migration0008<'a> {
         Ok(())
     }
 
-    /// Check if the migration has already been applied by checking if the raw_request or raw_response columns exist in BatchRequest
+    /// Check if the migration has already been applied by checking if the raw_request, raw_response, function_name or and variant_name
+    /// columns exist in BatchRequest
     /// and if the processing_time_ms columns in ChatInference and JsonInference and response_time_ms column in ModelInference is Nullable
     async fn should_apply(&self) -> Result<bool, Error> {
         if !check_column_exists(self.clickhouse, "BatchRequest", "raw_request", "0008").await? {
             return Ok(true);
         }
         if !check_column_exists(self.clickhouse, "BatchRequest", "raw_response", "0008").await? {
+            return Ok(true);
+        }
+        if !check_column_exists(self.clickhouse, "BatchRequest", "function_name", "0008").await? {
+            return Ok(true);
+        }
+        if !check_column_exists(self.clickhouse, "BatchRequest", "variant_name", "0008").await? {
             return Ok(true);
         }
         if get_column_type(self.clickhouse, "BatchRequest", "errors", "0008").await?
@@ -97,7 +104,8 @@ impl<'a> Migration for Migration0008<'a> {
     }
 
     async fn apply(&self) -> Result<(), Error> {
-        // Add a `raw_request` column and a `raw_response` column to the `BatchRequest` table
+        // Add a `raw_request` column, a `raw_response` column, a `function_name` column and a `variant_name` column
+        // to the `BatchRequest` table
         let query = r#"
             ALTER TABLE BatchRequest
             ADD COLUMN IF NOT EXISTS raw_request String,
