@@ -695,6 +695,9 @@ pub async fn write_poll_batch_inference<'a>(
     }
 }
 
+/// This function updates the status of a batch request in the database
+/// It only updates the status of the batch request and does not write any other data to the database
+/// Should only be called if status is Pending or Failed
 async fn write_batch_request_status_update(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     batch_request: &BatchRequestRow<'_>,
@@ -702,6 +705,14 @@ async fn write_batch_request_status_update(
     raw_request: String,
     raw_response: String,
 ) -> Result<(), Error> {
+    if status != BatchStatus::Pending && status != BatchStatus::Failed {
+        return Err(Error::new(ErrorDetails::Inference {
+            message: format!(
+                "write_batch_request_status_update called with invalid status {:?}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new",
+                status
+            ),
+        }));
+    }
     let batch_request_insert = BatchRequestRow::new(UnparsedBatchRequestRow {
         batch_id: batch_request.batch_id,
         batch_params: &batch_request.batch_params,
@@ -728,7 +739,7 @@ async fn write_batch_request_status_update(
 /// As part of this, it also constructs the `ModelInferenceResponseWithMetadata` struct which is
 /// used to serialize the `ModelInference` table.
 ///
-/// TODO(Viraj): this function has a large number of Clones that are not necessary.
+/// TODO: this function has a large number of Clones that are not necessary.
 /// To avoid these, the types that are calling for clones must be changed to Cows and then the code in the non-batch inference
 /// handler must be adjusted to deal with it and also the lifetimes associated there.
 pub async fn write_completed_batch_inference<'a>(
