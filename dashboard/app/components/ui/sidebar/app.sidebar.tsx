@@ -1,5 +1,3 @@
-"use client";
-
 import * as React from "react";
 import { ChevronRight, ChevronLeft, FileText } from "lucide-react";
 import { useSidebar } from "~/components/ui/sidebar";

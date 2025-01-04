@@ -1107,7 +1107,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_chat_inference_response() {
-        // TODO (#30): handle the tool call case here. For now, we will always set those values to None.
         // Case 1: No output schema
         let inference_id = Uuid::now_v7();
         let content = vec!["Hello, world!".to_string().into()];
@@ -1151,6 +1150,7 @@ mod tests {
         assert_eq!(model_inference_result.model_name, "test_model");
         assert_eq!(model_inference_result.model_provider_name, "test_provider");
         assert_eq!(model_inference_result.raw_request, raw_request);
+
         // Case 2: A tool call that fails argument validation
         let inference_id = Uuid::now_v7();
         let content = vec![ContentBlock::ToolCall(ToolCall {
