@@ -16,4 +16,5 @@ docker run \
     --max-total-tokens 2048 \
     --max-batch-prefill-tokens 1024 \
     --quantize fp8
+    # Do not pass --port here, it is set by the container
 ```
