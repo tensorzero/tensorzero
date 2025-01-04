@@ -1,5 +1,6 @@
 use futures::StreamExt;
 use lazy_static::lazy_static;
+use reqwest::StatusCode;
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
@@ -9,9 +10,9 @@ use tokio::time::Instant;
 use url::Url;
 
 use super::openai::{
-    get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
-    stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAITool, OpenAIToolChoice,
-    OpenAIToolType, StreamOptions,
+    get_chat_url, prepare_openai_messages, prepare_openai_tools, stream_openai,
+    OpenAIRequestMessage, OpenAIResponse, OpenAITool, OpenAIToolChoice, OpenAIToolType,
+    StreamOptions,
 };
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
@@ -24,10 +25,6 @@ use crate::inference::types::{
 use crate::model::CredentialLocation;
 
 lazy_static! {
-    static ref TGI_DEFAULT_BASE_URL: Url = {
-        #[allow(clippy::expect_used)]
-        Url::parse("https://api.openai.com/v1").expect("Failed to parse TGI_DEFAULT_BASE_URL")
-    };
     static ref TGI: String = "TGI".to_string();
 }
 
@@ -103,9 +100,10 @@ impl InferenceProvider for TGIProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
+        // TGI doesn't care about this field, so we can hardcode it to "tgi"
         let model_name = TGI.to_lowercase().clone();
         let request_body = TGIRequest::new(&model_name, request)?;
-        let request_url = get_chat_url(Some(&TGI_DEFAULT_BASE_URL))?;
+        let request_url = get_chat_url(Some(&self.api_base))?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
 
@@ -155,7 +153,7 @@ impl InferenceProvider for TGIProvider {
             }
             .try_into()?)
         } else {
-            Err(handle_openai_error(
+            Err(handle_tgi_error(
                 res.status(),
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
@@ -188,7 +186,7 @@ impl InferenceProvider for TGIProvider {
                 provider_type: TGI.clone(),
             })
         })?;
-        let request_url = get_chat_url(Some(&TGI_DEFAULT_BASE_URL))?;
+        let request_url = get_chat_url(Some(&self.api_base))?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut request_builder = http_client
@@ -431,6 +429,25 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             usage,
             latency,
         ))
+    }
+}
+
+pub(super) fn handle_tgi_error(response_code: StatusCode, response_body: &str) -> Error {
+    match response_code {
+        StatusCode::BAD_REQUEST
+        | StatusCode::UNAUTHORIZED
+        | StatusCode::FORBIDDEN
+        | StatusCode::TOO_MANY_REQUESTS => ErrorDetails::InferenceClient {
+            message: response_body.to_string(),
+            status_code: Some(response_code),
+            provider_type: "TGI".to_string(),
+        }
+        .into(),
+        _ => ErrorDetails::InferenceServer {
+            message: response_body.to_string(),
+            provider_type: "TGI".to_string(),
+        }
+        .into(),
     }
 }
 
