@@ -6,6 +6,7 @@ if [ -z "$BEARER_TOKEN" ]; then
   exit 1
 fi
 
+# Replace placeholder in nginx config with real token from env
 sed -i "s#_MY_SECRET_#${BEARER_TOKEN}#g" /etc/nginx/conf.d/default.conf
 
 ldconfig 2>/dev/null || echo 'Note: Unable to refresh dynamic linker cache. This is expected in some container environments and will not affect functionality.'
