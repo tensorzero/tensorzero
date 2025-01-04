@@ -53,20 +53,20 @@ repos:
 
       - id: prettier
         name: prettier
-        entry: npx prettier
+        entry: bash -c 'cd dashboard && npm run format'
         language: node
         types_or:
           [css, html, javascript, json, jsx, markdown, scss, ts, tsx, yaml]
-        args: ["--write", "--list-different"]
         additional_dependencies:
           - prettier
+          - prettier-plugin-tailwindcss
           - "@prettier/plugin-xml"
         exclude: '.*\.ipynb$'
         pass_filenames: false
 
       - id: eslint
         name: eslint
-        entry: bash -c 'cd dashboard && npx eslint'
+        entry: bash -c 'cd dashboard && npm run lint'
         language: node
         types_or: [javascript, jsx, ts, tsx]
         additional_dependencies:
@@ -77,7 +77,7 @@ repos:
 
       - id: tsc
         name: tsc
-        entry: bash -c 'cd dashboard && tsc'
+        entry: bash -c 'cd dashboard && npm run typecheck'
         language: node
         types_or: [ts, tsx]
         additional_dependencies:
