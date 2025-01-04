@@ -21,21 +21,6 @@ async fn get_providers() -> E2ETestProviders {
         },
     ];
 
-    let inference_params_providers = vec![
-        E2ETestProvider {
-            variant_name: "gcp-vertex-gemini-flash-dynamic".to_string(),
-            model_name: "gemini-1.5-flash-001-dynamic".to_string(),
-            model_provider_name: "gcp_vertex_gemini".to_string(),
-            credentials: HashMap::new(),
-        },
-        E2ETestProvider {
-            variant_name: "gcp-vertex-gemini-pro-dynamic".to_string(),
-            model_name: "gemini-1.5-pro-001-dynamic".to_string(),
-            model_provider_name: "gcp_vertex_gemini".to_string(),
-            credentials: HashMap::new(),
-        },
-    ];
-
     let json_providers = vec![
         E2ETestProvider {
             variant_name: "gcp-vertex-gemini-flash".to_string(),
@@ -65,7 +50,7 @@ async fn get_providers() -> E2ETestProviders {
 
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
-        inference_params_inference: inference_params_providers,
+        inference_params_inference: standard_providers.clone(),
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),
         dynamic_tool_use_inference: standard_providers.clone(),
