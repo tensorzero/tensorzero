@@ -28,7 +28,10 @@ services:
 
   gateway:
     container_name: tensorzero-gateway-dashboard-tests
-    image: tensorzero/gateway
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: gateway
     volumes:
       - ./config:/app/config:ro
     environment:
