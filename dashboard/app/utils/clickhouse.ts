@@ -606,12 +606,18 @@ export const inferenceByIdRowSchema = z
 
 export type InferenceByIdRow = z.infer<typeof inferenceByIdRowSchema>;
 
-/// Query a table of at most `page_size` Inferences from ChatInference or JsonInference that are before the given `before` ID or after the given `after` ID.
-/// If `before` and `after` are both not provided, the query will return the most recent `page_size` Inferences.
-/// If `before` and `after` are both provided, we will throw an error.
-/// If `before` is provided, the query will return the most recent `page_size` Inferences before the given `before` ID.
-/// If `after` is provided, the query will return the earliest `page_size` Inferences after the given `after` ID.
-/// All returned data should be ordered by `id` in descending order.
+/**
+ * Query a table of at most `page_size` Inferences from ChatInference or JsonInference that are
+ * before the given `before` ID or after the given `after` ID. If `episode_id` is provided,
+ * we only return rows from that specific episode.
+ *
+ * - If `before` and `after` are both not provided, returns the most recent `page_size` Inferences.
+ * - If `before` and `after` are both provided, throw an error.
+ * - If `before` is provided, returns the most recent `page_size` Inferences before the given `before` ID.
+ * - If `after` is provided, returns the earliest `page_size` Inferences after the given `after` ID.
+ *
+ * All returned data should be ordered by `id` in descending order.
+ */
 export async function queryInferenceTable(params: {
   page_size: number;
   before?: string; // UUIDv7 string
@@ -624,9 +630,7 @@ export async function queryInferenceTable(params: {
   }
 
   let query = "";
-  const query_params: Record<string, string | number> = {
-    page_size,
-  };
+  const query_params: Record<string, string | number> = { page_size };
 
   if (!before && !after) {
     // No before/after => just the most recent page_size items
@@ -653,7 +657,8 @@ export async function queryInferenceTable(params: {
         function_type,
         UUIDv7ToDateTime(id) AS timestamp
       FROM InferenceById
-      WHERE toUInt128(id) < toUInt128(toUUID({before:String}))
+      WHERE
+        toUInt128(id) < toUInt128(toUUID({before:String}))
       ORDER BY toUInt128(id) DESC
       LIMIT {page_size:UInt32}
     `;
@@ -679,7 +684,8 @@ export async function queryInferenceTable(params: {
           function_type,
           UUIDv7ToDateTime(id) AS timestamp
         FROM InferenceById
-        WHERE toUInt128(id) > toUInt128(toUUID({after:String}))
+        WHERE
+          toUInt128(id) > toUInt128(toUUID({after:String}))
         ORDER BY toUInt128(id) ASC
         LIMIT {page_size:UInt32}
       )
@@ -854,6 +860,126 @@ export async function queryEpisodeTableBounds(): Promise<TableBounds> {
     const resultSet = await clickhouseClient.query({
       query,
       format: "JSONEachRow",
+    });
+    const rows = await resultSet.json<TableBounds>();
+    return rows[0];
+  } catch (error) {
+    console.error(error);
+    throw data("Error querying inference table bounds", { status: 500 });
+  }
+}
+
+export async function queryInferenceTableByEpisodeId(params: {
+  episode_id: string;
+  page_size: number;
+  before?: string; // UUIDv7 string
+  after?: string; // UUIDv7 string
+}): Promise<InferenceByIdRow[]> {
+  const { episode_id, page_size, before, after } = params;
+
+  if (before && after) {
+    throw new Error("Cannot specify both 'before' and 'after' parameters");
+  }
+
+  let query = "";
+  const query_params: Record<string, string | number> = {
+    page_size,
+    episode_id,
+  };
+
+  if (!before && !after) {
+    // No before/after => just the most recent page_size items
+    query = `
+      SELECT
+        id,
+        function_name,
+        variant_name,
+        episode_id,
+        function_type,
+        UUIDv7ToDateTime(id) AS timestamp
+      FROM InferenceByEpisodeId
+      WHERE episode_id = {episode_id:String}
+      ORDER BY toUInt128(id) DESC
+      LIMIT {page_size:UInt32}
+    `;
+  } else if (before) {
+    // "Most recent" page_size before a certain ID => descending sort is fine
+    query = `
+      SELECT
+        id,
+        function_name,
+        variant_name,
+        episode_id,
+        function_type,
+        UUIDv7ToDateTime(id) AS timestamp
+      FROM InferenceByEpisodeId
+      WHERE episode_id = {episode_id:String}
+        AND toUInt128(id) < toUInt128(toUUID({before:String}))
+      ORDER BY toUInt128(id) DESC
+      LIMIT {page_size:UInt32}
+    `;
+    query_params.before = before;
+  } else if (after) {
+    // "Earliest" page_size after a certain ID => first sort ascending, then reorder descending
+    // Subselect:
+    query = `
+      SELECT
+        id,
+        function_name,
+        variant_name,
+        episode_id,
+        function_type,
+        timestamp
+      FROM
+      (
+        SELECT
+          id,
+          function_name,
+          variant_name,
+          episode_id,
+          function_type,
+          UUIDv7ToDateTime(id) AS timestamp
+        FROM InferenceById
+        WHERE episode_id = {episode_id:String}
+          AND toUInt128(id) > toUInt128(toUUID({after:String}))
+        ORDER BY toUInt128(id) ASC
+        LIMIT {page_size:UInt32}
+      )
+      ORDER BY toUInt128(id) DESC
+    `;
+    query_params.after = after;
+  }
+
+  try {
+    const resultSet = await clickhouseClient.query({
+      query,
+      format: "JSONEachRow",
+      query_params,
+    });
+    const rows = await resultSet.json<InferenceByIdRow>();
+    return rows;
+  } catch (error) {
+    console.error(error);
+    throw data("Error querying inference table", { status: 500 });
+  }
+}
+export async function queryInferenceTableBoundsByEpisodeId(params: {
+  episode_id: string;
+}): Promise<TableBounds> {
+  const { episode_id } = params;
+  const query = `
+   SELECT
+  (SELECT id FROM InferenceById WHERE toUInt128(id) = (SELECT MIN(toUInt128(id)) FROM InferenceById WHERE episode_id = {episode_id:String})) AS first_id,
+  (SELECT id FROM InferenceById WHERE toUInt128(id) = (SELECT MAX(toUInt128(id)) FROM InferenceById WHERE episode_id = {episode_id:String})) AS last_id
+FROM InferenceById
+LIMIT 1
+  `;
+
+  try {
+    const resultSet = await clickhouseClient.query({
+      query,
+      format: "JSONEachRow",
+      query_params: { episode_id },
     });
     const rows = await resultSet.json<TableBounds>();
     return rows[0];

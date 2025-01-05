@@ -9,6 +9,8 @@ import {
   queryEpisodeTableBounds,
   queryInferenceTable,
   queryInferenceTableBounds,
+  queryInferenceTableBoundsByEpisodeId,
+  queryInferenceTableByEpisodeId,
 } from "./clickhouse";
 
 test("checkClickhouseConnection", async () => {
@@ -404,8 +406,116 @@ test("queryInferenceTable before past timestamp is empty", async () => {
   expect(inferences.length).toBe(0);
 });
 
-// These are the same because the early inferences are in singleton episodes.
-// We might change this for better test coverage in the future.
+test("queryInferenceTableByEpisodeId pages through all results correctly using before with episode_id", async () => {
+  const PAGE_SIZE = 20;
+  let currentPage = await queryInferenceTableByEpisodeId({
+    page_size: PAGE_SIZE,
+    episode_id: "01942e26-618b-7b80-b492-34bed9f6d872",
+  });
+
+  // Keep track of how many full pages we've seen
+  let numFullPages = 0;
+  let totalElements = 0;
+
+  while (currentPage.length === PAGE_SIZE) {
+    totalElements += currentPage.length;
+
+    // Verify each page is the correct size
+    expect(currentPage.length).toBe(PAGE_SIZE);
+    // Verify IDs are in descending order within each page
+    for (let i = 1; i < currentPage.length; i++) {
+      expect(currentPage[i - 1].id > currentPage[i].id).toBe(true);
+    }
+
+    // Get next page using last item's ID as cursor
+    currentPage = await queryInferenceTableByEpisodeId({
+      before: currentPage[currentPage.length - 1].id,
+      page_size: PAGE_SIZE,
+      episode_id: "01942e26-618b-7b80-b492-34bed9f6d872",
+    });
+
+    numFullPages++;
+  }
+
+  // Add the remaining elements from the last page
+  totalElements += currentPage.length;
+
+  // The last page should have fewer items than PAGE_SIZE
+  // (unless the total happens to be exactly divisible by PAGE_SIZE)
+  expect(currentPage.length).toBeLessThanOrEqual(PAGE_SIZE);
+
+  // Verify total number of elements
+  expect(totalElements).toBe(35);
+
+  // We should have seen at least one full page
+  expect(numFullPages).toBeGreaterThan(0);
+});
+
+test("queryInferenceTableByEpisodeId pages through all results correctly using after with episode_id", async () => {
+  const PAGE_SIZE = 20;
+
+  // First get to the last page to find the earliest ID
+  let currentPage = await queryInferenceTableByEpisodeId({
+    page_size: PAGE_SIZE,
+    episode_id: "01942e26-469a-7553-af00-cb0495dc7bb5",
+  });
+
+  while (currentPage.length === PAGE_SIZE) {
+    currentPage = await queryInferenceTableByEpisodeId({
+      before: currentPage[currentPage.length - 1].id,
+      page_size: PAGE_SIZE,
+      episode_id: "01942e26-469a-7553-af00-cb0495dc7bb5",
+    });
+  }
+
+  // Now we have the earliest ID, let's page forward using after
+  const firstId = currentPage[currentPage.length - 1].id;
+  currentPage = await queryInferenceTableByEpisodeId({
+    after: firstId,
+    page_size: PAGE_SIZE,
+    episode_id: "01942e26-469a-7553-af00-cb0495dc7bb5",
+  });
+
+  // Keep track of how many full pages we've seen
+  let numFullPages = 0;
+  let totalElements = 0;
+
+  while (currentPage.length === PAGE_SIZE) {
+    totalElements += currentPage.length;
+
+    // Verify each page is the correct size
+    expect(currentPage.length).toBe(PAGE_SIZE);
+
+    // Verify IDs are in descending order within each page
+    for (let i = 1; i < currentPage.length; i++) {
+      expect(currentPage[i - 1].id > currentPage[i].id).toBe(true);
+    }
+
+    // Get next page using first item's ID as cursor
+    currentPage = await queryInferenceTableByEpisodeId({
+      after: currentPage[0].id,
+      page_size: PAGE_SIZE,
+      episode_id: "01942e26-469a-7553-af00-cb0495dc7bb5",
+    });
+
+    numFullPages++;
+  }
+
+  // Add the remaining elements from the last page
+  totalElements += currentPage.length;
+
+  // The last page should have fewer items than PAGE_SIZE
+  // (unless the total happens to be exactly divisible by PAGE_SIZE)
+  expect(currentPage.length).toBeLessThanOrEqual(PAGE_SIZE);
+
+  // Verify total number of elements matches the previous test
+  expect(totalElements).toBe(42);
+
+  // We should have seen at least two full pages
+  expect(numFullPages).toBeGreaterThan(1);
+});
+
+// queryInferenceTableBounds and queryEpisodeTableBounds are the same because the early inferences are in singleton episodes.
 test("queryInferenceTableBounds", async () => {
   const bounds = await queryInferenceTableBounds();
   expect(bounds.first_id).toBe("0192ced0-9873-70e2-ade5-dc5b8faea232");
@@ -416,6 +526,14 @@ test("queryEpisodeTableBounds", async () => {
   const bounds = await queryEpisodeTableBounds();
   expect(bounds.first_id).toBe("0192ced0-9873-70e2-ade5-dc5b8faea232");
   expect(bounds.last_id).toBe("01942e28-4a3c-7873-b94d-402a9cc83f2a");
+});
+
+test("queryInferenceTableBounds with episode_id", async () => {
+  const bounds = await queryInferenceTableBoundsByEpisodeId({
+    episode_id: "01942e26-6497-7910-89d6-d9d1c735d3df",
+  });
+  expect(bounds.first_id).toBe("01942e26-6e50-7fa0-8d61-9fd730a73a8b");
+  expect(bounds.last_id).toBe("01942e27-5a2b-75b3-830c-094f82096270");
 });
 
 test("queryEpisodeTable", async () => {
