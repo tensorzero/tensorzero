@@ -692,3 +692,5 @@ test("queryEpisodeTable pages through all results correctly using after", async 
   // We should have seen at least 9 full pages
   expect(numFullPages).toBeGreaterThan(8);
 });
+
+// TODO: add tests for all the metric functions

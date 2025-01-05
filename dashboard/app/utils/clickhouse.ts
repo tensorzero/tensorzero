@@ -989,7 +989,302 @@ LIMIT 1
   }
 }
 
-export const floatMetricRowSchema = z
+export const booleanMetricFeedbackRowSchema = z.object({
+  id: z.string().uuid(),
+  target_id: z.string().uuid(),
+  metric_name: z.string(),
+  value: z.boolean(),
+  tags: z.record(z.string(), z.string()),
+  timestamp: z.string().datetime(),
+});
+
+export type BooleanMetricFeedbackRow = z.infer<
+  typeof booleanMetricFeedbackRowSchema
+>;
+
+export async function queryBooleanMetricsByTargetId(params: {
+  target_id: string;
+  before?: string;
+  after?: string;
+  page_size?: number;
+}): Promise<BooleanMetricFeedbackRow[]> {
+  const { target_id, before, after, page_size } = params;
+
+  if (before && after) {
+    throw new Error("Cannot specify both 'before' and 'after' parameters");
+  }
+
+  let query = "";
+  const query_params: Record<string, string | number> = {
+    target_id,
+    page_size: page_size || 100,
+  };
+
+  if (!before && !after) {
+    query = `
+      SELECT
+        id,
+        target_id,
+        metric_name,
+        value,
+        tags,
+        UUIDv7ToDateTime(id) AS timestamp
+      FROM BooleanMetricFeedbackByTargetId
+      WHERE target_id = {target_id:String}
+      ORDER BY toUInt128(id) DESC
+      LIMIT {page_size:UInt32}
+    `;
+  } else if (before) {
+    query = `
+      SELECT
+        id,
+        target_id,
+        metric_name,
+        value,
+        tags,
+        UUIDv7ToDateTime(id) AS timestamp
+      FROM BooleanMetricFeedbackByTargetId
+      WHERE target_id = {target_id:String}
+        AND toUInt128(id) < toUInt128(toUUID({before:String}))
+      ORDER BY toUInt128(id) DESC
+      LIMIT {page_size:UInt32}
+    `;
+    query_params.before = before;
+  } else if (after) {
+    query = `
+      SELECT
+        id,
+        target_id,
+        metric_name,
+        value,
+        tags,
+        timestamp
+      FROM
+      (
+        SELECT
+          id,
+          target_id,
+          metric_name,
+          value,
+          tags,
+          UUIDv7ToDateTime(id) AS timestamp
+        FROM BooleanMetricFeedbackByTargetId
+        WHERE target_id = {target_id:String}
+          AND toUInt128(id) > toUInt128(toUUID({after:String}))
+        ORDER BY toUInt128(id) ASC
+        LIMIT {page_size:UInt32}
+      )
+      ORDER BY toUInt128(id) DESC
+    `;
+    query_params.after = after;
+  }
+
+  try {
+    const resultSet = await clickhouseClient.query({
+      query,
+      format: "JSONEachRow",
+      query_params,
+    });
+    const rows = await resultSet.json<BooleanMetricFeedbackRow>();
+    return rows;
+  } catch (error) {
+    console.error(error);
+    throw data("Error querying boolean metrics", { status: 500 });
+  }
+}
+
+export const commentFeedbackRowSchema = z.object({
+  id: z.string().uuid(),
+  target_id: z.string().uuid(),
+  target_type: z.enum(["inference", "episode"]),
+  value: z.string(),
+  timestamp: z.string().datetime(),
+});
+
+export type CommentFeedbackRow = z.infer<typeof commentFeedbackRowSchema>;
+
+export async function queryCommentFeedbackByTargetId(params: {
+  target_id: string;
+  before?: string;
+  after?: string;
+  page_size?: number;
+}): Promise<CommentFeedbackRow[]> {
+  const { target_id, before, after, page_size } = params;
+
+  if (before && after) {
+    throw new Error("Cannot specify both 'before' and 'after' parameters");
+  }
+
+  let query = "";
+  const query_params: Record<string, string | number> = {
+    target_id,
+    page_size: page_size || 100,
+  };
+
+  if (!before && !after) {
+    query = `
+      SELECT
+        id,
+        target_id,
+        target_type,
+        value,
+        UUIDv7ToDateTime(id) AS timestamp
+      FROM CommentFeedbackByTargetId
+      WHERE target_id = {target_id:String}
+      ORDER BY toUInt128(id) DESC
+      LIMIT {page_size:UInt32}
+    `;
+  } else if (before) {
+    query = `
+      SELECT
+        id,
+        target_id,
+        target_type,
+        value,
+        UUIDv7ToDateTime(id) AS timestamp
+      FROM CommentFeedbackByTargetId
+      WHERE target_id = {target_id:String}
+        AND toUInt128(id) < toUInt128(toUUID({before:String}))
+      ORDER BY toUInt128(id) DESC
+      LIMIT {page_size:UInt32}
+    `;
+    query_params.before = before;
+  } else if (after) {
+    query = `
+      SELECT
+        id,
+        target_id,
+        target_type,
+        value,
+        timestamp
+      FROM
+      (
+        SELECT
+          id,
+          target_id,
+          target_type,
+          value,
+          UUIDv7ToDateTime(id) AS timestamp
+        FROM CommentFeedbackByTargetId
+        WHERE target_id = {target_id:String}
+          AND toUInt128(id) > toUInt128(toUUID({after:String}))
+        ORDER BY toUInt128(id) ASC
+        LIMIT {page_size:UInt32}
+      )
+      ORDER BY toUInt128(id) DESC
+    `;
+    query_params.after = after;
+  }
+
+  try {
+    const resultSet = await clickhouseClient.query({
+      query,
+      format: "JSONEachRow",
+      query_params,
+    });
+    const rows = await resultSet.json<CommentFeedbackRow>();
+    return rows;
+  } catch (error) {
+    console.error(error);
+    throw data("Error querying comment feedback", { status: 500 });
+  }
+}
+
+export const demonstrationFeedbackRowSchema = z.object({
+  id: z.string().uuid(),
+  inference_id: z.string().uuid(),
+  value: z.string(),
+  timestamp: z.string().datetime(),
+});
+
+export type DemonstrationFeedbackRow = z.infer<
+  typeof demonstrationFeedbackRowSchema
+>;
+
+export async function queryDemonstrationFeedbackByInferenceId(params: {
+  inference_id: string;
+  before?: string;
+  after?: string;
+  page_size?: number;
+}): Promise<DemonstrationFeedbackRow[]> {
+  const { inference_id, before, after, page_size } = params;
+
+  if (before && after) {
+    throw new Error("Cannot specify both 'before' and 'after' parameters");
+  }
+
+  let query = "";
+  const query_params: Record<string, string | number> = {
+    inference_id,
+    page_size: page_size || 100,
+  };
+
+  if (!before && !after) {
+    query = `
+      SELECT
+        id,
+        inference_id,
+        value,
+        UUIDv7ToDateTime(id) AS timestamp
+      FROM DemonstrationFeedbackByInferenceId
+      WHERE inference_id = {inference_id:String}
+      ORDER BY toUInt128(id) DESC
+      LIMIT {page_size:UInt32}
+    `;
+  } else if (before) {
+    query = `
+      SELECT
+        id,
+        inference_id,
+        value,
+        UUIDv7ToDateTime(id) AS timestamp
+      FROM DemonstrationFeedbackByInferenceId
+      WHERE inference_id = {inference_id:String}
+        AND toUInt128(id) < toUInt128(toUUID({before:String}))
+      ORDER BY toUInt128(id) DESC
+      LIMIT {page_size:UInt32}
+    `;
+    query_params.before = before;
+  } else if (after) {
+    query = `
+      SELECT
+        id,
+        inference_id,
+        value,
+        timestamp
+      FROM
+      (
+        SELECT
+          id,
+          inference_id,
+          value,
+          UUIDv7ToDateTime(id) AS timestamp
+        FROM DemonstrationFeedbackByInferenceId
+        WHERE inference_id = {inference_id:String}
+          AND toUInt128(id) > toUInt128(toUUID({after:String}))
+        ORDER BY toUInt128(id) ASC
+        LIMIT {page_size:UInt32}
+      )
+      ORDER BY toUInt128(id) DESC
+    `;
+    query_params.after = after;
+  }
+
+  try {
+    const resultSet = await clickhouseClient.query({
+      query,
+      format: "JSONEachRow",
+      query_params,
+    });
+    const rows = await resultSet.json<DemonstrationFeedbackRow>();
+    return rows;
+  } catch (error) {
+    console.error(error);
+    throw data("Error querying demonstration feedback", { status: 500 });
+  }
+}
+
+export const floatMetricFeedbackRowSchema = z
   .object({
     id: z.string().uuid(),
     function_name: z.string(),
@@ -999,14 +1294,163 @@ export const floatMetricRowSchema = z
   })
   .strict();
 
-export type InferenceByIdRow = z.infer<typeof inferenceByIdRowSchema>;
+export type FloatMetricFeedbackRow = z.infer<
+  typeof floatMetricFeedbackRowSchema
+>;
 
-export async function queryFloatMetrics(params: {
-  episode_id?: string;
-  metric_name?: string;
+export async function queryFloatMetricsByTargetId(params: {
+  target_id: string;
   before?: string;
   after?: string;
   page_size?: number;
-}): Promise<FloatMetricRow[]> {
-  const { episode_id, metric_name, before, after, page_size } = params;
+}): Promise<FloatMetricFeedbackRow[]> {
+  const { target_id, before, after, page_size } = params;
+
+  if (before && after) {
+    throw new Error("Cannot specify both 'before' and 'after' parameters");
+  }
+
+  let query = "";
+  const query_params: Record<string, string | number> = {
+    target_id,
+    page_size: page_size || 100,
+  };
+
+  if (!before && !after) {
+    query = `
+      SELECT
+        id,
+        target_id,
+        metric_name,
+        value,
+        tags,
+        UUIDv7ToDateTime(id) AS timestamp
+      FROM FloatMetricFeedbackByTargetId
+      WHERE target_id = {target_id:String}
+      ORDER BY toUInt128(id) DESC
+      LIMIT {page_size:UInt32}
+    `;
+  } else if (before) {
+    query = `
+      SELECT
+        id,
+        target_id,
+        metric_name,
+        value,
+        tags,
+        UUIDv7ToDateTime(id) AS timestamp
+      FROM FloatMetricFeedbackByTargetId
+      WHERE target_id = {target_id:String}
+        AND toUInt128(id) < toUInt128(toUUID({before:String}))
+      ORDER BY toUInt128(id) DESC
+      LIMIT {page_size:UInt32}
+    `;
+    query_params.before = before;
+  } else if (after) {
+    query = `
+      SELECT
+        id,
+        target_id,
+        metric_name,
+        value,
+        tags,
+        timestamp
+      FROM
+      (
+        SELECT
+          id,
+          target_id,
+          metric_name,
+          value,
+          tags,
+          UUIDv7ToDateTime(id) AS timestamp
+        FROM FloatMetricFeedbackByTargetId
+        WHERE target_id = {target_id:String}
+          AND toUInt128(id) > toUInt128(toUUID({after:String}))
+        ORDER BY toUInt128(id) ASC
+        LIMIT {page_size:UInt32}
+      )
+      ORDER BY toUInt128(id) DESC
+    `;
+    query_params.after = after;
+  }
+
+  try {
+    const resultSet = await clickhouseClient.query({
+      query,
+      format: "JSONEachRow",
+      query_params,
+    });
+    const rows = await resultSet.json<FloatMetricFeedbackRow>();
+    return rows;
+  } catch (error) {
+    console.error(error);
+    throw data("Error querying float metric feedback", { status: 500 });
+  }
+}
+
+export const feedbackRowSchema = z.union([
+  booleanMetricFeedbackRowSchema,
+  floatMetricFeedbackRowSchema,
+  commentFeedbackRowSchema,
+  demonstrationFeedbackRowSchema,
+]);
+
+export type FeedbackRow = z.infer<typeof feedbackRowSchema>;
+
+export async function queryFeedbackByTargetId(params: {
+  target_id: string;
+  before?: string;
+  after?: string;
+  page_size?: number;
+}): Promise<FeedbackRow[]> {
+  const { target_id, before, after, page_size } = params;
+
+  const booleanMetrics = await queryBooleanMetricsByTargetId({
+    target_id,
+    before,
+    after,
+    page_size,
+  });
+
+  const commentFeedback = await queryCommentFeedbackByTargetId({
+    target_id,
+    before,
+    after,
+    page_size,
+  });
+
+  const demonstrationFeedback = await queryDemonstrationFeedbackByInferenceId({
+    inference_id: target_id,
+    before,
+    after,
+    page_size,
+  });
+
+  const floatMetrics = await queryFloatMetricsByTargetId({
+    target_id,
+    before,
+    after,
+    page_size,
+  });
+
+  // Combine all feedback types into a single array
+  const allFeedback: FeedbackRow[] = [
+    ...booleanMetrics,
+    ...commentFeedback,
+    ...demonstrationFeedback,
+    ...floatMetrics,
+  ];
+
+  // Sort by id (which is a UUID v7 timestamp)
+  allFeedback.sort((a, b) => a.id.localeCompare(b.id));
+
+  // Take either earliest or latest elements based on pagination params
+  if (before) {
+    // If 'before' is specified, take latest elements
+    return allFeedback.slice(0, page_size || 100);
+  } else {
+    // If 'after' is specified or no pagination params, take earliest elements
+    return allFeedback.slice(-Math.min(allFeedback.length, page_size || 100));
+  }
 }
