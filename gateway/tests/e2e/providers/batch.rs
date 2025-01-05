@@ -1,5 +1,10 @@
 #![allow(clippy::print_stdout)]
-
+/// This file contains 3 types of test for batch inference:
+/// 1. Start a batch inference. Should do whatever is necessary for a provider to start a batch inference for a particular kind of inference
+///    Should also set up bookkeeping so that we can poll for the batch inference to complete later on.
+/// 2. Poll for a batch inference from Pending. Take a currently Pending batch inference and poll for it to complete.
+/// 3. Poll for a batch inference from Completed. Take a currently Completed batch inference (so we know there are results),
+///    change it so that it looks like it is Pending, and then poll for it to be completed again.
 use std::collections::HashMap;
 
 use gateway::{

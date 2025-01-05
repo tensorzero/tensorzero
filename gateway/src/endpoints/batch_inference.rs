@@ -723,7 +723,7 @@ async fn write_batch_request_status_update(
         raw_response: &raw_response,
         model_provider_name: &batch_request.model_provider_name,
         status,
-        errors: vec![],
+        errors: vec![], // TODO (#503): add better error handling
     });
     clickhouse_connection_info
         .write(&[batch_request_insert], "BatchRequest")

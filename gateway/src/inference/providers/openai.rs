@@ -241,6 +241,10 @@ impl InferenceProvider for OpenAIProvider {
         Ok((chunk, stream, raw_request))
     }
 
+    /// Two parts to starting an OpenAI batch inference:
+    /// 1. Upload the requests to OpenAI as a File
+    /// 2. Start the batch inference
+    ///    We do them in sequence here.
     async fn start_batch_inference<'a>(
         &'a self,
         requests: &'a [ModelInferenceRequest<'_>],
@@ -299,6 +303,7 @@ impl InferenceProvider for OpenAIProvider {
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
+        // Actually upload the file to OpenAI
         let res = request_builder.multipart(form).send().await.map_err(|e| {
             Error::new(ErrorDetails::InferenceClient {
                 message: format!("Error sending request to OpenAI: {e}"),
@@ -326,6 +331,7 @@ impl InferenceProvider for OpenAIProvider {
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
+        // Now let's actually start the batch inference
         let res = request_builder
             .json(&batch_request)
             .send()
@@ -574,6 +580,7 @@ pub fn stream_openai(
 }
 
 impl OpenAIProvider {
+    // Once a batch has been completed we need to retrieve the results from OpenAI using the files API
     #[instrument(skip_all, fields(file_id = file_id))]
     async fn collect_finished_batch(
         &self,
