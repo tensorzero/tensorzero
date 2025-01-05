@@ -1093,6 +1093,34 @@ export async function queryBooleanMetricsByTargetId(params: {
   }
 }
 
+export async function queryBooleanMetricFeedbackBoundsByTargetId(params: {
+  target_id: string;
+}): Promise<TableBounds> {
+  const { target_id } = params;
+  const query = `
+   SELECT
+  (SELECT id FROM BooleanMetricFeedbackByTargetId WHERE toUInt128(id) = (SELECT MIN(toUInt128(id)) FROM BooleanMetricFeedbackByTargetId WHERE target_id = {target_id:String})) AS first_id,
+  (SELECT id FROM BooleanMetricFeedbackByTargetId WHERE toUInt128(id) = (SELECT MAX(toUInt128(id)) FROM BooleanMetricFeedbackByTargetId WHERE target_id = {target_id:String})) AS last_id
+  FROM BooleanMetricFeedbackByTargetId
+  LIMIT 1
+  `;
+
+  try {
+    const resultSet = await clickhouseClient.query({
+      query,
+      format: "JSONEachRow",
+      query_params: { target_id },
+    });
+    const rows = await resultSet.json<TableBounds>();
+    return rows[0];
+  } catch (error) {
+    console.error(error);
+    throw data("Error querying boolean metric feedback bounds", {
+      status: 500,
+    });
+  }
+}
+
 export const commentFeedbackRowSchema = z.object({
   id: z.string().uuid(),
   target_id: z.string().uuid(),
@@ -1190,6 +1218,32 @@ export async function queryCommentFeedbackByTargetId(params: {
   }
 }
 
+export async function queryCommentFeedbackBoundsByTargetId(params: {
+  target_id: string;
+}): Promise<TableBounds> {
+  const { target_id } = params;
+  const query = `
+   SELECT
+  (SELECT id FROM CommentFeedbackByTargetId WHERE toUInt128(id) = (SELECT MIN(toUInt128(id)) FROM CommentFeedbackByTargetId WHERE target_id = {target_id:String})) AS first_id,
+  (SELECT id FROM CommentFeedbackByTargetId WHERE toUInt128(id) = (SELECT MAX(toUInt128(id)) FROM CommentFeedbackByTargetId WHERE target_id = {target_id:String})) AS last_id
+  FROM CommentFeedbackByTargetId
+  LIMIT 1
+  `;
+
+  try {
+    const resultSet = await clickhouseClient.query({
+      query,
+      format: "JSONEachRow",
+      query_params: { target_id },
+    });
+    const rows = await resultSet.json<TableBounds>();
+    return rows[0];
+  } catch (error) {
+    console.error(error);
+    throw data("Error querying comment feedback bounds", { status: 500 });
+  }
+}
+
 export const demonstrationFeedbackRowSchema = z.object({
   id: z.string().uuid(),
   inference_id: z.string().uuid(),
@@ -1281,6 +1335,34 @@ export async function queryDemonstrationFeedbackByInferenceId(params: {
   } catch (error) {
     console.error(error);
     throw data("Error querying demonstration feedback", { status: 500 });
+  }
+}
+
+export async function queryDemonstrationFeedbackBoundsByInferenceId(params: {
+  inference_id: string;
+}): Promise<TableBounds> {
+  const { inference_id } = params;
+  const query = `
+   SELECT
+  (SELECT id FROM DemonstrationFeedbackByInferenceId WHERE toUInt128(id) = (SELECT MIN(toUInt128(id)) FROM DemonstrationFeedbackByInferenceId WHERE inference_id = {target_id:String})) AS first_id,
+  (SELECT id FROM DemonstrationFeedbackByInferenceId WHERE toUInt128(id) = (SELECT MAX(toUInt128(id)) FROM DemonstrationFeedbackByInferenceId WHERE inference_id = {target_id:String})) AS last_id
+  FROM DemonstrationFeedbackByInferenceId
+  LIMIT 1
+  `;
+
+  try {
+    const resultSet = await clickhouseClient.query({
+      query,
+      format: "JSONEachRow",
+      query_params: { inference_id },
+    });
+    const rows = await resultSet.json<TableBounds>();
+    return rows[0];
+  } catch (error) {
+    console.error(error);
+    throw data("Error querying demonstration feedback bounds", {
+      status: 500,
+    });
   }
 }
 
@@ -1389,6 +1471,34 @@ export async function queryFloatMetricsByTargetId(params: {
   }
 }
 
+export async function queryFloatMetricFeedbackBoundsByTargetId(params: {
+  target_id: string;
+}): Promise<TableBounds> {
+  const { target_id } = params;
+  const query = `
+   SELECT
+  (SELECT id FROM FloatMetricFeedbackByTargetId WHERE toUInt128(id) = (SELECT MIN(toUInt128(id)) FROM FloatMetricFeedbackByTargetId WHERE target_id = {target_id:String})) AS first_id,
+  (SELECT id FROM FloatMetricFeedbackByTargetId WHERE toUInt128(id) = (SELECT MAX(toUInt128(id)) FROM FloatMetricFeedbackByTargetId WHERE target_id = {target_id:String})) AS last_id
+  FROM FloatMetricFeedbackByTargetId
+  LIMIT 1
+  `;
+
+  try {
+    const resultSet = await clickhouseClient.query({
+      query,
+      format: "JSONEachRow",
+      query_params: { target_id },
+    });
+    const rows = await resultSet.json<TableBounds>();
+    return rows[0];
+  } catch (error) {
+    console.error(error);
+    throw data("Error querying float metric feedback bounds", {
+      status: 500,
+    });
+  }
+}
+
 export const feedbackRowSchema = z.union([
   booleanMetricFeedbackRowSchema,
   floatMetricFeedbackRowSchema,
@@ -1406,33 +1516,33 @@ export async function queryFeedbackByTargetId(params: {
 }): Promise<FeedbackRow[]> {
   const { target_id, before, after, page_size } = params;
 
-  const booleanMetrics = await queryBooleanMetricsByTargetId({
-    target_id,
-    before,
-    after,
-    page_size,
-  });
-
-  const commentFeedback = await queryCommentFeedbackByTargetId({
-    target_id,
-    before,
-    after,
-    page_size,
-  });
-
-  const demonstrationFeedback = await queryDemonstrationFeedbackByInferenceId({
-    inference_id: target_id,
-    before,
-    after,
-    page_size,
-  });
-
-  const floatMetrics = await queryFloatMetricsByTargetId({
-    target_id,
-    before,
-    after,
-    page_size,
-  });
+  const [booleanMetrics, commentFeedback, demonstrationFeedback, floatMetrics] =
+    await Promise.all([
+      queryBooleanMetricsByTargetId({
+        target_id,
+        before,
+        after,
+        page_size,
+      }),
+      queryCommentFeedbackByTargetId({
+        target_id,
+        before,
+        after,
+        page_size,
+      }),
+      queryDemonstrationFeedbackByInferenceId({
+        inference_id: target_id,
+        before,
+        after,
+        page_size,
+      }),
+      queryFloatMetricsByTargetId({
+        target_id,
+        before,
+        after,
+        page_size,
+      }),
+    ]);
 
   // Combine all feedback types into a single array
   const allFeedback: FeedbackRow[] = [
@@ -1453,4 +1563,49 @@ export async function queryFeedbackByTargetId(params: {
     // If 'after' is specified or no pagination params, take earliest elements
     return allFeedback.slice(-Math.min(allFeedback.length, page_size || 100));
   }
+}
+
+export async function queryFeedbackBoundsByTargetId(params: {
+  target_id: string;
+}): Promise<TableBounds> {
+  const { target_id } = params;
+  const [
+    booleanMetricFeedbackBounds,
+    commentFeedbackBounds,
+    demonstrationFeedbackBounds,
+    floatMetricFeedbackBounds,
+  ] = await Promise.all([
+    queryBooleanMetricFeedbackBoundsByTargetId({
+      target_id,
+    }),
+    queryCommentFeedbackBoundsByTargetId({
+      target_id,
+    }),
+    queryDemonstrationFeedbackBoundsByInferenceId({
+      inference_id: target_id,
+    }),
+    queryFloatMetricFeedbackBoundsByTargetId({
+      target_id,
+    }),
+  ]);
+
+  // Find the earliest first_id and latest last_id across all feedback types
+  const allFirstIds = [
+    booleanMetricFeedbackBounds.first_id,
+    commentFeedbackBounds.first_id,
+    demonstrationFeedbackBounds.first_id,
+    floatMetricFeedbackBounds.first_id,
+  ];
+
+  const allLastIds = [
+    booleanMetricFeedbackBounds.last_id,
+    commentFeedbackBounds.last_id,
+    demonstrationFeedbackBounds.last_id,
+    floatMetricFeedbackBounds.last_id,
+  ];
+
+  return {
+    first_id: allFirstIds.sort()[0],
+    last_id: allLastIds.sort().reverse()[0],
+  };
 }

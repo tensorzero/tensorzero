@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 import { Skeleton } from "~/components/ui/skeleton";
+import { FunctionBadges } from "~/components/function/FunctionBadges";
 
 type FunctionSelectorProps = {
   control: Control<SFTFormValues>;
@@ -48,19 +49,9 @@ export function FunctionSelector({
                     <SelectItem key={name} value={name}>
                       <div className="flex w-full items-center justify-between">
                         <span>{name}</span>
-                        <span
-                          className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                            fn.type === "chat"
-                              ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300"
-                              : "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300"
-                          }`}
-                        >
-                          {fn.type === "chat"
-                            ? "Chat"
-                            : fn.type === "json"
-                              ? "JSON"
-                              : "Unknown"}
-                        </span>
+                        <div className="ml-2">
+                          <FunctionBadges fn={fn} />
+                        </div>
                       </div>
                     </SelectItem>
                   );
