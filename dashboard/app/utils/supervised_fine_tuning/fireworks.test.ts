@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { tensorzero_inference_to_fireworks_messages } from "./fireworks";
 import { create_env } from "../minijinja/pkg/minijinja_bindings";
-import type { ParsedInferenceRow } from "../clickhouse";
+import type { ParsedInferenceRow } from "../clickhouse/common";
 
 describe("tensorzero_inference_to_fireworks_messages", async () => {
   it("test simple json", () => {

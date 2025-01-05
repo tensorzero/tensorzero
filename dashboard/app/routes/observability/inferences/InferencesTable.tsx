@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { InferenceByIdRow, TableBounds } from "~/utils/clickhouse";
+import type { InferenceByIdRow } from "~/utils/clickhouse/inference";
 import {
   Table,
   TableBody,
@@ -10,20 +10,14 @@ import {
 } from "~/components/ui/table";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useNavigate } from "react-router";
+import { formatDate } from "~/utils/date";
 
 export default function InferencesTable({
   inferences,
-  pageSize,
-  bounds,
 }: {
   inferences: InferenceByIdRow[];
-  pageSize: number;
-  bounds: TableBounds;
 }) {
   const [goToId, setGoToId] = useState("");
-  const navigate = useNavigate();
 
   // TODO: wire this to go the the details page for a particular inference, maybe add a popover.
   const handleGoTo = (e: React.FormEvent<HTMLFormElement>) => {
@@ -41,31 +35,6 @@ export default function InferencesTable({
     }
     setGoToId("");
   };
-
-  const formatDate = (date: Date) => {
-    return date.toLocaleString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
-  const topInference = inferences[0];
-  const bottomInference = inferences[inferences.length - 1];
-
-  const handleNextPage = () => {
-    navigate(`?before=${bottomInference.id}&page_size=${pageSize}`);
-  };
-
-  const handlePreviousPage = () => {
-    navigate(`?after=${topInference.id}&page_size=${pageSize}`);
-  };
-
-  // These are swapped because the table is sorted in descending order
-  const disablePrevious = bounds.last_id === topInference.id;
-  const disableNext = bounds.first_id === bottomInference.id;
 
   return (
     <div>
@@ -139,22 +108,6 @@ export default function InferencesTable({
           ))}
         </TableBody>
       </Table>
-      <div className="mt-4 flex items-center justify-center gap-2">
-        <Button
-          onClick={handlePreviousPage}
-          disabled={disablePrevious}
-          className="rounded-md border border-gray-300 bg-white p-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <Button
-          onClick={handleNextPage}
-          disabled={disableNext}
-          className="rounded-md border border-gray-300 bg-white p-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-      </div>
     </div>
   );
 }

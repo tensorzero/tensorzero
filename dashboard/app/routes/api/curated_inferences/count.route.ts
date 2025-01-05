@@ -2,8 +2,8 @@ import type { LoaderFunctionArgs } from "react-router";
 import {
   countCuratedInferences,
   countFeedbacksForMetric,
-  countInferencesForFunction,
-} from "~/utils/clickhouse";
+} from "~/utils/clickhouse/curation";
+import { countInferencesForFunction } from "~/utils/clickhouse/inference";
 import { getConfig } from "~/utils/config/index.server";
 
 /// Count the number of inferences, feedbacks, and curated inferences for a given function and metric

@@ -1,5 +1,5 @@
 import type { SFTFormValues } from "~/routes/optimization/supervised-fine-tuning/types";
-import type { ParsedInferenceRow } from "../clickhouse";
+import type { ParsedInferenceRow } from "../clickhouse/common";
 import type { ProviderType } from "../config/models";
 
 export function splitValidationData(

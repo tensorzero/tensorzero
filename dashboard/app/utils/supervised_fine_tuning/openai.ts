@@ -5,13 +5,13 @@ import { createReadStream } from "fs";
 import OpenAI from "openai";
 import type { SFTFormValues } from "~/routes/optimization/supervised-fine-tuning/types";
 import {
-  getCuratedInferences,
   type ContentBlockOutput,
   type InputMessageContent,
   type JsonInferenceOutput,
   type ParsedInferenceRow,
   type Role,
-} from "../clickhouse";
+} from "../clickhouse/common";
+import { getCuratedInferences } from "../clickhouse/curation";
 import { get_template_env, type ChatCompletionConfig } from "../config/variant";
 import { getConfig } from "../config/index.server";
 import type { JsExposedEnv } from "../minijinja/pkg/minijinja_bindings";

@@ -40,6 +40,7 @@ type MetricBadgesProps = {
 };
 
 export function MetricBadges({ metric }: MetricBadgesProps) {
+  if (!metric) return null;
   return (
     <div className="flex gap-1.5">
       {/* Type badge */}
@@ -55,9 +56,11 @@ export function MetricBadges({ metric }: MetricBadgesProps) {
       )}
 
       {/* Level badge */}
-      <Badge className={getBadgeStyle("level", metric.level)}>
-        {metric.level}
-      </Badge>
+      {metric.type !== "comment" && (
+        <Badge className={getBadgeStyle("level", metric.level)}>
+          {metric.level}
+        </Badge>
+      )}
     </div>
   );
 }

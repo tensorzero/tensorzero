@@ -1,10 +1,12 @@
 import {
   queryInferenceTable,
   queryInferenceTableBounds,
-} from "~/utils/clickhouse";
+} from "~/utils/clickhouse/inference";
 import type { Route } from "./+types/route";
 import InferencesTable from "./InferencesTable";
 import { data, isRouteErrorResponse } from "react-router";
+import { useNavigate } from "react-router";
+import PageButtons from "~/components/utils/PageButtons";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -33,17 +35,36 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const { inferences, pageSize, bounds } = loaderData;
+  const navigate = useNavigate();
+
+  const topInference = inferences[0];
+  const bottomInference = inferences[inferences.length - 1];
+
+  const handleNextPage = () => {
+    navigate(`?before=${bottomInference.id}&pageSize=${pageSize}`);
+  };
+
+  const handlePreviousPage = () => {
+    navigate(`?after=${topInference.id}&pageSize=${pageSize}`);
+  };
+
+  // These are swapped because the table is sorted in descending order
+  const disablePrevious = bounds.last_id === topInference.id;
+  const disableNext = bounds.first_id === bottomInference.id;
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <InferencesTable
-        inferences={inferences}
-        pageSize={pageSize}
-        bounds={bounds}
+      <InferencesTable inferences={inferences} />
+      <PageButtons
+        onPreviousPage={handlePreviousPage}
+        onNextPage={handleNextPage}
+        disablePrevious={disablePrevious}
+        disableNext={disableNext}
       />
     </div>
   );
 }
+
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   console.error(error);
 

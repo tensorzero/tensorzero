@@ -9,7 +9,7 @@ import type {
   textInputMessageContent,
   toolCallInputMessageContent,
   toolResultInputMessageContent,
-} from "../clickhouse";
+} from "../clickhouse/common";
 
 describe("content_block_to_openai_message", () => {
   it("test text content block with no template", async () => {
