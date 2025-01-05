@@ -988,3 +988,25 @@ LIMIT 1
     throw data("Error querying inference table bounds", { status: 500 });
   }
 }
+
+export const floatMetricRowSchema = z
+  .object({
+    id: z.string().uuid(),
+    function_name: z.string(),
+    variant_name: z.string(),
+    episode_id: z.string().uuid(),
+    timestamp: z.string().datetime(),
+  })
+  .strict();
+
+export type InferenceByIdRow = z.infer<typeof inferenceByIdRowSchema>;
+
+export async function queryFloatMetrics(params: {
+  episode_id?: string;
+  metric_name?: string;
+  before?: string;
+  after?: string;
+  page_size?: number;
+}): Promise<FloatMetricRow[]> {
+  const { episode_id, metric_name, before, after, page_size } = params;
+}
