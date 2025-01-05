@@ -33,6 +33,9 @@ fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("XAI_API_KEY".to_string())
 }
 
+const PROVIDER_NAME: &str = "xAI";
+const PROVIDER_TYPE: &str = "xai";
+
 #[derive(Debug)]
 pub struct XAIProvider {
     pub model_name: String,
@@ -45,7 +48,7 @@ impl XAIProvider {
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
         let credential_location = api_key_location.unwrap_or(default_api_key_location());
-        let generic_credentials = Credential::try_from((credential_location, "xAI"))?;
+        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
         let provider_credentials = XAICredentials::try_from(generic_credentials)?;
 
         Ok(XAIProvider {
@@ -88,12 +91,12 @@ impl XAICredentials {
             XAICredentials::Static(api_key) => Ok(api_key),
             XAICredentials::Dynamic(key_name) => dynamic_api_keys.get(key_name).ok_or_else(|| {
                 ErrorDetails::ApiKeyMissing {
-                    provider_name: "xAI".to_string(),
+                    provider_name: PROVIDER_NAME.to_string(),
                 }
                 .into()
             }),
             XAICredentials::None => Err(ErrorDetails::ApiKeyMissing {
-                provider_name: "xAI".to_string(),
+                provider_name: PROVIDER_NAME.to_string(),
             }
             .into()),
         }
@@ -124,7 +127,7 @@ impl InferenceProvider for XAIProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request to xAI: {e}"),
                     status_code: e.status(),
-                    provider_type: "xAI".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
 
@@ -132,14 +135,14 @@ impl InferenceProvider for XAIProvider {
             let response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
-                    provider_type: "xAI".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
 
             let response = serde_json::from_str(&response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {response}"),
-                    provider_type: "xAI".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
 
@@ -159,7 +162,7 @@ impl InferenceProvider for XAIProvider {
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
                         message: format!("Error parsing error response: {e}"),
-                        provider_type: "xAI".to_string(),
+                        provider_type: PROVIDER_TYPE.to_string(),
                     })
                 })?,
             ))
@@ -183,7 +186,7 @@ impl InferenceProvider for XAIProvider {
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request: {e}"),
-                provider_type: "xAI".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         let request_url = get_chat_url(Some(&XAI_DEFAULT_BASE_URL))?;
@@ -199,7 +202,7 @@ impl InferenceProvider for XAIProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request to xAI: {e}"),
                     status_code: None,
-                    provider_type: "xAI".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
 
@@ -212,7 +215,7 @@ impl InferenceProvider for XAIProvider {
             None => {
                 return Err(ErrorDetails::InferenceServer {
                     message: "Stream ended before first chunk".to_string(),
-                    provider_type: "xAI".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 }
                 .into())
             }
@@ -227,7 +230,7 @@ impl InferenceProvider for XAIProvider {
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<BatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
-            provider_type: "xAI".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
         }
         .into())
     }
@@ -335,7 +338,7 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let raw_response = serde_json::to_string(&response).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error parsing response: {e}"),
-                provider_type: "xAI".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
 
@@ -345,7 +348,7 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                     "Response has invalid number of choices {}, Expected 1",
                     response.choices.len()
                 ),
-                provider_type: "xAI".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             }
             .into());
         }
@@ -356,7 +359,7 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             .pop()
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
-                provider_type: "xAI".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             }))?
             .message;
         let mut content: Vec<ContentBlock> = Vec::new();
@@ -371,7 +374,7 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request body as JSON: {e}"),
-                provider_type: "xAI".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         let system = generic_request.system.clone();

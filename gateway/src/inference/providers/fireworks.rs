@@ -37,6 +37,9 @@ lazy_static! {
     };
 }
 
+const PROVIDER_NAME: &str = "Fireworks";
+const PROVIDER_TYPE: &str = "fireworks";
+
 #[derive(Debug)]
 pub struct FireworksProvider {
     pub model_name: String,
@@ -49,7 +52,7 @@ impl FireworksProvider {
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
         let credential_location = api_key_location.unwrap_or(default_api_key_location());
-        let generic_credentials = Credential::try_from((credential_location, "Fireworks"))?;
+        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
         let provider_credentials = FireworksCredentials::try_from(generic_credentials)?;
         Ok(FireworksProvider {
             model_name,
@@ -92,14 +95,14 @@ impl FireworksCredentials {
             FireworksCredentials::Dynamic(key_name) => {
                 dynamic_api_keys.get(key_name).ok_or_else(|| {
                     ErrorDetails::ApiKeyMissing {
-                        provider_name: "Fireworks".to_string(),
+                        provider_name: PROVIDER_NAME.to_string(),
                     }
                     .into()
                 })
             }
             #[cfg(any(test, feature = "e2e_tests"))]
             &FireworksCredentials::None => Err(ErrorDetails::ApiKeyMissing {
-                provider_name: "Fireworks".to_string(),
+                provider_name: PROVIDER_NAME.to_string(),
             }
             .into()),
         }
@@ -137,7 +140,7 @@ impl InferenceProvider for FireworksProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request to Fireworks: {e}"),
                     status_code: e.status(),
-                    provider_type: "Fireworks".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
         let latency = Latency::NonStreaming {
@@ -147,14 +150,14 @@ impl InferenceProvider for FireworksProvider {
             let response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
-                    provider_type: "Fireworks".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
 
             let response = serde_json::from_str(&response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {response}"),
-                    provider_type: "Fireworks".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
 
@@ -171,7 +174,7 @@ impl InferenceProvider for FireworksProvider {
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
                         message: format!("Error parsing error response: {e}"),
-                        provider_type: "Fireworks".to_string(),
+                        provider_type: PROVIDER_TYPE.to_string(),
                     })
                 })?,
             ))
@@ -195,7 +198,7 @@ impl InferenceProvider for FireworksProvider {
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request body: {e}"),
-                provider_type: "Fireworks".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         let request_url = get_chat_url(Some(&FIREWORKS_API_BASE))?;
@@ -211,7 +214,7 @@ impl InferenceProvider for FireworksProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request to Fireworks: {e}"),
                     status_code: None,
-                    provider_type: "Fireworks".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
         let mut stream = Box::pin(stream_openai(event_source, start_time));
@@ -223,7 +226,7 @@ impl InferenceProvider for FireworksProvider {
             None => {
                 return Err(ErrorDetails::InferenceServer {
                     message: "Stream ended before first chunk".to_string(),
-                    provider_type: "Fireworks".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 }
                 .into())
             }
@@ -238,7 +241,7 @@ impl InferenceProvider for FireworksProvider {
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<BatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
-            provider_type: "Fireworks".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
         }
         .into())
     }
@@ -376,7 +379,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
         let raw_response = serde_json::to_string(&response).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error parsing response: {e}"),
-                provider_type: "Fireworks".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         if response.choices.len() != 1 {
@@ -385,7 +388,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                     "Response has invalid number of choices: {}. Expected 1.",
                     response.choices.len()
                 ),
-                provider_type: "Fireworks".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             }
             .into());
         }
@@ -395,7 +398,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
             .pop()
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
-                provider_type: "Fireworks".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             }
             ))?
             .message;
@@ -411,7 +414,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request body as JSON: {e}"),
-                provider_type: "Fireworks".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         let system = generic_request.system.clone();

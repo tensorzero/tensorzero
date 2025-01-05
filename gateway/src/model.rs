@@ -617,7 +617,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                     #[cfg(any(test, feature = "e2e_tests"))]
                     {
                         warn!(
-                            "You are missing the credentials required for a {} model, so the associated tests will likely fail.",
+                            "You are missing the credentials required for a model provider of type {}, so the associated tests will likely fail.",
                             provider_type
                         );
                         Ok(Credential::Missing)
@@ -638,7 +638,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                         #[cfg(any(test, feature = "e2e_tests"))]
                         {
                             warn!(
-                                "Environment variable {} for {} credentials path is missing, tests will likely fail.",
+                                "Environment variable {} is required for a model provider of type {}, so the associated tests will likely fail.",
                                 env_key, provider_type
                             );
                             return Ok(Credential::Missing);
@@ -661,7 +661,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                         #[cfg(any(test, feature = "e2e_tests"))]
                         {
                             warn!(
-                                "Failed to read credentials file for a {} model: {}. Tests will likely fail.",
+                                "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
                                 provider_type, e
                             );
                             Ok(Credential::Missing)
@@ -684,7 +684,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                     #[cfg(any(test, feature = "e2e_tests"))]
                     {
                         warn!(
-                            "Failed to read credentials file for a {} model: {}. Tests will likely fail.",
+                            "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
                             provider_type, e
                         );
                         Ok(Credential::Missing)
@@ -918,7 +918,7 @@ mod tests {
                     ErrorDetails::InferenceClient {
                         message: "Error sending request to Dummy provider.".to_string(),
                         status_code: None,
-                        provider_type: "Dummy".to_string(),
+                        provider_type: "dummy".to_string(),
                     }
                     .into()
                 )])
@@ -1072,7 +1072,7 @@ mod tests {
                     ErrorDetails::InferenceClient {
                         message: "Error sending request to Dummy provider.".to_string(),
                         status_code: None,
-                        provider_type: "Dummy".to_string(),
+                        provider_type: "dummy".to_string(),
                     }
                     .into()
                 )])
@@ -1221,7 +1221,7 @@ mod tests {
                     ErrorDetails::InferenceClient {
                         message: "Invalid API key for Dummy provider".to_string(),
                         status_code: None,
-                        provider_type: "Dummy".to_string(),
+                        provider_type: "dummy".to_string(),
                     }
                     .into()
                 )])

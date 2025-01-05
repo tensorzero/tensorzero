@@ -37,6 +37,9 @@ lazy_static! {
     };
 }
 
+const PROVIDER_NAME: &str = "Together";
+const PROVIDER_TYPE: &str = "together";
+
 #[derive(Debug)]
 pub struct TogetherProvider {
     pub model_name: String,
@@ -49,7 +52,7 @@ impl TogetherProvider {
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
         let credential_location = api_key_location.unwrap_or(default_api_key_location());
-        let generic_credentials = Credential::try_from((credential_location, "Together"))?;
+        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
         let provider_credentials = TogetherCredentials::try_from(generic_credentials)?;
         Ok(TogetherProvider {
             model_name,
@@ -96,13 +99,13 @@ impl TogetherCredentials {
             TogetherCredentials::Dynamic(key_name) => {
                 Ok(Cow::Borrowed(dynamic_api_keys.get(key_name).ok_or_else(
                     || ErrorDetails::ApiKeyMissing {
-                        provider_name: "Together".to_string(),
+                        provider_name: PROVIDER_NAME.to_string(),
                     },
                 )?))
             }
             #[cfg(any(test, feature = "e2e_tests"))]
             TogetherCredentials::None => Err(ErrorDetails::ApiKeyMissing {
-                provider_name: "Together".to_string(),
+                provider_name: PROVIDER_NAME.to_string(),
             })?,
         }
     }
@@ -132,21 +135,21 @@ impl InferenceProvider for TogetherProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("{e}"),
                     status_code: Some(e.status().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)),
-                    provider_type: "Together".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
         if res.status().is_success() {
             let response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
-                    provider_type: "Together".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
 
             let response = serde_json::from_str(&response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {response}"),
-                    provider_type: "Together".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
 
@@ -165,7 +168,7 @@ impl InferenceProvider for TogetherProvider {
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
                         message: format!("Error parsing error response: {e}"),
-                        provider_type: "Together".to_string(),
+                        provider_type: PROVIDER_TYPE.to_string(),
                     })
                 })?,
             ))
@@ -189,7 +192,7 @@ impl InferenceProvider for TogetherProvider {
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request: {e}"),
-                provider_type: "Together".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
@@ -205,7 +208,7 @@ impl InferenceProvider for TogetherProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request to Together: {e}"),
                     status_code: None,
-                    provider_type: "Together".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
         let mut stream = Box::pin(stream_openai(event_source, start_time));
@@ -217,7 +220,7 @@ impl InferenceProvider for TogetherProvider {
             None => {
                 return Err(Error::new(ErrorDetails::InferenceServer {
                     message: "Stream ended before first chunk".to_string(),
-                    provider_type: "Together".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 }));
             }
         };
@@ -231,7 +234,7 @@ impl InferenceProvider for TogetherProvider {
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<BatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
-            provider_type: "Together".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
         }
         .into())
     }
@@ -351,7 +354,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
         let raw_response = serde_json::to_string(&response).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error parsing response: {e}"),
-                provider_type: "Together".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         if response.choices.len() != 1 {
@@ -360,7 +363,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
                     "Response has invalid number of choices: {}. Expected 1.",
                     response.choices.len()
                 ),
-                provider_type: "Together".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             }
             .into());
         }
@@ -370,7 +373,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
             .pop()
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
-                provider_type: "Together".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             }))?
             .message;
         let mut content: Vec<ContentBlock> = Vec::new();
@@ -385,7 +388,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request body as JSON: {e}"),
-                provider_type: "Together".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         let system = generic_request.system.clone();
