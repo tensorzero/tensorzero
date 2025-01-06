@@ -638,7 +638,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                         #[cfg(any(test, feature = "e2e_tests"))]
                         {
                             warn!(
-                                "Environment variable {} is required for a model provider of type {}, so the associated tests will likely fail.",
+                                "Environment variable {} is required for a model provider of type {} but is missing, so the associated tests will likely fail.",
                                 env_key, provider_type
                             );
                             return Ok(Credential::Missing);
