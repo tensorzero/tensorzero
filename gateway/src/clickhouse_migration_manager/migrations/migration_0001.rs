@@ -58,13 +58,8 @@ impl<'a> Migration for Migration0001<'a> {
     }
 
     async fn apply(&self) -> Result<(), Error> {
-        // If there is no data, we don't need to wait for the view to catch up
-        let view_offset = if self.clean_start {
-            Duration::from_secs(0)
-        } else {
-            Duration::from_secs(15)
-        };
-
+        // Only gets used when we are not doing a clean start
+        let view_offset = Duration::from_secs(15);
         let view_timestamp = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| {
@@ -89,8 +84,13 @@ impl<'a> Migration for Migration0001<'a> {
             ORDER BY id;
         "#;
         let _ = self.clickhouse.run_query(query.to_string()).await?;
-
         // Create the materialized view for the `InferencesById` table from ChatInference
+        // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
+        let view_where_clause = if !self.clean_start {
+            format!("WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
+        } else {
+            String::new()
+        };
         let query = format!(
             r#"
             CREATE MATERIALIZED VIEW ChatInferenceByIdView
@@ -103,13 +103,14 @@ impl<'a> Migration for Migration0001<'a> {
                     episode_id,
                     'chat'
                 FROM ChatInference
-                WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}));
+                {view_where_clause};
             "#,
-            view_timestamp = view_timestamp
+            view_where_clause = view_where_clause
         );
         let _ = self.clickhouse.run_query(query).await?;
 
         // Create the materialized view for the `InferencesById` table from JsonInference
+        // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
         let query = format!(
             r#"
             CREATE MATERIALIZED VIEW JsonInferenceByIdView
@@ -122,53 +123,54 @@ impl<'a> Migration for Migration0001<'a> {
                     episode_id,
                     'json'
                 FROM JsonInference
-                WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}));
-        "#,
-            view_timestamp = view_timestamp
+                {view_where_clause};
+            "#,
+            view_where_clause = view_where_clause
         );
         let _ = self.clickhouse.run_query(query).await?;
 
-        // Sleep for the duration specified by view_offset to allow the materialized views to catch up
-        tokio::time::sleep(view_offset).await;
-
         // Insert the data from the original tables into the new table (we do this concurrently since it could theoretically take a long time)
-        let insert_chat_inference = async {
-            let query = format!(
-                r#"
-                INSERT INTO InferenceById
-                SELECT
-                    id,
-                    function_name,
-                    variant_name,
-                    episode_id,
-                    'chat'
-                FROM ChatInference
-                WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-            "#,
-                view_timestamp = view_timestamp
-            );
-            self.clickhouse.run_query(query).await
-        };
+        if !self.clean_start {
+            // Sleep for the duration specified by view_offset to allow the materialized views to catch up
+            tokio::time::sleep(view_offset).await;
+            let insert_chat_inference = async {
+                let query = format!(
+                    r#"
+                    INSERT INTO InferenceById
+                    SELECT
+                        id,
+                        function_name,
+                        variant_name,
+                        episode_id,
+                        'chat'
+                    FROM ChatInference
+                    WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
+                "#,
+                    view_timestamp = view_timestamp
+                );
+                self.clickhouse.run_query(query).await
+            };
 
-        let insert_json_inference = async {
-            let query = format!(
-                r#"
-                INSERT INTO InferenceById
-                SELECT
-                    id,
-                    function_name,
-                    variant_name,
-                    episode_id,
-                    'json'
-                FROM JsonInference
-                WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
-            "#,
-                view_timestamp = view_timestamp
-            );
-            self.clickhouse.run_query(query).await
-        };
+            let insert_json_inference = async {
+                let query = format!(
+                    r#"
+                    INSERT INTO InferenceById
+                    SELECT
+                        id,
+                        function_name,
+                        variant_name,
+                        episode_id,
+                        'json'
+                    FROM JsonInference
+                    WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
+                "#,
+                    view_timestamp = view_timestamp
+                );
+                self.clickhouse.run_query(query).await
+            };
 
-        tokio::try_join!(insert_chat_inference, insert_json_inference)?;
+            tokio::try_join!(insert_chat_inference, insert_json_inference)?;
+        }
 
         Ok(())
     }
@@ -176,8 +178,8 @@ impl<'a> Migration for Migration0001<'a> {
     fn rollback_instructions(&self) -> String {
         "\
             -- Drop the materialized views\n\
-            DROP MATERIALIZED VIEW IF EXISTS ChatInferenceByIdView;\n\
-            DROP MATERIALIZED VIEW IF EXISTS JsonInferenceByIdView;\n\
+            DROP VIEW IF EXISTS ChatInferenceByIdView;\n\
+            DROP VIEW IF EXISTS JsonInferenceByIdView;\n\
             \n\
             -- Drop the table\n\
             DROP TABLE IF EXISTS InferenceById;\n\

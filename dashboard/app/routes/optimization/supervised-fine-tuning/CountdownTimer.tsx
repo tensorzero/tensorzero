@@ -32,9 +32,9 @@ export function CountdownTimer({ endTime }: CountdownTimerProps) {
   }, [endTime]);
 
   return (
-    <Card className="w-full max-w-sm mx-auto">
-      <CardContent className="flex justify-center items-center h-24">
-        <div className="grid grid-flow-col gap-4 text-center auto-cols-max">
+    <Card className="mx-auto w-full max-w-sm">
+      <CardContent className="flex h-24 items-center justify-center">
+        <div className="grid auto-cols-max grid-flow-col gap-4 text-center">
           <div className="flex flex-col">
             <span className="countdown font-mono text-4xl">
               {String(timeLeft.hours).padStart(2, "0")}

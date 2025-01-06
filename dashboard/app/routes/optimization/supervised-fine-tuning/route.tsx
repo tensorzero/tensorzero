@@ -252,7 +252,7 @@ export default function SupervisedFineTuning({
   const config = useConfig();
   if (loaderData.status === "error") {
     return (
-      <div className="text-red-500 text-sm">
+      <div className="text-sm text-red-500">
         Error: {(loaderData as { error: string }).error}
       </div>
     );
@@ -284,11 +284,10 @@ export default function SupervisedFineTuning({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <main className="p-4">
-        <h2 className="scroll-m-20 border-b pb-2 text-3xl font-semibold tracking-tight first:mt-0">
-          Supervised Fine-Tuning
-        </h2>
+    <div className="container mx-auto px-4 py-8">
+      <main>
+        <h2 className="mb-4 text-2xl font-semibold">Supervised Fine-Tuning</h2>
+        <div className="mb-6 h-px w-full bg-gray-200"></div>
         {status === "idle" && (
           <FineTuningForm
             config={config}
@@ -298,11 +297,11 @@ export default function SupervisedFineTuning({
         )}
 
         {finalResult && (
-          <div className="p-4 bg-gray-100 rounded-lg mt-4">
+          <div className="mt-4 rounded-lg bg-gray-100 p-4">
             <div className="mb-2 font-medium">Configuration</div>
             <Textarea
               value={finalResult}
-              className="w-full h-48 resize-none bg-transparent border-none focus:ring-0"
+              className="h-48 w-full resize-none border-none bg-transparent focus:ring-0"
               readOnly
             />
           </div>
@@ -461,7 +460,7 @@ function FineTuningForm({
               config={config}
             />
             {errors.function && (
-              <p className="text-red-500 text-sm">{errors.function.message}</p>
+              <p className="text-sm text-red-500">{errors.function.message}</p>
             )}
 
             <MetricSelector
@@ -471,7 +470,7 @@ function FineTuningForm({
               config={config}
             />
             {errors.metric && (
-              <p className="text-red-500 text-sm">{errors.metric.message}</p>
+              <p className="text-sm text-red-500">{errors.metric.message}</p>
             )}
 
             <VariantSelector
@@ -491,7 +490,7 @@ function FineTuningForm({
             {getButtonText()}
           </Button>
           {errorsOnSubmit && (
-            <p className="text-red-500 text-sm">{errorsOnSubmit.message}</p>
+            <p className="text-sm text-red-500">{errorsOnSubmit.message}</p>
           )}
         </form>
       </Form>

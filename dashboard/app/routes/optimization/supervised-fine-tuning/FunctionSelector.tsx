@@ -43,21 +43,20 @@ export function FunctionSelector({
                 {Object.entries(config.functions).map(([name, fn]) => {
                   return (
                     <SelectItem key={name} value={name}>
-                      <div className="flex items-center justify-between w-full">
+                      <div className="flex w-full items-center justify-between">
                         <span>{name}</span>
                         <span
-                          className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
-                                    ${
-                                      fn.type === "chat"
-                                        ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300"
-                                        : "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300"
-                                    }`}
+                          className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                            fn.type === "chat"
+                              ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300"
+                              : "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300"
+                          }`}
                         >
                           {fn.type === "chat"
                             ? "Chat"
                             : fn.type === "json"
-                            ? "JSON"
-                            : "Unknown"}
+                              ? "JSON"
+                              : "Unknown"}
                         </span>
                       </div>
                     </SelectItem>

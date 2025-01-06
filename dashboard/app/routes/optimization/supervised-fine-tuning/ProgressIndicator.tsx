@@ -80,8 +80,8 @@ export function ProgressIndicator({
   };
 
   return (
-    <div className="p-4 bg-gray-100 rounded-lg mt-4">
-      <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="mt-4 rounded-lg bg-gray-100 p-4">
+      <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="flex flex-col justify-center">
           <div className="mb-2 font-medium">Job URL</div>
           <a
@@ -92,7 +92,7 @@ export function ProgressIndicator({
           >
             <Textarea
               value={progressInfo.jobUrl}
-              className="w-full resize-none bg-white cursor-pointer hover:bg-gray-50"
+              className="w-full cursor-pointer resize-none bg-white hover:bg-gray-50"
               readOnly
             />
           </a>
@@ -102,7 +102,7 @@ export function ProgressIndicator({
           progressInfo.estimatedCompletionTimestamp && (
             <div className="flex flex-col justify-center">
               <div className="mb-2 font-medium">Estimated Completion</div>
-              <div className="bg-white p-2 rounded-md">
+              <div className="rounded-md bg-white p-2">
                 <div>
                   {formatEstimatedTime(
                     progressInfo.estimatedCompletionTimestamp,
@@ -117,7 +117,7 @@ export function ProgressIndicator({
       </div>
 
       <div className="mb-2 font-medium">Progress History</div>
-      <div className="space-y-4 max-h-[600px] overflow-y-auto">
+      <div className="max-h-[600px] space-y-4 overflow-y-auto">
         {[...history].reverse().map((entry, index) => {
           const serializedData = getSerializedData(entry);
           const height = getTextAreaHeight(serializedData);
@@ -125,11 +125,11 @@ export function ProgressIndicator({
           return (
             <div
               key={index}
-              className={`border rounded-md p-3 ${getEntryClassName(
+              className={`rounded-md border p-3 ${getEntryClassName(
                 entry,
               )} last:border-b`}
             >
-              <div className="flex justify-between items-center mb-1">
+              <div className="mb-1 flex items-center justify-between">
                 <div className="text-sm text-gray-500">
                   {entry.timestamp.toLocaleTimeString()}
                 </div>
