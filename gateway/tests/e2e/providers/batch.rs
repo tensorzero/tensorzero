@@ -732,7 +732,6 @@ pub async fn test_poll_existing_simple_batch_inference_request_with_provider(
         batch_id,
         inference_id: None,
     });
-    println!("URL: {url}");
     let response = Client::new().get(url).send().await.unwrap();
 
     // Check that the API response is ok
