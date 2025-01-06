@@ -1,6 +1,5 @@
 import type { MetricConfig } from "../config/metric";
 import {
-  clickhouseClient,
   getInferenceTableName,
   InferenceJoinKey,
   type ParsedInferenceRow,
@@ -8,6 +7,7 @@ import {
   type InferenceRow,
   parseInferenceRows,
 } from "./common";
+import { clickhouseClient } from "./common";
 import type { FunctionConfig } from "../config/function";
 
 function getInferenceJoinKey(metric_config: MetricConfig): InferenceJoinKey {

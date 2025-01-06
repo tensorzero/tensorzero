@@ -1,6 +1,7 @@
-import { createClient } from "@clickhouse/client";
 import { z } from "zod";
 import type { FunctionConfig } from "../config/function";
+
+import { createClient } from "@clickhouse/client";
 
 export const clickhouseClient = createClient({
   url: process.env.CLICKHOUSE_URL,
@@ -208,6 +209,6 @@ export function getInferenceTableName(
 }
 
 export interface TableBounds {
-  first_id: string; // UUIDv7 string
-  last_id: string; // UUIDv7 string
+  first_id?: string; // UUIDv7 string
+  last_id?: string; // UUIDv7 string
 }

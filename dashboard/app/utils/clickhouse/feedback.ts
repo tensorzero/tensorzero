@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { clickhouseClient } from "./common";
 import type { TableBounds } from "./common";
 import { data } from "react-router";
+import { clickhouseClient } from "./common";
 
 export const booleanMetricFeedbackRowSchema = z.object({
   id: z.string().uuid(),
@@ -126,6 +126,15 @@ export async function queryBooleanMetricFeedbackBoundsByTargetId(params: {
       query_params: { target_id },
     });
     const rows = await resultSet.json<TableBounds>();
+    // If there is no data at all ClickHouse returns an empty array
+    // If there is no data for a specific target_id ClickHouse returns an array with a single element where first_id and last_id are null
+    // We handle both cases by returning undefined for first_id and last_id
+    if (
+      rows.length === 0 ||
+      (rows[0].first_id === null && rows[0].last_id === null)
+    ) {
+      return { first_id: undefined, last_id: undefined };
+    }
     return rows[0];
   } catch (error) {
     console.error(error);
@@ -251,6 +260,15 @@ export async function queryCommentFeedbackBoundsByTargetId(params: {
       query_params: { target_id },
     });
     const rows = await resultSet.json<TableBounds>();
+    // If there is no data at all ClickHouse returns an empty array
+    // If there is no data for a specific target_id ClickHouse returns an array with a single element where first_id and last_id are null
+    // We handle both cases by returning undefined for first_id and last_id
+    if (
+      rows.length === 0 ||
+      (rows[0].first_id === null && rows[0].last_id === null)
+    ) {
+      return { first_id: undefined, last_id: undefined };
+    }
     return rows[0];
   } catch (error) {
     console.error(error);
@@ -371,6 +389,15 @@ export async function queryDemonstrationFeedbackBoundsByInferenceId(params: {
       query_params: { inference_id },
     });
     const rows = await resultSet.json<TableBounds>();
+    // If there is no data at all ClickHouse returns an empty array
+    // If there is no data for a specific target_id ClickHouse returns an array with a single element where first_id and last_id are null
+    // We handle both cases by returning undefined for first_id and last_id
+    if (
+      rows.length === 0 ||
+      (rows[0].first_id === null && rows[0].last_id === null)
+    ) {
+      return { first_id: undefined, last_id: undefined };
+    }
     return rows[0];
   } catch (error) {
     console.error(error);
@@ -505,6 +532,15 @@ export async function queryFloatMetricFeedbackBoundsByTargetId(params: {
       query_params: { target_id },
     });
     const rows = await resultSet.json<TableBounds>();
+    // If there is no data at all ClickHouse returns an empty array
+    // If there is no data for a specific target_id ClickHouse returns an array with a single element where first_id and last_id are null
+    // We handle both cases by returning undefined for first_id and last_id
+    if (
+      rows.length === 0 ||
+      (rows[0].first_id === null && rows[0].last_id === null)
+    ) {
+      return { first_id: undefined, last_id: undefined };
+    }
     return rows[0];
   } catch (error) {
     console.error(error);
@@ -522,18 +558,6 @@ export const feedbackRowSchema = z.union([
 ]);
 
 export type FeedbackRow = z.infer<typeof feedbackRowSchema>;
-
-// Since demonstrations and comments do not have a metric_name, we need to
-// infer the metric name from the structure of the feedback row
-export const getMetricName = (feedback: FeedbackRow) => {
-  if ("metric_name" in feedback) {
-    return feedback.metric_name;
-  }
-  if ("inference_id" in feedback) {
-    return "demonstration";
-  }
-  return "comment";
-};
 
 export async function queryFeedbackByTargetId(params: {
   target_id: string;
@@ -622,14 +646,14 @@ export async function queryFeedbackBoundsByTargetId(params: {
     commentFeedbackBounds.first_id,
     demonstrationFeedbackBounds.first_id,
     floatMetricFeedbackBounds.first_id,
-  ];
+  ].filter((id): id is string => id !== undefined);
 
   const allLastIds = [
     booleanMetricFeedbackBounds.last_id,
     commentFeedbackBounds.last_id,
     demonstrationFeedbackBounds.last_id,
     floatMetricFeedbackBounds.last_id,
-  ];
+  ].filter((id): id is string => id !== undefined);
 
   return {
     first_id: allFirstIds.sort()[0],

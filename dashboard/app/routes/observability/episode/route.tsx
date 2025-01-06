@@ -2,6 +2,10 @@ import {
   queryInferenceTableBoundsByEpisodeId,
   queryInferenceTableByEpisodeId,
 } from "~/utils/clickhouse/inference";
+import {
+  queryFeedbackBoundsByTargetId,
+  queryFeedbackByTargetId,
+} from "~/utils/clickhouse/feedback";
 import type { Route } from "./+types/route";
 import { data, isRouteErrorResponse, useNavigate } from "react-router";
 import { Badge } from "~/components/ui/badge";
@@ -14,10 +18,6 @@ import {
 import { Tooltip } from "~/components/ui/tooltip";
 import EpisodeFeedbackTable from "./EpisodeFeedbackTable";
 import PageButtons from "~/components/utils/PageButtons";
-import {
-  queryFeedbackBoundsByTargetId,
-  queryFeedbackByTargetId,
-} from "~/utils/clickhouse/feedback";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { episode_id } = params;
@@ -93,24 +93,36 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const disableNextInferencePage =
     inference_bounds.first_id === bottomInference.id;
 
-  const topFeedback = feedbacks[0];
-  const bottomFeedback = feedbacks[feedbacks.length - 1];
+  const topFeedback = feedbacks[0] as { id: string } | undefined;
+  const bottomFeedback = feedbacks[feedbacks.length - 1] as
+    | { id: string }
+    | undefined;
+
   const handleNextFeedbackPage = () => {
+    if (!bottomFeedback?.id) return;
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("afterFeedback");
     searchParams.set("beforeFeedback", bottomFeedback.id);
     navigate(`?${searchParams.toString()}`);
   };
+
   const handlePreviousFeedbackPage = () => {
+    if (!topFeedback?.id) return;
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("beforeFeedback");
     searchParams.set("afterFeedback", topFeedback.id);
     navigate(`?${searchParams.toString()}`);
   };
+
   // These are swapped because the table is sorted in descending order
   const disablePreviousFeedbackPage =
+    !topFeedback?.id ||
+    !feedback_bounds.last_id ||
     feedback_bounds.last_id === topFeedback.id;
+
   const disableNextFeedbackPage =
+    !bottomFeedback?.id ||
+    !feedback_bounds.first_id ||
     feedback_bounds.first_id === bottomFeedback.id;
 
   return (

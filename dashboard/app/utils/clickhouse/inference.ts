@@ -1,8 +1,9 @@
 import z from "node_modules/zod/lib";
 import type { TableBounds } from "./common";
-import { clickhouseClient, getInferenceTableName } from "./common";
+import { getInferenceTableName } from "./common";
 import { data } from "react-router";
 import type { FunctionConfig } from "../config/function";
+import { clickhouseClient } from "./common";
 
 export const inferenceByIdRowSchema = z
   .object({
