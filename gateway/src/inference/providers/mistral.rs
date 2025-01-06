@@ -1,4 +1,4 @@
-use std::{borrow::Cow, env, time::Duration};
+use std::{borrow::Cow, time::Duration};
 
 use futures::stream::Stream;
 use futures::StreamExt;
@@ -20,7 +20,7 @@ use crate::{
         ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
         ProviderInferenceResponseStream, TextChunk, Usage,
     },
-    model::CredentialLocation,
+    model::{Credential, CredentialLocation},
     tool::{ToolCall, ToolCallChunk, ToolChoice},
 };
 
@@ -43,6 +43,9 @@ fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("MISTRAL_API_KEY".to_string())
 }
 
+const PROVIDER_NAME: &str = "Mistral";
+const PROVIDER_TYPE: &str = "mistral";
+
 #[derive(Debug)]
 pub struct MistralProvider {
     pub model_name: String,
@@ -54,26 +57,12 @@ impl MistralProvider {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
-        let credentials = match api_key_location {
-            CredentialLocation::Env(key_name) => {
-                let api_key = env::var(key_name)
-                    .map_err(|_| {
-                        Error::new(ErrorDetails::ApiKeyMissing {
-                            provider_name: "Mistral".to_string(),
-                        })
-                    })?
-                    .into();
-                MistralCredentials::Static(api_key)
-            }
-            CredentialLocation::Dynamic(key_name) => MistralCredentials::Dynamic(key_name),
-            _ => Err(Error::new(ErrorDetails::Config {
-                message: "Invalid api_key_location for Mistral provider".to_string(),
-            }))?,
-        };
+        let credential_location = api_key_location.unwrap_or(default_api_key_location());
+        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
+        let provider_credentials = MistralCredentials::try_from(generic_credentials)?;
         Ok(MistralProvider {
             model_name,
-            credentials,
+            credentials: provider_credentials,
         })
     }
 }
@@ -82,6 +71,24 @@ impl MistralProvider {
 pub enum MistralCredentials {
     Static(SecretString),
     Dynamic(String),
+    #[cfg(any(test, feature = "e2e_tests"))]
+    None,
+}
+
+impl TryFrom<Credential> for MistralCredentials {
+    type Error = Error;
+
+    fn try_from(credentials: Credential) -> Result<Self, Error> {
+        match credentials {
+            Credential::Static(key) => Ok(MistralCredentials::Static(key)),
+            Credential::Dynamic(key_name) => Ok(MistralCredentials::Dynamic(key_name)),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            Credential::Missing => Ok(MistralCredentials::None),
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: "Invalid api_key_location for Mistral provider".to_string(),
+            })),
+        }
+    }
 }
 
 impl MistralCredentials {
@@ -94,11 +101,16 @@ impl MistralCredentials {
             MistralCredentials::Dynamic(key_name) => {
                 dynamic_api_keys.get(key_name).ok_or_else(|| {
                     ErrorDetails::ApiKeyMissing {
-                        provider_name: "Mistral".to_string(),
+                        provider_name: PROVIDER_NAME.to_string(),
                     }
                     .into()
                 })
             }
+            #[cfg(any(test, feature = "e2e_tests"))]
+            MistralCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+                provider_name: PROVIDER_NAME.to_string(),
+            }
+            .into()),
         }
     }
 }
@@ -125,7 +137,7 @@ impl InferenceProvider for MistralProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request to Mistral: {e}"),
                     status_code: e.status(),
-                    provider_type: "Mistral".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
         let latency = Latency::NonStreaming {
@@ -135,14 +147,14 @@ impl InferenceProvider for MistralProvider {
             let response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
-                    provider_type: "Mistral".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
 
             let response = serde_json::from_str(&response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {response}"),
-                    provider_type: "Mistral".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
 
@@ -159,7 +171,7 @@ impl InferenceProvider for MistralProvider {
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
                         message: format!("Error parsing error response: {e}"),
-                        provider_type: "Mistral".to_string(),
+                        provider_type: PROVIDER_TYPE.to_string(),
                     })
                 })?,
             )
@@ -183,7 +195,7 @@ impl InferenceProvider for MistralProvider {
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request: {e}"),
-                provider_type: "Mistral".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         let request_url = get_chat_url(Some(&MISTRAL_API_BASE))?;
@@ -199,7 +211,7 @@ impl InferenceProvider for MistralProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request to Mistral: {e}"),
                     status_code: None,
-                    provider_type: "Mistral".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
         let mut stream = Box::pin(stream_mistral(event_source, start_time));
@@ -211,7 +223,7 @@ impl InferenceProvider for MistralProvider {
             None => {
                 return Err(Error::new(ErrorDetails::InferenceServer {
                     message: "Stream ended before first chunk".to_string(),
-                    provider_type: "Mistral".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 }))
             }
         };
@@ -237,7 +249,7 @@ impl InferenceProvider for MistralProvider {
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
-            provider_type: "Mistral".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
         }
         .into())
     }
@@ -254,12 +266,12 @@ fn handle_mistral_error(
         | StatusCode::TOO_MANY_REQUESTS => Err(ErrorDetails::InferenceClient {
             message: response_body.to_string(),
             status_code: Some(response_code),
-            provider_type: "Mistral".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
         }
         .into()),
         _ => Err(ErrorDetails::InferenceServer {
             message: response_body.to_string(),
-            provider_type: "Mistral".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
         }
         .into()),
     }
@@ -276,7 +288,7 @@ pub fn stream_mistral(
                 Err(e) => {
                     yield Err(ErrorDetails::InferenceServer {
                         message: e.to_string(),
-                        provider_type: "Mistral".to_string(),
+                        provider_type: PROVIDER_TYPE.to_string(),
                     }.into());
                 }
                 Ok(event) => match event {
@@ -291,7 +303,7 @@ pub fn stream_mistral(
                                     "Error parsing chunk. Error: {}, Data: {}",
                                     e, message.data
                                 ),
-                                provider_type: "Mistral".to_string(),
+                                provider_type: PROVIDER_TYPE.to_string(),
                             }.into());
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
@@ -548,7 +560,7 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
         let raw_response = serde_json::to_string(&response).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error parsing response: {e}"),
-                provider_type: "Mistral".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         if response.choices.len() != 1 {
@@ -557,7 +569,7 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
                     "Response has invalid number of choices: {}. Expected 1.",
                     response.choices.len()
                 ),
-                provider_type: "Mistral".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             }));
         }
         let usage = response.usage.into();
@@ -566,7 +578,7 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
             .pop()
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
-                provider_type: "Mistral".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             }))?
             .message;
         let mut content: Vec<ContentBlock> = Vec::new();
@@ -583,7 +595,7 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request body as JSON: {e}"),
-                provider_type: "Mistral".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         let system = generic_request.system.clone();
@@ -646,13 +658,13 @@ fn mistral_to_tensorzero_chunk(
     let raw_message = serde_json::to_string(&chunk).map_err(|e| {
         Error::new(ErrorDetails::InferenceServer {
             message: format!("Error parsing response from Mistral: {e}"),
-            provider_type: "Mistral".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
         })
     })?;
     if chunk.choices.len() > 1 {
         return Err(ErrorDetails::InferenceServer {
             message: "Response has invalid number of choices: {}. Expected 1.".to_string(),
-            provider_type: "Mistral".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
         }
         .into());
     }
@@ -1010,7 +1022,7 @@ mod tests {
         {
             assert_eq!(message, "Unauthorized access");
             assert_eq!(status_code, Some(StatusCode::UNAUTHORIZED));
-            assert_eq!(provider, "Mistral".to_string());
+            assert_eq!(provider, PROVIDER_TYPE.to_string());
         }
 
         // Test forbidden error
@@ -1025,7 +1037,7 @@ mod tests {
         {
             assert_eq!(message, "Forbidden access");
             assert_eq!(status_code, Some(StatusCode::FORBIDDEN));
-            assert_eq!(provider, "Mistral".to_string())
+            assert_eq!(provider, PROVIDER_TYPE.to_string())
         }
 
         // Test rate limit error
@@ -1040,7 +1052,7 @@ mod tests {
         {
             assert_eq!(message, "Rate limit exceeded");
             assert_eq!(status_code, Some(StatusCode::TOO_MANY_REQUESTS));
-            assert_eq!(provider, "Mistral".to_string());
+            assert_eq!(provider, PROVIDER_TYPE.to_string());
         }
 
         // Test server error
@@ -1053,12 +1065,42 @@ mod tests {
         } = details
         {
             assert_eq!(message, "Server error");
-            assert_eq!(provider, "Mistral".to_string())
+            assert_eq!(provider, PROVIDER_TYPE.to_string())
         }
     }
 
     #[test]
     fn test_mistral_api_base() {
         assert_eq!(MISTRAL_API_BASE.as_str(), "https://api.mistral.ai/v1/");
+    }
+
+    #[test]
+    fn test_credential_to_mistral_credentials() {
+        // Test Static credential
+        let generic = Credential::Static(SecretString::from("test_key"));
+        let creds: MistralCredentials = MistralCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, MistralCredentials::Static(_)));
+
+        // Test Dynamic credential
+        let generic = Credential::Dynamic("key_name".to_string());
+        let creds = MistralCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, MistralCredentials::Dynamic(_)));
+
+        // Test Missing credential (test mode)
+        #[cfg(any(test, feature = "e2e_tests"))]
+        {
+            let generic = Credential::Missing;
+            let creds = MistralCredentials::try_from(generic).unwrap();
+            assert!(matches!(creds, MistralCredentials::None));
+        }
+
+        // Test invalid type
+        let generic = Credential::FileContents(SecretString::from("test"));
+        let result = MistralCredentials::try_from(generic);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err().get_owned_details(),
+            ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
+        ));
     }
 }

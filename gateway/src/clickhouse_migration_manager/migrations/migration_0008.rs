@@ -113,6 +113,9 @@ impl<'a> Migration for Migration0008<'a> {
             ADD COLUMN IF NOT EXISTS function_name LowCardinality(String),
             ADD COLUMN IF NOT EXISTS variant_name LowCardinality(String),
             MODIFY COLUMN errors Array(String);"#;
+        // NOTE: this MODIFY COLUMN errors statement would convert data in bad ways
+        // HOWEVER, TensorZero at the point of writing has never actually written any errors to the errors column
+        // so this is safe to dos
         let _ = self.clickhouse.run_query(query.to_string()).await?;
 
         // Alter the `response_time_ms` column of `ModelInference` to be a nullable column
@@ -154,11 +157,14 @@ impl<'a> Migration for Migration0008<'a> {
             MODIFY COLUMN processing_time_ms UInt32;\n\
             ALTER TABLE JsonInference
             MODIFY COLUMN processing_time_ms UInt32;\n\
-            \n\
+            ALTER TABLE BatchRequest
+            MODIFY COLUMN errors Map(UUID, String);\n\
             -- Drop the columns \n\
             ALTER TABLE BatchRequest
             DROP COLUMN raw_request,
-            DROP COLUMN raw_response;\n\
+            DROP COLUMN raw_response,
+            DROP COLUMN function_name,
+            DROP COLUMN variant_name;\n\
         "
         .to_string()
     }

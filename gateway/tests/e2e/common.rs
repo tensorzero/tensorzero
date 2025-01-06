@@ -23,7 +23,8 @@ pub async fn get_clickhouse() -> ClickHouseConnectionInfo {
         .expect("Failed to connect to ClickHouse")
 }
 
-async fn clickhouse_flush_async_insert(clickhouse: &ClickHouseConnectionInfo) {
+#[cfg(feature = "e2e_tests")]
+pub async fn clickhouse_flush_async_insert(clickhouse: &ClickHouseConnectionInfo) {
     clickhouse
         .run_query("SYSTEM FLUSH ASYNC INSERT QUEUE".to_string())
         .await
@@ -107,45 +108,6 @@ pub(crate) async fn select_model_inferences_clickhouse(
     } else {
         Some(json_rows)
     }
-}
-
-// Can't figure out why this is dead code
-#[allow(dead_code)]
-pub async fn select_feedback_clickhouse(
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
-    table_name: &str,
-    feedback_id: Uuid,
-) -> Option<Value> {
-    clickhouse_flush_async_insert(clickhouse_connection_info).await;
-
-    let query = format!(
-        "SELECT * FROM {} WHERE id = '{}' FORMAT JSONEachRow",
-        table_name, feedback_id
-    );
-
-    let text = clickhouse_connection_info.run_query(query).await.unwrap();
-    let json: Value = serde_json::from_str(&text).ok()?;
-    Some(json)
-}
-
-// Can't figure out why this is dead code
-#[allow(dead_code)]
-pub async fn select_feedback_tags_clickhouse(
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
-    metric_name: &str,
-    tag_key: &str,
-    tag_value: &str,
-) -> Option<Value> {
-    clickhouse_flush_async_insert(clickhouse_connection_info).await;
-
-    let query = format!(
-        "SELECT * FROM FeedbackTag WHERE metric_name = '{}' AND key = '{}' AND value = '{}' FORMAT JSONEachRow",
-        metric_name, tag_key, tag_value
-    );
-
-    let text = clickhouse_connection_info.run_query(query).await.unwrap();
-    let json: Value = serde_json::from_str(&text).ok()?;
-    Some(json)
 }
 
 pub(crate) async fn select_inference_tags_clickhouse(

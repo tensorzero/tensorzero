@@ -5,7 +5,6 @@ use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::env;
 use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
@@ -24,7 +23,7 @@ use crate::inference::types::{
     ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream, RequestMessage, TextChunk, Usage,
 };
-use crate::model::CredentialLocation;
+use crate::model::{Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
 
 lazy_static! {
@@ -35,6 +34,8 @@ lazy_static! {
     };
 }
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
+const PROVIDER_NAME: &str = "Anthropic";
+const PROVIDER_TYPE: &str = "anthropic";
 
 fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("ANTHROPIC_API_KEY".to_string())
@@ -51,26 +52,12 @@ impl AnthropicProvider {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
-        let credentials = match api_key_location {
-            CredentialLocation::Env(key_name) => {
-                let api_key = env::var(key_name).map_err(|_| {
-                    Error::new(ErrorDetails::ApiKeyMissing {
-                        provider_name: "Anthropic".to_string(),
-                    })
-                })?;
-                AnthropicCredentials::Static(api_key.into())
-            }
-            CredentialLocation::Dynamic(key_name) => AnthropicCredentials::Dynamic(key_name),
-            _ => {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: "Invalid api_key_location for Anthropic provider".to_string(),
-                }))
-            }
-        };
+        let credential_location = api_key_location.unwrap_or(default_api_key_location());
+        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
+        let provider_credentials = AnthropicCredentials::try_from(generic_credentials)?;
         Ok(AnthropicProvider {
             model_name,
-            credentials,
+            credentials: provider_credentials,
         })
     }
 }
@@ -79,6 +66,24 @@ impl AnthropicProvider {
 pub enum AnthropicCredentials {
     Static(SecretString),
     Dynamic(String),
+    #[cfg(any(test, feature = "e2e_tests"))]
+    None,
+}
+
+impl TryFrom<Credential> for AnthropicCredentials {
+    type Error = Error;
+
+    fn try_from(credentials: Credential) -> Result<Self, Error> {
+        match credentials {
+            Credential::Static(key) => Ok(AnthropicCredentials::Static(key)),
+            Credential::Dynamic(key_name) => Ok(AnthropicCredentials::Dynamic(key_name)),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            Credential::Missing => Ok(AnthropicCredentials::None),
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: "Invalid api_key_location for Anthropic provider".to_string(),
+            })),
+        }
+    }
 }
 
 impl AnthropicCredentials {
@@ -91,11 +96,16 @@ impl AnthropicCredentials {
             AnthropicCredentials::Dynamic(key_name) => {
                 dynamic_api_keys.get(key_name).ok_or_else(|| {
                     ErrorDetails::ApiKeyMissing {
-                        provider_name: "Anthropic".to_string(),
+                        provider_name: PROVIDER_NAME.to_string(),
                     }
                     .into()
                 })
             }
+            #[cfg(any(test, feature = "e2e_tests"))]
+            AnthropicCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+                provider_name: PROVIDER_NAME.to_string(),
+            }
+            .into()),
         }
     }
 }
@@ -123,7 +133,7 @@ impl InferenceProvider for AnthropicProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request: {e}"),
                     status_code: e.status(),
-                    provider_type: "Anthropic".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
         let latency = Latency::NonStreaming {
@@ -133,14 +143,14 @@ impl InferenceProvider for AnthropicProvider {
             let response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
-                    provider_type: "Anthropic".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
 
             let response = serde_json::from_str(&response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {response}"),
-                    provider_type: "Anthropic".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
 
@@ -158,7 +168,7 @@ impl InferenceProvider for AnthropicProvider {
             let error_body = res.json::<AnthropicError>().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing response: {e}"),
-                    provider_type: "Anthropic".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
             handle_anthropic_error(response_code, error_body.error)
@@ -183,7 +193,7 @@ impl InferenceProvider for AnthropicProvider {
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request body as JSON: {e}"),
-                provider_type: "Anthropic".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         let start_time = Instant::now();
@@ -199,7 +209,7 @@ impl InferenceProvider for AnthropicProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request: {e}"),
                     status_code: None,
-                    provider_type: "Anthropic".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
         let mut stream = Box::pin(stream_anthropic(event_source, start_time));
@@ -209,7 +219,7 @@ impl InferenceProvider for AnthropicProvider {
             None => {
                 return Err(Error::new(ErrorDetails::InferenceServer {
                     message: "Stream ended before first chunk".to_string(),
-                    provider_type: "Anthropic".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 }))
             }
         };
@@ -242,7 +252,7 @@ impl InferenceProvider for AnthropicProvider {
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
-            provider_type: "Anthropic".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
         }
         .into())
     }
@@ -264,7 +274,7 @@ fn stream_anthropic(
                 Err(e) => {
                     yield Err(ErrorDetails::InferenceServer {
                         message: e.to_string(),
-                        provider_type: "Anthropic".to_string(),
+                        provider_type: PROVIDER_TYPE.to_string(),
                     }.into());
                 }
                 Ok(event) => match event {
@@ -276,7 +286,7 @@ fn stream_anthropic(
                                     "Error parsing message: {}, Data: {}",
                                     e, message.data
                                 ),
-                                provider_type: "Anthropic".to_string(),
+                                provider_type: PROVIDER_TYPE.to_string(),
 
                             }));
                         // Anthropic streaming API docs specify that this is the last message
@@ -420,7 +430,7 @@ impl<'a> TryFrom<&'a ContentBlock> for AnthropicMessageContent<'a> {
                     Error::new(ErrorDetails::InferenceClient {
                         status_code: Some(StatusCode::BAD_REQUEST),
                         message: format!("Error parsing tool call arguments as JSON Value: {e}"),
-                        provider_type: "Anthropic".to_string(),
+                        provider_type: PROVIDER_TYPE.to_string(),
                     })
                 })?;
 
@@ -428,7 +438,7 @@ impl<'a> TryFrom<&'a ContentBlock> for AnthropicMessageContent<'a> {
                     return Err(Error::new(ErrorDetails::InferenceClient {
                         status_code: Some(StatusCode::BAD_REQUEST),
                         message: "Tool call arguments must be a JSON object".to_string(),
-                        provider_type: "Anthropic".to_string(),
+                        provider_type: PROVIDER_TYPE.to_string(),
                     }));
                 }
 
@@ -696,7 +706,7 @@ impl TryFrom<AnthropicContentBlock> for ContentBlock {
                     arguments: serde_json::to_string(&input).map_err(|e| {
                         Error::new(ErrorDetails::InferenceServer {
                             message: format!("Error parsing input for tool call: {e}"),
-                            provider_type: "Anthropic".to_string(),
+                            provider_type: PROVIDER_TYPE.to_string(),
                         })
                     })?,
                 }))
@@ -759,14 +769,14 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request body as JSON: {e}"),
-                provider_type: "Anthropic".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
 
         let raw_response = serde_json::to_string(&response).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error parsing response from Anthropic: {e}"),
-                provider_type: "Anthropic".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
 
@@ -808,14 +818,14 @@ fn handle_anthropic_error(
         | StatusCode::TOO_MANY_REQUESTS => Err(ErrorDetails::InferenceClient {
             message: response_body.message,
             status_code: Some(response_code),
-            provider_type: "Anthropic".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
         }
         .into()),
         // StatusCode::NOT_FOUND | StatusCode::FORBIDDEN | StatusCode::INTERNAL_SERVER_ERROR | 529: Overloaded
         // These are all captured in _ since they have the same error behavior
         _ => Err(ErrorDetails::InferenceServer {
             message: response_body.message,
-            provider_type: "Anthropic".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
         }
         .into()),
     }
@@ -884,7 +894,7 @@ fn anthropic_to_tensorzero_stream_message(
     let raw_message = serde_json::to_string(&message).map_err(|e| {
         Error::new(ErrorDetails::InferenceServer {
             message: format!("Error parsing response from Anthropic: {e}"),
-            provider_type: "Anthropic".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
         })
     })?;
     match message {
@@ -910,11 +920,11 @@ fn anthropic_to_tensorzero_stream_message(
                     vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                         raw_name: current_tool_name.clone().ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                             message: "Got InputJsonDelta chunk from Anthropic without current tool name being set by a ToolUse".to_string(),
-                            provider_type: "Anthropic".to_string(),
+                            provider_type: PROVIDER_TYPE.to_string(),
                         }))?,
                         id: current_tool_id.clone().ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                             message: "Got InputJsonDelta chunk from Anthropic without current tool id being set by a ToolUse".to_string(),
-                            provider_type: "Anthropic".to_string(),
+                            provider_type: PROVIDER_TYPE.to_string(),
                         }))?,
                         raw_arguments: partial_json,
                     })],
@@ -925,7 +935,7 @@ fn anthropic_to_tensorzero_stream_message(
             }
             _ => Err(ErrorDetails::InferenceServer {
                 message: "Unsupported content block type for ContentBlockDelta".to_string(),
-                provider_type: "Anthropic".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             }
             .into()),
         },
@@ -965,14 +975,14 @@ fn anthropic_to_tensorzero_stream_message(
             }
             _ => Err(ErrorDetails::InferenceServer {
                 message: "Unsupported content block type for ContentBlockStart".to_string(),
-                provider_type: "Anthropic".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             }
             .into()),
         },
         AnthropicStreamMessage::ContentBlockStop { .. } => Ok(None),
         AnthropicStreamMessage::Error { error } => Err(ErrorDetails::InferenceServer {
             message: error.to_string(),
-            provider_type: "Anthropic".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
         }
         .into()),
         AnthropicStreamMessage::MessageDelta { usage, .. } => {
@@ -1596,7 +1606,7 @@ mod tests {
             ErrorDetails::InferenceClient {
                 message: "test_message".to_string(),
                 status_code: Some(response_code),
-                provider_type: "Anthropic".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             }
         );
         let response_code = StatusCode::UNAUTHORIZED;
@@ -1607,7 +1617,7 @@ mod tests {
             ErrorDetails::InferenceClient {
                 message: "test_message".to_string(),
                 status_code: Some(response_code),
-                provider_type: "Anthropic".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             }
         );
         let response_code = StatusCode::TOO_MANY_REQUESTS;
@@ -1618,7 +1628,7 @@ mod tests {
             ErrorDetails::InferenceClient {
                 message: "test_message".to_string(),
                 status_code: Some(response_code),
-                provider_type: "Anthropic".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             }
         );
         let response_code = StatusCode::NOT_FOUND;
@@ -1628,7 +1638,7 @@ mod tests {
             details,
             ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
-                provider_type: "Anthropic".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             }
         );
         let response_code = StatusCode::INTERNAL_SERVER_ERROR;
@@ -1638,7 +1648,7 @@ mod tests {
             details,
             ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
-                provider_type: "Anthropic".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             }
         );
     }
@@ -1908,8 +1918,7 @@ mod tests {
             details,
             ErrorDetails::InferenceServer {
                 message: "Got InputJsonDelta chunk from Anthropic without current tool name being set by a ToolUse".to_string(),
-                provider_type: "Anthropic".to_string(),
-
+                provider_type: PROVIDER_TYPE.to_string(),
             }
         );
 
@@ -2025,7 +2034,7 @@ mod tests {
             details,
             ErrorDetails::InferenceServer {
                 message: "Unsupported content block type for ContentBlockStart".to_string(),
-                provider_type: "Anthropic".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             }
         );
 
@@ -2059,7 +2068,7 @@ mod tests {
             details,
             ErrorDetails::InferenceServer {
                 message: r#"{"message":"Test error"}"#.to_string(),
-                provider_type: "Anthropic".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             }
         );
 
@@ -2331,5 +2340,35 @@ mod tests {
         };
         let result = prefill_json_chunk_response(chunk.clone());
         assert_eq!(result, chunk);
+    }
+
+    #[test]
+    fn test_credential_to_anthropic_credentials() {
+        // Test Static credential
+        let generic = Credential::Static(SecretString::from("test_key"));
+        let creds = AnthropicCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, AnthropicCredentials::Static(_)));
+
+        // Test Dynamic credential
+        let generic = Credential::Dynamic("key_name".to_string());
+        let creds = AnthropicCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, AnthropicCredentials::Dynamic(_)));
+
+        // Test Missing credential (test mode)
+        #[cfg(any(test, feature = "e2e_tests"))]
+        {
+            let generic = Credential::Missing;
+            let creds = AnthropicCredentials::try_from(generic).unwrap();
+            assert!(matches!(creds, AnthropicCredentials::None));
+        }
+
+        // Test invalid type
+        let generic = Credential::FileContents(SecretString::from("test"));
+        let result = AnthropicCredentials::try_from(generic);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err().get_owned_details(),
+            ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
+        ));
     }
 }

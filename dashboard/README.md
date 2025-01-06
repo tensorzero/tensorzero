@@ -11,7 +11,8 @@ Our goals for this project are to:
   - [ ] Supervised fine-tuning
   - [ ] Dynamic in-context learning
 
-- [ ] Allow users to review inferences and episodes and provide feedback to either.
+- [x] Allow users to review inferences and episodes
+- [ ]and provide feedback to either.
 - [ ] Provide an easy dashboard showing the relative performance of different variants for a particular function.
 - [ ] Allow users to edit the configuration through the dashboard.
 

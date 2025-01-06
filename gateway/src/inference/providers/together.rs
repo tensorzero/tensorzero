@@ -1,4 +1,4 @@
-use std::{borrow::Cow, env};
+use std::borrow::Cow;
 
 use futures::StreamExt;
 use lazy_static::lazy_static;
@@ -18,7 +18,7 @@ use crate::{
         ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
         ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     },
-    model::CredentialLocation,
+    model::{Credential, CredentialLocation},
 };
 
 use super::{
@@ -37,6 +37,9 @@ lazy_static! {
     };
 }
 
+const PROVIDER_NAME: &str = "Together";
+const PROVIDER_TYPE: &str = "together";
+
 #[derive(Debug)]
 pub struct TogetherProvider {
     pub model_name: String,
@@ -48,26 +51,12 @@ impl TogetherProvider {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
-        let credentials = match api_key_location {
-            CredentialLocation::Env(key_name) => {
-                let api_key = env::var(key_name)
-                    .map_err(|_| {
-                        Error::new(ErrorDetails::ApiKeyMissing {
-                            provider_name: "Together".to_string(),
-                        })
-                    })?
-                    .into();
-                TogetherCredentials::Static(api_key)
-            }
-            CredentialLocation::Dynamic(key_name) => TogetherCredentials::Dynamic(key_name),
-            _ => Err(Error::new(ErrorDetails::Config {
-                message: "Invalid api_key_location for Together provider".to_string(),
-            }))?,
-        };
+        let credential_location = api_key_location.unwrap_or(default_api_key_location());
+        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
+        let provider_credentials = TogetherCredentials::try_from(generic_credentials)?;
         Ok(TogetherProvider {
             model_name,
-            credentials,
+            credentials: provider_credentials,
         })
     }
 }
@@ -80,6 +69,24 @@ fn default_api_key_location() -> CredentialLocation {
 pub enum TogetherCredentials {
     Static(SecretString),
     Dynamic(String),
+    #[cfg(any(test, feature = "e2e_tests"))]
+    None,
+}
+
+impl TryFrom<Credential> for TogetherCredentials {
+    type Error = Error;
+
+    fn try_from(credentials: Credential) -> Result<Self, Error> {
+        match credentials {
+            Credential::Static(key) => Ok(TogetherCredentials::Static(key)),
+            Credential::Dynamic(key_name) => Ok(TogetherCredentials::Dynamic(key_name)),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            Credential::Missing => Ok(TogetherCredentials::None),
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: "Invalid api_key_location for Together provider".to_string(),
+            })),
+        }
+    }
 }
 
 impl TogetherCredentials {
@@ -92,10 +99,14 @@ impl TogetherCredentials {
             TogetherCredentials::Dynamic(key_name) => {
                 Ok(Cow::Borrowed(dynamic_api_keys.get(key_name).ok_or_else(
                     || ErrorDetails::ApiKeyMissing {
-                        provider_name: "Together".to_string(),
+                        provider_name: PROVIDER_NAME.to_string(),
                     },
                 )?))
             }
+            #[cfg(any(test, feature = "e2e_tests"))]
+            TogetherCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+                provider_name: PROVIDER_NAME.to_string(),
+            })?,
         }
     }
 }
@@ -124,21 +135,21 @@ impl InferenceProvider for TogetherProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("{e}"),
                     status_code: Some(e.status().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)),
-                    provider_type: "Together".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
         if res.status().is_success() {
             let response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
-                    provider_type: "Together".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
 
             let response = serde_json::from_str(&response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {response}"),
-                    provider_type: "Together".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
 
@@ -157,7 +168,7 @@ impl InferenceProvider for TogetherProvider {
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
                         message: format!("Error parsing error response: {e}"),
-                        provider_type: "Together".to_string(),
+                        provider_type: PROVIDER_TYPE.to_string(),
                     })
                 })?,
             ))
@@ -181,7 +192,7 @@ impl InferenceProvider for TogetherProvider {
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request: {e}"),
-                provider_type: "Together".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
@@ -197,7 +208,7 @@ impl InferenceProvider for TogetherProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request to Together: {e}"),
                     status_code: None,
-                    provider_type: "Together".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
         let mut stream = Box::pin(stream_openai(event_source, start_time));
@@ -209,7 +220,7 @@ impl InferenceProvider for TogetherProvider {
             None => {
                 return Err(Error::new(ErrorDetails::InferenceServer {
                     message: "Stream ended before first chunk".to_string(),
-                    provider_type: "Together".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 }));
             }
         };
@@ -223,7 +234,7 @@ impl InferenceProvider for TogetherProvider {
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
-            provider_type: "Together".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
         }
         .into())
     }
@@ -355,7 +366,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
         let raw_response = serde_json::to_string(&response).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error parsing response: {e}"),
-                provider_type: "Together".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         if response.choices.len() != 1 {
@@ -364,7 +375,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
                     "Response has invalid number of choices: {}. Expected 1.",
                     response.choices.len()
                 ),
-                provider_type: "Together".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             }
             .into());
         }
@@ -374,7 +385,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
             .pop()
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
-                provider_type: "Together".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             }))?
             .message;
         let mut content: Vec<ContentBlock> = Vec::new();
@@ -389,7 +400,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request body as JSON: {e}"),
-                provider_type: "Together".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         let system = generic_request.system.clone();
@@ -470,5 +481,34 @@ mod tests {
     #[test]
     fn test_together_api_base() {
         assert_eq!(TOGETHER_API_BASE.as_str(), "https://api.together.xyz/v1");
+    }
+    #[test]
+    fn test_credential_to_together_credentials() {
+        // Test Static credential
+        let generic = Credential::Static(SecretString::from("test_key"));
+        let creds: TogetherCredentials = TogetherCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, TogetherCredentials::Static(_)));
+
+        // Test Dynamic credential
+        let generic = Credential::Dynamic("key_name".to_string());
+        let creds = TogetherCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, TogetherCredentials::Dynamic(_)));
+
+        // Test Missing credential (test mode)
+        #[cfg(any(test, feature = "e2e_tests"))]
+        {
+            let generic = Credential::Missing;
+            let creds = TogetherCredentials::try_from(generic).unwrap();
+            assert!(matches!(creds, TogetherCredentials::None));
+        }
+
+        // Test invalid type
+        let generic = Credential::FileContents(SecretString::from("test"));
+        let result = TogetherCredentials::try_from(generic);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err().get_owned_details(),
+            ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
+        ));
     }
 }

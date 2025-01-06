@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use gateway::{
     embeddings::{EmbeddingProvider, EmbeddingProviderConfig, EmbeddingRequest},
     endpoints::inference::InferenceCredentials,
@@ -25,10 +27,23 @@ crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
+    let credentials = match std::env::var("OPENAI_API_KEY") {
+        Ok(key) => HashMap::from([("openai_api_key".to_string(), key)]),
+        Err(_) => HashMap::new(),
+    };
+
     let standard_providers = vec![E2ETestProvider {
         variant_name: "openai".to_string(),
         model_name: "gpt-4o-mini-2024-07-18".to_string(),
         model_provider_name: "openai".to_string(),
+        credentials: HashMap::new(),
+    }];
+
+    let inference_params_providers = vec![E2ETestProvider {
+        variant_name: "openai-dynamic".to_string(),
+        model_name: "gpt-4o-mini-2024-07-18-dynamic".to_string(),
+        model_provider_name: "openai".to_string(),
+        credentials,
     }];
 
     let json_providers = vec![
@@ -36,16 +51,19 @@ async fn get_providers() -> E2ETestProviders {
             variant_name: "openai".to_string(),
             model_name: "gpt-4o-mini-2024-07-18".to_string(),
             model_provider_name: "openai".to_string(),
+            credentials: HashMap::new(),
         },
         E2ETestProvider {
             variant_name: "openai-implicit".to_string(),
             model_name: "gpt-4o-mini-2024-07-18".to_string(),
             model_provider_name: "openai".to_string(),
+            credentials: HashMap::new(),
         },
         E2ETestProvider {
             variant_name: "openai-strict".to_string(),
             model_name: "gpt-4o-mini-2024-07-18".to_string(),
             model_provider_name: "openai".to_string(),
+            credentials: HashMap::new(),
         },
     ];
 
@@ -54,11 +72,12 @@ async fn get_providers() -> E2ETestProviders {
         variant_name: "openai-shorthand".to_string(),
         model_name: "openai::gpt-4o-mini-2024-07-18".to_string(),
         model_provider_name: "openai".to_string(),
+        credentials: HashMap::new(),
     }];
 
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
-        inference_params_inference: standard_providers.clone(),
+        inference_params_inference: inference_params_providers,
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),
         dynamic_tool_use_inference: standard_providers.clone(),

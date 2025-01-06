@@ -1,9 +1,12 @@
 use lazy_static::lazy_static;
 use reqwest::Client;
+use secrecy::SecretString;
 use serde::de::Error as SerdeError;
 use std::collections::HashMap;
+use std::{env, fs};
 use strum::VariantNames;
-use tracing::{span, Instrument, Level};
+#[allow(unused_imports)]
+use tracing::{span, warn, Instrument, Level};
 use url::Url;
 
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -269,7 +272,6 @@ impl<'de> Deserialize<'de> for ProviderConfig {
         D: serde::Deserializer<'de>,
     {
         let helper = ProviderConfigHelper::deserialize(deserializer)?;
-
         Ok(match helper {
             ProviderConfigHelper::Anthropic {
                 model_name,
@@ -645,8 +647,13 @@ impl ProviderConfig {
 }
 
 pub enum CredentialLocation {
+    /// Environment variable containing the actual credential
     Env(String),
+    /// Environment variable containing the path to a credential file
+    PathFromEnv(String),
+    /// For dynamic credential resolution
     Dynamic(String),
+    /// Direct path to a credential file
     Path(String),
     None,
 }
@@ -659,6 +666,8 @@ impl<'de> Deserialize<'de> for CredentialLocation {
         let s = String::deserialize(deserializer)?;
         if let Some(inner) = s.strip_prefix("env::") {
             Ok(CredentialLocation::Env(inner.to_string()))
+        } else if let Some(inner) = s.strip_prefix("path_from_env::") {
+            Ok(CredentialLocation::PathFromEnv(inner.to_string()))
         } else if let Some(inner) = s.strip_prefix("dynamic::") {
             Ok(CredentialLocation::Dynamic(inner.to_string()))
         } else if let Some(inner) = s.strip_prefix("path::") {
@@ -670,6 +679,117 @@ impl<'de> Deserialize<'de> for CredentialLocation {
                 "Invalid ApiKeyLocation format: {}",
                 s
             )))
+        }
+    }
+}
+
+pub enum Credential {
+    Static(SecretString),
+    FileContents(SecretString),
+    Dynamic(String),
+    None,
+    #[cfg(any(test, feature = "e2e_tests"))]
+    Missing,
+}
+
+impl TryFrom<(CredentialLocation, &str)> for Credential {
+    type Error = Error;
+    #[allow(unused_variables)]
+    fn try_from(
+        (location, provider_type): (CredentialLocation, &str),
+    ) -> Result<Self, Self::Error> {
+        match location {
+            CredentialLocation::Env(key_name) => match env::var(key_name) {
+                Ok(value) => Ok(Credential::Static(SecretString::from(value))),
+                Err(_) => {
+                    #[cfg(any(test, feature = "e2e_tests"))]
+                    {
+                        warn!(
+                            "You are missing the credentials required for a model provider of type {}, so the associated tests will likely fail.",
+                            provider_type
+                        );
+                        Ok(Credential::Missing)
+                    }
+                    #[cfg(not(any(test, feature = "e2e_tests")))]
+                    {
+                        Err(Error::new(ErrorDetails::ApiKeyMissing {
+                            provider_name: provider_type.to_string(),
+                        }))
+                    }
+                }
+            },
+            CredentialLocation::PathFromEnv(env_key) => {
+                // First get the path from environment variable
+                let path = match env::var(&env_key) {
+                    Ok(path) => path,
+                    Err(_) => {
+                        #[cfg(any(test, feature = "e2e_tests"))]
+                        {
+                            warn!(
+                                "Environment variable {} is required for a model provider of type {} but is missing, so the associated tests will likely fail.",
+                                env_key, provider_type
+                            );
+                            return Ok(Credential::Missing);
+                        }
+                        #[cfg(not(any(test, feature = "e2e_tests")))]
+                        {
+                            return Err(Error::new(ErrorDetails::ApiKeyMissing {
+                                provider_name: format!(
+                                    "{}: Environment variable {} for credentials path is missing",
+                                    provider_type, env_key
+                                ),
+                            }));
+                        }
+                    }
+                };
+                // Then read the file contents
+                match fs::read_to_string(path) {
+                    Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
+                    Err(e) => {
+                        #[cfg(any(test, feature = "e2e_tests"))]
+                        {
+                            warn!(
+                                "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
+                                provider_type, e
+                            );
+                            Ok(Credential::Missing)
+                        }
+                        #[cfg(not(any(test, feature = "e2e_tests")))]
+                        {
+                            Err(Error::new(ErrorDetails::ApiKeyMissing {
+                                provider_name: format!(
+                                    "{}: Failed to read credentials file - {}",
+                                    provider_type, e
+                                ),
+                            }))
+                        }
+                    }
+                }
+            }
+            CredentialLocation::Path(path) => match fs::read_to_string(path) {
+                Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
+                Err(e) => {
+                    #[cfg(any(test, feature = "e2e_tests"))]
+                    {
+                        warn!(
+                            "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
+                            provider_type, e
+                        );
+                        Ok(Credential::Missing)
+                    }
+                    #[cfg(not(any(test, feature = "e2e_tests")))]
+                    {
+                        Err(Error::new(ErrorDetails::ApiKeyMissing {
+                            provider_name: format!(
+                                "{}: Failed to read credentials file - {}",
+                                provider_type, e
+                            ),
+                        }))
+                    }
+                }
+            },
+            CredentialLocation::Dynamic(key_name) => Ok(Credential::Dynamic(key_name.clone())),
+            CredentialLocation::None => Ok(Credential::None),
         }
     }
 }
@@ -886,7 +1006,7 @@ mod tests {
                     ErrorDetails::InferenceClient {
                         message: "Error sending request to Dummy provider.".to_string(),
                         status_code: None,
-                        provider_type: "Dummy".to_string(),
+                        provider_type: "dummy".to_string(),
                     }
                     .into()
                 )])
@@ -1040,7 +1160,7 @@ mod tests {
                     ErrorDetails::InferenceClient {
                         message: "Error sending request to Dummy provider.".to_string(),
                         status_code: None,
-                        provider_type: "Dummy".to_string(),
+                        provider_type: "dummy".to_string(),
                     }
                     .into()
                 )])
@@ -1189,7 +1309,7 @@ mod tests {
                     ErrorDetails::InferenceClient {
                         message: "Invalid API key for Dummy provider".to_string(),
                         status_code: None,
-                        provider_type: "Dummy".to_string(),
+                        provider_type: "dummy".to_string(),
                     }
                     .into()
                 )])

@@ -1,4 +1,5 @@
 #![allow(clippy::print_stdout)]
+use std::collections::HashMap;
 
 #[cfg(feature = "e2e_tests")]
 use futures::StreamExt;
@@ -25,6 +26,7 @@ pub struct E2ETestProvider {
     pub variant_name: String,
     pub model_name: String,
     pub model_provider_name: String,
+    pub credentials: HashMap<String, String>,
 }
 
 /// Enforce that every provider implements a common set of tests.
@@ -806,6 +808,7 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
             }
         },
         "stream": false,
+        "credentials": provider.credentials,
     });
 
     let response = Client::new()
@@ -1038,6 +1041,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
             }
         },
         "stream": true,
+        "credentials": provider.credentials,
     });
 
     let mut event_source = Client::new()
