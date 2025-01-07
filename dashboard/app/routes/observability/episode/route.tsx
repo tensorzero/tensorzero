@@ -1,8 +1,10 @@
 import {
+  countInferencesForEpisode,
   queryInferenceTableBoundsByEpisodeId,
   queryInferenceTableByEpisodeId,
 } from "~/utils/clickhouse/inference";
 import {
+  countFeedbackByTargetId,
   queryFeedbackBoundsByTargetId,
   queryFeedbackByTargetId,
 } from "~/utils/clickhouse/feedback";
@@ -31,27 +33,35 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw data("Page size cannot exceed 100", { status: 400 });
   }
 
-  const [inferences, inference_bounds, feedbacks, feedback_bounds] =
-    await Promise.all([
-      queryInferenceTableByEpisodeId({
-        episode_id,
-        before: beforeInference || undefined,
-        after: afterInference || undefined,
-        page_size: pageSize,
-      }),
-      queryInferenceTableBoundsByEpisodeId({
-        episode_id,
-      }),
-      queryFeedbackByTargetId({
-        target_id: episode_id,
-        before: beforeFeedback || undefined,
-        after: afterFeedback || undefined,
-        page_size: pageSize,
-      }),
-      queryFeedbackBoundsByTargetId({
-        target_id: episode_id,
-      }),
-    ]);
+  const [
+    inferences,
+    inference_bounds,
+    feedbacks,
+    feedback_bounds,
+    num_inferences,
+    num_feedbacks,
+  ] = await Promise.all([
+    queryInferenceTableByEpisodeId({
+      episode_id,
+      before: beforeInference || undefined,
+      after: afterInference || undefined,
+      page_size: pageSize,
+    }),
+    queryInferenceTableBoundsByEpisodeId({
+      episode_id,
+    }),
+    queryFeedbackByTargetId({
+      target_id: episode_id,
+      before: beforeFeedback || undefined,
+      after: afterFeedback || undefined,
+      page_size: pageSize,
+    }),
+    queryFeedbackBoundsByTargetId({
+      target_id: episode_id,
+    }),
+    countInferencesForEpisode(episode_id),
+    countFeedbackByTargetId(episode_id),
+  ]);
 
   return {
     episode_id,
@@ -59,6 +69,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     inference_bounds,
     feedbacks,
     feedback_bounds,
+    num_inferences,
+    num_feedbacks,
   };
 }
 
@@ -69,6 +81,8 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     inference_bounds,
     feedbacks,
     feedback_bounds,
+    num_inferences,
+    num_feedbacks,
   } = loaderData;
   const navigate = useNavigate();
 
@@ -136,7 +150,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
       <div>
         <h3 className="mb-2 flex items-center gap-2 text-xl font-semibold">
           Inferences
-          <Badge variant="secondary">Count: {inferences.length}</Badge>
+          <Badge variant="secondary">Count: {num_inferences}</Badge>
         </h3>
 
         <EpisodeInferenceTable inferences={inferences} />
@@ -167,7 +181,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <Badge variant="secondary">Count: {feedbacks.length}</Badge>
+          <Badge variant="secondary">Count: {num_feedbacks}</Badge>
         </h3>
         <EpisodeFeedbackTable feedback={feedbacks} />
         <PageButtons

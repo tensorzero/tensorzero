@@ -144,6 +144,19 @@ export async function queryBooleanMetricFeedbackBoundsByTargetId(params: {
   }
 }
 
+export async function countBooleanMetricFeedbackByTargetId(
+  target_id: string,
+): Promise<number> {
+  const query = `SELECT COUNT() AS count FROM BooleanMetricFeedbackByTargetId WHERE target_id = {target_id:String}`;
+  const resultSet = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: { target_id },
+  });
+  const rows = await resultSet.json<{ count: string }>();
+  return Number(rows[0].count);
+}
+
 export const commentFeedbackRowSchema = z.object({
   id: z.string().uuid(),
   target_id: z.string().uuid(),
@@ -276,6 +289,19 @@ export async function queryCommentFeedbackBoundsByTargetId(params: {
   }
 }
 
+export async function countCommentFeedbackByTargetId(
+  target_id: string,
+): Promise<number> {
+  const query = `SELECT COUNT() AS count FROM CommentFeedbackByTargetId WHERE target_id = {target_id:String}`;
+  const resultSet = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: { target_id },
+  });
+  const rows = await resultSet.json<{ count: string }>();
+  return Number(rows[0].count);
+}
+
 export const demonstrationFeedbackRowSchema = z.object({
   id: z.string().uuid(),
   inference_id: z.string().uuid(),
@@ -405,6 +431,19 @@ export async function queryDemonstrationFeedbackBoundsByInferenceId(params: {
       status: 500,
     });
   }
+}
+
+export async function countDemonstrationFeedbackByInferenceId(
+  inference_id: string,
+): Promise<number> {
+  const query = `SELECT COUNT() AS count FROM DemonstrationFeedbackByInferenceId WHERE inference_id = {inference_id:String}`;
+  const resultSet = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: { inference_id },
+  });
+  const rows = await resultSet.json<{ count: string }>();
+  return Number(rows[0].count);
 }
 
 export const floatMetricFeedbackRowSchema = z
@@ -550,6 +589,19 @@ export async function queryFloatMetricFeedbackBoundsByTargetId(params: {
   }
 }
 
+export async function countFloatMetricFeedbackByTargetId(
+  target_id: string,
+): Promise<number> {
+  const query = `SELECT COUNT() AS count FROM FloatMetricFeedbackByTargetId WHERE target_id = {target_id:String}`;
+  const resultSet = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: { target_id },
+  });
+  const rows = await resultSet.json<{ count: string }>();
+  return Number(rows[0].count);
+}
+
 export const feedbackRowSchema = z.union([
   booleanMetricFeedbackRowSchema,
   floatMetricFeedbackRowSchema,
@@ -659,4 +711,19 @@ export async function queryFeedbackBoundsByTargetId(params: {
     first_id: allFirstIds.sort()[0],
     last_id: allLastIds.sort().reverse()[0],
   };
+}
+
+export async function countFeedbackByTargetId(
+  target_id: string,
+): Promise<number> {
+  const [booleanMetrics, commentFeedback, demonstrationFeedback, floatMetrics] =
+    await Promise.all([
+      countBooleanMetricFeedbackByTargetId(target_id),
+      countCommentFeedbackByTargetId(target_id),
+      countDemonstrationFeedbackByInferenceId(target_id),
+      countFloatMetricFeedbackByTargetId(target_id),
+    ]);
+  return (
+    booleanMetrics + commentFeedback + demonstrationFeedback + floatMetrics
+  );
 }

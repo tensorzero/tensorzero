@@ -409,3 +409,16 @@ export async function countInferencesForFunction(
   const rows = await resultSet.json<{ count: string }>();
   return Number(rows[0].count);
 }
+
+export async function countInferencesForEpisode(
+  episode_id: string,
+): Promise<number> {
+  const query = `SELECT COUNT() AS count FROM InferenceByEpisodeId WHERE episode_id = {episode_id:String}`;
+  const resultSet = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: { episode_id },
+  });
+  const rows = await resultSet.json<{ count: string }>();
+  return Number(rows[0].count);
+}
