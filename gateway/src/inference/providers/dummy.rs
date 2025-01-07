@@ -22,6 +22,9 @@ use crate::inference::types::{
 use crate::model::CredentialLocation;
 use crate::tool::{ToolCall, ToolCallChunk};
 
+const PROVIDER_NAME: &str = "Dummy";
+const PROVIDER_TYPE: &str = "dummy";
+
 #[derive(Debug, Default)]
 pub struct DummyProvider {
     pub model_name: String,
@@ -71,7 +74,7 @@ impl DummyCredentials {
             DummyCredentials::Dynamic(key_name) => {
                 Some(dynamic_api_keys.get(key_name).ok_or_else(|| {
                     ErrorDetails::ApiKeyMissing {
-                        provider_name: "Dummy".to_string(),
+                        provider_name: PROVIDER_NAME.to_string(),
                     }
                     .into()
                 }))
@@ -165,7 +168,7 @@ impl InferenceProvider for DummyProvider {
                         self.model_name, *counter
                     ),
                     status_code: None,
-                    provider_type: "Dummy".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 }
                 .into());
             }
@@ -175,7 +178,7 @@ impl InferenceProvider for DummyProvider {
             return Err(ErrorDetails::InferenceClient {
                 message: "Error sending request to Dummy provider.".to_string(),
                 status_code: None,
-                provider_type: "Dummy".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             }
             .into());
         }
@@ -186,7 +189,7 @@ impl InferenceProvider for DummyProvider {
                     return Err(ErrorDetails::InferenceClient {
                         message: "Invalid API key for Dummy provider".to_string(),
                         status_code: None,
-                        provider_type: "Dummy".to_string(),
+                        provider_type: PROVIDER_TYPE.to_string(),
                     }
                     .into());
                 }
@@ -290,7 +293,7 @@ impl InferenceProvider for DummyProvider {
                         self.model_name, *counter
                     ),
                     status_code: None,
-                    provider_type: "Dummy".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 }
                 .into());
             }
@@ -300,7 +303,7 @@ impl InferenceProvider for DummyProvider {
             return Err(ErrorDetails::InferenceClient {
                 message: "Error sending request to Dummy provider.".to_string(),
                 status_code: None,
-                provider_type: "Dummy".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             }
             .into());
         }
@@ -412,7 +415,7 @@ impl EmbeddingProvider for DummyProvider {
             return Err(ErrorDetails::InferenceClient {
                 message: "Error sending request to Dummy provider.".to_string(),
                 status_code: None,
-                provider_type: "Dummy".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             }
             .into());
         }

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::providers::common::{E2ETestProvider, E2ETestProviders};
 
 crate::generate_provider_tests!(get_providers);
@@ -8,6 +10,7 @@ async fn get_providers() -> E2ETestProviders {
         variant_name: "gcp-vertex-haiku".to_string(),
         model_name: "claude-3-haiku-20240307-gcp-vertex".to_string(),
         model_provider_name: "gcp_vertex_anthropic".to_string(),
+        credentials: HashMap::new(),
     }];
 
     let json_providers = vec![
@@ -15,11 +18,13 @@ async fn get_providers() -> E2ETestProviders {
             variant_name: "gcp-vertex-haiku".to_string(),
             model_name: "claude-3-haiku-20240307-gcp-vertex".to_string(),
             model_provider_name: "gcp_vertex_anthropic".to_string(),
+            credentials: HashMap::new(),
         },
         E2ETestProvider {
             variant_name: "gcp-vertex-haiku-implicit".to_string(),
             model_name: "claude-3-haiku-20240307-gcp-vertex".to_string(),
             model_provider_name: "gcp_vertex_anthropic".to_string(),
+            credentials: HashMap::new(),
         },
     ];
 
