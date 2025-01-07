@@ -31,6 +31,7 @@ type JobInfo =
   | {
       status: "error";
       message: string;
+      info: OpenAI.FineTuning.Jobs.FineTuningJob;
     };
 
 interface OpenAISFTJobParams {
@@ -108,7 +109,6 @@ export class OpenAISFTJob extends SFTJob {
         status: "error",
         modelProvider: "openai",
         formData: this.formData,
-        jobId: this.jobId,
         jobUrl: this.jobUrl,
         rawData: this.job,
         error: error,
@@ -122,7 +122,6 @@ export class OpenAISFTJob extends SFTJob {
         status: "completed",
         modelProvider: "openai",
         formData: this.formData,
-        jobId: this.jobId,
         jobUrl: this.jobUrl,
         rawData: this.job,
         result: this.fineTunedModel,
@@ -134,11 +133,10 @@ export class OpenAISFTJob extends SFTJob {
       status: "running",
       modelProvider: "openai",
       formData: this.formData,
-      jobId: this.jobId,
       rawData: this.job,
       jobUrl: this.jobUrl,
       estimatedCompletionTime: estimatedCompletionTime
-        ? new Date(estimatedCompletionTime)
+        ? new Date(estimatedCompletionTime * 1000)
         : undefined,
     };
   }
@@ -147,17 +145,31 @@ export class OpenAISFTJob extends SFTJob {
     if (!this.jobId) {
       throw new Error("Job ID is required to poll OpenAI SFT");
     }
-    const job = await client.fineTuning.jobs.retrieve(this.jobId);
-    return new OpenAISFTJob({
-      jobId: job.id,
-      status: job.status,
-      fineTunedModel: job.fine_tuned_model ?? undefined,
-      job: {
-        status: "ok",
-        info: job,
-      },
-      formData: this.formData,
-    });
+    try {
+      const jobInfo = await client.fineTuning.jobs.retrieve(this.jobId);
+      return new OpenAISFTJob({
+        jobId: jobInfo.id,
+        status: jobInfo.status,
+        fineTunedModel: jobInfo.fine_tuned_model ?? undefined,
+        job: {
+          status: "ok",
+          info: jobInfo,
+        },
+        formData: this.formData,
+      });
+    } catch (error) {
+      return new OpenAISFTJob({
+        jobId: this.jobId,
+        status: "running",
+        fineTunedModel: undefined,
+        job: {
+          status: "error",
+          info: this.job.info,
+          message: error instanceof Error ? error.message : String(error),
+        },
+        formData: this.formData,
+      });
+    }
   }
 }
 

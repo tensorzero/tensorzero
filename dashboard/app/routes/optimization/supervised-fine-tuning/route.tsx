@@ -28,7 +28,6 @@ import {
 import { ModelSelector } from "./ModelSelector";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
 import { Button } from "~/components/ui/button";
-import { Textarea } from "~/components/ui/textarea";
 import { Form } from "~/components/ui/form";
 import type { Route } from "./+types/route";
 // The following import would be needed for type-safe fetching of counts
@@ -37,6 +36,7 @@ import type { CountsData } from "../../api/curated_inferences/count.route";
 import type { Config } from "~/utils/config";
 // import { ProgressIndicator, type ProgressInfo } from "./ProgressIndicator";
 import FineTuningStatus from "./FineTuningStatus";
+import { SFTResult } from "./SFTResult";
 
 export const meta: MetaFunction = () => {
   return [
@@ -72,7 +72,6 @@ function get_progress_fixture(provider: ProviderType): SFTJobStatus {
         maxSamples: 94,
         threshold: 0.5,
       },
-      jobId: "01943d5f-d649-7e0c-95b7-04b7944128ea",
       jobUrl:
         provider === "openai"
           ? "https://platform.openai.com/finetune/ftjob-abc123"
@@ -103,7 +102,6 @@ function get_progress_fixture(provider: ProviderType): SFTJobStatus {
           threshold: 0.5,
           jobId: "01944200-d290-706d-b2f2-ca958d7ced80",
         },
-        jobId: "ftjob-eC8vFeECwiVKNrjDxNrBkIvH",
         rawData: {
           status: "ok",
           info: {
@@ -150,7 +148,6 @@ function get_progress_fixture(provider: ProviderType): SFTJobStatus {
           threshold: 0.5,
           jobId: "019441ec-cecb-7489-b59e-a2aa2ee942c1",
         },
-        jobId: "019441ec-cecb-7489-b59e-a2aa2ee942c1",
         jobUrl:
           "https://fireworks.ai/dashboard/fine-tuning/c3b0372cb74e4155ba2811ca3c41e0bb",
         rawData: {
@@ -294,16 +291,7 @@ export default function SupervisedFineTuning({
 
         {/* {status !== "idle" && <ProgressIndicator progressInfo={progressInfo} />} */}
         {<FineTuningStatus status={status} />}
-        {finalResult && (
-          <div className="mt-4 rounded-lg bg-gray-100 p-4">
-            <div className="mb-2 font-medium">Configuration</div>
-            <Textarea
-              value={finalResult}
-              className="h-48 w-full resize-none border-none bg-transparent focus:ring-0"
-              readOnly
-            />
-          </div>
-        )}
+        <SFTResult finalResult={finalResult} />
       </main>
     </div>
   );

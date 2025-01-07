@@ -155,7 +155,6 @@ export class FireworksSFTJob extends SFTJob {
         status: "error",
         modelProvider: "fireworks",
         formData: this.formData,
-        jobId: this.jobId,
         jobUrl: this.jobUrl,
         rawData: this.jobInfo,
         error: error,
@@ -169,7 +168,6 @@ export class FireworksSFTJob extends SFTJob {
         status: "completed",
         modelProvider: "fireworks",
         formData: this.formData,
-        jobId: this.jobId,
         jobUrl: this.jobUrl,
         result: this.modelPath,
         rawData: this.jobInfo,
@@ -179,7 +177,6 @@ export class FireworksSFTJob extends SFTJob {
       status: "running",
       modelProvider: "fireworks",
       formData: this.formData,
-      jobId: this.jobId,
       jobUrl: this.jobUrl,
       rawData: this.jobInfo,
     };
@@ -380,14 +377,11 @@ async function deploy_model_request(accountId: string, modelId: string) {
     },
     body: JSON.stringify(body),
   };
+  console.log("fireworks url", url);
+  console.log("fireworks options", options);
 
   try {
     const response = await fetch(url, options);
-    if (!response.ok) {
-      throw new Error(
-        `Failed to deploy model: ${response.status} ${response.statusText}`,
-      );
-    }
     const data = await response.json();
     if (!data) {
       throw new Error("Empty response received from deploy model request");

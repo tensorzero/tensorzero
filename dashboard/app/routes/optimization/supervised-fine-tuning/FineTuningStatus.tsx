@@ -1,5 +1,4 @@
 import { Badge } from "~/components/ui/badge";
-import { Progress } from "~/components/ui/progress";
 import {
   Clock,
   ExternalLink,
@@ -14,6 +13,7 @@ import { extractTimestampFromUUIDv7 } from "~/utils/common";
 import { MetadataItem } from "./MetadataItem";
 import { CountdownTimer } from "./CountdownTimer";
 import { RawDataAccordion } from "./RawDataAccordion";
+import { ProgressIndicator } from "./ProgressIndicator";
 
 // const jobStatus = "running"; // This could be "Running", "Completed", or "Error"
 // const modelProvider = "openai"; // This could be "OpenAI" or "Fireworks"
@@ -43,6 +43,7 @@ export default function LLMFineTuningStatus({
   status: SFTJobStatus;
 }) {
   if (status.status === "idle") return null;
+  const createdAt = extractTimestampFromUUIDv7(status.formData.jobId);
   return (
     <div className="container mx-auto space-y-6 bg-background p-6">
       <div className="space-y-4">
@@ -50,7 +51,7 @@ export default function LLMFineTuningStatus({
           <h3 className="text-lg font-semibold">
             Job{" "}
             <code className="rounded bg-muted px-1 py-0.5 text-sm">
-              {status.jobId}
+              {status.formData.jobId}
             </code>
           </h3>
           <div className="flex items-center gap-2">
@@ -93,7 +94,7 @@ export default function LLMFineTuningStatus({
           <MetadataItem
             icon={Clock}
             label="Created"
-            value={extractTimestampFromUUIDv7(status.jobId).toLocaleString()}
+            value={createdAt.toLocaleString()}
             isRaw
           />
         </div>
@@ -109,11 +110,12 @@ export default function LLMFineTuningStatus({
                   endTime={status.estimatedCompletionTime.getTime()}
                 />
               </div>
-              <Progress value={75} className="w-full" />
+              <ProgressIndicator
+                createdAt={createdAt}
+                estimatedCompletion={status.estimatedCompletionTime}
+              />
             </div>
           )}
-
-        <RawDataAccordion rawData={status.rawData} />
 
         <a
           href={status.jobUrl}
@@ -124,6 +126,7 @@ export default function LLMFineTuningStatus({
           View Job Details
           <ExternalLink className="ml-1 h-4 w-4" />
         </a>
+        <RawDataAccordion rawData={status.rawData} />
       </div>
     </div>
   );

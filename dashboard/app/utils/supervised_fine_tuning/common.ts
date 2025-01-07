@@ -38,7 +38,6 @@ export type SFTJobStatus =
       status: "running";
       modelProvider: ProviderType;
       formData: SFTFormValues;
-      jobId: string;
       jobUrl: string;
       rawData: RawData;
       estimatedCompletionTime?: Date;
@@ -47,7 +46,6 @@ export type SFTJobStatus =
       status: "completed";
       modelProvider: ProviderType;
       formData: SFTFormValues;
-      jobId: string;
       jobUrl: string;
       rawData: RawData;
       result: string;
@@ -56,7 +54,6 @@ export type SFTJobStatus =
       status: "error";
       modelProvider: ProviderType;
       formData: SFTFormValues;
-      jobId: string;
       jobUrl: string;
       rawData: RawData;
       error: string;
