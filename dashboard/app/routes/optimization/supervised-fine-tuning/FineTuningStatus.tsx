@@ -14,28 +14,6 @@ import { MetadataItem } from "./MetadataItem";
 import { RawDataAccordion } from "./RawDataAccordion";
 import { ProgressIndicator } from "./ProgressIndicator";
 
-// const jobStatus = "running"; // This could be "Running", "Completed", or "Error"
-// const modelProvider = "openai"; // This could be "OpenAI" or "Fireworks"
-// const jobId = "ft-1234567890";
-// const createdTime = new Date("2024-01-06T11:00:53.000Z");
-// const baseModel = "gpt-4o-mini-2024-07-18";
-// const functionName = "write_haiku";
-// const metric = "user_score";
-// const prompt = "v2";
-
-// const rawData = {
-//   id: jobId,
-//   status: jobStatus,
-//   provider: modelProvider,
-//   created_at: createdTime.toISOString(),
-//   base_model: baseModel,
-//   estimated_completion: estimatedCompletionTime.toISOString(),
-//   function: functionName,
-//   metric: metric,
-//   prompt: prompt,
-//   // Add more fields as needed
-// };
-
 export default function LLMFineTuningStatus({
   status,
 }: {
