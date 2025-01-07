@@ -1,5 +1,5 @@
 import { Progress } from "~/components/ui/progress";
-import { CountdownTimer } from "./CountdownTimer";
+import { CountdownTimer } from "~/components/ui/CountdownTimer";
 
 function getProgressPercentage(
   createdAt: Date,

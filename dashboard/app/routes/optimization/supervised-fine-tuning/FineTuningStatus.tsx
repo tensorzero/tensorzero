@@ -11,7 +11,6 @@ import type { SFTJobStatus } from "~/utils/supervised_fine_tuning/common";
 import { ModelBadge } from "~/components/model/ModelBadge";
 import { extractTimestampFromUUIDv7 } from "~/utils/common";
 import { MetadataItem } from "./MetadataItem";
-import { CountdownTimer } from "./CountdownTimer";
 import { RawDataAccordion } from "./RawDataAccordion";
 import { ProgressIndicator } from "./ProgressIndicator";
 
@@ -104,12 +103,6 @@ export default function LLMFineTuningStatus({
           "estimatedCompletionTime" in status &&
           status.estimatedCompletionTime && (
             <div className="max-w-lg space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-medium">Estimated Completion</span>
-                <CountdownTimer
-                  endTime={status.estimatedCompletionTime.getTime()}
-                />
-              </div>
               <ProgressIndicator
                 createdAt={createdAt}
                 estimatedCompletion={status.estimatedCompletionTime}
