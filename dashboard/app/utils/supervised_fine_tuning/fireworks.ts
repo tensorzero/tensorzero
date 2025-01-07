@@ -34,8 +34,6 @@ import { getConfig } from "../config/index.server";
 import { get_template_env, type ChatCompletionConfig } from "../config/variant";
 import { z } from "zod";
 import { SFTJob, type SFTJobStatus } from "./common";
-import type { ProviderType } from "../config/models";
-import type { ProgressInfo } from "~/routes/optimization/supervised-fine-tuning/ProgressIndicator";
 export const FIREWORKS_API_URL = "https://api.fireworks.ai";
 export const FIREWORKS_API_KEY = process.env.FIREWORKS_API_KEY || logError();
 export const FIREWORKS_ACCOUNT_ID =
@@ -54,6 +52,7 @@ interface FireworksSFTJobParams {
   modelId?: string;
   modelPath?: string;
   jobInfo: JobInfo;
+  formData: SFTFormValues;
 }
 
 type JobInfo =
@@ -73,6 +72,7 @@ export class FireworksSFTJob extends SFTJob {
   public modelId?: string;
   public modelPath?: string;
   public jobInfo: JobInfo;
+  public formData: SFTFormValues;
 
   constructor(params: FireworksSFTJobParams) {
     super();
@@ -82,6 +82,7 @@ export class FireworksSFTJob extends SFTJob {
     this.modelId = params.modelId;
     this.modelPath = params.modelPath;
     this.jobInfo = params.jobInfo;
+    this.formData = params.formData;
   }
 
   static async from_form_data(data: SFTFormValues): Promise<FireworksSFTJob> {
@@ -132,43 +133,55 @@ export class FireworksSFTJob extends SFTJob {
         status: "ok",
         info: jobInfo,
       },
+      formData: data,
     });
   }
 
-  provider(): ProviderType {
-    return "fireworks";
+  private get jobUrl(): string {
+    const jobId = this.jobPath.split("/").pop();
+    if (!jobId) {
+      throw new Error("Failed to parse job ID from path");
+    }
+    return `https://fireworks.ai/dashboard/fine-tuning/${jobId}`;
   }
 
   status(): SFTJobStatus {
-    if (this.jobStatus === "FAILED") return "error";
-    return this.jobStatus === "DEPLOYED" ? "completed" : "running";
-  }
-
-  result(): string | undefined {
-    return this.modelPath;
-  }
-
-  progress_info(): ProgressInfo {
-    const jobUrl = fireworks_job_url_from_path(this.jobPath);
-    if (
-      this.jobInfo &&
-      typeof this.jobInfo === "object" &&
-      "status" in this.jobInfo
-    ) {
-      if (this.jobInfo.status === "error") {
-        return {
-          provider: "error",
-          data: {
-            message: this.jobInfo.message,
-          },
-          jobUrl: jobUrl,
-        };
+    if (this.jobStatus === "FAILED") {
+      const error =
+        this.jobInfo.status === "error"
+          ? this.jobInfo.message
+          : "Unknown error";
+      return {
+        status: "error",
+        modelProvider: "fireworks",
+        formData: this.formData,
+        jobId: this.jobId,
+        jobUrl: this.jobUrl,
+        rawData: this.jobInfo,
+        error: error,
+      };
+    }
+    if (this.jobStatus === "DEPLOYED") {
+      if (!this.modelPath) {
+        throw new Error("Model path is undefined for deployed job");
       }
+      return {
+        status: "completed",
+        modelProvider: "fireworks",
+        formData: this.formData,
+        jobId: this.jobId,
+        jobUrl: this.jobUrl,
+        result: this.modelPath,
+        rawData: this.jobInfo,
+      };
     }
     return {
-      provider: "fireworks",
-      data: this.jobInfo,
-      jobUrl: jobUrl,
+      status: "running",
+      modelProvider: "fireworks",
+      formData: this.formData,
+      jobId: this.jobId,
+      jobUrl: this.jobUrl,
+      rawData: this.jobInfo,
     };
   }
 
@@ -195,6 +208,7 @@ export class FireworksSFTJob extends SFTJob {
               status: "ok",
               info: jobInfo,
             },
+            formData: this.formData,
           });
         } else {
           return new FireworksSFTJob({
@@ -207,6 +221,7 @@ export class FireworksSFTJob extends SFTJob {
               status: "ok",
               info: jobInfo,
             },
+            formData: this.formData,
           });
         }
       } else {
@@ -228,6 +243,7 @@ export class FireworksSFTJob extends SFTJob {
               status: "ok",
               info: deployModelResponse,
             },
+            formData: this.formData,
           });
         } else {
           return new FireworksSFTJob({
@@ -240,6 +256,7 @@ export class FireworksSFTJob extends SFTJob {
               status: "ok",
               info: deployModelResponse,
             },
+            formData: this.formData,
           });
         }
       }
@@ -254,6 +271,7 @@ export class FireworksSFTJob extends SFTJob {
           status: "error",
           message: error instanceof Error ? error.message : String(error),
         },
+        formData: this.formData,
       });
     }
   }
@@ -687,12 +705,4 @@ async function create_fine_tuning_job(
       }`,
     );
   }
-}
-
-function fireworks_job_url_from_path(path: string): string {
-  const jobId = path.split("/").pop();
-  if (!jobId) {
-    throw new Error("Failed to parse job ID from path");
-  }
-  return `https://fireworks.ai/dashboard/fine-tuning/${jobId}`;
 }

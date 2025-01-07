@@ -18,8 +18,6 @@ import type { JsExposedEnv } from "../minijinja/pkg/minijinja_bindings";
 import { splitValidationData, type SFTJobStatus } from "./common";
 import { render_message } from "./rendering";
 import { SFTJob } from "./common";
-import type { ProviderType } from "../config/models";
-import type { ProgressInfo } from "~/routes/optimization/supervised-fine-tuning/ProgressIndicator";
 
 export const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -40,6 +38,7 @@ interface OpenAISFTJobParams {
   status: string;
   fineTunedModel?: string;
   job: JobInfo;
+  formData: SFTFormValues;
 }
 
 export class OpenAISFTJob extends SFTJob {
@@ -47,13 +46,14 @@ export class OpenAISFTJob extends SFTJob {
   public jobStatus: string;
   public fineTunedModel?: string;
   public job: JobInfo;
-
+  public formData: SFTFormValues;
   constructor(params: OpenAISFTJobParams) {
     super();
     this.jobId = params.jobId;
     this.jobStatus = params.status;
     this.fineTunedModel = params.fineTunedModel;
     this.job = params.job;
+    this.formData = params.formData;
   }
 
   static async from_form_data(data: SFTFormValues): Promise<OpenAISFTJob> {
@@ -85,6 +85,7 @@ export class OpenAISFTJob extends SFTJob {
         curatedInferences,
         data.validationSplitPercent,
         templateEnv,
+        data,
       );
     } catch (error) {
       throw new Error(
@@ -95,39 +96,50 @@ export class OpenAISFTJob extends SFTJob {
     }
     return job;
   }
-
-  result(): string | undefined {
-    return this.fineTunedModel;
-  }
-
-  provider(): ProviderType {
-    return "openai";
+  private get jobUrl(): string {
+    return `https://platform.openai.com/finetune/${this.jobId}`;
   }
 
   status(): SFTJobStatus {
-    if (this.jobStatus === "failed") return "error";
-    return this.jobStatus === "succeeded" ? "completed" : "running";
-  }
-
-  progress_info(): ProgressInfo {
-    if (this.job.status === "error") {
+    if (this.jobStatus === "failed") {
+      const error =
+        this.job.status === "error" ? this.job.message : "Unknown error";
       return {
-        provider: "error",
-        data: {
-          message: this.job.message || "Unknown error occurred",
-        },
-        jobUrl: `https://platform.openai.com/finetune/${this.jobId}`,
+        status: "error",
+        modelProvider: "openai",
+        formData: this.formData,
+        jobId: this.jobId,
+        jobUrl: this.jobUrl,
+        rawData: this.job,
+        error: error,
       };
     }
-    const estimatedCompletionTimestamp = this.job.info.estimated_finish
-      ? this.job.info.estimated_finish * 1000
-      : undefined;
-
+    if (this.jobStatus === "succeeded") {
+      if (!this.fineTunedModel) {
+        throw new Error("Fine-tuned model is undefined");
+      }
+      return {
+        status: "completed",
+        modelProvider: "openai",
+        formData: this.formData,
+        jobId: this.jobId,
+        jobUrl: this.jobUrl,
+        rawData: this.job,
+        result: this.fineTunedModel,
+      };
+    }
+    const estimatedCompletionTime =
+      this.job.status === "ok" ? this.job.info.estimated_finish : undefined;
     return {
-      provider: "openai",
-      data: this.job.info,
-      estimatedCompletionTimestamp: estimatedCompletionTimestamp,
-      jobUrl: `https://platform.openai.com/finetune/${this.jobId}`,
+      status: "running",
+      modelProvider: "openai",
+      formData: this.formData,
+      jobId: this.jobId,
+      rawData: this.job,
+      jobUrl: this.jobUrl,
+      estimatedCompletionTime: estimatedCompletionTime
+        ? new Date(estimatedCompletionTime)
+        : undefined,
     };
   }
 
@@ -144,6 +156,7 @@ export class OpenAISFTJob extends SFTJob {
         status: "ok",
         info: job,
       },
+      formData: this.formData,
     });
   }
 }
@@ -153,6 +166,7 @@ export async function start_sft_openai(
   inferences: ParsedInferenceRow[],
   validationSplitPercent: number,
   templateEnv: JsExposedEnv,
+  formData: SFTFormValues,
 ) {
   const { trainInferences, valInferences } = splitValidationData(
     inferences,
@@ -182,6 +196,7 @@ export async function start_sft_openai(
       status: "ok",
       info: job,
     },
+    formData,
   });
 }
 

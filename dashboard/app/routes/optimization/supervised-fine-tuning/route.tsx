@@ -35,7 +35,8 @@ import type { Route } from "./+types/route";
 // import type { Route as CuratedInferencesCount } from "../../api/curated_inferences/+types/count.route";
 import type { CountsData } from "../../api/curated_inferences/count.route";
 import type { Config } from "~/utils/config";
-import { ProgressIndicator, type ProgressInfo } from "./ProgressIndicator";
+// import { ProgressIndicator, type ProgressInfo } from "./ProgressIndicator";
+import FineTuningStatus from "./FineTuningStatus";
 
 export const meta: MetaFunction = () => {
   return [
@@ -51,22 +52,34 @@ export const meta: MetaFunction = () => {
 export const jobStore: { [jobId: string]: SFTJob } = {};
 
 // TODO: remove once we're happy
-function get_progress_fixture(provider: ProviderType): LoaderData {
+function get_progress_fixture(provider: ProviderType): SFTJobStatus {
   // 25% chance of returning an error
-  if (Math.random() < 0.25) {
+  if (Math.random() < 0.8) {
     return {
       status: "running",
-      result: undefined,
       modelProvider: provider,
-      progressInfo: {
-        provider: "error",
-        data: {
-          message: "Simulated error occurred during fine-tuning",
+      formData: {
+        function: "dashboard_fixture_write_haiku",
+        metric: "dashboard_fixture_haiku_rating",
+        jobId: "01943d5f-d649-7e0c-95b7-04b7944128ea",
+        model: {
+          displayName: "gpt-4o-mini-2024-07-18",
+          name: "gpt-4o-mini-2024-07-18",
+          provider: "openai",
         },
-        jobUrl:
-          provider === "openai"
-            ? "https://platform.openai.com/finetune/ftjob-abc123"
-            : "https://fireworks.ai/dashboard/fine-tuning/ftjob-abc123",
+        variant: "baseline",
+        validationSplitPercent: 20,
+        maxSamples: 94,
+        threshold: 0.5,
+      },
+      jobId: "01943d5f-d649-7e0c-95b7-04b7944128ea",
+      jobUrl:
+        provider === "openai"
+          ? "https://platform.openai.com/finetune/ftjob-abc123"
+          : "https://fireworks.ai/dashboard/fine-tuning/ftjob-abc123",
+      rawData: {
+        status: "error",
+        message: "Simulated error occurred during fine-tuning",
       },
     };
   }
@@ -75,62 +88,82 @@ function get_progress_fixture(provider: ProviderType): LoaderData {
     case "openai":
       return {
         status: "running",
-        result: undefined,
         modelProvider: "openai",
-        progressInfo: {
-          jobUrl: "https://platform.openai.com/finetune/ftjob-abc123",
-          provider: "openai",
-          data: {
-            object: "fine_tuning.job",
-            id: "ftjob-abc123",
-            model: "davinci-002",
-            created_at: 1692661014,
-            finished_at: 1692661190,
-            fine_tuned_model: "ft:davinci-002:my-org:custom_suffix:7q8mpxmy",
-            organization_id: "org-123",
-            result_files: ["file-abc123"],
-            status: "succeeded",
-            validation_file: null,
-            training_file: "file-abc123",
-            hyperparameters: {
-              n_epochs: 4,
-              batch_size: 1,
-              learning_rate_multiplier: 1.0,
-            },
-            trained_tokens: 5768,
-            integrations: [],
-            seed: 0,
-            estimated_finish: 0,
-            method: {
-              type: "supervised",
-              supervised: {
-                hyperparameters: {
-                  n_epochs: 4,
-                  batch_size: 1,
-                  learning_rate_multiplier: 1.0,
-                },
-              },
-            },
+        formData: {
+          function: "dashboard_fixture_write_haiku",
+          metric: "dashboard_fixture_haiku_rating",
+          model: {
+            displayName: "gpt-4o-mini-2024-07-18",
+            name: "gpt-4o-mini-2024-07-18",
+            provider: "openai",
           },
-          estimatedCompletionTimestamp: Math.floor(Date.now()) + 300000,
+          variant: "baseline",
+          validationSplitPercent: 20,
+          maxSamples: 94,
+          threshold: 0.5,
+          jobId: "01944200-d290-706d-b2f2-ca958d7ced80",
         },
+        jobId: "ftjob-eC8vFeECwiVKNrjDxNrBkIvH",
+        rawData: {
+          status: "ok",
+          info: {
+            object: "fine_tuning.job",
+            id: "ftjob-eC8vFeECwiVKNrjDxNrBkIvH",
+            model: "gpt-4o-mini-2024-07-18",
+            created_at: 1736274146,
+            finished_at: null,
+            fine_tuned_model: null,
+            organization_id: "org-fewHWgmYjDeYGco5co60C7fh",
+            result_files: [],
+            status: "validating_files",
+            validation_file: "file-EsNbLPMX57KNArvLqyMuph",
+            training_file: "file-NoXMdRuTTQq5X7vRB95TJ8",
+            hyperparameters: [Object],
+            trained_tokens: null,
+            error: {},
+            user_provided_suffix: null,
+            seed: 1683600021,
+            estimated_finish: null,
+            integrations: [],
+            method: [Object],
+          },
+        },
+        estimatedCompletionTime: new Date(Date.now() + 15 * 60 * 1000),
+        jobUrl:
+          "https://platform.openai.com/finetune/ftjob-eC8vFeECwiVKNrjDxNrBkIvH",
       };
     case "fireworks":
       return {
         status: "running",
         modelProvider: "fireworks",
-        result: undefined,
-        progressInfo: {
-          provider: "fireworks",
-          data: {
-            state: "PENDING",
+        formData: {
+          function: "dashboard_fixture_extract_entities",
+          metric: "dashboard_fixture_exact_match",
+          model: {
+            displayName: "llama-3.1-8b-instruct",
+            name: "accounts/fireworks/models/llama-v3p1-8b-instruct",
+            provider: "fireworks",
+          },
+          variant: "baseline",
+          validationSplitPercent: 20,
+          maxSamples: 41,
+          threshold: 0.5,
+          jobId: "019441ec-cecb-7489-b59e-a2aa2ee942c1",
+        },
+        jobId: "019441ec-cecb-7489-b59e-a2aa2ee942c1",
+        jobUrl:
+          "https://fireworks.ai/dashboard/fine-tuning/c3b0372cb74e4155ba2811ca3c41e0bb",
+        rawData: {
+          status: "ok",
+          info: {
+            state: "RUNNING",
             modelId: "",
             baseModel: "accounts/fireworks/models/llama-v3p1-8b-instruct",
             batchSize: 16,
-            createTime: "2024-12-28T15:16:43.649092Z",
+            createTime: "2025-01-07T18:00:35.637282Z",
             createdBy: "viraj@tensorzero.com",
             dataset:
-              "accounts/viraj-ebfe5a/datasets/01940dd7-4f65-716a-a257-6da73412fe87",
+              "accounts/viraj-ebfe5a/datasets/019441ec-ed15-73bc-8cf7-a1ef8533dcd8",
             evaluationSplit: 0.2,
             evaluation: false,
             evaluationDataset: "",
@@ -139,31 +172,21 @@ function get_progress_fixture(provider: ProviderType): LoaderData {
             loraTargetModules: [],
             maskToken: "",
             microBatchSize: 0,
-            name: "accounts/viraj-ebfe5a/fineTuningJobs/ed8f3dead9d74b7fbe0623f039d151e3",
+            name: "accounts/viraj-ebfe5a/fineTuningJobs/c3b0372cb74e4155ba2811ca3c41e0bb",
             padToken: "",
-            status: {
-              code: "OK",
-              message: "",
-            },
+            status: [Object],
           },
-          jobUrl: "https://fireworks.ai/dashboard/fine-tuning/ftjob-abc123",
         },
       };
     default:
       throw new Error(`Unknown provider: ${provider}`);
   }
 }
-interface LoaderData {
-  status: SFTJobStatus;
-  result: string | undefined;
-  modelProvider: ProviderType | undefined;
-  progressInfo: ProgressInfo | undefined;
-}
 
 // If there is a job_id in the URL, grab it from the job store and pull it.
 export async function loader({
   params,
-}: Route.LoaderArgs): Promise<LoaderData | { status: "error"; error: string }> {
+}: Route.LoaderArgs): Promise<SFTJobStatus> {
   // for debugging ProgressIndicator without starting a real job
   // return get_progress_fixture("openai");
   const job_id = params.job_id;
@@ -171,9 +194,6 @@ export async function loader({
   if (!job_id) {
     return {
       status: "idle",
-      result: undefined,
-      modelProvider: undefined,
-      progressInfo: undefined,
     };
   }
 
@@ -183,37 +203,13 @@ export async function loader({
       status: 404,
     });
   }
-  if (storedJob.status() === "completed" || storedJob.status() === "error") {
-    return {
-      status: storedJob.status(),
-      result: storedJob.result(),
-      modelProvider: storedJob.provider(),
-      progressInfo: storedJob.progress_info(),
-    };
-  }
 
   // Poll for updates
   const updatedJob = await storedJob.poll();
   jobStore[job_id] = updatedJob;
-
-  const result = updatedJob.result();
   const status = updatedJob.status();
-  const modelProvider = updatedJob.provider();
-  const progressInfo = updatedJob.progress_info();
-  const loaderData = {
-    status,
-    result,
-    modelProvider,
-    progressInfo,
-  };
-  console.log(loaderData);
-
-  return {
-    status,
-    result,
-    modelProvider,
-    progressInfo,
-  };
+  console.log("status", status);
+  return status;
 }
 
 // The action actually launches the fine-tuning job.
@@ -252,12 +248,10 @@ export default function SupervisedFineTuning({
   const config = useConfig();
   if (loaderData.status === "error") {
     return (
-      <div className="text-sm text-red-500">
-        Error: {(loaderData as { error: string }).error}
-      </div>
+      <div className="text-sm text-red-500">Error: {loaderData.error}</div>
     );
   }
-  const { status, result, modelProvider, progressInfo } = loaderData;
+  const status = loaderData;
   const revalidator = useRevalidator();
 
   const [submissionPhase, setSubmissionPhase] = useState<
@@ -266,7 +260,7 @@ export default function SupervisedFineTuning({
 
   // If running, periodically poll for updates on the job
   useEffect(() => {
-    if (status === "running") {
+    if (status.status === "running") {
       setSubmissionPhase("pending");
       const interval = setInterval(() => {
         revalidator.revalidate();
@@ -276,8 +270,10 @@ export default function SupervisedFineTuning({
   }, [status, revalidator]);
 
   const finalResult =
-    result && modelProvider
-      ? dump_model_config(get_fine_tuned_model_config(result, modelProvider))
+    status.status === "completed"
+      ? dump_model_config(
+          get_fine_tuned_model_config(status.result, status.modelProvider),
+        )
       : null;
   if (finalResult && submissionPhase !== "complete") {
     setSubmissionPhase("complete");
@@ -288,7 +284,7 @@ export default function SupervisedFineTuning({
       <main>
         <h2 className="mb-4 text-2xl font-semibold">Supervised Fine-Tuning</h2>
         <div className="mb-6 h-px w-full bg-gray-200"></div>
-        {status === "idle" && (
+        {status.status === "idle" && (
           <FineTuningForm
             config={config}
             submissionPhase={submissionPhase}
@@ -296,6 +292,8 @@ export default function SupervisedFineTuning({
           />
         )}
 
+        {/* {status !== "idle" && <ProgressIndicator progressInfo={progressInfo} />} */}
+        {<FineTuningStatus status={status} />}
         {finalResult && (
           <div className="mt-4 rounded-lg bg-gray-100 p-4">
             <div className="mb-2 font-medium">Configuration</div>
@@ -306,8 +304,6 @@ export default function SupervisedFineTuning({
             />
           </div>
         )}
-
-        {status !== "idle" && <ProgressIndicator progressInfo={progressInfo} />}
       </main>
     </div>
   );
