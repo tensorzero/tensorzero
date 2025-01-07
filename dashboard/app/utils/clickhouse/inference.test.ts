@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import {
+  countInferencesForEpisode,
   queryEpisodeTable,
   queryEpisodeTableBounds,
   queryInferenceTable,
@@ -301,6 +302,14 @@ test("queryInferenceTableBounds with episode_id", async () => {
   expect(bounds.last_id).toBe("01942e27-5a2b-75b3-830c-094f82096270");
 });
 
+test("queryInferenceTableBounds with invalid episode_id", async () => {
+  const bounds = await queryInferenceTableBoundsByEpisodeId({
+    episode_id: "01942e26-6497-7910-89d6-d9c1c735d3df",
+  });
+  expect(bounds.first_id).toBe(null);
+  expect(bounds.last_id).toBe(null);
+});
+
 test("queryEpisodeTable", async () => {
   const episodes = await queryEpisodeTable({
     page_size: 10,
@@ -458,4 +467,16 @@ test("queryEpisodeTable pages through all results correctly using after", async 
   expect(numFullPages).toBeGreaterThan(8);
 });
 
-// TODO (Viraj): Add tests for countInferencesForEpisode
+test("countInferencesForEpisode", async () => {
+  const count = await countInferencesForEpisode(
+    "01942e26-549f-7153-ac56-dd1d23d30f8c",
+  );
+  expect(count).toBe(43);
+});
+
+test("countInferencesForEpisode with invalid episode_id", async () => {
+  const count = await countInferencesForEpisode(
+    "01942e26-549f-7153-ac56-dd1d23d30f8d",
+  );
+  expect(count).toBe(0);
+});
