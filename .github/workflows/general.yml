@@ -79,7 +79,7 @@ jobs:
 
       - name: Install npm dependencies
         working-directory: dashboard
-        run: npm install --platform=linux
+        run: npm install --platform=linux --legacy-peer-deps cmdk
 
       - name: Run ESLint
         working-directory: dashboard

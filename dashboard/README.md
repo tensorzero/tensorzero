@@ -11,7 +11,8 @@ Our goals for this project are to:
   - [ ] Supervised fine-tuning
   - [ ] Dynamic in-context learning
 
-- [ ] Allow users to review inferences and episodes and provide feedback to either.
+- [x] Allow users to review inferences and episodes
+- [ ]and provide feedback to either.
 - [ ] Provide an easy dashboard showing the relative performance of different variants for a particular function.
 - [ ] Allow users to edit the configuration through the dashboard.
 
@@ -37,7 +38,7 @@ It also requires a one-time build of a WebAssembly module from Rust source code 
 
 Here are the steps in order to run or test the dashboard assuming you have the prerequisites installed and this repository checked out:
 
-1. Install npm dependencies: `npm install`
+1. Install npm dependencies: `npm install --legacy-peer-deps cmdk`
 2. Build the WebAssembly module following instructions in `app/utils/minijinja/README.md`.
 3. Create a `.env` file in the `dashboard` directory and set the following environment variables for the server:
 
