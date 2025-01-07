@@ -270,7 +270,6 @@ export default function SupervisedFineTuning({
           />
         )}
 
-        {/* {status !== "idle" && <ProgressIndicator progressInfo={progressInfo} />} */}
         {<FineTuningStatus status={status} />}
         <SFTResult finalResult={finalResult} />
       </main>

@@ -1,3 +1,9 @@
+/**
+ * Component that displays the status and details of a Language Model Fine-Tuning job.
+ * Shows metadata like job ID, status, base model, function, metrics, and progress.
+ * Includes links to external job details and raw data visualization.
+ */
+
 import { Badge } from "~/components/ui/badge";
 import {
   Clock,

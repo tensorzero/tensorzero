@@ -354,6 +354,9 @@ async function get_fine_tuning_job_details(
 // Once a model has been fine-tuned, we should deploy it
 // This is a separate step from the fine-tuning job
 // NOTE: If unused, the model will be un-deployed after 7 days
+// This function is called both to deploy the model and to poll for the deployment status
+// NOTE: If the model has already been requested to be deployed,
+// the API actually returns 400 along with the deployment status in the message
 async function deploy_model_request(accountId: string, modelId: string) {
   const url = new URL(
     `v1/accounts/${accountId}/deployedModels`,
@@ -377,8 +380,6 @@ async function deploy_model_request(accountId: string, modelId: string) {
     },
     body: JSON.stringify(body),
   };
-  console.log("fireworks url", url);
-  console.log("fireworks options", options);
 
   try {
     const response = await fetch(url, options);
