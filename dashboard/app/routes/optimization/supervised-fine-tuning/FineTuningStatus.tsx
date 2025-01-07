@@ -102,31 +102,3 @@ export default function LLMFineTuningStatus({
     </div>
   );
 }
-
-/*
- <Accordion
-          type="single"
-          collapsible
-          className="w-full rounded-md border"
-          /* If rawData exists, is an object with a status property that equals "error",
-             automatically expand the raw data accordion to show error details.
-             Otherwise leave accordion collapsed by setting defaultValue to undefined
-             defaultValue={
-                status.rawData &&
-                typeof status.rawData === "object" &&
-                "status" in status.rawData &&
-                status.rawData.status === "error"
-                  ? "raw-data"
-                  : undefined
-              }
-            >
-              <AccordionItem value="raw-data" className="border-none">
-                <AccordionTrigger className="px-4">Raw Data</AccordionTrigger>
-                <AccordionContent className="px-4">
-                  <pre className="overflow-x-auto rounded-md bg-muted p-4">
-                    {JSON.stringify(status.rawData, null, 2)}
-                  </pre>
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
-*/
