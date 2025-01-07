@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use tracing::instrument;
 
@@ -113,6 +113,17 @@ impl<'c> Config<'c> {
             .into_iter()
             .map(|(name, config)| config.load(&base_path, name.clone()).map(|c| (name, c)))
             .collect::<Result<HashMap<String, StaticToolConfig>, Error>>()?;
+        // Validate that all tools have unique names.
+        let mut seen_names = HashSet::new();
+        for tool_config in tools.values() {
+            let tool_name = &tool_config.name;
+            if !seen_names.insert(tool_name) {
+                return Err(ErrorDetails::Config {
+                    message: format!("Duplicate tool name: '{}' in tool configs", tool_name),
+                }
+                .into());
+            }
+        }
 
         let mut config = Config {
             gateway,
@@ -473,6 +484,7 @@ impl UninitializedVariantConfig {
 
 #[derive(Debug, Deserialize)]
 pub struct UninitializedToolConfig {
+    pub name: Option<String>,
     pub description: String,
     pub parameters: PathBuf,
     #[serde(default)]
@@ -483,11 +495,15 @@ impl UninitializedToolConfig {
     pub fn load<P: AsRef<Path>>(
         self,
         base_path: P,
-        name: String,
+        table_id: String,
     ) -> Result<StaticToolConfig, Error> {
         let parameters = JSONSchemaFromPath::new(self.parameters, base_path.as_ref())?;
+        let tool_name = match self.name {
+            Some(value) => value,
+            None => table_id.clone(),
+        };
         Ok(StaticToolConfig {
-            name,
+            name: tool_name,
             description: self.description,
             parameters,
             strict: self.strict,
@@ -613,6 +629,18 @@ mod tests {
                 assert_eq!(openai_config.model_name, "text-embedding-3-small");
             }
             _ => panic!("Expected an OpenAI provider"),
+        }
+        // Check that the optional name field is used in tool config.
+        if let Some(temp_config) = config.tools.get("get_temperatureA") {
+            assert_eq!(temp_config.name, "temperature_tool");
+        } else {
+            panic!("Key 'get_temperatureA' not found in config.tools");
+        }
+        // Use table name if name field is not provided in tool config.
+        if let Some(temp_config) = config.tools.get("get_temperature") {
+            assert_eq!(temp_config.name, "get_temperature");
+        } else {
+            panic!("Key 'get_temperatureA' not found in config.tools");
         }
     }
 
@@ -944,6 +972,21 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("unknown field `enable_agi`, expected"));
+    }
+
+    #[test]
+    fn test_config_from_toml_table_duplicate_tool_names() {
+        let mut config = get_sample_valid_config();
+        config["tools"]["get_temperature"]
+            .as_table_mut()
+            .expect("Failed to get `get_temperature` section")
+            .insert("name".into(), "temperature_tool".into());
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, base_path);
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Duplicate tool name: 'temperature_tool' in tool configs"));
     }
 
     /// Ensure that the config validation fails when a model has no providers in `routing`
@@ -1457,7 +1500,7 @@ mod tests {
 
         [functions.weather_helper]
         type = "chat"
-        tools = ["get_temperature"]
+        tools = ["get_temperature", "get_temperatureA"]
         tool_choice = {specific = "get_temperature"}
 
         [functions.weather_helper.variants.openai_promptA]
@@ -1547,6 +1590,12 @@ mod tests {
         [tools.get_temperature]
         description = "Get the weather for a given location"
         parameters = "fixtures/config/tools/get_temperature.json"
+
+        [tools.get_temperatureA]
+        name = "temperature_tool"
+        description = "Get the weather for a given location"
+        parameters = "fixtures/config/tools/get_temperature.json"
+
         "#;
         env::set_var("OPENAI_API_KEY", "sk-something");
         env::set_var("ANTHROPIC_API_KEY", "sk-something");
