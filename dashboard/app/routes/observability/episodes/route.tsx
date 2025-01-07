@@ -6,6 +6,7 @@ import type { Route } from "./+types/route";
 import EpisodesTable from "./EpisodesTable";
 import { data, isRouteErrorResponse, useNavigate } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
+import EpisodeSearchBar from "./EpisodeSearchBar";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -54,6 +55,10 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      <h2 className="mb-4 text-2xl font-semibold">Episodes</h2>
+      <div className="mb-6 h-px w-full bg-gray-200"></div>
+      <EpisodeSearchBar />
+      <div className="my-6 h-px w-full bg-gray-200"></div>
       <EpisodesTable episodes={episodes} />
       <PageButtons
         onPreviousPage={handlePreviousPage}

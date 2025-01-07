@@ -62,6 +62,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     countInferencesForEpisode(episode_id),
     countFeedbackByTargetId(episode_id),
   ]);
+  if (inferences.length === 0) {
+    throw data(`No inferences found for episode ${episode_id}.`, {
+      status: 404,
+    });
+  }
 
   return {
     episode_id,

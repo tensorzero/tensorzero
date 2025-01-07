@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Table,
   TableBody,
@@ -7,8 +6,6 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
 import type { EpisodeByIdRow } from "~/utils/clickhouse/inference";
 
 export default function EpisodesTable({
@@ -16,16 +13,6 @@ export default function EpisodesTable({
 }: {
   episodes: EpisodeByIdRow[];
 }) {
-  const [goToId, setGoToId] = useState("");
-
-  // TODO: wire this to go the the details page for a particular inference, maybe add a popover.
-  const handleGoTo = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    // TODO: Implement episode navigation and highlighting
-    console.log("Go to episode:", goToId);
-    setGoToId("");
-  };
-
   const formatTimeRange = (startTime: Date, endTime: Date, count: number) => {
     const formatOptions: Intl.DateTimeFormatOptions = {
       year: "numeric",
@@ -45,21 +32,6 @@ export default function EpisodesTable({
 
   return (
     <div>
-      <h2 className="mb-4 text-2xl font-semibold">Episodes</h2>
-      <div className="mb-6 h-px w-full bg-gray-200"></div>
-      <form onSubmit={handleGoTo} className="mb-4">
-        <div className="flex gap-2">
-          <Input
-            type="text"
-            placeholder="00000000-0000-0000-0000-000000000000"
-            value={goToId}
-            onChange={(e) => setGoToId(e.target.value)}
-            className="flex-grow"
-          />
-          <Button type="submit">Go to Episode</Button>
-        </div>
-      </form>
-      <div className="my-6 h-px w-full bg-gray-200"></div>
       <Table>
         <TableHeader>
           <TableRow>
