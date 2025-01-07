@@ -1,5 +1,3 @@
-use std::env;
-
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest_eventsource::RequestBuilderExt;
@@ -16,7 +14,7 @@ use crate::inference::types::{
     ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream,
 };
-use crate::model::CredentialLocation;
+use crate::model::{Credential, CredentialLocation};
 
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
@@ -35,6 +33,9 @@ fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("XAI_API_KEY".to_string())
 }
 
+const PROVIDER_NAME: &str = "xAI";
+const PROVIDER_TYPE: &str = "xai";
+
 #[derive(Debug)]
 pub struct XAIProvider {
     pub model_name: String,
@@ -46,26 +47,13 @@ impl XAIProvider {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
-        let credentials = match api_key_location {
-            CredentialLocation::Env(key_name) => {
-                let api_key = env::var(key_name)
-                    .map_err(|_| {
-                        Error::new(ErrorDetails::ApiKeyMissing {
-                            provider_name: "xAI".to_string(),
-                        })
-                    })?
-                    .into();
-                XAICredentials::Static(api_key)
-            }
-            CredentialLocation::Dynamic(key_name) => XAICredentials::Dynamic(key_name),
-            _ => Err(Error::new(ErrorDetails::Config {
-                message: "Invalid api_key_location for xAI provider".to_string(),
-            }))?,
-        };
+        let credential_location = api_key_location.unwrap_or(default_api_key_location());
+        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
+        let provider_credentials = XAICredentials::try_from(generic_credentials)?;
+
         Ok(XAIProvider {
             model_name,
-            credentials,
+            credentials: provider_credentials,
         })
     }
 }
@@ -77,6 +65,23 @@ pub enum XAICredentials {
     None,
 }
 
+impl TryFrom<Credential> for XAICredentials {
+    type Error = Error;
+
+    fn try_from(credentials: Credential) -> Result<Self, Error> {
+        match credentials {
+            Credential::Static(key) => Ok(XAICredentials::Static(key)),
+            Credential::Dynamic(key_name) => Ok(XAICredentials::Dynamic(key_name)),
+            Credential::None => Ok(XAICredentials::None),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            Credential::Missing => Ok(XAICredentials::None),
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: "Invalid api_key_location for xAI provider".to_string(),
+            })),
+        }
+    }
+}
+
 impl XAICredentials {
     pub fn get_api_key<'a>(
         &'a self,
@@ -86,12 +91,12 @@ impl XAICredentials {
             XAICredentials::Static(api_key) => Ok(api_key),
             XAICredentials::Dynamic(key_name) => dynamic_api_keys.get(key_name).ok_or_else(|| {
                 ErrorDetails::ApiKeyMissing {
-                    provider_name: "xAI".to_string(),
+                    provider_name: PROVIDER_NAME.to_string(),
                 }
                 .into()
             }),
             XAICredentials::None => Err(ErrorDetails::ApiKeyMissing {
-                provider_name: "xAI".to_string(),
+                provider_name: PROVIDER_NAME.to_string(),
             }
             .into()),
         }
@@ -122,7 +127,7 @@ impl InferenceProvider for XAIProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request to xAI: {e}"),
                     status_code: e.status(),
-                    provider_type: "xAI".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
 
@@ -130,14 +135,14 @@ impl InferenceProvider for XAIProvider {
             let response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
-                    provider_type: "xAI".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
 
             let response = serde_json::from_str(&response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {response}"),
-                    provider_type: "xAI".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
 
@@ -157,7 +162,7 @@ impl InferenceProvider for XAIProvider {
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
                         message: format!("Error parsing error response: {e}"),
-                        provider_type: "xAI".to_string(),
+                        provider_type: PROVIDER_TYPE.to_string(),
                     })
                 })?,
             ))
@@ -181,7 +186,7 @@ impl InferenceProvider for XAIProvider {
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request: {e}"),
-                provider_type: "xAI".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         let request_url = get_chat_url(Some(&XAI_DEFAULT_BASE_URL))?;
@@ -197,7 +202,7 @@ impl InferenceProvider for XAIProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request to xAI: {e}"),
                     status_code: None,
-                    provider_type: "xAI".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
 
@@ -210,7 +215,7 @@ impl InferenceProvider for XAIProvider {
             None => {
                 return Err(ErrorDetails::InferenceServer {
                     message: "Stream ended before first chunk".to_string(),
-                    provider_type: "xAI".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 }
                 .into())
             }
@@ -225,7 +230,7 @@ impl InferenceProvider for XAIProvider {
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<BatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
-            provider_type: "xAI".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
         }
         .into())
     }
@@ -333,7 +338,7 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let raw_response = serde_json::to_string(&response).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error parsing response: {e}"),
-                provider_type: "xAI".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
 
@@ -343,7 +348,7 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                     "Response has invalid number of choices {}, Expected 1",
                     response.choices.len()
                 ),
-                provider_type: "xAI".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             }
             .into());
         }
@@ -354,7 +359,7 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             .pop()
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
-                provider_type: "xAI".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             }))?
             .message;
         let mut content: Vec<ContentBlock> = Vec::new();
@@ -369,7 +374,7 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request body as JSON: {e}"),
-                provider_type: "xAI".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         let system = generic_request.system.clone();
@@ -504,5 +509,35 @@ mod tests {
     #[test]
     fn test_xai_api_base() {
         assert_eq!(XAI_DEFAULT_BASE_URL.as_str(), "https://api.x.ai/v1");
+    }
+
+    #[test]
+    fn test_credential_to_xai_credentials() {
+        // Test Static credential
+        let generic = Credential::Static(SecretString::from("test_key"));
+        let creds: XAICredentials = XAICredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, XAICredentials::Static(_)));
+
+        // Test Dynamic credential
+        let generic = Credential::Dynamic("key_name".to_string());
+        let creds = XAICredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, XAICredentials::Dynamic(_)));
+
+        // Test Missing credential (test mode)
+        #[cfg(any(test, feature = "e2e_tests"))]
+        {
+            let generic = Credential::Missing;
+            let creds = XAICredentials::try_from(generic).unwrap();
+            assert!(matches!(creds, XAICredentials::None));
+        }
+
+        // Test invalid type
+        let generic = Credential::FileContents(SecretString::from("test"));
+        let result = XAICredentials::try_from(generic);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err().get_owned_details(),
+            ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
+        ));
     }
 }
