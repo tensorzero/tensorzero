@@ -84,6 +84,13 @@ repos:
           - typescript
         pass_filenames: false
 
+      - id: pyright
+        name: pyright
+        entry: bash -c 'cd clients && pyright'
+        language: python
+        types_or: [python]
+        pass_filenames: false
+
   - repo: https://github.com/srstevenson/nb-clean
     rev: 3.2.0
     hooks:
