@@ -1,3 +1,4 @@
+# pyright: strict
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -92,7 +93,7 @@ def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
             inference_id=UUID(data["inference_id"]),
             episode_id=UUID(data["episode_id"]),
             variant_name=data["variant_name"],
-            content=[parse_content_block(block) for block in data["content"]],
+            content=[parse_content_block(block) for block in data["content"]],  # type: ignore[var-annotated]
             usage=Usage(**data["usage"]),
         )
     elif "output" in data and isinstance(data["output"], dict):
@@ -100,7 +101,7 @@ def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
             inference_id=UUID(data["inference_id"]),
             episode_id=UUID(data["episode_id"]),
             variant_name=data["variant_name"],
-            output=JsonInferenceOutput(**data["output"]),
+            output=JsonInferenceOutput(**data["output"]),  # type: ignore[arg-type]
             usage=Usage(**data["usage"]),
         )
     else:

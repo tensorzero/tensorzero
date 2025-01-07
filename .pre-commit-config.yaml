@@ -86,7 +86,7 @@ repos:
 
       - id: pyright
         name: pyright
-        entry: bash -c 'cd clients && pyright'
+        entry: bash -c 'source .venv/bin/activate && cd clients && pyright'
         language: python
         types_or: [python]
         pass_filenames: false
