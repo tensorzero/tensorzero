@@ -102,3 +102,13 @@ test("parse e2e config", async () => {
     "../../fixtures/config/tools/get_temperature.json",
   );
 });
+
+test("missing field error path", async () => {
+  try {
+    await loadConfig("./../gateway/tests/e2e/tensorzero_missing_field.toml");
+  } catch (error) {
+    expect(error.message).toContain(
+      "missing field `type`\nin `functions.my_function.variants.my_variant`\n",
+    );
+  }
+});

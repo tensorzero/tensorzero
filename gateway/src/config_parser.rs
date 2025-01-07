@@ -105,7 +105,7 @@ impl<'c> Config<'c> {
         let functions = config
             .functions
             .into_iter()
-            .map(|(name, config)| config.load(&base_path).map(|c| (name, c)))
+            .map(|(name, config)| config.load(&base_path, &name).map(|c| (name, c)))
             .collect::<Result<HashMap<String, FunctionConfig>, Error>>()?;
 
         let tools = config
@@ -367,7 +367,7 @@ struct UninitializedFunctionConfigJson {
 }
 
 impl UninitializedFunctionConfig {
-    pub fn load<P: AsRef<Path>>(self, base_path: P) -> Result<FunctionConfig, Error> {
+    pub fn load<P: AsRef<Path>>(self, base_path: P, function_name: &str) -> Result<FunctionConfig, Error> {
         match self {
             UninitializedFunctionConfig::Chat(params) => {
                 let system_schema = params
@@ -385,7 +385,7 @@ impl UninitializedFunctionConfig {
                 let variants = params
                     .variants
                     .into_iter()
-                    .map(|(name, variant)| variant.load(&base_path).map(|v| (name, v)))
+                    .map(|(name, variant)| variant.load(&base_path, function_name, &name).map(|v| (name, v)))
                     .collect::<Result<HashMap<_, _>, Error>>()?;
                 Ok(FunctionConfig::Chat(FunctionConfigChat {
                     variants,
@@ -425,7 +425,7 @@ impl UninitializedFunctionConfig {
                 let variants = params
                     .variants
                     .into_iter()
-                    .map(|(name, variant)| variant.load(&base_path).map(|v| (name, v)))
+                    .map(|(name, variant)| variant.load(&base_path, function_name, &name).map(|v| (name, v)))
                     .collect::<Result<HashMap<_, _>, Error>>()?;
                 Ok(FunctionConfig::Json(FunctionConfigJson {
                     variants,
@@ -455,7 +455,7 @@ pub enum UninitializedVariantConfig {
 }
 
 impl UninitializedVariantConfig {
-    pub fn load<P: AsRef<Path>>(self, base_path: P) -> Result<VariantConfig, Error> {
+    pub fn load<P: AsRef<Path>>(self, base_path: P, function_name: &str, variant_name: &str) -> Result<VariantConfig, Error> {
         match self {
             UninitializedVariantConfig::ChatCompletion(params) => {
                 Ok(VariantConfig::ChatCompletion(params))
