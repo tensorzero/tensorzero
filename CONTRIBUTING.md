@@ -152,6 +152,7 @@ cargo test-unit
 6. Run the formatter
 
    ```bash
+   uv pip install ruff
    uv run ruff format --check .
    uv run ruff check --output-format=github --extend-select I .
    ```
