@@ -655,8 +655,8 @@ export async function queryFeedbackByTargetId(params: {
     ...floatMetrics,
   ];
 
-  // Sort by id (which is a UUID v7 timestamp)
-  allFeedback.sort((a, b) => a.id.localeCompare(b.id));
+  // Sort by id (which is a UUID v7 timestamp) in descending order
+  allFeedback.sort((a, b) => (b.id > a.id ? 1 : -1));
 
   // Take either earliest or latest elements based on pagination params
   if (before) {

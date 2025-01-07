@@ -116,3 +116,8 @@ optimize = "max"
 type = "boolean"
 level = "episode"
 optimize = "max"
+
+[metrics.num_questions]
+type = "float"
+level = "episode"
+optimize = "min"
