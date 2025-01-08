@@ -3,6 +3,7 @@ mod best_of_n;
 mod clickhouse;
 mod common;
 mod dicl;
+mod fallback;
 mod feedback;
 mod health;
 mod inference;
