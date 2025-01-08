@@ -52,6 +52,42 @@ test("queryCommentFeedbackByTargetId", async () => {
     page_size: 10,
   });
   expect(emptyFeedback).toHaveLength(0);
+
+  // Test paging backwards from a specific ID
+  // There will be 1 less item in the first page because the last item is excluded
+  const startId = "01944339-0132-7fb2-b3bc-84537d686443"; // Last ID
+  const firstBackwardPage = await queryCommentFeedbackByTargetId({
+    target_id,
+    before: startId,
+    page_size,
+  });
+  expect(firstBackwardPage).toHaveLength(10);
+
+  const secondBackwardPage = await queryCommentFeedbackByTargetId({
+    target_id,
+    before: firstBackwardPage[firstBackwardPage.length - 1].id,
+    page_size,
+  });
+  expect(secondBackwardPage).toHaveLength(10);
+
+  const thirdBackwardPage = await queryCommentFeedbackByTargetId({
+    target_id,
+    before: secondBackwardPage[secondBackwardPage.length - 1].id,
+    page_size,
+  });
+  expect(thirdBackwardPage).toHaveLength(5);
+
+  // Check that backward pages are sorted by id in descending order
+  checkSorting(firstBackwardPage);
+  checkSorting(secondBackwardPage);
+  checkSorting(thirdBackwardPage);
+
+  // Check total number of items matches
+  expect(
+    firstBackwardPage.length +
+      secondBackwardPage.length +
+      thirdBackwardPage.length,
+  ).toBe(25);
 });
 
 test("countCommentFeedbackByTargetId", async () => {
