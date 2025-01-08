@@ -16,3 +16,6 @@ build-backend = "hatchling.build"
 
 [tool.uv]
 dev-dependencies = ["pytest>=8.3.2", "pytest-asyncio>=0.24.0"]
+
+[tool.pyright]
+strict = ["**/*.py"]
