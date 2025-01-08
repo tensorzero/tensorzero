@@ -46,6 +46,12 @@ test("queryCommentFeedbackByTargetId", async () => {
 
   // Check total number of items
   expect(firstPage.length + secondPage.length + thirdPage.length).toBe(26);
+
+  const emptyFeedback = await queryCommentFeedbackByTargetId({
+    target_id: "01942e26-4693-7e80-8591-47b98e25d711",
+    page_size: 10,
+  });
+  expect(emptyFeedback).toHaveLength(0);
 });
 
 test("countCommentFeedbackByTargetId", async () => {
@@ -53,6 +59,11 @@ test("countCommentFeedbackByTargetId", async () => {
     "01942e26-4693-7e80-8591-47b98e25d721",
   );
   expect(count).toBe(26);
+
+  const emptyCount = await countCommentFeedbackByTargetId(
+    "01942e26-4693-7e80-8591-47b98e25d711",
+  );
+  expect(emptyCount).toBe(0);
 });
 
 test("queryFeedbackBoundsByTargetId", async () => {
@@ -62,5 +73,13 @@ test("queryFeedbackBoundsByTargetId", async () => {
   expect(bounds).toEqual({
     first_id: "01944339-00dc-7aa2-843a-74ebdf5d5d60",
     last_id: "01944339-0132-7fb2-b3bc-84537d686443",
+  });
+
+  const emptyBounds = await queryCommentFeedbackBoundsByTargetId({
+    target_id: "01942e26-4693-7e80-8591-47b98e25d711",
+  });
+  expect(emptyBounds).toEqual({
+    first_id: undefined,
+    last_id: undefined,
   });
 });
