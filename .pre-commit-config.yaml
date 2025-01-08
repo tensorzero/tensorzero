@@ -84,13 +84,6 @@ repos:
           - typescript
         pass_filenames: false
 
-      - id: pyright
-        name: pyright
-        entry: bash -c 'source .venv/bin/activate && cd clients && pyright'
-        language: python
-        types_or: [python]
-        pass_filenames: false
-
   - repo: https://github.com/srstevenson/nb-clean
     rev: 3.2.0
     hooks:
@@ -104,3 +97,10 @@ repos:
       - id: ruff
         args: ["--extend-select", "I", "--fix"]
       - id: ruff-format
+
+  - repo: https://github.com/RobertCraigie/pyright-python
+    rev: v1.1.391
+    hooks:
+    - id: pyright
+      additional_dependencies:
+        - httpx
