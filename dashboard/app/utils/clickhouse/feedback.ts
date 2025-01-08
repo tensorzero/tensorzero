@@ -659,12 +659,12 @@ export async function queryFeedbackByTargetId(params: {
   allFeedback.sort((a, b) => (b.id > a.id ? 1 : -1));
 
   // Take either earliest or latest elements based on pagination params
-  if (before) {
-    // If 'before' is specified, take latest elements
-    return allFeedback.slice(0, page_size || 100);
-  } else {
-    // If 'after' is specified or no pagination params, take earliest elements
+  if (after) {
+    // If 'after' is specified, take earliest elements
     return allFeedback.slice(-Math.min(allFeedback.length, page_size || 100));
+  } else {
+    // If 'before' is specified or no pagination params, take latest elements
+    return allFeedback.slice(0, page_size || 100);
   }
 }
 
