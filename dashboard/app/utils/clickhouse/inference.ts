@@ -422,3 +422,157 @@ export async function countInferencesForEpisode(
   const rows = await resultSet.json<{ count: string }>();
   return Number(rows[0].count);
 }
+
+export const chatInferenceRowSchema = z.object({
+  id: z.string().uuid(),
+  function_name: z.string(),
+  variant_name: z.string(),
+  episode_id: z.string().uuid(),
+  input: z.string(),
+  output: z.string(),
+  tool_params: z.string(),
+  inference_params: z.string(),
+  processing_time_ms: z.number(),
+  timestamp: z.string().datetime(),
+  tags: z.record(z.string(), z.string()).default({}),
+});
+
+export type ChatInferenceRow = z.infer<typeof chatInferenceRowSchema>;
+
+export const jsonInferenceRowSchema = z.object({
+  id: z.string().uuid(),
+  function_name: z.string(),
+  variant_name: z.string(),
+  episode_id: z.string().uuid(),
+  input: z.string(),
+  output: z.string(),
+  output_schema: z.string(),
+  inference_params: z.string(),
+  processing_time_ms: z.number(),
+  timestamp: z.string().datetime(),
+  tags: z.record(z.string(), z.string()).default({}),
+});
+
+export type JsonInferenceRow = z.infer<typeof jsonInferenceRowSchema>;
+
+export const inferenceRowSchema = z.discriminatedUnion("function_type", [
+  chatInferenceRowSchema.extend({
+    function_type: z.literal("chat"),
+  }),
+  jsonInferenceRowSchema.extend({
+    function_type: z.literal("json"),
+  }),
+]);
+
+export type InferenceRow = z.infer<typeof inferenceRowSchema>;
+
+export async function queryInferenceById(
+  id: string,
+): Promise<InferenceRow | null> {
+  const query = `
+    SELECT
+      /* Common columns (pick from whichever side is not null) */
+      i.id AS id,
+      coalesce(c.function_name, j.function_name)        AS function_name,
+      coalesce(c.variant_name, j.variant_name)          AS variant_name,
+      coalesce(c.episode_id, j.episode_id)              AS episode_id,
+      coalesce(c.input, j.input)                        AS input,
+      coalesce(c.output, j.output)                      AS output,
+
+      /* Chat-specific columns */
+      IF(
+        i.function_type = 'chat',
+        c.tool_params,
+        ''  -- or NULL
+      ) AS tool_params,
+
+      /* This column name must match exactly what your union expects */
+      IF(
+        i.function_type = 'chat',
+        c.inference_params,
+        j.inference_params
+      ) AS inference_params,
+
+      IF(
+        i.function_type = 'chat',
+        c.processing_time_ms,
+        j.processing_time_ms
+      ) AS processing_time_ms,
+
+      /* JSON-specific column */
+      IF(
+        i.function_type = 'json',
+        j.output_schema,
+        ''  -- or NULL
+      ) AS output_schema,
+
+      /* Timestamps & tags: unify them from chat/json */
+      /* Some ClickHouse clients require manual type conversion of DateTime to a string.
+         If so, you can wrap these in toString() or similar. */
+      IF(
+        i.function_type = 'chat',
+        c.timestamp,
+        j.timestamp
+      ) AS timestamp,
+
+      IF(
+        i.function_type = 'chat',
+        c.tags,
+        j.tags
+      ) AS tags,
+
+      /* Discriminator itself */
+      i.function_type
+
+    FROM InferenceById i
+    LEFT JOIN ChatInference c
+      ON i.id = c.id
+      AND i.function_type = 'chat'
+    LEFT JOIN JsonInference j
+      ON i.id = j.id
+      AND i.function_type = 'json'
+
+    WHERE i.id = {id:String}
+  `;
+  const resultSet = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: { id },
+  });
+  const rows = await resultSet.json<InferenceRow>();
+  return rows[0] || null;
+}
+
+export const modelInferenceRowSchema = z.object({
+  id: z.string().uuid(),
+  inference_id: z.string().uuid(),
+  raw_request: z.string(),
+  raw_response: z.string(),
+  model_name: z.string(),
+  model_provider_name: z.string(),
+  input_tokens: z.number(),
+  output_tokens: z.number(),
+  response_time_ms: z.number(),
+  ttft_ms: z.number().nullable(),
+  timestamp: z.string().datetime(),
+  system: z.string().nullable(),
+  input_messages: z.string(),
+  output: z.string(),
+});
+
+export type ModelInferenceRow = z.infer<typeof modelInferenceRowSchema>;
+
+export async function queryModelInferencesByInferenceId(
+  id: string,
+): Promise<ModelInferenceRow[] | null> {
+  const query = `
+    SELECT * FROM ModelInference WHERE inference_id = {id:String}
+  `;
+  const resultSet = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: { id },
+  });
+  const rows = await resultSet.json<ModelInferenceRow>();
+  return rows;
+}

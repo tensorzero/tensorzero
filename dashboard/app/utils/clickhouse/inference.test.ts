@@ -3,6 +3,7 @@ import {
   countInferencesForEpisode,
   queryEpisodeTable,
   queryEpisodeTableBounds,
+  queryInferenceById,
   queryInferenceTable,
   queryInferenceTableBounds,
   queryInferenceTableBoundsByEpisodeId,
@@ -479,4 +480,25 @@ test("countInferencesForEpisode with invalid episode_id", async () => {
     "01942e26-549f-7153-ac56-dd1d23d30f8d",
   );
   expect(count).toBe(0);
+});
+
+test("queryInferenceById for chat inference", async () => {
+  const inference = await queryInferenceById(
+    "01942e26-910b-7ab1-a645-46bc4463a001",
+  );
+  expect(inference?.function_type).toBe("chat");
+});
+
+test("queryInferenceById for missing inference", async () => {
+  const inference = await queryInferenceById(
+    "01942e26-910b-7ab1-a645-46bc4463a000",
+  );
+  expect(inference).toBeNull();
+});
+
+test("queryInferenceById for json inference", async () => {
+  const inference = await queryInferenceById(
+    "01942e26-88ab-7331-8293-de75cc2b88a7",
+  );
+  expect(inference?.function_type).toBe("json");
 });
