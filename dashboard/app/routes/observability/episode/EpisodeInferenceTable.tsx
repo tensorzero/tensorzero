@@ -28,7 +28,10 @@ export default function EpisodeInferenceTable({
         {inferences.map((inference) => (
           <TableRow key={inference.id} id={inference.id}>
             <TableCell className="max-w-[200px]">
-              <a href={`#${inference.id}`} className="block no-underline">
+              <a
+                href={`/observability/inference/${inference.id}`}
+                className="block no-underline"
+              >
                 <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
                   {inference.id}
                 </code>
