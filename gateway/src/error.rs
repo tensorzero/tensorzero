@@ -76,6 +76,7 @@ pub enum ErrorDetails {
     },
     Config {
         message: String,
+        path: Option<String>,
     },
     DynamicJsonSchema {
         message: String,
@@ -402,8 +403,12 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::ClickHouseQuery { message } => {
                 write!(f, "Failed to run ClickHouse query: {}", message)
             }
-            ErrorDetails::Config { message } => {
-                write!(f, "{}", message)
+            ErrorDetails::Config { message, path } => {
+                if let Some(path) = path {
+                    write!(f, "{}\nin `{}`\n", message, path)
+                } else {
+                    write!(f, "{}", message)
+                }
             }
             ErrorDetails::DynamicJsonSchema { message } => {
                 write!(

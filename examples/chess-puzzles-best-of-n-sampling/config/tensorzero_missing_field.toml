@@ -1,0 +1,10 @@
+[functions.my_function]
+type = "chat"
+
+[functions.my_function.variants.my_variant]
+# The following entry is mandatory but it's missing
+# type = "chat_completion"
+model = "anthropic::claude-3-haiku-20240307"
+
+[gateway]
+disable_observability = true
