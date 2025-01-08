@@ -219,6 +219,10 @@ pub enum ErrorDetails {
     UuidInFuture {
         raw_uuid: String,
     },
+    RouteNotFound {
+        path: String,
+        method: String,
+    },
 }
 
 impl ErrorDetails {
@@ -280,6 +284,7 @@ impl ErrorDetails {
             ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => tracing::Level::WARN,
             ErrorDetails::UuidInFuture { .. } => tracing::Level::WARN,
+            ErrorDetails::RouteNotFound { .. } => tracing::Level::WARN,
         }
     }
 
@@ -345,6 +350,7 @@ impl ErrorDetails {
             }
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::UuidInFuture { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::RouteNotFound { .. } => StatusCode::NOT_FOUND,
         }
     }
 
@@ -569,6 +575,9 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::UuidInFuture { raw_uuid } => {
                 write!(f, "UUID is in the future: {}", raw_uuid)
+            }
+            ErrorDetails::RouteNotFound { path, method } => {
+                write!(f, "Route not found: {} {}", method, path)
             }
         }
     }
