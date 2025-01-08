@@ -1,11 +1,12 @@
+import { z } from "zod";
 import type { MetricConfig } from "../config/metric";
 import {
+  contentBlockOutputSchema,
   getInferenceTableName,
   InferenceJoinKey,
-  type ParsedInferenceRow,
   InferenceTableName,
-  type InferenceRow,
-  parseInferenceRows,
+  inputSchema,
+  jsonInferenceOutputSchema,
 } from "./common";
 import { clickhouseClient } from "./common";
 import type { FunctionConfig } from "../config/function";
@@ -166,7 +167,7 @@ async function queryAllInferencesForFunction(
   function_name: string,
   inference_table_name: InferenceTableName,
   max_samples: number | undefined,
-): Promise<ParsedInferenceRow[]> {
+): Promise<ParsedInferenceExample[]> {
   const limitClause = max_samples ? `LIMIT ${max_samples}` : "";
   const query = `SELECT * FROM ${inference_table_name} WHERE function_name = {function_name:String} ${limitClause}`;
   const resultSet = await clickhouseClient.query({
@@ -174,8 +175,8 @@ async function queryAllInferencesForFunction(
     format: "JSONEachRow",
     query_params: { function_name },
   });
-  const rows = await resultSet.json<InferenceRow>();
-  return parseInferenceRows(rows, inference_table_name);
+  const rows = await resultSet.json<InferenceExample>();
+  return parseInferenceExamples(rows, inference_table_name);
 }
 
 // Generic function to handle both boolean and float metric queries
@@ -191,7 +192,7 @@ async function queryCuratedMetricData(
     threshold?: number;
     max_samples?: number;
   },
-): Promise<ParsedInferenceRow[]> {
+): Promise<ParsedInferenceExample[]> {
   const {
     filterGood = false,
     maximize = false,
@@ -245,8 +246,8 @@ async function queryCuratedMetricData(
       ...(threshold !== undefined ? { threshold } : {}),
     },
   });
-  const rows = await resultSet.json<InferenceRow>();
-  return parseInferenceRows(rows, inference_table_name);
+  const rows = await resultSet.json<InferenceExample>();
+  return parseInferenceExamples(rows, inference_table_name);
 }
 
 // Generic function to count metric data
@@ -313,7 +314,7 @@ async function queryDemonstrationDataForFunction(
   function_name: string,
   inference_table_name: InferenceTableName,
   max_samples: number | undefined,
-): Promise<ParsedInferenceRow[]> {
+): Promise<ParsedInferenceExample[]> {
   const limitClause = max_samples ? `LIMIT ${max_samples}` : "";
 
   const query = `
@@ -344,8 +345,8 @@ async function queryDemonstrationDataForFunction(
       function_name,
     },
   });
-  const rows = await resultSet.json<InferenceRow>();
-  return parseInferenceRows(rows, inference_table_name);
+  const rows = await resultSet.json<InferenceExample>();
+  return parseInferenceExamples(rows, inference_table_name);
 }
 
 export async function countDemonstrationDataForFunction(
@@ -378,4 +379,65 @@ export async function countDemonstrationDataForFunction(
   });
   const rows = await resultSet.json<{ count: number }>();
   return rows[0].count;
+}
+
+export const inferenceExampleSchema = z
+  .object({
+    variant_name: z.string(),
+    input: z.string(),
+    output: z.string(),
+    episode_id: z.string(),
+  })
+  .strict();
+export type InferenceExample = z.infer<typeof inferenceExampleSchema>;
+
+export const parsedChatExampleSchema = inferenceExampleSchema
+  .omit({
+    input: true,
+    output: true,
+  })
+  .extend({
+    input: inputSchema,
+    output: z.array(contentBlockOutputSchema),
+  })
+  .strict();
+export type ParsedChatInferenceExample = z.infer<
+  typeof parsedChatExampleSchema
+>;
+
+export const parsedJsonInferenceExampleSchema = inferenceExampleSchema
+  .omit({
+    input: true,
+    output: true,
+  })
+  .extend({
+    input: inputSchema,
+    output: jsonInferenceOutputSchema,
+  })
+  .strict();
+export type ParsedJsonInferenceExample = z.infer<
+  typeof parsedJsonInferenceExampleSchema
+>;
+
+export type ParsedInferenceExample =
+  | ParsedChatInferenceExample
+  | ParsedJsonInferenceExample;
+
+function parseInferenceExamples(
+  rows: InferenceExample[],
+  tableName: string,
+): ParsedChatInferenceExample[] | ParsedJsonInferenceExample[] {
+  if (tableName === "ChatInference") {
+    return rows.map((row) => ({
+      ...row,
+      input: inputSchema.parse(JSON.parse(row.input)),
+      output: z.array(contentBlockOutputSchema).parse(JSON.parse(row.output)),
+    })) as ParsedChatInferenceExample[];
+  } else {
+    return rows.map((row) => ({
+      ...row,
+      input: inputSchema.parse(JSON.parse(row.input)),
+      output: jsonInferenceOutputSchema.parse(JSON.parse(row.output)),
+    })) as ParsedJsonInferenceExample[];
+  }
 }

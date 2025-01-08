@@ -12,7 +12,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const before = url.searchParams.get("before");
   const after = url.searchParams.get("after");
-  const pageSize = Number(url.searchParams.get("page_size")) || 10;
+  const pageSize = Number(url.searchParams.get("pageSize")) || 10;
   if (pageSize > 100) {
     throw data("Page size cannot exceed 100", { status: 400 });
   }

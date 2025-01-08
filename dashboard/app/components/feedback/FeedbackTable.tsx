@@ -13,7 +13,7 @@ import { formatDate } from "~/utils/date";
 import { MetricBadges } from "~/components/metric/MetricBadges";
 import { useConfig } from "~/context/config";
 
-export default function EpisodeFeedbackTable({
+export default function FeedbackTable({
   feedback,
 }: {
   feedback: FeedbackRow[];

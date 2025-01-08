@@ -19,13 +19,11 @@ export async function checkClickhouseConnection(): Promise<boolean> {
 export const roleSchema = z.enum(["user", "assistant"]);
 export type Role = z.infer<typeof roleSchema>;
 
-export const textInputMessageContentSchema = z.object({
+export const textInputSchema = z.object({
   type: z.literal("text"),
   value: z.any(), // Value type from Rust maps to any in TS
 });
-export type textInputMessageContent = z.infer<
-  typeof textInputMessageContentSchema
->;
+export type TextInput = z.infer<typeof textInputSchema>;
 
 export const toolCallSchema = z
   .object({
@@ -34,17 +32,15 @@ export const toolCallSchema = z
     id: z.string(),
   })
   .strict();
-export type toolCall = z.infer<typeof toolCallSchema>;
+export type ToolCall = z.infer<typeof toolCallSchema>;
 
-export const toolCallInputMessageContentSchema = z
+export const toolCallContentSchema = z
   .object({
     type: z.literal("tool_call"),
     ...toolCallSchema.shape,
   })
   .strict();
-export type toolCallInputMessageContent = z.infer<
-  typeof toolCallInputMessageContentSchema
->;
+export type ToolCallContent = z.infer<typeof toolCallContentSchema>;
 
 export const toolResultSchema = z
   .object({
@@ -53,21 +49,21 @@ export const toolResultSchema = z
     id: z.string(),
   })
   .strict();
+export type ToolResult = z.infer<typeof toolResultSchema>;
 
-export const toolResultInputMessageContentSchema = z
+export const toolResultContentSchema = z
   .object({
     type: z.literal("tool_result"),
     ...toolResultSchema.shape,
   })
   .strict();
-export type toolResultInputMessageContent = z.infer<
-  typeof toolResultInputMessageContentSchema
->;
+export type ToolResultContent = z.infer<typeof toolResultContentSchema>;
 
+// Types for input to TensorZero
 export const inputMessageContentSchema = z.discriminatedUnion("type", [
-  textInputMessageContentSchema,
-  toolCallInputMessageContentSchema,
-  toolResultInputMessageContentSchema,
+  textInputSchema,
+  toolCallContentSchema,
+  toolResultContentSchema,
 ]);
 export type InputMessageContent = z.infer<typeof inputMessageContentSchema>;
 
@@ -86,6 +82,26 @@ export const inputSchema = z
   })
   .strict();
 export type Input = z.infer<typeof inputSchema>;
+
+// Types for main intermediate representations (content blocks and request messages)
+export const textContentSchema = z.object({
+  type: z.literal("text"),
+  text: z.string(),
+});
+export type TextContent = z.infer<typeof textContentSchema>;
+
+export const contentBlockSchema = z.discriminatedUnion("type", [
+  textContentSchema,
+  toolCallContentSchema,
+  toolResultContentSchema,
+]);
+export type ContentBlock = z.infer<typeof contentBlockSchema>;
+
+export const requestMessageSchema = z.object({
+  role: roleSchema,
+  content: z.array(contentBlockSchema),
+});
+export type RequestMessage = z.infer<typeof requestMessageSchema>;
 
 export const jsonInferenceOutputSchema = z.object({
   raw: z.string(),
@@ -106,6 +122,7 @@ export const toolCallOutputSchema = z
   .strict();
 
 export type ToolCallOutput = z.infer<typeof toolCallOutputSchema>;
+
 export const textSchema = z
   .object({
     type: z.literal("text"),
@@ -121,67 +138,6 @@ export const contentBlockOutputSchema = z.discriminatedUnion("type", [
 ]);
 
 export type ContentBlockOutput = z.infer<typeof contentBlockOutputSchema>;
-
-export const inferenceRowSchema = z
-  .object({
-    variant_name: z.string(),
-    input: z.string(),
-    output: z.string(),
-    episode_id: z.string(),
-  })
-  .strict();
-export type InferenceRow = z.infer<typeof inferenceRowSchema>;
-
-export const parsedChatInferenceRowSchema = inferenceRowSchema
-  .omit({
-    input: true,
-    output: true,
-  })
-  .extend({
-    input: inputSchema,
-    output: z.array(contentBlockOutputSchema),
-  })
-  .strict();
-export type ParsedChatInferenceRow = z.infer<
-  typeof parsedChatInferenceRowSchema
->;
-
-export const parsedJsonInferenceRowSchema = inferenceRowSchema
-  .omit({
-    input: true,
-    output: true,
-  })
-  .extend({
-    input: inputSchema,
-    output: jsonInferenceOutputSchema,
-  })
-  .strict();
-export type ParsedJsonInferenceRow = z.infer<
-  typeof parsedJsonInferenceRowSchema
->;
-
-export type ParsedInferenceRow =
-  | ParsedChatInferenceRow
-  | ParsedJsonInferenceRow;
-
-export function parseInferenceRows(
-  rows: InferenceRow[],
-  tableName: string,
-): ParsedChatInferenceRow[] | ParsedJsonInferenceRow[] {
-  if (tableName === "ChatInference") {
-    return rows.map((row) => ({
-      ...row,
-      input: inputSchema.parse(JSON.parse(row.input)),
-      output: z.array(contentBlockOutputSchema).parse(JSON.parse(row.output)),
-    })) as ParsedChatInferenceRow[];
-  } else {
-    return rows.map((row) => ({
-      ...row,
-      input: inputSchema.parse(JSON.parse(row.input)),
-      output: jsonInferenceOutputSchema.parse(JSON.parse(row.output)),
-    })) as ParsedJsonInferenceRow[];
-  }
-}
 
 export const InferenceTableName = {
   CHAT: "ChatInference",

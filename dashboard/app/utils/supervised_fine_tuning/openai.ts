@@ -8,9 +8,9 @@ import {
   type ContentBlockOutput,
   type InputMessageContent,
   type JsonInferenceOutput,
-  type ParsedInferenceRow,
   type Role,
 } from "../clickhouse/common";
+import type { ParsedInferenceExample } from "../clickhouse/curation";
 import { getCuratedInferences } from "../clickhouse/curation";
 import { get_template_env, type ChatCompletionConfig } from "../config/variant";
 import { getConfig } from "../config/index.server";
@@ -101,7 +101,7 @@ export class OpenAISFTJob extends SFTJob {
 
 export async function start_sft_openai(
   modelName: string,
-  inferences: ParsedInferenceRow[],
+  inferences: ParsedInferenceExample[],
   validationSplitPercent: number,
   templateEnv: JsExposedEnv,
 ) {
@@ -132,7 +132,7 @@ export async function start_sft_openai(
 }
 
 export function tensorzero_inference_to_openai_messages(
-  sample: ParsedInferenceRow,
+  sample: ParsedInferenceExample,
   env: JsExposedEnv,
 ) {
   const system = sample.input.system;

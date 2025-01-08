@@ -18,7 +18,7 @@ import {
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 import { Tooltip } from "~/components/ui/tooltip";
-import EpisodeFeedbackTable from "./EpisodeFeedbackTable";
+import FeedbackTable from "~/components/feedback/FeedbackTable";
 import PageButtons from "~/components/utils/PageButtons";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
@@ -188,7 +188,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
           </TooltipProvider>
           <Badge variant="secondary">Count: {num_feedbacks}</Badge>
         </h3>
-        <EpisodeFeedbackTable feedback={feedbacks} />
+        <FeedbackTable feedback={feedbacks} />
         <PageButtons
           onPreviousPage={handlePreviousFeedbackPage}
           onNextPage={handleNextFeedbackPage}

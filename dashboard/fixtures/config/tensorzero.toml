@@ -26,7 +26,7 @@ system_template = "functions/extract_entities/initial_prompt/system_template.min
 type = "chat"
 user_schema = "functions/write_haiku/user_schema.json"
 
-[functions.dashboard_fixture_write_haiku.variants.baseline]
+[functions.dashboard_fixture_write_haiku.variants.initial_prompt_gpt4o_mini]
 type = "chat_completion"
 model = "gpt-4o-mini-2024-07-18"
 system_template = "functions/write_haiku/initial_prompt/system_template.minijinja"

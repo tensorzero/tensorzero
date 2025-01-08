@@ -1,6 +1,13 @@
 import z from "node_modules/zod/lib";
 import type { TableBounds } from "./common";
-import { getInferenceTableName } from "./common";
+import {
+  contentBlockOutputSchema,
+  contentBlockSchema,
+  getInferenceTableName,
+  inputSchema,
+  jsonInferenceOutputSchema,
+  requestMessageSchema,
+} from "./common";
 import { data } from "react-router";
 import type { FunctionConfig } from "../config/function";
 import { clickhouseClient } from "./common";
@@ -466,9 +473,87 @@ export const inferenceRowSchema = z.discriminatedUnion("function_type", [
 
 export type InferenceRow = z.infer<typeof inferenceRowSchema>;
 
+export const parsedChatInferenceRowSchema = chatInferenceRowSchema
+  .omit({
+    input: true,
+    output: true,
+    inference_params: true,
+    tool_params: true,
+  })
+  .extend({
+    input: inputSchema,
+    output: z.array(contentBlockOutputSchema),
+    inference_params: z.record(z.string(), z.unknown()),
+    tool_params: z.record(z.string(), z.unknown()),
+  });
+
+export type ParsedChatInferenceRow = z.infer<
+  typeof parsedChatInferenceRowSchema
+>;
+
+export const parsedJsonInferenceRowSchema = jsonInferenceRowSchema
+  .omit({
+    input: true,
+    output: true,
+    inference_params: true,
+    output_schema: true,
+  })
+  .extend({
+    input: inputSchema,
+    output: jsonInferenceOutputSchema,
+    inference_params: z.record(z.string(), z.unknown()),
+    output_schema: z.record(z.string(), z.unknown()),
+  });
+
+export type ParsedJsonInferenceRow = z.infer<
+  typeof parsedJsonInferenceRowSchema
+>;
+
+export const parsedInferenceRowSchema = z.discriminatedUnion("function_type", [
+  parsedChatInferenceRowSchema.extend({
+    function_type: z.literal("chat"),
+  }),
+  parsedJsonInferenceRowSchema.extend({
+    function_type: z.literal("json"),
+  }),
+]);
+
+export type ParsedInferenceRow = z.infer<typeof parsedInferenceRowSchema>;
+
+function parseInferenceRow(row: InferenceRow): ParsedInferenceRow {
+  if (row.function_type === "chat") {
+    return {
+      ...row,
+      input: inputSchema.parse(JSON.parse(row.input)),
+      output: z.array(contentBlockOutputSchema).parse(JSON.parse(row.output)),
+      inference_params: z
+        .record(z.string(), z.unknown())
+        .parse(JSON.parse(row.inference_params)),
+      tool_params:
+        row.tool_params === ""
+          ? {}
+          : z
+              .record(z.string(), z.unknown())
+              .parse(JSON.parse(row.tool_params)),
+    };
+  } else {
+    return {
+      ...row,
+      input: inputSchema.parse(JSON.parse(row.input)),
+      output: jsonInferenceOutputSchema.parse(JSON.parse(row.output)),
+      inference_params: z
+        .record(z.string(), z.unknown())
+        .parse(JSON.parse(row.inference_params)),
+      output_schema: z
+        .record(z.string(), z.unknown())
+        .parse(JSON.parse(row.output_schema)),
+    };
+  }
+}
+
 export async function queryInferenceById(
   id: string,
-): Promise<InferenceRow | null> {
+): Promise<ParsedInferenceRow | null> {
   const query = `
     SELECT
       /* Common columns (pick from whichever side is not null) */
@@ -540,7 +625,10 @@ export async function queryInferenceById(
     query_params: { id },
   });
   const rows = await resultSet.json<InferenceRow>();
-  return rows[0] || null;
+  const firstRow = rows[0];
+  if (!firstRow) return null;
+  const parsedRow = parseInferenceRow(firstRow);
+  return parsedRow;
 }
 
 export const modelInferenceRowSchema = z.object({
@@ -562,9 +650,35 @@ export const modelInferenceRowSchema = z.object({
 
 export type ModelInferenceRow = z.infer<typeof modelInferenceRowSchema>;
 
+export const parsedModelInferenceRowSchema = modelInferenceRowSchema
+  .omit({
+    input_messages: true,
+    output: true,
+  })
+  .extend({
+    input_messages: z.array(requestMessageSchema),
+    output: z.array(contentBlockSchema),
+  });
+
+export type ParsedModelInferenceRow = z.infer<
+  typeof parsedModelInferenceRowSchema
+>;
+
+function parseModelInferenceRow(
+  row: ModelInferenceRow,
+): ParsedModelInferenceRow {
+  return {
+    ...row,
+    input_messages: z
+      .array(requestMessageSchema)
+      .parse(JSON.parse(row.input_messages)),
+    output: z.array(contentBlockSchema).parse(JSON.parse(row.output)),
+  };
+}
+
 export async function queryModelInferencesByInferenceId(
   id: string,
-): Promise<ModelInferenceRow[] | null> {
+): Promise<ParsedModelInferenceRow[]> {
   const query = `
     SELECT * FROM ModelInference WHERE inference_id = {id:String}
   `;
@@ -574,5 +688,5 @@ export async function queryModelInferencesByInferenceId(
     query_params: { id },
   });
   const rows = await resultSet.json<ModelInferenceRow>();
-  return rows;
+  return rows.map(parseModelInferenceRow);
 }

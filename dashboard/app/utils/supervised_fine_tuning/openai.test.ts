@@ -5,18 +5,17 @@ import {
 } from "./openai";
 import { create_env } from "../minijinja/pkg/minijinja_bindings";
 import type {
-  ParsedInferenceRow,
-  textInputMessageContent,
-  toolCallInputMessageContent,
-  toolResultInputMessageContent,
+  TextInput,
+  ToolCallContent,
+  ToolResultContent,
 } from "../clickhouse/common";
-
+import type { ParsedInferenceExample } from "../clickhouse/curation";
 describe("content_block_to_openai_message", () => {
   it("test text content block with no template", async () => {
     const textContentBlock = {
       type: "text",
       value: "foo bar baz",
-    } as textInputMessageContent;
+    } as TextInput;
     const env = create_env({});
     const openai_message = content_block_to_openai_message(
       textContentBlock,
@@ -30,7 +29,7 @@ describe("content_block_to_openai_message", () => {
     const textContentBlock = {
       type: "text",
       value: { dogName: "Wally" },
-    } as textInputMessageContent;
+    } as TextInput;
     const env = create_env({
       assistant: "Hi, I'm your friendly canine assistant {{ dogName }}!",
     });
@@ -51,7 +50,7 @@ describe("content_block_to_openai_message", () => {
       name: "get_weather",
       arguments: '{"location": "Manaus"}',
       id: "tool_494949",
-    } as toolCallInputMessageContent;
+    } as ToolCallContent;
     const env = create_env({
       assistant: "Hi, I'm your friendly canine assistant {{ dogName }}!",
     });
@@ -81,7 +80,7 @@ describe("content_block_to_openai_message", () => {
       name: "get_weather",
       result: "35 and sunny",
       id: "tool_494949",
-    } as toolResultInputMessageContent;
+    } as ToolResultContent;
     const env = create_env({
       assistant: "Hi, I'm your friendly canine assistant {{ dogName }}!",
     });
@@ -129,7 +128,7 @@ describe("tensorzero_inference_to_openai_messages", async () => {
         },
       },
       episode_id: "0192ced0-a2c6-7323-be23-ce4124e683d3",
-    } as ParsedInferenceRow;
+    } as ParsedInferenceExample;
 
     const openaiMessages = tensorzero_inference_to_openai_messages(row, env);
     expect(openaiMessages.length).toBe(3);
@@ -193,7 +192,7 @@ describe("tensorzero_inference_to_openai_messages", async () => {
       },
       output: [{ type: "text", text: "it is 34 and sunny" }],
       episode_id: "0192ced0-a2c6-7323-be23-ce4124e683d3",
-    } as ParsedInferenceRow;
+    } as ParsedInferenceExample;
 
     const openaiMessages = tensorzero_inference_to_openai_messages(row, env);
     expect(openaiMessages.length).toBe(5);

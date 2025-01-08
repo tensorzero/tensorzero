@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { tensorzero_inference_to_fireworks_messages } from "./fireworks";
 import { create_env } from "../minijinja/pkg/minijinja_bindings";
-import type { ParsedInferenceRow } from "../clickhouse/common";
+import type { ParsedInferenceExample } from "../clickhouse/curation";
 
 describe("tensorzero_inference_to_fireworks_messages", async () => {
   it("test simple json", () => {
@@ -34,7 +34,7 @@ describe("tensorzero_inference_to_fireworks_messages", async () => {
         },
       },
       episode_id: "0192ced0-a2c6-7323-be23-ce4124e683d3",
-    } as ParsedInferenceRow;
+    } as ParsedInferenceExample;
 
     const fireworksExample = tensorzero_inference_to_fireworks_messages(
       row,
@@ -77,7 +77,7 @@ describe("tensorzero_inference_to_fireworks_messages", async () => {
       },
       output: [{ type: "text", text: "it is 34 and sunny" }],
       episode_id: "0192ced0-a2c6-7323-be23-ce4124e683d3",
-    } as ParsedInferenceRow;
+    } as ParsedInferenceExample;
 
     const fireworksExample = tensorzero_inference_to_fireworks_messages(
       row,
