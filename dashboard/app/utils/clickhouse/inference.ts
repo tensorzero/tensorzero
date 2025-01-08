@@ -652,7 +652,7 @@ export async function queryModelInferencesByInferenceId(
   id: string,
 ): Promise<ParsedModelInferenceRow[]> {
   const query = `
-    SELECT * FROM ModelInference WHERE inference_id = {id:String}
+    SELECT *, formatDateTime(timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp FROM ModelInference WHERE inference_id = {id:String}
   `;
   const resultSet = await clickhouseClient.query({
     query,
@@ -660,5 +660,7 @@ export async function queryModelInferencesByInferenceId(
     query_params: { id },
   });
   const rows = await resultSet.json<ModelInferenceRow>();
-  return rows.map(parseModelInferenceRow);
+  const validatedRows = z.array(modelInferenceRowSchema).parse(rows);
+  const parsedRows = validatedRows.map(parseModelInferenceRow);
+  return parsedRows;
 }

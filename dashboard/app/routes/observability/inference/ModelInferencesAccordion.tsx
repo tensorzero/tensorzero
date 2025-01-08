@@ -16,7 +16,6 @@ interface ModelInferencesAccordionProps {
 export function ModelInferencesAccordion({
   modelInferences,
 }: ModelInferencesAccordionProps) {
-  console.log(modelInferences);
   return (
     <Card>
       <CardHeader>
