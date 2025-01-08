@@ -97,10 +97,20 @@ repos:
       - id: ruff
         args: ["--extend-select", "I", "--fix"]
       - id: ruff-format
-
   - repo: https://github.com/RobertCraigie/pyright-python
     rev: v1.1.391
     hooks:
-    - id: pyright
-      additional_dependencies:
-        - httpx
+      - id: pyright
+        name: "pyright: clients/python"
+        files: ^clients/python/
+        args: ["--project", "clients/python/pyproject.toml"]
+        additional_dependencies:
+          - httpx
+          - uuid_utils
+
+      - id: pyright
+        name: "pyright: clients/openai-python"
+        files: ^clients/openai-python/
+        args: ["--project", "clients/openai-python/pyrightconfig.json"]
+        additional_dependencies:
+          - openai
