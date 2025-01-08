@@ -132,6 +132,8 @@ impl InferenceProvider for AnthropicProvider {
                     message: format!("Error sending request: {e}"),
                     status_code: e.status(),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                 })
             })?;
         let latency = Latency::NonStreaming {
@@ -142,6 +144,8 @@ impl InferenceProvider for AnthropicProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                 })
             })?;
 
@@ -149,6 +153,8 @@ impl InferenceProvider for AnthropicProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {response}"),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: Some(response.to_string()),
                 })
             })?;
 
@@ -163,13 +169,27 @@ impl InferenceProvider for AnthropicProvider {
             Ok(response_with_latency.try_into()?)
         } else {
             let response_code = res.status();
-            let error_body = res.json::<AnthropicError>().await.map_err(|e| {
+            let response_text = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing response: {e}"),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                 })
             })?;
-            handle_anthropic_error(response_code, error_body.error)
+            let error_body: AnthropicError = serde_json::from_str(&response_text).map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!("Error parsing response: {e}"),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: Some(response_text),
+                })
+            })?;
+            handle_anthropic_error(
+                response_code,
+                error_body.error,
+                serde_json::to_string(&request_body).unwrap_or_default(),
+            )
         }
     }
 
@@ -189,9 +209,8 @@ impl InferenceProvider for AnthropicProvider {
     > {
         let request_body = AnthropicRequestBody::new(&self.model_name, request)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request body as JSON: {e}"),
-                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         let start_time = Instant::now();
@@ -208,6 +227,8 @@ impl InferenceProvider for AnthropicProvider {
                     message: format!("Error sending request: {e}"),
                     status_code: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
                 })
             })?;
         let mut stream = Box::pin(stream_anthropic(event_source, start_time));
@@ -218,6 +239,8 @@ impl InferenceProvider for AnthropicProvider {
                 return Err(Error::new(ErrorDetails::InferenceServer {
                     message: "Stream ended before first chunk".to_string(),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
                 }))
             }
         };
@@ -261,6 +284,8 @@ fn stream_anthropic(
                     yield Err(ErrorDetails::InferenceServer {
                         message: e.to_string(),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        raw_request: None,
+                        raw_response: None,
                     }.into());
                 }
                 Ok(event) => match event {
@@ -273,7 +298,8 @@ fn stream_anthropic(
                                     e, message.data
                                 ),
                                 provider_type: PROVIDER_TYPE.to_string(),
-
+                                raw_request: None,
+                                raw_response: Some(message.data.clone()),
                             }));
                         // Anthropic streaming API docs specify that this is the last message
                         if let Ok(AnthropicStreamMessage::MessageStop) = data {
@@ -417,6 +443,8 @@ impl<'a> TryFrom<&'a ContentBlock> for AnthropicMessageContent<'a> {
                         status_code: Some(StatusCode::BAD_REQUEST),
                         message: format!("Error parsing tool call arguments as JSON Value: {e}"),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        raw_request: None,
+                        raw_response: Some(tool_call.arguments.clone()),
                     })
                 })?;
 
@@ -425,6 +453,8 @@ impl<'a> TryFrom<&'a ContentBlock> for AnthropicMessageContent<'a> {
                         status_code: Some(StatusCode::BAD_REQUEST),
                         message: "Tool call arguments must be a JSON object".to_string(),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        raw_request: None,
+                        raw_response: Some(tool_call.arguments.clone()),
                     }));
                 }
 
@@ -661,7 +691,7 @@ struct AnthropicError {
     error: AnthropicErrorBody,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct AnthropicErrorBody {
     r#type: String,
     message: String,
@@ -693,6 +723,8 @@ impl TryFrom<AnthropicContentBlock> for ContentBlock {
                         Error::new(ErrorDetails::InferenceServer {
                             message: format!("Error parsing input for tool call: {e}"),
                             provider_type: PROVIDER_TYPE.to_string(),
+                            raw_request: None,
+                            raw_response: Some(serde_json::to_string(&input).unwrap_or_default()),
                         })
                     })?,
                 }))
@@ -753,16 +785,14 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
         } = value;
 
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request body as JSON: {e}"),
-                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
 
         let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error parsing response from Anthropic: {e}"),
-                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
 
@@ -796,22 +826,27 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
 fn handle_anthropic_error(
     response_code: StatusCode,
     response_body: AnthropicErrorBody,
+    raw_request: String,
 ) -> Result<ProviderInferenceResponse, Error> {
     match response_code {
         StatusCode::UNAUTHORIZED
         | StatusCode::BAD_REQUEST
         | StatusCode::PAYLOAD_TOO_LARGE
         | StatusCode::TOO_MANY_REQUESTS => Err(ErrorDetails::InferenceClient {
-            message: response_body.message,
             status_code: Some(response_code),
             provider_type: PROVIDER_TYPE.to_string(),
+            raw_request: Some(raw_request),
+            raw_response: serde_json::to_string(&response_body).ok(),
+            message: response_body.message,
         }
         .into()),
         // StatusCode::NOT_FOUND | StatusCode::FORBIDDEN | StatusCode::INTERNAL_SERVER_ERROR | 529: Overloaded
         // These are all captured in _ since they have the same error behavior
         _ => Err(ErrorDetails::InferenceServer {
+            raw_response: serde_json::to_string(&response_body).ok(),
             message: response_body.message,
             provider_type: PROVIDER_TYPE.to_string(),
+            raw_request: Some(raw_request),
         }
         .into()),
     }
@@ -878,9 +913,8 @@ fn anthropic_to_tensorzero_stream_message(
     current_tool_name: &mut Option<String>,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
     let raw_message = serde_json::to_string(&message).map_err(|e| {
-        Error::new(ErrorDetails::InferenceServer {
-            message: format!("Error parsing response from Anthropic: {e}"),
-            provider_type: PROVIDER_TYPE.to_string(),
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Error serializing stream message from Anthropic: {e}"),
         })
     })?;
     match message {
@@ -907,10 +941,14 @@ fn anthropic_to_tensorzero_stream_message(
                         raw_name: current_tool_name.clone().ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                             message: "Got InputJsonDelta chunk from Anthropic without current tool name being set by a ToolUse".to_string(),
                             provider_type: PROVIDER_TYPE.to_string(),
+                            raw_request: None,
+                            raw_response: None,
                         }))?,
                         id: current_tool_id.clone().ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                             message: "Got InputJsonDelta chunk from Anthropic without current tool id being set by a ToolUse".to_string(),
                             provider_type: PROVIDER_TYPE.to_string(),
+                            raw_request: None,
+                            raw_response: None,
                         }))?,
                         raw_arguments: partial_json,
                     })],
@@ -922,6 +960,8 @@ fn anthropic_to_tensorzero_stream_message(
             _ => Err(ErrorDetails::InferenceServer {
                 message: "Unsupported content block type for ContentBlockDelta".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: Some(serde_json::to_string(&delta).unwrap_or_default()),
             }
             .into()),
         },
@@ -962,6 +1002,8 @@ fn anthropic_to_tensorzero_stream_message(
             _ => Err(ErrorDetails::InferenceServer {
                 message: "Unsupported content block type for ContentBlockStart".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: Some(serde_json::to_string(&content_block).unwrap_or_default()),
             }
             .into()),
         },
@@ -969,6 +1011,8 @@ fn anthropic_to_tensorzero_stream_message(
         AnthropicStreamMessage::Error { error } => Err(ErrorDetails::InferenceServer {
             message: error.to_string(),
             provider_type: PROVIDER_TYPE.to_string(),
+            raw_request: None,
+            raw_response: None,
         }
         .into()),
         AnthropicStreamMessage::MessageDelta { usage, .. } => {
@@ -1585,7 +1629,8 @@ mod tests {
             message: "test_message".to_string(),
         };
         let response_code = StatusCode::BAD_REQUEST;
-        let result = handle_anthropic_error(response_code, error_body.clone());
+        let result =
+            handle_anthropic_error(response_code, error_body.clone(), "raw request".to_string());
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
@@ -1593,10 +1638,13 @@ mod tests {
                 message: "test_message".to_string(),
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: Some("raw request".to_string()),
+                raw_response: None,
             }
         );
         let response_code = StatusCode::UNAUTHORIZED;
-        let result = handle_anthropic_error(response_code, error_body.clone());
+        let result =
+            handle_anthropic_error(response_code, error_body.clone(), "raw request".to_string());
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
@@ -1604,10 +1652,13 @@ mod tests {
                 message: "test_message".to_string(),
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: Some("raw request".to_string()),
+                raw_response: None,
             }
         );
         let response_code = StatusCode::TOO_MANY_REQUESTS;
-        let result = handle_anthropic_error(response_code, error_body.clone());
+        let result =
+            handle_anthropic_error(response_code, error_body.clone(), "raw request".to_string());
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
@@ -1615,25 +1666,33 @@ mod tests {
                 message: "test_message".to_string(),
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: Some("raw request".to_string()),
+                raw_response: None,
             }
         );
         let response_code = StatusCode::NOT_FOUND;
-        let result = handle_anthropic_error(response_code, error_body.clone());
+        let result =
+            handle_anthropic_error(response_code, error_body.clone(), "raw request".to_string());
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
             ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
+                raw_request: Some("raw request".to_string()),
+                raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
             }
         );
         let response_code = StatusCode::INTERNAL_SERVER_ERROR;
-        let result = handle_anthropic_error(response_code, error_body.clone());
+        let result =
+            handle_anthropic_error(response_code, error_body.clone(), "raw request".to_string());
         let details = result.unwrap_err().get_owned_details();
         assert_eq!(
             details,
             ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
+                raw_request: Some("raw request".to_string()),
+                raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
             }
         );
@@ -1904,6 +1963,8 @@ mod tests {
             details,
             ErrorDetails::InferenceServer {
                 message: "Got InputJsonDelta chunk from Anthropic without current tool name being set by a ToolUse".to_string(),
+                raw_request: None,
+                raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
             }
         );
@@ -2021,6 +2082,8 @@ mod tests {
             ErrorDetails::InferenceServer {
                 message: "Unsupported content block type for ContentBlockStart".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: None,
             }
         );
 
@@ -2054,6 +2117,8 @@ mod tests {
             details,
             ErrorDetails::InferenceServer {
                 message: r#"{"message":"Test error"}"#.to_string(),
+                raw_request: None,
+                raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
             }
         );

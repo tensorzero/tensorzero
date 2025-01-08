@@ -3,6 +3,17 @@ use std::collections::HashMap;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
 use serde_json::{json, Value};
+use tokio::sync::OnceCell;
+
+static DEBUG: OnceCell<bool> = OnceCell::const_new();
+
+pub fn set_debug(debug: bool) -> Result<(), Error> {
+    DEBUG.set(debug).map_err(|_| {
+        Error::new(ErrorDetails::Config {
+            message: "Failed to set debug mode".to_string(),
+        })
+    })
+}
 
 #[derive(Debug, PartialEq)]
 // As long as the struct member is private, we force people to use the `new` method and log the error.
@@ -86,11 +97,15 @@ pub enum ErrorDetails {
     InferenceServer {
         message: String,
         provider_type: String,
+        raw_request: Option<String>,
+        raw_response: Option<String>,
     },
     InferenceClient {
         message: String,
         status_code: Option<StatusCode>,
         provider_type: String,
+        raw_request: Option<String>,
+        raw_response: Option<String>,
     },
     Inference {
         message: String,
@@ -425,8 +440,33 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::InferenceClient {
                 message,
                 provider_type,
-                ..
-            } => write!(f, "Error from {} client: {}", provider_type, message),
+                raw_request,
+                raw_response,
+                status_code,
+            } => {
+                if *DEBUG.get().unwrap_or(&false) {
+                    write!(
+                        f,
+                        "Error from {} client: {}{}{}",
+                        provider_type,
+                        message,
+                        raw_request
+                            .as_ref()
+                            .map_or("".to_string(), |r| format!("\nRaw request: {}", r)),
+                        raw_response
+                            .as_ref()
+                            .map_or("".to_string(), |r| format!("\nRaw response: {}", r))
+                    )
+                } else {
+                    write!(
+                        f,
+                        "Error {} from {} client: {}",
+                        status_code.map_or("".to_string(), |s| s.to_string()),
+                        provider_type,
+                        message
+                    )
+                }
+            }
             ErrorDetails::InferenceServer {
                 message,
                 provider_type,
