@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Code } from "~/components/ui/code";
 import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference";
+import ModelInput from "./ModelInput";
 
 interface ModelInferenceItemProps {
   inference: ParsedModelInferenceRow;
@@ -45,31 +46,10 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
         </div>
       </div>
 
-      {inference.system && (
-        <Card>
-          <CardHeader>
-            <CardTitle>System Message</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <pre className="overflow-x-auto rounded-md bg-muted p-4">
-              <code className="text-sm">{inference.system}</code>
-            </pre>
-          </CardContent>
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Input Messages</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <pre className="overflow-x-auto rounded-md bg-muted p-4">
-            <code className="text-sm">
-              {JSON.stringify(inference.input_messages, null, 2)}
-            </code>
-          </pre>
-        </CardContent>
-      </Card>
+      <ModelInput
+        input_messages={inference.input_messages}
+        system={inference.system}
+      />
 
       <Card>
         <CardHeader>

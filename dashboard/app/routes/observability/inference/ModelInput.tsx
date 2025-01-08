@@ -1,27 +1,32 @@
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
-import type { Input, InputMessage } from "~/utils/clickhouse/common";
+import type {
+  ContentBlock,
+  Input,
+  RequestMessage,
+} from "~/utils/clickhouse/common";
 
 interface InputProps {
-  input: Input;
+  input_messages: RequestMessage[];
+  system: string | null;
 }
 
-function MessageContent({ content }: { content: InputMessage["content"] }) {
+function MessageContent({ content }: { content: ContentBlock[] }) {
   return (
     <div className="space-y-2">
-      {content.map((block, index) => {
+      {content.map((block, blockIndex) => {
         switch (block.type) {
           case "text":
             return (
-              <div key={index} className="whitespace-pre-wrap">
-                {typeof block.value === "object"
-                  ? JSON.stringify(block.value, null, 2)
-                  : block.value}
+              <div key={blockIndex} className="whitespace-pre-wrap">
+                {typeof block.text === "object"
+                  ? JSON.stringify(block.text, null, 2)
+                  : block.text}
               </div>
             );
           case "tool_call":
             return (
               <div
-                key={index}
+                key={blockIndex}
                 className="rounded bg-slate-100 p-2 dark:bg-slate-800"
               >
                 <div className="font-medium">Tool: {block.name}</div>
@@ -31,7 +36,7 @@ function MessageContent({ content }: { content: InputMessage["content"] }) {
           case "tool_result":
             return (
               <div
-                key={index}
+                key={blockIndex}
                 className="rounded bg-slate-100 p-2 dark:bg-slate-800"
               >
                 <div className="font-medium">Result from: {block.name}</div>
@@ -44,7 +49,7 @@ function MessageContent({ content }: { content: InputMessage["content"] }) {
   );
 }
 
-function Message({ message }: { message: InputMessage }) {
+function Message({ message }: { message: RequestMessage }) {
   return (
     <div className="space-y-1">
       <div className="font-medium capitalize text-slate-600 dark:text-slate-400">
@@ -55,23 +60,19 @@ function Message({ message }: { message: InputMessage }) {
   );
 }
 
-export default function Input({ input }: InputProps) {
+export default function Input({ input_messages, system }: InputProps) {
   return (
     <Card>
       <CardHeader>
         <CardTitle>Input</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        {input.system && (
+        {system && (
           <div className="rounded border-2 border-blue-200 bg-blue-50/50 p-4 dark:border-blue-900 dark:bg-blue-950/50">
             <div className="mb-2 text-lg font-semibold text-blue-900 dark:text-blue-100">
               System
             </div>
-            <div className="whitespace-pre-wrap">
-              {typeof input.system === "object"
-                ? JSON.stringify(input.system, null, 2)
-                : input.system}
-            </div>
+            <div className="whitespace-pre-wrap">{system}</div>
           </div>
         )}
 
@@ -80,7 +81,7 @@ export default function Input({ input }: InputProps) {
             Messages
           </div>
           <div className="space-y-4">
-            {input.messages.map((message, index) => (
+            {input_messages.map((message, index) => (
               <Message key={index} message={message} />
             ))}
           </div>

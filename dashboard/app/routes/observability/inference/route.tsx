@@ -16,6 +16,11 @@ import FeedbackTable from "~/components/feedback/FeedbackTable";
 import { ParameterCard } from "./InferenceParameters";
 import { TagsTable } from "./TagsTable";
 import { ModelInferencesAccordion } from "./ModelInferencesAccordion";
+import { TooltipContent } from "~/components/ui/tooltip";
+import { TooltipTrigger } from "~/components/ui/tooltip";
+import { Tooltip } from "~/components/ui/tooltip";
+import { TooltipProvider } from "~/components/ui/tooltip";
+import { Badge } from "~/components/ui/badge";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { inference_id } = params;
@@ -89,6 +94,8 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     !feedback_bounds.first_id ||
     feedback_bounds.first_id === bottomFeedback.id;
 
+  const num_feedbacks = feedback.length;
+
   return (
     <div className="container mx-auto space-y-6 p-4">
       <h2 className="mb-4 text-2xl font-semibold">
@@ -100,13 +107,34 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
       <BasicInfo inference={inference} />
       <Input input={inference.input} />
       <Output output={inference.output} />
-      <FeedbackTable feedback={feedback} />
-      <PageButtons
-        onNextPage={handleNextFeedbackPage}
-        onPreviousPage={handlePreviousFeedbackPage}
-        disableNext={disableNextFeedbackPage}
-        disablePrevious={disablePreviousFeedbackPage}
-      />
+      <div className="mt-8">
+        <h3 className="mb-2 flex items-center gap-2 text-xl font-semibold">
+          Feedback
+          <TooltipProvider>
+            <Tooltip delayDuration={0}>
+              <TooltipTrigger asChild>
+                <Badge variant="outline" className="px-2 py-0.5 text-xs">
+                  inference
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="max-w-xs">
+                  This table only includes inference-level feedback. To see
+                  episode-level feedback, open the detail page for that episode.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <Badge variant="secondary">Count: {num_feedbacks}</Badge>
+        </h3>
+        <FeedbackTable feedback={feedback} />
+        <PageButtons
+          onNextPage={handleNextFeedbackPage}
+          onPreviousPage={handlePreviousFeedbackPage}
+          disableNext={disableNextFeedbackPage}
+          disablePrevious={disablePreviousFeedbackPage}
+        />
+      </div>
       <ParameterCard
         title="Inference Parameters"
         parameters={inference.inference_params}
@@ -130,6 +158,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     </div>
   );
 }
+
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   console.error(error);
 
