@@ -10,6 +10,11 @@ import {
   queryInferenceTableByEpisodeId,
 } from "./inference";
 import { countInferencesForFunction } from "./inference";
+import type {
+  ContentBlockOutput,
+  JsonInferenceOutput,
+  TextContent,
+} from "./common";
 
 // Test countInferencesForFunction
 test("countInferencesForFunction returns correct counts", async () => {
@@ -487,6 +492,11 @@ test("queryInferenceById for chat inference", async () => {
     "01942e26-910b-7ab1-a645-46bc4463a001",
   );
   expect(inference?.function_type).toBe("chat");
+  expect(inference?.input.messages.length).toBeGreaterThan(0);
+  const output = inference?.output as ContentBlockOutput[];
+  const firstOutput = output[0] as TextContent;
+  expect(firstOutput.type).toBe("text");
+  expect(firstOutput.text).toBe("Yes.");
 });
 
 test("queryInferenceById for missing inference", async () => {
@@ -501,4 +511,7 @@ test("queryInferenceById for json inference", async () => {
     "01942e26-88ab-7331-8293-de75cc2b88a7",
   );
   expect(inference?.function_type).toBe("json");
+  expect(inference?.input.messages.length).toBe(0);
+  const output = inference?.output as JsonInferenceOutput;
+  expect(output.parsed).toBeDefined();
 });

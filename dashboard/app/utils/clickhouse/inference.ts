@@ -556,68 +556,40 @@ export async function queryInferenceById(
 ): Promise<ParsedInferenceRow | null> {
   const query = `
     SELECT
-      /* Common columns (pick from whichever side is not null) */
-      i.id AS id,
-      coalesce(c.function_name, j.function_name)        AS function_name,
-      coalesce(c.variant_name, j.variant_name)          AS variant_name,
-      coalesce(c.episode_id, j.episode_id)              AS episode_id,
-      coalesce(c.input, j.input)                        AS input,
-      coalesce(c.output, j.output)                      AS output,
+  i.id AS id,
 
-      /* Chat-specific columns */
-      IF(
-        i.function_type = 'chat',
-        c.tool_params,
-        ''  -- or NULL
-      ) AS tool_params,
+  -- Common columns (pick via IF)
+  IF(i.function_type = 'chat', c.function_name, j.function_name) AS function_name,
+  IF(i.function_type = 'chat', c.variant_name,   j.variant_name)   AS variant_name,
+  IF(i.function_type = 'chat', c.episode_id,     j.episode_id)     AS episode_id,
+  IF(i.function_type = 'chat', c.input,          j.input)          AS input,
+  IF(i.function_type = 'chat', c.output,         j.output)         AS output,
 
-      /* This column name must match exactly what your union expects */
-      IF(
-        i.function_type = 'chat',
-        c.inference_params,
-        j.inference_params
-      ) AS inference_params,
+  -- Chat-specific columns
+  IF(i.function_type = 'chat', c.tool_params, '') AS tool_params,
 
-      IF(
-        i.function_type = 'chat',
-        c.processing_time_ms,
-        j.processing_time_ms
-      ) AS processing_time_ms,
+  -- Inference params (common name in the union)
+  IF(i.function_type = 'chat', c.inference_params, j.inference_params) AS inference_params,
 
-      /* JSON-specific column */
-      IF(
-        i.function_type = 'json',
-        j.output_schema,
-        ''  -- or NULL
-      ) AS output_schema,
+  -- Processing time
+  IF(i.function_type = 'chat', c.processing_time_ms, j.processing_time_ms) AS processing_time_ms,
 
-      /* Timestamps & tags: unify them from chat/json */
-      /* Some ClickHouse clients require manual type conversion of DateTime to a string.
-         If so, you can wrap these in toString() or similar. */
-      IF(
-        i.function_type = 'chat',
-        c.timestamp,
-        j.timestamp
-      ) AS timestamp,
+  -- JSON-specific column
+  IF(i.function_type = 'json', j.output_schema, '') AS output_schema,
 
-      IF(
-        i.function_type = 'chat',
-        c.tags,
-        j.tags
-      ) AS tags,
+  -- Timestamps & tags
+  IF(i.function_type = 'chat', c.timestamp, j.timestamp) AS timestamp,
+  IF(i.function_type = 'chat', c.tags,      j.tags)      AS tags,
 
-      /* Discriminator itself */
-      i.function_type
+  -- Discriminator itself
+  i.function_type
 
-    FROM InferenceById i
-    LEFT JOIN ChatInference c
-      ON i.id = c.id
-      AND i.function_type = 'chat'
-    LEFT JOIN JsonInference j
-      ON i.id = j.id
-      AND i.function_type = 'json'
-
-    WHERE i.id = {id:String}
+FROM InferenceById i
+LEFT JOIN ChatInference c
+  ON i.id = c.id
+LEFT JOIN JsonInference j
+  ON i.id = j.id
+WHERE i.id = {id:String};
   `;
   const resultSet = await clickhouseClient.query({
     query,

@@ -7,6 +7,7 @@ import InferencesTable from "./InferencesTable";
 import { data, isRouteErrorResponse } from "react-router";
 import { useNavigate } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
+import InferenceSearchBar from "./InferenceSearchBar";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -54,6 +55,10 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      <h2 className="mb-4 text-2xl font-semibold">Inferences</h2>
+      <div className="mb-6 h-px w-full bg-gray-200"></div>
+      <InferenceSearchBar />
+      <div className="my-6 h-px w-full bg-gray-200"></div>
       <InferencesTable inferences={inferences} />
       <PageButtons
         onPreviousPage={handlePreviousPage}

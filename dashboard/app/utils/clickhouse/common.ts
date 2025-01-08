@@ -123,17 +123,8 @@ export const toolCallOutputSchema = z
 
 export type ToolCallOutput = z.infer<typeof toolCallOutputSchema>;
 
-export const textSchema = z
-  .object({
-    type: z.literal("text"),
-    text: z.string(),
-  })
-  .strict();
-
-export type Text = z.infer<typeof textSchema>;
-
 export const contentBlockOutputSchema = z.discriminatedUnion("type", [
-  textSchema,
+  textContentSchema,
   toolCallOutputSchema,
 ]);
 
