@@ -5,6 +5,15 @@ use axum::response::{IntoResponse, Json, Response};
 use serde_json::{json, Value};
 use tokio::sync::OnceCell;
 
+/// Controls whether to include raw request/response details in error output
+///
+/// When true:
+/// - Raw request/response details are logged for inference provider errors
+/// - Raw details are included in error response bodies
+/// - Most commonly affects errors from provider API requests/responses
+///
+/// WARNING: Setting this to true will expose potentially sensitive request/response
+/// data in logs and error responses. Use with caution.
 static DEBUG: OnceCell<bool> = OnceCell::const_new();
 
 pub fn set_debug(debug: bool) -> Result<(), Error> {
