@@ -3,6 +3,26 @@ use std::collections::HashMap;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
 use serde_json::{json, Value};
+use tokio::sync::OnceCell;
+
+/// Controls whether to include raw request/response details in error output
+///
+/// When true:
+/// - Raw request/response details are logged for inference provider errors
+/// - Raw details are included in error response bodies
+/// - Most commonly affects errors from provider API requests/responses
+///
+/// WARNING: Setting this to true will expose potentially sensitive request/response
+/// data in logs and error responses. Use with caution.
+static DEBUG: OnceCell<bool> = OnceCell::const_new();
+
+pub fn set_debug(debug: bool) -> Result<(), Error> {
+    DEBUG.set(debug).map_err(|_| {
+        Error::new(ErrorDetails::Config {
+            message: "Failed to set debug mode".to_string(),
+        })
+    })
+}
 
 #[derive(Debug, PartialEq)]
 // As long as the struct member is private, we force people to use the `new` method and log the error.
@@ -86,11 +106,15 @@ pub enum ErrorDetails {
     InferenceServer {
         message: String,
         provider_type: String,
+        raw_request: Option<String>,
+        raw_response: Option<String>,
     },
     InferenceClient {
         message: String,
         status_code: Option<StatusCode>,
         provider_type: String,
+        raw_request: Option<String>,
+        raw_response: Option<String>,
     },
     Inference {
         message: String,
@@ -219,6 +243,10 @@ pub enum ErrorDetails {
     UuidInFuture {
         raw_uuid: String,
     },
+    RouteNotFound {
+        path: String,
+        method: String,
+    },
 }
 
 impl ErrorDetails {
@@ -280,6 +308,7 @@ impl ErrorDetails {
             ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => tracing::Level::WARN,
             ErrorDetails::UuidInFuture { .. } => tracing::Level::WARN,
+            ErrorDetails::RouteNotFound { .. } => tracing::Level::WARN,
         }
     }
 
@@ -345,6 +374,7 @@ impl ErrorDetails {
             }
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::UuidInFuture { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::RouteNotFound { .. } => StatusCode::NOT_FOUND,
         }
     }
 
@@ -419,13 +449,58 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::InferenceClient {
                 message,
                 provider_type,
-                ..
-            } => write!(f, "Error from {} client: {}", provider_type, message),
+                raw_request,
+                raw_response,
+                status_code,
+            } => {
+                // `debug` defaults to false so we don't log raw request and response by default
+                if *DEBUG.get().unwrap_or(&false) {
+                    write!(
+                        f,
+                        "Error from {} client: {}{}{}",
+                        provider_type,
+                        message,
+                        raw_request
+                            .as_ref()
+                            .map_or("".to_string(), |r| format!("\nRaw request: {}", r)),
+                        raw_response
+                            .as_ref()
+                            .map_or("".to_string(), |r| format!("\nRaw response: {}", r))
+                    )
+                } else {
+                    write!(
+                        f,
+                        "Error{} from {} client: {}",
+                        status_code.map_or("".to_string(), |s| format!(" {}", s)),
+                        provider_type,
+                        message
+                    )
+                }
+            }
             ErrorDetails::InferenceServer {
                 message,
                 provider_type,
-                ..
-            } => write!(f, "Error from {} server: {}", provider_type, message),
+                raw_request,
+                raw_response,
+            } => {
+                // `debug` defaults to false so we don't log raw request and response by default
+                if *DEBUG.get().unwrap_or(&false) {
+                    write!(
+                        f,
+                        "Error from {} server: {}{}{}",
+                        provider_type,
+                        message,
+                        raw_request
+                            .as_ref()
+                            .map_or("".to_string(), |r| format!("\nRaw request: {}", r)),
+                        raw_response
+                            .as_ref()
+                            .map_or("".to_string(), |r| format!("\nRaw response: {}", r))
+                    )
+                } else {
+                    write!(f, "Error from {} server: {}", provider_type, message)
+                }
+            }
             ErrorDetails::InferenceTimeout { variant_name } => {
                 write!(f, "Inference timed out for variant: {}", variant_name)
             }
@@ -569,6 +644,9 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::UuidInFuture { raw_uuid } => {
                 write!(f, "UUID is in the future: {}", raw_uuid)
+            }
+            ErrorDetails::RouteNotFound { path, method } => {
+                write!(f, "Route not found: {} {}", method, path)
             }
         }
     }

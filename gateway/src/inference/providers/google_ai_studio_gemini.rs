@@ -144,6 +144,8 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                     message: format!("Error sending request: {e}"),
                     status_code: e.status(),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                 })
             })?;
         let latency = Latency::NonStreaming {
@@ -154,6 +156,8 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                 })
             })?;
 
@@ -161,6 +165,8 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {response}"),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: Some(response.clone()),
                 })
             })?;
             let response_with_latency = GeminiResponseWithMetadata {
@@ -176,6 +182,8 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                 })
             })?;
             handle_google_ai_studio_error(response_code, error_body)
@@ -198,9 +206,8 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
     > {
         let request_body: GeminiRequest = GeminiRequest::new(request)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),
-                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
@@ -217,6 +224,8 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                     message: format!("Error sending request to Google AI Studio Gemini: {e}"),
                     status_code: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                 })
             })?;
         let mut stream = Box::pin(stream_google_ai_studio_gemini(event_source, start_time));
@@ -227,6 +236,8 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                 return Err(ErrorDetails::InferenceServer {
                     message: "Stream ended before first chunk".to_string(),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                 }
                 .into())
             }
@@ -262,6 +273,8 @@ fn stream_google_ai_studio_gemini(
                     yield Err(ErrorDetails::InferenceServer {
                         message: e.to_string(),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        raw_request: None,
+                        raw_response: None,
                     }.into())
                 }
                 Ok(event) => match event {
@@ -271,6 +284,8 @@ fn stream_google_ai_studio_gemini(
                             Error::new(ErrorDetails::InferenceServer {
                                 message: format!("Error parsing streaming JSON response: {e}"),
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                raw_request: None,
+                                raw_response: Some(message.data.clone()),
                             })
                         });
                         let data = match data {
@@ -352,6 +367,8 @@ impl<'a> TryFrom<&'a ContentBlock> for GeminiPart<'a> {
                         status_code: Some(StatusCode::BAD_REQUEST),
                         message: format!("Error parsing tool result as JSON Value: {e}"),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        raw_request: None,
+                        raw_response: Some(tool_result.result.clone()),
                     })
                 })?;
 
@@ -375,6 +392,8 @@ impl<'a> TryFrom<&'a ContentBlock> for GeminiPart<'a> {
                         status_code: Some(StatusCode::BAD_REQUEST),
                         message: format!("Error parsing tool call arguments as JSON Value: {e}"),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        raw_request: None,
+                        raw_response: Some(tool_call.arguments.clone()),
                     })
                 })?;
 
@@ -383,6 +402,8 @@ impl<'a> TryFrom<&'a ContentBlock> for GeminiPart<'a> {
                         status_code: Some(StatusCode::BAD_REQUEST),
                         message: "Tool call arguments must be a JSON object".to_string(),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        raw_request: None,
+                        raw_response: Some(tool_call.arguments.clone()),
                     }
                     .into());
                 }
@@ -763,9 +784,8 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
             generic_request,
         } = response;
         let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing response from Google AI Studio Gemini: {e}"),
-                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
 
@@ -774,6 +794,8 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
             Error::new(ErrorDetails::InferenceServer {
                 message: "Google AI Studio Gemini response has no candidates".to_string(),
+                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
@@ -794,14 +816,15 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 Error::new(ErrorDetails::InferenceServer {
                     message: "Google AI Studio Gemini non-streaming response has no usage metadata"
                         .to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: Some(raw_response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?
             .into();
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),
-                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         let system = generic_request.system.clone();
@@ -834,17 +857,18 @@ impl TryFrom<GoogleAIStudioGeminiResponseWithMetadata> for ProviderInferenceResp
         } = response;
 
         let raw = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!(
                     "Error serializing streaming response from Google AI Studio Gemini: {e}"
                 ),
-                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
 
         let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
             Error::new(ErrorDetails::InferenceServer {
                 message: "Google AI Studio Gemini response has no candidates".to_string(),
+                raw_request: None,
+                raw_response: Some(raw.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
@@ -881,15 +905,19 @@ fn handle_google_ai_studio_error(
         | StatusCode::BAD_REQUEST
         | StatusCode::PAYLOAD_TOO_LARGE
         | StatusCode::TOO_MANY_REQUESTS => Err(ErrorDetails::InferenceClient {
-            message: response_body,
             status_code: Some(response_code),
+            message: response_body.clone(),
+            raw_request: None,
+            raw_response: Some(response_body.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
         }
         .into()),
         // StatusCode::NOT_FOUND | StatusCode::FORBIDDEN | StatusCode::INTERNAL_SERVER_ERROR | 529: Overloaded
         // These are all captured in _ since they have the same error behavior
         _ => Err(ErrorDetails::InferenceServer {
-            message: response_body,
+            message: response_body.clone(),
+            raw_request: None,
+            raw_response: Some(response_body.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
         }
         .into()),

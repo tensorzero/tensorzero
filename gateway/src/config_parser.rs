@@ -36,6 +36,8 @@ pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
     #[serde(default)]
     pub disable_observability: bool,
+    #[serde(default)]
+    pub debug: bool,
 }
 
 #[derive(Debug, Deserialize)]
