@@ -444,6 +444,7 @@ impl std::fmt::Display for ErrorDetails {
                 raw_response,
                 status_code,
             } => {
+                // `debug` defaults to false so we don't log raw request and response by default
                 if *DEBUG.get().unwrap_or(&false) {
                     write!(
                         f,
@@ -470,8 +471,27 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::InferenceServer {
                 message,
                 provider_type,
-                ..
-            } => write!(f, "Error from {} server: {}", provider_type, message),
+                raw_request,
+                raw_response,
+            } => {
+                // `debug` defaults to false so we don't log raw request and response by default
+                if *DEBUG.get().unwrap_or(&false) {
+                    write!(
+                        f,
+                        "Error from {} server: {}{}{}",
+                        provider_type,
+                        message,
+                        raw_request
+                            .as_ref()
+                            .map_or("".to_string(), |r| format!("\nRaw request: {}", r)),
+                        raw_response
+                            .as_ref()
+                            .map_or("".to_string(), |r| format!("\nRaw response: {}", r))
+                    )
+                } else {
+                    write!(f, "Error from {} server: {}", provider_type, message)
+                }
+            }
             ErrorDetails::InferenceTimeout { variant_name } => {
                 write!(f, "Inference timed out for variant: {}", variant_name)
             }
