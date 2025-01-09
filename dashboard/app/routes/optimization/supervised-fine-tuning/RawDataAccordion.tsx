@@ -86,10 +86,8 @@ export function RawDataAccordion({ rawData }: RawDataAccordionProps) {
                 <Textarea
                   value={serializedData}
                   style={{ height: `${height}px` }}
-                  className={`w-full resize-none border-none focus:ring-0 ${
-                    entry.status === "error"
-                      ? "bg-red-50 text-red-700"
-                      : "bg-transparent"
+                  className={`w-full resize-none rounded border-none bg-slate-100 p-2 font-mono text-sm focus:ring-0 dark:bg-slate-800 ${
+                    entry.status === "error" ? "bg-red-50 text-red-700" : ""
                   }`}
                   readOnly
                 />

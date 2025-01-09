@@ -1,60 +1,37 @@
-"use client";
+import { useEffect } from "react";
 
-import { useEffect, useState } from "react";
-import { Card, CardContent } from "~/components/ui/card";
+import { useState } from "react";
 
-interface CountdownTimerProps {
-  endTime: number; // Unix timestamp in milliseconds
-}
-
-export function CountdownTimer({ endTime }: CountdownTimerProps) {
-  const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
-
-  function calculateTimeLeft() {
-    const difference = endTime - Date.now();
-    if (difference <= 0) {
-      return { hours: 0, minutes: 0, seconds: 0 };
-    }
-
-    return {
-      hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
-      minutes: Math.floor((difference / 1000 / 60) % 60),
-      seconds: Math.floor((difference / 1000) % 60),
-    };
-  }
+export function CountdownTimer({ targetDate }: { targetDate: Date }) {
+  const [timeLeft, setTimeLeft] = useState("");
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setTimeLeft(calculateTimeLeft());
+      const now = new Date();
+      const difference = targetDate.getTime() - now.getTime();
+
+      if (difference > 0) {
+        const hours = Math.floor((difference / (1000 * 60 * 60)) % 24);
+        const minutes = Math.floor((difference / 1000 / 60) % 60);
+        const seconds = Math.floor((difference / 1000) % 60);
+
+        setTimeLeft(
+          `${hours.toString().padStart(2, "0")}:${minutes
+            .toString()
+            .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`,
+        );
+      } else {
+        setTimeLeft("00:00:00");
+        clearInterval(timer);
+      }
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [endTime]);
+  }, [targetDate]);
 
   return (
-    <Card className="mx-auto w-full max-w-sm">
-      <CardContent className="flex h-24 items-center justify-center">
-        <div className="grid auto-cols-max grid-flow-col gap-4 text-center">
-          <div className="flex flex-col">
-            <span className="countdown font-mono text-4xl">
-              {String(timeLeft.hours).padStart(2, "0")}
-            </span>
-            hours
-          </div>
-          <div className="flex flex-col">
-            <span className="countdown font-mono text-4xl">
-              {String(timeLeft.minutes).padStart(2, "0")}
-            </span>
-            min
-          </div>
-          <div className="flex flex-col">
-            <span className="countdown font-mono text-4xl">
-              {String(timeLeft.seconds).padStart(2, "0")}
-            </span>
-            sec
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <span className="font-mono" title={targetDate.toLocaleString()}>
+      {timeLeft}
+    </span>
   );
 }

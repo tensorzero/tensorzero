@@ -25,7 +25,7 @@ export function ProgressIndicator({
     <div className="max-w-lg space-y-2">
       <div className="flex items-center justify-between">
         <span className="font-medium">Estimated Completion</span>
-        <CountdownTimer endTime={estimatedCompletion.getTime()} />
+        <CountdownTimer targetDate={estimatedCompletion} />
       </div>
       <Progress
         value={getProgressPercentage(createdAt, estimatedCompletion)}
