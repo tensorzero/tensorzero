@@ -3,7 +3,7 @@ pub mod clickhouse_migration_manager;
 pub mod config_parser; // TensorZero config file
 pub mod embeddings; // embedding inference
 pub mod endpoints; // API endpoints
-mod error; // error handling
+pub mod error; // error handling
 pub mod function; // types and methods for working with TensorZero functions
 pub mod gateway_util; // utilities for gateway
 pub mod inference; // model inference

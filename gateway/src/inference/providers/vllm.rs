@@ -126,6 +126,8 @@ impl InferenceProvider for VLLMProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request to vLLM: {e}"),
                     status_code: e.status(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
@@ -133,9 +135,19 @@ impl InferenceProvider for VLLMProvider {
             response_time: start_time.elapsed(),
         };
         if res.status().is_success() {
-            let response_body = res.json::<OpenAIResponse>().await.map_err(|e| {
+            let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing response: {e}"),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            })?;
+            let response_body = serde_json::from_str(&raw_response).map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!("Error parsing response: {e}"),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: Some(raw_response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
@@ -147,15 +159,16 @@ impl InferenceProvider for VLLMProvider {
             }
             .try_into()?)
         } else {
-            Err(handle_openai_error(
-                res.status(),
-                &res.text().await.map_err(|e| {
-                    Error::new(ErrorDetails::InferenceServer {
-                        message: format!("Error parsing error response: {e}"),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    })
-                })?,
-            ))
+            let status = res.status();
+            let raw_response = res.text().await.map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!("Error parsing error response: {e}"),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            })?;
+            Err(handle_openai_error(status, &raw_response, PROVIDER_TYPE))
         }
     }
 
@@ -174,9 +187,8 @@ impl InferenceProvider for VLLMProvider {
     > {
         let request_body = VLLMRequest::new(&self.model_name, request)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),
-                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
@@ -195,6 +207,8 @@ impl InferenceProvider for VLLMProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request to vLLM: {e}"),
                     status_code: None,
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
@@ -207,6 +221,8 @@ impl InferenceProvider for VLLMProvider {
             None => {
                 return Err(ErrorDetails::InferenceServer {
                     message: "Stream ended before first chunk".to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                 }
                 .into())
@@ -289,8 +305,10 @@ impl<'a> VLLMRequest<'a> {
         // TODO (#169): Implement tool calling.
         if request.tool_config.is_some() {
             return Err(ErrorDetails::InferenceClient {
-                status_code: Some(reqwest::StatusCode::BAD_REQUEST),
                 message: "TensorZero does not support tool use with vLLM. Please use a different provider.".to_string(),
+                status_code: Some(reqwest::StatusCode::BAD_REQUEST),
+                raw_request: None,
+                raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
             }.into());
         }
@@ -330,6 +348,8 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let raw_response = serde_json::to_string(&response).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error parsing response: {e}"),
+                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
@@ -339,6 +359,8 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
                     "Response has invalid number of choices: {}. Expected 1.",
                     response.choices.len()
                 ),
+                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
             }
             .into());
@@ -349,6 +371,8 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
             .pop()
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
+                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
             }))?
             .message;
@@ -364,6 +388,8 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request body as JSON: {e}"),
+                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;

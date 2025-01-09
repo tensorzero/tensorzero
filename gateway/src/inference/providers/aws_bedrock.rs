@@ -55,6 +55,8 @@ impl AWSBedrockProvider {
             .await
             .ok_or_else(|| {
                 Error::new(ErrorDetails::InferenceClient {
+                    raw_request: None,
+                    raw_response: None,
                     status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
                     message: "Failed to determine AWS region.".to_string(),
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -136,6 +138,8 @@ impl InferenceProvider for AWSBedrockProvider {
                     .build()
                     .map_err(|e| {
                         Error::new(ErrorDetails::InferenceClient {
+                            raw_request: None,
+                            raw_response: None,
                             status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
                             message: format!("Error configuring AWS Bedrock tool config: {e}"),
                             provider_type: PROVIDER_TYPE.to_string(),
@@ -156,6 +160,8 @@ impl InferenceProvider for AWSBedrockProvider {
                     "Error sending request to AWS Bedrock: {}",
                     DisplayErrorContext(&e)
                 ),
+                raw_request: None,
+                raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
@@ -247,6 +253,8 @@ impl InferenceProvider for AWSBedrockProvider {
                     .build()
                     .map_err(|e| {
                         Error::new(ErrorDetails::InferenceClient {
+                            raw_request: None,
+                            raw_response: None,
                             status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
                             message: format!("Error configuring AWS Bedrock tool config: {e}"),
                             provider_type: PROVIDER_TYPE.to_string(),
@@ -262,6 +270,8 @@ impl InferenceProvider for AWSBedrockProvider {
         let start_time = Instant::now();
         let stream = bedrock_request.send().await.map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
+                raw_request: Some(raw_request.clone()),
+                raw_response: None,
                 message: format!(
                     "Error sending request to AWS Bedrock: {}",
                     DisplayErrorContext(&e)
@@ -276,6 +286,8 @@ impl InferenceProvider for AWSBedrockProvider {
             Some(Err(e)) => return Err(e),
             None => {
                 return Err(Error::new(ErrorDetails::InferenceServer {
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
                     message: "Stream ended before first chunk".to_string(),
                     provider_type: PROVIDER_TYPE.to_string(),
                 }))
@@ -334,6 +346,8 @@ fn stream_bedrock(
             match ev {
                 Err(e) => {
                     yield Err(ErrorDetails::InferenceServer {
+                        raw_request: None,
+                        raw_response: None,
                         message: e.to_string(),
                         provider_type: PROVIDER_TYPE.to_string(),
 
@@ -392,12 +406,14 @@ fn bedrock_to_tensorzero_stream_message(
                                 raw_name: current_tool_name.clone().ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                                     message: "Got InputJsonDelta chunk from AWS Bedrock without current tool name being set by a ToolUse".to_string(),
                                     provider_type: PROVIDER_TYPE.to_string(),
-
+                                    raw_request: None,
+                                    raw_response: None,
                                 }))?,
                                 id: current_tool_id.clone().ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                                     message: "Got InputJsonDelta chunk from AWS Bedrock without current tool id being set by a ToolUse".to_string(),
                                     provider_type: PROVIDER_TYPE.to_string(),
-
+                                    raw_request: None,
+                                    raw_response: None,
                                 }))?,
                                 raw_arguments: tool_use.input,
                             })],
@@ -407,6 +423,8 @@ fn bedrock_to_tensorzero_stream_message(
                         )))
                     }
                     _ => Err(ErrorDetails::InferenceServer {
+                        raw_request: None,
+                        raw_response: None,
                         message: "Unsupported content block delta type for AWS Bedrock".to_string(),
                         provider_type: PROVIDER_TYPE.to_string(),
                     }
@@ -437,6 +455,8 @@ fn bedrock_to_tensorzero_stream_message(
                     )))
                 }
                 _ => Err(ErrorDetails::InferenceServer {
+                    raw_request: None,
+                    raw_response: None,
                     message: "Unsupported content block start type for AWS Bedrock".to_string(),
                     provider_type: PROVIDER_TYPE.to_string(),
                 }
@@ -470,6 +490,8 @@ fn bedrock_to_tensorzero_stream_message(
             }
         }
         _ => Err(ErrorDetails::InferenceServer {
+            raw_request: None,
+            raw_response: None,
             message: "Unknown event type from AWS Bedrock".to_string(),
             provider_type: PROVIDER_TYPE.to_string(),
         }
@@ -508,6 +530,8 @@ impl TryFrom<&ContentBlock> for BedrockContentBlock {
                 // Convert the tool call arguments from String to JSON Value...
                 let input = serde_json::from_str(&tool_call.arguments).map_err(|e| {
                     Error::new(ErrorDetails::InferenceClient {
+                        raw_request: None,
+                        raw_response: Some(tool_call.arguments.clone()),
                         status_code: Some(StatusCode::BAD_REQUEST),
                         message: format!("Error parsing tool call arguments as JSON Value: {e}"),
                         provider_type: PROVIDER_TYPE.to_string(),
@@ -517,6 +541,8 @@ impl TryFrom<&ContentBlock> for BedrockContentBlock {
                 // ...then convert the JSON Value to an AWS SDK Document
                 let input = serde_json::from_value(input).map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
+                        raw_request: None,
+                        raw_response: None,
                         message: format!(
                             "Error converting tool call arguments to AWS SDK Document: {e}"
                         ),
@@ -531,6 +557,8 @@ impl TryFrom<&ContentBlock> for BedrockContentBlock {
                     .build()
                     .map_err(|_| {
                         Error::new(ErrorDetails::InferenceClient {
+                            raw_request: None,
+                            raw_response: None,
                             status_code: Some(StatusCode::BAD_REQUEST),
                             message: "Error serializing tool call block".to_string(),
                             provider_type: PROVIDER_TYPE.to_string(),
@@ -547,6 +575,8 @@ impl TryFrom<&ContentBlock> for BedrockContentBlock {
                     .build()
                     .map_err(|_| {
                         Error::new(ErrorDetails::InferenceClient {
+                            raw_request: None,
+                            raw_response: None,
                             status_code: Some(StatusCode::BAD_REQUEST),
                             message: "Error serializing tool result block".to_string(),
                             provider_type: PROVIDER_TYPE.to_string(),
@@ -568,6 +598,8 @@ impl TryFrom<BedrockContentBlock> for ContentBlock {
             BedrockContentBlock::ToolUse(tool_use) => {
                 let arguments = serde_json::to_string(&tool_use.input).map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
+                        raw_request: None,
+                        raw_response: None,
                         message: format!("Error parsing tool call arguments from AWS Bedrock: {e}"),
                         provider_type: PROVIDER_TYPE.to_string(),
                     })
@@ -646,6 +678,8 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
             Some(ConverseOutputType::Message(message)) => Some(message),
             _ => {
                 return Err(ErrorDetails::InferenceServer {
+                    raw_request: None,
+                    raw_response: Some(raw_response.clone()),
                     message: "AWS Bedrock returned an unknown output type.".to_string(),
                     provider_type: PROVIDER_TYPE.to_string(),
                 }
@@ -656,6 +690,8 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
         let mut content: Vec<ContentBlock> = message
             .ok_or_else(|| {
                 Error::new(ErrorDetails::InferenceServer {
+                    raw_request: None,
+                    raw_response: Some(raw_response.clone()),
                     message: "AWS Bedrock returned an empty message.".to_string(),
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
@@ -681,6 +717,8 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
             })
             .ok_or_else(|| {
                 Error::new(ErrorDetails::InferenceServer {
+                    raw_request: None,
+                    raw_response: Some(raw_response.clone()),
                     message: "AWS Bedrock returned a message without usage information."
                         .to_string(),
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -709,6 +747,8 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
 fn serialize_aws_bedrock_struct<T: std::fmt::Debug>(output: &T) -> Result<String, Error> {
     serde_json::to_string(&serde_json::json!({"debug": format!("{:?}", output)})).map_err(|e| {
         Error::new(ErrorDetails::InferenceServer {
+            raw_request: None,
+            raw_response: Some(format!("{:?}", output)),
             message: format!("Error parsing response from AWS Bedrock: {e}"),
             provider_type: PROVIDER_TYPE.to_string(),
         })
@@ -722,6 +762,8 @@ impl TryFrom<&ToolConfig> for Tool {
         let tool_input_schema = ToolInputSchema::Json(
             serde_json::from_value(tool_config.parameters().clone()).map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
+                    raw_request: None,
+                    raw_response: Some(format!("{:?}", tool_config.parameters())),
                     status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
                     message: format!("Error parsing tool input schema: {e}"),
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -736,6 +778,8 @@ impl TryFrom<&ToolConfig> for Tool {
             .build()
             .map_err(|_| {
                 Error::new(ErrorDetails::InferenceClient {
+                    raw_request: None,
+                    raw_response: Some(format!("{:?}", tool_config.parameters())),
                     status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
                     message: "Error configuring AWS Bedrock tool choice (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"
                         .to_string(),
@@ -767,6 +811,8 @@ impl TryFrom<ToolChoice> for AWSBedrockToolChoice {
                     .name(tool_name)
                     .build()
                     .map_err(|_| Error::new(ErrorDetails::InferenceClient {
+                        raw_request: None,
+                        raw_response: None,
                         status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
                         message:
                             "Error configuring AWS Bedrock tool choice (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"

@@ -271,6 +271,8 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                     message: format!("Error sending request: {e}"),
                     status_code: e.status(),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                 })
             })?;
         let latency = Latency::NonStreaming {
@@ -281,6 +283,8 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                 })
             })?;
 
@@ -288,6 +292,8 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {response}"),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: Some(response),
                 })
             })?;
             let response_with_latency = GCPVertexGeminiResponseWithMetadata {
@@ -303,6 +309,8 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                 })
             })?;
             handle_gcp_vertex_gemini_error(response_code, error_body)
@@ -326,9 +334,8 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         let request_body: GCPVertexGeminiRequest =
             GCPVertexGeminiRequest::new(request, &self.model_id)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),
-                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         let api_key = self
@@ -345,6 +352,8 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                     message: format!("Error sending request to GCP Vertex Gemini: {e}"),
                     status_code: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                 })
             })?;
         let mut stream = Box::pin(stream_gcp_vertex_gemini(event_source, start_time));
@@ -355,6 +364,8 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 return Err(ErrorDetails::InferenceServer {
                     message: "Stream ended before first chunk".to_string(),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                 }
                 .into())
             }
@@ -402,6 +413,8 @@ fn stream_gcp_vertex_gemini(
                     yield Err(ErrorDetails::InferenceServer {
                         message: e.to_string(),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        raw_request: None,
+                        raw_response: None,
                     }
                     .into());
                 }
@@ -412,6 +425,8 @@ fn stream_gcp_vertex_gemini(
                             Error::new(ErrorDetails::InferenceServer {
                                 message: format!("Error parsing streaming JSON response: {e}"),
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                raw_request: None,
+                                raw_response: Some(message.data.clone()),
                             })
                         });
                         let data = match data {
@@ -492,6 +507,8 @@ impl<'a> TryFrom<&'a ContentBlock> for GCPVertexGeminiContentPart<'a> {
                         status_code: Some(StatusCode::BAD_REQUEST),
                         message: format!("Error parsing tool result as JSON Value: {e}"),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        raw_request: None,
+                        raw_response: Some(tool_result.result.clone()),
                     })
                 })?;
 
@@ -515,6 +532,8 @@ impl<'a> TryFrom<&'a ContentBlock> for GCPVertexGeminiContentPart<'a> {
                         status_code: Some(StatusCode::BAD_REQUEST),
                         message: format!("Error parsing tool call arguments as JSON Value: {e}"),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        raw_request: None,
+                        raw_response: Some(tool_call.arguments.clone()),
                     })
                 })?;
 
@@ -523,6 +542,8 @@ impl<'a> TryFrom<&'a ContentBlock> for GCPVertexGeminiContentPart<'a> {
                         status_code: Some(StatusCode::BAD_REQUEST),
                         message: "Tool call arguments must be a JSON object".to_string(),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        raw_request: None,
+                        raw_response: Some(tool_call.arguments.clone()),
                     }
                     .into());
                 };
@@ -944,9 +965,8 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
             generic_request,
         } = response;
         let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing response from GCP Vertex Gemini: {e}"),
-                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
 
@@ -955,6 +975,8 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
         let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
             Error::new(ErrorDetails::InferenceServer {
                 message: "GCP Vertex Gemini response has no candidates".to_string(),
+                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
@@ -975,14 +997,15 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
                 Error::new(ErrorDetails::InferenceServer {
                     message: "GCP Vertex Gemini non-streaming response has no usage metadata"
                         .to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: Some(raw_response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?
             .into();
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),
-                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         let system = generic_request.system.clone();
@@ -1016,17 +1039,18 @@ impl TryFrom<GCPVertexGeminiStreamResponseWithMetadata> for ProviderInferenceRes
         } = response;
 
         let raw = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!(
                     "Error serializing streaming response from GCP Vertex Gemini: {e}"
                 ),
-                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
 
         let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
             Error::new(ErrorDetails::InferenceServer {
                 message: "GCP Vertex Gemini response has no candidates".to_string(),
+                raw_request: None,
+                raw_response: Some(raw.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
@@ -1063,14 +1087,18 @@ fn handle_gcp_vertex_gemini_error(
         | StatusCode::BAD_REQUEST
         | StatusCode::PAYLOAD_TOO_LARGE
         | StatusCode::TOO_MANY_REQUESTS => Err(Error::new(ErrorDetails::InferenceClient {
-            message: response_body,
+            message: response_body.clone(),
             status_code: Some(response_code),
+            raw_request: None,
+            raw_response: Some(response_body.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
         })),
         // StatusCode::NOT_FOUND | StatusCode::FORBIDDEN | StatusCode::INTERNAL_SERVER_ERROR | 529: Overloaded
         // These are all captured in _ since they have the same error behavior
         _ => Err(Error::new(ErrorDetails::InferenceServer {
-            message: response_body,
+            message: response_body.clone(),
+            raw_request: None,
+            raw_response: Some(response_body.clone()),
             provider_type: PROVIDER_TYPE.to_string(),
         })),
     }

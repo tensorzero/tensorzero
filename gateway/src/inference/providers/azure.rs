@@ -126,6 +126,8 @@ impl InferenceProvider for AzureProvider {
                     message: e.to_string(),
                     status_code: Some(e.status().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                 })
             })?;
         if res.status().is_success() {
@@ -137,6 +139,8 @@ impl InferenceProvider for AzureProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                 })
             })?;
 
@@ -144,6 +148,8 @@ impl InferenceProvider for AzureProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {response}"),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: Some(response.clone()),
                 })
             })?;
 
@@ -155,15 +161,16 @@ impl InferenceProvider for AzureProvider {
             }
             .try_into()?)
         } else {
-            Err(handle_openai_error(
-                res.status(),
-                &res.text().await.map_err(|e| {
-                    Error::new(ErrorDetails::InferenceServer {
-                        message: format!("Error parsing error response: {e}"),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    })
-                })?,
-            ))
+            let status = res.status();
+            let response = res.text().await.map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!("Error parsing error response: {e}"),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
+                })
+            })?;
+            Err(handle_openai_error(status, &response, PROVIDER_TYPE))
         }
     }
 
@@ -182,9 +189,8 @@ impl InferenceProvider for AzureProvider {
     > {
         let request_body = AzureRequest::new(request);
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request body as JSON: {e}"),
-                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id)?;
@@ -201,6 +207,8 @@ impl InferenceProvider for AzureProvider {
                     message: format!("Error sending request to Azure: {e}"),
                     status_code: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
                 })
             })?;
         let mut stream = Box::pin(stream_openai(event_source, start_time));
@@ -213,6 +221,8 @@ impl InferenceProvider for AzureProvider {
                 return Err(ErrorDetails::InferenceServer {
                     message: "Stream ended before first chunk".to_string(),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
                 }
                 .into())
             }
@@ -252,6 +262,8 @@ fn get_azure_chat_url(endpoint: &Url, deployment_id: &str) -> Result<Url, Error>
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error parsing URL: {e:?}"),
                 provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: None,
             })
         })?
         .push("openai")
@@ -382,9 +394,8 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
             generic_request,
         } = value;
         let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error parsing response: {e}"),
-                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         if response.choices.len() != 1 {
@@ -394,6 +405,8 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
                     response.choices.len()
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: Some(raw_response.clone()),
             }
             .into());
         }
@@ -407,6 +420,8 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 Error::new(ErrorDetails::InferenceServer {
                     message: "Response has no choices (this should never happen)".to_string(),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: None,
+                    raw_response: Some(raw_response.clone()),
                 })
             })?
             .message;
@@ -420,9 +435,8 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
             }
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request body as JSON: {e}"),
-                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
 

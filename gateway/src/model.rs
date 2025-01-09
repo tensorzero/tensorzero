@@ -1007,6 +1007,8 @@ mod tests {
                         message: "Error sending request to Dummy provider.".to_string(),
                         status_code: None,
                         provider_type: "dummy".to_string(),
+                        raw_request: Some("raw request".to_string()),
+                        raw_response: None,
                     }
                     .into()
                 )])
@@ -1161,6 +1163,8 @@ mod tests {
                         message: "Error sending request to Dummy provider.".to_string(),
                         status_code: None,
                         provider_type: "dummy".to_string(),
+                        raw_request: Some("raw request".to_string()),
+                        raw_response: None,
                     }
                     .into()
                 )])
@@ -1310,6 +1314,8 @@ mod tests {
                         message: "Invalid API key for Dummy provider".to_string(),
                         status_code: None,
                         provider_type: "dummy".to_string(),
+                        raw_request: Some("raw request".to_string()),
+                        raw_response: None,
                     }
                     .into()
                 )])

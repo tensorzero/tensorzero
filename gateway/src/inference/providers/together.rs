@@ -135,6 +135,8 @@ impl InferenceProvider for TogetherProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("{e}"),
                     status_code: Some(e.status().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
@@ -142,6 +144,8 @@ impl InferenceProvider for TogetherProvider {
             let response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
@@ -149,6 +153,8 @@ impl InferenceProvider for TogetherProvider {
             let response = serde_json::from_str(&response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {response}"),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: Some(response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
@@ -163,15 +169,16 @@ impl InferenceProvider for TogetherProvider {
             }
             .try_into()?)
         } else {
-            Err(handle_openai_error(
-                res.status(),
-                &res.text().await.map_err(|e| {
-                    Error::new(ErrorDetails::InferenceServer {
-                        message: format!("Error parsing error response: {e}"),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    })
-                })?,
-            ))
+            let status = res.status();
+            let raw_response = res.text().await.map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!("Error parsing error response: {e}"),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            })?;
+            Err(handle_openai_error(status, &raw_response, PROVIDER_TYPE))
         }
     }
 
@@ -190,9 +197,8 @@ impl InferenceProvider for TogetherProvider {
     > {
         let request_body = TogetherRequest::new(&self.model_name, request);
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),
-                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
@@ -208,6 +214,8 @@ impl InferenceProvider for TogetherProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request to Together: {e}"),
                     status_code: None,
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
@@ -220,6 +228,8 @@ impl InferenceProvider for TogetherProvider {
             None => {
                 return Err(Error::new(ErrorDetails::InferenceServer {
                     message: "Stream ended before first chunk".to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                 }));
             }
@@ -366,6 +376,8 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
         let raw_response = serde_json::to_string(&response).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error parsing response: {e}"),
+                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
@@ -375,6 +387,8 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
                     "Response has invalid number of choices: {}. Expected 1.",
                     response.choices.len()
                 ),
+                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
             }
             .into());
@@ -385,6 +399,8 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
             .pop()
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
+                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
             }))?
             .message;
@@ -400,6 +416,8 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request body as JSON: {e}"),
+                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;

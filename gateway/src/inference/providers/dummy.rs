@@ -164,6 +164,8 @@ impl InferenceProvider for DummyProvider {
             // Fail on even-numbered calls
             if *counter % 2 == 0 {
                 return Err(ErrorDetails::InferenceClient {
+                    raw_request: Some("raw request".to_string()),
+                    raw_response: None,
                     message: format!(
                         "Flaky model '{}' failed on call number {}",
                         self.model_name, *counter
@@ -178,6 +180,8 @@ impl InferenceProvider for DummyProvider {
         if self.model_name == "error" {
             return Err(ErrorDetails::InferenceClient {
                 message: "Error sending request to Dummy provider.".to_string(),
+                raw_request: Some("raw request".to_string()),
+                raw_response: None,
                 status_code: None,
                 provider_type: PROVIDER_TYPE.to_string(),
             }
@@ -189,6 +193,8 @@ impl InferenceProvider for DummyProvider {
                 if api_key.expose_secret() != "good_key" {
                     return Err(ErrorDetails::InferenceClient {
                         message: "Invalid API key for Dummy provider".to_string(),
+                        raw_request: Some("raw request".to_string()),
+                        raw_response: None,
                         status_code: None,
                         provider_type: PROVIDER_TYPE.to_string(),
                     }
@@ -289,6 +295,8 @@ impl InferenceProvider for DummyProvider {
             // Fail on even-numbered calls
             if *counter % 2 == 0 {
                 return Err(ErrorDetails::InferenceClient {
+                    raw_request: Some("raw request".to_string()),
+                    raw_response: None,
                     message: format!(
                         "Flaky model '{}' failed on call number {}",
                         self.model_name, *counter
@@ -303,6 +311,8 @@ impl InferenceProvider for DummyProvider {
         if self.model_name == "error" {
             return Err(ErrorDetails::InferenceClient {
                 message: "Error sending request to Dummy provider.".to_string(),
+                raw_request: Some("raw request".to_string()),
+                raw_response: None,
                 status_code: None,
                 provider_type: PROVIDER_TYPE.to_string(),
             }
@@ -430,6 +440,8 @@ impl EmbeddingProvider for DummyProvider {
         if self.model_name == "error" {
             return Err(ErrorDetails::InferenceClient {
                 message: "Error sending request to Dummy provider.".to_string(),
+                raw_request: Some("raw request".to_string()),
+                raw_response: None,
                 status_code: None,
                 provider_type: PROVIDER_TYPE.to_string(),
             }

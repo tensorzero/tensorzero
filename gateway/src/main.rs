@@ -9,6 +9,7 @@ use tokio::signal;
 use gateway::clickhouse_migration_manager;
 use gateway::config_parser::Config;
 use gateway::endpoints;
+use gateway::error;
 use gateway::gateway_util;
 use gateway::observability;
 
@@ -35,6 +36,9 @@ async fn main() {
             .await
             .expect_pretty("Failed to run ClickHouse migrations");
     }
+
+    // Set debug mode
+    error::set_debug(config.gateway.debug).expect_pretty("Failed to set debug mode");
 
     let router = Router::new()
         .route("/inference", post(endpoints::inference::inference_handler))
