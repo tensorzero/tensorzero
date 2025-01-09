@@ -25,12 +25,14 @@ async fn get_providers() -> E2ETestProviders {
         credentials,
     }];
 
-    let tool_providers = vec![E2ETestProvider {
-        variant_name: "fireworks-firefunction".to_string(),
-        model_name: "firefunction-v2".to_string(),
-        model_provider_name: "fireworks".to_string(),
-        credentials: HashMap::new(),
-    }];
+    // NOTE: FireFunction might not be available serverlessly anymore so we have temporarily disabled it
+    // let tool_providers = vec![E2ETestProvider {
+    //     variant_name: "fireworks-firefunction".to_string(),
+    //     model_name: "firefunction-v2".to_string(),
+    //     model_provider_name: "fireworks".to_string(),
+    //     credentials: HashMap::new(),
+    // }];
+    let tool_providers = vec![];
 
     let json_providers = vec![
         E2ETestProvider {
@@ -39,12 +41,12 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "fireworks".to_string(),
             credentials: HashMap::new(),
         },
-        E2ETestProvider {
-            variant_name: "fireworks-implicit".to_string(),
-            model_name: "firefunction-v2".to_string(),
-            model_provider_name: "fireworks".to_string(),
-            credentials: HashMap::new(),
-        },
+        // E2ETestProvider {
+        //     variant_name: "fireworks-implicit".to_string(),
+        //     model_name: "firefunction-v2".to_string(),
+        //     model_provider_name: "fireworks".to_string(),
+        //     credentials: HashMap::new(),
+        // },
     ];
 
     let shorthand_providers = vec![E2ETestProvider {
