@@ -440,8 +440,6 @@ impl<'a> MistralRequest<'a> {
         model: &'a str,
         request: &'a ModelInferenceRequest,
     ) -> Result<MistralRequest<'a>, Error> {
-        // NB: Fireworks will throw an error if you give FireworksResponseFormat::Text and then also include tools.
-        // So we just don't include it as Text is the same as None anyway.
         let response_format = match request.json_mode {
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
                 Some(MistralResponseFormat::JsonObject)

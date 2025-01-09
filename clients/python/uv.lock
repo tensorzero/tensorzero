@@ -157,7 +157,7 @@ wheels = [
 
 [[package]]
 name = "tensorzero"
-version = "2025.01.0"
+version = "2025.01.1"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
