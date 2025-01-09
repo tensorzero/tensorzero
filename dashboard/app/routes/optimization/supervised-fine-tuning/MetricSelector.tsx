@@ -54,8 +54,6 @@ type MetricSelectorProps = {
   feedbackCount: number | null;
   curatedInferenceCount: number | null;
   config: Config;
-  onMetricChange: (value: string | null) => void;
-  onThresholdChange: (value: number) => void;
 };
 
 export function MetricSelector({
@@ -63,8 +61,6 @@ export function MetricSelector({
   feedbackCount,
   curatedInferenceCount,
   config,
-  onMetricChange,
-  onThresholdChange,
 }: MetricSelectorProps) {
   return (
     <FormField
@@ -79,7 +75,6 @@ export function MetricSelector({
                 onValueChange={(value: string) => {
                   const metricValue = value === "none" ? null : value;
                   field.onChange(metricValue);
-                  onMetricChange(metricValue);
                 }}
                 value={field.value ?? "none"}
               >
@@ -138,7 +133,6 @@ export function MetricSelector({
                         className="border-none bg-transparent focus:ring-0"
                         onChange={(e) => {
                           thresholdField.onChange(Number(e.target.value));
-                          onThresholdChange(Number(e.target.value));
                         }}
                       />
                     </div>
