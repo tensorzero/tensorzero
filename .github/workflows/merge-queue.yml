@@ -82,8 +82,8 @@ jobs:
 
       - name: "Python: ruff"
         run: |
-          uvx ruff check --output-format=github --extend-select I .
-          uvx ruff format --check .
+          uvx ruff@0.9.0 check --output-format=github --extend-select I .
+          uvx ruff@0.9.0 format --check .
 
       - name: "Python: TensorZero Client: Install dependencies"
         working-directory: clients/python
