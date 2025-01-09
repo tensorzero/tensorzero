@@ -8,7 +8,7 @@ Our goals for this project are to:
 
 - [ ] Allow users to run TensorZero recipes through the UI. To start, this will include:
 
-  - [ ] Supervised fine-tuning
+  - [x] Supervised fine-tuning
   - [ ] Dynamic in-context learning
 
 - [x] Allow users to review inferences and episodes
@@ -17,7 +17,6 @@ Our goals for this project are to:
 - [ ] Allow users to edit the configuration through the UI.
 
 Currently, we are building out the UI incrementally.
-We have the beginning of a fine-tuning form that uses the OpenAI fine-tuning API.
 
 ## Running the UI
 
@@ -54,4 +53,8 @@ CLICKHOUSE_URL=<your-clickhouse-url> # For testing, set to http://localhost:8123
 With the dependencies running, you can run the tests with `npm run test`.
 Similarly, you can start a development server with `npm run dev`.
 
-We do not currently have a production build process or any way to change configuration.
+### Running the production server
+
+To run the production server, you should set the environment variables in the `.env.example` file in `.env` (API keys are optional but required if you'd like to fine-tune) and then run `docker compose up`.
+
+If you are running the production server against the fixtures from the development environment, set `CONFIG_DIR=./fixtures/config` and `CLICKHOUSE_URL=http://host.docker.internal:8123/tensorzero` in the `.env` file.
