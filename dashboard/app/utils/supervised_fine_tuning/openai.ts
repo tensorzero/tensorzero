@@ -18,31 +18,46 @@ import type { JsExposedEnv } from "../minijinja/pkg/minijinja_bindings";
 import { splitValidationData, type SFTJobStatus } from "./common";
 import { render_message } from "./rendering";
 import { SFTJob } from "./common";
-import type { ProviderType } from "../config/models";
 
 export const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+type JobInfo =
+  | {
+      status: "ok";
+      info: OpenAI.FineTuning.Jobs.FineTuningJob;
+    }
+  | {
+      status: "error";
+      message: string;
+      info: OpenAI.FineTuning.Jobs.FineTuningJob;
+    };
+
 interface OpenAISFTJobParams {
   jobId: string;
   status: string;
   fineTunedModel?: string;
+  job: JobInfo;
+  formData: SFTFormValues;
 }
 
 export class OpenAISFTJob extends SFTJob {
   public jobId: string;
   public jobStatus: string;
   public fineTunedModel?: string;
-
+  public job: JobInfo;
+  public formData: SFTFormValues;
   constructor(params: OpenAISFTJobParams) {
     super();
     this.jobId = params.jobId;
     this.jobStatus = params.status;
     this.fineTunedModel = params.fineTunedModel;
+    this.job = params.job;
+    this.formData = params.formData;
   }
 
-  static async fromFormData(data: SFTFormValues): Promise<OpenAISFTJob> {
+  static async from_form_data(data: SFTFormValues): Promise<OpenAISFTJob> {
     const config = await getConfig();
     const currentVariant = config.functions[data.function].variants[
       data.variant
@@ -64,38 +79,97 @@ export class OpenAISFTJob extends SFTJob {
       throw new Error("No curated inferences found");
     }
     const templateEnv = await get_template_env(currentVariant);
-    const job = await start_sft_openai(
-      data.model.name,
-      curatedInferences,
-      data.validationSplitPercent,
-      templateEnv,
-    );
+    let job;
+    try {
+      job = await start_sft_openai(
+        data.model.name,
+        curatedInferences,
+        data.validationSplitPercent,
+        templateEnv,
+        data,
+      );
+    } catch (error) {
+      throw new Error(
+        `Failed to start OpenAI SFT job: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
     return job;
   }
-
-  result(): string | undefined {
-    return this.fineTunedModel;
-  }
-
-  provider(): ProviderType {
-    return "openai";
+  private get jobUrl(): string {
+    return `https://platform.openai.com/finetune/${this.jobId}`;
   }
 
   status(): SFTJobStatus {
-    if (this.jobStatus === "failed") return "error";
-    return this.jobStatus === "succeeded" ? "completed" : "running";
+    if (this.jobStatus === "failed") {
+      const error =
+        this.job.status === "error" ? this.job.message : "Unknown error";
+      return {
+        status: "error",
+        modelProvider: "openai",
+        formData: this.formData,
+        jobUrl: this.jobUrl,
+        rawData: this.job,
+        error: error,
+      };
+    }
+    if (this.jobStatus === "succeeded") {
+      if (!this.fineTunedModel) {
+        throw new Error("Fine-tuned model is undefined");
+      }
+      return {
+        status: "completed",
+        modelProvider: "openai",
+        formData: this.formData,
+        jobUrl: this.jobUrl,
+        rawData: this.job,
+        result: this.fineTunedModel,
+      };
+    }
+    const estimatedCompletionTime =
+      this.job.status === "ok" ? this.job.info.estimated_finish : undefined;
+    return {
+      status: "running",
+      modelProvider: "openai",
+      formData: this.formData,
+      rawData: this.job,
+      jobUrl: this.jobUrl,
+      estimatedCompletionTime: estimatedCompletionTime
+        ? new Date(estimatedCompletionTime * 1000)
+        : undefined,
+    };
   }
 
   async poll(): Promise<OpenAISFTJob> {
     if (!this.jobId) {
       throw new Error("Job ID is required to poll OpenAI SFT");
     }
-    const job = await client.fineTuning.jobs.retrieve(this.jobId);
-    return new OpenAISFTJob({
-      jobId: job.id,
-      status: job.status,
-      fineTunedModel: job.fine_tuned_model ?? undefined,
-    });
+    try {
+      const jobInfo = await client.fineTuning.jobs.retrieve(this.jobId);
+      return new OpenAISFTJob({
+        jobId: jobInfo.id,
+        status: jobInfo.status,
+        fineTunedModel: jobInfo.fine_tuned_model ?? undefined,
+        job: {
+          status: "ok",
+          info: jobInfo,
+        },
+        formData: this.formData,
+      });
+    } catch (error) {
+      return new OpenAISFTJob({
+        jobId: this.jobId,
+        status: "running",
+        fineTunedModel: undefined,
+        job: {
+          status: "error",
+          info: this.job.info,
+          message: error instanceof Error ? error.message : String(error),
+        },
+        formData: this.formData,
+      });
+    }
   }
 }
 
@@ -104,6 +178,7 @@ export async function start_sft_openai(
   inferences: ParsedInferenceExample[],
   validationSplitPercent: number,
   templateEnv: JsExposedEnv,
+  formData: SFTFormValues,
 ) {
   const { trainInferences, valInferences } = splitValidationData(
     inferences,
@@ -119,15 +194,21 @@ export async function start_sft_openai(
     upload_examples_to_openai(trainMessages),
     upload_examples_to_openai(valMessages),
   ]);
-  const job_id = await create_openai_fine_tuning_job(
+  const job = await create_openai_fine_tuning_job(
     modelName,
     file_id,
     val_file_id ?? undefined,
   );
+  const jobId = job.id;
   return new OpenAISFTJob({
-    jobId: job_id,
+    jobId: jobId,
     status: "created",
     fineTunedModel: undefined,
+    job: {
+      status: "ok",
+      info: job,
+    },
+    formData,
   });
 }
 
@@ -276,7 +357,7 @@ async function create_openai_fine_tuning_job(
 
   try {
     const job = await client.fineTuning.jobs.create(params);
-    return job.id;
+    return job;
   } catch (error) {
     console.error("Error creating fine-tuning job:", error);
     throw error;

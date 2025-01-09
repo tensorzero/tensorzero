@@ -12,7 +12,7 @@ function MessageContent({ content }: { content: InputMessage["content"] }) {
         switch (block.type) {
           case "text":
             return (
-              <pre className="whitespace-pre-wrap">
+              <pre key={index} className="whitespace-pre-wrap">
                 <code className="text-sm">
                   {typeof block.value === "object"
                     ? JSON.stringify(block.value, null, 2)
