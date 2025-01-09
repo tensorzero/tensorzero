@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Create a batch inference job with two inputs
+# Create a batch inference job with three inputs
 curl -X POST http://localhost:3000/batch_inference \
   -H "Content-Type: application/json" \
   -d '{
@@ -12,6 +12,14 @@ curl -X POST http://localhost:3000/batch_inference \
           {
             "role": "user",
             "content": "Write a haiku about artificial intelligence."
+          }
+        ]
+      },
+      {
+        "messages": [
+          {
+            "role": "user",
+            "content": "Write a haiku about general aviation."
           }
         ]
       },
