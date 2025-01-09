@@ -9,7 +9,7 @@ export function ParameterCard({ title, parameters }: ParameterCardProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{title}</CardTitle>
+        <CardTitle className="text-xl">{title}</CardTitle>
       </CardHeader>
       <CardContent>
         <pre className="overflow-x-auto rounded-md bg-muted p-4">

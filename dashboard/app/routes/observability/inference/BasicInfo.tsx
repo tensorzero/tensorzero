@@ -17,25 +17,25 @@ export default function BasicInfo({ inference }: BasicInfoProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Basic Information</CardTitle>
+        <CardTitle className="text-xl">Basic Information</CardTitle>
       </CardHeader>
       <CardContent>
         <dl className="grid grid-cols-2 gap-4">
           <div>
-            <dt className="font-semibold">Function</dt>
+            <dt className="text-lg font-semibold">Function</dt>
             <dd>
               <Code>{inference.function_name}</Code>
             </dd>
           </div>
           <div>
-            <dt className="font-semibold">Variant</dt>
-            <dd className="flex items-center gap-2">
-              <Code>{inference.variant_name}</Code>
-              <Badge variant="destructive">{variantType}</Badge>
-            </dd>
+            <dt className="text-lg font-semibold">Variant</dt>
+            <Code>{inference.variant_name}</Code>
+            <Badge variant="outline" className="bg-blue-200">
+              {variantType}
+            </Badge>
           </div>
           <div>
-            <dt className="font-semibold">Episode ID</dt>
+            <dt className="text-lg font-semibold">Episode ID</dt>
             <dd>
               <Link to={`/observability/episode/${inference.episode_id}`}>
                 <Code>{inference.episode_id}</Code>
@@ -43,11 +43,11 @@ export default function BasicInfo({ inference }: BasicInfoProps) {
             </dd>
           </div>
           <div>
-            <dt className="font-semibold">Timestamp</dt>
+            <dt className="text-lg font-semibold">Timestamp</dt>
             <dd>{new Date(inference.timestamp).toLocaleString()}</dd>
           </div>
           <div>
-            <dt className="font-semibold">Processing Time</dt>
+            <dt className="text-lg font-semibold">Processing Time</dt>
             <dd>{inference.processing_time_ms}ms</dd>
           </div>
         </dl>

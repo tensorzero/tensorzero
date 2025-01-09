@@ -19,7 +19,7 @@ export function ModelInferencesAccordion({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Model Inferences</CardTitle>
+        <CardTitle className="text-xl">Model Inferences</CardTitle>
       </CardHeader>
       <CardContent>
         <Accordion type="single" collapsible className="w-full">

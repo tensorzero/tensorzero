@@ -13,35 +13,35 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <dt className="font-semibold">Model</dt>
+          <dt className="text-lg font-semibold">Model</dt>
           <dd>
             <Code>{inference.model_name}</Code>
           </dd>
         </div>
         <div>
-          <dt className="font-semibold">Model Provider</dt>
+          <dt className="text-lg font-semibold">Model Provider</dt>
           <dd>
             <Code>{inference.model_provider_name}</Code>
           </dd>
         </div>
         <div>
-          <dt className="font-semibold">Input Tokens</dt>
+          <dt className="text-lg font-semibold">Input Tokens</dt>
           <dd>{inference.input_tokens}</dd>
         </div>
         <div>
-          <dt className="font-semibold">Output Tokens</dt>
+          <dt className="text-lg font-semibold">Output Tokens</dt>
           <dd>{inference.output_tokens}</dd>
         </div>
         <div>
-          <dt className="font-semibold">Response Time</dt>
+          <dt className="text-lg font-semibold">Response Time</dt>
           <dd>{inference.response_time_ms}ms</dd>
         </div>
         <div>
-          <dt className="font-semibold">TTFT</dt>
+          <dt className="text-lg font-semibold">TTFT</dt>
           <dd>{inference.ttft_ms ? `${inference.ttft_ms}ms` : "N/A"}</dd>
         </div>
         <div>
-          <dt className="font-semibold">Timestamp</dt>
+          <dt className="text-lg font-semibold">Timestamp</dt>
           <dd>{new Date(inference.timestamp).toLocaleString()}</dd>
         </div>
       </div>

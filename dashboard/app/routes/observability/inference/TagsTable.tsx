@@ -17,7 +17,7 @@ export function TagsTable({ tags }: TagsTableProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Tags</CardTitle>
+        <CardTitle className="text-xl">Tags</CardTitle>
       </CardHeader>
       <CardContent>
         <Table>

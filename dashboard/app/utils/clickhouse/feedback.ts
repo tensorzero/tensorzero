@@ -4,6 +4,7 @@ import { data } from "react-router";
 import { clickhouseClient } from "./common";
 
 export const booleanMetricFeedbackRowSchema = z.object({
+  type: z.literal("boolean"),
   id: z.string().uuid(),
   target_id: z.string().uuid(),
   metric_name: z.string(),
@@ -37,6 +38,7 @@ export async function queryBooleanMetricsByTargetId(params: {
   if (!before && !after) {
     query = `
         SELECT
+          'boolean' AS type,
           id,
           target_id,
           metric_name,
@@ -51,6 +53,7 @@ export async function queryBooleanMetricsByTargetId(params: {
   } else if (before) {
     query = `
         SELECT
+          'boolean' AS type,
           id,
           target_id,
           metric_name,
@@ -67,6 +70,7 @@ export async function queryBooleanMetricsByTargetId(params: {
   } else if (after) {
     query = `
         SELECT
+          'boolean' AS type,
           id,
           target_id,
           metric_name,
@@ -158,6 +162,7 @@ export async function countBooleanMetricFeedbackByTargetId(
 }
 
 export const commentFeedbackRowSchema = z.object({
+  type: z.literal("comment"),
   id: z.string().uuid(),
   target_id: z.string().uuid(),
   target_type: z.enum(["inference", "episode"]),
@@ -188,6 +193,7 @@ export async function queryCommentFeedbackByTargetId(params: {
   if (!before && !after) {
     query = `
         SELECT
+          'comment' AS type,
           id,
           target_id,
           target_type,
@@ -201,6 +207,7 @@ export async function queryCommentFeedbackByTargetId(params: {
   } else if (before) {
     query = `
         SELECT
+          'comment' AS type,
           id,
           target_id,
           target_type,
@@ -216,6 +223,7 @@ export async function queryCommentFeedbackByTargetId(params: {
   } else if (after) {
     query = `
         SELECT
+          'comment' AS type,
           id,
           target_id,
           target_type,
@@ -303,6 +311,7 @@ export async function countCommentFeedbackByTargetId(
 }
 
 export const demonstrationFeedbackRowSchema = z.object({
+  type: z.literal("demonstration"),
   id: z.string().uuid(),
   inference_id: z.string().uuid(),
   value: z.string(),
@@ -334,6 +343,7 @@ export async function queryDemonstrationFeedbackByInferenceId(params: {
   if (!before && !after) {
     query = `
         SELECT
+          'demonstration' AS type,
           id,
           inference_id,
           value,
@@ -346,6 +356,7 @@ export async function queryDemonstrationFeedbackByInferenceId(params: {
   } else if (before) {
     query = `
         SELECT
+          'demonstration' AS type,
           id,
           inference_id,
           value,
@@ -360,6 +371,7 @@ export async function queryDemonstrationFeedbackByInferenceId(params: {
   } else if (after) {
     query = `
         SELECT
+          'demonstration' AS type,
           id,
           inference_id,
           value,
@@ -448,6 +460,7 @@ export async function countDemonstrationFeedbackByInferenceId(
 
 export const floatMetricFeedbackRowSchema = z
   .object({
+    type: z.literal("float"),
     id: z.string().uuid(),
     target_id: z.string().uuid(),
     metric_name: z.string(),
@@ -482,6 +495,7 @@ export async function queryFloatMetricsByTargetId(params: {
   if (!before && !after) {
     query = `
         SELECT
+          'float' AS type,
           id,
           target_id,
           metric_name,
@@ -496,6 +510,7 @@ export async function queryFloatMetricsByTargetId(params: {
   } else if (before) {
     query = `
         SELECT
+          'float' AS type,
           id,
           target_id,
           metric_name,
@@ -512,6 +527,7 @@ export async function queryFloatMetricsByTargetId(params: {
   } else if (after) {
     query = `
         SELECT
+          'float' AS type,
           id,
           target_id,
           metric_name,
@@ -601,8 +617,7 @@ export async function countFloatMetricFeedbackByTargetId(
   const rows = await resultSet.json<{ count: string }>();
   return Number(rows[0].count);
 }
-
-export const feedbackRowSchema = z.union([
+export const feedbackRowSchema = z.discriminatedUnion("type", [
   booleanMetricFeedbackRowSchema,
   floatMetricFeedbackRowSchema,
   commentFeedbackRowSchema,
