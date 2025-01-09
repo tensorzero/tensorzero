@@ -1,5 +1,5 @@
 {
-  "name": "tensorzero-dashboard",
+  "name": "tensorzero-ui",
   "private": true,
   "type": "module",
   "scripts": {
