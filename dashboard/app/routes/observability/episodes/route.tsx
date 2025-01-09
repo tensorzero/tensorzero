@@ -1,13 +1,18 @@
-import { queryEpisodeTable, queryEpisodeTableBounds } from "~/utils/clickhouse";
+import {
+  queryEpisodeTable,
+  queryEpisodeTableBounds,
+} from "~/utils/clickhouse/inference";
 import type { Route } from "./+types/route";
 import EpisodesTable from "./EpisodesTable";
-import { data, isRouteErrorResponse } from "react-router";
+import { data, isRouteErrorResponse, useNavigate } from "react-router";
+import PageButtons from "~/components/utils/PageButtons";
+import EpisodeSearchBar from "./EpisodeSearchBar";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const before = url.searchParams.get("before");
   const after = url.searchParams.get("after");
-  const pageSize = Number(url.searchParams.get("page_size")) || 10;
+  const pageSize = Number(url.searchParams.get("pageSize")) || 10;
   if (pageSize > 100) {
     throw data("Page size cannot exceed 100", { status: 400 });
   }
@@ -30,10 +35,37 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
   const { episodes, pageSize, bounds } = loaderData;
+  const navigate = useNavigate();
+
+  const topEpisode = episodes[0];
+  const bottomEpisode = episodes[episodes.length - 1];
+
+  // IMPORTANT: use the last_inference_id to navigate
+  const handleNextPage = () => {
+    navigate(`?before=${bottomEpisode.last_inference_id}&pageSize=${pageSize}`);
+  };
+
+  const handlePreviousPage = () => {
+    navigate(`?after=${topEpisode.last_inference_id}&pageSize=${pageSize}`);
+  };
+
+  // These are swapped because the table is sorted in descending order
+  const disablePrevious = bounds.last_id === topEpisode.last_inference_id;
+  const disableNext = bounds.first_id === bottomEpisode.last_inference_id;
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <EpisodesTable episodes={episodes} pageSize={pageSize} bounds={bounds} />
+      <h2 className="mb-4 text-2xl font-semibold">Episodes</h2>
+      <div className="mb-6 h-px w-full bg-gray-200"></div>
+      <EpisodeSearchBar />
+      <div className="my-6 h-px w-full bg-gray-200"></div>
+      <EpisodesTable episodes={episodes} />
+      <PageButtons
+        onPreviousPage={handlePreviousPage}
+        onNextPage={handleNextPage}
+        disablePrevious={disablePrevious}
+        disableNext={disableNext}
+      />
     </div>
   );
 }

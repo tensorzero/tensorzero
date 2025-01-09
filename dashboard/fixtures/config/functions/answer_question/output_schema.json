@@ -1,0 +1,13 @@
+{
+  "type": "object",
+  "properties": {
+    "answer": {
+      "type": "string"
+    },
+    "solved": {
+      "type": "boolean"
+    }
+  },
+  "required": ["answer", "solved"],
+  "additionalProperties": false
+}
