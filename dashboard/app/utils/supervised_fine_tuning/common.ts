@@ -22,7 +22,43 @@ export function splitValidationData(
   };
 }
 
-export type SFTJobStatus = "running" | "completed" | "error";
+export type RawData =
+  | {
+      status: "ok";
+      info: unknown;
+    }
+  | {
+      status: "error";
+      message: string;
+    };
+
+// export type SFTJobStatus = {"running" | "completed" | "error" | "idle";
+export type SFTJobStatus =
+  | {
+      status: "running";
+      modelProvider: ProviderType;
+      formData: SFTFormValues;
+      jobUrl: string;
+      rawData: RawData;
+      estimatedCompletionTime?: Date;
+    }
+  | {
+      status: "completed";
+      modelProvider: ProviderType;
+      formData: SFTFormValues;
+      jobUrl: string;
+      rawData: RawData;
+      result: string;
+    }
+  | {
+      status: "error";
+      modelProvider: ProviderType;
+      formData: SFTFormValues;
+      jobUrl: string;
+      rawData: RawData;
+      error: string;
+    }
+  | { status: "idle" };
 
 // Abstract base class
 export abstract class SFTJob {
@@ -33,8 +69,6 @@ export abstract class SFTJob {
     throw new Error("Child class must implement fromFormData");
   }
 
-  abstract result(): string | undefined;
   abstract status(): SFTJobStatus;
   abstract poll(): Promise<SFTJob>;
-  abstract provider(): ProviderType;
 }
