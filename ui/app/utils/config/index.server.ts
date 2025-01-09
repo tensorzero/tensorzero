@@ -8,8 +8,7 @@ import { EmbeddingModelConfigSchema, ModelConfigSchema } from "./models";
 import { ToolConfigSchema } from "./tool";
 import type { FunctionConfig } from "./function";
 
-const CONFIG_PATH =
-  process.env.CONFIG_PATH || "fixtures/config/tensorzero.toml";
+const CONFIG_PATH = process.env.CONFIG_PATH || "config/tensorzero.toml";
 
 export async function loadConfig(config_path: string): Promise<Config> {
   const tomlContent = await fs.readFile(config_path, "utf-8");
