@@ -115,7 +115,7 @@ impl<'a> Migration for Migration0008<'a> {
             MODIFY COLUMN errors Array(String);"#;
         // NOTE: this MODIFY COLUMN errors statement would convert data in bad ways
         // HOWEVER, TensorZero at the point of writing has never actually written any errors to the errors column
-        // so this is safe to dos
+        // so this is safe to do.
         let _ = self.clickhouse.run_query(query.to_string()).await?;
 
         // Alter the `response_time_ms` column of `ModelInference` to be a nullable column
