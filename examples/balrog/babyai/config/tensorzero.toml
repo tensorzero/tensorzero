@@ -1,0 +1,95 @@
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                   MODELS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[models.my_gpt_4o_mini]
+routing = ["openai"]
+
+[models."my_gpt_4o_mini".providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini-2024-07-18"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.generate_action_baseline]
+type = "chat"
+system_schema = "functions/generate_action/system_schema.json"
+user_schema = "functions/generate_action/user_schema.json"
+
+[functions.generate_action_baseline.variants.simple_variant]
+type = "chat_completion"
+weight = 1.0
+model = "my_gpt_4o_mini"
+system_template = "functions/generate_action/baseline/system.minijinja"
+user_template = "functions/generate_action/baseline/user.minijinja"
+
+[functions.generate_action_history]
+type = "chat"
+system_schema = "functions/generate_action/system_schema.json"
+user_schema = "functions/generate_action/user_schema.json"
+
+[functions.generate_action_history.variants.simple_variant]
+type = "chat_completion"
+weight = 1.0
+model = "my_gpt_4o_mini"
+system_template = "functions/generate_action/history/system.minijinja"
+user_template = "functions/generate_action/history/user.minijinja"
+
+[functions.generate_action_reasoning]
+type = "chat"
+system_schema = "functions/generate_action/system_schema.json"
+user_schema = "functions/generate_action/user_schema.json"
+
+[functions.generate_action_reasoning.variants.simple_variant]
+type = "chat_completion"
+weight = 1.0
+model = "my_gpt_4o_mini"
+system_template = "functions/generate_action/reasoning/system.minijinja"
+user_template = "functions/generate_action/reasoning/user.minijinja"
+
+[functions.generate_action_history_and_reasoning]
+type = "chat"
+system_schema = "functions/generate_action/system_schema.json"
+user_schema = "functions/generate_action/user_schema.json"
+
+[functions.generate_action_history_and_reasoning.variants.simple_variant]
+type = "chat_completion"
+weight = 1.0
+model = "my_gpt_4o_mini"
+system_template = "functions/generate_action/history_and_reasoning/system.minijinja"
+user_template = "functions/generate_action/history_and_reasoning/user.minijinja"
+
+[functions.extract_action]
+type = "json"
+output_schema = "functions/extract_action/output_schema.json"
+
+[functions.extract_action.variants.simple_variant]
+type = "chat_completion"
+weight = 1.0
+model = "my_gpt_4o_mini"
+system_template = "functions/extract_action/simple_variant/system.minijinja"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  METRICS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[metrics.reward]
+level = "inference"
+optimize = "max"
+type = "float"
+
+[metrics.episode_return]
+level = "episode"
+optimize = "max"
+type = "float"
+
+[metrics.progression]
+level = "episode"
+optimize = "max"
+type = "float"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  TOOLS                                     │
+# └────────────────────────────────────────────────────────────────────────────┘
