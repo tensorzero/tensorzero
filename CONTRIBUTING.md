@@ -145,8 +145,8 @@ cargo test-unit
 5. Run the type checker
 
    ```bash
-   uv pip install mypy
-   uv run mypy . --strict
+   uv pip install pyright
+   uv run pyright
    ```
 
 6. Run the formatter

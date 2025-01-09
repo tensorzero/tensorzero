@@ -263,6 +263,24 @@ pub(crate) mod tests {
             .contains("Failed to add template"));
     }
 
+    #[test]
+    fn test_to_json_filter() {
+        let templates = get_test_template_config();
+        let context = serde_json::json!({"input": ["hello", "world"]});
+        let result = templates.template_message("user_with_tojson", &context);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "Hello, [\"hello\",\"world\"]");
+    }
+
+    #[test]
+    fn test_join_filter() {
+        let templates = get_test_template_config();
+        let context = serde_json::json!({"input": ["hello", "hello", "world"]});
+        let result = templates.template_message("user_with_join", &context);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "Hello, hello, hello, world!");
+    }
+
     pub fn get_test_template_config<'a>() -> TemplateConfig<'a> {
         let mut templates = HashMap::new();
 
@@ -306,6 +324,22 @@ pub(crate) mod tests {
         let user_template = "What's the capital of Japan?";
         let temp_file7 = create_temp_file(user_template);
         templates.insert("user_filled".to_string(), temp_file7.path().to_path_buf());
+
+        // Template with tojson filter
+        let user_template = "Hello, {{ input | tojson }}";
+        let temp_file8 = create_temp_file(user_template);
+        templates.insert(
+            "user_with_tojson".to_string(),
+            temp_file8.path().to_path_buf(),
+        );
+
+        // Template with join filter
+        let user_template = "Hello, {{ input | join(', ') }}!";
+        let temp_file9 = create_temp_file(user_template);
+        templates.insert(
+            "user_with_join".to_string(),
+            temp_file9.path().to_path_buf(),
+        );
 
         // Initialize templates
         let mut template_config = TemplateConfig::new();
