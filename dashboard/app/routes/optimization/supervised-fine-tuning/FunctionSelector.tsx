@@ -15,14 +15,12 @@ type FunctionSelectorProps = {
   control: Control<SFTFormValues>;
   inferenceCount: number | null;
   config: Config;
-  onFunctionChange: (value: string) => void;
 };
 
 export function FunctionSelector({
   control,
   inferenceCount,
   config,
-  onFunctionChange,
 }: FunctionSelectorProps) {
   return (
     <FormField
@@ -35,7 +33,6 @@ export function FunctionSelector({
             <Select
               onValueChange={(value: string) => {
                 field.onChange(value);
-                onFunctionChange(value);
               }}
               value={field.value}
             >
