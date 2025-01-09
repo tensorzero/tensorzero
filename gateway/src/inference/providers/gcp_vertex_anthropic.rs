@@ -1567,7 +1567,7 @@ mod tests {
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: None,
-                raw_response: None,
+                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
             }
         );
         let response_code = StatusCode::UNAUTHORIZED;
@@ -1580,7 +1580,7 @@ mod tests {
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: None,
-                raw_response: None,
+                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
             }
         );
         let response_code = StatusCode::TOO_MANY_REQUESTS;
@@ -1593,7 +1593,7 @@ mod tests {
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: None,
-                raw_response: None,
+                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
             }
         );
         let response_code = StatusCode::NOT_FOUND;
@@ -1605,7 +1605,7 @@ mod tests {
             ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
                 raw_request: None,
-                raw_response: None,
+                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
                 provider_type: PROVIDER_TYPE.to_string()
             }
         );
@@ -1617,7 +1617,7 @@ mod tests {
             ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
                 raw_request: None,
-                raw_response: None,
+                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
                 provider_type: PROVIDER_TYPE.to_string()
             }
         );
@@ -2067,6 +2067,8 @@ mod tests {
             details,
             ErrorDetails::InferenceServer {
                 message: "Unsupported content block type for ContentBlockStart".to_string(),
+                raw_request: None,
+                raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string()
             }
         );
@@ -2101,6 +2103,8 @@ mod tests {
             details,
             ErrorDetails::InferenceServer {
                 message: r#"{"message":"Test error"}"#.to_string(),
+                raw_request: None,
+                raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
             }
         );

@@ -185,6 +185,7 @@ impl InferenceProvider for FireworksProvider {
                         raw_response: None,
                     })
                 })?,
+                PROVIDER_TYPE,
             ))
         }
     }

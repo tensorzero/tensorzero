@@ -883,6 +883,8 @@ mod tests {
                     Error::new(ErrorDetails::InferenceClient {
                         message: "Error sending request to Dummy provider.".to_string(),
                         status_code: None,
+                        raw_request: None,
+                        raw_response: None,
                         provider_type: "dummy".to_string(),
                     })
                 )])

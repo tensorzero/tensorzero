@@ -127,6 +127,8 @@ impl InferenceProvider for XAIProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request to xAI: {e}"),
                     status_code: e.status(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
@@ -135,6 +137,8 @@ impl InferenceProvider for XAIProvider {
             let response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
@@ -142,6 +146,8 @@ impl InferenceProvider for XAIProvider {
             let response = serde_json::from_str(&response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {response}"),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: Some(response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
@@ -157,15 +163,17 @@ impl InferenceProvider for XAIProvider {
             }
             .try_into()?)
         } else {
-            Err(handle_openai_error(
-                res.status(),
-                &res.text().await.map_err(|e| {
-                    Error::new(ErrorDetails::InferenceServer {
-                        message: format!("Error parsing error response: {e}"),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    })
-                })?,
-            ))
+            let status = res.status();
+
+            let response = res.text().await.map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!("Error parsing error response: {e}"),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            })?;
+            Err(handle_openai_error(status, &response, PROVIDER_TYPE))
         }
     }
 
@@ -186,6 +194,8 @@ impl InferenceProvider for XAIProvider {
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request: {e}"),
+                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
@@ -202,6 +212,8 @@ impl InferenceProvider for XAIProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request to xAI: {e}"),
                     status_code: None,
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
@@ -215,6 +227,8 @@ impl InferenceProvider for XAIProvider {
             None => {
                 return Err(ErrorDetails::InferenceServer {
                     message: "Stream ended before first chunk".to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                 }
                 .into())
@@ -336,9 +350,8 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
         } = value;
 
         let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error parsing response: {e}"),
-                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
 
@@ -348,6 +361,8 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                     "Response has invalid number of choices {}, Expected 1",
                     response.choices.len()
                 ),
+                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
             }
             .into());
@@ -359,6 +374,8 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             .pop()
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
+                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
             }))?
             .message;
@@ -372,9 +389,8 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             }
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request body as JSON: {e}"),
-                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         let system = generic_request.system.clone();

@@ -1639,7 +1639,7 @@ mod tests {
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: Some("raw request".to_string()),
-                raw_response: None,
+                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
             }
         );
         let response_code = StatusCode::UNAUTHORIZED;
@@ -1653,7 +1653,7 @@ mod tests {
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: Some("raw request".to_string()),
-                raw_response: None,
+                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
             }
         );
         let response_code = StatusCode::TOO_MANY_REQUESTS;
@@ -1667,7 +1667,7 @@ mod tests {
                 status_code: Some(response_code),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: Some("raw request".to_string()),
-                raw_response: None,
+                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
             }
         );
         let response_code = StatusCode::NOT_FOUND;
@@ -1679,7 +1679,7 @@ mod tests {
             ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
                 raw_request: Some("raw request".to_string()),
-                raw_response: None,
+                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
                 provider_type: PROVIDER_TYPE.to_string(),
             }
         );
@@ -1692,7 +1692,7 @@ mod tests {
             ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
                 raw_request: Some("raw request".to_string()),
-                raw_response: None,
+                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
                 provider_type: PROVIDER_TYPE.to_string(),
             }
         );
@@ -2083,7 +2083,9 @@ mod tests {
                 message: "Unsupported content block type for ContentBlockStart".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: None,
-                raw_response: None,
+                raw_response: Some(
+                    "{\"type\":\"input_json_delta\",\"partial_json\":\"aaaa: bbbbb\"}".to_string()
+                ),
             }
         );
 
