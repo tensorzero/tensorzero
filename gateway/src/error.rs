@@ -460,8 +460,8 @@ impl std::fmt::Display for ErrorDetails {
                 } else {
                     write!(
                         f,
-                        "Error {} from {} client: {}",
-                        status_code.map_or("".to_string(), |s| s.to_string()),
+                        "Error{} from {} client: {}",
+                        status_code.map_or("".to_string(), |s| format!(" {}", s)),
                         provider_type,
                         message
                     )
