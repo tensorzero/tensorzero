@@ -209,6 +209,10 @@ jobs:
         working-directory: dashboard
         run: npm test
 
+      - name: Take down dashboard tests
+        working-directory: dashboard
+        run: docker compose -f fixtures/docker-compose.yml down
+
       - name: Set up CLICKHOUSE_URL for batch tests
         run: |
           echo "CLICKHOUSE_URL=${{ secrets.CLICKHOUSE_CLOUD_URL }}" >> $GITHUB_ENV
