@@ -93,6 +93,9 @@ jobs:
         working-directory: dashboard
         run: npm run typecheck
 
+      - name: Debug with ssh
+        uses: lhotari/action-upterm@v1
+
       - name: Start services for dashboard tests
         working-directory: dashboard
         run: |
