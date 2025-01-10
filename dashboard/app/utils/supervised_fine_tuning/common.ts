@@ -1,9 +1,9 @@
 import type { SFTFormValues } from "~/routes/optimization/supervised-fine-tuning/types";
-import type { ParsedInferenceRow } from "../clickhouse";
+import type { ParsedInferenceExample } from "../clickhouse/curation";
 import type { ProviderType } from "../config/models";
 
 export function splitValidationData(
-  inferences: ParsedInferenceRow[],
+  inferences: ParsedInferenceExample[],
   validationSplitPercent: number,
 ) {
   const validationSplit = validationSplitPercent / 100;

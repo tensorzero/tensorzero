@@ -23,17 +23,17 @@
 import type { SFTFormValues } from "~/routes/optimization/supervised-fine-tuning/types";
 import type { JsExposedEnv } from "../minijinja/pkg/minijinja_bindings";
 import { v7 } from "uuid";
-import type {
-  ContentBlockOutput,
-  JsonInferenceOutput,
-  ParsedInferenceRow,
-} from "../clickhouse";
-import { getCuratedInferences } from "../clickhouse";
 import { render_message } from "./rendering";
 import { getConfig } from "../config/index.server";
 import { get_template_env, type ChatCompletionConfig } from "../config/variant";
 import { z } from "zod";
 import { SFTJob, type SFTJobStatus } from "./common";
+import { getCuratedInferences } from "../clickhouse/curation";
+import type {
+  ContentBlockOutput,
+  JsonInferenceOutput,
+} from "../clickhouse/common";
+import type { ParsedInferenceExample } from "../clickhouse/curation";
 export const FIREWORKS_API_URL = "https://api.fireworks.ai";
 export const FIREWORKS_API_KEY = process.env.FIREWORKS_API_KEY || logError();
 export const FIREWORKS_ACCOUNT_ID =
@@ -414,7 +414,7 @@ function get_deployment_status(
 
 export async function start_sft_fireworks(
   modelName: string,
-  inferences: ParsedInferenceRow[],
+  inferences: ParsedInferenceExample[],
   validationSplitPercent: number,
   templateEnv: JsExposedEnv,
 ): Promise<Record<string, unknown>> {
@@ -453,7 +453,7 @@ type FireworksExample = {
 };
 
 export function tensorzero_inference_to_fireworks_messages(
-  sample: ParsedInferenceRow,
+  sample: ParsedInferenceExample,
   env: JsExposedEnv,
 ): FireworksExample {
   const messages: FireworksMessage[] = [];

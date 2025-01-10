@@ -15,6 +15,7 @@ model_name = "gpt-4o-mini-2024-07-18"
 
 [functions.dashboard_fixture_extract_entities]
 type = "json"
+output_schema = "functions/extract_entities/output_schema.json"
 
 [functions.dashboard_fixture_extract_entities.variants.baseline]
 type = "chat_completion"
@@ -25,11 +26,47 @@ system_template = "functions/extract_entities/initial_prompt/system_template.min
 type = "chat"
 user_schema = "functions/write_haiku/user_schema.json"
 
-[functions.dashboard_fixture_write_haiku.variants.baseline]
+[functions.dashboard_fixture_write_haiku.variants.initial_prompt_gpt4o_mini]
 type = "chat_completion"
 model = "gpt-4o-mini-2024-07-18"
 system_template = "functions/write_haiku/initial_prompt/system_template.minijinja"
 user_template = "functions/write_haiku/initial_prompt/user_template.minijinja"
+
+[functions.generate_secret]
+type = "json"
+output_schema = "functions/generate_secret/output_schema.json"
+
+[functions.generate_secret.variants.baseline]
+weight = 1
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_template = "functions/generate_secret/baseline/system_template.minijinja"
+json_mode = "strict"
+# for creativity
+temperature = 1.5
+
+[functions.ask_question]
+type = "json"
+output_schema = "functions/ask_question/output_schema.json"
+system_schema = "functions/ask_question/system_schema.json"
+
+[functions.ask_question.variants.baseline]
+type = "chat_completion"
+weight = 1
+model = "openai::gpt-4o-mini-2024-07-18"
+system_template = "functions/ask_question/baseline/system_template.minijinja"
+
+[functions.answer_question]
+type = "chat"
+system_schema = "functions/answer_question/system_schema.json"
+
+[functions.answer_question.variants.baseline]
+type = "chat_completion"
+weight = 1
+model = "openai::gpt-4o-mini-2024-07-18"
+system_template = "functions/answer_question/baseline/system_template.minijinja"
+# for honesty
+temperature = 0.5
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
@@ -74,3 +111,13 @@ optimize = "max"
 type = "float"
 level = "episode"
 optimize = "max"
+
+[metrics.solved]
+type = "boolean"
+level = "episode"
+optimize = "max"
+
+[metrics.num_questions]
+type = "float"
+level = "episode"
+optimize = "min"

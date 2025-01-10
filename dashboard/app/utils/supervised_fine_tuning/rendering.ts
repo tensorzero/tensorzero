@@ -1,5 +1,5 @@
-import type { InputMessageContent, Role } from "~/utils/clickhouse";
-import { JsExposedEnv } from "../minijinja/pkg";
+import type { InputMessageContent, Role } from "../clickhouse/common";
+import { JsExposedEnv } from "../minijinja/pkg/minijinja_bindings";
 
 /**
  * Renders a text message using the provided environment and content.
