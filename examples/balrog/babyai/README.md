@@ -17,6 +17,21 @@ We use the [BALROG agentic LLM benchmark](https://github.com/balrog-ai/BALROG) i
 
 ## Setup
 
+### Requirements
+This example makes use of the BALROG python package, which requires `cmake` to be installed.
+
+#### Linux
+
+```bash
+sudo apt-get install cmake
+```
+
+#### MacOS
+
+```bash
+brew install cmake
+```
+
 ### TensorZero
 
 We've written TensorZero configuration files to accomplish this example and have provided them in the `config` directory.
