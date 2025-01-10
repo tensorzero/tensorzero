@@ -101,7 +101,7 @@ pub struct ModelUsedInfo<'a> {
 }
 
 pub trait Variant {
-    async fn infer<'a, 'request>(
+    async fn infer<'a: 'request, 'request>(
         &'a self,
         input: &Input,
         models: &'request InferenceModels<'a>,
@@ -167,7 +167,7 @@ impl Variant for VariantConfig {
         fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name.unwrap_or("")),
         skip_all
     )]
-    async fn infer<'a, 'request>(
+    async fn infer<'a: 'request, 'request>(
         &'a self,
         input: &Input,
         models: &'request InferenceModels<'a>,
