@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{OnceCell, RwLock};
 use tokio::task::JoinHandle;
+use tracing::instrument;
 
 use crate::error::{Error, ErrorDetails};
 
@@ -205,6 +206,16 @@ impl DynamicJSONSchema {
             })
             .await?;
         Ok(())
+    }
+
+    #[instrument]
+    pub fn parse_from_str(s: &str) -> Result<Self, Error> {
+        let schema = serde_json::from_str(s).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: e.to_string(),
+            })
+        })?;
+        Ok(Self::new(schema))
     }
 }
 

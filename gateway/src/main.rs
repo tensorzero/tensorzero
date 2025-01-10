@@ -43,8 +43,16 @@ async fn main() {
     let router = Router::new()
         .route("/inference", post(endpoints::inference::inference_handler))
         .route(
-            "/start_batch_inference",
+            "/batch_inference",
             post(endpoints::batch_inference::start_batch_inference_handler),
+        )
+        .route(
+            "/batch_inference/:batch_id",
+            get(endpoints::batch_inference::poll_batch_inference_handler),
+        )
+        .route(
+            "/batch_inference/:batch_id/inference/:inference_id",
+            get(endpoints::batch_inference::poll_batch_inference_handler),
         )
         .route(
             "/openai/v1/chat/completions",

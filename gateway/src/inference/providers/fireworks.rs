@@ -12,10 +12,11 @@ use url::Url;
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
+    inference::types::batch::PollBatchInferenceResponse,
     inference::types::{
-        batch::BatchProviderInferenceResponse, ContentBlock, Latency, ModelInferenceRequest,
-        ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
-        ProviderInferenceResponseStream,
+        batch::{BatchRequestRow, StartBatchProviderInferenceResponse},
+        ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+        ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     },
     model::{Credential, CredentialLocation},
 };
@@ -254,7 +255,19 @@ impl InferenceProvider for FireworksProvider {
         _requests: &'a [ModelInferenceRequest<'a>],
         _client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<BatchProviderInferenceResponse, Error> {
+    ) -> Result<StartBatchProviderInferenceResponse, Error> {
+        Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
+            provider_type: "Fireworks".to_string(),
+        }
+        .into())
+    }
+
+    async fn poll_batch_inference<'a>(
+        &'a self,
+        _batch_request: &'a BatchRequestRow<'a>,
+        _http_client: &'a reqwest::Client,
+        _dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<PollBatchInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
             provider_type: PROVIDER_TYPE.to_string(),
         }

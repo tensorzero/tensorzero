@@ -207,3 +207,23 @@ jobs:
       - name: Run dashboard tests
         working-directory: dashboard
         run: npm test
+
+      - name: Take down dashboard tests
+        working-directory: dashboard
+        run: docker compose -f fixtures/docker-compose.yml down
+
+      - name: Set up CLICKHOUSE_URL for batch tests
+        run: |
+          echo "CLICKHOUSE_URL=${{ secrets.CLICKHOUSE_CLOUD_URL }}" >> $GITHUB_ENV
+      - name: Launch the gateway for batch tests
+        run: |
+          cargo run-e2e &
+          echo "GATEWAY_PID=$!" >> $GITHUB_ENV
+          while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
+            echo "Waiting for gateway to be healthy..."
+            sleep 1
+          done
+
+      - name: Run batch tests
+        run: |
+          cargo test-batch

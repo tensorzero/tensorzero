@@ -15,9 +15,10 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
     inference::types::{
-        batch::BatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, Latency,
-        ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
-        ProviderInferenceResponseChunk, ProviderInferenceResponseStream, TextChunk, Usage,
+        batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
+        ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest,
+        ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
+        ProviderInferenceResponseStream, TextChunk, Usage,
     },
     model::{Credential, CredentialLocation},
     tool::{ToolCall, ToolCallChunk, ToolChoice},
@@ -245,7 +246,19 @@ impl InferenceProvider for MistralProvider {
         _requests: &'a [ModelInferenceRequest<'a>],
         _client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<BatchProviderInferenceResponse, Error> {
+    ) -> Result<StartBatchProviderInferenceResponse, Error> {
+        Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
+            provider_type: "Mistral".to_string(),
+        }
+        .into())
+    }
+
+    async fn poll_batch_inference<'a>(
+        &'a self,
+        _batch_request: &'a BatchRequestRow<'a>,
+        _http_client: &'a reqwest::Client,
+        _dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<PollBatchInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
             provider_type: PROVIDER_TYPE.to_string(),
         }
