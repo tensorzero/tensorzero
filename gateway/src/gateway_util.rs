@@ -113,6 +113,7 @@ mod tests {
         let gateway_config = GatewayConfig {
             disable_observability: true,
             bind_address: None,
+            debug: false,
         };
 
         let config = Box::leak(Box::new(Config {
@@ -131,6 +132,7 @@ mod tests {
         let gateway_config = GatewayConfig {
             disable_observability: false,
             bind_address: None,
+            debug: false,
         };
 
         let config = Box::leak(Box::new(Config {
@@ -148,6 +150,7 @@ mod tests {
         let gateway_config = GatewayConfig {
             disable_observability: false,
             bind_address: None,
+            debug: false,
         };
         let config = Box::leak(Box::new(Config {
             gateway: gateway_config,
@@ -165,6 +168,7 @@ mod tests {
         let gateway_config = GatewayConfig {
             disable_observability: false,
             bind_address: None,
+            debug: false,
         };
         let config = Box::leak(Box::new(Config {
             gateway: gateway_config,

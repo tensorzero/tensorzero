@@ -18,16 +18,21 @@ function renderContentBlock(block: ContentBlockOutput, index: number) {
   switch (block.type) {
     case "text":
       return (
-        <div key={index} className="whitespace-pre-wrap">
-          {block.text}
+        <div key={index} className="rounded-md bg-muted p-4">
+          <h3 className="mb-2 text-lg font-medium">Text</h3>
+          <pre className="overflow-x-auto">
+            <code className="text-sm">{block.text}</code>
+          </pre>
         </div>
       );
     case "tool_call":
       return (
-        <div key={index} className="my-2 rounded-md bg-muted/50 p-2 font-mono">
-          <div className="font-semibold">Tool: {block.name}</div>
+        <div key={index} className="rounded-md bg-muted p-4">
+          <h3 className="mb-2 text-lg font-medium">Tool: {block.name}</h3>
           <pre className="overflow-x-auto">
-            <code>{JSON.stringify(block.arguments, null, 2)}</code>
+            <code className="text-sm">
+              {JSON.stringify(block.arguments, null, 2)}
+            </code>
           </pre>
         </div>
       );
@@ -38,14 +43,14 @@ export default function Output({ output }: OutputProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Output</CardTitle>
+        <CardTitle className="text-xl">Output</CardTitle>
       </CardHeader>
       <CardContent>
         {isJsonInferenceOutput(output) ? (
           <div className="space-y-4">
             {output.parsed && (
               <div className="rounded-md bg-muted p-4">
-                <h3 className="mb-2 text-sm font-medium">Parsed Output</h3>
+                <h3 className="mb-2 text-lg font-medium">Parsed Output</h3>
                 <pre className="overflow-x-auto">
                   <code className="text-sm">
                     {JSON.stringify(output.parsed, null, 2)}
@@ -54,7 +59,7 @@ export default function Output({ output }: OutputProps) {
               </div>
             )}
             <div className="rounded-md bg-muted p-4">
-              <h3 className="mb-2 text-sm font-medium">Raw Output</h3>
+              <h3 className="mb-2 text-lg font-medium">Raw Output</h3>
               <pre className="overflow-x-auto">
                 <code className="text-sm">{output.raw}</code>
               </pre>

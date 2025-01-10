@@ -12,11 +12,13 @@ function MessageContent({ content }: { content: InputMessage["content"] }) {
         switch (block.type) {
           case "text":
             return (
-              <div key={index} className="whitespace-pre-wrap">
-                {typeof block.value === "object"
-                  ? JSON.stringify(block.value, null, 2)
-                  : block.value}
-              </div>
+              <pre key={index} className="whitespace-pre-wrap">
+                <code className="text-sm">
+                  {typeof block.value === "object"
+                    ? JSON.stringify(block.value, null, 2)
+                    : block.value}
+                </code>
+              </pre>
             );
           case "tool_call":
             return (
@@ -47,7 +49,7 @@ function MessageContent({ content }: { content: InputMessage["content"] }) {
 function Message({ message }: { message: InputMessage }) {
   return (
     <div className="space-y-1">
-      <div className="font-medium capitalize text-slate-600 dark:text-slate-400">
+      <div className="text-md font-medium capitalize text-slate-600 dark:text-slate-400">
         {message.role}
       </div>
       <MessageContent content={message.content} />
@@ -59,19 +61,21 @@ export default function Input({ input }: InputProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Input</CardTitle>
+        <CardTitle className="text-xl">Input</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
         {input.system && (
-          <div className="rounded border-2 border-blue-200 bg-blue-50/50 p-4 dark:border-blue-900 dark:bg-blue-950/50">
-            <div className="mb-2 text-lg font-semibold text-blue-900 dark:text-blue-100">
+          <div className="rounded border border-slate-200 p-4 dark:border-slate-800">
+            <div className="mb-3 text-lg font-semibold text-slate-900 dark:text-slate-100">
               System
             </div>
-            <div className="whitespace-pre-wrap">
-              {typeof input.system === "object"
-                ? JSON.stringify(input.system, null, 2)
-                : input.system}
-            </div>
+            <pre className="overflow-x-auto p-4">
+              <code className="text-sm">
+                {typeof input.system === "object"
+                  ? JSON.stringify(input.system, null, 2)
+                  : input.system}
+              </code>
+            </pre>
           </div>
         )}
 

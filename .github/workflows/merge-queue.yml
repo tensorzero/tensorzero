@@ -82,8 +82,8 @@ jobs:
 
       - name: "Python: ruff"
         run: |
-          uvx ruff check --output-format=github --extend-select I .
-          uvx ruff format --check .
+          uvx ruff@0.9.0 check --output-format=github --extend-select I .
+          uvx ruff@0.9.0 format --check .
 
       - name: "Python: TensorZero Client: Install dependencies"
         working-directory: clients/python
@@ -91,11 +91,11 @@ jobs:
           uv venv
           uv pip sync requirements.txt
 
-      - name: "Python: TensorZero Client: mypy"
+      - name: "Python: TensorZero Client: pyright"
         working-directory: clients/python
         run: |
-          uv pip install mypy
-          uv run mypy . --strict
+          uv pip install pyright
+          uv run pyright
 
       - name: "Python: TensorZero Client: pytest"
         working-directory: clients/python
@@ -108,11 +108,11 @@ jobs:
           uv venv
           uv pip sync requirements.txt
 
-      - name: "Python: OpenAI Client: mypy"
+      - name: "Python: OpenAI Client: pyright"
         working-directory: clients/openai-python
         run: |
-          uv pip install mypy
-          uv run mypy . --strict
+          uv pip install pyright
+          uv run pyright
 
       - name: "Python: OpenAI Client: pytest"
         working-directory: clients/openai-python
@@ -125,11 +125,11 @@ jobs:
           uv venv
           uv pip sync requirements.txt
 
-      - name: "Python: Recipes: mypy"
+      - name: "Python: Recipes: pyright"
         working-directory: recipes/tests
         run: |
-          uv pip install mypy
-          uv run mypy . --strict
+          uv pip install pyright
+          uv run pyright
 
       - name: "Python: Recipes: pytest"
         working-directory: recipes/tests

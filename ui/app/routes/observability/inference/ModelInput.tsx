@@ -18,9 +18,11 @@ function MessageContent({ content }: { content: ContentBlock[] }) {
           case "text":
             return (
               <div key={blockIndex} className="whitespace-pre-wrap">
-                {typeof block.text === "object"
-                  ? JSON.stringify(block.text, null, 2)
-                  : block.text}
+                <code className="text-sm">
+                  {typeof block.text === "object"
+                    ? JSON.stringify(block.text, null, 2)
+                    : block.text}
+                </code>
               </div>
             );
           case "tool_call":
@@ -64,20 +66,22 @@ export default function Input({ input_messages, system }: InputProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Input</CardTitle>
+        <CardTitle className="text-lg">Input</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
         {system && (
-          <div className="rounded border-2 border-blue-200 bg-blue-50/50 p-4 dark:border-blue-900 dark:bg-blue-950/50">
-            <div className="mb-2 text-lg font-semibold text-blue-900 dark:text-blue-100">
+          <div className="rounded border border-slate-200 p-4 dark:border-slate-800">
+            <div className="text-md mb-3 font-semibold text-slate-900 dark:text-slate-100">
               System
             </div>
-            <div className="whitespace-pre-wrap">{system}</div>
+            <pre className="overflow-x-auto p-4">
+              <code className="text-sm">{system}</code>
+            </pre>
           </div>
         )}
 
         <div className="rounded border border-slate-200 p-4 dark:border-slate-800">
-          <div className="mb-3 text-lg font-semibold text-slate-900 dark:text-slate-100">
+          <div className="text-md mb-3 font-semibold text-slate-900 dark:text-slate-100">
             Messages
           </div>
           <div className="space-y-4">

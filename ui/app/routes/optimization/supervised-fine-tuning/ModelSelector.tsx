@@ -1,7 +1,6 @@
 import type { Control } from "react-hook-form";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 import type { SFTFormValues } from "./types";
-import { ModelBadges } from "~/components/model/ModelBadges";
 import { ModelOptionSchema, type ModelOption } from "./model_options";
 import { useState } from "react";
 import {
@@ -20,6 +19,7 @@ import {
   CommandList,
 } from "~/components/ui/command";
 import { cn } from "~/utils/common";
+import { ModelBadge } from "~/components/model/ModelBadge";
 
 export function ModelSelector({
   control,
@@ -91,7 +91,7 @@ export function ModelSelector({
                       {field.value?.displayName ?? "Select a model..."}
                       {field.value?.provider && (
                         <span className="ml-2">
-                          <ModelBadges provider={field.value.provider} />
+                          <ModelBadge provider={field.value.provider} />
                         </span>
                       )}
                     </div>
@@ -138,7 +138,7 @@ export function ModelSelector({
                               />
                               <span>{model.displayName}</span>
                             </div>
-                            <ModelBadges provider={model.provider} />
+                            <ModelBadge provider={model.provider} />
                           </CommandItem>
                         ))}
                       </CommandGroup>
