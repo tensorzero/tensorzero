@@ -208,8 +208,8 @@ jobs:
         working-directory: ui
         run: npm test
 
-      - name: Take down dashboard tests
-        working-directory: dashboard
+      - name: Take down ui tests
+        working-directory: ui
         run: docker compose -f fixtures/docker-compose.yml down
 
       - name: Set up CLICKHOUSE_URL for batch tests
