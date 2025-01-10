@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import type { Control } from "react-hook-form";
+import { useFormState } from "react-hook-form";
 import {
   Accordion,
   AccordionContent,
@@ -18,8 +20,30 @@ export function AdvancedParametersAccordion({
   control,
   maxSamplesLimit,
 }: AdvancedParametersAccordionProps) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const { errors } = useFormState({
+    control,
+  });
+
+  const hasAdvancedErrors = Boolean(
+    errors.validationSplitPercent || errors.maxSamples,
+  );
+
+  useEffect(() => {
+    if (hasAdvancedErrors) {
+      setIsOpen(true);
+    }
+  }, [hasAdvancedErrors]);
+
   return (
-    <Accordion type="single" collapsible className="w-full">
+    <Accordion
+      type="single"
+      collapsible
+      className="w-full"
+      value={isOpen ? "advanced-parameters" : undefined}
+      onValueChange={(value) => setIsOpen(value === "advanced-parameters")}
+    >
       <AccordionItem value="advanced-parameters">
         <AccordionTrigger className="hover:no-underline">
           <div className="flex items-center gap-2">
@@ -34,15 +58,21 @@ export function AdvancedParametersAccordion({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Validation Split (%)</FormLabel>
-                  <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
-                    <Input
-                      type="number"
-                      min={0}
-                      max={100}
-                      {...field}
-                      onChange={(e) => field.onChange(Number(e.target.value))}
-                    />
-                    <div></div>
+                  <div className="grid grid-cols-2 gap-x-8">
+                    <div className="flex flex-col gap-2">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        {...field}
+                        onChange={(e) => field.onChange(Number(e.target.value))}
+                      />
+                      {errors.validationSplitPercent && (
+                        <p className="text-sm text-red-500">
+                          {errors.validationSplitPercent.message}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </FormItem>
               )}
@@ -54,16 +84,22 @@ export function AdvancedParametersAccordion({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Max. Samples</FormLabel>
-                  <div className="grid gap-x-8 gap-y-2 md:grid-cols-2">
-                    <Input
-                      type="number"
-                      min={10}
-                      max={maxSamplesLimit}
-                      step={1}
-                      {...field}
-                      onChange={(e) => field.onChange(Number(e.target.value))}
-                    />
-                    <div></div>
+                  <div className="grid grid-cols-2 gap-x-8">
+                    <div className="flex flex-col gap-2">
+                      <Input
+                        type="number"
+                        min={10}
+                        max={maxSamplesLimit}
+                        step={1}
+                        {...field}
+                        onChange={(e) => field.onChange(Number(e.target.value))}
+                      />
+                      {errors.maxSamples && (
+                        <p className="text-sm text-red-500">
+                          {errors.maxSamples.message}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </FormItem>
               )}
