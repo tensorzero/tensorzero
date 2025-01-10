@@ -14,5 +14,13 @@ export default [
     "observability/inferences",
     "routes/observability/inferences/route.tsx",
   ),
+  route(
+    "observability/episode/:episode_id",
+    "routes/observability/episode/route.tsx",
+  ),
+  route(
+    "observability/inference/:inference_id",
+    "routes/observability/inference/route.tsx",
+  ),
   route("observability/episodes", "routes/observability/episodes/route.tsx"),
 ] satisfies RouteConfig;

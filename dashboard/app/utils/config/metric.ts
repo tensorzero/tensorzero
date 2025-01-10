@@ -27,7 +27,6 @@ export const MetricConfigSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("comment"),
-    level: MetricConfigLevelSchema,
   }),
   z.object({
     type: z.literal("demonstration"),

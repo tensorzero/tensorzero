@@ -91,7 +91,9 @@ test("parse e2e config", async () => {
   const demonstrationMetric = validatedConfig.metrics["demonstration"];
   expect(demonstrationMetric).toBeDefined();
   expect(demonstrationMetric.type).toBe("demonstration");
-  expect(demonstrationMetric.level).toBe("inference");
+  expect(
+    (demonstrationMetric as { type: "demonstration"; level: string }).level,
+  ).toBe("inference");
 
   // Test a tool config
   const getTemperatureTool = validatedConfig.tools["get_temperature"];

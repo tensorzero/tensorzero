@@ -137,6 +137,8 @@ impl InferenceProvider for MistralProvider {
                     message: format!("Error sending request to Mistral: {e}"),
                     status_code: e.status(),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                 })
             })?;
         let latency = Latency::NonStreaming {
@@ -147,6 +149,8 @@ impl InferenceProvider for MistralProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                 })
             })?;
 
@@ -154,6 +158,8 @@ impl InferenceProvider for MistralProvider {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {response}"),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: Some(response.clone()),
                 })
             })?;
 
@@ -171,6 +177,8 @@ impl InferenceProvider for MistralProvider {
                     Error::new(ErrorDetails::InferenceServer {
                         message: format!("Error parsing error response: {e}"),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                        raw_response: None,
                     })
                 })?,
             )
@@ -192,9 +200,8 @@ impl InferenceProvider for MistralProvider {
     > {
         let request_body = MistralRequest::new(&self.model_name, request)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),
-                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         let request_url = get_chat_url(Some(&MISTRAL_API_BASE))?;
@@ -211,6 +218,8 @@ impl InferenceProvider for MistralProvider {
                     message: format!("Error sending request to Mistral: {e}"),
                     status_code: None,
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
                 })
             })?;
         let mut stream = Box::pin(stream_mistral(event_source, start_time));
@@ -223,6 +232,8 @@ impl InferenceProvider for MistralProvider {
                 return Err(Error::new(ErrorDetails::InferenceServer {
                     message: "Stream ended before first chunk".to_string(),
                     provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
                 }))
             }
         };
@@ -254,11 +265,15 @@ fn handle_mistral_error(
             message: response_body.to_string(),
             status_code: Some(response_code),
             provider_type: PROVIDER_TYPE.to_string(),
+            raw_request: None,
+            raw_response: None,
         }
         .into()),
         _ => Err(ErrorDetails::InferenceServer {
             message: response_body.to_string(),
             provider_type: PROVIDER_TYPE.to_string(),
+            raw_request: None,
+            raw_response: None,
         }
         .into()),
     }
@@ -276,6 +291,8 @@ pub fn stream_mistral(
                     yield Err(ErrorDetails::InferenceServer {
                         message: e.to_string(),
                         provider_type: PROVIDER_TYPE.to_string(),
+                        raw_request: None,
+                        raw_response: None,
                     }.into());
                 }
                 Ok(event) => match event {
@@ -291,6 +308,8 @@ pub fn stream_mistral(
                                     e, message.data
                                 ),
                                 provider_type: PROVIDER_TYPE.to_string(),
+                                raw_request: None,
+                                raw_response: None,
                             }.into());
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
@@ -543,9 +562,8 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
             generic_request,
         } = value;
         let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error parsing response: {e}"),
-                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         if response.choices.len() != 1 {
@@ -555,6 +573,8 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
                     response.choices.len()
                 ),
                 provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: Some(raw_response.clone()),
             }));
         }
         let usage = response.usage.into();
@@ -564,6 +584,8 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: Some(raw_response.clone())
             }))?
             .message;
         let mut content: Vec<ContentBlock> = Vec::new();
@@ -578,9 +600,8 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
             }
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request body as JSON: {e}"),
-                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         let system = generic_request.system.clone();
@@ -641,15 +662,16 @@ fn mistral_to_tensorzero_chunk(
     latency: Duration,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     let raw_message = serde_json::to_string(&chunk).map_err(|e| {
-        Error::new(ErrorDetails::InferenceServer {
+        Error::new(ErrorDetails::Serialization {
             message: format!("Error parsing response from Mistral: {e}"),
-            provider_type: PROVIDER_TYPE.to_string(),
         })
     })?;
     if chunk.choices.len() > 1 {
         return Err(ErrorDetails::InferenceServer {
             message: "Response has invalid number of choices: {}. Expected 1.".to_string(),
             provider_type: PROVIDER_TYPE.to_string(),
+            raw_request: None,
+            raw_response: Some(raw_message.clone()),
         }
         .into());
     }
@@ -1003,11 +1025,15 @@ mod tests {
             message,
             status_code,
             provider_type: provider,
+            raw_request,
+            raw_response,
         } = details
         {
             assert_eq!(message, "Unauthorized access");
             assert_eq!(status_code, Some(StatusCode::UNAUTHORIZED));
             assert_eq!(provider, PROVIDER_TYPE.to_string());
+            assert_eq!(raw_request, None);
+            assert_eq!(raw_response, None);
         }
 
         // Test forbidden error
@@ -1018,11 +1044,15 @@ mod tests {
             message,
             status_code,
             provider_type: provider,
+            raw_request,
+            raw_response,
         } = details
         {
             assert_eq!(message, "Forbidden access");
             assert_eq!(status_code, Some(StatusCode::FORBIDDEN));
-            assert_eq!(provider, PROVIDER_TYPE.to_string())
+            assert_eq!(provider, PROVIDER_TYPE.to_string());
+            assert_eq!(raw_request, None);
+            assert_eq!(raw_response, None);
         }
 
         // Test rate limit error
@@ -1033,11 +1063,15 @@ mod tests {
             message,
             status_code,
             provider_type: provider,
+            raw_request,
+            raw_response,
         } = details
         {
             assert_eq!(message, "Rate limit exceeded");
             assert_eq!(status_code, Some(StatusCode::TOO_MANY_REQUESTS));
             assert_eq!(provider, PROVIDER_TYPE.to_string());
+            assert_eq!(raw_request, None);
+            assert_eq!(raw_response, None);
         }
 
         // Test server error
@@ -1047,10 +1081,14 @@ mod tests {
         if let ErrorDetails::InferenceServer {
             message,
             provider_type: provider,
+            raw_request,
+            raw_response,
         } = details
         {
             assert_eq!(message, "Server error");
-            assert_eq!(provider, PROVIDER_TYPE.to_string())
+            assert_eq!(provider, PROVIDER_TYPE.to_string());
+            assert_eq!(raw_request, None);
+            assert_eq!(raw_response, None);
         }
     }
 

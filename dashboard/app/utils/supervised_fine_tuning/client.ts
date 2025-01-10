@@ -6,7 +6,7 @@ import type { SFTJob } from "./common";
 export function launch_sft_job(data: SFTFormValues): Promise<SFTJob> {
   switch (data.model.provider) {
     case "openai":
-      return OpenAISFTJob.fromFormData(data);
+      return OpenAISFTJob.from_form_data(data);
     case "fireworks":
       return FireworksSFTJob.from_form_data(data);
     default:
