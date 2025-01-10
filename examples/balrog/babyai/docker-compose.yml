@@ -1,8 +1,6 @@
-# This is a simplified example for learning purposes. Do not use this in production.
-# For production-ready deployments, see: https://www.tensorzero.com/docs/gateway/deployment
-
 services:
   clickhouse:
+    container_name: tensorzero-clickhouse-babyai
     image: clickhouse/clickhouse-server
     ports:
       - "8123:8123"
@@ -13,6 +11,7 @@ services:
       timeout: 1s
 
   gateway:
+    container_name: tensorzero-clickhouse-babyai
     image: tensorzero/gateway
     volumes:
       # Mount our tensorzero.toml file into the container
