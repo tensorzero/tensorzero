@@ -492,10 +492,10 @@ pub struct InferenceDatabaseInsertMetadata {
     pub tags: HashMap<String, String>,
 }
 
-async fn write_inference<'a>(
+async fn write_inference(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     input: Input,
-    result: InferenceResult<'a>,
+    result: InferenceResult<'_>,
     metadata: InferenceDatabaseInsertMetadata,
 ) {
     let serialized_input = match serde_json::to_string(&input).map_err(|e| {

@@ -106,7 +106,7 @@ impl XAICredentials {
 impl InferenceProvider for XAIProvider {
     async fn infer<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'a>,
+        request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -179,7 +179,7 @@ impl InferenceProvider for XAIProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'a>,
+        request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<
@@ -239,7 +239,7 @@ impl InferenceProvider for XAIProvider {
 
     async fn start_batch_inference<'a>(
         &'a self,
-        _requests: &'a [ModelInferenceRequest<'a>],
+        _requests: &'a [ModelInferenceRequest<'_>],
         _client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<BatchProviderInferenceResponse, Error> {

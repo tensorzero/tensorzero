@@ -113,7 +113,7 @@ impl OpenAICredentials {
 impl InferenceProvider for OpenAIProvider {
     async fn infer<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'a>,
+        request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -187,7 +187,7 @@ impl InferenceProvider for OpenAIProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'a>,
+        request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<
