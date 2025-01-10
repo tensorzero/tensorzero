@@ -20,10 +20,10 @@ import { SFTForm } from "./SFTForm";
 
 export const meta: MetaFunction = () => {
   return [
-    { title: "TensorZero Supervised Fine-Tuning Dashboard" },
+    { title: "TensorZero Supervised Fine-Tuning UI" },
     {
       name: "description",
-      content: "Supervised Fine-Tuning Optimization Dashboard",
+      content: "Supervised Fine-Tuning Optimization UI",
     },
   ];
 };

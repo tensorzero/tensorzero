@@ -2,7 +2,7 @@
 members = [
     "gateway",
     "gateway/tests/mock-inference-provider",
-    "dashboard/app/utils/minijinja",
+    "ui/app/utils/minijinja",
 ]
 resolver = "2"
 

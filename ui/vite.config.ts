@@ -4,7 +4,6 @@ import tailwindcss from "tailwindcss";
 import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 import wasm from "vite-plugin-wasm";
-import topLevelAwait from "vite-plugin-top-level-await";
 
 export default defineConfig({
   css: {
@@ -12,5 +11,13 @@ export default defineConfig({
       plugins: [tailwindcss, autoprefixer],
     },
   },
-  plugins: [reactRouter(), tsconfigPaths(), wasm(), topLevelAwait()],
+  plugins: [wasm(), reactRouter(), tsconfigPaths()],
+  // IMPORTANT:
+  // If we don't set the target to es2022, we need `vite-plugin-top-level-await`
+  // for "vite-plugin-wasm".
+  // However, that's causing an error when building the production bundle.
+  // For now, we're setting the target to es2022 as a workaround.
+  build: {
+    target: "es2022",
+  },
 });
