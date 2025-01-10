@@ -221,9 +221,6 @@ jobs:
             sleep 1
           done
 
-      - name: Debugging with ssh
-        uses: lhotari/action-upterm@v1
-
       - name: Run batch tests
         run: |
           cargo test-batch
