@@ -44,7 +44,7 @@ impl ClickHouseConnectionInfo {
         let database = validate_clickhouse_url_get_db_name(&database_url)?
             .unwrap_or_else(|| "default".to_string());
 
-        #[cfg(feature = "e2e_tests")]
+        #[cfg(any(feature = "e2e_tests", feature = "batch_tests"))]
         let database = "tensorzero_e2e_tests".to_string();
 
         // Although we take the database name from the URL path,

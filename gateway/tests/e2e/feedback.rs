@@ -1,13 +1,13 @@
-use gateway::inference::types::{ContentBlockOutput, JsonInferenceOutput, Text};
+use gateway::{
+    clickhouse::ClickHouseConnectionInfo,
+    inference::types::{ContentBlockOutput, JsonInferenceOutput, Text},
+};
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
-use crate::common::{
-    get_clickhouse, get_gateway_endpoint, select_feedback_clickhouse,
-    select_feedback_tags_clickhouse,
-};
+use crate::common::{clickhouse_flush_async_insert, get_clickhouse, get_gateway_endpoint};
 
 #[tokio::test]
 async fn e2e_test_comment_feedback() {
@@ -905,4 +905,39 @@ async fn e2e_test_boolean_feedback() {
     assert!(retrieved_value);
     let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
     assert_eq!(metric_name, "goal_achieved");
+}
+
+async fn select_feedback_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    table_name: &str,
+    feedback_id: Uuid,
+) -> Option<Value> {
+    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+
+    let query = format!(
+        "SELECT * FROM {} WHERE id = '{}' FORMAT JSONEachRow",
+        table_name, feedback_id
+    );
+
+    let text = clickhouse_connection_info.run_query(query).await.unwrap();
+    let json: Value = serde_json::from_str(&text).ok()?;
+    Some(json)
+}
+
+async fn select_feedback_tags_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    metric_name: &str,
+    tag_key: &str,
+    tag_value: &str,
+) -> Option<Value> {
+    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+
+    let query = format!(
+        "SELECT * FROM FeedbackTag WHERE metric_name = '{}' AND key = '{}' AND value = '{}' FORMAT JSONEachRow",
+        metric_name, tag_key, tag_value
+    );
+
+    let text = clickhouse_connection_info.run_query(query).await.unwrap();
+    let json: Value = serde_json::from_str(&text).ok()?;
+    Some(json)
 }
