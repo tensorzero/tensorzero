@@ -11,6 +11,7 @@ use migrations::migration_0004::Migration0004;
 use migrations::migration_0005::Migration0005;
 use migrations::migration_0006::Migration0006;
 use migrations::migration_0007::Migration0007;
+use migrations::migration_0008::Migration0008;
 use migrations::migration_0009::Migration0009;
 use migrations::migration_0010::Migration0010;
 
@@ -35,6 +36,7 @@ pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
         clean_start,
     })
     .await?;
+    run_migration(&Migration0008 { clickhouse }).await?;
     run_migration(&Migration0009 {
         clickhouse,
         clean_start,
