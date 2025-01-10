@@ -27,7 +27,7 @@ export function AdvancedParametersAccordion({
   });
 
   const hasAdvancedErrors = Boolean(
-    errors.validationSplitPercent || errors.maxSamples || errors.threshold,
+    errors.validationSplitPercent || errors.maxSamples,
   );
 
   useEffect(() => {
