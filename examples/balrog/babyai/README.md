@@ -1,9 +1,5 @@
 # Example: LLM applicationfor BabyAI
 
-<!-- TensorZero was built to support inference strategies more sophisticated than just a single chat completion.
-
-In this example, we'll show how you can drop in this experimental best-of-n variant type to spend additional compute budget for better performance on a challenging LLM benchmark. -->
-
 ## Background: BabyAI
 
 [BabyAI](https://github.com/mila-iqia/babyai) is a grid world environment designed to test the sample efficiency of grounded language acquisition. Each task is described in natural language (e.g., "put the red ball next to the blue ball"). To complete a task, the agent must execute a sequence of actions given partial observations of the environment. The set of actions are "go forward," "turn right," "turn left," "pick up," "drop," and "toggle." An example observation is, "you carry a yellow ball\n a wall 2 steps right\n a red ball 1 step forward".
