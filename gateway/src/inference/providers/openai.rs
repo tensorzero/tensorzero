@@ -1026,7 +1026,7 @@ pub(super) fn tensorzero_to_openai_messages(
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "type")]
-pub enum OpenAIResponseFormat {
+enum OpenAIResponseFormat {
     #[default]
     Text,
     JsonObject,
@@ -1036,7 +1036,7 @@ pub enum OpenAIResponseFormat {
 }
 
 impl OpenAIResponseFormat {
-    pub fn new(
+    fn new(
         json_mode: &ModelInferenceRequestJsonMode,
         output_schema: Option<&Value>,
         model: &str,
