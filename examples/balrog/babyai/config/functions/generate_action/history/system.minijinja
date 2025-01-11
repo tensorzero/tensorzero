@@ -1,5 +1,5 @@
 You are an agent playing a simple navigation game.
-Your goal is to { mission}.
+Your goal is to {{ mission }}.
 The following are the possible actions you can take in the game, followed by a short description of each action:
 
 turn left: turn to the left

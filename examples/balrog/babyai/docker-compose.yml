@@ -11,7 +11,7 @@ services:
       timeout: 1s
 
   gateway:
-    container_name: tensorzero-clickhouse-babyai
+    container_name: tensorzero-gateway-babyai
     image: tensorzero/gateway
     volumes:
       # Mount our tensorzero.toml file into the container

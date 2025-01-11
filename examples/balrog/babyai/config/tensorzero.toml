@@ -13,52 +13,60 @@ model_name = "gpt-4o-mini-2024-07-18"
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-[functions.generate_action_baseline]
+[functions.generate_action]
 type = "chat"
 system_schema = "functions/generate_action/system_schema.json"
 user_schema = "functions/generate_action/user_schema.json"
 
-[functions.generate_action_baseline.variants.simple_variant]
+[functions.generate_action.variants.baseline]
 type = "chat_completion"
 weight = 1.0
 model = "my_gpt_4o_mini"
 system_template = "functions/generate_action/baseline/system.minijinja"
 user_template = "functions/generate_action/baseline/user.minijinja"
 
-[functions.generate_action_history]
-type = "chat"
-system_schema = "functions/generate_action/system_schema.json"
-user_schema = "functions/generate_action/user_schema.json"
+[functions.generate_action.variants.no_mission]
+type = "chat_completion"
+weight = 1.0
+model = "my_gpt_4o_mini"
+system_template = "functions/generate_action/no_mission/system.minijinja"
+user_template = "functions/generate_action/no_mission/user.minijinja"
 
-[functions.generate_action_history.variants.simple_variant]
+[functions.generate_action.variants.history]
 type = "chat_completion"
 weight = 1.0
 model = "my_gpt_4o_mini"
 system_template = "functions/generate_action/history/system.minijinja"
 user_template = "functions/generate_action/history/user.minijinja"
 
-[functions.generate_action_reasoning]
-type = "chat"
-system_schema = "functions/generate_action/system_schema.json"
-user_schema = "functions/generate_action/user_schema.json"
-
-[functions.generate_action_reasoning.variants.simple_variant]
+[functions.generate_action.variants.reasoning]
 type = "chat_completion"
 weight = 1.0
 model = "my_gpt_4o_mini"
 system_template = "functions/generate_action/reasoning/system.minijinja"
 user_template = "functions/generate_action/reasoning/user.minijinja"
 
-[functions.generate_action_history_and_reasoning]
-type = "chat"
-system_schema = "functions/generate_action/system_schema.json"
-user_schema = "functions/generate_action/user_schema.json"
-
-[functions.generate_action_history_and_reasoning.variants.simple_variant]
+[functions.generate_action.variants.history_and_reasoning]
 type = "chat_completion"
 weight = 1.0
 model = "my_gpt_4o_mini"
 system_template = "functions/generate_action/history_and_reasoning/system.minijinja"
+user_template = "functions/generate_action/history_and_reasoning/user.minijinja"
+
+[functions.generate_action.variants.best_of_5]
+weight = 1
+type = "experimental_best_of_n_sampling"
+candidates = [
+    "baseline",
+    "no_mission",
+    "history",
+    "reasoning",
+    "history_and_reasoning",
+]
+
+[functions.generate_action.variants.best_of_5.evaluator]
+model = "my_gpt_4o_mini"
+system_template = "functions/generate_action/baseline/system.minijinja"
 user_template = "functions/generate_action/history_and_reasoning/user.minijinja"
 
 [functions.extract_action]
