@@ -10,14 +10,6 @@ async fn get_providers() -> E2ETestProviders {
         model_provider_name: "tgi".to_string(),
         credentials: HashMap::new(),
     }];
-
-    let json_mode_providers = vec![E2ETestProvider {
-        variant_name: "tgi".to_string(),
-        model_name: model_name.clone(),
-        model_provider_name: "tgi".to_string(),
-        credentials: HashMap::new(),
-    }];
-
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         inference_params_inference: standard_providers.clone(),
@@ -25,7 +17,7 @@ async fn get_providers() -> E2ETestProviders {
         tool_multi_turn_inference: vec![],
         dynamic_tool_use_inference: vec![],
         parallel_tool_use_inference: vec![],
-        json_mode_inference: json_mode_providers.clone(),
+        json_mode_inference: standard_providers.clone(),
         shorthand_inference: vec![],
         #[cfg(feature = "batch_tests")]
         supports_batch_inference: false,

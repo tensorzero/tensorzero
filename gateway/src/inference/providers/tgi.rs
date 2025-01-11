@@ -333,8 +333,6 @@ fn stream_tgi(
 
 /// This struct defines the supported parameters for the TGI API
 /// See the [TGI documentation](https://huggingface.co/docs/text-generation-inference/en/reference/api_reference#openai-messages-api)
-/// Since TGI is fully compatible with Open AI, you can also
-/// See the [OpenAI API documentation](https://platform.openai.com/docs/api-reference/chat/create)
 /// for more details.
 /// We are not handling logprobs, top_logprobs, n,
 /// presence_penalty, seed, service_tier, stop, user,
@@ -373,6 +371,7 @@ impl<'a> TGIRequest<'a> {
     ) -> Result<TGIRequest<'a>, Error> {
         // TGI doesn't support json mode at all (only through tools [https://huggingface.co/docs/text-generation-inference/en/conceptual/guidance])
         // So we log a warning and ignore the json mode
+        // You can get JSON mode through `implicit_tool` instead.
         if request.json_mode != ModelInferenceRequestJsonMode::Off {
             tracing::warn!("TGI does not support json mode. Ignoring json mode.");
         }
