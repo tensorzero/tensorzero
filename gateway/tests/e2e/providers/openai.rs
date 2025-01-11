@@ -1,28 +1,49 @@
+use std::collections::HashMap;
+
 use gateway::{
     embeddings::{EmbeddingProvider, EmbeddingProviderConfig, EmbeddingRequest},
     endpoints::inference::InferenceCredentials,
     inference::types::Latency,
 };
-use reqwest::{Client, StatusCode};
-use serde_json::{json, Value};
+use reqwest::Client;
+#[cfg(feature = "e2e_tests")]
+use reqwest::StatusCode;
+#[cfg(feature = "e2e_tests")]
+use serde_json::json;
+use serde_json::Value;
+#[cfg(feature = "e2e_tests")]
 use uuid::Uuid;
 
-use crate::{
-    common::{
-        get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
-        select_model_inference_clickhouse,
-    },
-    providers::common::{E2ETestProvider, E2ETestProviders},
+#[cfg(feature = "e2e_tests")]
+use crate::common::{
+    get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
+    select_model_inference_clickhouse,
 };
+use crate::providers::common::{E2ETestProvider, E2ETestProviders};
 
+#[cfg(feature = "e2e_tests")]
 crate::generate_provider_tests!(get_providers);
+#[cfg(feature = "batch_tests")]
 crate::generate_batch_inference_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
+    let credentials = match std::env::var("OPENAI_API_KEY") {
+        Ok(key) => HashMap::from([("openai_api_key".to_string(), key)]),
+        Err(_) => HashMap::new(),
+    };
+
     let standard_providers = vec![E2ETestProvider {
         variant_name: "openai".to_string(),
         model_name: "gpt-4o-mini-2024-07-18".to_string(),
         model_provider_name: "openai".to_string(),
+        credentials: HashMap::new(),
+    }];
+
+    let inference_params_providers = vec![E2ETestProvider {
+        variant_name: "openai-dynamic".to_string(),
+        model_name: "gpt-4o-mini-2024-07-18-dynamic".to_string(),
+        model_provider_name: "openai".to_string(),
+        credentials,
     }];
 
     let json_providers = vec![
@@ -30,38 +51,46 @@ async fn get_providers() -> E2ETestProviders {
             variant_name: "openai".to_string(),
             model_name: "gpt-4o-mini-2024-07-18".to_string(),
             model_provider_name: "openai".to_string(),
+            credentials: HashMap::new(),
         },
         E2ETestProvider {
             variant_name: "openai-implicit".to_string(),
             model_name: "gpt-4o-mini-2024-07-18".to_string(),
             model_provider_name: "openai".to_string(),
+            credentials: HashMap::new(),
         },
         E2ETestProvider {
             variant_name: "openai-strict".to_string(),
             model_name: "gpt-4o-mini-2024-07-18".to_string(),
             model_provider_name: "openai".to_string(),
+            credentials: HashMap::new(),
         },
     ];
 
+    #[cfg(feature = "e2e_tests")]
     let shorthand_providers = vec![E2ETestProvider {
         variant_name: "openai-shorthand".to_string(),
         model_name: "openai::gpt-4o-mini-2024-07-18".to_string(),
         model_provider_name: "openai".to_string(),
+        credentials: HashMap::new(),
     }];
 
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
-        inference_params_inference: standard_providers.clone(),
+        inference_params_inference: inference_params_providers,
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),
         dynamic_tool_use_inference: standard_providers.clone(),
         parallel_tool_use_inference: standard_providers.clone(),
         json_mode_inference: json_providers.clone(),
+        #[cfg(feature = "e2e_tests")]
         shorthand_inference: shorthand_providers.clone(),
+        #[cfg(feature = "batch_tests")]
         supports_batch_inference: true,
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 #[tokio::test]
 async fn test_o1_mini_inference() {
     let client = Client::new();
@@ -244,6 +273,7 @@ async fn test_embedding_request() {
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 #[tokio::test]
 async fn test_embedding_sanity_check() {
     let provider_config_serialized = r#"
@@ -295,6 +325,7 @@ async fn test_embedding_sanity_check() {
     );
 }
 
+#[cfg(feature = "e2e_tests")]
 fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     let dot_product: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
     let magnitude_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();

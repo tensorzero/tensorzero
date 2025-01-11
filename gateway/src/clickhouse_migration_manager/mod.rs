@@ -5,30 +5,44 @@ use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::{Error, ErrorDetails};
 use migration_trait::Migration;
 use migrations::migration_0000::Migration0000;
-use migrations::migration_0001::Migration0001;
 use migrations::migration_0002::Migration0002;
 use migrations::migration_0003::Migration0003;
 use migrations::migration_0004::Migration0004;
 use migrations::migration_0005::Migration0005;
 use migrations::migration_0006::Migration0006;
 use migrations::migration_0007::Migration0007;
+use migrations::migration_0008::Migration0008;
+use migrations::migration_0009::Migration0009;
+use migrations::migration_0010::Migration0010;
 
 pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     // This is a no-op if the database already exists
     clickhouse.create_database().await?;
     // If the first migration needs to run, we are starting from scratch and don't need to wait for data to migrate
     let clean_start = run_migration(&Migration0000 { clickhouse }).await?;
-    run_migration(&Migration0001 {
-        clickhouse,
-        clean_start,
-    })
-    .await?;
+    // BANNED: This migration is no longer needed because it is deleted and replaced by migration 0010
+    // run_migration(&Migration0001 {
+    //     clickhouse,
+    //     clean_start,
+    // })
+    // .await?;
     run_migration(&Migration0002 { clickhouse }).await?;
     run_migration(&Migration0003 { clickhouse }).await?;
     run_migration(&Migration0004 { clickhouse }).await?;
     run_migration(&Migration0005 { clickhouse }).await?;
     run_migration(&Migration0006 { clickhouse }).await?;
     run_migration(&Migration0007 {
+        clickhouse,
+        clean_start,
+    })
+    .await?;
+    run_migration(&Migration0008 { clickhouse }).await?;
+    run_migration(&Migration0009 {
+        clickhouse,
+        clean_start,
+    })
+    .await?;
+    run_migration(&Migration0010 {
         clickhouse,
         clean_start,
     })

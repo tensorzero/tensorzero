@@ -23,7 +23,8 @@ pub async fn get_clickhouse() -> ClickHouseConnectionInfo {
         .expect("Failed to connect to ClickHouse")
 }
 
-async fn clickhouse_flush_async_insert(clickhouse: &ClickHouseConnectionInfo) {
+#[cfg(feature = "e2e_tests")]
+pub async fn clickhouse_flush_async_insert(clickhouse: &ClickHouseConnectionInfo) {
     clickhouse
         .run_query("SYSTEM FLUSH ASYNC INSERT QUEUE".to_string())
         .await
@@ -34,10 +35,11 @@ pub(crate) async fn select_chat_inference_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
 ) -> Option<Value> {
+    #[cfg(feature = "e2e_tests")]
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
-        "SELECT * FROM ChatInference WHERE id = '{}' FORMAT JSONEachRow",
+        "SELECT * FROM ChatInference WHERE id = '{}' LIMIT 1 FORMAT JSONEachRow",
         inference_id
     );
 
@@ -50,10 +52,12 @@ pub(crate) async fn select_json_inference_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
 ) -> Option<Value> {
+    #[cfg(feature = "e2e_tests")]
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
+    // We limit to 1 in case there are duplicate entries (can be caused by a race condition in polling batch inferences)
     let query = format!(
-        "SELECT * FROM JsonInference WHERE id = '{}' FORMAT JSONEachRow",
+        "SELECT * FROM JsonInference WHERE id = '{}' LIMIT 1 FORMAT JSONEachRow",
         inference_id
     );
 
@@ -66,10 +70,12 @@ pub(crate) async fn select_model_inference_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
 ) -> Option<Value> {
+    #[cfg(feature = "e2e_tests")]
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
+    // We limit to 1 in case there are duplicate entries (can be caused by a race condition in polling batch inferences)
     let query = format!(
-        "SELECT * FROM ModelInference WHERE inference_id = '{}' FORMAT JSONEachRow",
+        "SELECT * FROM ModelInference WHERE inference_id = '{}' LIMIT 1 FORMAT JSONEachRow",
         inference_id
     );
 
@@ -82,8 +88,10 @@ pub(crate) async fn select_model_inferences_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
 ) -> Option<Vec<Value>> {
+    #[cfg(feature = "e2e_tests")]
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
+    // We limit to 1 in case there are duplicate entries (can be caused by a race condition in polling batch inferences)
     let query = format!(
         "SELECT * FROM ModelInference WHERE inference_id = '{}' FORMAT JSONEachRow",
         inference_id
@@ -102,52 +110,19 @@ pub(crate) async fn select_model_inferences_clickhouse(
     }
 }
 
-pub(crate) async fn select_feedback_clickhouse(
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
-    table_name: &str,
-    feedback_id: Uuid,
-) -> Option<Value> {
-    clickhouse_flush_async_insert(clickhouse_connection_info).await;
-
-    let query = format!(
-        "SELECT * FROM {} WHERE id = '{}' FORMAT JSONEachRow",
-        table_name, feedback_id
-    );
-
-    let text = clickhouse_connection_info.run_query(query).await.unwrap();
-    let json: Value = serde_json::from_str(&text).ok()?;
-    Some(json)
-}
-
-pub(crate) async fn select_feedback_tags_clickhouse(
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
-    metric_name: &str,
-    tag_key: &str,
-    tag_value: &str,
-) -> Option<Value> {
-    clickhouse_flush_async_insert(clickhouse_connection_info).await;
-
-    let query = format!(
-        "SELECT * FROM FeedbackTag WHERE metric_name = '{}' AND key = '{}' AND value = '{}' FORMAT JSONEachRow",
-        metric_name, tag_key, tag_value
-    );
-
-    let text = clickhouse_connection_info.run_query(query).await.unwrap();
-    let json: Value = serde_json::from_str(&text).ok()?;
-    Some(json)
-}
-
 pub(crate) async fn select_inference_tags_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     function_name: &str,
     tag_key: &str,
     tag_value: &str,
+    inference_id: Uuid,
 ) -> Option<Value> {
+    #[cfg(feature = "e2e_tests")]
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
-        "SELECT * FROM InferenceTag WHERE function_name = '{}' AND key = '{}' AND value = '{}' FORMAT JSONEachRow",
-        function_name, tag_key, tag_value
+        "SELECT * FROM InferenceTag WHERE function_name = '{}' AND key = '{}' AND value = '{}' AND inference_id = '{}' FORMAT JSONEachRow",
+        function_name, tag_key, tag_value, inference_id
     );
 
     let text = clickhouse_connection_info.run_query(query).await.unwrap();
@@ -155,6 +130,7 @@ pub(crate) async fn select_inference_tags_clickhouse(
     Some(json)
 }
 
+#[cfg(feature = "batch_tests")]
 pub(crate) async fn select_batch_model_inference_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
@@ -170,10 +146,33 @@ pub(crate) async fn select_batch_model_inference_clickhouse(
     );
 
     let text = clickhouse_connection_info.run_query(query).await.unwrap();
-
     Some(serde_json::from_str(&text).unwrap())
 }
 
+#[cfg(feature = "batch_tests")]
+pub(crate) async fn select_batch_model_inferences_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    batch_id: Uuid,
+) -> Option<Vec<Value>> {
+    let query = format!(
+        r#"
+        SELECT bmi.*
+        FROM BatchModelInference bmi
+        WHERE bmi.batch_id = '{}'
+        FORMAT JSONEachRow"#,
+        batch_id
+    );
+
+    let text = clickhouse_connection_info.run_query(query).await.unwrap();
+    let json_rows: Vec<Value> = text
+        .lines()
+        .filter_map(|line| serde_json::from_str(line).ok())
+        .collect();
+
+    Some(json_rows)
+}
+
+#[cfg(feature = "batch_tests")]
 pub(crate) async fn select_latest_batch_request_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     batch_id: Uuid,

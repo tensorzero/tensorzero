@@ -13,7 +13,10 @@ repos:
       - id: check-xml
       - id: check-yaml
       - id: detect-private-key
-        exclude: CONTRIBUTING.md
+        exclude: |
+          (?x)
+          gateway/src/inference/providers/gcp_vertex_gemini\.rs|
+          CONTRIBUTING\.md
       - id: end-of-file-fixer
         exclude: \.minijinja$
       - id: trailing-whitespace
@@ -50,7 +53,7 @@ repos:
 
       - id: prettier
         name: prettier
-        entry: bash -c 'cd dashboard && npm run format'
+        entry: bash -c 'cd ui && npm run format'
         language: node
         types_or:
           [css, html, javascript, json, jsx, markdown, scss, ts, tsx, yaml]
@@ -63,7 +66,7 @@ repos:
 
       - id: eslint
         name: eslint
-        entry: bash -c 'cd dashboard && npm run lint'
+        entry: bash -c 'cd ui && npm run lint'
         language: node
         types_or: [javascript, jsx, ts, tsx]
         additional_dependencies:
@@ -74,7 +77,7 @@ repos:
 
       - id: tsc
         name: tsc
-        entry: bash -c 'cd dashboard && npm run typecheck'
+        entry: bash -c 'cd ui && npm run typecheck'
         language: node
         types_or: [ts, tsx]
         additional_dependencies:
@@ -89,8 +92,25 @@ repos:
           - --remove-empty-cells
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.4
+    rev: v0.9.0
     hooks:
       - id: ruff
         args: ["--extend-select", "I", "--fix"]
       - id: ruff-format
+  - repo: https://github.com/RobertCraigie/pyright-python
+    rev: v1.1.391
+    hooks:
+      - id: pyright
+        name: "pyright: clients/python"
+        files: ^clients/python/
+        args: ["--project", "clients/python/pyproject.toml"]
+        additional_dependencies:
+          - httpx
+          - uuid_utils
+
+      - id: pyright
+        name: "pyright: clients/openai-python"
+        files: ^clients/openai-python/
+        args: ["--project", "clients/openai-python/pyrightconfig.json"]
+        additional_dependencies:
+          - openai

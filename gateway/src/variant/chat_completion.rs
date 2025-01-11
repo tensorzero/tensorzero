@@ -7,7 +7,7 @@ use crate::endpoints::inference::{InferenceClients, InferenceModels, InferencePa
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::{
-    batch::BatchModelInferenceWithMetadata, ContentBlock, InferenceResultChunk,
+    batch::StartBatchModelInferenceWithMetadata, ContentBlock, InferenceResultChunk,
     InferenceResultStream, Input, InputMessageContent, ModelInferenceRequest, RequestMessage, Role,
 };
 use crate::inference::types::{InferenceResult, InputMessage};
@@ -314,7 +314,7 @@ impl Variant for ChatCompletionConfig {
         inference_configs: &'a [InferenceConfig<'a, 'a>],
         clients: &'a InferenceClients<'a>,
         inference_params: Vec<InferenceParams>,
-    ) -> Result<BatchModelInferenceWithMetadata<'a>, Error> {
+    ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
         // First construct all inference configs so they stick around for the duration of this function body
         let mut inference_params = inference_params;
 
@@ -341,7 +341,7 @@ impl Variant for ChatCompletionConfig {
                 clients.credentials,
             )
             .await?;
-        Ok(BatchModelInferenceWithMetadata::new(
+        Ok(StartBatchModelInferenceWithMetadata::new(
             model_inference_response,
             inference_requests,
             &self.model,
@@ -883,7 +883,9 @@ mod tests {
                     Error::new(ErrorDetails::InferenceClient {
                         message: "Error sending request to Dummy provider.".to_string(),
                         status_code: None,
-                        provider_type: "Dummy".to_string(),
+                        raw_request: Some("raw request".to_string()),
+                        raw_response: None,
+                        provider_type: "dummy".to_string(),
                     })
                 )])
             }

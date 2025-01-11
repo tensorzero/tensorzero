@@ -3,6 +3,27 @@ use std::collections::HashMap;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
 use serde_json::{json, Value};
+use tokio::sync::OnceCell;
+use uuid::Uuid;
+
+/// Controls whether to include raw request/response details in error output
+///
+/// When true:
+/// - Raw request/response details are logged for inference provider errors
+/// - Raw details are included in error response bodies
+/// - Most commonly affects errors from provider API requests/responses
+///
+/// WARNING: Setting this to true will expose potentially sensitive request/response
+/// data in logs and error responses. Use with caution.
+static DEBUG: OnceCell<bool> = OnceCell::const_new();
+
+pub fn set_debug(debug: bool) -> Result<(), Error> {
+    DEBUG.set(debug).map_err(|_| {
+        Error::new(ErrorDetails::Config {
+            message: "Failed to set debug mode".to_string(),
+        })
+    })
+}
 
 #[derive(Debug, PartialEq)]
 // As long as the struct member is private, we force people to use the `new` method and log the error.
@@ -61,10 +82,16 @@ pub enum ErrorDetails {
         index: usize,
         message: String,
     },
+    BatchNotFound {
+        id: Uuid,
+    },
     ChannelWrite {
         message: String,
     },
     ClickHouseConnection {
+        message: String,
+    },
+    ClickHouseDeserialization {
         message: String,
     },
     ClickHouseMigration {
@@ -83,23 +110,33 @@ pub enum ErrorDetails {
     GCPCredentials {
         message: String,
     },
-    InferenceServer {
+    Inference {
         message: String,
-        provider_type: String,
     },
     InferenceClient {
         message: String,
         status_code: Option<StatusCode>,
         provider_type: String,
+        raw_request: Option<String>,
+        raw_response: Option<String>,
     },
-    Inference {
+    InferenceNotFound {
+        inference_id: Uuid,
+    },
+    InferenceServer {
         message: String,
+        provider_type: String,
+        raw_request: Option<String>,
+        raw_response: Option<String>,
     },
     InferenceTimeout {
         variant_name: String,
     },
     InputValidation {
         source: Box<Error>,
+    },
+    InvalidBatchParams {
+        message: String,
     },
     InvalidBaseUrl {
         message: String,
@@ -119,6 +156,13 @@ pub enum ErrorDetails {
     },
     InvalidMessage {
         message: String,
+    },
+    InvalidModel {
+        model_name: String,
+    },
+    InvalidModelProvider {
+        model_name: String,
+        provider_name: String,
     },
     InvalidOpenAICompatibleRequest {
         message: String,
@@ -160,6 +204,9 @@ pub enum ErrorDetails {
     MiniJinjaTemplateRender {
         template_name: String,
         message: String,
+    },
+    MissingBatchInferenceResponse {
+        inference_id: Option<Uuid>,
     },
     ModelProvidersExhausted {
         provider_errors: HashMap<String, Error>,
@@ -219,6 +266,10 @@ pub enum ErrorDetails {
     UuidInFuture {
         raw_uuid: String,
     },
+    RouteNotFound {
+        path: String,
+        method: String,
+    },
 }
 
 impl ErrorDetails {
@@ -230,8 +281,10 @@ impl ErrorDetails {
             ErrorDetails::AppState { .. } => tracing::Level::ERROR,
             ErrorDetails::BadCredentialsPreInference { .. } => tracing::Level::ERROR,
             ErrorDetails::BatchInputValidation { .. } => tracing::Level::WARN,
+            ErrorDetails::BatchNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::ChannelWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseConnection { .. } => tracing::Level::ERROR,
+            ErrorDetails::ClickHouseDeserialization { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseMigration { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseQuery { .. } => tracing::Level::ERROR,
             ErrorDetails::Config { .. } => tracing::Level::ERROR,
@@ -239,15 +292,19 @@ impl ErrorDetails {
             ErrorDetails::GCPCredentials { .. } => tracing::Level::ERROR,
             ErrorDetails::Inference { .. } => tracing::Level::ERROR,
             ErrorDetails::InferenceClient { .. } => tracing::Level::ERROR,
+            ErrorDetails::InferenceNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::InferenceServer { .. } => tracing::Level::ERROR,
             ErrorDetails::InferenceTimeout { .. } => tracing::Level::WARN,
             ErrorDetails::InputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidBaseUrl { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidBatchParams { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidCandidate { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidDiclConfig { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidEpisodeId { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidMessage { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidModel { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidModelProvider { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidOpenAICompatibleRequest { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidProviderConfig { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidRequest { .. } => tracing::Level::WARN,
@@ -261,6 +318,7 @@ impl ErrorDetails {
             ErrorDetails::MiniJinjaTemplate { .. } => tracing::Level::ERROR,
             ErrorDetails::MiniJinjaTemplateMissing { .. } => tracing::Level::ERROR,
             ErrorDetails::MiniJinjaTemplateRender { .. } => tracing::Level::ERROR,
+            ErrorDetails::MissingBatchInferenceResponse { .. } => tracing::Level::WARN,
             ErrorDetails::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
             ErrorDetails::ModelValidation { .. } => tracing::Level::ERROR,
             ErrorDetails::Observability { .. } => tracing::Level::ERROR,
@@ -280,6 +338,7 @@ impl ErrorDetails {
             ErrorDetails::UnsupportedModelProviderForBatchInference { .. } => tracing::Level::WARN,
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => tracing::Level::WARN,
             ErrorDetails::UuidInFuture { .. } => tracing::Level::WARN,
+            ErrorDetails::RouteNotFound { .. } => tracing::Level::WARN,
         }
     }
 
@@ -291,8 +350,10 @@ impl ErrorDetails {
             ErrorDetails::AppState { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::BadCredentialsPreInference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::BatchInputValidation { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::BatchNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ClickHouseDeserialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -302,16 +363,20 @@ impl ErrorDetails {
             ErrorDetails::InferenceClient { status_code, .. } => {
                 status_code.unwrap_or_else(|| StatusCode::INTERNAL_SERVER_ERROR)
             }
+            ErrorDetails::InferenceNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::InferenceServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             ErrorDetails::InvalidEpisodeId { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidUuid { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InputValidation { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidBaseUrl { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidBatchParams { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidDiclConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidModel { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidModelProvider { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidOpenAICompatibleRequest { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidProviderConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidRequest { .. } => StatusCode::BAD_REQUEST,
@@ -324,6 +389,7 @@ impl ErrorDetails {
             ErrorDetails::MiniJinjaTemplate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::MiniJinjaTemplateMissing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::MiniJinjaTemplateRender { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::MissingBatchInferenceResponse { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -345,6 +411,7 @@ impl ErrorDetails {
             }
             ErrorDetails::UnsupportedVariantForBatchInference { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::UuidInFuture { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::RouteNotFound { .. } => StatusCode::NOT_FOUND,
         }
     }
 
@@ -390,11 +457,17 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::BatchInputValidation { index, message } => {
                 write!(f, "Input at index {} failed validation: {}", index, message,)
             }
+            ErrorDetails::BatchNotFound { id } => {
+                write!(f, "Batch request not found for id: {}", id)
+            }
             ErrorDetails::ChannelWrite { message } => {
                 write!(f, "Error writing to channel: {}", message)
             }
             ErrorDetails::ClickHouseConnection { message } => {
                 write!(f, "Error connecting to ClickHouse: {}", message)
+            }
+            ErrorDetails::ClickHouseDeserialization { message } => {
+                write!(f, "Error deserializing ClickHouse response: {}", message)
             }
             ErrorDetails::ClickHouseMigration { id, message } => {
                 write!(f, "Error running ClickHouse migration {}: {}", id, message)
@@ -419,20 +492,73 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::InferenceClient {
                 message,
                 provider_type,
-                ..
-            } => write!(f, "Error from {} client: {}", provider_type, message),
+                raw_request,
+                raw_response,
+                status_code,
+            } => {
+                // `debug` defaults to false so we don't log raw request and response by default
+                if *DEBUG.get().unwrap_or(&false) {
+                    write!(
+                        f,
+                        "Error from {} client: {}{}{}",
+                        provider_type,
+                        message,
+                        raw_request
+                            .as_ref()
+                            .map_or("".to_string(), |r| format!("\nRaw request: {}", r)),
+                        raw_response
+                            .as_ref()
+                            .map_or("".to_string(), |r| format!("\nRaw response: {}", r))
+                    )
+                } else {
+                    write!(
+                        f,
+                        "Error{} from {} client: {}",
+                        status_code.map_or("".to_string(), |s| format!(" {}", s)),
+                        provider_type,
+                        message
+                    )
+                }
+            }
+            ErrorDetails::InferenceNotFound { inference_id } => {
+                write!(f, "Inference not found for id: {}", inference_id)
+            }
             ErrorDetails::InferenceServer {
                 message,
                 provider_type,
-                ..
-            } => write!(f, "Error from {} server: {}", provider_type, message),
+                raw_request,
+                raw_response,
+            } => {
+                // `debug` defaults to false so we don't log raw request and response by default
+                if *DEBUG.get().unwrap_or(&false) {
+                    write!(
+                        f,
+                        "Error from {} server: {}{}{}",
+                        provider_type,
+                        message,
+                        raw_request
+                            .as_ref()
+                            .map_or("".to_string(), |r| format!("\nRaw request: {}", r)),
+                        raw_response
+                            .as_ref()
+                            .map_or("".to_string(), |r| format!("\nRaw response: {}", r))
+                    )
+                } else {
+                    write!(f, "Error from {} server: {}", provider_type, message)
+                }
+            }
             ErrorDetails::InferenceTimeout { variant_name } => {
                 write!(f, "Inference timed out for variant: {}", variant_name)
             }
             ErrorDetails::InputValidation { source } => {
                 write!(f, "Input validation failed with messages: {}", source)
             }
-            ErrorDetails::InvalidBaseUrl { message } => write!(f, "{}", message),
+            ErrorDetails::InvalidBaseUrl { message } => write!(
+                f,
+                "Invalid batch params retrieved from database: {}",
+                message
+            ),
+            ErrorDetails::InvalidBatchParams { message } => write!(f, "{}", message),
             ErrorDetails::InvalidCandidate {
                 variant_name,
                 message,
@@ -451,6 +577,19 @@ impl std::fmt::Display for ErrorDetails {
                 write!(f, "Invalid Episode ID: {}", message)
             }
             ErrorDetails::InvalidMessage { message } => write!(f, "{}", message),
+            ErrorDetails::InvalidModel { model_name } => {
+                write!(f, "Invalid model: {}", model_name)
+            }
+            ErrorDetails::InvalidModelProvider {
+                model_name,
+                provider_name,
+            } => {
+                write!(
+                    f,
+                    "Invalid model provider: {} for model: {}",
+                    provider_name, model_name
+                )
+            }
             ErrorDetails::InvalidOpenAICompatibleRequest { message } => write!(
                 f,
                 "Invalid request to OpenAI-compatible endpoint: {}",
@@ -506,6 +645,14 @@ impl std::fmt::Display for ErrorDetails {
             } => {
                 write!(f, "Error rendering template {}: {}", template_name, message)
             }
+            ErrorDetails::MissingBatchInferenceResponse { inference_id } => match inference_id {
+                Some(inference_id) => write!(
+                    f,
+                    "Missing batch inference response for inference id: {}",
+                    inference_id
+                ),
+                None => write!(f, "Missing batch inference response"),
+            },
             ErrorDetails::ModelProvidersExhausted { provider_errors } => {
                 write!(
                     f,
@@ -569,6 +716,9 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::UuidInFuture { raw_uuid } => {
                 write!(f, "UUID is in the future: {}", raw_uuid)
+            }
+            ErrorDetails::RouteNotFound { path, method } => {
+                write!(f, "Route not found: {} {}", method, path)
             }
         }
     }

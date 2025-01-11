@@ -1,1 +1,3 @@
-target/
+**/target/
+**/.venv/
+**/node_modules/

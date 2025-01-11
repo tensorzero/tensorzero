@@ -1,12 +1,11 @@
-use std::env;
-
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
+use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::{
-    batch::BatchProviderInferenceResponse, ContentBlock, Latency, ModelInferenceRequest,
+    batch::StartBatchProviderInferenceResponse, ContentBlock, Latency, ModelInferenceRequest,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
 };
-use crate::model::CredentialLocation;
+use crate::model::{Credential, CredentialLocation};
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest_eventsource::RequestBuilderExt;
@@ -33,10 +32,13 @@ pub fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("HYPERBOLIC_API_KEY".to_string())
 }
 
+const PROVIDER_NAME: &str = "Hyperbolic";
+const PROVIDER_TYPE: &str = "hyperbolic";
+
 #[derive(Debug)]
 pub struct HyperbolicProvider {
-    pub model_name: String,
-    pub credentials: HyperbolicCredentials,
+    model_name: String,
+    credentials: HyperbolicCredentials,
 }
 
 impl HyperbolicProvider {
@@ -44,26 +46,12 @@ impl HyperbolicProvider {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
-        let credentials = match api_key_location {
-            CredentialLocation::Env(key_name) => {
-                let api_key = env::var(key_name).map_err(|_| {
-                    Error::new(ErrorDetails::ApiKeyMissing {
-                        provider_name: "Hyperbolic".to_string(),
-                    })
-                })?;
-                HyperbolicCredentials::Static(api_key.into())
-            }
-            CredentialLocation::Dynamic(key_name) => HyperbolicCredentials::Dynamic(key_name),
-            _ => {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: "Invalid api_key_location for Hyperbolic provider".to_string(),
-                }))
-            }
-        };
+        let credential_location = api_key_location.unwrap_or(default_api_key_location());
+        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
+        let provider_credentials = HyperbolicCredentials::try_from(generic_credentials)?;
         Ok(HyperbolicProvider {
             model_name,
-            credentials,
+            credentials: provider_credentials,
         })
     }
 }
@@ -72,6 +60,24 @@ impl HyperbolicProvider {
 pub enum HyperbolicCredentials {
     Static(SecretString),
     Dynamic(String),
+    #[cfg(any(test, feature = "e2e_tests"))]
+    None,
+}
+
+impl TryFrom<Credential> for HyperbolicCredentials {
+    type Error = Error;
+
+    fn try_from(credentials: Credential) -> Result<Self, Error> {
+        match credentials {
+            Credential::Static(key) => Ok(HyperbolicCredentials::Static(key)),
+            Credential::Dynamic(key_name) => Ok(HyperbolicCredentials::Dynamic(key_name)),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            Credential::Missing => Ok(HyperbolicCredentials::None),
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: "Invalid api_key_location for Hyperbolic provider".to_string(),
+            })),
+        }
+    }
 }
 
 impl HyperbolicCredentials {
@@ -84,11 +90,15 @@ impl HyperbolicCredentials {
             HyperbolicCredentials::Dynamic(key_name) => {
                 dynamic_api_keys.get(key_name).ok_or_else(|| {
                     ErrorDetails::ApiKeyMissing {
-                        provider_name: "HyperbolicCredentials".to_string(),
+                        provider_name: PROVIDER_NAME.to_string(),
                     }
                     .into()
                 })
             }
+            #[cfg(any(test, feature = "e2e_tests"))]
+            HyperbolicCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+                provider_name: PROVIDER_NAME.to_string(),
+            })?,
         }
     }
 }
@@ -117,7 +127,9 @@ impl InferenceProvider for HyperbolicProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request to Hyperbolic: {e}"),
                     status_code: e.status(),
-                    provider_type: "Hyperbolic".to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
 
@@ -125,14 +137,18 @@ impl InferenceProvider for HyperbolicProvider {
             let response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
-                    provider_type: "Hyperbolic".to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
 
             let response = serde_json::from_str(&response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {response}"),
-                    provider_type: "Hyperbolic".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: Some(response.clone()),
                 })
             })?;
 
@@ -152,9 +168,12 @@ impl InferenceProvider for HyperbolicProvider {
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
                         message: format!("Error parsing error response: {e}"),
-                        provider_type: "Hyperbolic".to_string(),
+                        raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                        raw_response: None,
+                        provider_type: PROVIDER_TYPE.to_string(),
                     })
                 })?,
+                PROVIDER_TYPE,
             ))
         }
     }
@@ -174,9 +193,8 @@ impl InferenceProvider for HyperbolicProvider {
     > {
         let request_body = HyperbolicRequest::new(&self.model_name, request)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),
-                provider_type: "Hyperbolic".to_string(),
             })
         })?;
         let request_url = get_chat_url(Some(&HYPERBOLIC_DEFAULT_BASE_URL))?;
@@ -192,7 +210,9 @@ impl InferenceProvider for HyperbolicProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request to Hyperbolic: {e}"),
                     status_code: None,
-                    provider_type: "Hyperbolic".to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
+                    provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
 
@@ -205,7 +225,9 @@ impl InferenceProvider for HyperbolicProvider {
             None => {
                 return Err(ErrorDetails::InferenceServer {
                     message: "Stream ended before first chunk".to_string(),
-                    provider_type: "Hyperbolic".to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
+                    provider_type: PROVIDER_TYPE.to_string(),
                 }
                 .into())
             }
@@ -218,9 +240,21 @@ impl InferenceProvider for HyperbolicProvider {
         _requests: &'a [ModelInferenceRequest<'a>],
         _client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<BatchProviderInferenceResponse, Error> {
+    ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
             provider_type: "Hyperbolic".to_string(),
+        }
+        .into())
+    }
+
+    async fn poll_batch_inference<'a>(
+        &'a self,
+        _batch_request: &'a BatchRequestRow<'a>,
+        _http_client: &'a reqwest::Client,
+        _dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<PollBatchInferenceResponse, Error> {
+        Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
+            provider_type: PROVIDER_TYPE.to_string(),
         }
         .into())
     }
@@ -298,9 +332,8 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
         } = value;
 
         let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!("Error parsing response: {e}"),
-                provider_type: "Hyperbolic".to_string(),
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Error serializing response: {e}"),
             })
         })?;
 
@@ -310,7 +343,9 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
                     "Response has invalid number of choices {}, Expected 1",
                     response.choices.len()
                 ),
-                provider_type: "Hyperbolic".to_string(),
+                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_response: Some(raw_response.clone()),
+                provider_type: PROVIDER_TYPE.to_string(),
             }
             .into());
         }
@@ -321,7 +356,9 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
             .pop()
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
-                provider_type: "Hyperbolic".to_string(),
+                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_response: Some(raw_response.clone()),
+                provider_type: PROVIDER_TYPE.to_string(),
             }))?
             .message;
         let mut content: Vec<ContentBlock> = Vec::new();
@@ -334,9 +371,8 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
             }
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request body as JSON: {e}"),
-                provider_type: "Hyperbolic".to_string(),
             })
         })?;
         let system = generic_request.system.clone();
@@ -402,5 +438,35 @@ mod tests {
             HYPERBOLIC_DEFAULT_BASE_URL.as_str(),
             "https://api.hyperbolic.xyz/v1/"
         );
+    }
+
+    #[test]
+    fn test_credential_to_hyperbolic_credentials() {
+        // Test Static credential
+        let generic = Credential::Static(SecretString::from("test_key"));
+        let creds = HyperbolicCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, HyperbolicCredentials::Static(_)));
+
+        // Test Dynamic credential
+        let generic = Credential::Dynamic("key_name".to_string());
+        let creds = HyperbolicCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, HyperbolicCredentials::Dynamic(_)));
+
+        // Test Missing credential (test mode)
+        #[cfg(any(test, feature = "e2e_tests"))]
+        {
+            let generic = Credential::Missing;
+            let creds = HyperbolicCredentials::try_from(generic).unwrap();
+            assert!(matches!(creds, HyperbolicCredentials::None));
+        }
+
+        // Test invalid type
+        let generic = Credential::FileContents(SecretString::from("test"));
+        let result = HyperbolicCredentials::try_from(generic);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err().get_owned_details(),
+            ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
+        ));
     }
 }

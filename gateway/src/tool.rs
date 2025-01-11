@@ -81,7 +81,7 @@ pub struct ToolCallConfig {
 
 /// ToolCallConfigDatabaseInsert is a lightweight version of ToolCallConfig that can be serialized and cloned.
 /// It is used to insert the ToolCallConfig into the database.
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 pub struct ToolCallConfigDatabaseInsert {
     pub tools_available: Vec<Tool>,
     pub tool_choice: ToolChoice,
@@ -495,6 +495,27 @@ impl TryFrom<BatchDynamicToolParamsWithSize> for Vec<DynamicToolParams> {
             });
         }
         Ok(all_dynamic_tool_params)
+    }
+}
+
+impl From<ToolCallConfigDatabaseInsert> for ToolCallConfig {
+    fn from(db_insert: ToolCallConfigDatabaseInsert) -> Self {
+        Self {
+            tools_available: db_insert
+                .tools_available
+                .into_iter()
+                .map(|tool| {
+                    ToolConfig::Dynamic(DynamicToolConfig {
+                        description: tool.description,
+                        parameters: DynamicJSONSchema::new(tool.parameters),
+                        name: tool.name,
+                        strict: tool.strict,
+                    })
+                })
+                .collect(),
+            tool_choice: db_insert.tool_choice,
+            parallel_tool_calls: db_insert.parallel_tool_calls,
+        }
     }
 }
 

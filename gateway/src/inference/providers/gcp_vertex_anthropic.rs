@@ -1,4 +1,3 @@
-use std::env;
 use std::time::Duration;
 
 use futures::{Stream, StreamExt};
@@ -13,32 +12,34 @@ use uuid::Uuid;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
+use crate::inference::types::batch::BatchRequestRow;
+use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::{
-    batch::BatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType, Latency,
-    ModelInferenceRequestJsonMode, Role, Text, TextChunk,
+    batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType,
+    Latency, ModelInferenceRequestJsonMode, Role, Text, TextChunk,
 };
 use crate::inference::types::{
     ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream, RequestMessage, Usage,
 };
-use crate::model::CredentialLocation;
+use crate::model::{Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
-use super::gcp_vertex_gemini::{
-    default_api_key_location, GCPServiceAccountCredentials, GCPVertexCredentials,
-};
+use super::gcp_vertex_gemini::{default_api_key_location, GCPVertexCredentials};
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
+#[allow(unused)]
+const PROVIDER_NAME: &str = "GCP Vertex Anthropic";
+const PROVIDER_TYPE: &str = "gcp_vertex_anthropic";
 
 #[derive(Debug)]
 pub struct GCPVertexAnthropicProvider {
-    pub request_url: String,
-    pub streaming_request_url: String,
-    pub audience: String,
-    pub credentials: GCPVertexCredentials,
-    pub model_id: String,
+    request_url: String,
+    streaming_request_url: String,
+    audience: String,
+    credentials: GCPVertexCredentials,
 }
 
 impl GCPVertexAnthropicProvider {
@@ -48,37 +49,10 @@ impl GCPVertexAnthropicProvider {
         project_id: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
-        let credentials = match api_key_location {
-            CredentialLocation::Env(key_name) => {
-                let path = env::var(key_name).map_err(|e| {
-                    Error::new(ErrorDetails::GCPCredentials {
-                        message: format!(
-                            "Failed to load GCP credentials from environment variable: {}",
-                            e
-                        ),
-                    })
-                })?;
-                GCPVertexCredentials::Static(
-                    GCPServiceAccountCredentials::from_path(path.as_str()).map_err(|e| {
-                        Error::new(ErrorDetails::GCPCredentials {
-                            message: format!("Failed to load GCP credentials: {}", e),
-                        })
-                    })?,
-                )
-            }
-            CredentialLocation::Path(path) => GCPVertexCredentials::Static(
-                GCPServiceAccountCredentials::from_path(path.as_str()).map_err(|e| {
-                    Error::new(ErrorDetails::GCPCredentials {
-                        message: format!("Failed to load GCP credentials: {}", e),
-                    })
-                })?,
-            ),
-            CredentialLocation::Dynamic(key_name) => GCPVertexCredentials::Dynamic(key_name),
-            _ => Err(Error::new(ErrorDetails::GCPCredentials {
-                message: "Invalid credential_location for GCPVertexAnthropic provider".to_string(),
-            }))?,
-        };
+        let credential_location = api_key_location.unwrap_or(default_api_key_location());
+        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
+        let provider_credentials =
+            GCPVertexCredentials::try_from((generic_credentials, PROVIDER_TYPE))?;
         let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:rawPredict");
         let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:streamRawPredict");
         let audience = format!("https://{location}-aiplatform.googleapis.com/");
@@ -87,8 +61,7 @@ impl GCPVertexAnthropicProvider {
             request_url,
             streaming_request_url,
             audience,
-            credentials,
-            model_id,
+            credentials: provider_credentials,
         })
     }
 }
@@ -118,7 +91,9 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request: {e}"),
                     status_code: e.status(),
-                    provider_type: "GCP Vertex Anthropic".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                 })
             })?;
         let latency = Latency::NonStreaming {
@@ -128,14 +103,18 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             let response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
-                    provider_type: "GCP Vertex Anthropic".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                 })
             })?;
 
             let response = serde_json::from_str(&response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing JSON response: {e}: {response}"),
-                    provider_type: "GCP Vertex Anthropic".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: Some(response.clone()),
                 })
             })?;
 
@@ -153,7 +132,9 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             let error_body = res.json::<GCPVertexAnthropicError>().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing response: {e}"),
-                    provider_type: "GCP Vertex Anthropic".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                 })
             })?;
             handle_anthropic_error(response_code, error_body.error)
@@ -176,9 +157,8 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
     > {
         let request_body = GCPVertexAnthropicRequestBody::new(request)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request body as JSON: {e}"),
-                provider_type: "GCP Vertex Anthropic".to_string(),
             })
         })?;
         let api_key = self
@@ -193,9 +173,11 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to Anthropic: {e}"),
+                    message: format!("Error sending request: {e}"),
                     status_code: None,
-                    provider_type: "GCP Vertex Anthropic".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                 })
             })?;
         let mut stream = Box::pin(stream_anthropic(event_source, start_time));
@@ -205,7 +187,9 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             None => {
                 return Err(ErrorDetails::InferenceServer {
                     message: "Stream ended before first chunk".to_string(),
-                    provider_type: "GCP Vertex Anthropic".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                 }
                 .into())
             }
@@ -225,9 +209,21 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         _requests: &'a [ModelInferenceRequest<'a>],
         _client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<BatchProviderInferenceResponse, Error> {
+    ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
             provider_type: "GCP Vertex Anthropic".to_string(),
+        }
+        .into())
+    }
+
+    async fn poll_batch_inference<'a>(
+        &'a self,
+        _batch_request: &'a BatchRequestRow<'a>,
+        _http_client: &'a reqwest::Client,
+        _dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<PollBatchInferenceResponse, Error> {
+        Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
+            provider_type: PROVIDER_TYPE.to_string(),
         }
         .into())
     }
@@ -249,7 +245,9 @@ fn stream_anthropic(
                 Err(e) => {
                     yield Err(ErrorDetails::InferenceServer {
                         message: e.to_string(),
-                        provider_type: "GCP Vertex Anthropic".to_string()
+                        provider_type: PROVIDER_TYPE.to_string(),
+                        raw_request: None,
+                        raw_response: None,
                     }.into());
                 }
                 Ok(event) => match event {
@@ -261,7 +259,9 @@ fn stream_anthropic(
                                     "Error parsing message: {}, Data: {}",
                                     e, message.data
                                 ),
-                                provider_type: "GCP Vertex Anthropic".to_string()
+                                provider_type: PROVIDER_TYPE.to_string(),
+                                raw_request: None,
+                                raw_response: None,
                             }));
                         // Anthropic streaming API docs specify that this is the last message
                         if let Ok(GCPVertexAnthropicStreamMessage::MessageStop) = data {
@@ -391,7 +391,9 @@ impl<'a> TryFrom<&'a ContentBlock> for GCPVertexAnthropicMessageContent<'a> {
                     Error::new(ErrorDetails::InferenceClient {
                         status_code: Some(StatusCode::BAD_REQUEST),
                         message: format!("Error parsing tool call arguments as JSON Value: {e}"),
-                        provider_type: "GCP Vertex Anthropic".to_string(),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                        raw_request: None,
+                        raw_response: Some(tool_call.arguments.clone()),
                     })
                 })?;
 
@@ -399,7 +401,9 @@ impl<'a> TryFrom<&'a ContentBlock> for GCPVertexAnthropicMessageContent<'a> {
                     return Err(ErrorDetails::InferenceClient {
                         status_code: Some(StatusCode::BAD_REQUEST),
                         message: "Tool call arguments must be a JSON object".to_string(),
-                        provider_type: "GCP Vertex Anthropic".to_string(),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                        raw_request: None,
+                        raw_response: Some(tool_call.arguments.clone()),
                     }
                     .into());
                 }
@@ -614,7 +618,7 @@ struct GCPVertexAnthropicError {
     error: GCPVertexAnthropicErrorBody,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct GCPVertexAnthropicErrorBody {
     r#type: String,
     message: String,
@@ -643,9 +647,8 @@ impl TryFrom<GCPVertexAnthropicContentBlock> for ContentBlock {
                     id,
                     name,
                     arguments: serde_json::to_string(&input).map_err(|e| {
-                        Error::new(ErrorDetails::InferenceServer {
+                        Error::new(ErrorDetails::Serialization {
                             message: format!("Error parsing input for tool call: {e}"),
-                            provider_type: "GCP Vertex Anthropic".to_string(),
                         })
                     })?,
                 }))
@@ -706,9 +709,8 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
         } = value;
 
         let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error parsing response from GCP Vertex Anthropic: {e}"),
-                provider_type: "GCP Vertex Anthropic".to_string(),
             })
         })?;
 
@@ -718,9 +720,8 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
             .map(|block| block.try_into())
             .collect::<Result<Vec<_>, _>>()?;
         let raw_request = serde_json::to_string(&request).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request to GCP Vertex Anthropic: {e}"),
-                provider_type: "GCP Vertex Anthropic".to_string(),
             })
         })?;
 
@@ -758,16 +759,20 @@ fn handle_anthropic_error(
         | StatusCode::BAD_REQUEST
         | StatusCode::PAYLOAD_TOO_LARGE
         | StatusCode::TOO_MANY_REQUESTS => Err(ErrorDetails::InferenceClient {
+            raw_response: Some(serde_json::to_string(&response_body).unwrap_or_default()),
             message: response_body.message,
             status_code: Some(response_code),
-            provider_type: "GCP Vertex Anthropic".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
+            raw_request: None,
         }
         .into()),
         // StatusCode::NOT_FOUND | StatusCode::FORBIDDEN | StatusCode::INTERNAL_SERVER_ERROR | 529: Overloaded
         // These are all captured in _ since they have the same error behavior
         _ => Err(ErrorDetails::InferenceServer {
+            raw_response: Some(serde_json::to_string(&response_body).unwrap_or_default()),
             message: response_body.message,
-            provider_type: "GCP Vertex Anthropic".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
+            raw_request: None,
         }
         .into()),
     }
@@ -834,9 +839,8 @@ fn anthropic_to_tensorzero_stream_message(
     current_tool_name: &mut Option<String>,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
     let raw_message = serde_json::to_string(&message).map_err(|e| {
-        Error::new(ErrorDetails::InferenceServer {
+        Error::new(ErrorDetails::Serialization {
             message: format!("Error parsing response from Anthropic: {e}"),
-            provider_type: "GCP Vertex Anthropic".to_string(),
         })
     })?;
     match message {
@@ -862,11 +866,15 @@ fn anthropic_to_tensorzero_stream_message(
                     vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                         raw_name: current_tool_name.clone().ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                             message: "Got InputJsonDelta chunk from Anthropic without current tool name being set by a ToolUse".to_string(),
-                            provider_type: "GCP Vertex Anthropic".to_string()
+                            provider_type: PROVIDER_TYPE.to_string(),
+                            raw_request: None,
+                            raw_response: None,
                         }))?,
                         id: current_tool_id.clone().ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                             message: "Got InputJsonDelta chunk from Anthropic without current tool id being set by a ToolUse".to_string(),
-                            provider_type: "GCP Vertex Anthropic".to_string()
+                            provider_type: PROVIDER_TYPE.to_string(),
+                            raw_request: None,
+                            raw_response: None,
                         }))?,
                         raw_arguments: partial_json,
                     })],
@@ -877,7 +885,9 @@ fn anthropic_to_tensorzero_stream_message(
             }
             _ => Err(ErrorDetails::InferenceServer {
                 message: "Unsupported content block type for ContentBlockDelta".to_string(),
-                provider_type: "GCP Vertex Anthropic".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: None,
             }
             .into()),
         },
@@ -917,14 +927,18 @@ fn anthropic_to_tensorzero_stream_message(
             }
             _ => Err(ErrorDetails::InferenceServer {
                 message: "Unsupported content block type for ContentBlockStart".to_string(),
-                provider_type: "GCP Vertex Anthropic".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: None,
             }
             .into()),
         },
         GCPVertexAnthropicStreamMessage::ContentBlockStop { .. } => Ok(None),
         GCPVertexAnthropicStreamMessage::Error { error } => Err(ErrorDetails::InferenceServer {
             message: error.to_string(),
-            provider_type: "GCP Vertex Anthropic".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
+            raw_request: None,
+            raw_response: None,
         }
         .into()),
         GCPVertexAnthropicStreamMessage::MessageDelta { usage, .. } => {
@@ -1563,7 +1577,9 @@ mod tests {
             ErrorDetails::InferenceClient {
                 message: "test_message".to_string(),
                 status_code: Some(response_code),
-                provider_type: "GCP Vertex Anthropic".to_string()
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
             }
         );
         let response_code = StatusCode::UNAUTHORIZED;
@@ -1574,7 +1590,9 @@ mod tests {
             ErrorDetails::InferenceClient {
                 message: "test_message".to_string(),
                 status_code: Some(response_code),
-                provider_type: "GCP Vertex Anthropic".to_string()
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
             }
         );
         let response_code = StatusCode::TOO_MANY_REQUESTS;
@@ -1585,7 +1603,9 @@ mod tests {
             ErrorDetails::InferenceClient {
                 message: "test_message".to_string(),
                 status_code: Some(response_code),
-                provider_type: "GCP Vertex Anthropic".to_string()
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
             }
         );
         let response_code = StatusCode::NOT_FOUND;
@@ -1596,7 +1616,9 @@ mod tests {
             details,
             ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
-                provider_type: "GCP Vertex Anthropic".to_string()
+                raw_request: None,
+                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
+                provider_type: PROVIDER_TYPE.to_string()
             }
         );
         let response_code = StatusCode::INTERNAL_SERVER_ERROR;
@@ -1606,7 +1628,9 @@ mod tests {
             details,
             ErrorDetails::InferenceServer {
                 message: "test_message".to_string(),
-                provider_type: "GCP Vertex Anthropic".to_string()
+                raw_request: None,
+                raw_response: Some("{\"type\":\"error\",\"message\":\"test_message\"}".to_string()),
+                provider_type: PROVIDER_TYPE.to_string()
             }
         );
     }
@@ -1937,7 +1961,9 @@ mod tests {
             details,
             ErrorDetails::InferenceServer {
                 message: "Got InputJsonDelta chunk from Anthropic without current tool name being set by a ToolUse".to_string(),
-                provider_type: "GCP Vertex Anthropic".to_string()
+                raw_request: None,
+                raw_response: None,
+                provider_type: PROVIDER_TYPE.to_string()
             }
         );
 
@@ -2053,7 +2079,9 @@ mod tests {
             details,
             ErrorDetails::InferenceServer {
                 message: "Unsupported content block type for ContentBlockStart".to_string(),
-                provider_type: "GCP Vertex Anthropic".to_string()
+                raw_request: None,
+                raw_response: None,
+                provider_type: PROVIDER_TYPE.to_string()
             }
         );
 
@@ -2087,7 +2115,9 @@ mod tests {
             details,
             ErrorDetails::InferenceServer {
                 message: r#"{"message":"Test error"}"#.to_string(),
-                provider_type: "GCP Vertex Anthropic".to_string(),
+                raw_request: None,
+                raw_response: None,
+                provider_type: PROVIDER_TYPE.to_string(),
             }
         );
 

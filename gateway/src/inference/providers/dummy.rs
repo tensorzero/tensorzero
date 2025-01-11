@@ -13,14 +13,18 @@ use super::provider_trait::InferenceProvider;
 use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
-use crate::inference::types::batch::BatchStatus;
+use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::batch::{BatchRequestRow, BatchStatus};
 use crate::inference::types::{
-    batch::BatchProviderInferenceResponse, current_timestamp, ContentBlock, ContentBlockChunk,
+    batch::StartBatchProviderInferenceResponse, current_timestamp, ContentBlock, ContentBlockChunk,
     Latency, ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream, Usage,
 };
 use crate::model::CredentialLocation;
 use crate::tool::{ToolCall, ToolCallChunk};
+
+const PROVIDER_NAME: &str = "Dummy";
+const PROVIDER_TYPE: &str = "dummy";
 
 #[derive(Debug, Default)]
 pub struct DummyProvider {
@@ -71,7 +75,7 @@ impl DummyCredentials {
             DummyCredentials::Dynamic(key_name) => {
                 Some(dynamic_api_keys.get(key_name).ok_or_else(|| {
                     ErrorDetails::ApiKeyMissing {
-                        provider_name: "Dummy".to_string(),
+                        provider_name: PROVIDER_NAME.to_string(),
                     }
                     .into()
                 }))
@@ -160,12 +164,14 @@ impl InferenceProvider for DummyProvider {
             // Fail on even-numbered calls
             if *counter % 2 == 0 {
                 return Err(ErrorDetails::InferenceClient {
+                    raw_request: Some("raw request".to_string()),
+                    raw_response: None,
                     message: format!(
                         "Flaky model '{}' failed on call number {}",
                         self.model_name, *counter
                     ),
                     status_code: None,
-                    provider_type: "Dummy".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 }
                 .into());
             }
@@ -174,8 +180,10 @@ impl InferenceProvider for DummyProvider {
         if self.model_name == "error" {
             return Err(ErrorDetails::InferenceClient {
                 message: "Error sending request to Dummy provider.".to_string(),
+                raw_request: Some("raw request".to_string()),
+                raw_response: None,
                 status_code: None,
-                provider_type: "Dummy".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             }
             .into());
         }
@@ -185,8 +193,10 @@ impl InferenceProvider for DummyProvider {
                 if api_key.expose_secret() != "good_key" {
                     return Err(ErrorDetails::InferenceClient {
                         message: "Invalid API key for Dummy provider".to_string(),
+                        raw_request: Some("raw request".to_string()),
+                        raw_response: None,
                         status_code: None,
-                        provider_type: "Dummy".to_string(),
+                        provider_type: PROVIDER_TYPE.to_string(),
                     }
                     .into());
                 }
@@ -285,12 +295,14 @@ impl InferenceProvider for DummyProvider {
             // Fail on even-numbered calls
             if *counter % 2 == 0 {
                 return Err(ErrorDetails::InferenceClient {
+                    raw_request: Some("raw request".to_string()),
+                    raw_response: None,
                     message: format!(
                         "Flaky model '{}' failed on call number {}",
                         self.model_name, *counter
                     ),
                     status_code: None,
-                    provider_type: "Dummy".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
                 }
                 .into());
             }
@@ -299,8 +311,10 @@ impl InferenceProvider for DummyProvider {
         if self.model_name == "error" {
             return Err(ErrorDetails::InferenceClient {
                 message: "Error sending request to Dummy provider.".to_string(),
+                raw_request: Some("raw request".to_string()),
+                raw_response: None,
                 status_code: None,
-                provider_type: "Dummy".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             }
             .into());
         }
@@ -382,19 +396,34 @@ impl InferenceProvider for DummyProvider {
         requests: &'a [ModelInferenceRequest<'a>],
         _client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<BatchProviderInferenceResponse, Error> {
+    ) -> Result<StartBatchProviderInferenceResponse, Error> {
         let inference_ids: Vec<Uuid> = requests.iter().map(|_| Uuid::now_v7()).collect();
         let file_id = Uuid::now_v7();
         let batch_id = Uuid::now_v7();
         let raw_requests: Vec<String> =
             requests.iter().map(|_| "raw_request".to_string()).collect();
-        Ok(BatchProviderInferenceResponse {
+        Ok(StartBatchProviderInferenceResponse {
             batch_id,
             inference_ids,
             batch_params: json!({"file_id": file_id, "batch_id": batch_id}),
             status: BatchStatus::Pending,
             raw_requests,
+            raw_request: "raw request".to_string(),
+            raw_response: "raw response".to_string(),
+            errors: vec![],
         })
+    }
+
+    async fn poll_batch_inference<'a>(
+        &'a self,
+        _batch_request: &'a BatchRequestRow<'a>,
+        _http_client: &'a reqwest::Client,
+        _dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<PollBatchInferenceResponse, Error> {
+        Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
+            provider_type: "Dummy".to_string(),
+        }
+        .into())
     }
 }
 lazy_static! {
@@ -411,8 +440,10 @@ impl EmbeddingProvider for DummyProvider {
         if self.model_name == "error" {
             return Err(ErrorDetails::InferenceClient {
                 message: "Error sending request to Dummy provider.".to_string(),
+                raw_request: Some("raw request".to_string()),
+                raw_response: None,
                 status_code: None,
-                provider_type: "Dummy".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
             }
             .into());
         }

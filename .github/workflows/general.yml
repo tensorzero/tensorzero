@@ -43,23 +43,23 @@ jobs:
 
       - name: Lint (Python)
         run: |
-          python -m pip install ruff==0.8.4
+          python -m pip install ruff==0.9.0
           ruff format --check .
           ruff check --output-format=github --extend-select I .
 
-      - name: "TensorZero Python Client: mypy"
+      - name: "TensorZero Python Client: pyright"
         working-directory: clients/python
         run: |
           python -m pip install -r requirements.txt
-          python -m pip install mypy
-          python -m mypy . --strict
+          python -m pip install pyright
+          python -m pyright
 
-      - name: "OpenAI Python Client: mypy"
+      - name: "OpenAI Python Client: pyright"
         working-directory: clients/openai-python
         run: |
           python -m pip install -r requirements.txt
-          python -m pip install mypy
-          python -m mypy . --strict
+          python -m pip install pyright
+          python -m pyright
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -70,31 +70,31 @@ jobs:
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - name: Build minijinja WASM bindings
-        working-directory: dashboard/app/utils/minijinja
+        working-directory: ui/app/utils/minijinja
         run: wasm-pack build --features console_error_panic_hook
 
       - name: Run minijinja WASM tests
-        working-directory: dashboard/app/utils/minijinja
+        working-directory: ui/app/utils/minijinja
         run: wasm-pack test --node --features console_error_panic_hook
 
       - name: Install npm dependencies
-        working-directory: dashboard
+        working-directory: ui
         run: npm install --platform=linux --legacy-peer-deps cmdk
 
       - name: Run ESLint
-        working-directory: dashboard
+        working-directory: ui
         run: npm run lint
 
       - name: Run Prettier
-        working-directory: dashboard
+        working-directory: ui
         run: npm run format
 
       - name: Run TypeScript type checking
-        working-directory: dashboard
+        working-directory: ui
         run: npm run typecheck
 
-      - name: Start services for dashboard tests
-        working-directory: dashboard
+      - name: Start services for ui tests
+        working-directory: ui
         run: |
           echo "OPENAI_API_KEY=not_used" >> .env
           echo "FIREWORKS_API_KEY=not_used" >> .env
@@ -102,6 +102,6 @@ jobs:
           echo "CLICKHOUSE_URL=http://localhost:8123/tensorzero" >> .env
           docker compose -f fixtures/docker-compose.yml up -d
 
-      - name: Run dashboard tests
-        working-directory: dashboard
+      - name: Run ui tests
+        working-directory: ui
         run: npm test

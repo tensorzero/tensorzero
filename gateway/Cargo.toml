@@ -6,12 +6,18 @@ edition = "2021"
 
 [features]
 e2e_tests = []
+batch_tests = []
 
 
 [[test]]
 name = "e2e"
 path = "tests/e2e/tests.rs"
 required-features = ["e2e_tests"]
+
+[[test]]
+name = "batch"
+path = "tests/e2e/batch.rs"
+required-features = ["batch_tests"]
 
 
 [lints]
@@ -44,7 +50,13 @@ metrics-exporter-prometheus = { version = "0.15.3", features = [
     "http-listener",
 ], default-features = false }
 mimalloc = "0.1.43"
-minijinja = { version = "2.1.0", features = ["loader", "debug"] }
+minijinja = { version = "2.1.0", features = [
+    "loader",
+    "debug",
+    "json",
+    "loop_controls",
+    "builtins",
+] }
 rand = "0.8.5"
 reqwest = { version = "0.12.10", features = [
     "json",

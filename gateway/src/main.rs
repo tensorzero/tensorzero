@@ -9,6 +9,7 @@ use tokio::signal;
 use gateway::clickhouse_migration_manager;
 use gateway::config_parser::Config;
 use gateway::endpoints;
+use gateway::error;
 use gateway::gateway_util;
 use gateway::observability;
 
@@ -36,11 +37,22 @@ async fn main() {
             .expect_pretty("Failed to run ClickHouse migrations");
     }
 
+    // Set debug mode
+    error::set_debug(config.gateway.debug).expect_pretty("Failed to set debug mode");
+
     let router = Router::new()
         .route("/inference", post(endpoints::inference::inference_handler))
         .route(
-            "/start_batch_inference",
+            "/batch_inference",
             post(endpoints::batch_inference::start_batch_inference_handler),
+        )
+        .route(
+            "/batch_inference/:batch_id",
+            get(endpoints::batch_inference::poll_batch_inference_handler),
+        )
+        .route(
+            "/batch_inference/:batch_id/inference/:inference_id",
+            get(endpoints::batch_inference::poll_batch_inference_handler),
         )
         .route(
             "/openai/v1/chat/completions",
@@ -53,6 +65,7 @@ async fn main() {
             "/metrics",
             get(move || std::future::ready(metrics_handle.render())),
         )
+        .fallback(endpoints::fallback::handle_404)
         .with_state(app_state);
 
     // Bind to the socket address specified in the config, or default to 0.0.0.0:3000

@@ -83,8 +83,8 @@ jobs:
 
       - name: "Python: ruff"
         run: |
-          uvx ruff check --output-format=github --extend-select I .
-          uvx ruff format --check .
+          uvx ruff@0.9.0 check --output-format=github --extend-select I .
+          uvx ruff@0.9.0 format --check .
 
       - name: "Python: TensorZero Client: Install dependencies"
         working-directory: clients/python
@@ -92,11 +92,11 @@ jobs:
           uv venv
           uv pip sync requirements.txt
 
-      - name: "Python: TensorZero Client: mypy"
+      - name: "Python: TensorZero Client: pyright"
         working-directory: clients/python
         run: |
-          uv pip install mypy
-          uv run mypy . --strict
+          uv pip install pyright
+          uv run pyright
 
       - name: "Python: TensorZero Client: pytest"
         working-directory: clients/python
@@ -109,11 +109,11 @@ jobs:
           uv venv
           uv pip sync requirements.txt
 
-      - name: "Python: OpenAI Client: mypy"
+      - name: "Python: OpenAI Client: pyright"
         working-directory: clients/openai-python
         run: |
-          uv pip install mypy
-          uv run mypy . --strict
+          uv pip install pyright
+          uv run pyright
 
       - name: "Python: OpenAI Client: pytest"
         working-directory: clients/openai-python
@@ -126,11 +126,11 @@ jobs:
           uv venv
           uv pip sync requirements.txt
 
-      - name: "Python: Recipes: mypy"
+      - name: "Python: Recipes: pyright"
         working-directory: recipes/tests
         run: |
-          uv pip install mypy
-          uv run mypy . --strict
+          uv pip install pyright
+          uv run pyright
 
       - name: "Python: Recipes: pytest"
         working-directory: recipes/tests
@@ -151,11 +151,11 @@ jobs:
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - name: Build minijinja WASM bindings
-        working-directory: dashboard/app/utils/minijinja
+        working-directory: ui/app/utils/minijinja
         run: wasm-pack build --features console_error_panic_hook
 
       - name: Run minijinja WASM tests
-        working-directory: dashboard/app/utils/minijinja
+        working-directory: ui/app/utils/minijinja
         run: wasm-pack test --node --features console_error_panic_hook
 
       - name: Build Docker container for production deployment tests
@@ -181,23 +181,23 @@ jobs:
           docker compose -f gateway/tests/e2e/docker-compose.yml down
 
       - name: Install npm dependencies
-        working-directory: dashboard
+        working-directory: ui
         run: npm install --platform=linux --legacy-peer-deps cmdk
 
       - name: Run ESLint
-        working-directory: dashboard
+        working-directory: ui
         run: npm run lint
 
       - name: Run Prettier
-        working-directory: dashboard
+        working-directory: ui
         run: npm run format
 
       - name: Run TypeScript type checking
-        working-directory: dashboard
+        working-directory: ui
         run: npm run typecheck
 
-      - name: Start services for dashboard tests
-        working-directory: dashboard
+      - name: Start services for ui tests
+        working-directory: ui
         run: |
           echo "OPENAI_API_KEY=${{secrets.OPENAI_API_KEY}}" >> .env
           echo "FIREWORKS_API_KEY=${{secrets.FIREWORKS_API_KEY}}" >> .env
@@ -205,6 +205,26 @@ jobs:
           echo "CLICKHOUSE_URL=http://localhost:8123/tensorzero" >> .env
           docker compose -f fixtures/docker-compose.yml up -d
 
-      - name: Run dashboard tests
-        working-directory: dashboard
+      - name: Run ui tests
+        working-directory: ui
         run: npm test
+
+      - name: Take down ui tests
+        working-directory: ui
+        run: docker compose -f fixtures/docker-compose.yml down
+
+      - name: Set up CLICKHOUSE_URL for batch tests
+        run: |
+          echo "CLICKHOUSE_URL=${{ secrets.CLICKHOUSE_CLOUD_URL }}" >> $GITHUB_ENV
+      - name: Launch the gateway for batch tests
+        run: |
+          cargo run-e2e &
+          echo "GATEWAY_PID=$!" >> $GITHUB_ENV
+          while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
+            echo "Waiting for gateway to be healthy..."
+            sleep 1
+          done
+
+      - name: Run batch tests
+        run: |
+          cargo test-batch

@@ -88,7 +88,8 @@ class BaseTensorZeroGateway(ABC):
         # Convert content blocks to dicts if necessary
         for message in input.get("messages", []):
             if isinstance(message["content"], list):
-                for i, item in enumerate(message["content"]):
+                contents: List[Any] = message["content"]
+                for i, item in enumerate(contents):
                     if hasattr(item, "to_dict"):
                         message["content"][i] = item.to_dict()
         data: Dict[str, Any] = {

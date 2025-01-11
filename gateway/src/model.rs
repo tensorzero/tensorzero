@@ -1,9 +1,12 @@
 use lazy_static::lazy_static;
 use reqwest::Client;
+use secrecy::SecretString;
 use serde::de::Error as SerdeError;
 use std::collections::HashMap;
+use std::{env, fs};
 use strum::VariantNames;
-use tracing::{span, Instrument, Level};
+#[allow(unused_imports)]
+use tracing::{span, warn, Instrument, Level};
 use url::Url;
 
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -12,7 +15,10 @@ use crate::inference::providers::google_ai_studio_gemini::GoogleAIStudioGeminiPr
 
 use crate::inference::providers::hyperbolic::HyperbolicProvider;
 use crate::inference::providers::tgi::TGIProvider;
-use crate::inference::types::batch::{BatchModelInferenceResponse, BatchProviderInferenceResponse};
+use crate::inference::types::batch::{
+    BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
+    StartBatchProviderInferenceResponse,
+};
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
@@ -117,7 +123,7 @@ impl ModelConfig {
         requests: &'request [ModelInferenceRequest<'request>],
         client: &'request Client,
         api_keys: &'request InferenceCredentials,
-    ) -> Result<BatchModelInferenceResponse<'a>, Error> {
+    ) -> Result<StartBatchModelInferenceResponse<'a>, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
             let provider_config = self.providers.get(provider_name).ok_or_else(|| {
@@ -131,7 +137,10 @@ impl ModelConfig {
                 .await;
             match response {
                 Ok(response) => {
-                    return Ok(BatchModelInferenceResponse::new(response, provider_name));
+                    return Ok(StartBatchModelInferenceResponse::new(
+                        response,
+                        provider_name,
+                    ));
                 }
                 Err(error) => {
                     provider_errors.insert(provider_name.to_string(), error);
@@ -269,7 +278,6 @@ impl<'de> Deserialize<'de> for ProviderConfig {
         D: serde::Deserializer<'de>,
     {
         let helper = ProviderConfigHelper::deserialize(deserializer)?;
-
         Ok(match helper {
             ProviderConfigHelper::Anthropic {
                 model_name,
@@ -495,7 +503,7 @@ impl ProviderConfig {
         requests: &'a [ModelInferenceRequest<'a>],
         client: &'a Client,
         api_keys: &'a InferenceCredentials,
-    ) -> Result<BatchProviderInferenceResponse, Error> {
+    ) -> Result<StartBatchProviderInferenceResponse, Error> {
         match self {
             ProviderConfig::Anthropic(provider) => {
                 provider
@@ -575,11 +583,102 @@ impl ProviderConfig {
             }
         }
     }
+
+    pub async fn poll_batch_inference<'a>(
+        &self,
+        batch_request: &'a BatchRequestRow<'_>,
+        http_client: &'a reqwest::Client,
+        dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<PollBatchInferenceResponse, Error> {
+        match self {
+            ProviderConfig::Anthropic(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::AWSBedrock(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::Azure(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::Fireworks(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::GCPVertexAnthropic(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::GCPVertexGemini(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::GoogleAIStudioGemini(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::Hyperbolic(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::Mistral(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::OpenAI(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::TGI(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::Together(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::VLLM(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::XAI(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            #[cfg(any(test, feature = "e2e_tests"))]
+            ProviderConfig::Dummy(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+        }
+    }
 }
 
 pub enum CredentialLocation {
+    /// Environment variable containing the actual credential
     Env(String),
+    /// Environment variable containing the path to a credential file
+    PathFromEnv(String),
+    /// For dynamic credential resolution
     Dynamic(String),
+    /// Direct path to a credential file
     Path(String),
     None,
 }
@@ -592,6 +691,8 @@ impl<'de> Deserialize<'de> for CredentialLocation {
         let s = String::deserialize(deserializer)?;
         if let Some(inner) = s.strip_prefix("env::") {
             Ok(CredentialLocation::Env(inner.to_string()))
+        } else if let Some(inner) = s.strip_prefix("path_from_env::") {
+            Ok(CredentialLocation::PathFromEnv(inner.to_string()))
         } else if let Some(inner) = s.strip_prefix("dynamic::") {
             Ok(CredentialLocation::Dynamic(inner.to_string()))
         } else if let Some(inner) = s.strip_prefix("path::") {
@@ -603,6 +704,117 @@ impl<'de> Deserialize<'de> for CredentialLocation {
                 "Invalid ApiKeyLocation format: {}",
                 s
             )))
+        }
+    }
+}
+
+pub enum Credential {
+    Static(SecretString),
+    FileContents(SecretString),
+    Dynamic(String),
+    None,
+    #[cfg(any(test, feature = "e2e_tests"))]
+    Missing,
+}
+
+impl TryFrom<(CredentialLocation, &str)> for Credential {
+    type Error = Error;
+    #[allow(unused_variables)]
+    fn try_from(
+        (location, provider_type): (CredentialLocation, &str),
+    ) -> Result<Self, Self::Error> {
+        match location {
+            CredentialLocation::Env(key_name) => match env::var(key_name) {
+                Ok(value) => Ok(Credential::Static(SecretString::from(value))),
+                Err(_) => {
+                    #[cfg(any(test, feature = "e2e_tests"))]
+                    {
+                        warn!(
+                            "You are missing the credentials required for a model provider of type {}, so the associated tests will likely fail.",
+                            provider_type
+                        );
+                        Ok(Credential::Missing)
+                    }
+                    #[cfg(not(any(test, feature = "e2e_tests")))]
+                    {
+                        Err(Error::new(ErrorDetails::ApiKeyMissing {
+                            provider_name: provider_type.to_string(),
+                        }))
+                    }
+                }
+            },
+            CredentialLocation::PathFromEnv(env_key) => {
+                // First get the path from environment variable
+                let path = match env::var(&env_key) {
+                    Ok(path) => path,
+                    Err(_) => {
+                        #[cfg(any(test, feature = "e2e_tests"))]
+                        {
+                            warn!(
+                                "Environment variable {} is required for a model provider of type {} but is missing, so the associated tests will likely fail.",
+                                env_key, provider_type
+                            );
+                            return Ok(Credential::Missing);
+                        }
+                        #[cfg(not(any(test, feature = "e2e_tests")))]
+                        {
+                            return Err(Error::new(ErrorDetails::ApiKeyMissing {
+                                provider_name: format!(
+                                    "{}: Environment variable {} for credentials path is missing",
+                                    provider_type, env_key
+                                ),
+                            }));
+                        }
+                    }
+                };
+                // Then read the file contents
+                match fs::read_to_string(path) {
+                    Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
+                    Err(e) => {
+                        #[cfg(any(test, feature = "e2e_tests"))]
+                        {
+                            warn!(
+                                "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
+                                provider_type, e
+                            );
+                            Ok(Credential::Missing)
+                        }
+                        #[cfg(not(any(test, feature = "e2e_tests")))]
+                        {
+                            Err(Error::new(ErrorDetails::ApiKeyMissing {
+                                provider_name: format!(
+                                    "{}: Failed to read credentials file - {}",
+                                    provider_type, e
+                                ),
+                            }))
+                        }
+                    }
+                }
+            }
+            CredentialLocation::Path(path) => match fs::read_to_string(path) {
+                Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
+                Err(e) => {
+                    #[cfg(any(test, feature = "e2e_tests"))]
+                    {
+                        warn!(
+                            "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
+                            provider_type, e
+                        );
+                        Ok(Credential::Missing)
+                    }
+                    #[cfg(not(any(test, feature = "e2e_tests")))]
+                    {
+                        Err(Error::new(ErrorDetails::ApiKeyMissing {
+                            provider_name: format!(
+                                "{}: Failed to read credentials file - {}",
+                                provider_type, e
+                            ),
+                        }))
+                    }
+                }
+            },
+            CredentialLocation::Dynamic(key_name) => Ok(Credential::Dynamic(key_name.clone())),
+            CredentialLocation::None => Ok(Credential::None),
         }
     }
 }
@@ -735,12 +947,9 @@ mod tests {
     use std::borrow::Cow;
 
     use crate::inference::{
-        providers::{
-            anthropic::AnthropicCredentials,
-            dummy::{
-                DummyCredentials, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
-                DUMMY_INFER_USAGE, DUMMY_STREAMING_RESPONSE,
-            },
+        providers::dummy::{
+            DummyCredentials, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
+            DUMMY_INFER_USAGE, DUMMY_STREAMING_RESPONSE,
         },
         types::{ContentBlockChunk, FunctionType, ModelInferenceRequestJsonMode, TextChunk},
     };
@@ -820,7 +1029,9 @@ mod tests {
                     ErrorDetails::InferenceClient {
                         message: "Error sending request to Dummy provider.".to_string(),
                         status_code: None,
-                        provider_type: "Dummy".to_string(),
+                        provider_type: "dummy".to_string(),
+                        raw_request: Some("raw request".to_string()),
+                        raw_response: None,
                     }
                     .into()
                 )])
@@ -974,7 +1185,9 @@ mod tests {
                     ErrorDetails::InferenceClient {
                         message: "Error sending request to Dummy provider.".to_string(),
                         status_code: None,
-                        provider_type: "Dummy".to_string(),
+                        provider_type: "dummy".to_string(),
+                        raw_request: Some("raw request".to_string()),
+                        raw_response: None,
                     }
                     .into()
                 )])
@@ -1123,7 +1336,9 @@ mod tests {
                     ErrorDetails::InferenceClient {
                         message: "Invalid API key for Dummy provider".to_string(),
                         status_code: None,
-                        provider_type: "Dummy".to_string(),
+                        provider_type: "dummy".to_string(),
+                        raw_request: Some("raw request".to_string()),
+                        raw_response: None,
                     }
                     .into()
                 )])
@@ -1229,10 +1444,8 @@ mod tests {
             .into()
         );
         // Test that it works with an initialized model
-        let anthropic_provider_config = ProviderConfig::Anthropic(AnthropicProvider {
-            model_name: "claude".to_string(),
-            credentials: AnthropicCredentials::Static("".to_string().into()),
-        });
+        let anthropic_provider_config =
+            ProviderConfig::Anthropic(AnthropicProvider::new("claude".to_string(), None).unwrap());
         let anthropic_model_config = ModelConfig {
             routing: vec!["anthropic".to_string()],
             providers: HashMap::from([("anthropic".to_string(), anthropic_provider_config)]),

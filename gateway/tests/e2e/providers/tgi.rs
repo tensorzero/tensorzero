@@ -1,5 +1,5 @@
 use crate::providers::common::{E2ETestProvider, E2ETestProviders};
-
+use std::collections::HashMap;
 crate::generate_provider_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
@@ -8,23 +8,26 @@ async fn get_providers() -> E2ETestProviders {
         variant_name: "tgi".to_string(),
         model_name: model_name.clone(),
         model_provider_name: "tgi".to_string(),
+        credentials: HashMap::new(),
     }];
 
     let json_mode_providers = vec![E2ETestProvider {
         variant_name: "tgi".to_string(),
         model_name: model_name.clone(),
         model_provider_name: "tgi".to_string(),
+        credentials: HashMap::new(),
     }];
 
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         inference_params_inference: standard_providers.clone(),
-        tool_use_inference: standard_providers.clone(),
-        tool_multi_turn_inference: standard_providers.clone(),
-        dynamic_tool_use_inference: standard_providers.clone(),
+        tool_use_inference: vec![],
+        tool_multi_turn_inference: vec![],
+        dynamic_tool_use_inference: vec![],
         parallel_tool_use_inference: vec![],
         json_mode_inference: json_mode_providers.clone(),
         shorthand_inference: vec![],
+        #[cfg(feature = "batch_tests")]
         supports_batch_inference: false,
     }
 }

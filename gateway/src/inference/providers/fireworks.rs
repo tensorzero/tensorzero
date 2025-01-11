@@ -1,4 +1,4 @@
-use std::{borrow::Cow, env};
+use std::borrow::Cow;
 
 use futures::StreamExt;
 use lazy_static::lazy_static;
@@ -12,12 +12,13 @@ use url::Url;
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
+    inference::types::batch::PollBatchInferenceResponse,
     inference::types::{
-        batch::BatchProviderInferenceResponse, ContentBlock, Latency, ModelInferenceRequest,
-        ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
-        ProviderInferenceResponseStream,
+        batch::{BatchRequestRow, StartBatchProviderInferenceResponse},
+        ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+        ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     },
-    model::CredentialLocation,
+    model::{Credential, CredentialLocation},
 };
 
 use super::{
@@ -37,10 +38,13 @@ lazy_static! {
     };
 }
 
+const PROVIDER_NAME: &str = "Fireworks";
+const PROVIDER_TYPE: &str = "fireworks";
+
 #[derive(Debug)]
 pub struct FireworksProvider {
-    pub model_name: String,
-    pub credentials: FireworksCredentials,
+    model_name: String,
+    credentials: FireworksCredentials,
 }
 
 impl FireworksProvider {
@@ -48,24 +52,12 @@ impl FireworksProvider {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
-        let credentials = match api_key_location {
-            CredentialLocation::Env(key_name) => {
-                let api_key = env::var(key_name)
-                    .map_err(|_| ErrorDetails::ApiKeyMissing {
-                        provider_name: "Fireworks".to_string(),
-                    })?
-                    .into();
-                FireworksCredentials::Static(api_key)
-            }
-            CredentialLocation::Dynamic(key_name) => FireworksCredentials::Dynamic(key_name),
-            _ => Err(Error::new(ErrorDetails::Config {
-                message: "Invalid api_key_location for Fireworks provider".to_string(),
-            }))?,
-        };
+        let credential_location = api_key_location.unwrap_or(default_api_key_location());
+        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
+        let provider_credentials = FireworksCredentials::try_from(generic_credentials)?;
         Ok(FireworksProvider {
             model_name,
-            credentials,
+            credentials: provider_credentials,
         })
     }
 }
@@ -74,6 +66,24 @@ impl FireworksProvider {
 pub enum FireworksCredentials {
     Static(SecretString),
     Dynamic(String),
+    #[cfg(any(test, feature = "e2e_tests"))]
+    None,
+}
+
+impl TryFrom<Credential> for FireworksCredentials {
+    type Error = Error;
+
+    fn try_from(credentials: Credential) -> Result<Self, Error> {
+        match credentials {
+            Credential::Static(key) => Ok(FireworksCredentials::Static(key)),
+            Credential::Dynamic(key_name) => Ok(FireworksCredentials::Dynamic(key_name)),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            Credential::Missing => Ok(FireworksCredentials::None),
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: "Invalid api_key_location for Fireworks provider".to_string(),
+            })),
+        }
+    }
 }
 
 impl FireworksCredentials {
@@ -86,11 +96,16 @@ impl FireworksCredentials {
             FireworksCredentials::Dynamic(key_name) => {
                 dynamic_api_keys.get(key_name).ok_or_else(|| {
                     ErrorDetails::ApiKeyMissing {
-                        provider_name: "Fireworks".to_string(),
+                        provider_name: PROVIDER_NAME.to_string(),
                     }
                     .into()
                 })
             }
+            #[cfg(any(test, feature = "e2e_tests"))]
+            &FireworksCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+                provider_name: PROVIDER_NAME.to_string(),
+            }
+            .into()),
         }
     }
 }
@@ -126,24 +141,30 @@ impl InferenceProvider for FireworksProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request to Fireworks: {e}"),
                     status_code: e.status(),
-                    provider_type: "Fireworks".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                 })
             })?;
         let latency = Latency::NonStreaming {
             response_time: start_time.elapsed(),
         };
         if res.status().is_success() {
-            let response = res.text().await.map_err(|e| {
+            let response_text = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
-                    provider_type: "Fireworks".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: None,
                 })
             })?;
 
-            let response = serde_json::from_str(&response).map_err(|e| {
+            let response = serde_json::from_str(&response_text).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing JSON response: {e}: {response}"),
-                    provider_type: "Fireworks".to_string(),
+                    message: format!("Error parsing JSON response: {e}: {response_text}"),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                    raw_response: Some(response_text.clone()),
                 })
             })?;
 
@@ -160,9 +181,12 @@ impl InferenceProvider for FireworksProvider {
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
                         message: format!("Error parsing error response: {e}"),
-                        provider_type: "Fireworks".to_string(),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                        raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                        raw_response: None,
                     })
                 })?,
+                PROVIDER_TYPE,
             ))
         }
     }
@@ -184,7 +208,9 @@ impl InferenceProvider for FireworksProvider {
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request body: {e}"),
-                provider_type: "Fireworks".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_response: None,
             })
         })?;
         let request_url = get_chat_url(Some(&FIREWORKS_API_BASE))?;
@@ -200,7 +226,9 @@ impl InferenceProvider for FireworksProvider {
                 Error::new(ErrorDetails::InferenceClient {
                     message: format!("Error sending request to Fireworks: {e}"),
                     status_code: None,
-                    provider_type: "Fireworks".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
                 })
             })?;
         let mut stream = Box::pin(stream_openai(event_source, start_time));
@@ -212,7 +240,9 @@ impl InferenceProvider for FireworksProvider {
             None => {
                 return Err(ErrorDetails::InferenceServer {
                     message: "Stream ended before first chunk".to_string(),
-                    provider_type: "Fireworks".to_string(),
+                    provider_type: PROVIDER_TYPE.to_string(),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
                 }
                 .into())
             }
@@ -225,9 +255,21 @@ impl InferenceProvider for FireworksProvider {
         _requests: &'a [ModelInferenceRequest<'a>],
         _client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<BatchProviderInferenceResponse, Error> {
+    ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
             provider_type: "Fireworks".to_string(),
+        }
+        .into())
+    }
+
+    async fn poll_batch_inference<'a>(
+        &'a self,
+        _batch_request: &'a BatchRequestRow<'a>,
+        _http_client: &'a reqwest::Client,
+        _dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<PollBatchInferenceResponse, Error> {
+        Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
+            provider_type: PROVIDER_TYPE.to_string(),
         }
         .into())
     }
@@ -363,9 +405,8 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
             generic_request,
         } = value;
         let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error parsing response: {e}"),
-                provider_type: "Fireworks".to_string(),
             })
         })?;
         if response.choices.len() != 1 {
@@ -374,7 +415,9 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                     "Response has invalid number of choices: {}. Expected 1.",
                     response.choices.len()
                 ),
-                provider_type: "Fireworks".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_response: Some(raw_response.clone()),
             }
             .into());
         }
@@ -384,7 +427,9 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
             .pop()
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
-                provider_type: "Fireworks".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_response: Some(raw_response.clone()),
             }
             ))?
             .message;
@@ -398,9 +443,8 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
             }
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request body as JSON: {e}"),
-                provider_type: "Fireworks".to_string(),
             })
         })?;
         let system = generic_request.system.clone();
@@ -491,5 +535,35 @@ mod tests {
             FIREWORKS_API_BASE.as_str(),
             "https://api.fireworks.ai/inference/v1/"
         );
+    }
+
+    #[test]
+    fn test_credential_to_fireworks_credentials() {
+        // Test Static credential
+        let generic = Credential::Static(SecretString::from("test_key"));
+        let creds = FireworksCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, FireworksCredentials::Static(_)));
+
+        // Test Dynamic credential
+        let generic = Credential::Dynamic("key_name".to_string());
+        let creds = FireworksCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, FireworksCredentials::Dynamic(_)));
+
+        // Test Missing credential (test mode)
+        #[cfg(any(test, feature = "e2e_tests"))]
+        {
+            let generic = Credential::Missing;
+            let creds = FireworksCredentials::try_from(generic).unwrap();
+            assert!(matches!(creds, FireworksCredentials::None));
+        }
+
+        // Test invalid type
+        let generic = Credential::FileContents(SecretString::from("test"));
+        let result = FireworksCredentials::try_from(generic);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err().get_owned_details(),
+            ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
+        ));
     }
 }

@@ -6,6 +6,11 @@ use crate::error::{Error, ErrorDetails};
 
 use super::check_table_exists;
 
+/// BANNED: This migration is no longer needed because it is deleted and replaced by migration 0010
+/// It has a bug where the 'json' and 'chat' strings are not being written to the `function_type` column but instead the default value of 1 is being used
+/// This has been fixed in migration 0010
+/// DO NOT USE THIS MIGRATION
+///
 /// This migration is used to set up the ClickHouse database to efficiently validate
 /// the type of demonstrations.
 /// To do this, we need to be able to efficiently query what function was called for a

@@ -1,19 +1,24 @@
 #![allow(clippy::print_stdout)]
+use std::collections::HashMap;
 
+#[cfg(feature = "e2e_tests")]
 use futures::StreamExt;
 use gateway::{
     inference::types::{ContentBlock, RequestMessage, Role},
     tool::{ToolCall, ToolResult},
 };
+#[cfg(feature = "e2e_tests")]
 use reqwest::{Client, StatusCode};
+#[cfg(feature = "e2e_tests")]
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
+#[cfg(feature = "e2e_tests")]
+use crate::common::get_gateway_endpoint;
 use crate::common::{
-    get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
-    select_inference_tags_clickhouse, select_json_inference_clickhouse,
-    select_model_inference_clickhouse,
+    get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
+    select_json_inference_clickhouse, select_model_inference_clickhouse,
 };
 
 #[derive(Clone, Debug)]
@@ -21,6 +26,7 @@ pub struct E2ETestProvider {
     pub variant_name: String,
     pub model_name: String,
     pub model_provider_name: String,
+    pub credentials: HashMap<String, String>,
 }
 
 /// Enforce that every provider implements a common set of tests.
@@ -38,10 +44,13 @@ pub struct E2ETestProviders {
     pub dynamic_tool_use_inference: Vec<E2ETestProvider>,
     pub parallel_tool_use_inference: Vec<E2ETestProvider>,
     pub json_mode_inference: Vec<E2ETestProvider>,
+    #[cfg(feature = "e2e_tests")]
     pub shorthand_inference: Vec<E2ETestProvider>,
+    #[cfg(feature = "batch_tests")]
     pub supports_batch_inference: bool,
 }
 
+#[cfg(feature = "e2e_tests")]
 #[macro_export]
 macro_rules! generate_provider_tests {
     ($func:ident) => {
@@ -71,6 +80,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_tool_use_tool_choice_specific_inference_request_with_provider;
         use $crate::providers::common::test_tool_use_tool_choice_specific_streaming_inference_request_with_provider;
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_simple_inference_request() {
             let providers = $func().await.simple_inference;
@@ -79,6 +89,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_shorthand_inference_request() {
             let providers = $func().await.shorthand_inference;
@@ -95,6 +106,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_inference_params_inference_request() {
             let providers = $func().await.inference_params_inference;
@@ -103,6 +115,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_inference_params_streaming_inference_request() {
             let providers = $func().await.inference_params_inference;
@@ -111,6 +124,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_use_tool_choice_auto_used_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -119,6 +133,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_use_tool_choice_auto_used_streaming_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -127,6 +142,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_use_tool_choice_auto_unused_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -135,6 +151,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -143,6 +160,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_use_tool_choice_required_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -151,6 +169,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_use_tool_choice_required_streaming_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -159,6 +178,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_use_tool_choice_none_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -167,6 +187,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_use_tool_choice_none_streaming_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -175,6 +196,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_use_tool_choice_specific_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -183,6 +205,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_use_tool_choice_specific_streaming_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -191,6 +214,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_use_allowed_tools_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -199,6 +223,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_use_allowed_tools_streaming_inference_request() {
             let providers = $func().await.tool_use_inference;
@@ -207,6 +232,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_multi_turn_inference_request() {
             let providers = $func().await.tool_multi_turn_inference;
@@ -215,6 +241,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_tool_multi_turn_streaming_inference_request() {
             let providers = $func().await.tool_multi_turn_inference;
@@ -223,6 +250,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_dynamic_tool_use_inference_request() {
             let providers = $func().await.dynamic_tool_use_inference;
@@ -231,6 +259,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_dynamic_tool_use_streaming_inference_request() {
             let providers = $func().await.dynamic_tool_use_inference;
@@ -239,6 +268,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_parallel_tool_use_inference_request() {
             let providers = $func().await.parallel_tool_use_inference;
@@ -247,6 +277,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_parallel_tool_use_streaming_inference_request() {
             let providers = $func().await.parallel_tool_use_inference;
@@ -255,6 +286,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_json_mode_inference_request() {
             let providers = $func().await.json_mode_inference;
@@ -263,6 +295,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_dynamic_json_mode_inference_request() {
             let providers = $func().await.json_mode_inference;
@@ -271,6 +304,7 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_json_mode_streaming_inference_request() {
             let providers = $func().await.json_mode_inference;
@@ -281,9 +315,9 @@ macro_rules! generate_provider_tests {
     };
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
-    let tag_value = Uuid::now_v7().to_string();
 
     let payload = json!({
         "function_name": "basic_test",
@@ -299,7 +333,7 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
                 }
             ]},
         "stream": false,
-        "tags": {"key": tag_value},
+        "tags": {"foo": "bar"},
     });
 
     let response = Client::new()
@@ -315,12 +349,24 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
 
     println!("API response: {response_json:#?}");
 
+    check_simple_inference_response(response_json, Some(episode_id), &provider, false).await;
+}
+
+pub async fn check_simple_inference_response(
+    response_json: Value,
+    episode_id: Option<Uuid>,
+    provider: &E2ETestProvider,
+    is_batch: bool,
+) {
+    let hardcoded_function_name = "basic_test";
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
     let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
     let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    if let Some(episode_id) = episode_id {
+        assert_eq!(episode_id_response, episode_id);
+    }
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -355,14 +401,16 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     assert_eq!(id, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
+    assert_eq!(function_name, hardcoded_function_name);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
+    if let Some(episode_id) = episode_id {
+        assert_eq!(retrieved_episode_id, episode_id);
+    }
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
@@ -386,9 +434,10 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
     assert_eq!(clickhouse_content, content);
 
-    let tags = result.get("tags").unwrap().as_object().unwrap();
-    assert_eq!(tags.len(), 1);
-    assert_eq!(tags.get("key").unwrap().as_str().unwrap(), tag_value);
+    if !is_batch {
+        let tags = result.get("tags").unwrap().as_object().unwrap();
+        assert_eq!(tags.get("foo").unwrap().as_str().unwrap(), "bar");
+    }
 
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
     assert!(tool_params.is_empty());
@@ -407,8 +456,10 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
         100
     );
 
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert!(processing_time_ms > 0);
+    if !is_batch {
+        let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+        assert!(processing_time_ms > 0);
+    }
 
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
@@ -444,9 +495,11 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
+    if !is_batch {
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
         system,
@@ -463,15 +516,24 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 1);
 
-    // Check the InferenceTag Table
-    let result = select_inference_tags_clickhouse(&clickhouse, "basic_test", "key", &tag_value)
+    if !is_batch {
+        // Check the InferenceTag Table
+        let result = select_inference_tags_clickhouse(
+            &clickhouse,
+            hardcoded_function_name,
+            "foo",
+            "bar",
+            inference_id,
+        )
         .await
         .unwrap();
-    let id = result.get("inference_id").unwrap().as_str().unwrap();
-    let id = Uuid::parse_str(id).unwrap();
-    assert_eq!(id, inference_id);
+        let id = result.get("inference_id").unwrap().as_str().unwrap();
+        let id = Uuid::parse_str(id).unwrap();
+        assert_eq!(id, inference_id);
+    }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_simple_streaming_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
@@ -704,14 +766,21 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 1);
     // Check the InferenceTag Table
-    let result = select_inference_tags_clickhouse(&clickhouse, "basic_test", "key", &tag_value)
-        .await
-        .unwrap();
+    let result = select_inference_tags_clickhouse(
+        &clickhouse,
+        "basic_test",
+        "key",
+        &tag_value,
+        inference_id,
+    )
+    .await
+    .unwrap();
     let id = result.get("inference_id").unwrap().as_str().unwrap();
     let id = Uuid::parse_str(id).unwrap();
     assert_eq!(id, inference_id);
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_inference_params_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
 
@@ -725,7 +794,7 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
         "params": {
@@ -739,6 +808,7 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
             }
         },
         "stream": false,
+        "credentials": provider.credentials,
     });
 
     let response = Client::new()
@@ -750,18 +820,29 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
 
     // Check that the API response is ok
     let response_status = response.status();
+    assert_eq!(response_status, StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
 
     println!("API response: {response_json:#?}");
 
-    assert_eq!(response_status, StatusCode::OK);
+    check_inference_params_response(response_json, &provider, Some(episode_id), false).await;
+}
 
+pub async fn check_inference_params_response(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+    is_batch: bool,
+) {
+    let hardcoded_function_name = "basic_test";
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+        assert_eq!(episode_id_response, episode_id);
+    }
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -796,14 +877,16 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
     assert_eq!(id, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
+    assert_eq!(function_name, hardcoded_function_name);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
+    if let Some(episode_id) = episode_id {
+        let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+        let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+        assert_eq!(retrieved_episode_id, episode_id);
+    }
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
@@ -812,7 +895,7 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital city of Japan?"}]
+                "content": [{"type": "text", "value": "What is the name of the capital city of Japan?"}]
             }
         ]
     });
@@ -862,8 +945,12 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
         .unwrap();
     assert_eq!(frequency_penalty, 0.2);
 
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert!(processing_time_ms > 0);
+    if !is_batch {
+        let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+        assert!(processing_time_ms > 0);
+    } else {
+        assert!(result.get("processing_time_ms").unwrap().is_null());
+    }
 
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
@@ -899,9 +986,14 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
+    if !is_batch {
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    } else {
+        assert!(result.get("response_time_ms").unwrap().is_null());
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
         system,
@@ -911,7 +1003,9 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the capital city of Japan?".to_string().into()],
+        content: vec!["What is the name of the capital city of Japan?"
+            .to_string()
+            .into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
@@ -919,6 +1013,7 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
     assert_eq!(output.len(), 1);
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_inference_params_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -948,6 +1043,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
             }
         },
         "stream": true,
+        "credentials": provider.credentials,
     });
 
     let mut event_source = Client::new()
@@ -1176,6 +1272,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     assert_eq!(output.len(), 1);
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -1194,6 +1291,7 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
             ]},
         "stream": false,
         "variant_name": provider.variant_name,
+        "tags": {"test_type": "auto_used"}
     });
 
     let response = Client::new()
@@ -1208,13 +1306,29 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
     let response_json = response.json::<Value>().await.unwrap();
 
     println!("API response: {response_json:#?}");
+    check_tool_use_tool_choice_auto_used_inference_response(
+        response_json,
+        &provider,
+        Some(episode_id),
+        false,
+    )
+    .await;
+}
 
+pub async fn check_tool_use_tool_choice_auto_used_inference_response(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+    is_batch: bool,
+) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+        assert_eq!(episode_id_response, episode_id);
+    }
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -1284,9 +1398,11 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
+        assert_eq!(episode_id_result, episode_id);
+    }
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
@@ -1390,9 +1506,11 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
+    if !is_batch {
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
 
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
@@ -1436,6 +1554,7 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -1765,6 +1884,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
 
 /// This test is similar to `test_tool_use_tool_choice_auto_used_inference_request_with_provider`, but it steers the model to not use the tool.
 /// This ensures that ToolChoice::Auto is working as expected.
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -1798,12 +1918,29 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
 
     println!("API response: {response_json:#?}");
 
+    check_tool_use_tool_choice_auto_unused_inference_response(
+        response_json,
+        &provider,
+        Some(episode_id),
+        false,
+    )
+    .await;
+}
+
+pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+    is_batch: bool,
+) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+        assert_eq!(episode_id_response, episode_id);
+    }
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -1845,9 +1982,11 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
+        assert_eq!(episode_id_result, episode_id);
+    }
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
@@ -1901,6 +2040,12 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
         location["description"],
         "The location to get the temperature for (e.g. \"New York\")"
     );
+    if !is_batch {
+        let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+        assert!(processing_time_ms > 0);
+    } else {
+        assert!(result.get("processing_time_ms").unwrap().is_null());
+    }
 
     let units = properties["units"].as_object().unwrap();
     assert_eq!(units["type"], "string");
@@ -1941,6 +2086,14 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
     );
+    if !is_batch {
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    } else {
+        assert!(result.get("response_time_ms").unwrap().is_null());
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("mehta"));
@@ -1949,9 +2102,14 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
+    if !is_batch {
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    } else {
+        assert!(result.get("response_time_ms").unwrap().is_null());
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
 
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
@@ -1978,6 +2136,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
 
 /// This test is similar to `test_tool_use_tool_choice_auto_used_streaming_inference_request_with_provider`, but it steers the model to not use the tool.
 /// This ensures that ToolChoice::Auto is working as expected.
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -2259,6 +2418,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -2304,13 +2464,29 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     let response_json = response.json::<Value>().await.unwrap();
 
     println!("API response: {response_json:#?}");
+    check_tool_use_tool_choice_required_inference_response(
+        response_json,
+        &provider,
+        Some(episode_id),
+        false,
+    )
+    .await;
+}
 
+pub async fn check_tool_use_tool_choice_required_inference_response(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+    is_batch: bool,
+) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+        assert_eq!(episode_id_response, episode_id);
+    }
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -2382,9 +2558,11 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
+        assert_eq!(episode_id_result, episode_id);
+    }
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
@@ -2486,9 +2664,14 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
+    if !is_batch {
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    } else {
+        assert!(result.get("response_time_ms").unwrap().is_null());
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
 
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
@@ -2522,6 +2705,7 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -2851,6 +3035,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -2891,12 +3076,29 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
 
     println!("API response: {response_json:#?}");
 
+    check_tool_use_tool_choice_none_inference_response(
+        response_json,
+        &provider,
+        Some(episode_id),
+        false,
+    )
+    .await;
+}
+
+pub async fn check_tool_use_tool_choice_none_inference_response(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+    is_batch: bool,
+) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+        assert_eq!(episode_id_response, episode_id);
+    }
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -2937,9 +3139,11 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
+        assert_eq!(episode_id_result, episode_id);
+    }
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
@@ -3041,9 +3245,11 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
+    if !is_batch {
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
 
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
@@ -3072,6 +3278,7 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -3360,6 +3567,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -3419,13 +3627,29 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     let response_json = response.json::<Value>().await.unwrap();
 
     println!("API response: {response_json:#?}");
+    check_tool_use_tool_choice_specific_inference_response(
+        response_json,
+        &provider,
+        Some(episode_id),
+        false,
+    )
+    .await;
+}
 
+pub async fn check_tool_use_tool_choice_specific_inference_response(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+    is_batch: bool,
+) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+        assert_eq!(episode_id_response, episode_id);
+    }
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -3489,9 +3713,11 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
+        assert_eq!(episode_id_result, episode_id);
+    }
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
@@ -3625,9 +3851,11 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
+    if !is_batch {
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
 
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
@@ -3665,6 +3893,7 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -4054,6 +4283,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -4096,13 +4326,29 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     let response_json = response.json::<Value>().await.unwrap();
 
     println!("API response: {response_json:#?}");
+    check_tool_use_tool_choice_allowed_tools_inference_response(
+        response_json,
+        &provider,
+        Some(episode_id),
+        false,
+    )
+    .await;
+}
 
+pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+    is_batch: bool,
+) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+        assert_eq!(episode_id_response, episode_id);
+    }
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -4166,9 +4412,11 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
+        assert_eq!(episode_id_result, episode_id);
+    }
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
@@ -4257,9 +4505,11 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
+    if !is_batch {
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
 
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
@@ -4295,6 +4545,7 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -4612,6 +4863,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ETestProvider) {
     // NOTE: The xAI API returns an error for multi-turn tool use when the assistant message only has tool_calls but no content.
     // The xAI team has acknowledged the issue and is working on a fix.
@@ -4672,13 +4924,24 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
     let response_json = response.json::<Value>().await.unwrap();
 
     println!("API response: {response_json:#?}");
+    check_tool_use_multi_turn_inference_response(response_json, &provider, Some(episode_id), false)
+        .await;
+}
 
+pub async fn check_tool_use_multi_turn_inference_response(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+    is_batch: bool,
+) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+        assert_eq!(episode_id_response, episode_id);
+    }
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -4718,9 +4981,11 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
+    if let Some(episode_id) = episode_id {
+        let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+        let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+        assert_eq!(retrieved_episode_id, episode_id);
+    }
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
@@ -4819,9 +5084,11 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
+    if !is_batch {
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
 
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
@@ -4871,6 +5138,7 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -5185,6 +5453,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
 
@@ -5238,13 +5507,25 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
     let response_json = response.json::<Value>().await.unwrap();
 
     println!("API response: {response_json:#?}");
+    check_dynamic_tool_use_inference_response(response_json, &provider, Some(episode_id), false)
+        .await;
+}
 
+pub async fn check_dynamic_tool_use_inference_response(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+    is_batch: bool,
+) {
+    let hardcoded_function_name = "basic_test";
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+        assert_eq!(episode_id_response, episode_id);
+    }
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -5309,14 +5590,16 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
+    assert_eq!(function_name, hardcoded_function_name);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
+        assert_eq!(episode_id_result, episode_id);
+    }
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
@@ -5419,9 +5702,11 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
+    if !is_batch {
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
 
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
@@ -5457,6 +5742,7 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -5798,6 +6084,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
 
@@ -5829,13 +6116,25 @@ pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2
     let response_json = response.json::<Value>().await.unwrap();
 
     println!("API response: {response_json:#?}");
+    check_parallel_tool_use_inference_response(response_json, &provider, Some(episode_id), false)
+        .await;
+}
 
+pub async fn check_parallel_tool_use_inference_response(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+    is_batch: bool,
+) {
+    let hardcoded_function_name = "weather_helper_parallel";
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+        assert_eq!(episode_id_response, episode_id);
+    }
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -5931,14 +6230,16 @@ pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
+    assert_eq!(function_name, hardcoded_function_name);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
-    assert_eq!(episode_id_result, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_result = result.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_result = Uuid::parse_str(episode_id_result).unwrap();
+        assert_eq!(episode_id_result, episode_id);
+    }
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
@@ -6077,9 +6378,11 @@ pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
+    if !is_batch {
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
 
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
@@ -6114,6 +6417,7 @@ pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2
     assert!(tool_call_names.contains(&"get_humidity".to_string()));
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
@@ -6514,6 +6818,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     assert!(tool_call_names.contains(&"get_humidity".to_string()));
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
 
@@ -6546,12 +6851,23 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
 
     println!("API response: {response_json:#?}");
 
+    check_json_mode_inference_response(response_json, &provider, Some(episode_id), false).await;
+}
+
+pub async fn check_json_mode_inference_response(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+    is_batch: bool,
+) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+        assert_eq!(episode_id_response, episode_id);
+    }
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -6597,9 +6913,11 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
+    if let Some(episode_id) = episode_id {
+        let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+        let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+        assert_eq!(retrieved_episode_id, episode_id);
+    }
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
@@ -6633,8 +6951,10 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
         100
     );
 
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert!(processing_time_ms > 0);
+    if !is_batch {
+        let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+        assert!(processing_time_ms > 0);
+    }
     let retrieved_output_schema = result.get("output_schema").unwrap().as_str().unwrap();
     let retrieved_output_schema: Value = serde_json::from_str(retrieved_output_schema).unwrap();
     let expected_output_schema = json!({
@@ -6684,9 +7004,11 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
+    if !is_batch {
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
 
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
@@ -6722,6 +7044,7 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
     let output_schema = json!({
@@ -6766,12 +7089,31 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
 
     println!("API response: {response_json:#?}");
 
+    check_dynamic_json_mode_inference_response(
+        response_json,
+        &provider,
+        Some(episode_id),
+        Some(output_schema),
+        false,
+    )
+    .await;
+}
+
+pub async fn check_dynamic_json_mode_inference_response(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+    output_schema: Option<Value>,
+    is_batch: bool,
+) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
-    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
-    assert_eq!(episode_id_response, episode_id);
+    if let Some(episode_id) = episode_id {
+        let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+        let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+        assert_eq!(episode_id_response, episode_id);
+    }
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -6817,22 +7159,27 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
 
-    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
-    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
-    assert_eq!(retrieved_episode_id, episode_id);
+    if let Some(episode_id) = episode_id {
+        let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+        let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+        assert_eq!(retrieved_episode_id, episode_id);
+    }
 
-    let input: Value =
-        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    let correct_input = json!({
-        "system": {"assistant_name": "Dr. Mehta", "schema": serialized_output_schema},
-        "messages": [
-            {
-                "role": "user",
-                "content": [{"type": "text", "value": {"country": "Japan"}}]
-            }
-        ]
-    });
-    assert_eq!(input, correct_input);
+    if let Some(output_schema) = &output_schema {
+        let serialized_output_schema = serde_json::to_string(&output_schema).unwrap();
+        let input: Value =
+            serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+        let correct_input = json!({
+            "system": {"assistant_name": "Dr. Mehta", "schema": serialized_output_schema},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "value": {"country": "Japan"}}]
+                }
+            ]
+        });
+        assert_eq!(input, correct_input);
+    }
 
     let output_clickhouse = result.get("output").unwrap().as_str().unwrap();
     let output_clickhouse: Value = serde_json::from_str(output_clickhouse).unwrap();
@@ -6856,9 +7203,11 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
 
-    let retrieved_output_schema = result.get("output_schema").unwrap().as_str().unwrap();
-    let retrieved_output_schema: Value = serde_json::from_str(retrieved_output_schema).unwrap();
-    assert_eq!(retrieved_output_schema, output_schema);
+    if let Some(output_schema) = &output_schema {
+        let retrieved_output_schema = result.get("output_schema").unwrap().as_str().unwrap();
+        let retrieved_output_schema: Value = serde_json::from_str(retrieved_output_schema).unwrap();
+        assert_eq!(retrieved_output_schema, *output_schema);
+    }
 
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
@@ -6894,9 +7243,11 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
     assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
-    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null());
+    if !is_batch {
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
 
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
@@ -6932,7 +7283,12 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
     }
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn test_json_mode_streaming_inference_request_with_provider(provider: E2ETestProvider) {
+    if provider.variant_name.contains("tgi") {
+        // TGI does not support streaming in JSON mode (because it doesn't support streaming tools)
+        return;
+    }
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
