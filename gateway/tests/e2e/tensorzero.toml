@@ -1307,12 +1307,6 @@ model = "gpt-4o-mini-2024-07-18"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 100
 
-[functions.weather_helper.variants.tgi]
-type = "chat_completion"
-model = "phi-3.5-mini-instruct-tgi"
-system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
-max_tokens = 100
-
 [functions.weather_helper.variants.together]
 type = "chat_completion"
 model = "mixtral-8x7b-instruct-v0.1"
