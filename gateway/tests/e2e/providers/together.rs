@@ -2,7 +2,9 @@ use std::collections::HashMap;
 
 use crate::providers::common::{E2ETestProvider, E2ETestProviders};
 
+#[cfg(feature = "e2e_tests")]
 crate::generate_provider_tests!(get_providers);
+#[cfg(feature = "batch_tests")]
 crate::generate_batch_inference_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
@@ -38,6 +40,7 @@ async fn get_providers() -> E2ETestProviders {
         // },
     ];
 
+    #[cfg(feature = "e2e_tests")]
     let shorthand_providers = vec![E2ETestProvider {
         variant_name: "together-shorthand".to_string(),
         model_name: "together::meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo".to_string(),
@@ -56,7 +59,9 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: vec![],
         parallel_tool_use_inference: vec![],
         json_mode_inference: json_providers.clone(),
+        #[cfg(feature = "e2e_tests")]
         shorthand_inference: shorthand_providers.clone(),
+        #[cfg(feature = "batch_tests")]
         supports_batch_inference: false,
     }
 }

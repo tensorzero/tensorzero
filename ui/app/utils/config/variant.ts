@@ -100,6 +100,7 @@ export const VariantConfigSchema = z.discriminatedUnion("type", [
 
 export type VariantConfig = z.infer<typeof VariantConfigSchema>;
 
+// Modify get_template_env to ensure WASM is initialized
 export async function get_template_env(variant: ChatCompletionConfig) {
   const env: {
     system?: string;

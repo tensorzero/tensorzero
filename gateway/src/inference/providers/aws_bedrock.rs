@@ -21,9 +21,11 @@ use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
+use crate::inference::types::batch::BatchRequestRow;
+use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::{
-    batch::BatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType, Latency,
-    ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
+    batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType,
+    Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
     ProviderInferenceResponseChunk, ProviderInferenceResponseStream, RequestMessage, Role, Text,
     TextChunk, Usage,
 };
@@ -309,7 +311,19 @@ impl InferenceProvider for AWSBedrockProvider {
         _requests: &'a [ModelInferenceRequest<'a>],
         _client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<BatchProviderInferenceResponse, Error> {
+    ) -> Result<StartBatchProviderInferenceResponse, Error> {
+        Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
+            provider_type: "AWS Bedrock".to_string(),
+        }
+        .into())
+    }
+
+    async fn poll_batch_inference<'a>(
+        &'a self,
+        _batch_request: &'a BatchRequestRow<'a>,
+        _http_client: &'a reqwest::Client,
+        _dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<PollBatchInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
             provider_type: PROVIDER_TYPE.to_string(),
         }

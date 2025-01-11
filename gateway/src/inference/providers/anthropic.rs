@@ -13,9 +13,11 @@ use uuid::Uuid;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
+use crate::inference::types::batch::BatchRequestRow;
+use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::{
-    batch::BatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType, Latency,
-    ModelInferenceRequestJsonMode, Role, Text,
+    batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType,
+    Latency, ModelInferenceRequestJsonMode, Role, Text,
 };
 use crate::inference::types::{
     ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
@@ -259,7 +261,19 @@ impl InferenceProvider for AnthropicProvider {
         _requests: &'a [ModelInferenceRequest<'a>],
         _client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<BatchProviderInferenceResponse, Error> {
+    ) -> Result<StartBatchProviderInferenceResponse, Error> {
+        Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
+            provider_type: "Anthropic".to_string(),
+        }
+        .into())
+    }
+
+    async fn poll_batch_inference<'a>(
+        &'a self,
+        _batch_request: &'a BatchRequestRow<'a>,
+        _http_client: &'a reqwest::Client,
+        _dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<PollBatchInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
             provider_type: PROVIDER_TYPE.to_string(),
         }
