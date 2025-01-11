@@ -79,6 +79,12 @@ const getProviderInfo = (
         className:
           "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300",
       };
+    case "tgi":
+      return {
+        name: "TGI",
+        className:
+          "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300",
+      };
     case "vllm":
       return {
         name: "vLLM",
