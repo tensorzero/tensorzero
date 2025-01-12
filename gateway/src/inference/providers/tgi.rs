@@ -369,11 +369,11 @@ impl<'a> TGIRequest<'a> {
         model: &'a str,
         request: &'a ModelInferenceRequest,
     ) -> Result<TGIRequest<'a>, Error> {
-        // TGI doesn't support json mode at all (only through tools [https://huggingface.co/docs/text-generation-inference/en/conceptual/guidance])
-        // So we log a warning and ignore the json mode
+        // TGI doesn't support JSON mode at all (only through tools [https://huggingface.co/docs/text-generation-inference/en/conceptual/guidance])
+        // So we log a warning and ignore the JSON mode
         // You can get JSON mode through `implicit_tool` instead.
         if request.json_mode != ModelInferenceRequestJsonMode::Off {
-            tracing::warn!("TGI does not support json mode. Ignoring json mode.");
+            tracing::warn!("TGI does not support JSON mode. Ignoring JSON mode.");
         }
 
         let stream_options = match request.stream {
