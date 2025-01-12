@@ -3,7 +3,9 @@ routing = ["tgi"]
 
 [models.tgi.providers.tgi]
 type = "tgi"
-model_name = "tgi"
+api_base = "http://host.docker.internal:8080/v1"
+# TGI does not require an API key unless you put something like NGINX in front of it
+api_key = "none"
 
 [functions.my_function_name]
 type = "chat"
