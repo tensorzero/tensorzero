@@ -9,6 +9,20 @@ routing = ["openai"]
 type = "openai"
 model_name = "gpt-4o-mini-2024-07-18"
 
+[models."ft:gpt-4o-mini-2024-07-18:tensorzero::ApKaDBtL"]
+routing = [ "openai",]
+
+[models."ft:gpt-4o-mini-2024-07-18:tensorzero::ApKaDBtL".providers.openai]
+type = "openai"
+model_name = "ft:gpt-4o-mini-2024-07-18:tensorzero::ApKaDBtL"
+
+[models."ft:gpt-4o-mini-2024-07-18:tensorzero::ApJy3Pet"]
+routing = [ "openai",]
+
+[models."ft:gpt-4o-mini-2024-07-18:tensorzero::ApJy3Pet".providers.openai]
+type = "openai"
+model_name = "ft:gpt-4o-mini-2024-07-18:tensorzero::ApJy3Pet"
+
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
@@ -53,21 +67,26 @@ model = "my_gpt_4o_mini"
 system_template = "functions/generate_action/history_and_reasoning/system.minijinja"
 user_template = "functions/generate_action/history_and_reasoning/user.minijinja"
 
-[functions.generate_action.variants.best_of_5]
-weight = 1
-type = "experimental_best_of_n_sampling"
-candidates = [
-    "baseline",
-    "no_mission",
-    "history",
-    "reasoning",
-    "history_and_reasoning",
-]
-
-[functions.generate_action.variants.best_of_5.evaluator]
-model = "my_gpt_4o_mini"
-system_template = "functions/generate_action/baseline/system.minijinja"
+[functions.generate_action.variants.history_and_reasoning_ft]
+type = "chat_completion"
+weight = 0
+model = "ft:gpt-4o-mini-2024-07-18:tensorzero::ApHIAJtf"
+system_template = "functions/generate_action/history_and_reasoning/system.minijinja"
 user_template = "functions/generate_action/history_and_reasoning/user.minijinja"
+
+[functions.generate_action.variants.history_ft]
+type = "chat_completion"
+weight = 0
+model = "ft:gpt-4o-mini-2024-07-18:tensorzero::ApJy3Pet"
+system_template = "functions/generate_action/history/system.minijinja"
+user_template = "functions/generate_action/history/user.minijinja"
+
+[functions.generate_action.variants.no_mission_ft]
+type = "chat_completion"
+weight = 0
+model = "ft:gpt-4o-mini-2024-07-18:tensorzero::ApKaDBtL"
+system_template = "functions/generate_action/history/system.minijinja"
+user_template = "functions/generate_action/history/user.minijinja"
 
 [functions.extract_action]
 type = "json"
@@ -83,11 +102,6 @@ system_template = "functions/extract_action/simple_variant/system.minijinja"
 # │                                  METRICS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-[metrics.reward]
-level = "inference"
-optimize = "max"
-type = "float"
-
 [metrics.episode_return]
 level = "episode"
 optimize = "max"
@@ -97,7 +111,3 @@ type = "float"
 level = "episode"
 optimize = "max"
 type = "float"
-
-# ┌────────────────────────────────────────────────────────────────────────────┐
-# │                                  TOOLS                                     │
-# └────────────────────────────────────────────────────────────────────────────┘
