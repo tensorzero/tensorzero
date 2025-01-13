@@ -46,6 +46,7 @@ OPENAI_API_KEY=<your-key>
 FIREWORKS_API_KEY=<your-key>
 FIREWORKS_ACCOUNT_ID=<your-account-id>
 CLICKHOUSE_URL=<your-clickhouse-url> # For testing, set to http://localhost:8123/tensorzero
+CONFIG_DIR=<path-to-config-dir> # For testing, set to ./fixtures/config
 ```
 
 4. Run the dependencies: `docker compose -f fixtures/docker-compose.yml up`
