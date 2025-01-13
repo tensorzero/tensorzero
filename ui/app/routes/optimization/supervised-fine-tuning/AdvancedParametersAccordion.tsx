@@ -46,7 +46,7 @@ export function AdvancedParametersAccordion({
     >
       <AccordionItem value="advanced-parameters">
         <AccordionTrigger className="hover:no-underline">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <span>Advanced Parameters</span>
           </div>
         </AccordionTrigger>
@@ -68,7 +68,7 @@ export function AdvancedParametersAccordion({
                         onChange={(e) => field.onChange(Number(e.target.value))}
                       />
                       {errors.validationSplitPercent && (
-                        <p className="text-sm text-red-500">
+                        <p className="text-xs text-red-500">
                           {errors.validationSplitPercent.message}
                         </p>
                       )}
@@ -85,7 +85,7 @@ export function AdvancedParametersAccordion({
                 <FormItem>
                   <FormLabel>Max. Samples</FormLabel>
                   <div className="grid grid-cols-2 gap-x-8">
-                    <div className="flex flex-col gap-2">
+                    <div className="flex flex-col gap-1">
                       <Input
                         type="number"
                         min={10}
@@ -95,7 +95,7 @@ export function AdvancedParametersAccordion({
                         onChange={(e) => field.onChange(Number(e.target.value))}
                       />
                       {errors.maxSamples && (
-                        <p className="text-sm text-red-500">
+                        <p className="text-xs text-red-500">
                           {errors.maxSamples.message}
                         </p>
                       )}
