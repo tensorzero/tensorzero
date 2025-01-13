@@ -17,7 +17,7 @@ pub struct Migration0004<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
 
-impl<'a> Migration for Migration0004<'a> {
+impl Migration for Migration0004<'_> {
     /// Check if you can connect to the database and if the ModelInference table exists
     /// If all of this is OK, then we can apply the migration
     async fn can_apply(&self) -> Result<(), Error> {

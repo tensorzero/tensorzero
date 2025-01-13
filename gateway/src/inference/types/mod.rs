@@ -866,8 +866,8 @@ pub struct CollectChunksArgs<'a, 'b> {
 
 // Modify the collect_chunks function to accept CollectChunksArgs
 // 'a ends up as static and 'b ends up as stack allocated in the caller (endpoints::inference::create_stream)
-pub async fn collect_chunks<'a, 'b>(
-    args: CollectChunksArgs<'a, 'b>,
+pub async fn collect_chunks<'a>(
+    args: CollectChunksArgs<'a, '_>,
 ) -> Result<InferenceResult<'a>, Error> {
     let CollectChunksArgs {
         value,
