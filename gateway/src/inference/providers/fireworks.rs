@@ -122,7 +122,7 @@ fn default_api_key_location() -> CredentialLocation {
 impl InferenceProvider for FireworksProvider {
     async fn infer<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'a>,
+        request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         api_key: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -193,7 +193,7 @@ impl InferenceProvider for FireworksProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'a>,
+        request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         api_key: &'a InferenceCredentials,
     ) -> Result<
@@ -252,7 +252,7 @@ impl InferenceProvider for FireworksProvider {
 
     async fn start_batch_inference<'a>(
         &'a self,
-        _requests: &'a [ModelInferenceRequest<'a>],
+        _requests: &'a [ModelInferenceRequest<'_>],
         _client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
