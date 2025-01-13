@@ -19,7 +19,7 @@ pub struct Migration0006<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
 
-impl<'a> Migration for Migration0006<'a> {
+impl Migration for Migration0006<'_> {
     /// Check if you can connect to the database
     async fn can_apply(&self) -> Result<(), Error> {
         self.clickhouse.health().await.map_err(|e| {
