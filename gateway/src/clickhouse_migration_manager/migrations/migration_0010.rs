@@ -26,7 +26,7 @@ pub struct Migration0010<'a> {
     pub clean_start: bool,
 }
 
-impl<'a> Migration for Migration0010<'a> {
+impl Migration for Migration0010<'_> {
     /// Check if you can connect to the database
     /// Then check if the two inference tables exist as the sources for the materialized views
     /// If all of this is OK, then we can apply the migration

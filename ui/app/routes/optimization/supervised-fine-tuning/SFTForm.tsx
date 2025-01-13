@@ -156,32 +156,49 @@ export function SFTForm({
           className="space-y-6"
         >
           <div className="space-y-6">
-            <FunctionSelector
-              control={form.control}
-              inferenceCount={counts.inferenceCount}
-              config={config}
-            />
-            {errors.function && (
-              <p className="text-sm text-red-500">{errors.function.message}</p>
-            )}
+            <div className="flex flex-col gap-1">
+              <FunctionSelector
+                control={form.control}
+                inferenceCount={counts.inferenceCount}
+                config={config}
+              />
+              {errors.function && (
+                <p className="text-xs text-red-500">
+                  {errors.function.message}
+                </p>
+              )}
+            </div>
 
-            <MetricSelector
-              control={form.control}
-              feedbackCount={counts.feedbackCount}
-              curatedInferenceCount={counts.curatedInferenceCount}
-              config={config}
-            />
-            {errors.metric && (
-              <p className="text-sm text-red-500">{errors.metric.message}</p>
-            )}
+            <div className="flex flex-col">
+              <MetricSelector
+                control={form.control}
+                feedbackCount={counts.feedbackCount}
+                curatedInferenceCount={counts.curatedInferenceCount}
+                config={config}
+              />
 
-            <VariantSelector
-              control={form.control}
-              chatCompletionVariants={getChatCompletionVariantsForFunction()}
-            />
+              {errors.metric && (
+                <p className="text-xs text-red-500">{errors.metric.message}</p>
+              )}
+            </div>
 
-            <ModelSelector control={form.control} models={models} />
+            <div className="flex flex-col gap-1">
+              <VariantSelector
+                control={form.control}
+                chatCompletionVariants={getChatCompletionVariantsForFunction()}
+              />
 
+              {errors.variant && (
+                <p className="text-xs text-red-500">{errors.variant.message}</p>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <ModelSelector control={form.control} models={models} />
+              {errors.model && (
+                <p className="text-xs text-red-500">{errors.model.message}</p>
+              )}
+            </div>
             <AdvancedParametersAccordion
               control={form.control}
               maxSamplesLimit={counts.inferenceCount ?? undefined}

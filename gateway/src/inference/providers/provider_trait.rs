@@ -44,7 +44,7 @@ pub trait InferenceProvider {
 
     fn poll_batch_inference<'a>(
         &'a self,
-        batch_request: &'a BatchRequestRow,
+        batch_request: &'a BatchRequestRow<'a>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> impl Future<Output = Result<PollBatchInferenceResponse, Error>> + Send + 'a;
