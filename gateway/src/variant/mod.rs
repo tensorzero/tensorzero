@@ -107,7 +107,7 @@ pub trait Variant {
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'a, 'request>,
-        clients: &'request InferenceClients,
+        clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult<'a>, Error>;
 
