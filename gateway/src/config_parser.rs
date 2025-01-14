@@ -219,13 +219,18 @@ impl<'c> Config<'c> {
         })
     }
 
-    /// Get a metric by name
-    pub fn get_metric<'a>(&'a self, metric_name: &str) -> Result<&'a MetricConfig, Error> {
+    /// Get a metric by name, producing an error if it's not found
+    pub fn get_metric_or_err<'a>(&'a self, metric_name: &str) -> Result<&'a MetricConfig, Error> {
         self.metrics.get(metric_name).ok_or_else(|| {
             Error::new(ErrorDetails::UnknownMetric {
                 name: metric_name.to_string(),
             })
         })
+    }
+
+    /// Get a metric by name
+    pub fn get_metric<'a>(&'a self, metric_name: &str) -> Option<&'a MetricConfig> {
+        self.metrics.get(metric_name)
     }
 
     /// Get a tool by name
