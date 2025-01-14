@@ -14,10 +14,10 @@ use crate::inference::providers::dummy::DummyProvider;
 use crate::inference::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
 
 use crate::inference::providers::hyperbolic::HyperbolicProvider;
-use crate::inference::types::batch::BatchRequestRow;
-use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::providers::tgi::TGIProvider;
 use crate::inference::types::batch::{
-    StartBatchModelInferenceResponse, StartBatchProviderInferenceResponse,
+    BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
+    StartBatchProviderInferenceResponse,
 };
 use crate::{
     endpoints::inference::InferenceCredentials,
@@ -174,6 +174,7 @@ pub enum ProviderConfig {
     Together(TogetherProvider),
     VLLM(VLLMProvider),
     XAI(XAIProvider),
+    TGI(TGIProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
 }
@@ -257,6 +258,11 @@ enum ProviderConfigHelper {
     #[allow(clippy::upper_case_acronyms)]
     XAI {
         model_name: String,
+        api_key_location: Option<CredentialLocation>,
+    },
+    #[allow(clippy::upper_case_acronyms)]
+    TGI {
+        api_base: Url,
         api_key_location: Option<CredentialLocation>,
     },
     #[cfg(any(test, feature = "e2e_tests"))]
@@ -381,6 +387,13 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 XAIProvider::new(model_name, api_key_location)
                     .map_err(|e| D::Error::custom(e.to_string()))?,
             ),
+            ProviderConfigHelper::TGI {
+                api_base,
+                api_key_location,
+            } => ProviderConfig::TGI(
+                TGIProvider::new(api_base, api_key_location)
+                    .map_err(|e| D::Error::custom(e.to_string()))?,
+            ),
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfigHelper::Dummy {
                 model_name,
@@ -420,6 +433,7 @@ impl ProviderConfig {
             ProviderConfig::Together(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::VLLM(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::XAI(provider) => provider.infer(request, client, api_keys).await,
+            ProviderConfig::TGI(provider) => provider.infer(request, client, api_keys).await,
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => provider.infer(request, client, api_keys).await,
         }
@@ -476,6 +490,7 @@ impl ProviderConfig {
             ProviderConfig::VLLM(provider) => {
                 provider.infer_stream(request, client, api_keys).await
             }
+            ProviderConfig::TGI(provider) => provider.infer_stream(request, client, api_keys).await,
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => {
                 provider.infer_stream(request, client, api_keys).await
@@ -555,6 +570,11 @@ impl ProviderConfig {
                     .start_batch_inference(requests, client, api_keys)
                     .await
             }
+            ProviderConfig::TGI(provider) => {
+                provider
+                    .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => {
                 provider
@@ -617,6 +637,11 @@ impl ProviderConfig {
                     .await
             }
             ProviderConfig::OpenAI(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::TGI(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
@@ -921,12 +946,9 @@ mod tests {
     use std::borrow::Cow;
 
     use crate::inference::{
-        providers::{
-            anthropic::AnthropicCredentials,
-            dummy::{
-                DummyCredentials, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
-                DUMMY_INFER_USAGE, DUMMY_STREAMING_RESPONSE,
-            },
+        providers::dummy::{
+            DummyCredentials, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
+            DUMMY_INFER_USAGE, DUMMY_STREAMING_RESPONSE,
         },
         types::{ContentBlockChunk, FunctionType, ModelInferenceRequestJsonMode, TextChunk},
     };
@@ -1421,10 +1443,8 @@ mod tests {
             .into()
         );
         // Test that it works with an initialized model
-        let anthropic_provider_config = ProviderConfig::Anthropic(AnthropicProvider {
-            model_name: "claude".to_string(),
-            credentials: AnthropicCredentials::Static("".to_string().into()),
-        });
+        let anthropic_provider_config =
+            ProviderConfig::Anthropic(AnthropicProvider::new("claude".to_string(), None).unwrap());
         let anthropic_model_config = ModelConfig {
             routing: vec!["anthropic".to_string()],
             providers: HashMap::from([("anthropic".to_string(), anthropic_provider_config)]),

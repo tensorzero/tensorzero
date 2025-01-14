@@ -42,8 +42,8 @@ const PROVIDER_TYPE: &str = "together";
 
 #[derive(Debug)]
 pub struct TogetherProvider {
-    pub model_name: String,
-    pub credentials: TogetherCredentials,
+    model_name: String,
+    credentials: TogetherCredentials,
 }
 
 impl TogetherProvider {

@@ -43,8 +43,8 @@ const PROVIDER_TYPE: &str = "fireworks";
 
 #[derive(Debug)]
 pub struct FireworksProvider {
-    pub model_name: String,
-    pub credentials: FireworksCredentials,
+    model_name: String,
+    credentials: FireworksCredentials,
 }
 
 impl FireworksProvider {

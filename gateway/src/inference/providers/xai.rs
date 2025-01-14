@@ -39,8 +39,8 @@ const PROVIDER_TYPE: &str = "xai";
 
 #[derive(Debug)]
 pub struct XAIProvider {
-    pub model_name: String,
-    pub credentials: XAICredentials,
+    model_name: String,
+    credentials: XAICredentials,
 }
 
 impl XAIProvider {

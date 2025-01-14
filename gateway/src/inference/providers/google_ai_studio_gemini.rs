@@ -31,9 +31,9 @@ const PROVIDER_TYPE: &str = "google_ai_studio_gemini";
 /// Implements a subset of the Google AI Studio Gemini API as documented [here](https://ai.google.dev/gemini-api/docs/text-generation?lang=rest)
 #[derive(Debug)]
 pub struct GoogleAIStudioGeminiProvider {
-    pub request_url: Url,
-    pub streaming_request_url: Url,
-    pub credentials: GoogleAIStudioCredentials,
+    request_url: Url,
+    streaming_request_url: Url,
+    credentials: GoogleAIStudioCredentials,
 }
 
 impl GoogleAIStudioGeminiProvider {
