@@ -1,6 +1,9 @@
 use crate::providers::common::{E2ETestProvider, E2ETestProviders};
 use std::collections::HashMap;
+#[cfg(feature = "e2e_tests")]
 crate::generate_provider_tests!(get_providers);
+#[cfg(feature = "batch_tests")]
+crate::generate_batch_inference_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
     let model_name = "phi-3.5-mini-instruct-tgi".to_string();
@@ -18,6 +21,7 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: vec![],
         parallel_tool_use_inference: vec![],
         json_mode_inference: standard_providers.clone(),
+        #[cfg(feature = "e2e_tests")]
         shorthand_inference: vec![],
         #[cfg(feature = "batch_tests")]
         supports_batch_inference: false,
