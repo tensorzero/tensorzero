@@ -329,7 +329,7 @@ pub async fn inference(
                     variant_name: variant_name.to_string(),
                     episode_id,
                     tool_config,
-                    processing_time: start_time.elapsed(),
+                    processing_time: Some(start_time.elapsed()),
                     tags: params.tags,
                 };
 
@@ -439,7 +439,7 @@ fn create_stream<'a>(
                     variant_name,
                     episode_id,
                     tool_config,
-                    processing_time: start_time.elapsed(),
+                    processing_time: Some(start_time.elapsed()),
                     tags,
                 };
                 tokio::spawn(async move {
@@ -488,26 +488,16 @@ pub struct InferenceDatabaseInsertMetadata {
     pub variant_name: String,
     pub episode_id: Uuid,
     pub tool_config: Option<ToolCallConfig>,
-    pub processing_time: Duration,
+    pub processing_time: Option<Duration>,
     pub tags: HashMap<String, String>,
 }
 
-async fn write_inference<'a>(
+async fn write_inference(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     input: Input,
-    result: InferenceResult<'a>,
+    result: InferenceResult<'_>,
     metadata: InferenceDatabaseInsertMetadata,
 ) {
-    let serialized_input = match serde_json::to_string(&input).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: e.to_string(),
-        })
-    }) {
-        Ok(serialized_input) => serialized_input,
-        Err(_) => {
-            return;
-        }
-    };
     let model_responses: Vec<serde_json::Value> = result.get_serialized_model_inferences();
     // Write the model responses to the ModelInference table
     for response in model_responses {
@@ -518,15 +508,13 @@ async fn write_inference<'a>(
     // Write the inference to the Inference table
     match result {
         InferenceResult::Chat(result) => {
-            let chat_inference =
-                ChatInferenceDatabaseInsert::new(result, serialized_input, metadata);
+            let chat_inference = ChatInferenceDatabaseInsert::new(result, input, metadata);
             let _ = clickhouse_connection_info
                 .write(&[chat_inference], "ChatInference")
                 .await;
         }
         InferenceResult::Json(result) => {
-            let json_inference =
-                JsonInferenceDatabaseInsert::new(result, serialized_input, metadata);
+            let json_inference = JsonInferenceDatabaseInsert::new(result, input, metadata);
             let _ = clickhouse_connection_info
                 .write(&[json_inference], "JsonInference")
                 .await;
@@ -536,14 +524,14 @@ async fn write_inference<'a>(
 
 /// InferenceResponse and InferenceResultChunk determine what gets serialized and sent to the client
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(untagged, rename_all = "snake_case")]
 pub enum InferenceResponse {
     Chat(ChatInferenceResponse),
     Json(JsonInferenceResponse),
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ChatInferenceResponse {
     pub inference_id: Uuid,
     pub episode_id: Uuid,
@@ -552,7 +540,7 @@ pub struct ChatInferenceResponse {
     pub usage: Usage,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct JsonInferenceResponse {
     pub inference_id: Uuid,
     pub episode_id: Uuid,
@@ -562,7 +550,7 @@ pub struct JsonInferenceResponse {
 }
 
 impl InferenceResponse {
-    fn new(inference_result: InferenceResult, episode_id: Uuid, variant_name: String) -> Self {
+    pub fn new(inference_result: InferenceResult, episode_id: Uuid, variant_name: String) -> Self {
         match inference_result {
             InferenceResult::Chat(result) => InferenceResponse::Chat(ChatInferenceResponse {
                 inference_id: result.inference_id,
@@ -578,6 +566,13 @@ impl InferenceResponse {
                 output: result.output,
                 usage: result.usage,
             }),
+        }
+    }
+
+    pub fn inference_id(&self) -> Uuid {
+        match self {
+            InferenceResponse::Chat(c) => c.inference_id,
+            InferenceResponse::Json(j) => j.inference_id,
         }
     }
 }

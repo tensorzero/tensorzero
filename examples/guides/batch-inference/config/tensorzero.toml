@@ -1,0 +1,6 @@
+[functions.generate_haiku]
+type = "chat"
+
+[functions.generate_haiku.variants.gpt_4o_mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"

@@ -174,6 +174,7 @@ pub enum Latency {
     NonStreaming {
         response_time: Duration,
     },
+    Batch,
 }
 
 /// After a ProviderInferenceResponse is returned to the Model,
@@ -310,33 +311,40 @@ pub enum InferenceResultChunk {
 /// For this we convert the InferenceResult into a ChatInferenceDatabaseInsert or JsonInferenceDatabaseInsert and ModelInferenceDatabaseInserts,
 /// which are written to ClickHouse tables of the same name asynchronously.
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ChatInferenceDatabaseInsert {
     pub id: Uuid,
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
-    pub input: String,  // serialized `Input`
-    pub output: String, // serialized `Vec<ContentBlockOutput>`
+    pub input: Input,
+    pub output: Vec<ContentBlockOutput>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub inference_params: InferenceParams,
-    pub processing_time_ms: u32,
+    pub processing_time_ms: Option<u32>,
     pub tags: HashMap<String, String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct JsonInferenceDatabaseInsert {
     pub id: Uuid,
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
-    pub input: String,  // serialized `Input`
-    pub output: String, // serialized `JsonInferenceOutput`
+    pub input: Input,
+    pub output: JsonInferenceOutput,
     pub inference_params: InferenceParams,
-    pub processing_time_ms: u32,
-    pub output_schema: String,
+    pub processing_time_ms: Option<u32>,
+    pub output_schema: Value,
     pub tags: HashMap<String, String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+pub enum InferenceDatabaseInsert {
+    Chat(ChatInferenceDatabaseInsert),
+    Json(JsonInferenceDatabaseInsert),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -350,7 +358,7 @@ pub struct ModelInferenceDatabaseInsert {
     pub output: String,
     pub input_tokens: u32,
     pub output_tokens: u32,
-    pub response_time_ms: u32,
+    pub response_time_ms: Option<u32>,
     pub model_name: String,
     pub model_provider_name: String,
     pub ttft_ms: Option<u32>,
@@ -480,10 +488,13 @@ impl ModelInferenceDatabaseInsert {
                 ttft,
                 response_time,
             } => (
-                response_time.as_millis() as u32,
+                Some(response_time.as_millis() as u32),
                 Some(ttft.as_millis() as u32),
             ),
-            Latency::NonStreaming { response_time } => (response_time.as_millis() as u32, None),
+            Latency::NonStreaming { response_time } => {
+                (Some(response_time.as_millis() as u32), None)
+            }
+            Latency::Batch => (None, None),
         };
         let serialized_input_messages = serialize_or_log(&result.input_messages);
         let serialized_output = serialize_or_log(&result.output);
@@ -660,20 +671,15 @@ pub async fn parse_chat_output(
 impl ChatInferenceDatabaseInsert {
     pub fn new(
         chat_result: ChatInferenceResult,
-        input: String,
+        input: Input,
         metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
-        let processing_time_ms = metadata.processing_time.as_millis() as u32;
+        let processing_time_ms = metadata
+            .processing_time
+            .map(|duration| duration.as_millis() as u32);
 
         let tool_params = metadata.tool_config.map(ToolCallConfigDatabaseInsert::from);
         let inference_params = chat_result.inference_params;
-        let output = serde_json::to_string(&chat_result.content)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!("Failed to serialize output: {}", e),
-                })
-            })
-            .unwrap_or_else(|_| String::new());
 
         Self {
             id: chat_result.inference_id,
@@ -683,7 +689,7 @@ impl ChatInferenceDatabaseInsert {
             input,
             tool_params,
             inference_params,
-            output,
+            output: chat_result.content,
             processing_time_ms,
             tags: metadata.tags,
         }
@@ -693,15 +699,15 @@ impl ChatInferenceDatabaseInsert {
 impl JsonInferenceDatabaseInsert {
     pub fn new(
         json_result: JsonInferenceResult,
-        input: String,
+        input: Input,
         metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
-        let processing_time_ms = metadata.processing_time.as_millis() as u32;
+        let processing_time_ms = metadata
+            .processing_time
+            .map(|duration| duration.as_millis() as u32);
 
         let inference_params = json_result.inference_params;
 
-        let output = serialize_or_log(&json_result.output);
-        let output_schema = serialize_or_log(&json_result.output_schema);
         Self {
             id: json_result.inference_id,
             function_name: metadata.function_name,
@@ -709,9 +715,9 @@ impl JsonInferenceDatabaseInsert {
             episode_id: metadata.episode_id,
             input,
             inference_params,
-            output,
+            output: json_result.output,
             processing_time_ms,
-            output_schema,
+            output_schema: json_result.output_schema,
             tags: metadata.tags,
         }
     }
@@ -860,8 +866,8 @@ pub struct CollectChunksArgs<'a, 'b> {
 
 // Modify the collect_chunks function to accept CollectChunksArgs
 // 'a ends up as static and 'b ends up as stack allocated in the caller (endpoints::inference::create_stream)
-pub async fn collect_chunks<'a, 'b>(
-    args: CollectChunksArgs<'a, 'b>,
+pub async fn collect_chunks<'a>(
+    args: CollectChunksArgs<'a, '_>,
 ) -> Result<InferenceResult<'a>, Error> {
     let CollectChunksArgs {
         value,
@@ -1094,9 +1100,10 @@ mod tests {
     use crate::inference::providers::common::get_temperature_tool_config;
     use crate::jsonschema_util::JSONSchemaFromPath;
     use crate::minijinja_util::TemplateConfig;
-    use crate::tool::{DynamicToolConfig, ToolCallConfig, ToolChoice, ToolConfig};
+    use crate::tool::ToolConfig;
+    use crate::tool::{DynamicToolConfig, ToolChoice};
     use serde_json::json;
-    use std::time::{Duration, Instant};
+    use tokio::time::Instant;
 
     #[tokio::test]
     async fn test_create_chat_inference_response() {

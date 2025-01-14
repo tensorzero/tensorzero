@@ -9,7 +9,7 @@ use tokio::time::{timeout, Duration};
 use crate::embeddings::EmbeddingModelConfig;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::inference::types::{
-    batch::BatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role, Usage,
+    batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role, Usage,
 };
 use crate::model::ModelTable;
 use crate::{
@@ -50,7 +50,7 @@ pub struct FuserConfig {
 }
 
 impl Variant for MixtureOfNConfig {
-    async fn infer<'a, 'request>(
+    async fn infer<'a: 'request, 'request>(
         &'a self,
         input: &Input,
         models: &'request InferenceModels<'a>,
@@ -154,7 +154,7 @@ impl Variant for MixtureOfNConfig {
         _inference_configs: &'a [InferenceConfig<'a, 'a>],
         _clients: &'a InferenceClients<'a>,
         _inference_params: Vec<InferenceParams>,
-    ) -> Result<BatchModelInferenceWithMetadata<'a>, Error> {
+    ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
         Err(ErrorDetails::UnsupportedVariantForBatchInference { variant_name: None }.into())
     }
 }

@@ -12,7 +12,7 @@ pub struct Migration0009<'a> {
     pub clean_start: bool,
 }
 
-impl<'a> Migration for Migration0009<'a> {
+impl Migration for Migration0009<'_> {
     /// Check if you can connect to the database
     /// Then check if the four feedback tables exist
     /// If all of this is OK, then we can apply the migration

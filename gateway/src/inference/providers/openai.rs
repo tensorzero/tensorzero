@@ -8,9 +8,11 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::io::Write;
 use std::time::Duration;
 use tokio::time::Instant;
+use tracing::instrument;
 use url::Url;
 use uuid::Uuid;
 
@@ -18,8 +20,12 @@ use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingR
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
+use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::batch::{
+    ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
+};
 use crate::inference::types::{
-    batch::{BatchProviderInferenceResponse, BatchStatus},
+    batch::{BatchStatus, StartBatchProviderInferenceResponse},
     ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     RequestMessage, Role, Text, TextChunk, Usage,
@@ -113,7 +119,7 @@ impl OpenAICredentials {
 impl InferenceProvider for OpenAIProvider {
     async fn infer<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'a>,
+        request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -187,7 +193,7 @@ impl InferenceProvider for OpenAIProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'a>,
+        request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<
@@ -251,14 +257,18 @@ impl InferenceProvider for OpenAIProvider {
         Ok((chunk, stream, raw_request))
     }
 
+    /// Two parts to starting an OpenAI batch inference:
+    /// 1. Upload the requests to OpenAI as a File
+    /// 2. Start the batch inference
+    ///    We do them in sequence here.
     async fn start_batch_inference<'a>(
         &'a self,
         requests: &'a [ModelInferenceRequest<'_>],
         client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<BatchProviderInferenceResponse, Error> {
+    ) -> Result<StartBatchProviderInferenceResponse, Error> {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let request_url = get_files_url(self.api_base.as_ref())?;
+        let request_url = get_file_url(self.api_base.as_ref(), None)?;
         let inference_ids: Vec<Uuid> = requests.iter().map(|_| Uuid::now_v7()).collect();
         let batch_requests: Result<Vec<OpenAIBatchFileInput>, Error> = requests
             .iter()
@@ -306,6 +316,7 @@ impl InferenceProvider for OpenAIProvider {
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
+        // Actually upload the file to OpenAI
         let res = request_builder.multipart(form).send().await.map_err(|e| {
             Error::new(ErrorDetails::InferenceClient {
                 message: format!("Error sending request to OpenAI: {e}"),
@@ -315,29 +326,31 @@ impl InferenceProvider for OpenAIProvider {
                 raw_response: None,
             })
         })?;
-        let response_text = res.text().await.map_err(|e| {
+        let text = res.text().await.map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
-                message: format!("Error parsing error response: {e}"),
+                message: format!("Error retrieving text response: {e}"),
+                provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: None,
                 raw_response: None,
-                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
-        let response: OpenAIFileResponse = serde_json::from_str(&response_text).map_err(|e| {
+        let response: OpenAIFileResponse = serde_json::from_str(&text).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
-                message: format!("Error parsing JSON response: {e}"),
+                message: format!("Error parsing JSON response: {e}, text: {text}"),
                 raw_request: None,
-                raw_response: Some(response_text.clone()),
+                raw_response: Some(text.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         let file_id = response.id;
         let batch_request = OpenAIBatchRequest::new(&file_id);
+        let raw_request = serde_json::to_string(&batch_request).map_err(|_| Error::new(ErrorDetails::Serialization { message: "Error serializing OpenAI batch request. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string() }))?;
         let request_url = get_batch_url(self.api_base.as_ref())?;
         let mut request_builder = client.post(request_url);
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }
+        // Now let's actually start the batch inference
         let res = request_builder
             .json(&batch_request)
             .send()
@@ -351,30 +364,141 @@ impl InferenceProvider for OpenAIProvider {
                     raw_response: None,
                 })
             })?;
-        let response_text = res.text().await.map_err(|e| {
+        let text = res.text().await.map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
-                message: format!("Error parsing error response: {e}"),
+                message: format!("Error retrieving batch response: {e}"),
                 raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
-
-        let response: OpenAIBatchResponse = serde_json::from_str(&response_text).map_err(|e| {
+        let response: OpenAIBatchResponse = serde_json::from_str(&text).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
-                message: format!("Error parsing JSON response: {e}"),
+                message: format!("Error parsing JSON response: {e}, text: {text}"),
                 raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
-                raw_response: Some(response_text.clone()),
+                raw_response: Some(text.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
-        Ok(BatchProviderInferenceResponse {
+        let batch_params = OpenAIBatchParams {
+            file_id: Cow::Owned(file_id),
+            batch_id: Cow::Owned(response.id),
+        };
+        let batch_params = serde_json::to_value(batch_params).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Error serializing OpenAI batch params: {e}"),
+            })
+        })?;
+        let errors = match response.errors {
+            Some(errors) => errors
+                .data
+                .into_iter()
+                .map(|error| {
+                    serde_json::to_value(&error).map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!("Error serializing batch error: {e}"),
+                        })
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+            None => vec![],
+        };
+        Ok(StartBatchProviderInferenceResponse {
             batch_id: Uuid::now_v7(),
             inference_ids,
-            batch_params: json!({"file_id": file_id, "batch_id": response.id}),
+            batch_params,
             raw_requests,
+            raw_request,
+            raw_response: text,
             status: BatchStatus::Pending,
+            errors,
         })
+    }
+
+    #[instrument(skip_all, fields(batch_request = ?batch_request))]
+    async fn poll_batch_inference<'a>(
+        &'a self,
+        batch_request: &'a BatchRequestRow<'a>,
+        http_client: &'a reqwest::Client,
+        dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<PollBatchInferenceResponse, Error> {
+        let batch_params = OpenAIBatchParams::from_ref(&batch_request.batch_params)?;
+        let mut request_url = get_batch_url(self.api_base.as_ref())?;
+        request_url
+            .path_segments_mut()
+            .map_err(|_| {
+                Error::new(ErrorDetails::Inference {
+                    message: "Failed to get mutable path segments".to_string(),
+                })
+            })?
+            .push(&batch_params.batch_id);
+        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let raw_request = request_url.to_string();
+        let mut request_builder = http_client
+            .get(request_url)
+            .header("Content-Type", "application/json");
+        if let Some(api_key) = api_key {
+            request_builder = request_builder.bearer_auth(api_key.expose_secret());
+        }
+        let res = request_builder.send().await.map_err(|e| {
+            Error::new(ErrorDetails::InferenceClient {
+                message: format!("Error sending request to OpenAI: {e}"),
+                status_code: e.status(),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
+                raw_response: None,
+            })
+        })?;
+        let text = res.text().await.map_err(|e| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: format!("Error parsing JSON response: {e}"),
+                raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
+                raw_response: None,
+                provider_type: PROVIDER_TYPE.to_string(),
+            })
+        })?;
+        let response: OpenAIBatchResponse = serde_json::from_str(&text).map_err(|e| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: format!("Error parsing JSON response: {e}."),
+                raw_request: Some(serde_json::to_string(&batch_request).unwrap_or_default()),
+                raw_response: Some(text.clone()),
+                provider_type: PROVIDER_TYPE.to_string(),
+            })
+        })?;
+        let status: BatchStatus = response.status.into();
+        let raw_response = text;
+        match status {
+            BatchStatus::Pending => Ok(PollBatchInferenceResponse::Pending {
+                raw_request,
+                raw_response,
+            }),
+            BatchStatus::Completed => {
+                let output_file_id = response.output_file_id.as_ref().ok_or_else(|| {
+                    Error::new(ErrorDetails::InferenceServer {
+                        message: "Output file ID is missing".to_string(),
+                        raw_request: Some(
+                            serde_json::to_string(&batch_request).unwrap_or_default(),
+                        ),
+                        raw_response: Some(raw_response.clone()),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    })
+                })?;
+                let response = self
+                    .collect_finished_batch(
+                        output_file_id,
+                        http_client,
+                        dynamic_api_keys,
+                        raw_request,
+                        raw_response,
+                    )
+                    .await?;
+                Ok(PollBatchInferenceResponse::Completed(response))
+            }
+            BatchStatus::Failed => Ok(PollBatchInferenceResponse::Failed {
+                raw_request,
+                raw_response,
+            }),
+        }
     }
 }
 
@@ -503,6 +627,98 @@ pub fn stream_openai(
     }
 }
 
+impl OpenAIProvider {
+    // Once a batch has been completed we need to retrieve the results from OpenAI using the files API
+    #[instrument(skip_all, fields(file_id = file_id))]
+    async fn collect_finished_batch(
+        &self,
+        file_id: &str,
+        client: &reqwest::Client,
+        credentials: &InferenceCredentials,
+        raw_request: String,
+        raw_response: String,
+    ) -> Result<ProviderBatchInferenceResponse, Error> {
+        let file_url = get_file_url(self.api_base.as_ref(), Some(file_id))?;
+        let api_key = self.credentials.get_api_key(credentials)?;
+        let mut request_builder = client.get(file_url);
+        if let Some(api_key) = api_key {
+            request_builder = request_builder.bearer_auth(api_key.expose_secret());
+        }
+        let res = request_builder.send().await.map_err(|e| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: format!(
+                    "Error downloading batch results from OpenAI for file {file_id}: {e}"
+                ),
+                raw_request: None,
+                raw_response: None,
+                provider_type: PROVIDER_TYPE.to_string(),
+            })
+        })?;
+
+        if res.status() != StatusCode::OK {
+            return Err(handle_openai_error(
+                res.status(),
+                &res.text().await.map_err(|e| {
+                    Error::new(ErrorDetails::InferenceServer {
+                        message: format!("Error parsing error response for file {file_id}: {e}"),
+                        raw_request: None,
+                        raw_response: None,
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    })
+                })?,
+                PROVIDER_TYPE,
+            ));
+        }
+
+        let bytes = res.bytes().await.map_err(|e| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: format!("Error reading batch results response for file {file_id}: {e}"),
+                raw_request: None,
+                raw_response: None,
+                provider_type: PROVIDER_TYPE.to_string(),
+            })
+        })?;
+        let mut elements: HashMap<Uuid, ProviderBatchInferenceOutput> = HashMap::new();
+        let text = std::str::from_utf8(&bytes).map_err(|e| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: format!("Error parsing batch results response for file {file_id}: {e}"),
+                raw_request: None,
+                raw_response: None,
+                provider_type: PROVIDER_TYPE.to_string(),
+            })
+        })?;
+        for line in text.lines() {
+            let row = match serde_json::from_str::<OpenAIBatchFileRow>(line) {
+                Ok(row) => row,
+                Err(e) => {
+                    // Construct error for logging but don't return it
+                    let _ = Error::new(ErrorDetails::InferenceServer {
+                        message: format!("Error parsing batch results row for file {file_id}: {e}"),
+                        raw_request: None,
+                        raw_response: Some(line.to_string()),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    });
+                    continue;
+                }
+            };
+            let output = match ProviderBatchInferenceOutput::try_from(row) {
+                Ok(output) => output,
+                Err(_) => {
+                    // Construct error for logging but don't return it
+                    continue;
+                }
+            };
+            elements.insert(output.id, output);
+        }
+
+        Ok(ProviderBatchInferenceResponse {
+            elements,
+            raw_request,
+            raw_response,
+        })
+    }
+}
+
 pub(super) fn get_chat_url(base_url: Option<&Url>) -> Result<Url, Error> {
     let base_url = base_url.unwrap_or(&OPENAI_DEFAULT_BASE_URL);
     let mut url = base_url.clone();
@@ -516,13 +732,18 @@ pub(super) fn get_chat_url(base_url: Option<&Url>) -> Result<Url, Error> {
     })
 }
 
-fn get_files_url(base_url: Option<&Url>) -> Result<Url, Error> {
+fn get_file_url(base_url: Option<&Url>, file_id: Option<&str>) -> Result<Url, Error> {
     let base_url = base_url.unwrap_or(&OPENAI_DEFAULT_BASE_URL);
     let mut url = base_url.clone();
     if !url.path().ends_with('/') {
         url.set_path(&format!("{}/", url.path()));
     }
-    url.join("files").map_err(|e| {
+    let path = if let Some(id) = file_id {
+        format!("files/{}/content", id)
+    } else {
+        "files".to_string()
+    };
+    url.join(&path).map_err(|e| {
         Error::new(ErrorDetails::InvalidBaseUrl {
             message: e.to_string(),
         })
@@ -870,6 +1091,48 @@ impl<'a> From<&'a ToolConfig> for OpenAITool<'a> {
             },
             strict: tool.strict(),
         }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct OpenAIBatchParams<'a> {
+    file_id: Cow<'a, str>,
+    batch_id: Cow<'a, str>,
+}
+
+impl<'a> OpenAIBatchParams<'a> {
+    #[instrument(name = "OpenAIBatchParams::from_ref", skip_all, fields(%value))]
+    fn from_ref(value: &'a Value) -> Result<Self, Error> {
+        let file_id = value
+            .get("file_id")
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::InvalidBatchParams {
+                    message: "Missing file_id in batch params".to_string(),
+                })
+            })?
+            .as_str()
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::InvalidBatchParams {
+                    message: "file_id must be a string".to_string(),
+                })
+            })?;
+        let batch_id = value
+            .get("batch_id")
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::InvalidBatchParams {
+                    message: "Missing batch_id in batch params".to_string(),
+                })
+            })?
+            .as_str()
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::InvalidBatchParams {
+                    message: "batch_id must be a string".to_string(),
+                })
+            })?;
+        Ok(Self {
+            file_id: Cow::Borrowed(file_id),
+            batch_id: Cow::Borrowed(batch_id),
+        })
     }
 }
 
@@ -1453,11 +1716,11 @@ struct OpenAIBatchResponse {
     id: String,
     // object: String,
     // endpoint: String,
-    // errors: OpenAIBatchErrors,
+    errors: Option<OpenAIBatchErrors>,
     // input_file_id: String,
     // completion_window: String,
-    // status: String,
-    // output_file_id: String,
+    status: OpenAIBatchStatus,
+    output_file_id: Option<String>,
     // error_file_id: String,
     // created_at: i64,
     // in_progress_at: Option<i64>,
@@ -1473,17 +1736,103 @@ struct OpenAIBatchResponse {
 }
 
 #[derive(Debug, Deserialize)]
-struct OpenAIBatchErrors {
-    // object: String,
-    // data: Vec<OpenAIBatchError>,
+#[serde(rename_all = "snake_case")]
+enum OpenAIBatchStatus {
+    Validating,
+    Failed,
+    InProgress,
+    Finalizing,
+    Completed,
+    Expired,
+    Cancelling,
+    Cancelled,
+}
+
+impl From<OpenAIBatchStatus> for BatchStatus {
+    fn from(status: OpenAIBatchStatus) -> Self {
+        match status {
+            OpenAIBatchStatus::Completed => BatchStatus::Completed,
+            OpenAIBatchStatus::Validating
+            | OpenAIBatchStatus::InProgress
+            | OpenAIBatchStatus::Finalizing => BatchStatus::Pending,
+            OpenAIBatchStatus::Failed
+            | OpenAIBatchStatus::Expired
+            | OpenAIBatchStatus::Cancelling
+            | OpenAIBatchStatus::Cancelled => BatchStatus::Failed,
+        }
+    }
+}
+
+impl TryFrom<OpenAIBatchFileRow> for ProviderBatchInferenceOutput {
+    type Error = Error;
+
+    fn try_from(row: OpenAIBatchFileRow) -> Result<Self, Self::Error> {
+        let mut response = row.response.body;
+        // Validate we have exactly one choice
+        if response.choices.len() != 1 {
+            return Err(ErrorDetails::InferenceServer {
+                message: format!(
+                    "Response has invalid number of choices: {}. Expected 1.",
+                    response.choices.len()
+                ),
+                raw_request: None,
+                raw_response: Some(serde_json::to_string(&response).unwrap_or_default()),
+                provider_type: PROVIDER_TYPE.to_string(),
+            }
+            .into());
+        }
+
+        // Convert response to raw string for storage
+        let raw_response = serde_json::to_string(&response).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Error parsing response: {e}"),
+            })
+        })?;
+
+        // Extract the message from choices
+        let message = response
+            .choices
+            .pop()
+            .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
+                message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
+                raw_request: None,
+                raw_response: Some(raw_response.clone()),
+                provider_type: PROVIDER_TYPE.to_string(),
+            }))?
+            .message;
+
+        // Convert message content to ContentBlocks
+        let mut content: Vec<ContentBlock> = Vec::new();
+        if let Some(text) = message.content {
+            content.push(text.into());
+        }
+        if let Some(tool_calls) = message.tool_calls {
+            for tool_call in tool_calls {
+                content.push(ContentBlock::ToolCall(tool_call.into()));
+            }
+        }
+
+        Ok(Self {
+            id: row.inference_id,
+            output: content,
+            raw_response,
+            usage: response.usage.into(),
+        })
+    }
 }
 
 #[derive(Debug, Deserialize)]
+struct OpenAIBatchErrors {
+    // object: String,
+    data: Vec<OpenAIBatchError>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 struct OpenAIBatchError {
-    // code: String,
-    // message: String,
-    // param: Option<String>,
-    // line: Option<i32>,
+    code: String,
+    message: String,
+    param: Option<String>,
+    line: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1491,6 +1840,20 @@ struct OpenAIBatchRequestCounts {
     // total: u32,
     // completed: u32,
     // failed: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIBatchFileRow {
+    #[serde(rename = "custom_id")]
+    inference_id: Uuid,
+    response: OpenAIBatchFileResponse,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIBatchFileResponse {
+    // status_code: u16,
+    // request_id: String,
+    body: OpenAIResponse,
 }
 
 #[cfg(test)]
@@ -2702,6 +3065,66 @@ mod tests {
         let result = tensorzero_to_openai_system_message(system, &json_mode, &messages);
         assert_eq!(result, expected);
     }
+
+    #[test]
+    fn test_create_file_url() {
+        use url::Url;
+
+        // Test Case 1: Base URL without trailing slash
+        let base_url = Url::parse("https://api.openai.com/v1").unwrap();
+        let file_id = Some("file123");
+        let result = get_file_url(Some(&base_url), file_id).unwrap();
+        assert_eq!(
+            result.as_str(),
+            "https://api.openai.com/v1/files/file123/content"
+        );
+
+        // Test Case 2: Base URL with trailing slash
+        let base_url = Url::parse("https://api.openai.com/v1/").unwrap();
+        let file_id = Some("file456");
+        let result = get_file_url(Some(&base_url), file_id).unwrap();
+        assert_eq!(
+            result.as_str(),
+            "https://api.openai.com/v1/files/file456/content"
+        );
+
+        // Test Case 3: Base URL with custom domain
+        let base_url = Url::parse("https://custom-openai.example.com").unwrap();
+        let file_id = Some("file789");
+        let result = get_file_url(Some(&base_url), file_id).unwrap();
+        assert_eq!(
+            result.as_str(),
+            "https://custom-openai.example.com/files/file789/content"
+        );
+
+        // Test Case 4: None base URL (should use default)
+        let file_id = Some("file101");
+        let result = get_file_url(None, file_id).unwrap();
+        assert_eq!(
+            result.as_str(),
+            "https://api.openai.com/v1/files/file101/content"
+        );
+
+        // Test Case 5: Base URL without trailing slash, no file ID
+        let base_url = Url::parse("https://api.openai.com/v1").unwrap();
+        let result = get_file_url(Some(&base_url), None).unwrap();
+        assert_eq!(result.as_str(), "https://api.openai.com/v1/files");
+
+        // Test Case 6: Base URL with trailing slash, no file ID
+        let base_url = Url::parse("https://api.openai.com/v1/").unwrap();
+        let result = get_file_url(Some(&base_url), None).unwrap();
+        assert_eq!(result.as_str(), "https://api.openai.com/v1/files");
+
+        // Test Case 7: Custom domain base URL, no file ID
+        let base_url = Url::parse("https://custom-openai.example.com").unwrap();
+        let result = get_file_url(Some(&base_url), None).unwrap();
+        assert_eq!(result.as_str(), "https://custom-openai.example.com/files");
+
+        // Test Case 8: None base URL (default), no file ID
+        let result = get_file_url(None, None).unwrap();
+        assert_eq!(result.as_str(), "https://api.openai.com/v1/files");
+    }
+
     #[test]
     fn test_try_from_openai_credentials() {
         // Test Static credentials

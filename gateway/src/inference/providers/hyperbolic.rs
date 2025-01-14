@@ -1,7 +1,8 @@
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
+use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::{
-    batch::BatchProviderInferenceResponse, ContentBlock, Latency, ModelInferenceRequest,
+    batch::StartBatchProviderInferenceResponse, ContentBlock, Latency, ModelInferenceRequest,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
 };
 use crate::model::{Credential, CredentialLocation};
@@ -105,7 +106,7 @@ impl HyperbolicCredentials {
 impl InferenceProvider for HyperbolicProvider {
     async fn infer<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'a>,
+        request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -179,7 +180,7 @@ impl InferenceProvider for HyperbolicProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'a>,
+        request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<
@@ -236,10 +237,22 @@ impl InferenceProvider for HyperbolicProvider {
 
     async fn start_batch_inference<'a>(
         &'a self,
-        _requests: &'a [ModelInferenceRequest<'a>],
+        _requests: &'a [ModelInferenceRequest<'_>],
         _client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<BatchProviderInferenceResponse, Error> {
+    ) -> Result<StartBatchProviderInferenceResponse, Error> {
+        Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
+            provider_type: "Hyperbolic".to_string(),
+        }
+        .into())
+    }
+
+    async fn poll_batch_inference<'a>(
+        &'a self,
+        _batch_request: &'a BatchRequestRow<'a>,
+        _http_client: &'a reqwest::Client,
+        _dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<PollBatchInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
             provider_type: PROVIDER_TYPE.to_string(),
         }
