@@ -49,9 +49,9 @@ const PROVIDER_TYPE: &str = "openai";
 
 #[derive(Debug)]
 pub struct OpenAIProvider {
-    pub model_name: String,
-    pub api_base: Option<Url>,
-    pub credentials: OpenAICredentials,
+    model_name: String,
+    api_base: Option<Url>,
+    credentials: OpenAICredentials,
 }
 
 impl OpenAIProvider {

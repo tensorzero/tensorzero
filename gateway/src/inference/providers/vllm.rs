@@ -28,9 +28,9 @@ const PROVIDER_TYPE: &str = "vllm";
 
 #[derive(Debug)]
 pub struct VLLMProvider {
-    pub model_name: String,
-    pub api_base: Url,
-    pub credentials: VLLMCredentials,
+    model_name: String,
+    api_base: Url,
+    credentials: VLLMCredentials,
 }
 
 impl VLLMProvider {

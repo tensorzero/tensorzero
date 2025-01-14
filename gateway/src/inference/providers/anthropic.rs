@@ -43,8 +43,8 @@ fn default_api_key_location() -> CredentialLocation {
 
 #[derive(Debug)]
 pub struct AnthropicProvider {
-    pub model_name: String,
-    pub credentials: AnthropicCredentials,
+    model_name: String,
+    credentials: AnthropicCredentials,
 }
 
 impl AnthropicProvider {

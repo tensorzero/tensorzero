@@ -48,8 +48,8 @@ const PROVIDER_TYPE: &str = "mistral";
 
 #[derive(Debug)]
 pub struct MistralProvider {
-    pub model_name: String,
-    pub credentials: MistralCredentials,
+    model_name: String,
+    credentials: MistralCredentials,
 }
 
 impl MistralProvider {

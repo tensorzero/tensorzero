@@ -36,11 +36,10 @@ const PROVIDER_TYPE: &str = "gcp_vertex_anthropic";
 
 #[derive(Debug)]
 pub struct GCPVertexAnthropicProvider {
-    pub request_url: String,
-    pub streaming_request_url: String,
-    pub audience: String,
-    pub credentials: GCPVertexCredentials,
-    pub model_id: String,
+    request_url: String,
+    streaming_request_url: String,
+    audience: String,
+    credentials: GCPVertexCredentials,
 }
 
 impl GCPVertexAnthropicProvider {
@@ -63,7 +62,6 @@ impl GCPVertexAnthropicProvider {
             streaming_request_url,
             audience,
             credentials: provider_credentials,
-            model_id,
         })
     }
 }

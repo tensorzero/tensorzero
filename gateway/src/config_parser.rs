@@ -610,12 +610,7 @@ mod tests {
         assert_eq!(embedding_model.routing, vec!["openai"]);
         assert_eq!(embedding_model.providers.len(), 1);
         let provider = embedding_model.providers.get("openai").unwrap();
-        match provider {
-            EmbeddingProviderConfig::OpenAI(openai_config) => {
-                assert_eq!(openai_config.model_name, "text-embedding-3-small");
-            }
-            _ => panic!("Expected an OpenAI provider"),
-        }
+        assert!(matches!(provider, EmbeddingProviderConfig::OpenAI(_)));
     }
 
     /// Ensure that the config parsing correctly handles the `gateway.bind_address` field

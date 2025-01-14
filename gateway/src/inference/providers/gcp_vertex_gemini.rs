@@ -33,11 +33,11 @@ const PROVIDER_TYPE: &str = "gcp_vertex_gemini";
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
 #[derive(Debug)]
 pub struct GCPVertexGeminiProvider {
-    pub request_url: String,
-    pub streaming_request_url: String,
-    pub audience: String,
-    pub credentials: GCPVertexCredentials,
-    pub model_id: String,
+    request_url: String,
+    streaming_request_url: String,
+    audience: String,
+    credentials: GCPVertexCredentials,
+    model_id: String,
 }
 
 impl GCPVertexGeminiProvider {

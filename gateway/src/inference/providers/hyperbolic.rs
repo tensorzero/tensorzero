@@ -37,8 +37,8 @@ const PROVIDER_TYPE: &str = "hyperbolic";
 
 #[derive(Debug)]
 pub struct HyperbolicProvider {
-    pub model_name: String,
-    pub credentials: HyperbolicCredentials,
+    model_name: String,
+    credentials: HyperbolicCredentials,
 }
 
 impl HyperbolicProvider {
