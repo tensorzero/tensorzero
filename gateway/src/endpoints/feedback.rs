@@ -170,21 +170,21 @@ fn get_feedback_metadata<'a>(
     }
     let metric = config.get_metric(metric_name);
     let feedback_type = match metric.as_ref() {
-        Ok(metric) => {
+        Some(metric) => {
             let feedback_type: FeedbackType = (&metric.r#type).into();
             Ok(feedback_type)
         }
-        Err(e) => match metric_name {
+        None => match metric_name {
             "comment" => Ok(FeedbackType::Comment),
             "demonstration" => Ok(FeedbackType::Demonstration),
-            _ => Err(Error::new(ErrorDetails::InvalidRequest {
-                message: e.to_string(),
+            _ => Err(Error::new(ErrorDetails::UnknownMetric {
+                name: metric_name.to_string(),
             })),
         },
     }?;
     let feedback_level = match metric {
-        Ok(metric) => Ok(&metric.level),
-        Err(_) => match feedback_type {
+        Some(metric) => Ok(&metric.level),
+        None => match feedback_type {
             FeedbackType::Demonstration => Ok(&MetricConfigLevel::Inference),
             _ => match (inference_id, episode_id) {
                 (Some(_), None) => Ok(&MetricConfigLevel::Inference),
@@ -284,7 +284,8 @@ async fn write_float(
         tags,
         ..
     } = params;
-    let metric_config: &crate::config_parser::MetricConfig = config.get_metric(metric_name)?;
+    let metric_config: &crate::config_parser::MetricConfig =
+        config.get_metric_or_err(metric_name)?;
     // Verify that the function name exists.
     let _ = throttled_get_function_name(&connection_info, &metric_config.level, &target_id).await?;
 
@@ -318,7 +319,7 @@ async fn write_boolean(
         tags,
         ..
     } = params;
-    let metric_config = config.get_metric(metric_name)?;
+    let metric_config = config.get_metric_or_err(metric_name)?;
     // Verify that the function name exists.
     let _ = throttled_get_function_name(&connection_info, &metric_config.level, &target_id).await?;
     let value = value.as_bool().ok_or_else(|| {
@@ -738,6 +739,31 @@ mod tests {
             details,
             ErrorDetails::InvalidRequest {
                 message: "Both episode_id and inference_id cannot be provided".to_string(),
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_feedback_missing_metric() {
+        let metrics = HashMap::new();
+        let config = Config {
+            gateway: GatewayConfig::default(),
+            models: ModelTable::default(),
+            embedding_models: HashMap::new(),
+            metrics,
+            functions: HashMap::new(),
+            tools: HashMap::new(),
+            templates: TemplateConfig::new(),
+        };
+        let inference_id = Uuid::now_v7();
+        let metadata_err =
+            get_feedback_metadata(&config, "missing_metric_name", None, Some(inference_id))
+                .unwrap_err();
+        let details = metadata_err.get_owned_details();
+        assert_eq!(
+            details,
+            ErrorDetails::UnknownMetric {
+                name: "missing_metric_name".to_string(),
             }
         );
     }
