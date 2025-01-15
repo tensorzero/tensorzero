@@ -13,6 +13,7 @@ pub mod hyperbolic;
 pub mod mistral;
 pub mod openai;
 pub mod provider_trait;
+pub mod sglang;
 pub mod tgi;
 pub mod together;
 pub mod vllm;
