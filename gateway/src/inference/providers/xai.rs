@@ -112,7 +112,7 @@ impl InferenceProvider for XAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = XAIRequest::new(&self.model_name, request)?;
-        let request_url = get_chat_url(Some(&XAI_DEFAULT_BASE_URL))?;
+        let request_url = get_chat_url(&XAI_DEFAULT_BASE_URL)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let request_builder = http_client
@@ -200,7 +200,7 @@ impl InferenceProvider for XAIProvider {
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
-        let request_url = get_chat_url(Some(&XAI_DEFAULT_BASE_URL))?;
+        let request_url = get_chat_url(&XAI_DEFAULT_BASE_URL)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let event_source = http_client

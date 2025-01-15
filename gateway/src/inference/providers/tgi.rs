@@ -118,7 +118,7 @@ impl InferenceProvider for TGIProvider {
         // TGI doesn't care about this field, so we can hardcode it to "tgi"
         let model_name = PROVIDER_TYPE.to_string();
         let request_body = TGIRequest::new(&model_name, request)?;
-        let request_url = get_chat_url(Some(&self.api_base))?;
+        let request_url = get_chat_url(&self.api_base)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
 
@@ -218,7 +218,7 @@ impl InferenceProvider for TGIProvider {
                 raw_response: None,
             })
         })?;
-        let request_url = get_chat_url(Some(&self.api_base))?;
+        let request_url = get_chat_url(&self.api_base)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut request_builder = http_client
