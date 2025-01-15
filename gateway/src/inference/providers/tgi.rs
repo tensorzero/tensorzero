@@ -8,7 +8,7 @@
 /// Third, TGI doesn't support tool responses being sent back at all.
 /// Fourth, TGI only supports JSON mode through a tool call. Luckily, we do this out of the box with `implicit_tool` as the json mode
 ///
-/// In light of this, we have decided to not explictly support tool calling for TGI and only support JSON mode via `implicit_tool`.
+/// In light of this, we have decided to not explicitly support tool calling for TGI and only support JSON mode via `implicit_tool`.
 /// Our implementation currently allows you to use a tool in TGI (nonstreaming), but YMMV.
 use futures::{Stream, StreamExt};
 use reqwest::StatusCode;
