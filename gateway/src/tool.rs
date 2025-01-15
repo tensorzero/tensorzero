@@ -817,7 +817,7 @@ mod tests {
 
         // Bad name, good arguments (both not set since the name is invalid and we can't be sure what tool this goes to)
         let tool_call = ToolCall {
-            name: "get_weather".to_string(),
+            name: "not_get_weather".to_string(),
             arguments: "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}".to_string(),
             id: "321".to_string(),
         };
@@ -825,7 +825,7 @@ mod tests {
         assert_eq!(tool_call_output.name, None);
         assert_eq!(tool_call_output.arguments, None);
         assert_eq!(tool_call_output.id, "321");
-        assert_eq!(tool_call_output.raw_name, "get_weather");
+        assert_eq!(tool_call_output.raw_name, "not_get_weather");
         assert_eq!(
             tool_call_output.raw_arguments,
             "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}"
