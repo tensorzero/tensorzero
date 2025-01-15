@@ -1029,7 +1029,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
         "params": {
@@ -1150,7 +1150,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital city of Japan?"}]
+                "content": [{"type": "text", "value": "What is the name of the capital city of Japan?"}]
             }
         ]
     });
@@ -1264,7 +1264,9 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the capital city of Japan?".to_string().into()],
+        content: vec!["What is the name of the capital city of Japan?"
+            .to_string()
+            .into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
