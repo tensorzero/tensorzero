@@ -15,29 +15,29 @@ async fn get_providers() -> E2ETestProviders {
 
     let standard_providers = vec![E2ETestProvider {
         variant_name: "anthropic".to_string(),
-        model_name: "claude-3-haiku-20240307-anthropic".to_string(),
-        model_provider_name: "anthropic".to_string(),
+        model_name: "claude-3-haiku-20240307-anthropic".into(),
+        model_provider_name: "anthropic".into(),
         credentials: HashMap::new(),
     }];
 
     let inference_params_providers = vec![E2ETestProvider {
         variant_name: "anthropic-dynamic".to_string(),
-        model_name: "claude-3-haiku-20240307-anthropic-dynamic".to_string(),
-        model_provider_name: "anthropic".to_string(),
+        model_name: "claude-3-haiku-20240307-anthropic-dynamic".into(),
+        model_provider_name: "anthropic".into(),
         credentials,
     }];
 
     let json_providers = vec![
         E2ETestProvider {
             variant_name: "anthropic".to_string(),
-            model_name: "claude-3-haiku-20240307-anthropic".to_string(),
-            model_provider_name: "anthropic".to_string(),
+            model_name: "claude-3-haiku-20240307-anthropic".into(),
+            model_provider_name: "anthropic".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             variant_name: "anthropic-implicit".to_string(),
-            model_name: "claude-3-haiku-20240307-anthropic".to_string(),
-            model_provider_name: "anthropic".to_string(),
+            model_name: "claude-3-haiku-20240307-anthropic".into(),
+            model_provider_name: "anthropic".into(),
             credentials: HashMap::new(),
         },
     ];
@@ -45,8 +45,8 @@ async fn get_providers() -> E2ETestProviders {
     #[cfg(feature = "e2e_tests")]
     let shorthand_providers = vec![E2ETestProvider {
         variant_name: "anthropic-shorthand".to_string(),
-        model_name: "anthropic::claude-3-haiku-20240307".to_string(),
-        model_provider_name: "anthropic".to_string(),
+        model_name: "anthropic::claude-3-haiku-20240307".into(),
+        model_provider_name: "anthropic".into(),
         credentials: HashMap::new(),
     }];
 

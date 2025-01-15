@@ -11,7 +11,7 @@ describe("get_fine_tuned_model_config", () => {
           providers: {
             "claude-2": {
               type: "anthropic",
-              model_name: "claude-2",
+              model_name: "claude-2".into(),
             },
           },
         },

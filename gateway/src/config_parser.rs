@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tracing::instrument;
 
 use crate::embeddings::EmbeddingModelConfig;
@@ -23,10 +24,10 @@ use crate::variant::{Variant, VariantConfig};
 pub struct Config<'c> {
     pub gateway: GatewayConfig,
     pub models: ModelTable, // model name => model config
-    pub embedding_models: HashMap<String, EmbeddingModelConfig>, // embedding model name => embedding model config
-    pub functions: HashMap<String, FunctionConfig>,              // function name => function config
-    pub metrics: HashMap<String, MetricConfig>,                  // metric name => metric config
-    pub tools: HashMap<String, StaticToolConfig>,                // tool name => tool config
+    pub embedding_models: HashMap<Arc<str>, EmbeddingModelConfig>, // embedding model name => embedding model config
+    pub functions: HashMap<String, FunctionConfig>, // function name => function config
+    pub metrics: HashMap<String, MetricConfig>,     // metric name => metric config
+    pub tools: HashMap<String, StaticToolConfig>,   // tool name => tool config
     pub templates: TemplateConfig<'c>,
 }
 
@@ -243,7 +244,7 @@ impl<'c> Config<'c> {
     }
 
     /// Get a model by name
-    pub fn get_model<'a>(&'a self, model_name: &str) -> Result<&'a ModelConfig, Error> {
+    pub fn get_model<'a>(&'a self, model_name: &Arc<str>) -> Result<&'a ModelConfig, Error> {
         self.models.get(model_name).ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: model_name.to_string(),
@@ -287,7 +288,7 @@ struct UninitializedConfig {
     #[serde(default)]
     pub models: ModelTable, // model name => model config
     #[serde(default)]
-    pub embedding_models: HashMap<String, EmbeddingModelConfig>, // embedding model name => embedding model config
+    pub embedding_models: HashMap<Arc<str>, EmbeddingModelConfig>, // embedding model name => embedding model config
     pub functions: HashMap<String, UninitializedFunctionConfig>, // function name => function config
     #[serde(default)]
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
@@ -612,7 +613,7 @@ mod tests {
             .embedding_models
             .get("text-embedding-3-small")
             .unwrap();
-        assert_eq!(embedding_model.routing, vec!["openai"]);
+        assert_eq!(embedding_model.routing, vec!["openai".into()]);
         assert_eq!(embedding_model.providers.len(), 1);
         let provider = embedding_model.providers.get("openai").unwrap();
         assert!(matches!(provider, EmbeddingProviderConfig::OpenAI(_)));
