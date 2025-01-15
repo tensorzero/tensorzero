@@ -1,4 +1,4 @@
-import z from "node_modules/zod/lib";
+import z from "zod";
 import type { TableBounds } from "./common";
 import {
   contentBlockOutputSchema,
