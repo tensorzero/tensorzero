@@ -328,13 +328,13 @@ impl DiclConfig {
         };
 
         // Embed the input via an API request
-        let embedding_reponse = embedding_model
+        let embedding_response = embedding_model
             .embed(&embedding_request, clients.http_client, clients.credentials)
             .await?;
 
         // Wrap the embedding in a response with metadata
         let embedding_response_with_metadata =
-            EmbeddingResponseWithMetadata::new(embedding_reponse, &self.embedding_model);
+            EmbeddingResponseWithMetadata::new(embedding_response, &self.embedding_model);
 
         // Format the embedding as a string for ClickHouse
         let formatted_embedding = format!(
