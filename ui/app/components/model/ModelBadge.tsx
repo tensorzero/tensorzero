@@ -84,6 +84,12 @@ function formatProvider(provider: ProviderType): {
         className:
           "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
       };
+    case "sglang":
+      return {
+        name: "SGLang",
+        className:
+          "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300",
+      };
     case "tgi":
       return {
         name: "TGI",
