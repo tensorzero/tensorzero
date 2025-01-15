@@ -1,4 +1,4 @@
-import type { Control } from "react-hook-form";
+import { useWatch, useFormContext, type Control } from "react-hook-form";
 import type { SFTFormValues } from "./types";
 import { Config } from "~/utils/config";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
@@ -12,6 +12,9 @@ import {
 import { Skeleton } from "~/components/ui/skeleton";
 import { Input } from "~/components/ui/input";
 import { MetricBadges } from "~/components/metric/MetricBadges";
+import { useEffect, useMemo } from "react";
+import { useFetcher } from "react-router";
+import type { MetricsWithFeedbackData } from "~/utils/clickhouse/feedback";
 
 type MetricSelectorProps = {
   control: Control<SFTFormValues>;
@@ -26,6 +29,37 @@ export function MetricSelector({
   curatedInferenceCount,
   config,
 }: MetricSelectorProps) {
+  const metricsFetcher = useFetcher<MetricsWithFeedbackData>();
+  const { getValues, setValue } = useFormContext<SFTFormValues>();
+
+  const functionValue = useWatch({
+    control,
+    name: "function",
+  });
+
+  useEffect(() => {
+    if (functionValue) {
+      metricsFetcher.load(
+        `/api/metrics/with_feedback?function=${encodeURIComponent(functionValue)}`,
+      );
+    }
+  }, [functionValue]);
+
+  const validMetrics = useMemo(() => {
+    if (!metricsFetcher.data) return new Set<string>();
+    return new Set(metricsFetcher.data.metrics.map((m) => m.metric_name));
+  }, [metricsFetcher.data]);
+
+  const isLoading = metricsFetcher.state === "loading";
+
+  // Reset metric value if the selected function does not have the previously selected metric
+  useEffect(() => {
+    const metricValue = getValues("metric");
+    if (functionValue && metricValue && !validMetrics.has(metricValue)) {
+      setValue("metric", null);
+    }
+  }, [functionValue, validMetrics, getValues, setValue]);
+
   return (
     <FormField
       control={control}
@@ -41,9 +75,14 @@ export function MetricSelector({
                   field.onChange(metricValue);
                 }}
                 value={field.value ?? "none"}
+                disabled={!functionValue || isLoading}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a metric" />
+                  <SelectValue
+                    placeholder={
+                      isLoading ? "Loading metrics..." : "Select a metric"
+                    }
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">
@@ -51,16 +90,29 @@ export function MetricSelector({
                       <span>None</span>
                     </div>
                   </SelectItem>
-                  {Object.entries(config.metrics).map(([name, metric]) => (
-                    <SelectItem key={name} value={name}>
-                      <div className="flex w-full items-center justify-between">
-                        <span>{name}</span>
-                        <div className="ml-2">
-                          <MetricBadges metric={metric} />
-                        </div>
-                      </div>
-                    </SelectItem>
-                  ))}
+                  {Object.entries(config.metrics)
+                    .filter(([name]) => validMetrics.has(name))
+                    .map(([name, metric]) => {
+                      const metricFeedback = metricsFetcher.data?.metrics.find(
+                        (m) => m.metric_name === name,
+                      );
+
+                      return (
+                        <SelectItem key={name} value={name}>
+                          <div className="flex w-full items-center justify-between">
+                            <span>{name}</span>
+                            <div className="ml-2 flex items-center gap-2">
+                              {metricFeedback && (
+                                <span className="text-sm text-muted-foreground">
+                                  ({metricFeedback.feedback_count})
+                                </span>
+                              )}
+                              <MetricBadges metric={metric} />
+                            </div>
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
                 </SelectContent>
               </Select>
 
