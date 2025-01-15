@@ -1,9 +1,10 @@
-import { expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
 import {
   countCommentFeedbackByTargetId,
   queryCommentFeedbackBoundsByTargetId,
   queryCommentFeedbackByTargetId,
   queryFeedbackByTargetId,
+  queryMetricsWithFeedback,
   type BooleanMetricFeedbackRow,
   type CommentFeedbackRow,
   type FeedbackRow,
@@ -215,4 +216,113 @@ test("queryFeedbackByTargetId", async () => {
       secondBackwardPage.length +
       thirdBackwardPage.length,
   ).toBe(27);
+});
+
+describe("queryMetricsWithFeedback", () => {
+  test("returns correct feedback counts for different metric types", async () => {
+    // Test json function with multiple metric types
+    const jsonResults = await queryMetricsWithFeedback({
+      function_name: "dashboard_fixture_extract_entities",
+      inference_table: "JsonInference",
+      metrics: {
+        dashboard_fixture_exact_match: {
+          type: "boolean",
+          optimize: "max",
+          level: "inference",
+        },
+        dashboard_fixture_jaccard_similarity: {
+          type: "float",
+          optimize: "max",
+          level: "inference",
+        },
+      },
+    });
+
+    // Check boolean and demonstration counts for JSON function
+    expect(jsonResults.metrics).toContainEqual({
+      function_name: "dashboard_fixture_extract_entities",
+      metric_name: "dashboard_fixture_exact_match",
+      metric_type: "boolean",
+      feedback_count: 99,
+    });
+    expect(jsonResults.metrics).toContainEqual({
+      function_name: "dashboard_fixture_extract_entities",
+      metric_name: "demonstration",
+      metric_type: "demonstration",
+      feedback_count: 100,
+    });
+
+    // Test chat function with float metrics
+    const chatResults = await queryMetricsWithFeedback({
+      function_name: "dashboard_fixture_write_haiku",
+      inference_table: "ChatInference",
+      metrics: {
+        dashboard_fixture_haiku_rating: {
+          type: "float",
+          optimize: "max",
+          level: "inference",
+        },
+      },
+    });
+
+    expect(chatResults.metrics).toContainEqual({
+      function_name: "dashboard_fixture_write_haiku",
+      metric_name: "dashboard_fixture_haiku_rating",
+      metric_type: "float",
+      feedback_count: 491,
+    });
+  });
+
+  // Tests error handling for nonexistent functions
+  test("returns empty array for nonexistent function", async () => {
+    const results = await queryMetricsWithFeedback({
+      function_name: "nonexistent_function",
+      inference_table: "ChatInference",
+      metrics: {
+        dashboard_fixture_haiku_rating: {
+          type: "float",
+          optimize: "max",
+          level: "inference",
+        },
+      },
+    });
+
+    expect(results.metrics).toEqual([]);
+  });
+
+  // Tests handling of metrics at different levels (inference vs episode)
+  test("returns correct metrics for both inference and episode levels", async () => {
+    const results = await queryMetricsWithFeedback({
+      function_name: "dashboard_fixture_write_haiku",
+      inference_table: "ChatInference",
+      metrics: {
+        dashboard_fixture_haiku_rating: {
+          type: "float",
+          optimize: "max",
+          level: "inference",
+        },
+        dashboard_fixture_haiku_rating_episode: {
+          type: "float",
+          optimize: "max",
+          level: "episode",
+        },
+      },
+    });
+
+    // Check inference level metric
+    expect(results.metrics).toContainEqual({
+      function_name: "dashboard_fixture_write_haiku",
+      metric_name: "dashboard_fixture_haiku_rating",
+      metric_type: "float",
+      feedback_count: 491,
+    });
+
+    // Check episode level metric
+    expect(results.metrics).toContainEqual({
+      function_name: "dashboard_fixture_write_haiku",
+      metric_name: "dashboard_fixture_haiku_rating_episode",
+      metric_type: "float",
+      feedback_count: 85,
+    });
+  });
 });

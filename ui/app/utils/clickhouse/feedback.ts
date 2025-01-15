@@ -1,7 +1,9 @@
 import { z } from "zod";
 import type { TableBounds } from "./common";
 import { data } from "react-router";
-import { clickhouseClient } from "./common";
+import { clickhouseClient, InferenceJoinKey } from "./common";
+import type { MetricConfig } from "~/utils/config/metric";
+import { getInferenceJoinKey } from "~/utils/clickhouse/curation";
 
 export const booleanMetricFeedbackRowSchema = z.object({
   type: z.literal("boolean"),
@@ -741,4 +743,176 @@ export async function countFeedbackByTargetId(
   return (
     booleanMetrics + commentFeedback + demonstrationFeedback + floatMetrics
   );
+}
+
+export const metricsWithFeedbackRowSchema = z
+  .object({
+    function_name: z.string(),
+    metric_name: z.string(),
+    metric_type: z.enum(["boolean", "float", "demonstration"]),
+    feedback_count: z.number(),
+  })
+  .strict();
+
+export const metricsWithFeedbackDataSchema = z
+  .object({
+    metrics: z.array(metricsWithFeedbackRowSchema),
+  })
+  .strict();
+
+export type MetricsWithFeedbackRow = z.infer<
+  typeof metricsWithFeedbackRowSchema
+>;
+export type MetricsWithFeedbackData = z.infer<
+  typeof metricsWithFeedbackDataSchema
+>;
+
+export async function queryMetricsWithFeedback(params: {
+  function_name: string;
+  inference_table: string;
+  metrics: Record<string, MetricConfig>;
+}): Promise<MetricsWithFeedbackData> {
+  const { function_name, inference_table, metrics } = params;
+
+  const inferenceMetrics = Object.entries(metrics)
+    .filter(([, metric]) => {
+      try {
+        return getInferenceJoinKey(metric) === InferenceJoinKey.ID;
+      } catch {
+        return false;
+      }
+    })
+    .map(([name]) => name);
+
+  const episodeMetrics = Object.entries(metrics)
+    .filter(([, metric]) => {
+      try {
+        return getInferenceJoinKey(metric) === InferenceJoinKey.EPISODE_ID;
+      } catch {
+        return false;
+      }
+    })
+    .map(([name]) => name);
+
+  const idInClause =
+    inferenceMetrics.length > 0
+      ? `IN ('${inferenceMetrics.join("','")}')`
+      : `= ''`;
+
+  const episodeIdInClause =
+    episodeMetrics.length > 0 ? `IN ('${episodeMetrics.join("','")}')` : `= ''`;
+
+  const query = `
+    WITH
+    boolean_inference_metrics AS (
+      SELECT
+        i.function_name,
+        bmf.metric_name,
+        'boolean' as metric_type,
+        COUNT(DISTINCT i.id) as feedback_count
+      FROM tensorzero.${inference_table} i
+      JOIN tensorzero.BooleanMetricFeedback bmf ON bmf.target_id = i.id
+      WHERE i.function_name = {function_name:String}
+        AND bmf.metric_name ${idInClause}
+      GROUP BY i.function_name, bmf.metric_name
+      HAVING feedback_count > 0
+    ),
+
+    boolean_episode_metrics AS (
+      SELECT
+        i.function_name,
+        bmf.metric_name,
+        'boolean' as metric_type,
+        COUNT(DISTINCT i.id) as feedback_count
+      FROM tensorzero.${inference_table} i
+      JOIN tensorzero.BooleanMetricFeedback bmf ON bmf.target_id = i.episode_id
+      WHERE i.function_name = {function_name:String}
+        AND bmf.metric_name ${episodeIdInClause}
+      GROUP BY i.function_name, bmf.metric_name
+      HAVING feedback_count > 0
+    ),
+
+    float_inference_metrics AS (
+      SELECT
+        i.function_name,
+        fmf.metric_name,
+        'float' as metric_type,
+        COUNT(DISTINCT i.id) as feedback_count
+      FROM tensorzero.${inference_table} i
+      JOIN tensorzero.FloatMetricFeedback fmf ON fmf.target_id = i.id
+      WHERE i.function_name = {function_name:String}
+        AND fmf.metric_name ${idInClause}
+      GROUP BY i.function_name, fmf.metric_name
+      HAVING feedback_count > 0
+    ),
+
+    float_episode_metrics AS (
+      SELECT
+        i.function_name,
+        fmf.metric_name,
+        'float' as metric_type,
+        COUNT(DISTINCT i.id) as feedback_count
+      FROM tensorzero.${inference_table} i
+      JOIN tensorzero.FloatMetricFeedback fmf ON fmf.target_id = i.episode_id
+      WHERE i.function_name = {function_name:String}
+        AND fmf.metric_name ${episodeIdInClause}
+      GROUP BY i.function_name, fmf.metric_name
+      HAVING feedback_count > 0
+    ),
+
+    demo_metrics AS (
+      SELECT
+        i.function_name,
+        'demonstration' as metric_name,
+        'demonstration' as metric_type,
+        COUNT(DISTINCT i.id) as feedback_count
+      FROM tensorzero.${inference_table} i
+      JOIN tensorzero.DemonstrationFeedback df ON df.inference_id = i.id
+      WHERE i.function_name = {function_name:String}
+      GROUP BY i.function_name
+      HAVING feedback_count > 0
+    )
+
+    SELECT
+      function_name,
+      metric_name,
+      metric_type,
+      toString(feedback_count) as feedback_count
+    FROM (
+      SELECT * FROM boolean_inference_metrics
+      UNION ALL
+      SELECT * FROM boolean_episode_metrics
+      UNION ALL
+      SELECT * FROM float_inference_metrics
+      UNION ALL
+      SELECT * FROM float_episode_metrics
+      UNION ALL
+      SELECT * FROM demo_metrics
+    )
+    ORDER BY metric_type, metric_name`;
+
+  try {
+    const resultSet = await clickhouseClient.query({
+      query,
+      format: "JSONEachRow",
+      query_params: { function_name },
+    });
+
+    const rawMetrics = (await resultSet.json()) as Array<{
+      function_name: string;
+      metric_name: string;
+      metric_type: "boolean" | "float" | "demonstration";
+      feedback_count: string;
+    }>;
+
+    const validMetrics = rawMetrics.map((metric) => ({
+      ...metric,
+      feedback_count: Number(metric.feedback_count),
+    }));
+
+    return { metrics: validMetrics };
+  } catch (error) {
+    console.error("Error fetching metrics with feedback:", error);
+    throw data("Error fetching metrics with feedback", { status: 500 });
+  }
 }
