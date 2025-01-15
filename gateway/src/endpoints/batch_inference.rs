@@ -9,6 +9,7 @@ use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::iter::repeat;
+use std::sync::Arc;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -492,7 +493,7 @@ pub async fn get_batch_request(
 async fn poll_batch_inference(
     batch_request: &BatchRequestRow<'static>,
     http_client: reqwest::Client,
-    models: &HashMap<String, ModelConfig>,
+    models: &HashMap<Arc<str>, ModelConfig>,
     credentials: &InferenceCredentials,
 ) -> Result<PollBatchInferenceResponse, Error> {
     // Retrieve the relevant model provider
@@ -808,8 +809,8 @@ pub async fn write_completed_batch_inference<'a>(
             raw_response,
             usage: usage.clone(),
             latency: Latency::Batch,
-            model_name: &batch_request.model_name,
-            model_provider_name: &batch_request.model_provider_name,
+            model_name: batch_request.model_name.clone(),
+            model_provider_name: batch_request.model_provider_name.clone().into(),
         };
         let tool_config: Option<ToolCallConfig> = tool_params.map(|t| t.into());
         let output_schema = match output_schema

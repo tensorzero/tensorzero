@@ -15,23 +15,23 @@ async fn get_providers() -> E2ETestProviders {
 
     let standard_providers = vec![E2ETestProvider {
         variant_name: "hyperbolic".to_string(),
-        model_name: "meta-llama/Meta-Llama-3-70B-Instruct".to_string(),
-        model_provider_name: "hyperbolic".to_string(),
+        model_name: "meta-llama/Meta-Llama-3-70B-Instruct".into(),
+        model_provider_name: "hyperbolic".into(),
         credentials: HashMap::new(),
     }];
 
     let inference_params_providers = vec![E2ETestProvider {
         variant_name: "hyperbolic-dynamic".to_string(),
-        model_name: "meta-llama/Meta-Llama-3-70B-Instruct-dynamic".to_string(),
-        model_provider_name: "hyperbolic".to_string(),
+        model_name: "meta-llama/Meta-Llama-3-70B-Instruct-dynamic".into(),
+        model_provider_name: "hyperbolic".into(),
         credentials,
     }];
 
     #[cfg(feature = "e2e_tests")]
     let shorthand_providers = vec![E2ETestProvider {
         variant_name: "hyperbolic-shorthand".to_string(),
-        model_name: "hyperbolic::meta-llama/Meta-Llama-3-70B-Instruct".to_string(),
-        model_provider_name: "hyperbolic".to_string(),
+        model_name: "hyperbolic::meta-llama/Meta-Llama-3-70B-Instruct".into(),
+        model_provider_name: "hyperbolic".into(),
         credentials: HashMap::new(),
     }];
 

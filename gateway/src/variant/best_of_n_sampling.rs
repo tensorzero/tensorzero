@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::{collections::HashMap, path::PathBuf};
 
 use backon::Retryable;
@@ -76,7 +77,7 @@ impl Variant for BestOfNSamplingConfig {
         inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
-    ) -> Result<InferenceResult<'a>, Error> {
+    ) -> Result<InferenceResult, Error> {
         let candidate_inference_results = self
             .infer_candidates(input, models, function, inference_config, clients)
             .await?;
@@ -98,14 +99,7 @@ impl Variant for BestOfNSamplingConfig {
         _inference_config: &'request InferenceConfig<'static, 'request>,
         _clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
-    ) -> Result<
-        (
-            InferenceResultChunk,
-            InferenceResultStream,
-            ModelUsedInfo<'static>,
-        ),
-        Error,
-    > {
+    ) -> Result<(InferenceResultChunk, InferenceResultStream, ModelUsedInfo), Error> {
         Err(ErrorDetails::InvalidRequest {
             message: "Best of n variants do not support streaming inference.".to_string(),
         }
@@ -116,7 +110,7 @@ impl Variant for BestOfNSamplingConfig {
         &self,
         function: &FunctionConfig,
         models: &mut ModelTable,
-        embedding_models: &HashMap<String, EmbeddingModelConfig>,
+        embedding_models: &HashMap<Arc<str>, EmbeddingModelConfig>,
         templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,
@@ -185,7 +179,7 @@ impl BestOfNSamplingConfig {
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
-    ) -> Result<Vec<InferenceResult<'a>>, Error> {
+    ) -> Result<Vec<InferenceResult>, Error> {
         // Get all the variants we are going to infer
         let candidate_variants = self
             .candidates
@@ -255,11 +249,11 @@ impl BestOfNSamplingConfig {
     async fn select_best_candidate<'a, 'request>(
         &'a self,
         input: &Input,
-        models: &'a HashMap<String, ModelConfig>,
+        models: &'a HashMap<Arc<str>, ModelConfig>,
         inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
-        candidates: Vec<InferenceResult<'a>>,
-    ) -> Result<InferenceResult<'a>, Error> {
+        candidates: Vec<InferenceResult>,
+    ) -> Result<InferenceResult, Error> {
         if candidates.is_empty() {
             return Err(ErrorDetails::Inference {
                 message: "No candidates to select from in best of n".to_string(),
@@ -341,17 +335,11 @@ impl BestOfNSamplingConfig {
 async fn inner_select_best_candidate<'a, 'request>(
     evaluator: &'a EvaluatorConfig,
     input: &'request Input,
-    models: &'a HashMap<String, ModelConfig>,
+    models: &'a HashMap<Arc<str>, ModelConfig>,
     inference_config: &'request InferenceConfig<'a, 'request>,
     clients: &'request InferenceClients<'request>,
-    candidates: &[InferenceResult<'request>],
-) -> Result<
-    (
-        Option<usize>,
-        Option<ModelInferenceResponseWithMetadata<'a>>,
-    ),
-    Error,
-> {
+    candidates: &[InferenceResult],
+) -> Result<(Option<usize>, Option<ModelInferenceResponseWithMetadata>), Error> {
     let (inference_request, skipped_indices) = evaluator.prepare_request(
         input,
         inference_config,
@@ -378,7 +366,7 @@ async fn inner_select_best_candidate<'a, 'request>(
     }
     let model_config = models.get(&evaluator.inner.model).ok_or_else(|| {
         Error::new(ErrorDetails::UnknownModel {
-            name: evaluator.inner.model.clone(),
+            name: evaluator.inner.model.to_string(),
         })
     })?;
     let model_inference_response = (|| async {
@@ -388,8 +376,10 @@ async fn inner_select_best_candidate<'a, 'request>(
     })
     .retry(evaluator.inner.retries.get_backoff())
     .await?;
-    let model_inference_result =
-        ModelInferenceResponseWithMetadata::new(model_inference_response, &evaluator.inner.model);
+    let model_inference_result = ModelInferenceResponseWithMetadata::new(
+        model_inference_response,
+        evaluator.inner.model.clone(),
+    );
     let text_content = match model_inference_result
         .output
         .iter()
@@ -677,7 +667,7 @@ mod tests {
         // Test without templates, string message
         let evaluator_config = EvaluatorConfig {
             inner: ChatCompletionConfig {
-                model: "dummy".to_string(),
+                model: "dummy".into(),
                 weight: 1.0,
                 ..Default::default()
             },
@@ -698,7 +688,7 @@ mod tests {
         // Test without templates, object message
         let evaluator_config = EvaluatorConfig {
             inner: ChatCompletionConfig {
-                model: "dummy".to_string(),
+                model: "dummy".into(),
                 weight: 1.0,
                 ..Default::default()
             },
@@ -717,7 +707,7 @@ mod tests {
         // Test without templates, no message
         let evaluator_config = EvaluatorConfig {
             inner: ChatCompletionConfig {
-                model: "dummy".to_string(),
+                model: "dummy".into(),
                 weight: 1.0,
                 ..Default::default()
             },
@@ -739,7 +729,7 @@ mod tests {
 
         let evaluator_config = EvaluatorConfig {
             inner: ChatCompletionConfig {
-                model: "dummy".to_string(),
+                model: "dummy".into(),
                 weight: 1.0,
                 system_template: Some(system_template_name.into()),
                 ..Default::default()
@@ -771,7 +761,7 @@ mod tests {
 
         let evaluator_config = EvaluatorConfig {
             inner: ChatCompletionConfig {
-                model: "dummy".to_string(),
+                model: "dummy".into(),
                 weight: 1.0,
                 system_template: Some(system_template_name.into()),
                 ..Default::default()
@@ -801,7 +791,7 @@ mod tests {
         // Create an EvaluatorConfig
         let evaluator_config = EvaluatorConfig {
             inner: ChatCompletionConfig {
-                model: "dummy".to_string(),
+                model: "dummy".into(),
                 weight: 1.0,
                 ..Default::default()
             },
@@ -826,8 +816,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(500),
             },
-            model_provider_name: "ExampleProvider",
-            model_name: "ExampleModel",
+            model_provider_name: "ExampleProvider".into(),
+            model_name: "ExampleModel".into(),
         };
 
         let candidate1 = InferenceResult::Chat(
@@ -863,8 +853,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(550),
             },
-            model_provider_name: "ExampleProvider2",
-            model_name: "ExampleModel2",
+            model_provider_name: "ExampleProvider2".into(),
+            model_name: "ExampleModel2".into(),
         };
 
         let candidate2 = InferenceResult::Chat(
@@ -903,7 +893,7 @@ mod tests {
         // Create an EvaluatorConfig
         let evaluator_config = EvaluatorConfig {
             inner: ChatCompletionConfig {
-                model: "dummy_json".to_string(),
+                model: "dummy_json".into(),
                 weight: 1.0,
                 ..Default::default()
             },
@@ -928,8 +918,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(500),
             },
-            model_provider_name: "ExampleProvider",
-            model_name: "ExampleModel",
+            model_provider_name: "ExampleProvider".into(),
+            model_name: "ExampleModel".into(),
         };
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
@@ -965,8 +955,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(550),
             },
-            model_provider_name: "ExampleProvider2",
-            model_name: "ExampleModel2",
+            model_provider_name: "ExampleProvider2".into(),
+            model_name: "ExampleModel2".into(),
         };
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1004,7 +994,7 @@ mod tests {
         // Set up evaluator with a provider that returns a valid answer_choice
         let evaluator_config = EvaluatorConfig {
             inner: ChatCompletionConfig {
-                model: "best_of_n_1".to_string(),
+                model: "best_of_n_1".into(),
                 ..Default::default()
             },
         };
@@ -1035,8 +1025,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(500),
             },
-            model_provider_name: "ExampleProvider",
-            model_name: "ExampleModel",
+            model_provider_name: "ExampleProvider".into(),
+            model_name: "ExampleModel".into(),
         };
         let inference_id0 = Uuid::now_v7();
         let candidate0 = InferenceResult::Chat(
@@ -1072,8 +1062,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(550),
             },
-            model_provider_name: "ExampleProvider1",
-            model_name: "ExampleModel1",
+            model_provider_name: "ExampleProvider1".into(),
+            model_name: "ExampleModel1".into(),
         };
         let inference_id1 = Uuid::now_v7();
         let candidate1 = InferenceResult::Chat(
@@ -1092,13 +1082,13 @@ mod tests {
         );
         let candidates = vec![candidate0, candidate1];
         let models = HashMap::from([(
-            "best_of_n_1".to_string(),
+            "best_of_n_1".into(),
             ModelConfig {
-                routing: vec!["best_of_n_1".to_string()],
+                routing: vec!["best_of_n_1".into()],
                 providers: HashMap::from([(
-                    "best_of_n_1".to_string(),
+                    "best_of_n_1".into(),
                     ProviderConfig::Dummy(DummyProvider {
-                        model_name: "best_of_n_1".to_string(),
+                        model_name: "best_of_n_1".into(),
                         ..Default::default()
                     }),
                 )]),
@@ -1157,7 +1147,7 @@ mod tests {
         // Set up evaluator with a provider that fails
         let evaluator_config = EvaluatorConfig {
             inner: ChatCompletionConfig {
-                model: "error".to_string(),
+                model: "error".into(),
                 ..Default::default()
             },
         };
@@ -1171,13 +1161,13 @@ mod tests {
         let models = {
             let mut map = HashMap::new();
             map.insert(
-                "error".to_string(),
+                "error".into(),
                 ModelConfig {
-                    routing: vec!["error".to_string()],
+                    routing: vec!["error".into()],
                     providers: HashMap::from([(
-                        "error".to_string(),
+                        "error".into(),
                         ProviderConfig::Dummy(DummyProvider {
-                            model_name: "error".to_string(),
+                            model_name: "error".into(),
                             ..Default::default()
                         }),
                     )]),
@@ -1216,7 +1206,7 @@ mod tests {
         // Set up evaluator with a provider that returns invalid JSON
         let evaluator_config = EvaluatorConfig {
             inner: ChatCompletionConfig {
-                model: "regular".to_string(),
+                model: "regular".into(),
                 ..Default::default()
             },
         };
@@ -1230,13 +1220,13 @@ mod tests {
         let models = {
             let mut map = HashMap::new();
             map.insert(
-                "regular".to_string(),
+                "regular".into(),
                 ModelConfig {
-                    routing: vec!["regular".to_string()],
+                    routing: vec!["regular".into()],
                     providers: HashMap::from([(
-                        "regular".to_string(),
+                        "regular".into(),
                         ProviderConfig::Dummy(DummyProvider {
-                            model_name: "regular".to_string(),
+                            model_name: "regular".into(),
                             ..Default::default()
                         }),
                     )]),
@@ -1297,7 +1287,7 @@ mod tests {
             candidates: vec![],
             evaluator: EvaluatorConfig {
                 inner: ChatCompletionConfig {
-                    model: "best_of_n_big".to_string(),
+                    model: "best_of_n_big".into(),
                     weight: 1.0,
                     ..Default::default()
                 },
@@ -1306,13 +1296,13 @@ mod tests {
 
         let mut big_models = HashMap::new();
         big_models.insert(
-            "best_of_n_big".to_string(),
+            "best_of_n_big".into(),
             ModelConfig {
-                routing: vec!["best_of_n_big".to_string()],
+                routing: vec!["best_of_n_big".into()],
                 providers: HashMap::from([(
-                    "best_of_n_big".to_string(),
+                    "best_of_n_big".into(),
                     ProviderConfig::Dummy(DummyProvider {
-                        model_name: "best_of_n_big".to_string(),
+                        model_name: "best_of_n_big".into(),
                         ..Default::default()
                     }),
                 )]),

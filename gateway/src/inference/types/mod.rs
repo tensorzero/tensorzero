@@ -7,6 +7,7 @@ use std::{
     collections::HashMap,
     fmt,
     pin::Pin,
+    sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use uuid::Uuid;
@@ -180,7 +181,7 @@ pub enum Latency {
 /// After a ProviderInferenceResponse is returned to the Model,
 /// it is converted into a ModelInferenceResponse that includes additional metadata (such as the model provider name).
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ModelInferenceResponse<'a> {
+pub struct ModelInferenceResponse {
     pub id: Uuid,
     pub created: u64,
     pub output: Vec<ContentBlock>,
@@ -190,13 +191,13 @@ pub struct ModelInferenceResponse<'a> {
     pub raw_response: String,
     pub usage: Usage,
     pub latency: Latency,
-    pub model_provider_name: &'a str,
+    pub model_provider_name: Arc<str>,
 }
 
 /// Finally, in the Variant we convert the ModelInferenceResponse into a ModelInferenceResponseWithMetadata
 /// that includes additional metadata (such as the model name).
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ModelInferenceResponseWithMetadata<'a> {
+pub struct ModelInferenceResponseWithMetadata {
     pub id: Uuid,
     pub created: u64,
     pub output: Vec<ContentBlock>,
@@ -206,8 +207,8 @@ pub struct ModelInferenceResponseWithMetadata<'a> {
     pub raw_response: String,
     pub usage: Usage,
     pub latency: Latency,
-    pub model_provider_name: &'a str,
-    pub model_name: &'a str,
+    pub model_provider_name: Arc<str>,
+    pub model_name: Arc<str>,
 }
 
 /* As a Variant might make use of multiple model inferences, we then combine
@@ -219,28 +220,28 @@ pub struct ModelInferenceResponseWithMetadata<'a> {
 /// This type contains the result of running a variant of a function
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum InferenceResult<'a> {
-    Chat(ChatInferenceResult<'a>),
-    Json(JsonInferenceResult<'a>),
+pub enum InferenceResult {
+    Chat(ChatInferenceResult),
+    Json(JsonInferenceResult),
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct ChatInferenceResult<'a> {
+pub struct ChatInferenceResult {
     pub inference_id: Uuid,
     created: u64,
     pub content: Vec<ContentBlockOutput>,
     pub usage: Usage,
-    pub model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
+    pub model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
     pub inference_params: InferenceParams,
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct JsonInferenceResult<'a> {
+pub struct JsonInferenceResult {
     pub inference_id: Uuid,
     created: u64,
     pub output: JsonInferenceOutput,
     pub usage: Usage,
-    pub model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
+    pub model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
     pub output_schema: Value,
     pub inference_params: InferenceParams,
 }
@@ -443,10 +444,10 @@ impl From<String> for ContentBlock {
     }
 }
 
-impl<'a> ModelInferenceResponse<'a> {
+impl ModelInferenceResponse {
     pub fn new(
         provider_inference_response: ProviderInferenceResponse,
-        model_provider_name: &'a str,
+        model_provider_name: Arc<str>,
     ) -> Self {
         Self {
             id: provider_inference_response.id,
@@ -463,8 +464,8 @@ impl<'a> ModelInferenceResponse<'a> {
     }
 }
 
-impl<'a> ModelInferenceResponseWithMetadata<'a> {
-    pub fn new(model_inference_response: ModelInferenceResponse<'a>, model_name: &'a str) -> Self {
+impl ModelInferenceResponseWithMetadata {
+    pub fn new(model_inference_response: ModelInferenceResponse, model_name: Arc<str>) -> Self {
         Self {
             id: model_inference_response.id,
             created: model_inference_response.created,
@@ -540,7 +541,7 @@ impl ProviderInferenceResponse {
     }
 }
 
-impl<'a> InferenceResult<'a> {
+impl InferenceResult {
     pub fn get_serialized_model_inferences(&self) -> Vec<serde_json::Value> {
         let model_inference_responses = match self {
             InferenceResult::Chat(chat_result) => &chat_result.model_inference_results,
@@ -573,16 +574,14 @@ impl<'a> InferenceResult<'a> {
         }
     }
 
-    pub fn mut_model_inference_results(
-        &mut self,
-    ) -> &mut Vec<ModelInferenceResponseWithMetadata<'a>> {
+    pub fn mut_model_inference_results(&mut self) -> &mut Vec<ModelInferenceResponseWithMetadata> {
         match self {
             InferenceResult::Chat(chat_result) => &mut chat_result.model_inference_results,
             InferenceResult::Json(json_result) => &mut json_result.model_inference_results,
         }
     }
 
-    pub fn owned_model_inference_results(self) -> Vec<ModelInferenceResponseWithMetadata<'a>> {
+    pub fn owned_model_inference_results(self) -> Vec<ModelInferenceResponseWithMetadata> {
         match self {
             InferenceResult::Chat(chat_result) => chat_result.model_inference_results,
             InferenceResult::Json(json_result) => json_result.model_inference_results,
@@ -590,13 +589,13 @@ impl<'a> InferenceResult<'a> {
     }
 }
 
-impl<'a> JsonInferenceResult<'a> {
+impl JsonInferenceResult {
     pub fn new(
         inference_id: Uuid,
         raw: String,
         parsed: Option<Value>,
         usage: Usage,
-        model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
+        model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
         output_schema: Value,
         inference_params: InferenceParams,
     ) -> Self {
@@ -613,12 +612,12 @@ impl<'a> JsonInferenceResult<'a> {
     }
 }
 
-impl<'a> ChatInferenceResult<'a> {
+impl ChatInferenceResult {
     pub async fn new(
         inference_id: Uuid,
         raw_content: Vec<ContentBlock>,
         usage: Usage,
-        model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
+        model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
         tool_config: Option<&ToolCallConfig>,
         inference_params: InferenceParams,
     ) -> Self {
@@ -851,8 +850,8 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
 pub struct CollectChunksArgs<'a, 'b> {
     pub value: Vec<InferenceResultChunk>,
     pub function: &'a FunctionConfig,
-    pub model_name: &'a str,
-    pub model_provider_name: &'a str,
+    pub model_name: Arc<str>,
+    pub model_provider_name: Arc<str>,
     pub raw_request: String,
     pub inference_params: InferenceParams,
     pub system: Option<String>,
@@ -866,9 +865,7 @@ pub struct CollectChunksArgs<'a, 'b> {
 
 // Modify the collect_chunks function to accept CollectChunksArgs
 // 'a ends up as static and 'b ends up as stack allocated in the caller (endpoints::inference::create_stream)
-pub async fn collect_chunks<'a>(
-    args: CollectChunksArgs<'a, '_>,
-) -> Result<InferenceResult<'a>, Error> {
+pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<InferenceResult, Error> {
     let CollectChunksArgs {
         value,
         function,
@@ -1127,8 +1124,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
             },
-            model_provider_name: "test_provider",
-            model_name: "test_model",
+            model_provider_name: "test_provider".into(),
+            model_name: "test_model".into(),
         }];
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
@@ -1147,8 +1144,11 @@ mod tests {
             .model_inference_results
             .first()
             .unwrap();
-        assert_eq!(model_inference_result.model_name, "test_model");
-        assert_eq!(model_inference_result.model_provider_name, "test_provider");
+        assert_eq!(&*model_inference_result.model_name, "test_model");
+        assert_eq!(
+            &*model_inference_result.model_provider_name,
+            "test_provider"
+        );
         assert_eq!(model_inference_result.raw_request, raw_request);
 
         // Case 2: A tool call that fails argument validation
@@ -1170,8 +1170,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
             },
-            model_provider_name: "test_provider",
-            model_name: "test_model",
+            model_provider_name: "test_provider".into(),
+            model_name: "test_model".into(),
         }];
 
         let weather_tool_config = get_temperature_tool_config();
@@ -1216,8 +1216,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
             },
-            model_provider_name: "test_provider",
-            model_name: "test_model",
+            model_provider_name: "test_provider".into(),
+            model_name: "test_model".into(),
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1261,8 +1261,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
             },
-            model_provider_name: "test_provider",
-            model_name: "test_model",
+            model_provider_name: "test_provider".into(),
+            model_name: "test_model".into(),
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1322,8 +1322,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
             },
-            model_provider_name: "test_provider",
-            model_name: "test_model",
+            model_provider_name: "test_provider".into(),
+            model_name: "test_model".into(),
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1405,8 +1405,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
             },
-            model_provider_name: "test_provider",
-            model_name: "test_model",
+            model_provider_name: "test_provider".into(),
+            model_name: "test_model".into(),
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1495,8 +1495,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
             },
-            model_provider_name: "test_provider",
-            model_name: "test_model",
+            model_provider_name: "test_provider".into(),
+            model_name: "test_model".into(),
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1543,8 +1543,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
             },
-            model_provider_name: "test_provider",
-            model_name: "test_model",
+            model_provider_name: "test_provider".into(),
+            model_name: "test_model".into(),
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1613,8 +1613,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
             },
-            model_provider_name: "test_provider",
-            model_name: "test_model",
+            model_provider_name: "test_provider".into(),
+            model_name: "test_model".into(),
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1667,8 +1667,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::default(),
             },
-            model_provider_name: "test_provider",
-            model_name: "test_model",
+            model_provider_name: "test_provider".into(),
+            model_name: "test_model".into(),
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1710,8 +1710,8 @@ mod tests {
             system: None,
             input_messages: vec![],
             function: &function_config,
-            model_name,
-            model_provider_name,
+            model_name: model_name.into(),
+            model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),
             inference_params: InferenceParams::default(),
             function_name: "",
@@ -1768,8 +1768,8 @@ mod tests {
             system: None,
             input_messages: vec![],
             function: &function_config,
-            model_name,
-            model_provider_name,
+            model_name: model_name.into(),
+            model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),
             inference_params: InferenceParams::default(),
             function_name: "",
@@ -1798,9 +1798,9 @@ mod tests {
         );
         assert_eq!(chat_result.model_inference_results.len(), 1);
         let model_inference_result = chat_result.model_inference_results.first().unwrap();
-        assert_eq!(model_inference_result.model_name, model_name);
+        assert_eq!(&*model_inference_result.model_name, model_name);
         assert_eq!(
-            model_inference_result.model_provider_name,
+            &*model_inference_result.model_provider_name,
             model_provider_name
         );
         assert_eq!(model_inference_result.raw_request, raw_request);
@@ -1855,8 +1855,8 @@ mod tests {
             system: None,
             input_messages: vec![],
             function: &json_function_config,
-            model_name,
-            model_provider_name,
+            model_name: model_name.into(),
+            model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),
             inference_params: InferenceParams::default(),
             function_name: "",
@@ -1886,9 +1886,9 @@ mod tests {
                 );
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 let model_inference_result = json_result.model_inference_results.first().unwrap();
-                assert_eq!(model_inference_result.model_name, model_name);
+                assert_eq!(&*model_inference_result.model_name, model_name);
                 assert_eq!(
-                    model_inference_result.model_provider_name,
+                    &*model_inference_result.model_provider_name,
                     model_provider_name
                 );
                 assert_eq!(model_inference_result.raw_request, raw_request);
@@ -1926,8 +1926,8 @@ mod tests {
             system: None,
             input_messages: vec![],
             function: &json_function_config,
-            model_name,
-            model_provider_name,
+            model_name: model_name.into(),
+            model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),
             inference_params: InferenceParams::default(),
             function_name: "",
@@ -1947,9 +1947,9 @@ mod tests {
                 assert_eq!(json_result.output.raw, "{\"name\":\"John\"}".to_string());
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 let model_inference_result = json_result.model_inference_results.first().unwrap();
-                assert_eq!(model_inference_result.model_name, model_name);
+                assert_eq!(&*model_inference_result.model_name, model_name);
                 assert_eq!(
-                    model_inference_result.model_provider_name,
+                    &*model_inference_result.model_provider_name,
                     model_provider_name
                 );
                 assert_eq!(model_inference_result.raw_request, raw_request);
@@ -1995,8 +1995,8 @@ mod tests {
             system: None,
             input_messages: vec![],
             function: &function_config,
-            model_name,
-            model_provider_name,
+            model_name: model_name.into(),
+            model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),
             inference_params: InferenceParams::default(),
             function_name: "",
@@ -2016,9 +2016,9 @@ mod tests {
             assert_eq!(chat_response.usage, usage);
             assert_eq!(chat_response.model_inference_results.len(), 1);
             let model_inference_result = chat_response.model_inference_results.first().unwrap();
-            assert_eq!(model_inference_result.model_name, model_name);
+            assert_eq!(&*model_inference_result.model_name, model_name);
             assert_eq!(
-                model_inference_result.model_provider_name,
+                &*model_inference_result.model_provider_name,
                 model_provider_name
             );
             assert_eq!(model_inference_result.raw_request, raw_request);
@@ -2078,8 +2078,8 @@ mod tests {
             system: None,
             input_messages: vec![],
             function: &json_function_config,
-            model_name,
-            model_provider_name,
+            model_name: model_name.into(),
+            model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),
             inference_params: InferenceParams::default(),
             function_name: "",
@@ -2109,9 +2109,9 @@ mod tests {
                 );
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 let model_inference_result = json_result.model_inference_results.first().unwrap();
-                assert_eq!(model_inference_result.model_name, model_name);
+                assert_eq!(&*model_inference_result.model_name, model_name);
                 assert_eq!(
-                    model_inference_result.model_provider_name,
+                    &*model_inference_result.model_provider_name,
                     model_provider_name
                 );
                 assert_eq!(model_inference_result.raw_request, raw_request);
@@ -2177,8 +2177,8 @@ mod tests {
             system: None,
             input_messages: vec![],
             function: &json_function_config,
-            model_name,
-            model_provider_name,
+            model_name: model_name.into(),
+            model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),
             inference_params: InferenceParams::default(),
             function_name: "",
@@ -2208,9 +2208,9 @@ mod tests {
                 );
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 let model_inference_result = json_result.model_inference_results.first().unwrap();
-                assert_eq!(model_inference_result.model_name, model_name);
+                assert_eq!(&*model_inference_result.model_name, model_name);
                 assert_eq!(
-                    model_inference_result.model_provider_name,
+                    &*model_inference_result.model_provider_name,
                     model_provider_name
                 );
                 assert_eq!(model_inference_result.raw_request, raw_request);

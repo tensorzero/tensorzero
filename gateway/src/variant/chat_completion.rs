@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use serde_json::Value;
+use std::sync::Arc;
 use std::{collections::HashMap, path::PathBuf};
 
 use crate::embeddings::EmbeddingModelConfig;
@@ -26,7 +27,7 @@ use super::{
 pub struct ChatCompletionConfig {
     #[serde(default)]
     pub weight: f64,
-    pub model: String,
+    pub model: Arc<str>,
     pub system_template: Option<PathBuf>,
     pub user_template: Option<PathBuf>,
     pub assistant_template: Option<PathBuf>,
@@ -154,7 +155,7 @@ impl Variant for ChatCompletionConfig {
         inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
-    ) -> Result<InferenceResult<'a>, Error> {
+    ) -> Result<InferenceResult, Error> {
         let mut inference_params = inference_params;
         let request = self.prepare_request(
             input,
@@ -165,12 +166,12 @@ impl Variant for ChatCompletionConfig {
         )?;
         let model_config = models.models.get(&self.model).ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
-                name: self.model.clone(),
+                name: self.model.to_string(),
             })
         })?;
         let args = InferModelRequestArgs {
             request,
-            model_name: &self.model,
+            model_name: self.model.clone(),
             model_config,
             function,
             inference_config,
@@ -189,14 +190,7 @@ impl Variant for ChatCompletionConfig {
         inference_config: &'request InferenceConfig<'static, 'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
-    ) -> Result<
-        (
-            InferenceResultChunk,
-            InferenceResultStream,
-            ModelUsedInfo<'static>,
-        ),
-        Error,
-    > {
+    ) -> Result<(InferenceResultChunk, InferenceResultStream, ModelUsedInfo), Error> {
         let mut inference_params = inference_params;
         let request = self.prepare_request(
             input,
@@ -207,12 +201,12 @@ impl Variant for ChatCompletionConfig {
         )?;
         let model_config = models.models.get(&self.model).ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
-                name: self.model.clone(),
+                name: self.model.to_string(),
             })
         })?;
         infer_model_request_stream(
             request,
-            &self.model,
+            self.model.clone(),
             model_config,
             function,
             clients,
@@ -233,7 +227,7 @@ impl Variant for ChatCompletionConfig {
         &self,
         function: &FunctionConfig,
         models: &mut ModelTable,
-        _embedding_models: &HashMap<String, EmbeddingModelConfig>,
+        _embedding_models: &HashMap<Arc<str>, EmbeddingModelConfig>,
         templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,
@@ -331,7 +325,7 @@ impl Variant for ChatCompletionConfig {
         }
         let model_config = models.models.get(&self.model).ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
-                name: self.model.clone(),
+                name: self.model.to_string(),
             })
         })?;
         let model_inference_response = model_config
@@ -408,7 +402,7 @@ mod tests {
         let templates = get_test_template_config();
         // Part 1: test without templates
         let chat_completion_config = ChatCompletionConfig {
-            model: "dummy".to_string(),
+            model: "dummy".into(),
             weight: 1.0,
             system_template: None,
             user_template: None,
@@ -477,7 +471,7 @@ mod tests {
         let assistant_template_name = "assistant";
 
         let chat_completion_config = ChatCompletionConfig {
-            model: "dummy".to_string(),
+            model: "dummy".into(),
             weight: 1.0,
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
@@ -560,7 +554,7 @@ mod tests {
         let assistant_template_name = "assistant_filled";
 
         let chat_completion_config = ChatCompletionConfig {
-            model: "dummy".to_string(),
+            model: "dummy".into(),
             weight: 1.0,
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
@@ -618,7 +612,7 @@ mod tests {
 
         // Test without templates, string message
         let chat_completion_config = ChatCompletionConfig {
-            model: "dummy".to_string(),
+            model: "dummy".into(),
             weight: 1.0,
             ..Default::default()
         };
@@ -634,7 +628,7 @@ mod tests {
 
         // Test without templates, object message
         let chat_completion_config = ChatCompletionConfig {
-            model: "dummy".to_string(),
+            model: "dummy".into(),
             weight: 1.0,
             ..Default::default()
         };
@@ -650,7 +644,7 @@ mod tests {
 
         // Test without templates, no message
         let chat_completion_config = ChatCompletionConfig {
-            model: "dummy".to_string(),
+            model: "dummy".into(),
             weight: 1.0,
             ..Default::default()
         };
@@ -663,7 +657,7 @@ mod tests {
         let system_template_name = "system";
 
         let chat_completion_config = ChatCompletionConfig {
-            model: "dummy".to_string(),
+            model: "dummy".into(),
             weight: 1.0,
             system_template: Some(system_template_name.into()),
             ..Default::default()
@@ -683,7 +677,7 @@ mod tests {
         let system_template_name = "system_filled";
 
         let chat_completion_config = ChatCompletionConfig {
-            model: "dummy".to_string(),
+            model: "dummy".into(),
             weight: 1.0,
             system_template: Some(system_template_name.into()),
             ..Default::default()
@@ -712,7 +706,7 @@ mod tests {
         let system_template_name = "system";
         let user_template_name = "greeting_with_age";
         let chat_completion_config = ChatCompletionConfig {
-            model: "good".to_string(),
+            model: "good".into(),
             weight: 1.0,
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
@@ -728,36 +722,36 @@ mod tests {
             parallel_tool_calls: false,
         });
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
-            model_name: "good".to_string(),
+            model_name: "good".into(),
             ..Default::default()
         });
         let error_provider_config = ProviderConfig::Dummy(DummyProvider {
-            model_name: "error".to_string(),
+            model_name: "error".into(),
             ..Default::default()
         });
         let json_provider_config = ProviderConfig::Dummy(DummyProvider {
-            model_name: "json".to_string(),
+            model_name: "json".into(),
             ..Default::default()
         });
         let text_model_config = ModelConfig {
-            routing: vec!["good".to_string()],
-            providers: HashMap::from([("good".to_string(), good_provider_config)]),
+            routing: vec!["good".into()],
+            providers: HashMap::from([("good".into(), good_provider_config)]),
         };
         let json_model_config = ModelConfig {
-            routing: vec!["json_provider".to_string()],
-            providers: HashMap::from([("json_provider".to_string(), json_provider_config)]),
+            routing: vec!["json_provider".into()],
+            providers: HashMap::from([("json_provider".into(), json_provider_config)]),
         };
         let tool_provider_config = ProviderConfig::Dummy(DummyProvider {
-            model_name: "tool".to_string(),
+            model_name: "tool".into(),
             ..Default::default()
         });
         let tool_model_config = ModelConfig {
-            routing: vec!["tool_provider".to_string()],
-            providers: HashMap::from([("tool_provider".to_string(), tool_provider_config)]),
+            routing: vec!["tool_provider".into()],
+            providers: HashMap::from([("tool_provider".into(), tool_provider_config)]),
         };
         let error_model_config = ModelConfig {
-            routing: vec!["error".to_string()],
-            providers: HashMap::from([("error".to_string(), error_provider_config)]),
+            routing: vec!["error".into()],
+            providers: HashMap::from([("error".into(), error_provider_config)]),
         };
         // Test case 1: invalid message (String passed when template required)
         let messages = vec![InputMessage {
@@ -810,7 +804,7 @@ mod tests {
             system: Some(json!({"assistant_name": "R2-D2"})),
             messages,
         };
-        let models = HashMap::from([("invalid_model".to_string(), text_model_config)])
+        let models = HashMap::from([("invalid_model".into(), text_model_config)])
             .try_into()
             .unwrap();
         let inference_models = InferenceModels {
@@ -843,14 +837,14 @@ mod tests {
         // Test case 3: Model inference fails because of model issues
 
         let chat_completion_config = ChatCompletionConfig {
-            model: "error".to_string(),
+            model: "error".into(),
             weight: 1.0,
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
             ..Default::default()
         };
         let inference_params = InferenceParams::default();
-        let models = HashMap::from([("error".to_string(), error_model_config)]);
+        let models = HashMap::from([("error".into(), error_model_config)]);
         let models = models.try_into().unwrap();
         let inference_models = InferenceModels {
             models: &models,
@@ -894,21 +888,21 @@ mod tests {
         // Test case 4: Model inference succeeds
         let inference_params = InferenceParams::default();
         let chat_completion_config = ChatCompletionConfig {
-            model: "good".to_string(),
+            model: "good".into(),
             weight: 1.0,
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
             ..Default::default()
         };
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
-            model_name: "good".to_string(),
+            model_name: "good".into(),
             ..Default::default()
         });
         let text_model_config = ModelConfig {
-            routing: vec!["good_provider".to_string()],
-            providers: HashMap::from([("good_provider".to_string(), good_provider_config)]),
+            routing: vec!["good_provider".into()],
+            providers: HashMap::from([("good_provider".into(), good_provider_config)]),
         };
-        let models = HashMap::from([("good".to_string(), text_model_config)])
+        let models = HashMap::from([("good".into(), text_model_config)])
             .try_into()
             .unwrap();
         let inference_models = InferenceModels {
@@ -953,11 +947,11 @@ mod tests {
                     vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()]
                 );
                 assert_eq!(
-                    chat_response.model_inference_results[0].model_name,
+                    &*chat_response.model_inference_results[0].model_name,
                     "good".to_string()
                 );
                 assert_eq!(
-                    chat_response.model_inference_results[0].model_provider_name,
+                    &*chat_response.model_inference_results[0].model_provider_name,
                     "good_provider".to_string()
                 );
                 assert_eq!(chat_response.inference_params, inference_params);
@@ -968,7 +962,7 @@ mod tests {
         // Test case 5: tool call
         let inference_params = InferenceParams::default();
         let chat_completion_config = ChatCompletionConfig {
-            model: "tool".to_string(),
+            model: "tool".into(),
             weight: 1.0,
             ..Default::default()
         };
@@ -979,7 +973,7 @@ mod tests {
                 content: vec!["What is the weather in Brooklyn?".to_string().into()],
             }],
         };
-        let models = HashMap::from([("tool".to_string(), tool_model_config)])
+        let models = HashMap::from([("tool".into(), tool_model_config)])
             .try_into()
             .unwrap();
         let inference_models = InferenceModels {
@@ -1034,11 +1028,11 @@ mod tests {
                 );
                 assert_eq!(chat_response.model_inference_results.len(), 1);
                 assert_eq!(
-                    chat_response.model_inference_results[0].model_provider_name,
+                    &*chat_response.model_inference_results[0].model_provider_name,
                     "tool_provider".to_string()
                 );
                 assert_eq!(
-                    chat_response.model_inference_results[0].model_name,
+                    &*chat_response.model_inference_results[0].model_name,
                     "tool".to_string()
                 );
                 assert_eq!(chat_response.inference_params, inference_params);
@@ -1115,7 +1109,7 @@ mod tests {
         };
         // Test case 6: JSON output was supposed to happen and it did
         let inference_params = InferenceParams::default();
-        let models = HashMap::from([("json".to_string(), json_model_config)])
+        let models = HashMap::from([("json".into(), json_model_config)])
             .try_into()
             .unwrap();
         let inference_models = InferenceModels {
@@ -1130,7 +1124,7 @@ mod tests {
             dynamic_output_schema: None,
         };
         let chat_completion_config = ChatCompletionConfig {
-            model: "json".to_string(),
+            model: "json".into(),
             weight: 1.0,
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
@@ -1161,11 +1155,11 @@ mod tests {
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 assert_eq!(
                     json_result.model_inference_results[0].model_provider_name,
-                    "json_provider".to_string()
+                    "json_provider".into()
                 );
                 assert_eq!(
                     json_result.model_inference_results[0].model_name,
-                    "json".to_string()
+                    "json".into()
                 );
                 assert_eq!(json_result.inference_params, inference_params);
             }
@@ -1222,7 +1216,7 @@ mod tests {
             dynamic_output_schema: Some(&output_schema),
         };
         let chat_completion_config = ChatCompletionConfig {
-            model: "json".to_string(),
+            model: "json".into(),
             weight: 1.0,
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
@@ -1253,11 +1247,11 @@ mod tests {
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 assert_eq!(
                     json_result.model_inference_results[0].model_provider_name,
-                    "json_provider".to_string()
+                    "json_provider".into()
                 );
                 assert_eq!(
                     json_result.model_inference_results[0].model_name,
-                    "json".to_string()
+                    "json".into()
                 );
                 assert_eq!(json_result.inference_params, inference_params);
             }
@@ -1305,7 +1299,7 @@ mod tests {
             dynamic_output_schema: Some(&output_schema),
         };
         let chat_completion_config = ChatCompletionConfig {
-            model: "json".to_string(),
+            model: "json".into(),
             weight: 1.0,
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
@@ -1342,11 +1336,11 @@ mod tests {
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 assert_eq!(
                     json_result.model_inference_results[0].model_provider_name,
-                    "json_provider".to_string()
+                    "json_provider".into()
                 );
                 assert_eq!(
                     json_result.model_inference_results[0].model_name,
-                    "json".to_string()
+                    "json".into()
                 );
                 let expected_inference_params = InferenceParams {
                     chat_completion: ChatCompletionInferenceParams {
@@ -1387,20 +1381,20 @@ mod tests {
         let system_template_name = "system";
         let user_template_name = "greeting_with_age";
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
-            model_name: "good".to_string(),
+            model_name: "good".into(),
             ..Default::default()
         });
         let error_provider_config = ProviderConfig::Dummy(DummyProvider {
-            model_name: "error".to_string(),
+            model_name: "error".into(),
             ..Default::default()
         });
         let text_model_config = ModelConfig {
-            routing: vec!["good_provider".to_string()],
-            providers: HashMap::from([("good_provider".to_string(), good_provider_config)]),
+            routing: vec!["good_provider".into()],
+            providers: HashMap::from([("good_provider".into(), good_provider_config)]),
         };
         let error_model_config = ModelConfig {
-            routing: vec!["error_provider".to_string()],
-            providers: HashMap::from([("error_provider".to_string(), error_provider_config)]),
+            routing: vec!["error_provider".into()],
+            providers: HashMap::from([("error_provider".into(), error_provider_config)]),
         };
         // Test case 1: Model inference fails because of model issues
         let inference_params = InferenceParams::default();
@@ -1413,14 +1407,14 @@ mod tests {
             messages,
         };
         let chat_completion_config = Box::leak(Box::new(ChatCompletionConfig {
-            model: "error".to_string(),
+            model: "error".into(),
             weight: 1.0,
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
             ..Default::default()
         }));
         let models = Box::leak(Box::new(
-            HashMap::from([("error".to_string(), error_model_config)])
+            HashMap::from([("error".into(), error_model_config)])
                 .try_into()
                 .unwrap(),
         ));
@@ -1466,14 +1460,14 @@ mod tests {
         // Test case 2: Model inference succeeds
         let inference_params = InferenceParams::default();
         let chat_completion_config = Box::leak(Box::new(ChatCompletionConfig {
-            model: "good".to_string(),
+            model: "good".into(),
             weight: 1.0,
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
             ..Default::default()
         }));
         let models = Box::leak(Box::new(
-            HashMap::from([("good".to_string(), text_model_config)])
+            HashMap::from([("good".into(), text_model_config)])
                 .try_into()
                 .unwrap(),
         ));
@@ -1510,8 +1504,11 @@ mod tests {
                 id: "0".to_string()
             })]
         );
-        assert_eq!(models_used.model_name, "good".to_string());
-        assert_eq!(models_used.model_provider_name, "good_provider".to_string());
+        assert_eq!(&*models_used.model_name, "good".to_string());
+        assert_eq!(
+            &*models_used.model_provider_name,
+            "good_provider".to_string()
+        );
         let mut i = 1;
         while let Some(chunk_result) = stream.next().await {
             let chunk = chunk_result.unwrap();

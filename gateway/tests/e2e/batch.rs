@@ -72,8 +72,8 @@ async fn test_get_batch_request() {
     assert_eq!(batch_request.batch_params.into_owned(), batch_params);
     assert_eq!(batch_request.function_name, function_name);
     assert_eq!(batch_request.variant_name, variant_name);
-    assert_eq!(batch_request.model_name, model_name);
-    assert_eq!(batch_request.model_provider_name, model_provider_name);
+    assert_eq!(&*batch_request.model_name, model_name);
+    assert_eq!(&*batch_request.model_provider_name, model_provider_name);
     assert_eq!(batch_request.status, BatchStatus::Pending);
     assert_eq!(batch_request.raw_request, raw_request);
     assert_eq!(batch_request.raw_response, raw_response);
@@ -120,8 +120,8 @@ async fn test_get_batch_request() {
     assert_eq!(batch_request.batch_id, batch_id);
     assert_eq!(batch_request.function_name, function_name);
     assert_eq!(batch_request.variant_name, variant_name);
-    assert_eq!(batch_request.model_name, model_name);
-    assert_eq!(batch_request.model_provider_name, model_provider_name);
+    assert_eq!(&*batch_request.model_name, model_name);
+    assert_eq!(&*batch_request.model_provider_name, model_provider_name);
 }
 
 #[tokio::test]
