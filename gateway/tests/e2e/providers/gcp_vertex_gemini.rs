@@ -11,14 +11,14 @@ async fn get_providers() -> E2ETestProviders {
     let standard_providers = vec![
         E2ETestProvider {
             variant_name: "gcp-vertex-gemini-flash".to_string(),
-            model_name: "gemini-1.5-flash-001".to_string(),
-            model_provider_name: "gcp_vertex_gemini".to_string(),
+            model_name: "gemini-1.5-flash-001".into(),
+            model_provider_name: "gcp_vertex_gemini".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             variant_name: "gcp-vertex-gemini-pro".to_string(),
-            model_name: "gemini-1.5-pro-001".to_string(),
-            model_provider_name: "gcp_vertex_gemini".to_string(),
+            model_name: "gemini-1.5-pro-001".into(),
+            model_provider_name: "gcp_vertex_gemini".into(),
             credentials: HashMap::new(),
         },
     ];
@@ -26,26 +26,26 @@ async fn get_providers() -> E2ETestProviders {
     let json_providers = vec![
         E2ETestProvider {
             variant_name: "gcp-vertex-gemini-flash".to_string(),
-            model_name: "gemini-1.5-flash-001".to_string(),
-            model_provider_name: "gcp_vertex_gemini".to_string(),
+            model_name: "gemini-1.5-flash-001".into(),
+            model_provider_name: "gcp_vertex_gemini".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             variant_name: "gcp-vertex-gemini-flash-implicit".to_string(),
-            model_name: "gemini-1.5-flash-001".to_string(),
-            model_provider_name: "gcp_vertex_gemini".to_string(),
+            model_name: "gemini-1.5-flash-001".into(),
+            model_provider_name: "gcp_vertex_gemini".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             variant_name: "gcp-vertex-gemini-pro".to_string(),
-            model_name: "gemini-1.5-pro-001".to_string(),
-            model_provider_name: "gcp_vertex_gemini".to_string(),
+            model_name: "gemini-1.5-pro-001".into(),
+            model_provider_name: "gcp_vertex_gemini".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             variant_name: "gcp-vertex-gemini-pro-implicit".to_string(),
-            model_name: "gemini-1.5-pro-001".to_string(),
-            model_provider_name: "gcp_vertex_gemini".to_string(),
+            model_name: "gemini-1.5-pro-001".into(),
+            model_provider_name: "gcp_vertex_gemini".into(),
             credentials: HashMap::new(),
         },
     ];

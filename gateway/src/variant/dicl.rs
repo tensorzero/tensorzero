@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
 use std::{collections::HashMap, path::PathBuf};
 
 use serde::Deserialize;
@@ -34,9 +35,9 @@ use super::{
 #[derive(Debug, Default)]
 pub struct DiclConfig {
     pub weight: f64,
-    pub embedding_model: String,
+    pub embedding_model: Arc<str>,
     pub k: u32, // k as in k-nearest neighbors
-    pub model: String,
+    pub model: Arc<str>,
     pub system_instructions: String,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
@@ -78,7 +79,7 @@ impl Variant for DiclConfig {
         inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
-    ) -> Result<InferenceResult<'a>, Error> {
+    ) -> Result<InferenceResult, Error> {
         // So this can be mutably borrowed by the prepare_request function
         let mut inference_params = inference_params;
 
@@ -110,14 +111,14 @@ impl Variant for DiclConfig {
 
         let model_config = models.models.get(&self.model).ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
-                name: self.model.clone(),
+                name: self.model.to_string(),
             })
         })?;
 
         // Instantiate the InferModelRequestArgs struct
         let args = InferModelRequestArgs {
             request: model_inference_request,
-            model_name: &self.model,
+            model_name: self.model.clone(),
             model_config,
             function,
             inference_config,
@@ -144,14 +145,7 @@ impl Variant for DiclConfig {
         inference_config: &'request InferenceConfig<'static, 'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
-    ) -> Result<
-        (
-            InferenceResultChunk,
-            InferenceResultStream,
-            ModelUsedInfo<'static>,
-        ),
-        Error,
-    > {
+    ) -> Result<(InferenceResultChunk, InferenceResultStream, ModelUsedInfo), Error> {
         // So this can be mutably borrowed by the prepare_request function
         let mut inference_params = inference_params;
 
@@ -182,7 +176,7 @@ impl Variant for DiclConfig {
 
         let model_config = models.models.get(&self.model).ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
-                name: self.model.clone(),
+                name: self.model.to_string(),
             })
         })?;
 
@@ -190,7 +184,7 @@ impl Variant for DiclConfig {
         let (inference_result_chunk, inference_result_stream, mut model_used_info) =
             infer_model_request_stream(
                 request,
-                &self.model,
+                self.model.clone(),
                 model_config,
                 function,
                 clients,
@@ -214,7 +208,7 @@ impl Variant for DiclConfig {
         &self,
         _function: &FunctionConfig,
         models: &mut ModelTable,
-        embedding_models: &HashMap<String, EmbeddingModelConfig>,
+        embedding_models: &HashMap<Arc<str>, EmbeddingModelConfig>,
         _templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,
@@ -301,12 +295,12 @@ impl DiclConfig {
     async fn retrieve_relevant_examples<'a>(
         &'a self,
         input: &Input,
-        embedding_models: &'a HashMap<String, EmbeddingModelConfig>,
+        embedding_models: &'a HashMap<Arc<str>, EmbeddingModelConfig>,
         clients: &InferenceClients<'_>,
         function_name: &str,
         variant_name: &str,
         function: &FunctionConfig,
-    ) -> Result<(Vec<Example>, EmbeddingResponseWithMetadata<'a>), Error> {
+    ) -> Result<(Vec<Example>, EmbeddingResponseWithMetadata), Error> {
         // Serialize the input so that it can be embedded
         let serialized_input = serde_json::to_string(&input).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -334,7 +328,7 @@ impl DiclConfig {
 
         // Wrap the embedding in a response with metadata
         let embedding_response_with_metadata =
-            EmbeddingResponseWithMetadata::new(embedding_response, &self.embedding_model);
+            EmbeddingResponseWithMetadata::new(embedding_response, self.embedding_model.clone());
 
         // Format the embedding as a string for ClickHouse
         let formatted_embedding = format!(
@@ -560,9 +554,9 @@ impl UninitializedDiclConfig {
 
         Ok(DiclConfig {
             weight: self.weight,
-            embedding_model: self.embedding_model,
+            embedding_model: Arc::from(self.embedding_model),
             k: self.k,
-            model: self.model,
+            model: Arc::from(self.model),
             system_instructions,
             temperature: self.temperature,
             top_p: self.top_p,

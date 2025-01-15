@@ -15,23 +15,23 @@ async fn get_providers() -> E2ETestProviders {
 
     let standard_providers = vec![E2ETestProvider {
         variant_name: "xai".to_string(),
-        model_name: "grok_2_1212".to_string(),
-        model_provider_name: "xai".to_string(),
+        model_name: "grok_2_1212".into(),
+        model_provider_name: "xai".into(),
         credentials: HashMap::new(),
     }];
 
     let inference_params_providers = vec![E2ETestProvider {
         variant_name: "xai".to_string(),
-        model_name: "grok_2_1212".to_string(),
-        model_provider_name: "xai".to_string(),
+        model_name: "grok_2_1212".into(),
+        model_provider_name: "xai".into(),
         credentials,
     }];
 
     #[cfg(feature = "e2e_tests")]
     let shorthand_providers = vec![E2ETestProvider {
         variant_name: "xai-shorthand".to_string(),
-        model_name: "xai::grok-2-1212".to_string(),
-        model_provider_name: "xai".to_string(),
+        model_name: "xai::grok-2-1212".into(),
+        model_provider_name: "xai".into(),
         credentials: HashMap::new(),
     }];
 

@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::Instant;
 use tokio_stream::StreamExt;
@@ -81,7 +82,7 @@ pub struct Params {
 }
 
 #[derive(Clone, Debug)]
-struct InferenceMetadata<'a> {
+struct InferenceMetadata {
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
@@ -89,12 +90,12 @@ struct InferenceMetadata<'a> {
     pub dryrun: bool,
     pub start_time: Instant,
     pub inference_params: InferenceParams,
-    pub model_name: &'a str,
-    pub model_provider_name: &'a str,
+    pub model_name: Arc<str>,
+    pub model_provider_name: Arc<str>,
     pub raw_request: String,
     pub system: Option<String>,
     pub input_messages: Vec<RequestMessage>,
-    pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
+    pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
     pub tags: HashMap<String, String>,
     pub tool_config: Option<ToolCallConfig>,
     pub dynamic_output_schema: Option<DynamicJSONSchema>,
@@ -360,7 +361,7 @@ pub async fn inference(
 fn create_stream<'a>(
     function: &'static FunctionConfig,
     templates: &'static TemplateConfig<'static>,
-    metadata: InferenceMetadata<'static>,
+    metadata: InferenceMetadata,
     first_chunk: InferenceResultChunk,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
@@ -495,7 +496,7 @@ pub struct InferenceDatabaseInsertMetadata {
 async fn write_inference(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     input: Input,
-    result: InferenceResult<'_>,
+    result: InferenceResult,
     metadata: InferenceDatabaseInsertMetadata,
 ) {
     let model_responses: Vec<serde_json::Value> = result.get_serialized_model_inferences();
@@ -640,7 +641,7 @@ pub struct InferenceClients<'a> {
 #[derive(Debug)]
 pub struct InferenceModels<'a> {
     pub models: &'a ModelTable,
-    pub embedding_models: &'a HashMap<String, EmbeddingModelConfig>,
+    pub embedding_models: &'a HashMap<Arc<str>, EmbeddingModelConfig>,
 }
 
 /// InferenceParams is the top-level struct for inference parameters.
@@ -738,8 +739,8 @@ mod tests {
             dryrun: false,
             inference_params: InferenceParams::default(),
             start_time: Instant::now(),
-            model_name: "test_model",
-            model_provider_name: "test_provider",
+            model_name: "test_model".into(),
+            model_provider_name: "test_provider".into(),
             raw_request: raw_request.clone(),
             system: None,
             input_messages: vec![],
@@ -788,8 +789,8 @@ mod tests {
             dryrun: false,
             inference_params: InferenceParams::default(),
             start_time: Instant::now(),
-            model_name: "test_model",
-            model_provider_name: "test_provider",
+            model_name: "test_model".into(),
+            model_provider_name: "test_provider".into(),
             raw_request: raw_request.clone(),
             system: None,
             input_messages: vec![],
