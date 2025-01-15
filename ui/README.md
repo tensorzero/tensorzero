@@ -1,34 +1,34 @@
 # TensorZero UI
 
-## Status
-
-This UI is currently a work in progress.
-
-Our goals for this project are to:
-
-- [ ] Allow users to run TensorZero recipes through the UI. To start, this will include:
-
-  - [x] Supervised fine-tuning
-  - [ ] Dynamic in-context learning
-
-- [x] Allow users to review inferences and episodes
-- [ ]and provide feedback to either.
-- [ ] Provide a view showing the relative performance of different variants for a particular function.
-- [ ] Allow users to edit the configuration through the UI.
+The TensorZero UI allows you to interact with TensorZero through a web interface.
+The goal for this project is to provide a user-friendly way to browse through inferences and episodes, understand the performance of variants, provide feedback on these, and launch optimization jobs based on the dataset TensorZero has accumulated.
 
 Currently, we are building out the UI incrementally.
 
+However, in order to get feedback from the community, we have released an early version of the UI as a docker image available on Docker Hub as `tensorzero/ui`.
+
 ## Running the UI
 
-### Prerequisites
+### Users
+
+The gateway requires a TensorZero configuration tree and the URL of the ClickHouse instance that the TensorZero gateway is running against.
+Given these two things, the easiest way to run the UI is to use the `tensorzero/ui` docker image.
+We include an example `docker-compose.yml` and `.env.example` file in this directory.
+You optionally can include an `OPENAI_API_KEY` and `FIREWORKS_API_KEY` in the `.env` file to enable fine-tuning on curated data from your ClickHouse using those services.
+
+The docker container exposes the UI on port 4000.
+
+### Developers
+
+#### Prerequisites
 
 - Node.js (we have only tested with v22.9.0)
 - Docker Compose
 - a Rust toolchain
 
-### Setup
+#### Setup
 
-Currently, the UI only runs against hardcoded fixtures in `fixtures/`.
+For development, the UI runs against hardcoded fixtures in `fixtures/`.
 It depends on a running ClickHouse instance that has been initialized with the TensorZero data model.
 We include some fixture data as well in order to exercise some functionality.
 You will need Docker Compose installed to run the dependencies.
@@ -46,7 +46,7 @@ OPENAI_API_KEY=<your-key>
 FIREWORKS_API_KEY=<your-key>
 FIREWORKS_ACCOUNT_ID=<your-account-id>
 CLICKHOUSE_URL=<your-clickhouse-url> # For testing, set to http://localhost:8123/tensorzero
-CONFIG_DIR=<path-to-config-dir> # For testing, set to ./fixtures/config
+TENSORZERO_UI_CONFIG_DIR=<path-to-config-dir> # For testing, set to ./fixtures/config
 ```
 
 4. Run the dependencies: `docker compose -f fixtures/docker-compose.yml up`
