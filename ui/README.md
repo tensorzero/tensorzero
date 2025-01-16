@@ -5,7 +5,7 @@ The goal for this project is to provide a user-friendly way to browse through in
 
 Currently, we are building out the UI incrementally.
 
-However, in order to get feedback from the community, we have released an early version of the UI as a docker image available on Docker Hub as `tensorzero/ui`.
+However, in order to get feedback from the community and provide some value to them, we have released an early version of the UI as a docker image available on Docker Hub as `tensorzero/ui`.
 
 ## Running the UI
 
