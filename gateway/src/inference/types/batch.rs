@@ -296,7 +296,7 @@ impl TryFrom<BatchEpisodeIdsWithSize> for BatchEpisodeIds {
     fn try_from(
         BatchEpisodeIdsWithSize(episode_ids, num_inferences): BatchEpisodeIdsWithSize,
     ) -> Result<Self, Self::Error> {
-        let episode_ids = match episode_ids {
+        let episode_ids: Vec<Uuid> = match episode_ids {
             Some(episode_ids) => {
                 if episode_ids.len() != num_inferences {
                     return Err(ErrorDetails::InvalidRequest {
@@ -314,7 +314,7 @@ impl TryFrom<BatchEpisodeIdsWithSize> for BatchEpisodeIds {
                     .map(|id| id.unwrap_or_else(Uuid::now_v7))
                     .collect()
             }
-            None => vec![Uuid::now_v7(); num_inferences],
+            None => (0..num_inferences).map(|_| Uuid::now_v7()).collect(),
         };
         episode_ids.iter().enumerate().try_for_each(|(i, id)| {
             validate_episode_id(*id).map_err(|e| {
