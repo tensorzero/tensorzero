@@ -537,10 +537,16 @@ mod tests {
         let batch_episode_ids_with_size = BatchEpisodeIdsWithSize(None, 3);
         let batch_episode_ids = BatchEpisodeIds::try_from(batch_episode_ids_with_size).unwrap();
         assert_eq!(batch_episode_ids.len(), 3);
+        assert_ne!(batch_episode_ids[0], batch_episode_ids[1]);
+        assert_ne!(batch_episode_ids[1], batch_episode_ids[2]);
+        assert_ne!(batch_episode_ids[0], batch_episode_ids[2]);
 
         let batch_episode_ids_with_size = BatchEpisodeIdsWithSize(Some(vec![None, None, None]), 3);
         let batch_episode_ids = BatchEpisodeIds::try_from(batch_episode_ids_with_size).unwrap();
         assert_eq!(batch_episode_ids.len(), 3);
+        assert_ne!(batch_episode_ids[0], batch_episode_ids[1]);
+        assert_ne!(batch_episode_ids[1], batch_episode_ids[2]);
+        assert_ne!(batch_episode_ids[0], batch_episode_ids[2]);
 
         let episode_id_0 = Uuid::now_v7();
         let episode_id_1 = Uuid::now_v7();
