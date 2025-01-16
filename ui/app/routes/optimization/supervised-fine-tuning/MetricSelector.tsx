@@ -66,9 +66,9 @@ export function MetricSelector({
       control={control}
       name="metric"
       render={({ field }) => (
-        <FormItem>
+        <FormItem className="flex flex-col justify-center">
           <FormLabel>Metric</FormLabel>
-          <div className="grid gap-x-8 md:grid-cols-2">
+          <div className="grid items-center gap-x-8 md:grid-cols-2">
             <div className="space-y-2">
               <Select
                 onValueChange={(value: string) => {

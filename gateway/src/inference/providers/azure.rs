@@ -29,9 +29,9 @@ const PROVIDER_TYPE: &str = "azure";
 
 #[derive(Debug)]
 pub struct AzureProvider {
-    pub deployment_id: String,
-    pub endpoint: Url,
-    pub credentials: AzureCredentials,
+    deployment_id: String,
+    endpoint: Url,
+    credentials: AzureCredentials,
 }
 
 impl AzureProvider {
@@ -106,7 +106,7 @@ fn default_api_key_location() -> CredentialLocation {
 impl InferenceProvider for AzureProvider {
     async fn infer<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'a>,
+        request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         api_key: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -176,7 +176,7 @@ impl InferenceProvider for AzureProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'a>,
+        request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<
@@ -232,7 +232,7 @@ impl InferenceProvider for AzureProvider {
 
     async fn start_batch_inference<'a>(
         &'a self,
-        _requests: &'a [ModelInferenceRequest<'a>],
+        _requests: &'a [ModelInferenceRequest<'_>],
         _client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {

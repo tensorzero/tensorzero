@@ -68,7 +68,7 @@ lazy_static! {
 }
 
 impl Variant for BestOfNSamplingConfig {
-    async fn infer<'a, 'request>(
+    async fn infer<'a: 'request, 'request>(
         &'a self,
         input: &Input,
         models: &'request InferenceModels<'a>,

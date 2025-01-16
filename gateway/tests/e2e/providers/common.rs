@@ -794,7 +794,7 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
         "params": {
@@ -895,7 +895,7 @@ pub async fn check_inference_params_response(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital city of Japan?"}]
+                "content": [{"type": "text", "value": "What is the name of the capital city of Japan?"}]
             }
         ]
     });
@@ -1003,7 +1003,9 @@ pub async fn check_inference_params_response(
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the capital city of Japan?".to_string().into()],
+        content: vec!["What is the name of the capital city of Japan?"
+            .to_string()
+            .into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
@@ -1027,7 +1029,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
         "params": {
@@ -1148,7 +1150,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital city of Japan?"}]
+                "content": [{"type": "text", "value": "What is the name of the capital city of Japan?"}]
             }
         ]
     });
@@ -1262,7 +1264,9 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the capital city of Japan?".to_string().into()],
+        content: vec!["What is the name of the capital city of Japan?"
+            .to_string()
+            .into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
@@ -7283,6 +7287,10 @@ pub async fn check_dynamic_json_mode_inference_response(
 
 #[cfg(feature = "e2e_tests")]
 pub async fn test_json_mode_streaming_inference_request_with_provider(provider: E2ETestProvider) {
+    if provider.variant_name.contains("tgi") {
+        // TGI does not support streaming in JSON mode (because it doesn't support streaming tools)
+        return;
+    }
     let episode_id = Uuid::now_v7();
 
     let payload = json!({

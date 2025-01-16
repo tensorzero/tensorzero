@@ -219,13 +219,18 @@ impl<'c> Config<'c> {
         })
     }
 
-    /// Get a metric by name
-    pub fn get_metric<'a>(&'a self, metric_name: &str) -> Result<&'a MetricConfig, Error> {
+    /// Get a metric by name, producing an error if it's not found
+    pub fn get_metric_or_err<'a>(&'a self, metric_name: &str) -> Result<&'a MetricConfig, Error> {
         self.metrics.get(metric_name).ok_or_else(|| {
             Error::new(ErrorDetails::UnknownMetric {
                 name: metric_name.to_string(),
             })
         })
+    }
+
+    /// Get a metric by name
+    pub fn get_metric<'a>(&'a self, metric_name: &str) -> Option<&'a MetricConfig> {
+        self.metrics.get(metric_name)
     }
 
     /// Get a tool by name
@@ -249,7 +254,7 @@ impl<'c> Config<'c> {
     /// Get all templates from the config
     /// The HashMap returned is a mapping from the path as given in the TOML file
     /// (relative to the directory containing the TOML file) to the path on the filesystem.
-    /// The former path is used as the name of the template for retrival by variants later.
+    /// The former path is used as the name of the template for retrieval by variants later.
     pub fn get_templates<P: AsRef<Path>>(&self, base_path: P) -> HashMap<String, PathBuf> {
         let mut templates = HashMap::new();
 
@@ -610,12 +615,7 @@ mod tests {
         assert_eq!(embedding_model.routing, vec!["openai"]);
         assert_eq!(embedding_model.providers.len(), 1);
         let provider = embedding_model.providers.get("openai").unwrap();
-        match provider {
-            EmbeddingProviderConfig::OpenAI(openai_config) => {
-                assert_eq!(openai_config.model_name, "text-embedding-3-small");
-            }
-            _ => panic!("Expected an OpenAI provider"),
-        }
+        assert!(matches!(provider, EmbeddingProviderConfig::OpenAI(_)));
     }
 
     /// Ensure that the config parsing correctly handles the `gateway.bind_address` field

@@ -28,9 +28,9 @@ const PROVIDER_TYPE: &str = "vllm";
 
 #[derive(Debug)]
 pub struct VLLMProvider {
-    pub model_name: String,
-    pub api_base: Url,
-    pub credentials: VLLMCredentials,
+    model_name: String,
+    api_base: Url,
+    credentials: VLLMCredentials,
 }
 
 impl VLLMProvider {
@@ -104,12 +104,12 @@ impl VLLMCredentials {
 impl InferenceProvider for VLLMProvider {
     async fn infer<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'a>,
+        request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = VLLMRequest::new(&self.model_name, request)?;
-        let request_url = get_chat_url(Some(&self.api_base))?;
+        let request_url = get_chat_url(&self.api_base)?;
         let start_time = Instant::now();
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let mut request_builder = http_client
@@ -174,7 +174,7 @@ impl InferenceProvider for VLLMProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'a>,
+        request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<
@@ -192,7 +192,7 @@ impl InferenceProvider for VLLMProvider {
             })
         })?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let request_url = get_chat_url(Some(&self.api_base))?;
+        let request_url = get_chat_url(&self.api_base)?;
         let start_time = Instant::now();
         let mut request_builder = http_client
             .post(request_url)
@@ -233,7 +233,7 @@ impl InferenceProvider for VLLMProvider {
 
     async fn start_batch_inference<'a>(
         &'a self,
-        _requests: &'a [ModelInferenceRequest<'a>],
+        _requests: &'a [ModelInferenceRequest<'_>],
         _client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {

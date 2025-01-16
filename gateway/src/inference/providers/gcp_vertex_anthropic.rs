@@ -36,11 +36,10 @@ const PROVIDER_TYPE: &str = "gcp_vertex_anthropic";
 
 #[derive(Debug)]
 pub struct GCPVertexAnthropicProvider {
-    pub request_url: String,
-    pub streaming_request_url: String,
-    pub audience: String,
-    pub credentials: GCPVertexCredentials,
-    pub model_id: String,
+    request_url: String,
+    streaming_request_url: String,
+    audience: String,
+    credentials: GCPVertexCredentials,
 }
 
 impl GCPVertexAnthropicProvider {
@@ -63,7 +62,6 @@ impl GCPVertexAnthropicProvider {
             streaming_request_url,
             audience,
             credentials: provider_credentials,
-            model_id,
         })
     }
 }
@@ -74,7 +72,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
     /// Anthropic non-streaming API request
     async fn infer<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'a>,
+        request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -146,7 +144,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
     /// Anthropic streaming API request
     async fn infer_stream<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'a>,
+        request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<
@@ -208,7 +206,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
 
     async fn start_batch_inference<'a>(
         &'a self,
-        _requests: &'a [ModelInferenceRequest<'a>],
+        _requests: &'a [ModelInferenceRequest<'_>],
         _client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {

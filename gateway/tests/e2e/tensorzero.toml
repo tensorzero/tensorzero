@@ -189,6 +189,13 @@ routing = ["together"]
 type = "together"
 model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
 
+[models."phi-3.5-mini-instruct-tgi"]
+routing = ["tgi"]
+
+[models."phi-3.5-mini-instruct-tgi".providers.tgi]
+type = "tgi"
+api_base = "https://zr0gj152lrhnrr-80.proxy.runpod.net/v1/"
+
 [models."llama3.1-8b-instruct-together-dynamic"]
 routing = ["together"]
 
@@ -574,6 +581,12 @@ type = "chat_completion"
 model = "o1-mini"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
+[functions.basic_test.variants.tgi]
+type = "chat_completion"
+model = "phi-3.5-mini-instruct-tgi"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.together]
 type = "chat_completion"
 model = "llama3.1-8b-instruct-together"
@@ -875,6 +888,14 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "strict"
 max_tokens = 100
 
+[functions.json_success.variants.tgi]
+type = "chat_completion"
+model = "phi-3.5-mini-instruct-tgi"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "implicit_tool"
+max_tokens = 100
+
 [functions.json_success.variants.together]
 type = "chat_completion"
 model = "llama3.1-8b-instruct-together"
@@ -1102,6 +1123,14 @@ model = "gpt-4o-mini-2024-07-18"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "strict"
+max_tokens = 100
+
+[functions.dynamic_json.variants.tgi]
+type = "chat_completion"
+model = "phi-3.5-mini-instruct-tgi"
+system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
+json_mode = "implicit_tool"
 max_tokens = 100
 
 [functions.dynamic_json.variants.together]

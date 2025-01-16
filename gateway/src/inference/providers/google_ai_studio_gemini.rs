@@ -31,9 +31,9 @@ const PROVIDER_TYPE: &str = "google_ai_studio_gemini";
 /// Implements a subset of the Google AI Studio Gemini API as documented [here](https://ai.google.dev/gemini-api/docs/text-generation?lang=rest)
 #[derive(Debug)]
 pub struct GoogleAIStudioGeminiProvider {
-    pub request_url: Url,
-    pub streaming_request_url: Url,
-    pub credentials: GoogleAIStudioCredentials,
+    request_url: Url,
+    streaming_request_url: Url,
+    credentials: GoogleAIStudioCredentials,
 }
 
 impl GoogleAIStudioGeminiProvider {
@@ -125,7 +125,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
     /// Google AI Studio Gemini non-streaming API request
     async fn infer<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'a>,
+        request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -194,7 +194,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
     /// Google AI Studio Gemini streaming API request
     async fn infer_stream<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'a>,
+        request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<
@@ -248,7 +248,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
 
     async fn start_batch_inference<'a>(
         &'a self,
-        _requests: &'a [ModelInferenceRequest<'a>],
+        _requests: &'a [ModelInferenceRequest<'_>],
         _client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {

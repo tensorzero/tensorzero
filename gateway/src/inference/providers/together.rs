@@ -42,8 +42,8 @@ const PROVIDER_TYPE: &str = "together";
 
 #[derive(Debug)]
 pub struct TogetherProvider {
-    pub model_name: String,
-    pub credentials: TogetherCredentials,
+    model_name: String,
+    credentials: TogetherCredentials,
 }
 
 impl TogetherProvider {
@@ -116,12 +116,12 @@ impl TogetherCredentials {
 impl InferenceProvider for TogetherProvider {
     async fn infer<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'a>,
+        request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = TogetherRequest::new(&self.model_name, request);
-        let request_url = get_chat_url(Some(&TOGETHER_API_BASE))?;
+        let request_url = get_chat_url(&TOGETHER_API_BASE)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let res = http_client
@@ -184,7 +184,7 @@ impl InferenceProvider for TogetherProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'a>,
+        request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<
@@ -202,7 +202,7 @@ impl InferenceProvider for TogetherProvider {
             })
         })?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let request_url = get_chat_url(Some(&TOGETHER_API_BASE))?;
+        let request_url = get_chat_url(&TOGETHER_API_BASE)?;
         let start_time = Instant::now();
         let event_source = http_client
             .post(request_url)
@@ -239,7 +239,7 @@ impl InferenceProvider for TogetherProvider {
 
     async fn start_batch_inference<'a>(
         &'a self,
-        _requests: &'a [ModelInferenceRequest<'a>],
+        _requests: &'a [ModelInferenceRequest<'_>],
         _client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {

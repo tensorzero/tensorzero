@@ -11,6 +11,7 @@ mod google_ai_studio_gemini;
 mod hyperbolic;
 mod mistral;
 mod openai;
+mod tgi;
 mod together;
 mod vllm;
 mod xai;

@@ -141,7 +141,7 @@ pub struct ModelInferenceRequest<'a> {
 /// Each provider transforms a ModelInferenceRequest into a provider-specific (private) inference request type
 /// that is suitable for serialization directly into a request to the provider.
 ///
-/// In both non-streaming and streaming inference, each ModelProvider recieves data from the provider in a
+/// In both non-streaming and streaming inference, each ModelProvider receives data from the provider in a
 /// a (private) provider-specific format that is then transformed into a ProviderInferenceResponse (non-streaming)
 /// or a stream of ProviderInferenceResponseChunks (streaming).
 
@@ -866,8 +866,8 @@ pub struct CollectChunksArgs<'a, 'b> {
 
 // Modify the collect_chunks function to accept CollectChunksArgs
 // 'a ends up as static and 'b ends up as stack allocated in the caller (endpoints::inference::create_stream)
-pub async fn collect_chunks<'a, 'b>(
-    args: CollectChunksArgs<'a, 'b>,
+pub async fn collect_chunks<'a>(
+    args: CollectChunksArgs<'a, '_>,
 ) -> Result<InferenceResult<'a>, Error> {
     let CollectChunksArgs {
         value,
