@@ -19,9 +19,14 @@ import { splitValidationData, type SFTJobStatus } from "./common";
 import { render_message } from "./rendering";
 import { SFTJob } from "./common";
 
-export const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+export const client = process.env.OPENAI_API_KEY
+  ? new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    })
+  : (() => {
+      console.warn("OPENAI_API_KEY environment variable is not set");
+      return undefined;
+    })();
 
 type JobInfo =
   | {
@@ -144,6 +149,11 @@ export class OpenAISFTJob extends SFTJob {
   async poll(): Promise<OpenAISFTJob> {
     if (!this.jobId) {
       throw new Error("Job ID is required to poll OpenAI SFT");
+    }
+    if (!client) {
+      throw new Error(
+        "OpenAI client is not initialized as credentials are missing",
+      );
     }
     try {
       const jobInfo = await client.fineTuning.jobs.retrieve(this.jobId);
@@ -323,6 +333,11 @@ async function upload_examples_to_openai(samples: OpenAIMessage[][]) {
       `temp_training_data_${Math.random().toString(36).substring(2, 10)}.jsonl`,
     );
     await fs.writeFile(tempFile, jsonl);
+    if (!client) {
+      throw new Error(
+        "OpenAI client is not initialized as credentials are missing",
+      );
+    }
 
     const file = await client.files.create({
       file: createReadStream(tempFile),
@@ -353,6 +368,11 @@ async function create_openai_fine_tuning_job(
 
   if (val_file_id) {
     params.validation_file = val_file_id;
+  }
+  if (!client) {
+    throw new Error(
+      "OpenAI client is not initialized as credentials are missing",
+    );
   }
 
   try {

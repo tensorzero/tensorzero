@@ -9,8 +9,9 @@ import { ToolConfigSchema } from "./tool";
 import type { FunctionConfig } from "./function";
 import path from "path";
 
-const CONFIG_DIR = process.env.CONFIG_DIR || "config";
-const CONFIG_PATH = path.join(CONFIG_DIR, "tensorzero.toml");
+const CONFIG_PATH =
+  process.env.TENSORZERO_UI_CONFIG_PATH ||
+  path.join("config", "tensorzero.toml");
 
 export async function loadConfig(config_path: string): Promise<Config> {
   const tomlContent = await fs.readFile(config_path, "utf-8");

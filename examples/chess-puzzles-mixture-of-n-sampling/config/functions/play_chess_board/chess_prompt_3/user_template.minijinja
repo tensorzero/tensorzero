@@ -9,6 +9,6 @@ Here, capital letters represent white pieces and lowercase letters represent bla
 The legal moves are:
 {%- for move in legal_moves_san %}
 - {{ move }}
-{%- endfor -%}
+{%- endfor %}
 
 What's your next move?
