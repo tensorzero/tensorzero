@@ -41,6 +41,13 @@ jobs:
       - name: Configure Namespace powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@v0
 
+      - name: Configure Namespace cache for Rust and Python (uv)
+        uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          cache: |
+            rust
+            uv
+
       - name: Login to DockerHub
         uses: docker/login-action@v3
         with:
