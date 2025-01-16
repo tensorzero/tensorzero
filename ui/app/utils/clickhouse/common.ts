@@ -7,7 +7,7 @@ export const clickhouseClient = createClient({
   url: process.env.CLICKHOUSE_URL,
 });
 
-export async function checkClickhouseConnection(): Promise<boolean> {
+export async function checkClickHouseConnection(): Promise<boolean> {
   try {
     const result = await clickhouseClient.ping();
     return result.success;
