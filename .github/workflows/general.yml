@@ -24,9 +24,6 @@ jobs:
       - name: Configure Namespace powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@v0
 
-      - name: Set up Cargo Cache
-        uses: Swatinem/rust-cache@v2
-
       - name: Install cargo-nextest and cargo-deny
         uses: taiki-e/install-action@v2
         with:
