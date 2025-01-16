@@ -1,6 +1,8 @@
-# Guide: Episodes
+# Guide: Streaming Inference
 
-This directory contains the code for the **[Episodes](https://www.tensorzero.com/docs/gateway/guides/episodes)** guide.
+<!-- This directory contains the code for the **[Streaming Inference](https://www.tensorzero.com/docs/gateway/guides/streaming-inference)** guide. -->
+
+This directory contains the code for streaming inference.
 
 ## Running the Example
 

@@ -1,6 +1,6 @@
-# Guide: Episodes
+# Guide: Metrics & Feedback
 
-This directory contains the code for the **[Episodes](https://www.tensorzero.com/docs/gateway/guides/episodes)** guide.
+This directory contains the code for the **[Metrics & Feedback](https://www.tensorzero.com/docs/gateway/guides/metrics-feedback)** guide.
 
 ## Running the Example
 

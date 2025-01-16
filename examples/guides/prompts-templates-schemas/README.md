@@ -1,6 +1,6 @@
-# Guide: Episodes
+# Guide: Prompt Templates & Schemas
 
-This directory contains the code for the **[Episodes](https://www.tensorzero.com/docs/gateway/guides/episodes)** guide.
+This directory contains the code for the **[Prompt Templates & Schemas](https://www.tensorzero.com/docs/gateway/guides/prompt-templates-schemas)** guide.
 
 ## Running the Example
 
