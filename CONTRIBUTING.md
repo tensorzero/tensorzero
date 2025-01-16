@@ -85,6 +85,7 @@ Did you have something else in mind? Reach out on Slack or Discord and let us kn
 - Install Docker [→](https://docs.docker.com/get-docker/)
 - Install `uv` [→](https://docs.astral.sh/uv/)
 - Install Python (3.10+) (e.g. `uv python install 3.10` + )
+- Install Node.js (we use v22) and `npm` [→](https://nodejs.org/en)
 
 ### Tests
 
@@ -159,7 +160,38 @@ cargo test-unit
 
 #### Dashboard
 
-Refer to the instructions in `dashboard/README.md`.
+For development, the UI runs against hardcoded fixtures in `ui/fixtures/`.
+It depends on a running ClickHouse instance that has been initialized with the TensorZero data model.
+We include some fixture data as well in order to exercise some functionality.
+
+It also requires a one-time build of a WebAssembly module from Rust source code that is used to ensure consistent templating of messages across the gateway and UI.
+
+The steps below assume you are in the `ui/` directory.
+
+Here are the steps in order to run or test the UI assuming you have the prerequisites installed and this repository checked out:
+
+1. Install npm dependencies: `npm install --legacy-peer-deps cmdk`
+2. Build the WebAssembly module following instructions in `ui/app/utils/minijinja/README.md`.
+3. Create a `.env` file and set the following environment variables for the server:
+
+```bash
+OPENAI_API_KEY=<your-key>
+FIREWORKS_API_KEY=<your-key>
+FIREWORKS_ACCOUNT_ID=<your-account-id>
+CLICKHOUSE_URL=<your-clickhouse-url> # For testing, set to http://localhost:8123/tensorzero
+TENSORZERO_UI_CONFIG_PATH=<path-to-config-file> # For testing, set to ./fixtures/config/tensorzero.toml
+```
+
+4. Run the dependencies: `docker compose -f fixtures/docker-compose.yml up`
+
+With the dependencies running, you can run the tests with `npm run test`.
+Similarly, you can start a development server with `npm run dev`.
+
+### Running the production server
+
+To run the production server, you should set the environment variables in the `.env.example` file in `.env` (API keys are optional but required if you'd like to fine-tune) and then run `docker compose up`.
+
+If you are running the production server against the fixtures from the development environment, set `CONFIG_DIR=./fixtures/config` and `CLICKHOUSE_URL=http://host.docker.internal:8123/tensorzero` in the `.env` file.
 
 ---
 
