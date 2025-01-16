@@ -82,6 +82,8 @@ async fn main() {
             "Failed to bind to socket address `{bind_address}`"
         ));
 
+    tracing::info!("TensorZero Gateway is listening on {}", bind_address);
+
     axum::serve(listener, router)
         .with_graceful_shutdown(shutdown_signal())
         .await
