@@ -747,7 +747,7 @@ pub async fn test_poll_existing_simple_batch_inference_request_with_provider(
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
     // Check the response from polling by batch_id
     check_simple_inference_response(inferences_json[0].clone(), None, &provider, true).await;
@@ -773,7 +773,7 @@ pub async fn test_poll_existing_simple_batch_inference_request_with_provider(
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
     check_simple_inference_response(inferences_json[0].clone(), None, &provider, true).await;
 }
@@ -827,7 +827,7 @@ pub async fn test_poll_completed_simple_batch_inference_request_with_provider(
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, ids.batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
     check_simple_inference_response(inferences_json[0].clone(), None, &provider, true).await;
@@ -852,7 +852,7 @@ pub async fn test_poll_completed_simple_batch_inference_request_with_provider(
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, ids.batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
     check_simple_inference_response(inferences_json[0].clone(), None, &provider, true).await;
@@ -1110,7 +1110,7 @@ pub async fn test_poll_existing_inference_params_batch_inference_request_with_pr
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
     // Check the response from polling by batch_id
     check_inference_params_response(inferences_json[0].clone(), &provider, None, true).await;
@@ -1137,7 +1137,7 @@ pub async fn test_poll_existing_inference_params_batch_inference_request_with_pr
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
     check_inference_params_response(inferences_json[0].clone(), &provider, None, true).await;
 }
@@ -1191,7 +1191,7 @@ pub async fn test_poll_completed_inference_params_batch_inference_request_with_p
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, ids.batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
     check_simple_inference_response(inferences_json[0].clone(), None, &provider, true).await;
@@ -1216,7 +1216,7 @@ pub async fn test_poll_completed_inference_params_batch_inference_request_with_p
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, ids.batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
     check_inference_params_response(inferences_json[0].clone(), &provider, None, true).await;
@@ -1755,7 +1755,7 @@ pub async fn test_poll_existing_tool_choice_batch_inference_request_with_provide
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
 
     let mut test_types_seen = HashSet::new();
     for inference_json in inferences_json {
@@ -1874,7 +1874,7 @@ pub async fn test_poll_completed_tool_use_batch_inference_request_with_provider(
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
 
     let mut test_types_seen = HashSet::new();
     for inference_json in inferences_json {
@@ -2178,7 +2178,7 @@ pub async fn test_poll_existing_allowed_tools_batch_inference_request_with_provi
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
     // Check the response from polling by batch_id
     check_tool_use_tool_choice_allowed_tools_inference_response(
@@ -2210,7 +2210,7 @@ pub async fn test_poll_existing_allowed_tools_batch_inference_request_with_provi
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
     check_tool_use_tool_choice_allowed_tools_inference_response(
         inferences_json[0].clone(),
@@ -2270,7 +2270,7 @@ pub async fn test_poll_completed_allowed_tools_batch_inference_request_with_prov
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, ids.batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
     check_tool_use_tool_choice_allowed_tools_inference_response(
@@ -2301,7 +2301,7 @@ pub async fn test_poll_completed_allowed_tools_batch_inference_request_with_prov
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, ids.batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
     check_tool_use_tool_choice_allowed_tools_inference_response(
@@ -2583,7 +2583,7 @@ pub async fn test_poll_existing_multi_turn_batch_inference_request_with_provider
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
     // Check the response from polling by batch_id
     check_tool_use_multi_turn_inference_response(inferences_json[0].clone(), &provider, None, true)
@@ -2610,7 +2610,7 @@ pub async fn test_poll_existing_multi_turn_batch_inference_request_with_provider
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
     check_tool_use_multi_turn_inference_response(inferences_json[0].clone(), &provider, None, true)
         .await;
@@ -2665,7 +2665,7 @@ pub async fn test_poll_completed_multi_turn_batch_inference_request_with_provide
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, ids.batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
     check_tool_use_multi_turn_inference_response(inferences_json[0].clone(), &provider, None, true)
@@ -2691,7 +2691,7 @@ pub async fn test_poll_completed_multi_turn_batch_inference_request_with_provide
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, ids.batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
     check_tool_use_multi_turn_inference_response(inferences_json[0].clone(), &provider, None, true)
@@ -2961,7 +2961,7 @@ pub async fn test_poll_existing_dynamic_tool_use_batch_inference_request_with_pr
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
     // Check the response from polling by batch_id
     check_dynamic_tool_use_inference_response(inferences_json[0].clone(), &provider, None, true)
@@ -2988,7 +2988,7 @@ pub async fn test_poll_existing_dynamic_tool_use_batch_inference_request_with_pr
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
     check_dynamic_tool_use_inference_response(inferences_json[0].clone(), &provider, None, true)
         .await;
@@ -3043,7 +3043,7 @@ pub async fn test_poll_completed_dynamic_tool_use_batch_inference_request_with_p
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, ids.batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
     check_dynamic_tool_use_inference_response(inferences_json[0].clone(), &provider, None, true)
@@ -3069,7 +3069,7 @@ pub async fn test_poll_completed_dynamic_tool_use_batch_inference_request_with_p
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, ids.batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
     check_dynamic_tool_use_inference_response(inferences_json[0].clone(), &provider, None, true)
@@ -3336,7 +3336,7 @@ pub async fn test_poll_existing_parallel_tool_use_batch_inference_request_with_p
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
     // Check the response from polling by batch_id
     check_parallel_tool_use_inference_response(inferences_json[0].clone(), &provider, None, true)
@@ -3364,7 +3364,7 @@ pub async fn test_poll_existing_parallel_tool_use_batch_inference_request_with_p
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
     check_parallel_tool_use_inference_response(inferences_json[0].clone(), &provider, None, true)
         .await;
@@ -3419,7 +3419,7 @@ pub async fn test_poll_completed_parallel_tool_use_batch_inference_request_with_
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, ids.batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
     check_parallel_tool_use_inference_response(inferences_json[0].clone(), &provider, None, true)
@@ -3445,7 +3445,7 @@ pub async fn test_poll_completed_parallel_tool_use_batch_inference_request_with_
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, ids.batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
     check_parallel_tool_use_inference_response(inferences_json[0].clone(), &provider, None, true)
@@ -3669,7 +3669,7 @@ pub async fn test_poll_existing_json_mode_batch_inference_request_with_provider(
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
     // Check the response from polling by batch_id
     check_json_mode_inference_response(inferences_json[0].clone(), &provider, None, true).await;
@@ -3695,7 +3695,7 @@ pub async fn test_poll_existing_json_mode_batch_inference_request_with_provider(
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
     check_json_mode_inference_response(inferences_json[0].clone(), &provider, None, true).await;
 }
@@ -3749,7 +3749,7 @@ pub async fn test_poll_completed_json_mode_batch_inference_request_with_provider
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, ids.batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
     check_json_mode_inference_response(inferences_json[0].clone(), &provider, None, true).await;
@@ -3774,7 +3774,7 @@ pub async fn test_poll_completed_json_mode_batch_inference_request_with_provider
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, ids.batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
     check_json_mode_inference_response(inferences_json[0].clone(), &provider, None, true).await;
@@ -4012,7 +4012,7 @@ pub async fn test_poll_existing_dynamic_json_mode_batch_inference_request_with_p
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
     // Check the response from polling by batch_id
     check_dynamic_json_mode_inference_response(
@@ -4045,7 +4045,7 @@ pub async fn test_poll_existing_dynamic_json_mode_batch_inference_request_with_p
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
     check_dynamic_json_mode_inference_response(
         inferences_json[0].clone(),
@@ -4106,7 +4106,7 @@ pub async fn test_poll_completed_dynamic_json_mode_batch_inference_request_with_
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, ids.batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
     check_dynamic_json_mode_inference_response(
@@ -4138,7 +4138,7 @@ pub async fn test_poll_completed_dynamic_json_mode_batch_inference_request_with_
     let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
     assert_eq!(returned_batch_id, ids.batch_id);
 
-    let inferences_json = response_json.get("responses").unwrap().as_array().unwrap();
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
     check_dynamic_json_mode_inference_response(

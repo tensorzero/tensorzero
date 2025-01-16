@@ -376,7 +376,7 @@ impl PollInferenceResponse {
 #[derive(Debug, PartialEq, Serialize)]
 pub struct CompletedBatchInferenceResponse {
     pub batch_id: Uuid,
-    pub responses: Vec<InferenceResponse>,
+    pub inferences: Vec<InferenceResponse>,
 }
 
 impl CompletedBatchInferenceResponse {
@@ -392,14 +392,14 @@ impl CompletedBatchInferenceResponse {
                 inference_id: Some(inference_id),
                 ..
             } => {
-                let responses = self
-                    .responses
+                let inferences = self
+                    .inferences
                     .into_iter()
                     .filter(|r| r.inference_id() == inference_id)
                     .collect();
                 CompletedBatchInferenceResponse {
                     batch_id: self.batch_id,
-                    responses,
+                    inferences,
                 }
             }
         }
@@ -664,7 +664,7 @@ pub async fn write_poll_batch_inference<'a>(
             Ok(PollInferenceResponse::Pending)
         }
         PollBatchInferenceResponse::Completed(response) => {
-            let responses = write_completed_batch_inference(
+            let inferences = write_completed_batch_inference(
                 clickhouse_connection_info,
                 batch_request,
                 response,
@@ -674,7 +674,7 @@ pub async fn write_poll_batch_inference<'a>(
             Ok(PollInferenceResponse::Completed(
                 CompletedBatchInferenceResponse {
                     batch_id: batch_request.batch_id,
-                    responses,
+                    inferences,
                 },
             ))
         }
@@ -763,7 +763,7 @@ pub async fn write_completed_batch_inference<'a>(
         .function_name
         .clone();
     let function = config.get_function(function_name)?;
-    let mut responses: Vec<InferenceResponse> = Vec::new();
+    let mut inferences: Vec<InferenceResponse> = Vec::new();
     let mut inference_rows_to_write: Vec<InferenceDatabaseInsert> = Vec::new();
     let mut model_inference_rows_to_write: Vec<Value> = Vec::new();
     for batch_model_inference in batch_model_inferences {
@@ -841,7 +841,7 @@ pub async fn write_completed_batch_inference<'a>(
             episode_id,
             variant_name.to_string(),
         );
-        responses.push(inference_response);
+        inferences.push(inference_response);
         let metadata = InferenceDatabaseInsertMetadata {
             function_name: function_name.to_string(),
             variant_name: variant_name.to_string(),
@@ -880,7 +880,7 @@ pub async fn write_completed_batch_inference<'a>(
         .write(&model_inference_rows_to_write, "ModelInference")
         .await?;
 
-    Ok(responses)
+    Ok(inferences)
 }
 
 /// This function gets the batch inferences from the database for a given batch id and inference ids
@@ -960,7 +960,7 @@ pub async fn get_completed_batch_inference_response(
                 }
                 Ok(CompletedBatchInferenceResponse {
                     batch_id: *batch_id,
-                    responses: inference_responses,
+                    inferences: inference_responses,
                 })
             }
             PollPathParams {
@@ -1009,7 +1009,7 @@ pub async fn get_completed_batch_inference_response(
                 let inference_response = InferenceResponse::Chat(inference_response.try_into()?);
                 Ok(CompletedBatchInferenceResponse {
                     batch_id: batch_request.batch_id,
-                    responses: vec![inference_response],
+                    inferences: vec![inference_response],
                 })
             }
         },
@@ -1053,7 +1053,7 @@ pub async fn get_completed_batch_inference_response(
                 }
                 Ok(CompletedBatchInferenceResponse {
                     batch_id: batch_request.batch_id,
-                    responses: inference_responses,
+                    inferences: inference_responses,
                 })
             }
             PollPathParams {
@@ -1102,7 +1102,7 @@ pub async fn get_completed_batch_inference_response(
                 let inference_response = InferenceResponse::Json(inference_response.try_into()?);
                 Ok(CompletedBatchInferenceResponse {
                     batch_id: batch_request.batch_id,
-                    responses: vec![inference_response],
+                    inferences: vec![inference_response],
                 })
             }
         },
