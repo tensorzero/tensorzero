@@ -212,11 +212,8 @@ impl InferenceProvider for TGIProvider {
             .into());
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: serde_json::to_string(&request_body).ok(),
-                raw_response: None,
             })
         })?;
         let request_url = get_chat_url(&self.api_base)?;
