@@ -38,6 +38,20 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const { inferences, pageSize, bounds } = loaderData;
   const navigate = useNavigate();
 
+  if (inferences.length === 0) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <h2 className="mb-4 text-2xl font-semibold">Inferences</h2>
+        <div className="mb-6 h-px w-full bg-gray-200"></div>
+        <InferenceSearchBar />
+        <div className="my-6 h-px w-full bg-gray-200"></div>
+        <div className="py-8 text-center text-gray-500">
+          No inferences found
+        </div>
+      </div>
+    );
+  }
+
   const topInference = inferences[0];
   const bottomInference = inferences[inferences.length - 1];
 
@@ -49,9 +63,10 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     navigate(`?after=${topInference.id}&pageSize=${pageSize}`);
   };
 
-  // These are swapped because the table is sorted in descending order
-  const disablePrevious = bounds.last_id === topInference.id;
-  const disableNext = bounds.first_id === bottomInference.id;
+  const disablePrevious =
+    !bounds?.last_id || bounds.last_id === topInference.id;
+  const disableNext =
+    !bounds?.first_id || bounds.first_id === bottomInference.id;
 
   return (
     <div className="container mx-auto px-4 py-8">

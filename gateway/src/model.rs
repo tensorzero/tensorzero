@@ -14,6 +14,7 @@ use crate::inference::providers::dummy::DummyProvider;
 use crate::inference::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
 
 use crate::inference::providers::hyperbolic::HyperbolicProvider;
+use crate::inference::providers::sglang::SGLangProvider;
 use crate::inference::providers::tgi::TGIProvider;
 use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
@@ -158,7 +159,6 @@ impl ModelConfig {
     }
 }
 
-// NOTE: if one adds a new provider, make sure to add it to the set of `BLACKLISTED_NAMES` in `config_parser.rs`
 #[derive(Debug)]
 pub enum ProviderConfig {
     Anthropic(AnthropicProvider),
@@ -175,6 +175,7 @@ pub enum ProviderConfig {
     VLLM(VLLMProvider),
     XAI(XAIProvider),
     TGI(TGIProvider),
+    SGLang(SGLangProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
 }
@@ -262,6 +263,12 @@ enum ProviderConfigHelper {
     },
     #[allow(clippy::upper_case_acronyms)]
     TGI {
+        api_base: Url,
+        api_key_location: Option<CredentialLocation>,
+    },
+    #[allow(clippy::upper_case_acronyms)]
+    SGLang {
+        model_name: String,
         api_base: Url,
         api_key_location: Option<CredentialLocation>,
     },
@@ -387,6 +394,14 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 XAIProvider::new(model_name, api_key_location)
                     .map_err(|e| D::Error::custom(e.to_string()))?,
             ),
+            ProviderConfigHelper::SGLang {
+                model_name,
+                api_base,
+                api_key_location,
+            } => ProviderConfig::SGLang(
+                SGLangProvider::new(model_name, api_base, api_key_location)
+                    .map_err(|e| D::Error::custom(e.to_string()))?,
+            ),
             ProviderConfigHelper::TGI {
                 api_base,
                 api_key_location,
@@ -431,6 +446,7 @@ impl ProviderConfig {
             ProviderConfig::Mistral(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::OpenAI(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::Together(provider) => provider.infer(request, client, api_keys).await,
+            ProviderConfig::SGLang(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::VLLM(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::XAI(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::TGI(provider) => provider.infer(request, client, api_keys).await,
@@ -484,6 +500,9 @@ impl ProviderConfig {
                 provider.infer_stream(request, client, api_keys).await
             }
             ProviderConfig::Together(provider) => {
+                provider.infer_stream(request, client, api_keys).await
+            }
+            ProviderConfig::SGLang(provider) => {
                 provider.infer_stream(request, client, api_keys).await
             }
             ProviderConfig::XAI(provider) => provider.infer_stream(request, client, api_keys).await,
@@ -556,6 +575,11 @@ impl ProviderConfig {
                     .await
             }
             ProviderConfig::Together(provider) => {
+                provider
+                    .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
+            ProviderConfig::SGLang(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
                     .await
@@ -647,6 +671,11 @@ impl ProviderConfig {
                     .await
             }
             ProviderConfig::Together(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::SGLang(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
