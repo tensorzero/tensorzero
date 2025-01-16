@@ -35,6 +35,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install and configure Namespace CLI
+        uses: namespacelabs/nscloud-setup@v0
+
+      - name: Configure Namespace powered Buildx
+        uses: namespacelabs/nscloud-setup-buildx-action@v0
+
       - name: Login to DockerHub
         uses: docker/login-action@v3
         with:
