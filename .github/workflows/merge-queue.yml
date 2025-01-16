@@ -77,7 +77,7 @@ jobs:
 
       - name: Launch the gateway for E2E tests
         run: |
-          cargo run-e2e &
+          cargo run-e2e > e2e_logs.txt 2>&1 &
           while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
             echo "Waiting for gateway to be healthy..."
             sleep 1
@@ -87,6 +87,10 @@ jobs:
       - name: Run all tests (including E2E tests)
         run: |
           cargo test-all --profile ci ${{ vars.CARGO_NEXTEST_ARGS }}
+
+      - name: Print e2e logs
+        if: always()
+        run: cat e2e_logs.txt
 
       - name: Install Python for python async client tests
         run: uv python install 3.10
