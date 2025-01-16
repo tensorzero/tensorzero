@@ -6,35 +6,34 @@ This directory contains the code for the **[Episodes](https://www.tensorzero.com
 
 1. Install the Python Dependencies
 
-   - Using [`uv`](https://github.com/astral-sh/uv)
+```bash
+# Using vanilla Python
+pip install -r requirements.txt
+```
 
-     ```bash
-     uv venv
-     uv pip sync requirements.txt
-     ```
+or
 
-   - Using `pip`
-
-     ```bash
-     pip install -r requirements.txt
-     ```
+```bash
+# Using uv
+uv venv && uv pip sync requirements.txt
+```
 
 2. Launch the TensorZero Gateway and ClickHouse database
-
-3. Launch the TensorZero Gateway and ClickHouse database:
 
 ```bash
 docker compose up
 ```
 
-2. Install the dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
 3. Run the example:
 
 ```bash
-python run.py
+# Using vanilla Python
+pip install -r requirements.txt
+```
+
+or
+
+```bash
+# Using uv
+uv run python run.py
 ```
