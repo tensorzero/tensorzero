@@ -11,7 +11,7 @@ env:
 
 jobs:
   validate:
-    runs-on: ubuntu-22.04-8core
+    runs-on: namespace-profile-tensorzero-8x16
 
     timeout-minutes: 15
 
