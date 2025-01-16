@@ -38,3 +38,18 @@ services:
     depends_on:
       clickhouse:
         condition: service_healthy
+  ui:
+    container_name: tensorzero-ui-gsm8k-custom-recipe-dspy
+    image: tensorzero/ui
+    volumes:
+      - ./config:/app/config:ro
+    environment:
+      - CLICKHOUSE_URL=http://tensorzero-clickhouse-gsm8k-custom-recipe-dspy:8123/tensorzero
+      - TENSORZERO_UI_CONFIG_PATH= # Leave blank so that it defaults to ./config/tensorzero.toml
+    env_file:
+      - ${ENV_FILE:-.env}
+    ports:
+      - "4000:4000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
