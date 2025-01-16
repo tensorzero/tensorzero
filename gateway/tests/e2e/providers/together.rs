@@ -15,23 +15,23 @@ async fn get_providers() -> E2ETestProviders {
 
     let standard_providers = vec![E2ETestProvider {
         variant_name: "together".to_string(),
-        model_name: "llama3.1-8b-instruct-together".to_string(),
-        model_provider_name: "together".to_string(),
+        model_name: "llama3.1-8b-instruct-together".into(),
+        model_provider_name: "together".into(),
         credentials: HashMap::new(),
     }];
 
     let inference_params_providers = vec![E2ETestProvider {
         variant_name: "together-dynamic".to_string(),
-        model_name: "llama3.1-8b-instruct-together-dynamic".to_string(),
-        model_provider_name: "together".to_string(),
+        model_name: "llama3.1-8b-instruct-together-dynamic".into(),
+        model_provider_name: "together".into(),
         credentials,
     }];
 
     let json_providers = vec![
         E2ETestProvider {
             variant_name: "together".to_string(),
-            model_name: "llama3.1-8b-instruct-together".to_string(),
-            model_provider_name: "together".to_string(),
+            model_name: "llama3.1-8b-instruct-together".into(),
+            model_provider_name: "together".into(),
             credentials: HashMap::new(),
         },
         // TODOs (#80): see below
@@ -43,8 +43,8 @@ async fn get_providers() -> E2ETestProviders {
     #[cfg(feature = "e2e_tests")]
     let shorthand_providers = vec![E2ETestProvider {
         variant_name: "together-shorthand".to_string(),
-        model_name: "together::meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo".to_string(),
-        model_provider_name: "together".to_string(),
+        model_name: "together::meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo".into(),
+        model_provider_name: "together".into(),
         credentials: HashMap::new(),
     }];
 

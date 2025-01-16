@@ -12,7 +12,7 @@ use crate::{
 use super::{ContentBlock, Input, ModelInferenceRequest, RequestMessage, Usage};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, sync::Arc};
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
@@ -151,7 +151,7 @@ pub struct BatchRequestRow<'a> {
     pub id: Uuid,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub batch_params: Cow<'a, Value>,
-    pub model_name: Cow<'a, str>,
+    pub model_name: Arc<str>,
     pub raw_request: Cow<'a, str>,
     pub raw_response: Cow<'a, str>,
     pub model_provider_name: Cow<'a, str>,
@@ -272,7 +272,7 @@ impl<'a> BatchRequestRow<'a> {
             batch_params: Cow::Borrowed(batch_params),
             function_name: Cow::Borrowed(function_name),
             variant_name: Cow::Borrowed(variant_name),
-            model_name: Cow::Borrowed(model_name),
+            model_name: Arc::from(model_name),
             raw_request: Cow::Borrowed(raw_request),
             raw_response: Cow::Borrowed(raw_response),
             model_provider_name: Cow::Borrowed(model_provider_name),

@@ -34,35 +34,35 @@ async fn get_providers() -> E2ETestProviders {
 
     let standard_providers = vec![E2ETestProvider {
         variant_name: "openai".to_string(),
-        model_name: "gpt-4o-mini-2024-07-18".to_string(),
-        model_provider_name: "openai".to_string(),
+        model_name: "gpt-4o-mini-2024-07-18".into(),
+        model_provider_name: "openai".into(),
         credentials: HashMap::new(),
     }];
 
     let inference_params_providers = vec![E2ETestProvider {
         variant_name: "openai-dynamic".to_string(),
-        model_name: "gpt-4o-mini-2024-07-18-dynamic".to_string(),
-        model_provider_name: "openai".to_string(),
+        model_name: "gpt-4o-mini-2024-07-18-dynamic".into(),
+        model_provider_name: "openai".into(),
         credentials,
     }];
 
     let json_providers = vec![
         E2ETestProvider {
             variant_name: "openai".to_string(),
-            model_name: "gpt-4o-mini-2024-07-18".to_string(),
-            model_provider_name: "openai".to_string(),
+            model_name: "gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             variant_name: "openai-implicit".to_string(),
-            model_name: "gpt-4o-mini-2024-07-18".to_string(),
-            model_provider_name: "openai".to_string(),
+            model_name: "gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             variant_name: "openai-strict".to_string(),
-            model_name: "gpt-4o-mini-2024-07-18".to_string(),
-            model_provider_name: "openai".to_string(),
+            model_name: "gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
     ];
@@ -70,8 +70,8 @@ async fn get_providers() -> E2ETestProviders {
     #[cfg(feature = "e2e_tests")]
     let shorthand_providers = vec![E2ETestProvider {
         variant_name: "openai-shorthand".to_string(),
-        model_name: "openai::gpt-4o-mini-2024-07-18".to_string(),
-        model_provider_name: "openai".to_string(),
+        model_name: "openai::gpt-4o-mini-2024-07-18".into(),
+        model_provider_name: "openai".into(),
         credentials: HashMap::new(),
     }];
 
