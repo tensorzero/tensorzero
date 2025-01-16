@@ -75,10 +75,10 @@ impl Variant for MixtureOfNConfig {
     }
 
     async fn infer_stream<'request>(
-        &'static self,
+        &self,
         _input: &Input,
         _models: &'request InferenceModels<'static>,
-        _function: &'static FunctionConfig,
+        _function: &FunctionConfig,
         _inference_config: &'request InferenceConfig<'static, 'request>,
         _clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,

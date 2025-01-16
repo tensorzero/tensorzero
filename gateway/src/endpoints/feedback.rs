@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 use axum::extract::State;
@@ -463,8 +464,8 @@ impl TryFrom<DemonstrationContentBlock> for ContentBlock {
 // For json functions, the value is validated against the output schema. If it passes,
 // we construct the usual {"raw": str, "parsed": parsed_value} object, serialize it, and return it.
 async fn validate_parse_demonstration(
-    function_config: &'static FunctionConfig,
-    tools: &'static HashMap<String, StaticToolConfig>,
+    function_config: &FunctionConfig,
+    tools: &HashMap<String, Arc<StaticToolConfig>>,
     value: &Value,
 ) -> Result<String, Error> {
     match function_config {
@@ -961,10 +962,10 @@ mod tests {
             .unwrap(),
             strict: false,
         };
-        let tools = Box::leak(Box::new(HashMap::from([(
+        let tools = HashMap::from([(
             "get_temperature".to_string(),
-            weather_tool_config_static,
-        )])));
+            Arc::new(weather_tool_config_static),
+        )]);
         let function_config_chat_tools =
             Box::leak(Box::new(FunctionConfig::Chat(FunctionConfigChat {
                 variants: HashMap::new(),
@@ -978,7 +979,7 @@ mod tests {
 
         // Case 1: a string passed to a chat function
         let value = json!("Hello, world!");
-        let parsed_value = validate_parse_demonstration(function_config_chat_tools, tools, &value)
+        let parsed_value = validate_parse_demonstration(function_config_chat_tools, &tools, &value)
             .await
             .unwrap();
         let expected_parsed_value = serde_json::to_string(&vec![ContentBlock::Text(Text {
@@ -990,7 +991,7 @@ mod tests {
         // Case 2: a tool call to get_temperature, which exists
         let value = json!([{"type": "tool_call", "name": "get_temperature", "arguments": {"location": "London", "unit": "celsius"}}]
         );
-        let parsed_value = validate_parse_demonstration(function_config_chat_tools, tools, &value)
+        let parsed_value = validate_parse_demonstration(function_config_chat_tools, &tools, &value)
             .await
             .unwrap();
         let expected_parsed_value =
@@ -1010,7 +1011,7 @@ mod tests {
         // Case 3: a tool call to get_humidity, which does not exist
         let value = json!([{"type": "tool_call", "name": "get_humidity", "arguments": {"location": "London", "unit": "celsius"}}]
         );
-        let err = validate_parse_demonstration(function_config_chat_tools, tools, &value)
+        let err = validate_parse_demonstration(function_config_chat_tools, &tools, &value)
             .await
             .unwrap_err();
         let details = err.get_owned_details();
@@ -1024,7 +1025,7 @@ mod tests {
         // Case 4: a tool call to get_temperature, which exists but has bad arguments (place instead of location)
         let value = json!([{"type": "tool_call", "name": "get_temperature", "arguments": {"place": "London", "unit": "celsius"}}]
         );
-        let err = validate_parse_demonstration(function_config_chat_tools, tools, &value)
+        let err = validate_parse_demonstration(function_config_chat_tools, &tools, &value)
             .await
             .unwrap_err();
         let details = err.get_owned_details();
@@ -1067,7 +1068,7 @@ mod tests {
             "name": "John",
             "age": 30
         });
-        let parsed_value = validate_parse_demonstration(function_config, tools, &value)
+        let parsed_value = validate_parse_demonstration(function_config, &tools, &value)
             .await
             .unwrap();
         let expected_parsed_value = serde_json::to_string(&json!({
@@ -1079,7 +1080,7 @@ mod tests {
 
         // Case 6: a JSON function with incorrect output
         let value = json!("Hello, world!");
-        validate_parse_demonstration(function_config, tools, &value)
+        validate_parse_demonstration(function_config, &tools, &value)
             .await
             .unwrap_err();
     }

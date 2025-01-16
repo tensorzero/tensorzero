@@ -27,7 +27,7 @@ pub struct Config<'c> {
     pub embedding_models: HashMap<Arc<str>, EmbeddingModelConfig>, // embedding model name => embedding model config
     pub functions: HashMap<String, FunctionConfig>, // function name => function config
     pub metrics: HashMap<String, MetricConfig>,     // metric name => metric config
-    pub tools: HashMap<String, StaticToolConfig>,   // tool name => tool config
+    pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
     pub templates: TemplateConfig<'c>,
 }
 
@@ -114,8 +114,12 @@ impl<'c> Config<'c> {
         let tools = config
             .tools
             .into_iter()
-            .map(|(name, config)| config.load(&base_path, name.clone()).map(|c| (name, c)))
-            .collect::<Result<HashMap<String, StaticToolConfig>, Error>>()?;
+            .map(|(name, config)| {
+                config
+                    .load(&base_path, name.clone())
+                    .map(|c| (name, Arc::new(c)))
+            })
+            .collect::<Result<HashMap<String, Arc<StaticToolConfig>>, Error>>()?;
 
         let mut config = Config {
             gateway,
@@ -235,7 +239,7 @@ impl<'c> Config<'c> {
     }
 
     /// Get a tool by name
-    pub fn get_tool<'a>(&'a self, tool_name: &str) -> Result<&'a StaticToolConfig, Error> {
+    pub fn get_tool<'a>(&'a self, tool_name: &str) -> Result<&'a Arc<StaticToolConfig>, Error> {
         self.tools.get(tool_name).ok_or_else(|| {
             Error::new(ErrorDetails::UnknownTool {
                 name: tool_name.to_string(),

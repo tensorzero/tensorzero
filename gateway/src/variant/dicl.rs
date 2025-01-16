@@ -138,10 +138,10 @@ impl Variant for DiclConfig {
     }
 
     async fn infer_stream<'request>(
-        &'static self,
+        &self,
         input: &Input,
         models: &'request InferenceModels<'static>,
-        function: &'static FunctionConfig,
+        function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'static, 'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
