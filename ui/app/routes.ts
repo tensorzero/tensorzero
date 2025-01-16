@@ -11,8 +11,8 @@ export default [
     "routes/api/curated_inferences/count.route.ts",
   ),
   route(
-    "api/metrics/with_feedback",
-    "routes/api/metrics/with_feedback.route.ts",
+    "api/function/:function_name/feedback_counts",
+    "routes/api/function/$function_name/feedback_counts.route.ts",
   ),
   route(
     "observability/inferences",

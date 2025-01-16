@@ -7,10 +7,9 @@ import {
 } from "~/utils/clickhouse/feedback";
 
 export async function loader({
-  request,
+  params,
 }: LoaderFunctionArgs): Promise<Response> {
-  const url = new URL(request.url);
-  const functionName = url.searchParams.get("function");
+  const functionName = params.function_name;
 
   if (!functionName) {
     return Response.json({ metrics: [] } as MetricsWithFeedbackData);

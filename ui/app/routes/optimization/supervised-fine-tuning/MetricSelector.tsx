@@ -15,6 +15,7 @@ import { MetricBadges } from "~/components/metric/MetricBadges";
 import { useEffect, useMemo } from "react";
 import { useFetcher } from "react-router";
 import type { MetricsWithFeedbackData } from "~/utils/clickhouse/feedback";
+import { Badge } from "~/components/ui/badge";
 
 type MetricSelectorProps = {
   control: Control<SFTFormValues>;
@@ -40,7 +41,7 @@ export function MetricSelector({
   useEffect(() => {
     if (functionValue) {
       metricsFetcher.load(
-        `/api/metrics/with_feedback?function=${encodeURIComponent(functionValue)}`,
+        `/api/function/${encodeURIComponent(functionValue)}/feedback_counts`,
       );
     }
   }, [functionValue]);
@@ -103,9 +104,9 @@ export function MetricSelector({
                             <span>{name}</span>
                             <div className="ml-2 flex items-center gap-2">
                               {metricFeedback && (
-                                <span className="text-sm text-muted-foreground">
-                                  ({metricFeedback.feedback_count})
-                                </span>
+                                <Badge className="bg-gray-200 text-gray-800 dark:bg-gray-900 dark:text-gray-300">
+                                  Count: {metricFeedback.feedback_count}
+                                </Badge>
                               )}
                               <MetricBadges metric={metric} />
                             </div>
