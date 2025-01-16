@@ -366,7 +366,7 @@ async fn test_write_read_completed_batch_inference_chat() {
             .await
             .unwrap();
 
-    // Sort responses by inference_id to ensure consistent ordering
+    // Sort inferences by inference_id to ensure consistent ordering
     inference_responses.sort_by_key(|response| response.inference_id());
 
     assert_eq!(inference_responses.len(), 2);
@@ -448,21 +448,21 @@ async fn test_write_read_completed_batch_inference_chat() {
     .await
     .unwrap();
     assert_eq!(completed_inference_response.batch_id, batch_id);
-    assert_eq!(completed_inference_response.responses.len(), 2);
+    assert_eq!(completed_inference_response.inferences.len(), 2);
 
-    // Create HashMaps keyed by inference_id for both sets of responses
-    let completed_responses: HashMap<_, _> = completed_inference_response
-        .responses
+    // Create HashMaps keyed by inference_id for both sets of inferences
+    let completed_inferences: HashMap<_, _> = completed_inference_response
+        .inferences
         .iter()
         .map(|r| (r.inference_id(), r))
         .collect();
-    let original_responses: HashMap<_, _> = [inference_response_1, inference_response_2]
+    let original_inferences: HashMap<_, _> = [inference_response_1, inference_response_2]
         .into_iter()
         .map(|r| (r.inference_id(), r))
         .collect();
 
     // Compare the HashMaps
-    assert_eq!(completed_responses, original_responses);
+    assert_eq!(completed_inferences, original_inferences);
 
     // Now let's read using `get_completed_batch_inference_response` with a `PollInferenceQuery::Inference`
     let query = PollPathParams {
@@ -478,8 +478,8 @@ async fn test_write_read_completed_batch_inference_chat() {
     .await
     .unwrap();
     assert_eq!(
-        &completed_inference_response.responses[0],
-        original_responses[&inference_id1]
+        &completed_inference_response.inferences[0],
+        original_inferences[&inference_id1]
     );
 }
 
@@ -564,17 +564,17 @@ async fn test_write_read_completed_batch_inference_json() {
 
     assert_eq!(inference_responses.len(), 2);
 
-    // Create a map of responses by inference_id for easier lookup
-    let responses_by_id: HashMap<_, _> = inference_responses
+    // Create a map of inferences by inference_id for easier lookup
+    let inferences_by_id: HashMap<_, _> = inference_responses
         .iter()
         .map(|r| (r.inference_id(), r))
         .collect();
 
     // Now we can safely access each response by its ID
-    let response_1 = responses_by_id
+    let response_1 = inferences_by_id
         .get(&inference_id1)
         .expect("Missing response for inference_id1");
-    let response_2 = responses_by_id
+    let response_2 = inferences_by_id
         .get(&inference_id2)
         .expect("Missing response for inference_id2");
 
@@ -677,21 +677,21 @@ async fn test_write_read_completed_batch_inference_json() {
     .await
     .unwrap();
     assert_eq!(completed_inference_response.batch_id, batch_id);
-    assert_eq!(completed_inference_response.responses.len(), 2);
+    assert_eq!(completed_inference_response.inferences.len(), 2);
 
-    // Create HashMaps keyed by inference_id for both sets of responses
-    let completed_responses: HashMap<_, _> = completed_inference_response
-        .responses
+    // Create HashMaps keyed by inference_id for both sets of inferences
+    let completed_inferences: HashMap<_, _> = completed_inference_response
+        .inferences
         .iter()
         .map(|r| (r.inference_id(), r))
         .collect();
-    let original_responses: HashMap<_, _> = [response_1, response_2]
+    let original_inferences: HashMap<_, _> = [response_1, response_2]
         .into_iter()
         .map(|r| (r.inference_id(), *r))
         .collect();
 
     // Compare the HashMaps
-    assert_eq!(completed_responses, original_responses);
+    assert_eq!(completed_inferences, original_inferences);
 
     // Now let's read using `get_completed_batch_inference_response` with a `PollInferenceQuery::Inference`
     let query = PollPathParams {
@@ -707,7 +707,7 @@ async fn test_write_read_completed_batch_inference_json() {
     .await
     .unwrap();
     assert_eq!(
-        &completed_inference_response.responses[0],
-        original_responses[&inference_id1]
+        &completed_inference_response.inferences[0],
+        original_inferences[&inference_id1]
     );
 }
