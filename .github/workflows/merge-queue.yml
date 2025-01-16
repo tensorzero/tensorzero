@@ -28,21 +28,24 @@ env:
 
 jobs:
   live-tests:
-    runs-on: ubuntu-22.04-8core
+    runs-on: namespace-profile-tensorzero-8x16
 
     timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install and configure Namespace CLI
+        uses: namespacelabs/nscloud-setup@v0
+
+      - name: Configure Namespace powered Buildx
+        uses: namespacelabs/nscloud-setup-buildx-action@v0
+
       - name: Login to DockerHub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Set up Cargo Cache
-        uses: Swatinem/rust-cache@v2
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@v2
