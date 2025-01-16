@@ -1,4 +1,4 @@
-name: PR Checks
+name: Dummy
 
 on:
   pull_request:
@@ -7,7 +7,7 @@ on:
 jobs:
   # We don't want to run live-tests on PRs, so we use a dummy job to satisfy branch protection checks
   live-tests:
-    runs-on: namespace-profile-tensorzero-2x8
+    runs-on: ubuntu-latest
 
     timeout-minutes: 5
 
