@@ -187,12 +187,6 @@ TENSORZERO_UI_CONFIG_PATH=<path-to-config-file> # For testing, set to ./fixtures
 With the dependencies running, you can run the tests with `npm run test`.
 Similarly, you can start a development server with `npm run dev`.
 
-### Running the production server
-
-To run the production server, you should set the environment variables in the `.env.example` file in `.env` (API keys are optional but required if you'd like to fine-tune) and then run `docker compose up`.
-
-If you are running the production server against the fixtures from the development environment, set `CONFIG_DIR=./fixtures/config` and `CLICKHOUSE_URL=http://host.docker.internal:8123/tensorzero` in the `.env` file.
-
 ---
 
 Thanks again for your interest in contributing to TensorZero! We're excited to see what you build.

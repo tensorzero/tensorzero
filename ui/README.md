@@ -13,6 +13,7 @@ The UI requires a TensorZero configuration tree and the URL of the ClickHouse in
 Given these two things, the easiest way to run the UI is to use the `tensorzero/ui` docker image.
 We include an example `docker-compose.yml` and `.env.example` file in this directory.
 You optionally can include an `OPENAI_API_KEY` and `FIREWORKS_API_KEY` in the `.env` file to enable fine-tuning on curated data from your ClickHouse using those services.
+The server looks for the `TENSORZERO_UI_CONFIG_PATH` environment variable to find the configuration file (defaults to `config/tensorzero.toml`).
 Many of the examples in the `examples/` directory of the top-level repository include a `docker-compose.yml` file that concurrently runs Clickhouse, the UI and the TensorZero gateway.
 These might also be useful to show how they work together.
 

@@ -4,8 +4,6 @@ services:
     image: tensorzero/ui
     volumes:
       - ./config:/app/config:ro
-    environment:
-      - TENSORZERO_UI_CONFIG_PATH= # Leave blank so that it defaults to ./config/tensorzero.toml
     env_file:
       - ${ENV_FILE:-.env}
     ports:
