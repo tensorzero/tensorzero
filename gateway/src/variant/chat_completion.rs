@@ -211,7 +211,7 @@ impl Variant for ChatCompletionConfig {
             function,
             clients,
             inference_params,
-            &self.retries,
+            self.retries,
         )
         .await
     }

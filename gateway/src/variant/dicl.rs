@@ -189,7 +189,7 @@ impl Variant for DiclConfig {
                 function,
                 clients,
                 inference_params,
-                &self.retries,
+                self.retries,
             )
             .await?;
 

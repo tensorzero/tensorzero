@@ -486,11 +486,11 @@ async fn infer_model_request<'a, 'request>(
 async fn infer_model_request_stream<'request>(
     request: ModelInferenceRequest<'request>,
     model_name: Arc<str>,
-    model_config: &'static ModelConfig,
-    function: &'static FunctionConfig,
+    model_config: &ModelConfig,
+    function: &FunctionConfig,
     clients: &'request InferenceClients<'request>,
     inference_params: InferenceParams,
-    retry_config: &'static RetryConfig,
+    retry_config: RetryConfig,
 ) -> Result<(InferenceResultChunk, InferenceResultStream, ModelUsedInfo), Error> {
     let (first_chunk, stream, raw_request, model_provider_name) = (|| async {
         model_config
@@ -510,13 +510,14 @@ async fn infer_model_request_stream<'request>(
         system,
         input_messages,
     };
-    let first_chunk = InferenceResultChunk::new(first_chunk, function);
+    let config_type = function.config_type();
+    let first_chunk = InferenceResultChunk::new(first_chunk, config_type);
     let stream =
-        stream.map(move |chunk| chunk.map(|chunk| InferenceResultChunk::new(chunk, function)));
+        stream.map(move |chunk| chunk.map(|chunk| InferenceResultChunk::new(chunk, config_type)));
     Ok((first_chunk, Box::pin(stream), model_used_info))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Copy, Clone)]
 pub struct RetryConfig {
     pub num_retries: usize,
     pub max_delay_s: f32,
@@ -1142,9 +1143,9 @@ mod tests {
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
         };
-        let retry_config = Box::leak(Box::new(RetryConfig::default()));
+        let retry_config = RetryConfig::default();
         // Create a dummy function config (chat completion)
-        let function_config = Box::leak(Box::new(FunctionConfig::Chat(FunctionConfigChat {
+        let function_config = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: None,
@@ -1152,7 +1153,7 @@ mod tests {
             tools: vec![],
             tool_choice: crate::tool::ToolChoice::Auto,
             parallel_tool_calls: false,
-        })));
+        });
 
         // Create an input message
         let messages = vec![RequestMessage {
@@ -1197,7 +1198,7 @@ mod tests {
             request,
             "good_model".into(),
             model_config,
-            function_config,
+            &function_config,
             &clients,
             inference_params.clone(),
             retry_config,
@@ -1323,7 +1324,7 @@ mod tests {
                 (model_name.into(), dummy_provider_config),
             ]),
         }));
-        let retry_config = Box::leak(Box::new(RetryConfig::default()));
+        let retry_config = RetryConfig::default();
 
         // Call infer_model_request_stream
         let result = infer_model_request_stream(

@@ -12,11 +12,14 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolResult};
 use crate::{endpoints::inference::InferenceDatabaseInsertMetadata, variant::InferenceConfig};
 use crate::{endpoints::inference::InferenceParams, error::ErrorDetails};
 use crate::{error::Error, variant::JsonMode};
 use crate::{function::FunctionConfig, minijinja_util::TemplateConfig};
+use crate::{
+    function::FunctionConfigType,
+    tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolResult},
+};
 use crate::{jsonschema_util::DynamicJSONSchema, tool::ToolCallConfigDatabaseInsert};
 
 pub mod batch;
@@ -781,10 +784,10 @@ impl InferenceResultChunk {
 }
 
 impl InferenceResultChunk {
-    pub fn new(chunk: ProviderInferenceResponseChunk, function: &FunctionConfig) -> Self {
+    pub fn new(chunk: ProviderInferenceResponseChunk, function: FunctionConfigType) -> Self {
         match function {
-            FunctionConfig::Chat(_) => Self::Chat(chunk.into()),
-            FunctionConfig::Json(_) => Self::Json(chunk.into()),
+            FunctionConfigType::Chat => Self::Chat(chunk.into()),
+            FunctionConfigType::Json => Self::Json(chunk.into()),
         }
     }
 }

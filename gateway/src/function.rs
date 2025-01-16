@@ -24,6 +24,21 @@ pub enum FunctionConfig {
     Json(FunctionConfigJson),
 }
 
+#[derive(Copy, Clone, Debug)]
+pub enum FunctionConfigType {
+    Chat,
+    Json,
+}
+
+impl FunctionConfig {
+    pub fn config_type(&self) -> FunctionConfigType {
+        match self {
+            FunctionConfig::Chat(_) => FunctionConfigType::Chat,
+            FunctionConfig::Json(_) => FunctionConfigType::Json,
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct FunctionConfigChat {
     pub variants: HashMap<String, VariantConfig>, // variant name => variant config
