@@ -52,11 +52,11 @@ pub struct FuserConfig {
 
 impl Variant for MixtureOfNConfig {
     async fn infer<'a: 'request, 'request>(
-        &'a self,
+        &self,
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        inference_config: &'request InferenceConfig<'static, 'request>,
         clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
@@ -77,7 +77,7 @@ impl Variant for MixtureOfNConfig {
     async fn infer_stream<'request>(
         &self,
         _input: &Input,
-        _models: &'request InferenceModels<'static>,
+        _models: &'request InferenceModels<'_>,
         _function: &FunctionConfig,
         _inference_config: &'request InferenceConfig<'static, 'request>,
         _clients: &'request InferenceClients<'request>,
@@ -160,7 +160,7 @@ impl MixtureOfNConfig {
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        inference_config: &'request InferenceConfig<'static, 'request>,
         clients: &'request InferenceClients<'request>,
     ) -> Result<Vec<InferenceResult>, Error> {
         // Get all the variants we are going to infer

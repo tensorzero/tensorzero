@@ -58,7 +58,7 @@ pub enum JsonMode {
 #[derive(Debug)]
 pub struct InferenceConfig<'a, 'request> {
     pub tool_config: Option<&'request ToolCallConfig>,
-    pub templates: &'a TemplateConfig<'a>,
+    pub templates: &'request TemplateConfig<'a>,
     pub dynamic_output_schema: Option<&'request DynamicJSONSchema>,
     pub function_name: &'request str,
     pub variant_name: Option<&'request str>,
@@ -103,11 +103,11 @@ pub struct ModelUsedInfo {
 
 pub trait Variant {
     async fn infer<'a: 'request, 'request>(
-        &'a self,
+        &self,
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        inference_config: &'request InferenceConfig<'static, 'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error>;
@@ -115,7 +115,7 @@ pub trait Variant {
     async fn infer_stream<'request>(
         &self,
         input: &Input,
-        models: &'request InferenceModels<'static>,
+        models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'static, 'request>,
         clients: &'request InferenceClients<'request>,
@@ -162,11 +162,11 @@ impl Variant for VariantConfig {
         skip_all
     )]
     async fn infer<'a: 'request, 'request>(
-        &'a self,
+        &self,
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        inference_config: &'request InferenceConfig<'static, 'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
@@ -227,10 +227,10 @@ impl Variant for VariantConfig {
         fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name.unwrap_or("")),
         skip_all
     )]
-    async fn infer_stream<'request>(
+    async fn infer_stream<'a, 'request>(
         &self,
         input: &Input,
-        models: &'request InferenceModels<'static>,
+        models: &'request InferenceModels<'a>,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'static, 'request>,
         clients: &'request InferenceClients<'request>,

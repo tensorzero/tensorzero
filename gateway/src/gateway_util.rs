@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use axum::extract::{rejection::JsonRejection, FromRequest, Json, Request};
 use reqwest::Client;
 use serde::de::DeserializeOwned;
@@ -10,16 +12,16 @@ use crate::error::{Error, ErrorDetails};
 /// State for the API
 #[derive(Clone)]
 pub struct AppStateData {
-    pub config: &'static Config<'static>,
+    pub config: Arc<Config<'static>>,
     pub http_client: Client,
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
 }
 pub type AppState = axum::extract::State<AppStateData>;
 
 impl AppStateData {
-    pub async fn new(config: &'static Config<'static>) -> Result<Self, Error> {
+    pub async fn new(config: Arc<Config<'static>>) -> Result<Self, Error> {
         let clickhouse_url = std::env::var("CLICKHOUSE_URL").ok();
-        let clickhouse_connection_info = setup_clickhouse(config, clickhouse_url).await?;
+        let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url).await?;
 
         let http_client = Client::new();
 
@@ -32,7 +34,7 @@ impl AppStateData {
 }
 
 async fn setup_clickhouse(
-    config: &'static Config<'static>,
+    config: &Config<'static>,
     clickhouse_url: Option<String>,
 ) -> Result<ClickHouseConnectionInfo, Error> {
     if config.gateway.disable_observability {

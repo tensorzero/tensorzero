@@ -148,11 +148,11 @@ impl ChatCompletionConfig {
 
 impl Variant for ChatCompletionConfig {
     async fn infer<'a: 'request, 'request>(
-        &'a self,
+        &self,
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        inference_config: &'request InferenceConfig<'static, 'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
@@ -185,7 +185,7 @@ impl Variant for ChatCompletionConfig {
     async fn infer_stream<'request>(
         &self,
         input: &Input,
-        models: &'request InferenceModels<'static>,
+        models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'static, 'request>,
         clients: &'request InferenceClients<'request>,

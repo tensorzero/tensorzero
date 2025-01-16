@@ -80,7 +80,7 @@ pub async fn feedback_handler(
 ) -> Result<Json<Value>, Error> {
     // Get the metric config or return an error if it doesn't exist
     let feedback_metadata = get_feedback_metadata(
-        config,
+        &config,
         &params.metric_name,
         params.episode_id,
         params.inference_id,
@@ -115,7 +115,7 @@ pub async fn feedback_handler(
         FeedbackType::Demonstration => {
             write_demonstration(
                 clickhouse_connection_info,
-                config,
+                &config,
                 &params,
                 feedback_metadata.target_id,
                 feedback_id,
@@ -126,7 +126,7 @@ pub async fn feedback_handler(
         FeedbackType::Float => {
             write_float(
                 clickhouse_connection_info,
-                config,
+                &config,
                 &params,
                 feedback_metadata.target_id,
                 feedback_id,
@@ -137,7 +137,7 @@ pub async fn feedback_handler(
         FeedbackType::Boolean => {
             write_boolean(
                 clickhouse_connection_info,
-                config,
+                &config,
                 &params,
                 feedback_metadata.target_id,
                 feedback_id,
@@ -245,7 +245,7 @@ async fn write_comment(
 
 async fn write_demonstration(
     connection_info: ClickHouseConnectionInfo,
-    config: &'static Config<'_>,
+    config: &Config<'_>,
     params: &Params,
     inference_id: Uuid,
     feedback_id: Uuid,
@@ -273,7 +273,7 @@ async fn write_demonstration(
 
 async fn write_float(
     connection_info: ClickHouseConnectionInfo,
-    config: &'static Config<'_>,
+    config: &Config<'_>,
     params: &Params,
     target_id: Uuid,
     feedback_id: Uuid,
@@ -308,7 +308,7 @@ async fn write_float(
 
 async fn write_boolean(
     connection_info: ClickHouseConnectionInfo,
-    config: &'static Config<'_>,
+    config: &Config<'_>,
     params: &Params,
     target_id: Uuid,
     feedback_id: Uuid,
@@ -772,7 +772,7 @@ mod tests {
     #[tokio::test]
     async fn test_feedback_handler() {
         // Test a Comment Feedback
-        let config = Box::leak(Box::new(Config {
+        let config = Arc::new(Config {
             gateway: GatewayConfig::default(),
             models: ModelTable::default(),
             embedding_models: HashMap::new(),
@@ -780,7 +780,7 @@ mod tests {
             functions: HashMap::new(),
             tools: HashMap::new(),
             templates: TemplateConfig::new(),
-        }));
+        });
         let app_state_data = get_unit_test_app_state_data(config, true);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let episode_id = Uuid::new_v7(timestamp);
@@ -855,7 +855,7 @@ mod tests {
                 optimize: MetricConfigOptimize::Max,
             },
         );
-        let config = Box::leak(Box::new(Config {
+        let config = Arc::new(Config {
             gateway: GatewayConfig::default(),
             models: ModelTable::default(),
             embedding_models: HashMap::new(),
@@ -863,8 +863,8 @@ mod tests {
             functions: HashMap::new(),
             tools: HashMap::new(),
             templates: TemplateConfig::new(),
-        }));
-        let app_state_data = get_unit_test_app_state_data(config, true);
+        });
+        let app_state_data = get_unit_test_app_state_data(config.clone(), true);
         let value = json!(4.5);
         let inference_id = Uuid::new_v7(timestamp);
         let episode_id = Uuid::new_v7(timestamp);
@@ -915,7 +915,7 @@ mod tests {
                 optimize: MetricConfigOptimize::Max,
             },
         );
-        let config = Box::leak(Box::new(Config {
+        let config = Arc::new(Config {
             gateway: GatewayConfig::default(),
             models: ModelTable::default(),
             embedding_models: HashMap::new(),
@@ -923,8 +923,8 @@ mod tests {
             functions: HashMap::new(),
             tools: HashMap::new(),
             templates: TemplateConfig::new(),
-        }));
-        let app_state_data = get_unit_test_app_state_data(config, true);
+        });
+        let app_state_data = get_unit_test_app_state_data(config.clone(), true);
         let value = json!(true);
         let inference_id = Uuid::new_v7(timestamp);
         let params = Params {
