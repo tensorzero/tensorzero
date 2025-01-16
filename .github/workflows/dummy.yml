@@ -7,7 +7,7 @@ on:
 jobs:
   # We don't want to run live-tests on PRs, so we use a dummy job to satisfy branch protection checks
   live-tests:
-    runs-on: ubuntu-22.04-8core
+    runs-on: ubuntu-latest
 
     timeout-minutes: 5
 
