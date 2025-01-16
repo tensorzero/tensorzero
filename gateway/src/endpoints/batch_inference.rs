@@ -392,14 +392,14 @@ impl CompletedBatchInferenceResponse {
                 inference_id: Some(inference_id),
                 ..
             } => {
-                let responses = self
+                let inferences = self
                     .inferences
                     .into_iter()
                     .filter(|r| r.inference_id() == inference_id)
                     .collect();
                 CompletedBatchInferenceResponse {
                     batch_id: self.batch_id,
-                    inferences: responses,
+                    inferences,
                 }
             }
         }
@@ -664,7 +664,7 @@ pub async fn write_poll_batch_inference<'a>(
             Ok(PollInferenceResponse::Pending)
         }
         PollBatchInferenceResponse::Completed(response) => {
-            let responses = write_completed_batch_inference(
+            let inferences = write_completed_batch_inference(
                 clickhouse_connection_info,
                 batch_request,
                 response,
@@ -674,7 +674,7 @@ pub async fn write_poll_batch_inference<'a>(
             Ok(PollInferenceResponse::Completed(
                 CompletedBatchInferenceResponse {
                     batch_id: batch_request.batch_id,
-                    inferences: responses,
+                    inferences,
                 },
             ))
         }

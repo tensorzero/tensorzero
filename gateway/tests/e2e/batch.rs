@@ -361,17 +361,17 @@ async fn test_write_read_completed_batch_inference_chat() {
         raw_request: raw_request.clone(),
         raw_response: raw_response.clone(),
     };
-    let mut inference_inference =
+    let mut inference_responses =
         write_completed_batch_inference(&clickhouse, &batch_request, response, &config)
             .await
             .unwrap();
 
     // Sort inference by inference_id to ensure consistent ordering
-    inference_inference.sort_by_key(|response| response.inference_id());
+    inference_responses.sort_by_key(|response| response.inference_id());
 
-    assert_eq!(inference_inference.len(), 2);
-    let inference_response_1 = &inference_inference[0];
-    let inference_response_2 = &inference_inference[1];
+    assert_eq!(inference_responses.len(), 2);
+    let inference_response_1 = &inference_responses[0];
+    let inference_response_2 = &inference_responses[1];
 
     match inference_response_1 {
         InferenceResponse::Chat(chat_inference_response) => {
@@ -557,15 +557,15 @@ async fn test_write_read_completed_batch_inference_json() {
         raw_request,
         raw_response,
     };
-    let inference_inference =
+    let inference_responses =
         write_completed_batch_inference(&clickhouse, &batch_request, response, &config)
             .await
             .unwrap();
 
-    assert_eq!(inference_inference.len(), 2);
+    assert_eq!(inference_responses.len(), 2);
 
     // Create a map of inference by inference_id for easier lookup
-    let inference_by_id: HashMap<_, _> = inference_inference
+    let inference_by_id: HashMap<_, _> = inference_responses
         .iter()
         .map(|r| (r.inference_id(), r))
         .collect();
