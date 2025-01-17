@@ -28,9 +28,9 @@ jobs:
         uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: |
+            pnpm
             python
             rust
-            pnpm
 
       - name: Install cargo-nextest and cargo-deny
         uses: taiki-e/install-action@v2
@@ -76,6 +76,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22.9.0"
+
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:

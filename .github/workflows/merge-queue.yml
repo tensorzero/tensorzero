@@ -50,9 +50,9 @@ jobs:
         uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: |
+            pnpm
             rust
             uv
-            pnpm
 
       - name: Login to DockerHub
         uses: docker/login-action@v3
