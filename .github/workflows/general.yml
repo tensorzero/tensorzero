@@ -24,7 +24,7 @@ jobs:
       - name: Configure Namespace-powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@v0
 
-      - name: Configure Namespace cache for Rust, Python (uv), and pnpm
+      - name: Configure Namespace cache for Rust, Python (pip), and pnpm
         uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: |
